@@ -10,8 +10,8 @@ from pathlib import Path
 import pytest
 
 import sqlbuild._native as native_module
+from sqlbuild._native import assemble_project
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
 from sqlbuild.compiler.project_assembly.types import ProjectRequestRow
@@ -342,7 +342,7 @@ def test_given_native_assembly_panics_when_assembling_then_raises_without_python
     calls: Counter[str] = python_resource_calls(monkeypatch=monkeypatch)
 
     with pytest.raises(native_module.NativeCompilerError) as raised:
-        _ = assemble_compiled_project(
+        _ = assemble_project(
             inputs=inputs,
             inference_profile=ExpressionInferenceProfile(sql_analysis_dialect=test_case.dialect),
         )

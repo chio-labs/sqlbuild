@@ -138,3 +138,10 @@ class FqnTestCase:
     project_name: str
     relative_path: str
     expected_fqn: list[str]
+
+
+@dataclass(frozen=True)
+class ManifestEncodingErrorTestCase:
+    description: str
+    meta: dict[object, object]
+    expected_message: str

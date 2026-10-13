@@ -4,10 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import build_project_graph
+from sqlbuild._native import build_project_graph, discover_project_inputs
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.rule_engine.main.load_config import load_rules_config

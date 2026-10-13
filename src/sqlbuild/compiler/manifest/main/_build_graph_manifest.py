@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.manifest._helpers.payload import build_manifest_payload
 from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
 
 
 def build_graph_manifest(
@@ -15,13 +17,17 @@ def build_graph_manifest(
     project_name: str,
     adapter_type: str,
     graph: _native.NativeProjectGraph,
-) -> dict[str, object]:
+) -> _native.NativeManifest:
     """Build the manifest with parent and child maps read from the native lineage graph."""
 
-    return build_manifest_payload(
+    return _native.build_manifest(
         project=project,
         plan_output=plan_output,
-        project_name=project_name,
-        adapter_type=adapter_type,
         graph=graph,
+        facts={
+            "project_name": project_name,
+            "adapter_type": adapter_type,
+            "generated_at": datetime.now(tz=UTC).isoformat(),
+            "hook_identities": build_hook_identities(project.hook_functions),
+        },
     )

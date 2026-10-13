@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+from sqlbuild._native import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.main.config._parse_config_overrides import (

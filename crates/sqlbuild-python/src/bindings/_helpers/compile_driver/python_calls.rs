@@ -2,7 +2,7 @@
 
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyString};
+use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString};
 
 /// `module.name`, imported.
 pub(crate) fn imported<'py>(
@@ -121,6 +121,15 @@ impl<'py> KeywordArguments<'py> {
     /// The argument `name` as a truth value, `False` when it was not passed.
     pub(crate) fn flag(&self, name: &str) -> PyResult<bool> {
         self.value(name)?.is_truthy()
+    }
+
+    /// The argument `name`, or `False` when it was not passed.
+    pub(crate) fn value_or_false(&self, name: &str) -> PyResult<Bound<'py, PyAny>> {
+        let py: Python<'py> = self.values.py();
+        Ok(self
+            .values
+            .get_item(name)?
+            .unwrap_or_else(|| PyBool::new(py, false).to_owned().into_any()))
     }
 
     /// Whether `name` was passed.

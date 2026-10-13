@@ -8,9 +8,9 @@ from unittest.mock import ANY, Mock
 import pytest
 
 import sqlbuild._native as native_module
+from sqlbuild._native import ProjectColumnLineage
 from sqlbuild.compiler.analysis_session.models import NativeModelAnalyses
 from sqlbuild.compiler.contracts.models import ContractValidationResult
-from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
 from sqlbuild.compiler.project_assembly.models import NativeProjectResources
 from sqlbuild.compiler.sql_test_glue.models import NativeSqlTestAssembly
@@ -36,7 +36,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
                 "complete_native_semantic_diagnostics": [ANY],
                 "evaluate_native_model_contracts": [ANY],
                 "native_promotion_conflict_diagnostics": [()],
-                "build_native_column_lineage": [ANY],
+                "build_compile_lineage": [ANY],
                 "plan_native_sql_test_artifacts": [ANY],
             },
         )
@@ -62,7 +62,7 @@ def test_given_project_when_compiling_then_native_seams_answer(
     assert native_seams == test_case.expected_native_returns
     planned_counts: list[int] = []
     for seams in (native_seams,):
-        assert isinstance(seams["build_native_column_lineage"][0], ProjectColumnLineage)
+        assert isinstance(seams["build_compile_lineage"][0], ProjectColumnLineage)
         assert isinstance(seams["assemble_native_project_resources"][0], NativeProjectResources)
         assert isinstance(seams["analyze_native_model_sql"][0], NativeModelAnalyses)
         assert seams["analyze_native_model_sql"][0].session is not None

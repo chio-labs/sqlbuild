@@ -1071,3 +1071,12 @@ class InferredFreshnessCliTestCase:
     description: str
     sources_yaml: str
     expected_sources: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class BuildManifestTestCase:
+    """One real `sqb build --manifest` run and the manifest nodes it must publish."""
+
+    description: str
+    model_count: int
+    expected_test_type: str

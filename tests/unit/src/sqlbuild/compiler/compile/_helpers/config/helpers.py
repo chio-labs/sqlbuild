@@ -3,19 +3,18 @@
 from pathlib import Path
 
 import sqlbuild._native as _native
+from sqlbuild._native import build_compile_inputs, discover_project_inputs
 from sqlbuild.compiler.compile._helpers.attachment.model_config import (
     build_native_model_config,
     native_model_config_session,
     native_validation_error,
 )
-from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     NativeModelConfigInputs,
     NativeModelConfigSession,
 )
 from sqlbuild.compiler.compile.types import CompileInputsView
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,

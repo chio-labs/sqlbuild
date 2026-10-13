@@ -23,7 +23,7 @@ class FormerlyDeferredLineageTestCase:
     description: str
     dialect: str
     keeps_catalog: bool
-    expected_native_statuses: dict[str, int]
+    expected_models_with_lineage: int
     expected_error: str | None
 
 
@@ -33,7 +33,6 @@ class UnparsedLineageTestCase:
 
     description: str
     query_sql: str
-    expected_status: str
     expected_messages: tuple[str, ...]
 
 

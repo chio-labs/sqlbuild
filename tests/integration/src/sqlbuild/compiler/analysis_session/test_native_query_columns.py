@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 import sqlbuild._native as native_module
-import sqlbuild.compiler.compile._helpers.assembly.project as project_assembly
+import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stage_assembly
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.analysis_session.main._infer_native_query_columns import (
     infer_native_query_columns,
@@ -132,7 +132,7 @@ def test_given_session_without_model_analysis_when_assembling_then_raises_native
     test_case: MissingSessionAnalysisTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        project_assembly,
+        native_stage_assembly,
         "analyze_model_sql",
         lambda _request: NativeModelAnalyses(positions={}, succeeded=frozenset(), session=None),
     )

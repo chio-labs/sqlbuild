@@ -215,8 +215,9 @@
 - An incremental rebuild after a focused change takes minutes. A build that is unexpectedly cold
   or much slower than that is a signal to stop and investigate, not to wait or start over.
 - Get fast feedback first: `cargo check -p <crate>` while editing, `cargo test -p <crate>` for
-  the crate you touched, then one maturin build and the focused Python tests. Run clippy with the
-  CI toolchain for the touched crates only.
+  the crate you touched, then one maturin build and the focused Python tests. CI lints with the
+  latest stable toolchain, so keep the local `stable` toolchain current (`rustup update stable`);
+  `make check-ci` includes `make rust-lint` (workspace clippy with `-D warnings`) before a push.
 - Fix compiler errors by reading them and making the smallest correct change. Never delete and
   rewrite a working module, or restart a port from scratch, because a build failed.
 - Do not run two native builds against the same target directory at once, and do not run

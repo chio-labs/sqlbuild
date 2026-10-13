@@ -12,6 +12,7 @@ from sqlbuild.cli.compile_reuse.constants import REUSE_DISABLE_ENV_VAR
 type LauncherRun = tuple[int, bytes, bytes]
 
 _ELAPSED_SECONDS: re.Pattern[bytes] = re.compile(rb"\(\d+\.\d s\)")
+_PHASE_SECONDS: re.Pattern[bytes] = re.compile(rb"\(\d+\.\d+s\)")
 NATIVE_SQB: Path = Path(sys.executable).with_name("sqb")
 PYTHON_CLI: Path = Path(sys.executable).with_name("sqlbuild-python")
 PROJECT_FILES: dict[str, str] = {
@@ -43,7 +44,7 @@ def write_project(project_dir: Path) -> Path:
 
 
 def run(program: Path, *, args: tuple[str, ...], cwd: Path) -> LauncherRun:
-    """Run one CLI process with reuse enabled; return its exit code, stdout and stderr."""
+    """Run one CLI process with reuse enabled; return its exit code, stdout and timeless stderr."""
 
     completed: subprocess.CompletedProcess[bytes] = subprocess.run(
         [str(program), *args],
@@ -53,7 +54,11 @@ def run(program: Path, *, args: tuple[str, ...], cwd: Path) -> LauncherRun:
         env={**os.environ, "NO_COLOR": "1", REUSE_DISABLE_ENV_VAR: "0"},
         timeout=600,
     )
-    return completed.returncode, completed.stdout, completed.stderr
+    return (
+        completed.returncode,
+        completed.stdout,
+        _PHASE_SECONDS.sub(b"(s)", completed.stderr),
+    )
 
 
 def launch_records(project_dir: Path) -> dict[Path, int]:

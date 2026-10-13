@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import sqlbuild._native as _native
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.lineage.cache import (
     read_relation_lineage_cache,
@@ -106,9 +107,8 @@ def _prepare_graph(
         )
         if cached is not None:
             return cached, None, parsed_depth
-    from sqlbuild._native import build_project_graph
+    from sqlbuild._native import build_project_graph, discover_project_inputs
     from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
-    from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 
     discovered: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=project_dir,
@@ -159,17 +159,15 @@ def _semantic_uses(
 ) -> tuple[DirectSemanticColumnUse, ...]:
     if not request.include_uses:
         return ()
-    from sqlbuild.compiler.lineage.main.build_semantic_uses import build_direct_semantic_uses
-
     if not isinstance(graph, ProjectGraph) or adapter is None:
         raise CliUserError(
             "semantic uses require a compiled project graph",
             code="C307",
         )
-    return build_direct_semantic_uses(
-        project=graph.project,
-        dialect=adapter.sql_analysis_dialect(),
-        model_names=_semantic_use_model_names(request=request, graph=graph),
+    return _native.build_direct_semantic_uses(
+        graph.project,
+        adapter.sql_analysis_dialect(),
+        _semantic_use_model_names(request=request, graph=graph),
     )
 
 
@@ -216,7 +214,7 @@ def _render_lineage(
             if error.code == UNKNOWN_SELECTOR_ERROR_CODE and isinstance(
                 graph, RelationLineageIndex
             ):
-                from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+                from sqlbuild._native import discover_project_inputs
 
                 reject_unit_test_selectors(
                     select=request.select,

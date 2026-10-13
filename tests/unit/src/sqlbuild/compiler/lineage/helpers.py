@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import sqlbuild._native as native
+from sqlbuild._native import ProjectColumnLineage
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
@@ -18,6 +20,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledSeedView,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredSchemaFile, DiscoveredSeedFile
+from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.spec.contracts.models import SchemaColumn, SchemaSeedEntry, SettingsConfig
 
 
@@ -122,3 +125,15 @@ def make_chain_models(
         for index in range(unrelated_model_count)
     )
     return (root, *chain, *unrelated)
+
+
+def project_column_lineage(
+    *,
+    project: CompiledProjectView,
+    dialect: str | None = None,
+    mode: ColumnLineageMode = ColumnLineageMode.RICH,
+    model_names: frozenset[str] | None = None,
+) -> ProjectColumnLineage | None:
+    """The project's native column lineage graph, rich by default."""
+
+    return native.build_project_column_lineage(project, dialect, mode, model_names)

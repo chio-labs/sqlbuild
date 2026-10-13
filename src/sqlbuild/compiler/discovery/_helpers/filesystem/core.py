@@ -21,16 +21,6 @@ from sqlbuild.compiler.discovery._helpers.filesystem.named_declarations import (
 from sqlbuild.compiler.discovery._helpers.filesystem.scoped_paths import (
     project_relative_path,
 )
-from sqlbuild.compiler.discovery._helpers.native.declaration_files import (
-    native_audit_files,
-    native_constant_files,
-    native_enum_files,
-    native_macro_files,
-    native_model_schema_files,
-    native_seed_files,
-    native_sql_function_files,
-    native_sql_hook_files,
-)
 from sqlbuild.compiler.discovery._helpers.python.functions import parse_python_function
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.constants import (
@@ -43,30 +33,20 @@ from sqlbuild.compiler.discovery.exceptions import (
     PythonNodeDiscoveryError,
 )
 from sqlbuild.compiler.discovery.models import (
-    DiscoveredAdapterFile,
     DiscoveredAssetFunction,
     DiscoveredAuditFactory,
-    DiscoveredAuditFile,
     DiscoveredCheckFunction,
     DiscoveredCommandOutputSink,
-    DiscoveredConstantFile,
-    DiscoveredEnumFile,
     DiscoveredEventExporter,
     DiscoveredEventExporterDeclaration,
     DiscoveredHookFunction,
     DiscoveredLoaderFunction,
-    DiscoveredMacroFile,
     DiscoveredMaterializationFile,
-    DiscoveredModelSchemaFile,
     DiscoveredProvider,
     DiscoveredProviderUsage,
     DiscoveredPythonFunctionFile,
     DiscoveredPythonNodeFunctions,
-    DiscoveredSeedFile,
-    DiscoveredSqlFunctionFile,
-    DiscoveredSqlHookFile,
     DiscoveredTaskFunction,
-    DiscoveryFileFault,
     NamedDeclarationRoot,
 )
 from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
@@ -132,52 +112,6 @@ class _PythonNodeDiscoveryBucket:
         self.audit_factories.append(item)
 
 
-def discover_enum_files(
-    *,
-    project_dir: Path,
-    on_fault: Callable[[DiscoveryFileFault], None] | None = None,
-    isolate_declaration_kind: bool = False,
-) -> tuple[DiscoveredEnumFile, ...]:
-    """Discover global and scoped enum declaration files."""
-
-    return native_enum_files(
-        project_dir=project_dir,
-        isolate_declaration_kind=isolate_declaration_kind,
-        on_fault=on_fault,
-    )
-
-
-def discover_constant_files(
-    *,
-    project_dir: Path,
-    on_fault: Callable[[DiscoveryFileFault], None] | None = None,
-    isolate_declaration_kind: bool = False,
-) -> tuple[DiscoveredConstantFile, ...]:
-    """Discover global and scoped constant declaration files."""
-
-    return native_constant_files(
-        project_dir=project_dir,
-        isolate_declaration_kind=isolate_declaration_kind,
-        on_fault=on_fault,
-    )
-
-
-def discover_model_schema_files(
-    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
-) -> tuple[DiscoveredModelSchemaFile, ...]:
-    """Discover project-wide and scoped reusable model schemas."""
-
-    return native_model_schema_files(project_dir=project_dir, on_fault=on_fault)
-
-
-def discover_sql_function_files(
-    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
-) -> tuple[DiscoveredSqlFunctionFile, ...]:
-    """Discover SQL function files under functions/sql/."""
-
-    return native_sql_function_files(project_dir=project_dir, on_fault=on_fault)
-
-
 def discover_python_function_files(
     *, project_dir: Path
 ) -> tuple[DiscoveredPythonFunctionFile, ...]:
@@ -208,30 +142,6 @@ def discover_python_function_files(
             )
         )
     return tuple(discovered_function_files)
-
-
-def discover_seed_files(*, project_dir: Path) -> tuple[DiscoveredSeedFile, ...]:
-    """Discover seed CSV files under seeds/."""
-
-    return native_seed_files(project_dir=project_dir)
-
-
-def discover_audit_files(
-    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
-) -> tuple[DiscoveredAuditFile, ...]:
-    """Discover generic and singular audit SQL files in their project-wide and scoped roles."""
-
-    return native_audit_files(project_dir=project_dir, on_fault=on_fault)
-
-
-def discover_macro_files(
-    *, project_dir: Path, isolate_declaration_kind: bool = False
-) -> tuple[DiscoveredMacroFile, ...]:
-    """Discover global and scoped project macro Python files."""
-
-    return native_macro_files(
-        project_dir=project_dir, isolate_declaration_kind=isolate_declaration_kind
-    )
 
 
 def discover_materialization_files(
@@ -342,14 +252,6 @@ def discover_hook_functions(
                 )
             )
     return tuple(discovered_hooks)
-
-
-def discover_sql_hook_files(
-    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
-) -> tuple[DiscoveredSqlHookFile, ...]:
-    """Discover named SQL lifecycle hooks in their project-wide and scoped roles."""
-
-    return native_sql_hook_files(project_dir=project_dir, on_fault=on_fault)
 
 
 def discover_provider_classes(*, project_dir: Path) -> tuple[DiscoveredProvider, ...]:
@@ -1311,19 +1213,6 @@ def _load_materialization_module(*, file_path: Path, project_dir: Path) -> Modul
     if hasattr(module, removed_hook_name):
         raise PythonNodeDiscoveryError(removed_hook_message)
     return module
-
-
-def discover_adapter_file(*, project_dir: Path) -> DiscoveredAdapterFile | None:
-    """Detect a project-level adapter.py without importing it."""
-
-    file_path: Path = project_dir / "adapter.py"
-    if not file_path.is_file():
-        return None
-
-    return DiscoveredAdapterFile(
-        file_path=file_path,
-        relative_path=project_relative_path(path=file_path, project_dir=project_dir),
-    )
 
 
 def _sorted_glob(*, project_dir: Path, root: Path, pattern: str) -> list[Path]:

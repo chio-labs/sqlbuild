@@ -15,7 +15,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledSourceView,
 )
-from sqlbuild.compiler.graph.main._native_project_graph import build_native_project_graph
 from sqlbuild.compiler.planner._helpers.graph.core import (
     build_downstream_deps,
     build_execution_upstream_deps,
@@ -69,7 +68,7 @@ def build_clone_plan_output(
         upstream_deps
     )
     selected_keys: frozenset[CompiledObjectKey] = resolve_graph_selectors(
-        graph=build_native_project_graph(project), select=select, exclude=exclude
+        graph=project.lineage_graph, select=select, exclude=exclude
     )
     return PlanOutput(
         execution_order=topologically_order_keys(upstream=upstream_deps),

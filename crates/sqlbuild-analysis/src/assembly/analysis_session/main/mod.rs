@@ -5,6 +5,7 @@ pub mod finished_fact_models;
 pub mod finished_model_facts;
 pub mod model_reference_facts;
 pub mod names_set_operation;
+pub mod native_dialect;
 pub mod projection_facts;
 pub mod prove_dynamic_contracts;
 pub mod prove_finished_dynamic_contracts;

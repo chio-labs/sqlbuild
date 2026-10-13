@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from sqlbuild._native import build_compiled_project
+from sqlbuild._native import build_compiled_project, discover_project_inputs
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
     CompileAnalysisSelection,
@@ -25,7 +25,6 @@ from sqlbuild.compiler.contract_adoption.models import (
     ContractEvidence,
     ContractFinding,
 )
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.lint.main.write_atomically import write_atomically

@@ -7,10 +7,9 @@ from typing import cast
 
 import pytest
 
+from sqlbuild._native import assemble_project, build_compile_inputs, discover_project_inputs
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.main._assemble_project import assemble_project
-from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompilerDiagnostic,
 )
@@ -20,9 +19,7 @@ from sqlbuild.compiler.compile.types import (
     CompileInputsView,
 )
 from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.manifest._helpers.model_nodes import build_model_node
 from sqlbuild.compiler.planner.main.identity.version_identity_model_metadata import (
     build_model_version_identity_metadata_json,
 )
@@ -39,6 +36,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     DUCKDB_COMPILE_ADAPTER_CONTEXT,
     compile_first_model,
+    manifest_model_node,
 )
 
 _PROJECT_FILE: str = """
@@ -305,11 +303,7 @@ SELECT
         ],
     }
     assert evaluate_model_contracts(project=project, dialect="duckdb").diagnostics == ()
-    manifest_node: dict[str, object] = build_model_node(
-        model=superset,
-        plan_entry=None,
-        project_name="demo",
-    )
+    manifest_node: dict[str, object] = manifest_model_node(project=project, name="order_superset")
     assert manifest_node["description"] == "Canonical order schema"
     manifest_columns: object = manifest_node["columns"]
     assert isinstance(manifest_columns, dict)
@@ -490,11 +484,7 @@ SELECT * FROM __ref("customer_category_amounts")
             "name_pattern": None,
         }
     ]
-    manifest_node: dict[str, object] = build_model_node(
-        model=model,
-        plan_entry=None,
-        project_name="demo",
-    )
+    manifest_node: dict[str, object] = manifest_model_node(project=project, name=model.name)
     manifest_meta: dict[str, object] = cast(dict[str, object], manifest_node["meta"])
     sqlbuild_meta: dict[str, object] = cast(dict[str, object], manifest_meta["sqlbuild"])
     assert sqlbuild_meta["dynamic_columns"] == contract_identity["dynamic_columns"]

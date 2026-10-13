@@ -8,21 +8,23 @@ from typing import Any
 import pytest
 
 import sqlbuild._native as native_module
+from sqlbuild._native import (
+    build_compile_inputs,
+    build_compiled_project,
+    discover_project_inputs,
+    run_compile_pipeline,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import semantic_shapes
-from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompiledLineageColumnFact,
 )
 from sqlbuild.compiler.compile.types import AuditInput, CompiledModelView, CompiledProjectView
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.manifest.main.build import build_manifest
-from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
-from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.sql_values.types import CollectionRendering
@@ -119,15 +121,17 @@ def build_manifest_for_pipeline_result(
     project_name: str,
     adapter_type: str,
 ) -> dict[str, object]:
-    """Build the manifest artifact from a compile pipeline result."""
+    """Build the manifest artifact from a compile pipeline result and parse its JSON."""
 
-    return build_manifest(
-        project=result.project,
-        plan_output=result.plan_output,
-        project_name=project_name,
-        adapter_type=adapter_type,
-        upstream_deps=result.plan_output.upstream_deps,
-        downstream_deps=result.plan_output.downstream_deps,
+    return json.loads(
+        build_manifest(
+            project=result.project,
+            plan_output=result.plan_output,
+            project_name=project_name,
+            adapter_type=adapter_type,
+            upstream_deps=result.plan_output.upstream_deps,
+            downstream_deps=result.plan_output.downstream_deps,
+        ).contents()
     )
 
 
@@ -172,7 +176,7 @@ def compile_reshaped_star_model(
         f"MODEL (description 'Test model reshaped_orders.', materialized table);\n{query_sql}",
         encoding="utf-8",
     )
-    project: CompiledProjectView = compile_project(
+    project: CompiledProjectView = build_compiled_project(
         discovered_inputs=discover_project_inputs(project_dir=project_dir),
         adapter=DuckDbAdapter(),
     )
@@ -237,7 +241,7 @@ def postgres_semantic_shapes(
         path: Path = project_dir / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
         _ = path.write_text(contents, encoding="utf-8")
-    project: CompiledProjectView = compile_project(
+    project: CompiledProjectView = build_compiled_project(
         discovered_inputs=discover_project_inputs(project_dir=project_dir),
         adapter=PostgresAdapter(),
         resolved_connection=_OFFLINE_POSTGRES_CONNECTION,

@@ -25,15 +25,6 @@ class SkipQuotedTextErrorTestCase:
 
 
 @dataclass(frozen=True)
-class IterCodePositionsTestCase:
-    """Code-position scan case."""
-
-    description: str
-    sql: str
-    expected_positions: tuple[tuple[int, int], ...]
-
-
-@dataclass(frozen=True)
 class DialectQuotedTextSuccessTestCase:
     """Successful dialect-aware quoted-text scan case."""
 
@@ -89,6 +80,6 @@ class DialectMatchingParenTestCase:
     """Dialect-aware parenthesis matching case."""
 
     description: str
-    syntax: SqlLexicalSyntax | None
+    native_syntax: dict[str, object] | None
     sql: str
     expected_index: int

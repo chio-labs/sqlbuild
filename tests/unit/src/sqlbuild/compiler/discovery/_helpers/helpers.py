@@ -2,7 +2,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
-from sqlbuild.compiler.discovery._helpers.filesystem.core import (
+from sqlbuild._native import (
     discover_audit_files,
     discover_constant_files,
     discover_enum_files,

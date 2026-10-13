@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery._helpers.native.model_files import (
-    discover_native_model_files,
+from sqlbuild._native import (
+    discover_model_files,
 )
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
@@ -52,7 +52,7 @@ def test_given_runtime_and_root_when_discovering_natively_then_supported_runs_an
 
     with capture:
         models.extend(
-            discover_native_model_files(
+            discover_model_files(
                 project_dir=project_dir,
                 extract_implicit_alias_columns=True,
                 extract_output_column_locations=True,
@@ -82,7 +82,7 @@ def test_given_native_model_walk_when_globbing_models_later_in_the_pass_then_the
 ) -> None:
     write_project(project_dir=tmp_path, files=(("models/marts/orders.sql", _VALID_MODEL),))
     with DirectorySnapshot.scope(project_dir=tmp_path) as snapshot:
-        _ = discover_native_model_files(
+        _ = discover_model_files(
             project_dir=tmp_path,
             extract_implicit_alias_columns=True,
             extract_output_column_locations=True,

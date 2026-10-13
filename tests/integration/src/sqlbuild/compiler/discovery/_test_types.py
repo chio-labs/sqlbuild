@@ -126,10 +126,10 @@ class UndecodablePathToleranceTestCase:
 
 @dataclass(frozen=True)
 class NativeOsErrorTestCase:
-    """An operating-system read payload and the Python error it becomes."""
+    """An OS read failure `(errno, winerror, message)` and the Python error it becomes."""
 
     description: str
-    payload: tuple[object, ...]
+    payload: tuple[int | None, int | None, str]
     expected_type: str
     expected_fields: tuple[object, ...]
 

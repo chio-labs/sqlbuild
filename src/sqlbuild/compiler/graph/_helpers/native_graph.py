@@ -43,12 +43,6 @@ def native_keys(keys: Iterable[CompiledObjectKey]) -> list[NativeKey]:
     return [native_key(key) for key in keys]
 
 
-def build_native_project_graph_impl(project: CompiledProjectView) -> _native.NativeProjectGraph:
-    """The project's native graph, built once per compiled project."""
-
-    return project.lineage_graph
-
-
 def project_lineage_views_impl(project: CompiledProjectView) -> LineageGraphViews:
     """The project's lineage edges and selector indexes as fresh dicts."""
 

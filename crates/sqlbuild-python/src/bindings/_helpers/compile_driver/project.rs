@@ -11,8 +11,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 
 const FRONTIER_MODULE: &str = "sqlbuild.compiler.frontier.main._compile_frontier";
 const FRONTIER_TYPES_MODULE: &str = "sqlbuild.compiler.frontier.types";
-const BUILD_INPUTS_MODULE: &str = "sqlbuild.compiler.compile.main._build_compile_inputs";
-const ASSEMBLE_MODULE: &str = "sqlbuild.compiler.compile.main._assemble_project";
+const BUILD_INPUTS_MODULE: &str = "sqlbuild._native";
+const ASSEMBLE_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const PROJECT_WITH_MODULE: &str = "sqlbuild.compiler.compiled_project.main.project_with";
 const PROMOTION_MODULE: &str = "sqlbuild.compiler.contracts.main.promotion_conflicts";
@@ -52,7 +52,7 @@ struct ProjectRequest {
 }
 
 /// `column_lineage_mode`, defaulting to `ColumnLineageMode.FAST` when not passed.
-fn lineage_mode<'py>(arguments: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn lineage_mode<'py>(arguments: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>> {
     let mode: Bound<'py, PyAny> = arguments.value("column_lineage_mode")?;
     if arguments.passed("column_lineage_mode")? {
         return Ok(mode);

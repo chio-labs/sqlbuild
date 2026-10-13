@@ -5,8 +5,9 @@ use sqlbuild_rules::constants::{API_VERSION, NATIVE_BUILD_IDENTITY};
 use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
 use crate::bindings::_helpers::{
     analysis, analysis_session, attachments, boundary, cache, compile_driver, compile_outputs,
-    compiled_project, contracts, discovery, graph, lineage, model_config, project_assembly,
-    refactor, render, rules, scopes, semantic_checks, sql_test_glue, sqltext, type_system,
+    compiled_project, contracts, dag_artifact, discovery, fingerprints, graph, lineage, manifest,
+    model_config, project_assembly, refactor, render, rules, scopes, semantic_checks,
+    sql_test_glue, sqltext, type_system,
 };
 use crate::bindings::models;
 
@@ -51,11 +52,14 @@ fn register_analysis_stages(module: &Bound<'_, PyModule>) -> PyResult<()> {
     semantic_checks::registration::register(module)?;
     contracts::registration::register(module)?;
     lineage::registration::register(module)?;
+    fingerprints::registration::register(module)?;
     sql_test_glue::registration::register(module)?;
     project_assembly::registration::register(module)?;
     compile_outputs::registration::register(module)?;
     graph::registration::register(module)?;
     compiled_project::registration::register(module)?;
     compile_driver::registration::register(module)?;
+    dag_artifact::registration::register(module)?;
+    manifest::registration::register(module)?;
     Ok(())
 }

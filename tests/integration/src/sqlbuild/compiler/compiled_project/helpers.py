@@ -13,14 +13,18 @@ from typing import Any
 import pytest
 
 import sqlbuild._native as _native
+from sqlbuild._native import (
+    assemble_project,
+    build_compile_inputs,
+    build_compiled_project,
+    discover_project_inputs,
+)
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.models import MeasurementThresholdBound, MeasurementThresholds
 from sqlbuild.compiler.compile import models as compile_models
-from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile._helpers.attachment import core as attachment_core
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
-from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompileModelConfig,
@@ -36,9 +40,7 @@ from sqlbuild.compiler.compile.types import (
     CompileInputsView,
 )
 from sqlbuild.compiler.compiled_project.main import compiled_project_facts as facts_module
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
-from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SourceColumnEntry
 from sqlbuild.sql_values.types import CollectionRendering
@@ -432,7 +434,7 @@ def compile_source_project(
     write_files(
         project_dir=project_dir, files={**SOURCE_PROJECT_FILES, "sources/raw.yml": source_yml}
     )
-    project: CompiledProjectView = compile_project(
+    project: CompiledProjectView = build_compiled_project(
         discovered_inputs=discover_project_inputs(project_dir=project_dir),
         adapter=DuckDbAdapter(),
         resolved_connection=_SOURCE_CONNECTION,
@@ -478,7 +480,7 @@ def compile_function_project(
     """Compile a project of `files`; return the project and its compile inputs."""
 
     write_files(project_dir=project_dir, files=files)
-    project: CompiledProjectView = compile_project(
+    project: CompiledProjectView = build_compiled_project(
         discovered_inputs=discover_project_inputs(project_dir=project_dir),
         adapter=DuckDbAdapter(),
         resolved_connection=_SOURCE_CONNECTION,
@@ -633,7 +635,7 @@ def _hand_built_model(name: str, sql: str) -> CompileModelInput:
 def hand_built_analysed_project(models: dict[str, str]) -> CompiledProjectView:
     """Assemble hand-built model inputs, which cross the explicit analysis boundary."""
 
-    return assemble_compiled_project(
+    return assemble_project(
         inputs=CompileProjectInputs(
             project_config=_HAND_BUILT_CONFIG,
             local_config=LocalConfig(),
@@ -660,7 +662,7 @@ def native_analysed_project(*, project_dir: Path, models: dict[str, str]) -> Com
             },
         },
     )
-    return compile_project(
+    return build_compiled_project(
         discovered_inputs=discover_project_inputs(project_dir=project_dir),
         adapter=DuckDbAdapter(),
         resolved_connection=_SOURCE_CONNECTION,

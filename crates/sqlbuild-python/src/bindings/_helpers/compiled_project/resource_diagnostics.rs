@@ -2,6 +2,7 @@
 
 use pyo3::exceptions::PyValueError;
 use sqlbuild_discovery::yaml_files::main::yaml_entry_lines::yaml_entry_lines;
+use sqlbuild_pysource::definition_locations::main::decorator_location::decorator_location;
 use sqlbuild_sqltext::compiler::main::model_header_entry_span::model_header_entry_span;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -57,8 +58,6 @@ pub(crate) struct DiagnosticSettings {
     loaders: HashMap<String, LoaderRow>,
     /// Python-defined resources: kind, name, description, location and help, read by Python.
     python_resources: Vec<PythonResourceRow>,
-    /// The Python locators module: YAML entry lines, MODEL header spans and decorators.
-    locators: Py<PyAny>,
 }
 
 /// The orphaned audit factory warnings, then the missing descriptions, then the cursor errors.
@@ -432,16 +431,13 @@ fn function_description<'py>(
             ("function", name, Some(resource_type)),
             attached.description.as_deref(),
             || {
-                let arguments: Bound<'py, PyDict> = PyDict::new(py);
-                arguments.set_item("contents", &contents)?;
-                arguments.set_item("decorator", PYTHON_UDF_DECORATOR)?;
-                let (line, column): (usize, usize) = diagnostics
-                    .settings
-                    .locators
-                    .bind(py)
-                    .call_method("decorator_location", (), Some(&arguments))?
-                    .extract()?;
-                diagnostics.location(&path, (line, column), None)
+                let version = py.version_info();
+                let position: (usize, usize) = decorator_location(
+                    &contents,
+                    PYTHON_UDF_DECORATOR,
+                    (version.major, version.minor),
+                );
+                diagnostics.location(&path, position, None)
             },
             &help,
         );

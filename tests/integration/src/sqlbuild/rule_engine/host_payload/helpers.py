@@ -5,11 +5,10 @@ from typing import Any
 
 import pytest
 
+from sqlbuild._native import build_compiled_project, discover_project_inputs
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.rule_engine._helpers.engine import custom_rules, fact_replay
 from sqlbuild.rule_engine._helpers.engine.fact_replay import (
     fact_outcome_digest,
@@ -63,7 +62,7 @@ def compile_files(*, root: Path, files: dict[str, str]) -> CompiledProjectView:
         path: Path = root / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(contents, encoding="utf-8")
-    return compile_project(
+    return build_compiled_project(
         discovered_inputs=discover_project_inputs(project_dir=root),
         adapter=DuckDbAdapter(),
         external_sql_reference_resolver=OrdersReferenceResolver(),

@@ -7,13 +7,13 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import discover_project_inputs
 from sqlbuild.compiler.compile._helpers.attachment.declaration_scope import (
     build_declaration_scope,
     rebind_declaration_scope,
 )
 from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
 from sqlbuild.compiler.compile.models import DeclarationScopeBuild, LoadedMacro
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.scopes.models import DeclarationIdentity
 from sqlbuild.compiler.scopes.types import DeclarationKind

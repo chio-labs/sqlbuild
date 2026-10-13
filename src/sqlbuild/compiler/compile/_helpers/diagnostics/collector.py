@@ -2,24 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
-from functools import wraps
-from typing import cast
 
-import sqlbuild._native as _native
 from sqlbuild.compiler.compile.classes.collected_compile_diagnostics import (
     CollectedCompileDiagnostics,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
-    CompileProjectInputs,
     CompilerDiagnostic,
 )
-from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
-from sqlbuild.compiler.compiled_project.main.inputs_with import inputs_with
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 
 _ACTIVE_COLLECTOR: ContextVar[CollectedCompileDiagnostics | None] = ContextVar(
     "sqlbuild_collected_compile_diagnostics", default=None
@@ -36,29 +29,6 @@ def collect_compile_diagnostics() -> Iterator[CollectedCompileDiagnostics]:
         yield collector
     finally:
         _ACTIVE_COLLECTOR.reset(token)
-
-
-def with_collected_compile_diagnostics[**P, R: (CompileInputsView, CompiledProjectView)](
-    build: Callable[P, R],
-) -> Callable[P, R]:
-    """Append every diagnostic reported while ``build`` runs to the diagnostics it returns."""
-
-    @wraps(build)
-    def collecting(*args: P.args, **kwargs: P.kwargs) -> R:
-        with collect_compile_diagnostics() as violations:
-            built: R = build(*args, **kwargs)
-        if not violations.diagnostics:
-            return built
-        diagnostics: tuple[CompilerDiagnostic, ...] = (
-            *built.diagnostics,
-            *violations.diagnostics,
-        )
-        if isinstance(built, CompileProjectInputs | _native.NativeInputsView):
-            return cast(R, inputs_with(inputs=built, diagnostics=diagnostics))
-        project: CompiledProjectView = cast(CompiledProjectView, built)
-        return cast(R, project_with(project=project, diagnostics=diagnostics))
-
-    return collecting
 
 
 def report_compile_diagnostic(*, key: tuple[str, ...], diagnostic: CompilerDiagnostic) -> None:

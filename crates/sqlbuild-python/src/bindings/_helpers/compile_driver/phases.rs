@@ -2,13 +2,13 @@
 
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyBool, PyTuple};
+use pyo3::types::{PyBool, PyBytes, PyTuple};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{Status, call_with, imported};
+use crate::bindings::_helpers::dag_artifact::artifact::build_dag_json;
 
 const MANIFEST_MODULE: &str = "sqlbuild.compiler.manifest.main._build_graph_manifest";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
-const DAG_MODULE: &str = "sqlbuild.compiler.dag.main.build";
 const PYTHON_NODES_MODULE: &str = "sqlbuild.compiler.python_nodes.main.graph";
 const ARTIFACT_BATCH_MODULE: &str = "sqlbuild.cli.commands.classes.native_artifact_batch";
 const TARGET_WRITER_MODULE: &str = "sqlbuild.cli.commands._helpers.compile.target_writer";
@@ -120,16 +120,14 @@ pub(crate) fn write_dag_artifact<'py>(
         &[("discovered_inputs", discovered.clone())],
     )?;
     let path: Bound<'py, PyAny> = resolved_dag_path(project_dir, dag_path)?;
-    let dag_json: Bound<'py, PyAny> = call_with(
-        &imported(py, DAG_MODULE, "build_dag_json")?,
-        &[
-            ("graph", analysis.getattr("graph")?),
-            (
-                "project_name",
-                discovered.getattr("project_config")?.getattr("name")?,
-            ),
-            ("python_graph", python_graph),
-        ],
+    let project_name: String = discovered
+        .getattr("project_config")?
+        .getattr("name")?
+        .extract()?;
+    let dag_json: String = build_dag_json(
+        &analysis.getattr("graph")?,
+        &project_name,
+        Some(&python_graph),
     )?;
     let batch: Bound<'py, PyAny> = call_with(
         &imported(py, ARTIFACT_BATCH_MODULE, "NativeArtifactBatch")?,
@@ -142,7 +140,7 @@ pub(crate) fn write_dag_artifact<'py>(
         &batch.getattr("queue")?,
         &[
             ("path", path),
-            ("contents", dag_json.call_method1("encode", ("utf-8",))?),
+            ("contents", PyBytes::new(py, dag_json.as_bytes()).into_any()),
         ],
     )?;
     batch.call_method0("flush")?;

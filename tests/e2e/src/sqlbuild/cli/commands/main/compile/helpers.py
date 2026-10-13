@@ -31,6 +31,7 @@ import pytest
 
 import sqlbuild._native as native_module
 import sqlbuild.adapter.type_system._helpers.type_normalization as type_normalization
+import sqlbuild.cli.commands._helpers.compile.lineage as compile_lineage
 import sqlbuild.cli.commands._helpers.compile.target_writer as target_writer
 import sqlbuild.cli.compile_reuse._helpers.native_reuse as native_reuse
 import sqlbuild.cli.compile_reuse.main._write_reusable_compile as write_reusable_module
@@ -42,7 +43,6 @@ import sqlbuild.compiler.contracts.main._evaluate_native_model_contracts as cont
 import sqlbuild.compiler.contracts.main.promotion_conflicts as promotion_conflicts
 import sqlbuild.compiler.contracts.main.validate as contract_validation
 import sqlbuild.compiler.frontier.main.compiled_code_identity as compiled_code_identity_module
-import sqlbuild.compiler.lineage.main.columns as column_lineage
 import sqlbuild.compiler.macro_bridge.classes.macro_bridge as macro_bridge_class
 from scripts.cold_compile_performance.main.read_compile_measurement import read_compile_measurement
 from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
@@ -4843,7 +4843,7 @@ _ANALYSIS_SEAMS: tuple[tuple[ModuleType, str], ...] = (
     (diagnostic_recovery, "complete_native_semantic_diagnostics"),
     (contract_validation, "evaluate_native_model_contracts"),
     (promotion_conflicts, "native_promotion_conflict_diagnostics"),
-    (column_lineage, "build_native_column_lineage"),
+    (compile_lineage, "build_compile_lineage"),
     (target_writer, "plan_native_sql_test_artifacts"),
 )
 

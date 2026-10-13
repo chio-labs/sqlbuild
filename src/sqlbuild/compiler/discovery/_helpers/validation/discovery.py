@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import csv
 from collections.abc import Callable
-from pathlib import Path
-from typing import Protocol, cast
+from typing import Protocol
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.discovery._helpers.native.payloads import native_failure, native_read_error
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAssetFunction,
     DiscoveredCheckFunction,
@@ -35,10 +32,6 @@ class _NodeDefinition(Protocol):
     def name(self) -> str: ...
 
 
-_UNREADABLE_TAG: str = "unreadable"
-_CSV_ERROR_TAG: str = "csv"
-_CSV_DIALECT_TAG: str = "csv_dialect"
-_CSV_DIALECT_ERRORS: dict[str, type[Exception]] = {"TypeError": TypeError, "ValueError": ValueError}
 _DEFINITION_READERS: tuple[Callable[[Callable[..., object]], _NodeDefinition | None], ...] = (
     read_loader_definition,
     read_task_definition,
@@ -50,21 +43,7 @@ _DEFINITION_READERS: tuple[Callable[[Callable[..., object]], _NodeDefinition | N
 def validate_discovered_inputs(discovered_inputs: DiscoveredProjectInputs) -> None:
     """Validate cross-file conflicts across discovered project inputs."""
 
-    payload: tuple[object, ...] | None = _native.discovered_inputs_failure(
-        discovered_inputs, _nodes(discovered_inputs)
-    )
-    if payload is None:
-        return
-    tag: object = payload[0]
-    if tag == _UNREADABLE_TAG:
-        raise native_read_error(
-            payload=cast(tuple[object, ...], payload[2]), file_path=Path(str(payload[1]))
-        )
-    if tag == _CSV_ERROR_TAG:
-        raise csv.Error(str(payload[1]))
-    if tag == _CSV_DIALECT_TAG:
-        raise _CSV_DIALECT_ERRORS[str(payload[1])](str(payload[2]))
-    raise native_failure(payload)
+    _native.validate_discovered_project_inputs(discovered_inputs, _nodes(discovered_inputs))
 
 
 def _nodes(inputs: DiscoveredProjectInputs) -> list[dict[str, object]]:

@@ -8,14 +8,13 @@ from unittest.mock import Mock
 import pytest
 
 import sqlbuild._native as native
-from sqlbuild._native import build_compiled_project
+from sqlbuild._native import build_compiled_project, discover_project_inputs
 from sqlbuild.adapter.contract.models import ColumnInfo, ExpressionInferenceProfile
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.compiler.compile.main._source_bindings import get_source_binding_diagnostics
 from sqlbuild.compiler.compile.models import CompilerDiagnostic
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     FunctionArgumentTypeCase,
     SemanticTriageCase,
@@ -227,7 +226,7 @@ def test_given_cached_validation_when_warm_or_schema_changed_then_reuses_only_ma
         repeated_validation: Mock = Mock(
             side_effect=AssertionError("cold compile repeated fused validation")
         )
-        patch.setattr(native, "validate_sql_with_schemas_json", repeated_validation)
+        patch.setattr(native, "schema_validation_rows", repeated_validation)
         assert main(args) == 0
         repeated_validation.assert_not_called()
     capsys.readouterr()
@@ -235,7 +234,7 @@ def test_given_cached_validation_when_warm_or_schema_changed_then_reuses_only_ma
         forbidden: Mock = Mock(
             side_effect=AssertionError("warm compile repeated native semantic work")
         )
-        patch.setattr(native, "validate_sql_with_schemas_json", forbidden)
+        patch.setattr(native, "schema_validation_rows", forbidden)
         patch.setattr(native, "analyze_project_queries_compact_json", forbidden)
         assert main(args) == 0
         forbidden.assert_not_called()

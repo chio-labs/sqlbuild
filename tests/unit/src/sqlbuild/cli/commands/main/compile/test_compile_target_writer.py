@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import replace
 from pathlib import Path
@@ -8,6 +7,7 @@ from unittest.mock import Mock
 
 import pytest
 
+import sqlbuild._native as _native
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands._helpers.compile import target_writer as target_writer_module
 from sqlbuild.cli.commands._helpers.compile.target_writer import (
@@ -26,6 +26,7 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.compiled_project.main.project_with import project_with
+from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.planner.models import ChainStep, PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
@@ -41,6 +42,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
     build_target_writer_plan_output,
     read_target_files,
 )
+from tests.unit.src.sqlbuild.compiler.manifest.helpers import build_test_project
 
 
 @pytest.mark.parametrize(
@@ -75,7 +77,14 @@ def test_given_plan_output_when_writing_target_then_expected_files_are_written(
     expected_test_sql: str = (
         build_sql_test_comparison_sql(test_entry=plan_output.test_entries[0]) + "\n"
     )
-    manifest: dict[str, object] = {"metadata": {"project_name": "demo"}}
+    manifest: _native.NativeManifest = build_manifest(
+        project=build_test_project(),
+        project_name="demo",
+        adapter_type="duckdb",
+        upstream_deps={},
+        downstream_deps={},
+    )
+    manifest_contents: bytes = manifest.contents()
 
     expected_files: dict[str, str] = dict(test_case.expected_files)
     expected_files["compiled/tests/_chain_/orders__stg_orders/orders_chain.sql"] = expected_test_sql
@@ -97,7 +106,7 @@ def test_given_plan_output_when_writing_target_then_expected_files_are_written(
     )
 
     assert read_target_files(tmp_path / "target", expected_files) == expected_files
-    assert json.loads(manifest_path.read_text()) == manifest
+    assert manifest_path.read_bytes() == manifest_contents
     assert manifest_path.stat().st_mtime_ns == unchanged_mtime_ns
     assert not (tmp_path / "target" / "run").exists()
 

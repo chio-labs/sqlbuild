@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
-from sqlbuild.compiler.discovery._helpers.native.declarations import native_declaration_groups
+import sqlbuild._native as _native
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.models import NamedDeclarationRoot
 from sqlbuild.compiler.scopes.constants import (
@@ -70,5 +70,5 @@ def named_declaration_files(
 def _declaration_groups(*, project_dir: Path) -> tuple[tuple[tuple[str, ...], Path], ...]:
     return tuple(
         (tuple(root.split(_PATH_SEPARATOR)), project_dir / directory)
-        for root, directory in native_declaration_groups(project_dir=project_dir)
+        for root, directory in _native.declaration_groups(project_dir=project_dir)
     )

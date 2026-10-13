@@ -1,9 +1,11 @@
 import itertools
+import json
 from collections.abc import Callable
 from pathlib import Path
 from types import MappingProxyType
 from typing import cast
 
+from sqlbuild._native import assemble_project, build_compile_inputs, discover_project_inputs
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
@@ -22,8 +24,6 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros,
     load_project_macros,
 )
-from sqlbuild.compiler.compile.main._assemble_project import assemble_project
-from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompiledDirectLogicSqlTestPayload,
@@ -49,7 +49,6 @@ from sqlbuild.compiler.compile.types import (
     CompileInputsView,
     ModelInput,
 )
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
     DiscoveredMacroFile,
     DiscoveredProjectInputs,
@@ -60,6 +59,7 @@ from sqlbuild.compiler.lineage.types import (
     ColumnTransformKind,
     InferredNullability,
 )
+from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.model_loop.main._build_native_declaration_contexts import (
     build_native_declaration_contexts,
 )
@@ -483,3 +483,18 @@ def reanalysed_columns(
         profile=inference_profile or ExpressionInferenceProfile(),
         column_types_by_table=column_types_by_table,
     )[0]
+
+
+def manifest_model_node(*, project: CompiledProjectView, name: str) -> dict[str, object]:
+    """Build the project's manifest and return one model node from its published JSON."""
+
+    manifest: dict[str, dict[str, dict[str, object]]] = json.loads(
+        build_manifest(
+            project=project,
+            project_name="demo",
+            adapter_type="duckdb",
+            upstream_deps={},
+            downstream_deps={},
+        ).contents()
+    )
+    return manifest["nodes"][f"model.demo.{name}"]

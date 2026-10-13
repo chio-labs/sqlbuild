@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
+from sqlbuild._native import discover_project_inputs
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
@@ -37,7 +38,6 @@ from sqlbuild.cli.commands.models import (
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.cli.progress.main._write_execution_header import write_execution_header
 from sqlbuild.compiler.compile.models import CompiledSqlScenario
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.main.sql_analysis_off_guidance import sql_analysis_off_guidance
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile_only import run_compile_only_pipeline

@@ -6,13 +6,13 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
+from sqlbuild._native import discover_project_inputs
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.clone.validation import validate_clone_request
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import CloneCommandRequest, CloneInvocation
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.presentation.main.supports_color import supports_color

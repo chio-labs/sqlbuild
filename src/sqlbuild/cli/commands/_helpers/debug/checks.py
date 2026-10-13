@@ -7,6 +7,7 @@ import sys
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
+from sqlbuild._native import discover_project_inputs
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
 from sqlbuild.cli.commands._helpers.runtime.connection import (
@@ -39,7 +40,6 @@ from sqlbuild.compiler.discovery.constants import (
     LOCAL_CONFIG_FILENAME,
     PROJECT_CONFIG_FILENAME,
 )
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredProvider
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,

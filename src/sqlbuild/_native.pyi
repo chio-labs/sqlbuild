@@ -1,10 +1,13 @@
 """Private SQLBuild native engine bindings."""
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Hashable, Mapping, Sequence, Set
 from pathlib import Path, PurePath
 from typing import Any, Literal, TypedDict, overload
 
+from _typeshed import SupportsRichComparison
+
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCompileArtifacts
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.models import CompileAnalysis
@@ -13,6 +16,7 @@ from sqlbuild.cli.entry.models import CompileCommandRequest, CompileProfileFlags
 from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
 from sqlbuild.compiler.compile.models import (
+    CompileAdapterContext,
     CompileAnalysisSelection,
     CompileAuditInput,
     CompiledAudit,
@@ -52,11 +56,16 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
+    DiscoveredAdapterFile,
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
+    DiscoveredConstantFile,
+    DiscoveredEnumFile,
     DiscoveredHookFunction,
     DiscoveredLoaderFunction,
+    DiscoveredMacroFile,
     DiscoveredMaterializationFile,
+    DiscoveredModelSchemaFile,
     DiscoveredProjectInputs,
     DiscoveredPythonFunctionFile,
     DiscoveredSchemaFile,
@@ -65,13 +74,29 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlFunctionFile,
     DiscoveredSqlHookFile,
     DiscoveredSqlScenarioFile,
+    DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
+    DiscoveryFileFault,
     EnumDeclaration,
     ModelSchemaDeclaration,
     TolerantScopeDiscovery,
 )
+from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
+from sqlbuild.compiler.lineage.models import (
+    ColumnLineageEdge,
+    DirectSemanticColumnUse,
+    ModelColumnLineage,
+    QualifiedLineageColumn,
+)
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
-from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.pipeline.models import (
+    CompiledProjectPhaseResult,
+    CompilePipelineOptions,
+    CompilePipelineResult,
+    ProjectGraph,
+)
+from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonNodeIdentity
 from sqlbuild.compiler.references.models import LiteralSqlRelation
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.scopes.models import (
@@ -102,6 +127,7 @@ from sqlbuild.compiler.sql_test_glue.models import (
 from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestAssemblyRow, NativeSqlTestPlanRow
 from sqlbuild.lint.types import RelationKeyRow
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     LocalConfig,
@@ -782,6 +808,26 @@ def relation_key_row(
     kind: str, name: str, values: dict[str, object], entry: object
 ) -> RelationKeyRow: ...
 def declared_relation_keys(rows: list[RelationKeyRow]) -> dict[str, list[list[str]]]: ...
+def build_dag_json(
+    *, graph: ProjectGraph, project_name: str, python_graph: PythonNodeGraph | None = None
+) -> str: ...
+
+class _ManifestFacts(TypedDict):
+    project_name: str
+    adapter_type: str
+    generated_at: str
+    hook_identities: Mapping[str, PythonNodeIdentity]
+
+class NativeManifest:
+    def contents(self) -> bytes: ...
+
+def build_manifest(
+    *,
+    project: CompiledProjectView,
+    plan_output: PlanOutput | None,
+    graph: NativeProjectGraph,
+    facts: _ManifestFacts,
+) -> NativeManifest: ...
 
 class NativeProjectGraph:
     @staticmethod
@@ -870,7 +916,6 @@ def model_header_failure(
 
 class NativeProjectTree:
     def __init__(self, project_dir: str) -> None: ...
-    def listings(self) -> list[tuple[str, list[tuple[str, bool, bool]]]]: ...
 
 class DiscoveredSqlModelFile:
     """A discovered SQL model file and its raw contents."""
@@ -941,6 +986,15 @@ def build_compiled_project(
     resolved_connection: dict[str, object] | None = None,
     analysis_selection: CompileAnalysisSelection | None = None,
 ) -> CompiledProjectView: ...
+def assemble_project(
+    *,
+    inputs: CompileInputsView,
+    inference_profile: ExpressionInferenceProfile | None = None,
+    skip_column_inference: bool = False,
+    column_lineage_mode: ColumnLineageMode = ...,
+    analysis_cache_dir: Path | None = None,
+    analysis_model_names: frozenset[str] | None = None,
+) -> CompiledProjectView: ...
 def build_project_graph_with_analysis_selection(
     *,
     discovered_inputs: DiscoveredProjectInputs,
@@ -967,6 +1021,47 @@ def build_project_graph(
     on_progress: Callable[[str], None] | None = None,
     no_cache: bool = False,
 ) -> ProjectGraph: ...
+def discover_project_inputs(
+    *,
+    project_dir: Path,
+    sql_analysis_enabled_override: bool | None = None,
+    extract_output_column_locations: bool = True,
+) -> DiscoveredProjectInputs: ...
+def build_discovered_project_inputs(
+    *,
+    project_dir: Path,
+    project_config: ProjectConfig,
+    local_config: LocalConfig,
+    sql_analysis_enabled: bool,
+    extract_output_column_locations: bool = True,
+) -> DiscoveredProjectInputs: ...
+def compile_project_phase(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    options: CompilePipelineOptions | None = None,
+    on_progress: Callable[[str], None] | None = None,
+) -> CompiledProjectPhaseResult: ...
+def run_compile_pipeline(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    options: CompilePipelineOptions | None = None,
+    hooks: ConnectionHooks | None = None,
+) -> CompilePipelineResult: ...
+def build_compile_inputs(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter_context: CompileAdapterContext,
+    selected_target: str | None = None,
+    cli_vars: dict[str, object] | None = None,
+    run_id: str | None = None,
+    no_sql_validation: bool = False,
+    defer_model_sql_validation: bool = False,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    resolved_connection: dict[str, object] | None = None,
+    no_cache: bool = False,
+) -> CompileInputsView: ...
 def run_compile_command(
     request: CompileCommandRequest, reuse_attempt: CompileReuseAttempt | None = None
 ) -> int: ...
@@ -1006,45 +1101,83 @@ def public_declaration_indexes(
 def public_model_schema_index(
     inputs: DiscoveredProjectInputs,
 ) -> dict[str, ModelSchemaDeclaration]: ...
-def discovered_inputs_failure(
-    inputs: DiscoveredProjectInputs, nodes: list[dict[str, object]]
-) -> tuple[object, ...] | None: ...
+def validate_discovered_project_inputs(
+    inputs: DiscoveredProjectInputs, nodes: list[dict[str, object]], /
+) -> None: ...
 def discover_model_files(
-    request: dict[str, object], tree: NativeProjectTree, project_dir: Path
-) -> list[tuple[Path, object]] | tuple[object, ...]: ...
-def discover_sql_test_files(
-    request: dict[str, object], tree: NativeProjectTree
-) -> list[tuple[str, tuple[object, ...]]] | tuple[object, ...]: ...
+    *,
+    project_dir: Path,
+    extract_implicit_alias_columns: bool,
+    extract_output_column_locations: bool,
+    selected_model_names: Set[str] | None = None,
+    on_fault: Callable[[DiscoveryFileFault], None] | None = None,
+) -> tuple[DiscoveredSqlModelFile, ...]: ...
+def discover_test_files(
+    *,
+    project_dir: Path,
+    selected_paths: Set[Path] | None = None,
+    on_fault: Callable[[DiscoveryFileFault], None] | None = None,
+) -> tuple[DiscoveredSqlTestFile, ...]: ...
 def discover_scenario_files(
-    request: dict[str, object], tree: NativeProjectTree
-) -> list[tuple[str, tuple[object, ...]]] | tuple[object, ...]: ...
+    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+) -> tuple[DiscoveredSqlScenarioFile, ...]: ...
+def parse_sql_test_file(
+    *, contents: str, file_path: Path
+) -> tuple[DiscoveredSqlTestBlock, ...]: ...
+def parse_sql_scenario_file(
+    *, contents: str, file_path: Path, relative_path: Path
+) -> DiscoveredSqlScenarioFile: ...
+def discover_source_files(
+    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+) -> tuple[DiscoveredSourceFile, ...]: ...
+def discover_schema_files(*, project_dir: Path) -> tuple[DiscoveredSchemaFile, ...]: ...
 def load_yaml_files(
     request: dict[str, object], relative_paths: list[str], tree: NativeProjectTree
-) -> list[tuple[object, ...]] | tuple[object, ...]: ...
-def load_yaml_document(file_path: str, text: str, kind: str) -> tuple[object, ...]: ...
+) -> list[tuple[str, object] | Exception]: ...
+def load_yaml_document(file_path: str, text: str, kind: str) -> object: ...
+def _oracle_read_error(
+    errno: int | None, winerror: int | None, message: str, *, file_path: Path
+) -> Exception: ...
+def discover_enum_files(
+    *,
+    project_dir: Path,
+    on_fault: Callable[[DiscoveryFileFault], None] | None = None,
+    isolate_declaration_kind: bool = False,
+) -> tuple[DiscoveredEnumFile, ...]: ...
+def discover_constant_files(
+    *,
+    project_dir: Path,
+    on_fault: Callable[[DiscoveryFileFault], None] | None = None,
+    isolate_declaration_kind: bool = False,
+) -> tuple[DiscoveredConstantFile, ...]: ...
+def discover_model_schema_files(
+    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+) -> tuple[DiscoveredModelSchemaFile, ...]: ...
+def discover_sql_function_files(
+    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+) -> tuple[DiscoveredSqlFunctionFile, ...]: ...
+def discover_sql_hook_files(
+    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+) -> tuple[DiscoveredSqlHookFile, ...]: ...
+def discover_audit_files(
+    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+) -> tuple[DiscoveredAuditFile, ...]: ...
+def discover_macro_files(
+    *, project_dir: Path, isolate_declaration_kind: bool = False
+) -> tuple[DiscoveredMacroFile, ...]: ...
+def discover_seed_files(*, project_dir: Path) -> tuple[DiscoveredSeedFile, ...]: ...
+def discover_adapter_file(*, project_dir: Path) -> DiscoveredAdapterFile | None: ...
+def retained_discovery_session(*, project_dir: Path) -> NativeDiscoverySession | None: ...
+def declaration_groups(*, project_dir: Path) -> list[tuple[str, str]]: ...
 
-class NativeDiscoverySession:
-    def __init__(self, request: dict[str, object]) -> None: ...
-    def collection(
-        self, kind: str, tree: NativeProjectTree, isolate_kind: bool = False
-    ) -> (
-        list[
-            tuple[
-                str, tuple[str, str, str | None, str | None, str | None] | None, tuple[object, ...]
-            ]
-        ]
-        | tuple[object, ...]
-    ): ...
+class NativeDiscoverySession: ...
 
 def parse_declaration_contents(
     request: dict[str, object], names: tuple[str, str], contents: str
-) -> tuple[object, ...]: ...
-def discover_declaration_layout(
-    tree: NativeProjectTree, kind: str | None = None
-) -> tuple[tuple[object, ...], tuple[object, ...]] | tuple[object, ...]: ...
-def parse_model_contents(request: dict[str, object], contents: str) -> tuple[object, ...]: ...
-def parse_sql_test_contents(request: dict[str, object], contents: str) -> tuple[object, ...]: ...
-def parse_scenario_contents(request: dict[str, object], contents: str) -> tuple[object, ...]: ...
+) -> str: ...
+def parse_model_contents(
+    request: dict[str, object], contents: str
+) -> tuple[dict[str, object], str, dict[str, SourceLocation]]: ...
 
 class NativeDeclarationContexts:
     def __init__(
@@ -1165,21 +1298,9 @@ def unresolved_reference_marker_kind(
 def normalize_typed_sql_value(
     raw_value: object, typing: tuple[str, str | None], limits: tuple[int, int, int], /
 ) -> object: ...
-def sql_test_blocks(
-    file_path: str, blocks: list[tuple[dict[str, object], str, tuple[int, int]]], /
-) -> list[object]: ...
-def validate_sql_test_block_names(
-    file_path: str, blocks: list[tuple[int, str | None]], /
-) -> None: ...
 def model_header_declarations(
     header: tuple[object | None, object | None], model_name: str, relative_path: Path, /
 ) -> tuple[tuple[object, ...], tuple[object, ...]]: ...
-def typed_constant_record(
-    constant: tuple[str, object],
-    options: tuple[str | None, str | None],
-    paths: tuple[Path, Path],
-    /,
-) -> object: ...
 def deferred_target_segments(
     template: str, logical: str, context_keys: list[str], variables: list[str], /
 ) -> list[tuple[bool, str]]: ...
@@ -1191,6 +1312,30 @@ def resource_sql_diagnostic_rows(catalog: object, request: object, /) -> list[ob
 def compiler_query_hash(sql: str, dialect: str | None, /) -> str: ...
 def function_definition_hash(sql: str, language: str, dialect: str | None, /) -> str: ...
 def normalize_query_text(sql: str, /) -> str: ...
+def fingerprint_create_table_sql(qualified_name: str, column_types: tuple[str, str], /) -> str: ...
+def fingerprint_read_latest_sql(qualified_name: str, /) -> str: ...
+def fingerprint_relevant_read_sql(
+    read_sql: str,
+    node_names: Sequence[str] | None,
+    filtered_node_types: Sequence[str],
+    /,
+) -> str | None: ...
+def fingerprint_insert_sql(qualified_name: str, fingerprint: Fingerprint, /) -> str: ...
+def fingerprint_insert_batches(
+    qualified_name: str,
+    fingerprints: Sequence[Fingerprint],
+    limits: tuple[int, int],
+    /,
+) -> list[tuple[tuple[Fingerprint, ...], str]]: ...
+def fingerprint_set_from_rows(
+    schema: str, qualified_name: str, rows: Sequence[Sequence[object]], /
+) -> FingerprintSet: ...
+def select_latest_fingerprints(
+    fingerprint_set: FingerprintSet,
+    node_names: Sequence[str],
+    filtered_node_types: Sequence[str],
+    /,
+) -> FingerprintSet: ...
 def glob_name_match(name: str, pattern: str, ignore_case: bool, /) -> bool: ...
 def lone_surrogate_site(raw_values: dict[str, object], /) -> tuple[str, str, int] | None: ...
 def environment_template_names(values: list[str | None], /) -> list[str]: ...
@@ -1209,6 +1354,9 @@ def contract_model_edit(
 def contract_source_edit(
     row: tuple[str, str, str, list[tuple[str, str | None]], list[tuple[str, str]], bool], /
 ) -> tuple[str | None, str | None, str | None]: ...
+def python_string_locations(
+    contents: str, names: list[str], context: str | None
+) -> list[tuple[int, int]]: ...
 def resource_identity_suggestion(
     name: str, private_identity: bool, /
 ) -> tuple[str, str] | None: ...
@@ -1294,6 +1442,11 @@ class NativeModelValidator:
     def references(
         self, model: tuple[str, str], references: list[tuple[str, str, bool]]
     ) -> int | NativeConfigError | None: ...
+
+class SqlCodeScanner:
+    def __init__(self, sql: str, syntax: dict[str, object] | None, context: str) -> None: ...
+    def non_code_end(self, index: int) -> int | None: ...
+    def matching_paren(self, open: int) -> int: ...
 
 class SqlReferenceScanner:
     def __init__(self, syntax: dict[str, object]) -> None: ...
@@ -1621,26 +1774,86 @@ def evaluate_project_model_contracts(
 def project_promotion_conflicts(
     settings: tuple[str | None, str, str], project: NativeCompiledProject
 ) -> list[tuple[str, str, str, str, str]]: ...
-def build_fast_column_lineage(
-    catalog: object | None,
-    request: tuple[str | None, list[tuple[str, str, list[str]]], list[tuple[bool, str, list[str]]]],
+def build_project_column_lineage(
+    project: CompiledProjectView,
+    dialect: str | None,
+    mode: ColumnLineageMode,
+    model_names: frozenset[str] | None,
     /,
-) -> list[tuple[str, list[tuple[str, str, str, list[tuple[str, str, str]]]], bool, str | None]]: ...
+) -> ProjectColumnLineage | None: ...
 def build_direct_semantic_uses(
-    schema: list[tuple[str, str, list[tuple[str, str | None]], list[tuple[str, str | None]]]],
-    models: list[tuple[str, str, str]],
-    dialect: str,
-) -> list[tuple[str, str, str, str, str, str, str, int | None, int | None]]: ...
-def build_rich_column_lineage(
-    request: tuple[
-        str,
-        list[tuple[str, str, list[tuple[str, str | None]], list[tuple[str, str | None]]]],
-        list[str],
-    ],
+    project: CompiledProjectView,
+    dialect: str | None,
+    model_names: frozenset[str],
     /,
-) -> list[
-    tuple[str, list[tuple[str, str, str, str, list[tuple[str, str, str]]]], bool, str | None]
-]: ...
+) -> tuple[DirectSemanticColumnUse, ...]: ...
+def render_dependency_tree[Node: Hashable](
+    *,
+    focus: Node,
+    deps: dict[Node, list[Node]],
+    seen: set[Node],
+    format_node: Callable[[Node], str],
+    sort_key: Callable[[Node], SupportsRichComparison],
+    branch_style: Callable[[str], str],
+    already_shown: Callable[[], str],
+) -> list[str]: ...
+def render_column_trace_tree[Column, Edge](
+    *,
+    target: Column,
+    deps: dict[str, list[Edge]],
+    total: int,
+    limit: int,
+    column_id: Callable[[Column], str],
+    related_column: Callable[[Edge], Column],
+    format_related: Callable[[Edge], str],
+    branch_style: Callable[[str], str],
+    already_shown: Callable[[], str],
+    note_style: Callable[[str], str],
+) -> list[str]: ...
+def render_column_trace_limit_note(
+    *, total: int, limit: int, note_style: Callable[[str], str]
+) -> list[str]: ...
+def serialize_column(
+    *,
+    column: QualifiedLineageColumn,
+    render_resource_type: Callable[[QualifiedLineageColumn], str],
+) -> dict[str, object]: ...
+def serialize_column_edge(
+    *,
+    edge: ColumnLineageEdge,
+    render_resource_type: Callable[[QualifiedLineageColumn], str],
+) -> dict[str, object]: ...
+
+class ProjectColumnLineage:
+    """Project-level column lineage graph with lazily materialized public views."""
+
+    def __init__(
+        self,
+        *,
+        models: dict[str, ModelColumnLineage],
+        edges: tuple[ColumnLineageEdge, ...],
+    ) -> None: ...
+    @classmethod
+    def from_fast_facts(
+        cls,
+        *,
+        models: dict[str, ModelColumnLineage],
+        compact_models: dict[str, tuple[Sequence[CompiledLineageColumnFact], bool]],
+        model_order: tuple[str, ...],
+    ) -> ProjectColumnLineage: ...
+    @property
+    def models(self) -> dict[str, ModelColumnLineage]: ...
+    @property
+    def edges(self) -> tuple[ColumnLineageEdge, ...]: ...
+    def has_model(self, model_name: str, /) -> bool: ...
+    def model_has_star(self, model_name: str, /) -> bool: ...
+    def edge_count_targeting(self, model_name: str, /) -> int: ...
+    def edges_targeting(self, model_name: str, /) -> tuple[ColumnLineageEdge, ...]: ...
+    def edges_sourced_from(self, resource_name: str, /) -> tuple[ColumnLineageEdge, ...]: ...
+    def column_consumers(
+        self, *, resource_name: str, column_name: str
+    ) -> tuple[ColumnLineageEdge, ...]: ...
+
 def relation_lineage_fingerprint(
     project_dir: Path, prefix: bytes, interrupted_listing_uncacheable: bool, /
 ) -> str | None: ...
@@ -1697,6 +1910,20 @@ def assemble_project_resource_facts(
     tuple[str, int, str, str, str | None, int | None] | None,
 ]: ...
 def check_native_explicit_references(request_json: str, /) -> str: ...
+def native_execution_gate_edges(
+    request_json: str, /
+) -> tuple[
+    list[tuple[str, tuple[str, str], tuple[str, str], tuple[str, str]]],
+    list[tuple[str, tuple[str, str], tuple[str, str], str, str | None]],
+]: ...
+def schema_validation_rows(
+    catalog: Any,
+    dialect: str,
+    requests: list[tuple[str, list[tuple[str, bool]], dict[str, Mapping[str, str]]]],
+) -> list[list[tuple[str, str, int | None, int | None, int | None, int | None, str]]]: ...
+def python_literal_sql_calls(
+    source: str, start_line: int, placeholder: str
+) -> list[tuple[str, str, int]]: ...
 def _oracle_json_dumps(dialect_json: str, value_json: str) -> str: ...
 def _oracle_text_positions(
     data: bytes, byte_offsets: list[int]

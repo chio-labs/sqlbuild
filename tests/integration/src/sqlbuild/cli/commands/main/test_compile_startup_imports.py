@@ -41,7 +41,6 @@ exit_code = main([
 ])
 Path(sys.argv[2]).write_text(json.dumps({
     "aggregate_models": "sqlbuild.cli.commands.models.runtime" in sys.modules,
-    "dag": "sqlbuild.compiler.dag.main.build" in sys.modules,
     "manifest": "sqlbuild.compiler.manifest.main.build" in sys.modules,
 }), encoding="utf-8")
 raise SystemExit(exit_code)
@@ -59,7 +58,6 @@ raise SystemExit(exit_code)
     assert summary["models"] == test_case.expected_count
     assert json.loads(import_status_path.read_text(encoding="utf-8")) == {
         "aggregate_models": False,
-        "dag": False,
         "manifest": False,
     }
 

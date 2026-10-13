@@ -2,24 +2,20 @@ from __future__ import annotations
 
 import random
 from collections import Counter
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import pytest
 
 import sqlbuild._native as native_module
-from sqlbuild._native import build_project_graph
+from sqlbuild._native import ProjectColumnLineage, build_project_graph, discover_project_inputs
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.compiled_project.main.project_with import project_with
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.lineage.main._build_native_column_lineage import (
-    build_native_column_lineage,
-)
-from sqlbuild.compiler.lineage.models import ProjectColumnLineage
+from sqlbuild.compiler.lineage.types import ColumnLineageMode
 
 _PROJECT_TOML: str = (
     'name = "orders_lineage"\nadapter = "duckdb"\n\n[connection]\ndatabase = "orders.duckdb"\n'
@@ -244,9 +240,22 @@ def lineage_views(
 
     lineage: ProjectColumnLineage = cast(
         ProjectColumnLineage,
-        build_native_column_lineage(project=project, dialect=dialect, model_names=model_names),
+        fast_column_lineage(project=project, dialect=dialect, model_names=model_names),
     )
     return _public_views(project=project, lineage=lineage)
+
+
+def fast_column_lineage(
+    *,
+    project: CompiledProjectView,
+    dialect: str | None,
+    model_names: frozenset[str] | None,
+) -> ProjectColumnLineage | None:
+    """The native fast lineage graph, or None without SQL analysis."""
+
+    return native_module.build_project_column_lineage(
+        project, dialect, ColumnLineageMode.FAST, model_names
+    )
 
 
 def _public_views(
@@ -280,18 +289,21 @@ def lineage_log_records(caplog: pytest.LogCaptureFixture) -> list[tuple[str, str
     ]
 
 
-def record_native_outcomes(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
-    """Count the native engine's per-model outcome statuses for the rest of the test."""
+def fast_lineage_work(
+    *, project: CompiledProjectView, model_names: frozenset[str] | None
+) -> Counter[str]:
+    """Count the selected models fast lineage parses and those whose root star it expands."""
 
-    statuses: Counter[str] = Counter()
-    build: Callable[..., Sequence[tuple[str, object, bool, str | None]]] = (
-        native_module.build_fast_column_lineage
+    names: frozenset[str] = model_names or frozenset(model.name for model in project.models)
+    return Counter(
+        parse=sum(
+            model.name in names and model.fast_lineage_columns is None for model in project.models
+        ),
+        star=sum(
+            model.name in names
+            and model.fast_lineage_columns is not None
+            and model.fast_lineage_has_star
+            and not model.fast_lineage_star_resolved
+            for model in project.models
+        ),
     )
-
-    def counted(*arguments: Any) -> Sequence[tuple[str, object, bool, str | None]]:
-        outcomes: Sequence[tuple[str, object, bool, str | None]] = build(*arguments)
-        statuses.update(outcome[0] for outcome in outcomes)
-        return outcomes
-
-    monkeypatch.setattr(native_module, "build_fast_column_lineage", counted)
-    return statuses

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.graph._helpers.hook_reads import hook_read_edges_impl
+from sqlbuild.compiler.graph._helpers.execution_gates import hook_read_edges_impl
 from sqlbuild.compiler.graph.models import HookReadEdge
 
 

@@ -23,7 +23,7 @@ fn checked(request: &ReferenceRequest) -> Result<ReferenceReport, ReferenceFailu
     } else {
         ReferenceReport::default()
     };
-    let gates = gate_edges(request);
+    let gates = gate_edges(&request.resources, &request.audits);
     let mut diagnostics = gate_diagnostics(request, &gates);
     if let Some(message) = unknown_read(request) {
         return Err(ReferenceFailure::CompileInput(message));

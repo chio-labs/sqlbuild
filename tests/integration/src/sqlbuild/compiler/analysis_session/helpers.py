@@ -14,8 +14,9 @@ from typing import Any, cast
 import pytest
 
 import sqlbuild._native as native_module
-import sqlbuild.compiler.compile._helpers.assembly.project as project_assembly
+import sqlbuild.compiler.compile._helpers.diagnostics.recovery as semantic_recovery
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stage_assembly
+from sqlbuild._native import build_compile_inputs, discover_project_inputs
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.entry.main.entry import main
@@ -52,7 +53,6 @@ from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
 )
 from sqlbuild.compiler.compile.classes.python_model_analysis import PythonModelAnalysis
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
     CompactLineageFacts,
@@ -61,8 +61,11 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
     ModelSqlAnalysis,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompileInputsView, ModelInput
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+from sqlbuild.compiler.compile.types import (
+    CompiledProjectView,
+    CompileInputsView,
+    ModelInput,
+)
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 from sqlbuild.sql_values.types import CollectionRendering
@@ -644,19 +647,20 @@ def analyse_natively(
         runs.golden.append(golden_entry("shapes", (native, catalog.expression_shapes)))
         return native
 
-    assembled_model: Callable[..., CompiledModelView] = project_assembly._assemble_compiled_model
+    completed: Callable[..., CompiledProjectView] = semantic_recovery.complete_semantic_diagnostics
 
-    def recorded_model(*arguments: Any, **keywords: Any) -> CompiledModelView:
-        model: CompiledModelView = assembled_model(*arguments, **keywords)
-        runs.golden.append(golden_entry("proof", model.dynamic_column_contract))
-        return model
+    def recorded_proofs(*, project: CompiledProjectView, **keywords: Any) -> CompiledProjectView:
+        runs.golden.extend(
+            golden_entry("proof", model.dynamic_column_contract) for model in project.models
+        )
+        return completed(project=project, **keywords)
 
     with monkeypatch.context() as patch:
-        patch.setattr(project_assembly, "_assemble_compiled_model", recorded_model)
-        patch.setattr(project_assembly, "analyze_model_sql", analysed_three_ways)
-        patch.setattr(project_assembly, "expression_source_shapes", recorded_shapes)
+        patch.setattr(semantic_recovery, "complete_semantic_diagnostics", recorded_proofs)
+        patch.setattr(native_stage_assembly, "analyze_model_sql", analysed_three_ways)
+        patch.setattr(native_stage_assembly, "expression_source_shapes", recorded_shapes)
         with suppress(CompileInputError):
-            _ = project_assembly.assemble_compiled_project(
+            _ = native_module.assemble_project(
                 inputs=inputs,
                 inference_profile=replace(inference_profile),
                 column_lineage_mode=lineage_mode,
@@ -701,8 +705,8 @@ def analysis_request(
         monkeypatch.context() as patch,
         suppress(CompileInputError, native_module.NativeCompilerError),
     ):
-        patch.setattr(project_assembly, "analyze_model_sql", captured)
-        _ = project_assembly.assemble_compiled_project(
+        patch.setattr(native_stage_assembly, "analyze_model_sql", captured)
+        _ = native_module.assemble_project(
             inputs=inputs,
             inference_profile=inference_profile,
         )

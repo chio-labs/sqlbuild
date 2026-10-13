@@ -37,3 +37,21 @@ pub(super) fn owned_failure(
 ) -> Option<(String, Option<String>)> {
     expected.map(|(message, help)| (message.to_owned(), help.map(str::to_owned)))
 }
+
+/// The paths a listing of a project holding `files` (with empty contents) returns.
+pub(super) fn listed_paths(
+    files: &[&str],
+    list: impl Fn(&ProjectTree) -> Result<Vec<String>, crate::yaml_files::models::YamlPathFailure>,
+) -> Result<Vec<String>, crate::yaml_files::models::YamlPathFailure> {
+    let project = tempfile::tempdir().expect("temporary project");
+    for file in files {
+        let path = project.path().join(file);
+        std::fs::create_dir_all(path.parent().expect("file parent")).expect("parent directory");
+        std::fs::write(path, b"").expect("project file");
+    }
+    list(&ProjectTree::new(project.path()))
+}
+
+pub(super) fn owned_paths(paths: &[&str]) -> Vec<String> {
+    paths.iter().map(|path| (*path).to_owned()).collect()
+}

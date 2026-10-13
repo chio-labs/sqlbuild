@@ -7,7 +7,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import cast
 
-from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
+from sqlbuild._native import assemble_project
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
@@ -440,7 +440,7 @@ def build_compiled_project_with_model_specs(
                 references=extract_sql_references(sql=sql, syntax=_GENERIC_SQL_SYNTAX),
             )
         )
-    return assemble_compiled_project(
+    return assemble_project(
         inputs=CompileProjectInputs(
             project_config=ProjectConfig(name="demo", adapter="duckdb"),
             local_config=LocalConfig(),

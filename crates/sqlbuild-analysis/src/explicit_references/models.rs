@@ -34,7 +34,7 @@ pub struct GraphResource {
 }
 
 /// A relation name with the qualifiers written or configured.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct Relation {
     pub name: String,
     pub schema: Option<String>,
@@ -46,12 +46,57 @@ pub struct Relation {
 pub struct ModelReferences {
     pub name: String,
     pub path: String,
+    #[serde(default)]
     pub destination: Relation,
     /// `model_python_hook_names(model)`.
     pub python_hooks: Vec<String>,
     pub sql_hooks: Vec<SqlHook>,
     /// The `migrate_from` text where it is a string and old-name views are retained.
     pub migrate_from: Option<String>,
+}
+
+/// The facts execution ordering reads: models with hooks, audits and Python hooks.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ExecutionGateRequest {
+    /// Models in project order with their dependencies.
+    pub resources: Vec<GraphResource>,
+    pub models: Vec<ModelReferences>,
+    pub audits: Vec<AuditGate>,
+    pub hooks: Vec<PythonHook>,
+}
+
+/// One ordering edge: `gated` waits for `read`, which audit `audit_name` on `target` reads.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct GateEdge {
+    pub audit_name: String,
+    pub target: ResourceKey,
+    pub gated: ResourceKey,
+    pub read: ResourceKey,
+}
+
+/// How diagnostics name a hook.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum HookType {
+    Python,
+    Sql,
+    InlineSql,
+}
+
+/// One ordering edge: model `gated` waits for `read`, which one of its hooks reads.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct HookEdge {
+    pub hook_name: String,
+    pub gated: ResourceKey,
+    pub read: ResourceKey,
+    pub hook_type: HookType,
+    pub path: Option<String>,
+}
+
+/// Python's attached-audit gate edges and hook-read edges, in its order.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ExecutionGateEdges {
+    pub audit_gates: Vec<GateEdge>,
+    pub hook_reads: Vec<HookEdge>,
 }
 
 /// One SQL hook entry with declared reads: its hook key, position and identity.

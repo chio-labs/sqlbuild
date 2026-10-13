@@ -5,9 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
+from sqlbuild._native import build_compile_inputs, discover_project_inputs
 from sqlbuild.compiler.compile.types import CompileInputsView
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     DUCKDB_COMPILE_ADAPTER_CONTEXT,

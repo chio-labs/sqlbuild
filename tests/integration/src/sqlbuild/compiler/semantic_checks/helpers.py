@@ -13,9 +13,9 @@ from typing import Any, cast
 import pytest
 
 import sqlbuild._native as native_module
-import sqlbuild.compiler.compile._helpers.assembly.project as assembly_project
+import sqlbuild.compiler.compile._helpers.diagnostics.recovery as semantic_recovery
 import sqlbuild.compiler.semantic_checks._helpers.stage as semantic_stage
-from sqlbuild._native import build_project_graph
+from sqlbuild._native import build_project_graph, discover_project_inputs
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.analysis_session.types import DiagnosticRow
@@ -25,7 +25,6 @@ from sqlbuild.compiler.compile._helpers.diagnostics.recovery import (
 from sqlbuild.compiler.compile.models import CompilerDiagnostic
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.compiled_project.main.project_with import project_with
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.semantic_checks._helpers.metadata import native_metadata_diagnostics
 from sqlbuild.compiler.semantic_checks._helpers.payloads import session_fact_models
 from sqlbuild.compiler.semantic_checks.main._complete_native_semantic_diagnostics import (
@@ -209,7 +208,7 @@ def captured_semantic_inputs(
         return complete_semantic_diagnostics(**arguments)
 
     with monkeypatch.context() as patch:
-        patch.setattr(assembly_project, "complete_semantic_diagnostics", capture)
+        patch.setattr(semantic_recovery, "complete_semantic_diagnostics", capture)
         _ = build_project_graph(
             discovered_inputs=discover_project_inputs(project_dir=project_dir),
             adapter=DuckDbAdapter(),

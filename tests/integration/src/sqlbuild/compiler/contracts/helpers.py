@@ -12,7 +12,7 @@ from typing import Any, NamedTuple, TypeGuard
 import pytest
 
 import sqlbuild.compiler.contracts.main._evaluate_native_model_contracts as contract_entry
-from sqlbuild._native import build_project_graph
+from sqlbuild._native import build_project_graph, discover_project_inputs
 from sqlbuild.adapter.contract.types import TypeDialect
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
@@ -26,7 +26,6 @@ from sqlbuild.compiler.compiled_project.main.compiled_model_record import compil
 from sqlbuild.compiler.compiled_project.main.compiled_project_record import compiled_project_record
 from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
 from sqlbuild.compiler.contracts.models import ContractValidationResult
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.planner.types import ContractPolicy, IncrementalMode, MaterializationType
 from sqlbuild.spec.contracts.models import (

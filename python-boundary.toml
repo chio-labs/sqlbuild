@@ -2,7 +2,7 @@
 # migration work that moves to Rust. `remaining_lines` must equal the current count of that work:
 # a PR that moves code lowers it, and adding movable Python fails the check.
 # Native failures must surface as errors; `handled_native_errors` lists the reviewed exceptions.
-remaining_lines = 137187
+remaining_lines = 130215
 
 [[stays]]
 path = "executor"
@@ -205,6 +205,14 @@ reason = "public-api"
 note = "Public facade."
 
 [[handled_native_errors]]
+location = "compiler/discovery/_helpers/filesystem/aggregation.py::_discover_declarations"
+note = "Tolerant scope discovery records a failing declaration category as a fault; no Python implementation runs."
+
+[[handled_native_errors]]
+location = "compiler/planner/_helpers/sql_tests/fixture_formatting.py::format_redundant_fixture_nulls"
+note = "A test file that no longer parses is left unformatted, as before; no Python implementation runs."
+
+[[handled_native_errors]]
 location = "compiler/macro_bridge/_helpers/store_keys.py::macro_store_token"
 note = "A macro without a stable key is not stored; no Python implementation runs."
 
@@ -223,3 +231,19 @@ note = "An undecodable cached finding is a cache miss; the rules run again nativ
 [[handled_native_errors]]
 location = "cli/commands/_helpers/refactor/compile_facts.py::compile_for_refactor"
 note = "Reports the Python stage errors the native compile driver propagates as refactor diagnostics; a native compiler failure is a RuntimeError and is not caught."
+
+[[handled_native_errors]]
+location = "cli/commands/_helpers/cost/refresh.py::refresh_pending_cost_run"
+note = "Best-effort cost refresh keeps its existing catch-all; discovery is now entered through the native driver, and no Python implementation runs instead."
+
+[[handled_native_errors]]
+location = "compiler/scopes/main/load_or_build_scope_index.py::load_or_build_scope_index"
+note = "Project input errors from discovery and compile-input stages select the tolerant scope index as before; a native compiler failure is a RuntimeError and is not caught."
+
+[[handled_native_errors]]
+location = "lint/_helpers/fixes.py::_FixSession._relation_keys"
+note = "A baseline that does not compile yields no relation keys, as before the compile entry became native; no Python implementation runs instead."
+
+[[handled_native_errors]]
+location = "lint/_helpers/fixes.py::_FixSession._verdict"
+note = "A candidate fix whose project fails to compile is unverified and not applied, as before the compile entry became native; no Python implementation runs instead."

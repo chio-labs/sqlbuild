@@ -8,16 +8,18 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
-from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
+from sqlbuild._native import (
+    assemble_project,
+    build_compile_inputs,
+    build_dag_json,
+    discover_project_inputs,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
 from sqlbuild.compiler.compiled_project.main.project_with import project_with
-from sqlbuild.compiler.dag.main.build import build_dag_json
 from sqlbuild.compiler.dag.types import NodeKind
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.graph.main.project_lineage_views import project_lineage_views
 from sqlbuild.compiler.pipeline.models import ProjectGraph
@@ -236,7 +238,7 @@ seeds:
         discovered_inputs=discovered,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
     )
-    project: CompiledProjectView = assemble_compiled_project(inputs=inputs)
+    project: CompiledProjectView = assemble_project(inputs=inputs)
     graph: ProjectGraph = project_graph_from_indexes(
         project=project,
         upstream_deps={},

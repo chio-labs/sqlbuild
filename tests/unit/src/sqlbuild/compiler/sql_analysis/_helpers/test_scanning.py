@@ -2,14 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.sql_analysis._helpers.scanning import (
-    dialect_non_code_end_impl,
-    dialect_quoted_text_end_impl,
-    find_matching_paren_impl,
-    iter_code_positions_impl,
-    skip_quoted_text_impl,
-)
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.compiler.sql_analysis._helpers._test_types import (
     DialectMatchingParenTestCase,
@@ -17,10 +11,13 @@ from tests.unit.src.sqlbuild.compiler.sql_analysis._helpers._test_types import (
     DialectNonCodeSuccessTestCase,
     DialectQuotedTextErrorTestCase,
     DialectQuotedTextSuccessTestCase,
-    IterCodePositionsTestCase,
     RequiresDialectScanTestCase,
     SkipQuotedTextErrorTestCase,
     SkipQuotedTextSuccessTestCase,
+)
+from tests.unit.src.sqlbuild.compiler.sql_analysis._helpers.helpers import (
+    dialect_scanner,
+    generic_scanner,
 )
 
 
@@ -75,7 +72,7 @@ def test_given_quoted_text_when_skipping_then_returns_end_position(
 ) -> None:
     sql: str = f"{test_case.quoted_sql} suffix"
 
-    result: int = skip_quoted_text_impl(sql=sql, start=0)
+    result: int | None = generic_scanner(sql=sql).non_code_end(0)
 
     assert result == test_case.expected_end
 
@@ -102,7 +99,7 @@ def test_given_unclosed_quote_when_skipping_then_raises_contextual_error(
     test_case: SkipQuotedTextErrorTestCase,
 ) -> None:
     with pytest.raises(CompileInputError, match=test_case.expected_error):
-        skip_quoted_text_impl(sql=test_case.sql, start=0, context=test_case.context)
+        generic_scanner(sql=test_case.sql, context=test_case.context).non_code_end(0)
 
 
 ANSI_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
@@ -197,8 +194,8 @@ TRIPLE_QUOTE_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax(
 def test_given_dialect_quoted_text_when_scanning_then_returns_end_position(
     test_case: DialectQuotedTextSuccessTestCase,
 ) -> None:
-    result: int | None = dialect_quoted_text_end_impl(
-        sql=test_case.sql, start=test_case.start, syntax=test_case.syntax
+    result: int | None = dialect_scanner(sql=test_case.sql, syntax=test_case.syntax).non_code_end(
+        test_case.start
     )
 
     assert result == test_case.expected_end
@@ -226,7 +223,7 @@ def test_given_unclosed_dialect_quoted_text_when_scanning_then_raises(
     test_case: DialectQuotedTextErrorTestCase,
 ) -> None:
     with pytest.raises(CompileInputError, match=test_case.expected_error):
-        dialect_quoted_text_end_impl(sql=test_case.sql, start=0, syntax=test_case.syntax)
+        dialect_scanner(sql=test_case.sql, syntax=test_case.syntax).non_code_end(0)
 
 
 NESTED_COMMENT_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax(nested_block_comments=True)
@@ -295,9 +292,7 @@ SLASH_COMMENT_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax(
 def test_given_dialect_sql_when_scanning_non_code_then_returns_end_position(
     test_case: DialectNonCodeSuccessTestCase,
 ) -> None:
-    result: int | None = dialect_non_code_end_impl(
-        sql=test_case.sql, start=0, syntax=test_case.syntax
-    )
+    result: int | None = dialect_scanner(sql=test_case.sql, syntax=test_case.syntax).non_code_end(0)
 
     assert result == test_case.expected_end
 
@@ -324,44 +319,7 @@ def test_given_unclosed_dialect_comment_when_scanning_then_raises(
     test_case: DialectNonCodeErrorTestCase,
 ) -> None:
     with pytest.raises(CompileInputError, match=test_case.expected_error):
-        dialect_non_code_end_impl(sql=test_case.sql, start=0, syntax=test_case.syntax)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    (
-        IterCodePositionsTestCase(
-            description="parentheses change depth and are not yielded",
-            sql="a(b)c",
-            expected_positions=((0, 0), (2, 1), (4, 0)),
-        ),
-        IterCodePositionsTestCase(
-            description="quotes and comments are skipped",
-            sql="a'(b'`c`--d\n/*e*/f",
-            expected_positions=((0, 0), (17, 0)),
-        ),
-        IterCodePositionsTestCase(
-            description="dollar-quoted text is skipped",
-            sql="a $$'(--$$b",
-            expected_positions=((0, 0), (1, 0), (10, 0)),
-        ),
-        IterCodePositionsTestCase(
-            description="dollars inside identifiers and parameters remain code",
-            sql="a$$b $1",
-            expected_positions=tuple((index, 0) for index in range(7)),
-        ),
-        IterCodePositionsTestCase(
-            description="unbalanced close parenthesis goes below zero depth",
-            sql=")a",
-            expected_positions=((1, -1),),
-        ),
-    ),
-    ids=lambda case: case.description,
-)
-def test_given_sql_when_iterating_code_positions_then_yields_code_offsets_with_depth(
-    test_case: IterCodePositionsTestCase,
-) -> None:
-    assert tuple(iter_code_positions_impl(sql=test_case.sql)) == test_case.expected_positions
+        dialect_scanner(sql=test_case.sql, syntax=test_case.syntax).non_code_end(0)
 
 
 @pytest.mark.parametrize(
@@ -431,19 +389,19 @@ def test_given_sql_when_checking_dialect_sensitivity_then_reports_differences(
     (
         DialectMatchingParenTestCase(
             description="backslash-escaped quote hides a parenthesis",
-            syntax=SINGLE_QUOTE_BACKSLASH_SYNTAX,
+            native_syntax=SINGLE_QUOTE_BACKSLASH_SYNTAX.native_mapping,
             sql="('O\\') ' AS name) tail",
             expected_index=len("('O\\') ' AS name"),
         ),
         DialectMatchingParenTestCase(
             description="hash comment hides a parenthesis",
-            syntax=HASH_COMMENT_SYNTAX,
+            native_syntax=HASH_COMMENT_SYNTAX.native_mapping,
             sql="(1 # )\n) tail",
             expected_index=len("(1 # )\n"),
         ),
         DialectMatchingParenTestCase(
             description="generic scanning keeps the backslash literal",
-            syntax=None,
+            native_syntax=None,
             sql="('C:\\') tail",
             expected_index=len("('C:\\'"),
         ),
@@ -454,6 +412,6 @@ def test_given_dialect_sql_when_matching_parenthesis_then_follows_dialect_rules(
     test_case: DialectMatchingParenTestCase,
 ) -> None:
     assert (
-        find_matching_paren_impl(sql=test_case.sql, open_paren_index=0, syntax=test_case.syntax)
+        _native.SqlCodeScanner(test_case.sql, test_case.native_syntax, "SQL").matching_paren(0)
         == test_case.expected_index
     )

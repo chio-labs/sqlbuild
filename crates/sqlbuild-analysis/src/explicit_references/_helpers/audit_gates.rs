@@ -7,30 +7,22 @@ use crate::explicit_references::constants::{
     AUDIT_GATE_CODE, MODEL_TYPE, READABLE_TYPES, SEED_TYPE, SOURCE_TYPE, TABLE_FUNCTION_TYPE,
     UDF_TYPE,
 };
-use crate::explicit_references::models::{AuditGate, ReferenceDiagnostic, ReferenceRequest};
+use crate::explicit_references::models::{
+    AuditGate, GateEdge, GraphResource, ReferenceDiagnostic, ReferenceRequest,
+};
 use crate::explicit_references::types::ResourceKey;
-
-/// One ordering edge: `gated` waits for `read`, which an audit on `target` reads.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct GateEdge {
-    pub(crate) gated: ResourceKey,
-    pub(crate) read: ResourceKey,
-}
 
 /// An audit's target and the other resources it reads.
 struct Gate<'a> {
+    audit_name: &'a str,
     target: &'a ResourceKey,
     reads: Vec<&'a ResourceKey>,
 }
 
 /// `attached_audit_gate_edges_impl`: edges to a fixed point, as sources gain triggering models.
-pub(crate) fn gate_edges(request: &ReferenceRequest) -> Vec<GateEdge> {
+pub(crate) fn gate_edges(resources: &[GraphResource], audits: &[AuditGate]) -> Vec<GateEdge> {
     let mut triggers: HashMap<ResourceKey, HashSet<ResourceKey>> = HashMap::new();
-    for resource in request
-        .resources
-        .iter()
-        .filter(|item| item.key.0 == MODEL_TYPE)
-    {
+    for resource in resources.iter().filter(|item| item.key.0 == MODEL_TYPE) {
         for dep in resource.deps.iter().filter(|dep| dep.0 == SOURCE_TYPE) {
             triggers
                 .entry(dep.clone())
@@ -38,7 +30,7 @@ pub(crate) fn gate_edges(request: &ReferenceRequest) -> Vec<GateEdge> {
                 .insert(resource.key.clone());
         }
     }
-    let gates: Vec<Gate<'_>> = request.audits.iter().filter_map(gate).collect();
+    let gates: Vec<Gate<'_>> = audits.iter().filter_map(gate).collect();
     let mut edges: Vec<GateEdge> = Vec::new();
     let mut seen: HashSet<GateEdge> = HashSet::new();
     let mut changed = true;
@@ -105,7 +97,11 @@ pub(crate) fn gate_diagnostics(
 fn gate(audit: &AuditGate) -> Option<Gate<'_>> {
     let target = audit.target.as_ref()?;
     let reads: Vec<&ResourceKey> = extra_reads(audit, target);
-    (!reads.is_empty()).then_some(Gate { target, reads })
+    (!reads.is_empty()).then_some(Gate {
+        audit_name: &audit.name,
+        target,
+        reads,
+    })
 }
 
 fn extra_reads<'a>(audit: &'a AuditGate, target: &ResourceKey) -> Vec<&'a ResourceKey> {
@@ -135,6 +131,8 @@ fn edges_of(
     for read in &gate.reads {
         for key in &gated {
             edges.push(GateEdge {
+                audit_name: gate.audit_name.to_owned(),
+                target: gate.target.clone(),
                 gated: key.clone(),
                 read: (*read).clone(),
             });

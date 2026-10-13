@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild import _native
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+from sqlbuild._native import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveryFileFault
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     DeclarationFilesParityTestCase,

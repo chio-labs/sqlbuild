@@ -10,7 +10,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     Status, call_with, imported, keywords, within,
 };
 
-const DISCOVER_MODULE: &str = "sqlbuild.compiler.discovery.main.discover";
+const DISCOVER_MODULE: &str = "sqlbuild._native";
 const REJECT_SELECTORS_MODULE: &str = "sqlbuild.compiler.pipeline.main.reject_unit_test_selectors";
 const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";

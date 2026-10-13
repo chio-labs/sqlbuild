@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Iterator
 
+import sqlbuild._native as _native
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
@@ -32,11 +33,6 @@ from sqlbuild.compiler.references.main._reference_call_prefix_pattern_text impor
     reference_call_prefix_pattern_text,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
-from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
-from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
-from sqlbuild.compiler.sql_analysis.main._skip_dialect_non_code import dialect_non_code_end
-from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
-from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 
@@ -51,7 +47,7 @@ _UDF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.U
 _TABLE_FUNCTION_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(
     SqlReferenceKind.TABLE_FUNCTION
 )
-_SQL_QUOTE_TOKENS: frozenset[str] = frozenset({"'", '"', "`", "$"})
+_REFERENCE_SCAN_CONTEXT: str = "SQL reference resolution"
 _CLAUSE_KEYWORDS: frozenset[str] = frozenset(
     {
         "WHERE",
@@ -185,11 +181,9 @@ def resolve_udf_references(
             last_index = match.end()
             continue
 
-        call_suffix_end: int = find_matching_paren(
-            sql=query_sql,
-            open_paren_index=call_suffix_start,
-            context="SQL UDF call",
-        )
+        call_suffix_end: int = _native.SqlCodeScanner(
+            query_sql, None, "SQL UDF call"
+        ).matching_paren(call_suffix_start)
         call_suffix_sql: str = query_sql[call_suffix_start : call_suffix_end + 1]
         parts.append(
             adapter.render_udf_call(
@@ -241,11 +235,9 @@ def resolve_table_function_references(
             last_index = match.end()
             continue
 
-        call_suffix_end: int = find_matching_paren(
-            sql=query_sql,
-            open_paren_index=call_suffix_start,
-            context="SQL table function call",
-        )
+        call_suffix_end: int = _native.SqlCodeScanner(
+            query_sql, None, "SQL table function call"
+        ).matching_paren(call_suffix_start)
         call_suffix_sql: str = query_sql[call_suffix_start : call_suffix_end + 1]
         parts.append(
             adapter.render_table_function_call(
@@ -281,33 +273,29 @@ def replace_executable_matches(
 
 
 def _iter_executable_matches(*, sql: str, pattern: re.Pattern[str]) -> Iterator[re.Match[str]]:
-    index: int = 0
-    while index < len(sql):
-        if sql[index] in _SQL_QUOTE_TOKENS:
-            index = skip_quoted_text(sql=sql, start=index, context="SQL reference resolution")
-            continue
-        if sql.startswith("--", index):
-            index = skip_line_comment(sql=sql, start=index)
-            continue
-        if sql.startswith("/*", index):
-            index = skip_block_comment(sql=sql, start=index, context="SQL reference resolution")
-            continue
-        match: re.Match[str] | None = pattern.match(sql, index)
-        if match is None:
-            index += 1
-            continue
-        yield match
-        index = match.end()
+    return _iter_code_matches(
+        sql=sql,
+        pattern=pattern,
+        scanner=_native.SqlCodeScanner(sql, None, _REFERENCE_SCAN_CONTEXT),
+    )
 
 
 def _iter_dialect_executable_matches(
     *, sql: str, pattern: re.Pattern[str], lexical_syntax: SqlLexicalSyntax
 ) -> Iterator[re.Match[str]]:
+    return _iter_code_matches(
+        sql=sql,
+        pattern=pattern,
+        scanner=_native.SqlCodeScanner(sql, lexical_syntax.native_mapping, _REFERENCE_SCAN_CONTEXT),
+    )
+
+
+def _iter_code_matches(
+    *, sql: str, pattern: re.Pattern[str], scanner: _native.SqlCodeScanner
+) -> Iterator[re.Match[str]]:
     index: int = 0
     while index < len(sql):
-        non_code_end: int | None = dialect_non_code_end(
-            sql=sql, start=index, syntax=lexical_syntax, context="SQL reference resolution"
-        )
+        non_code_end: int | None = scanner.non_code_end(index)
         if non_code_end is not None:
             index = non_code_end
             continue
