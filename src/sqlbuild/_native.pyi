@@ -1909,9 +1909,14 @@ def assemble_project_resource_facts(
     list[bool],
     tuple[str, int, str, str, str | None, int | None] | None,
 ]: ...
-def check_native_explicit_references(request_json: str, /) -> str: ...
+def explicit_reference_report(
+    project: Any,
+    settings: dict[str, object],
+    owners: list[tuple[Any, int, list[tuple[str, str, int]]]],
+    /,
+) -> Any: ...
 def native_execution_gate_edges(
-    request_json: str, /
+    project: Any, /
 ) -> tuple[
     list[tuple[str, tuple[str, str], tuple[str, str], tuple[str, str]]],
     list[tuple[str, tuple[str, str], tuple[str, str], str, str | None]],
