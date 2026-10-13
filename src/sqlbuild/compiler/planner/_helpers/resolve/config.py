@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import get_config_str
 from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.planner.types import IncrementalStrategy
-from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 
 def get_config_append_cursor_inclusive(model: CompiledModelView) -> bool:

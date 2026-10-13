@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import get_config_str
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
 )
@@ -19,7 +20,6 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
-from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 
 def build_display_only_sqlbuild_plan(

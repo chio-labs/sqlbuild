@@ -12,7 +12,7 @@ use sqlbuild_refactor::refactoring::models::{
 };
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const CONFIG_MODULE: &str = "sqlbuild.spec.contracts.main.get_config_str";
+const CONFIG_MODULE: &str = "sqlbuild._native";
 const SCOPE_MODELS: &str = "sqlbuild.compiler.scopes.models";
 const SCOPE_TYPES: &str = "sqlbuild.compiler.scopes.types";
 const GENERIC_DIALECT: &str = "generic";

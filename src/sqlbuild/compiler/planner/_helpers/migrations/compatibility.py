@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import get_config_str
 from sqlbuild.adapter.contract.models import ColumnInfo, NormalizedType, RelationInfo
 from sqlbuild.adapter.contract.types import TypeFamily
 from sqlbuild.adapter.type_system.main.normalize_type import normalize_type
@@ -21,7 +22,6 @@ from sqlbuild.compiler.planner.types import (
     SchemaChangeKind,
     SnapshotSchemaChangePolicy,
 )
-from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 from sqlbuild.spec.contracts.models import SnapshotsConfig
 
 _DEFAULT_ON_SCHEMA_CHANGE: OnSchemaChange = OnSchemaChange.APPEND_NEW_COLUMNS

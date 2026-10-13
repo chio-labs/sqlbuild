@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 
+from sqlbuild._native import get_config_str
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
@@ -48,7 +49,6 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import InputColumns, MaterializationType, WarningSeverity
-from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy
 
 _HISTORY_MATERIALIZATIONS: frozenset[str] = frozenset(

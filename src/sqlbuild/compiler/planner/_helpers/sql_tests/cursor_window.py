@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild._native import get_config_str
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
@@ -20,7 +21,6 @@ from sqlbuild.cursor_algebra.main.floor_to_grain import floor_to_grain
 from sqlbuild.cursor_algebra.main.parse import parse
 from sqlbuild.cursor_algebra.main.render import render
 from sqlbuild.cursor_algebra.types import CursorScalar
-from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 _DEFAULT_TIMESTAMP_START: str = "1900-01-01 00:00:00"
 _DEFAULT_TIMESTAMP_END: str = "2999-12-31 00:00:00"

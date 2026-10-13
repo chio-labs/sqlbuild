@@ -5,11 +5,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlbuild._native import get_config_str
 from sqlbuild.adapter.contract.models import CursorValue
 from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.compiler.planner.models import Duration
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
-from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 
 def resolve_bounded_cursors(

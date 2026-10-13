@@ -7,6 +7,7 @@ from collections.abc import Iterable
 from dataclasses import replace
 from datetime import datetime
 
+from sqlbuild._native import get_config_str
 from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
@@ -35,7 +36,6 @@ from sqlbuild.cursor_algebra.main.parse import parse
 from sqlbuild.cursor_algebra.main.try_parse import try_parse
 from sqlbuild.cursor_algebra.models import DateValue, IntegerValue, TimestampValue
 from sqlbuild.cursor_algebra.types import BoundSentinel, CursorScalar
-from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 _INTEGER_LITERAL: re.Pattern[str] = re.compile(r"[+-]?\d+")
 _LISTED_MODEL_LIMIT: int = 3

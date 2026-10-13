@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild._native import get_config_str
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationRowCountEstimate
 from sqlbuild.executor.diff._helpers.selection import qualified_name
 from sqlbuild.executor.diff.exceptions import FullDiffSizeGuardError
 from sqlbuild.executor.diff.models import FullDiffModelSize, FullDiffSideSize, FullDiffSizeLimits
-from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 
 def enforce_full_diff_size_limits(

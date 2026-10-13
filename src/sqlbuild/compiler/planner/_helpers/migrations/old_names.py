@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from datetime import datetime
 
 from sqlbuild._native import (
+    get_config_str,
     hard_coded_relation_remedy,
     match_project_relation,
     old_name_reference_message,
@@ -54,7 +55,6 @@ from sqlbuild.compiler.references.models import (
 from sqlbuild.cursor_algebra.models import Duration
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.python_nodes.types import SqlResourceRefKind
-from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 from sqlbuild.spec.contracts.models import MigrationsConfig, SchemaColumn
 
 _HISTORY_MATERIALIZATIONS: frozenset[str] = frozenset(
