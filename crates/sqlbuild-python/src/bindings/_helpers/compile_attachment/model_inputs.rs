@@ -25,7 +25,7 @@ const DECLARATIONS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.dec
 const MACROS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.macros";
 const TEMPLATING_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.templating";
 const UNICODE_ENVIRONMENT_MODULE: &str = "sqlbuild.compiler.compile.classes.unicode_environment";
-const PROJECT_VARS_MODULE: &str = "sqlbuild.compiler.authored_values.main._project_var_values";
+const PROJECT_VARS_MODULE: &str = "sqlbuild._native";
 const MACRO_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.main.active_macro_bridge";
 const CONTRACT_CLASSES_MODULE: &str =
     "sqlbuild.compiler.model_config.main._native_contract_classes";

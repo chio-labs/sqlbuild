@@ -2108,6 +2108,24 @@ def semantic_metadata_diagnostics(
 ) -> tuple[Any, ...]: ...
 
 # Native analysis: contracts.
+def optional_named_string(
+    *,
+    raw_value: object | None,
+    file_path: Path,
+    label: str,
+    key: str,
+    error_class: type[Exception],
+) -> str | None: ...
+def optional_named_bool[D: (bool, None)](
+    *,
+    raw_value: object | None,
+    file_path: Path,
+    label: str,
+    key: str,
+    error_class: type[Exception],
+    default: D,
+) -> bool | D: ...
+def render_project_var_text(*, value: object, label: str) -> str: ...
 def compare_contracts(
     *,
     adapter: BaseAdapter,

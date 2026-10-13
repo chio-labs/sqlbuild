@@ -25,8 +25,7 @@ const TEMPLATE_OPEN_TOKEN: &str = "${";
 const ENVIRONMENT_READ: &str = "env";
 const CONTEXT_READ: &str = "ctx";
 const EFFECTIVE_VARS_LABEL: &str = "effective vars";
-const PROJECT_VAR_VALUES_MODULE: &str =
-    "sqlbuild.compiler.authored_values.main._project_var_values";
+const PROJECT_VAR_VALUES_MODULE: &str = "sqlbuild._native";
 const RENDER_PROJECT_VAR_TEXT: &str = "render_project_var_text";
 const VALUE_PATH: &str = "its value";
 const BUILTINS_MODULE: &str = "builtins";

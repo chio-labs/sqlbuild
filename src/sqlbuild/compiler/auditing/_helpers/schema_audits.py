@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import cast
 
+from sqlbuild._native import optional_named_bool, optional_named_string
 from sqlbuild.compiler.auditing.constants import (
     MEASUREMENT_OUTSIDE_BOUND_VALUE_COUNT,
     MEASUREMENT_THRESHOLD_ERROR_KEY,
@@ -14,8 +15,6 @@ from sqlbuild.compiler.auditing.constants import (
 from sqlbuild.compiler.auditing.exceptions import MeasurementAuditError
 from sqlbuild.compiler.auditing.models import MeasurementThresholdBound, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditSeverity, ThresholdOperator
-from sqlbuild.compiler.authored_values.main._optional_named_bool import optional_named_bool
-from sqlbuild.compiler.authored_values.main._optional_named_string import optional_named_string
 from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
     validate_resource_identity,
 )

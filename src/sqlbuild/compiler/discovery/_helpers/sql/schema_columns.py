@@ -6,9 +6,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
+from sqlbuild._native import optional_named_bool, optional_named_string
 from sqlbuild.compiler.auditing.main._parse_audit_instances import parse_audit_instances
-from sqlbuild.compiler.authored_values.main._optional_named_bool import optional_named_bool
-from sqlbuild.compiler.authored_values.main._optional_named_string import optional_named_string
 from sqlbuild.compiler.compile.constants import COLUMN_MIGRATE_FROM_KEY, NOT_NULL_AUDIT_NAME
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
