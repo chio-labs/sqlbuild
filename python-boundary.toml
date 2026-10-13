@@ -2,7 +2,7 @@
 # migration work that moves to Rust. `remaining_lines` must equal the current count of that work:
 # a PR that moves code lowers it, and adding movable Python fails the check.
 # Native failures must surface as errors; `handled_native_errors` lists the reviewed exceptions.
-remaining_lines = 115330
+remaining_lines = 103112
 
 [[stays]]
 path = "executor"
@@ -83,6 +83,21 @@ note = "Documented SQLite and Postgres execution-history backends."
 path = "runtime/execution_limits"
 reason = "executor"
 note = "Deadline the executor scheduler and warehouse cursors enforce."
+
+[[stays]]
+path = "runtime/compute_logs"
+reason = "executor"
+note = "Captures compute logs while the executor runs models, loaders and tasks."
+
+[[stays]]
+path = "runtime/event_exporting"
+reason = "executor"
+note = "Exports execution events while the executor runs."
+
+[[stays]]
+path = "runtime/output_capture"
+reason = "executor"
+note = "Captures stdout and stderr of running Python nodes for the executor."
 
 [[stays]]
 path = "integrations/dagster"
@@ -205,10 +220,6 @@ reason = "public-api"
 note = "Public facade."
 
 [[handled_native_errors]]
-location = "compiler/discovery/_helpers/filesystem/aggregation.py::_discover_declarations"
-note = "Tolerant scope discovery records a failing declaration category as a fault; no Python implementation runs."
-
-[[handled_native_errors]]
 location = "compiler/planner/_helpers/sql_tests/fixture_formatting.py::format_redundant_fixture_nulls"
 note = "A test file that no longer parses is left unformatted, as before; no Python implementation runs."
 
@@ -229,13 +240,13 @@ location = "cli/commands/_helpers/cost/refresh.py::refresh_pending_cost_run"
 note = "Best-effort cost refresh keeps its existing catch-all; discovery is now entered through the native driver, and no Python implementation runs instead."
 
 [[handled_native_errors]]
-location = "compiler/scopes/main/load_or_build_scope_index.py::load_or_build_scope_index"
-note = "Project input errors from discovery and compile-input stages select the tolerant scope index as before; a native compiler failure is a RuntimeError and is not caught."
-
-[[handled_native_errors]]
 location = "lint/_helpers/fixes.py::_FixSession._relation_keys"
 note = "A baseline that does not compile yields no relation keys, as before the compile entry became native; no Python implementation runs instead."
 
 [[handled_native_errors]]
 location = "lint/_helpers/fixes.py::_FixSession._verdict"
 note = "A candidate fix whose project fails to compile is unverified and not applied, as before the compile entry became native; no Python implementation runs instead."
+
+[[handled_native_errors]]
+location = "compiler/project_assembly/_helpers/request.py::_opaque_render"
+note = "A var that cannot render as text is recorded as the error a template using it raises; no Python implementation runs."

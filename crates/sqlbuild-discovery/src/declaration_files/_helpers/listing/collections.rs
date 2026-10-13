@@ -26,6 +26,7 @@ pub(crate) enum NamedKind {
     SingularAudit,
     Schema,
     SqlHook,
+    PythonHook,
 }
 
 impl NamedKind {
@@ -35,20 +36,30 @@ impl NamedKind {
             Self::SingularAudit => "singular_audit",
             Self::Schema => "schema",
             Self::SqlHook => "sql_hook",
+            Self::PythonHook => "python_hook",
+        }
+    }
+
+    /// Whether `name` matches the kind's file glob: `*.py` for Python hooks, `*.sql` otherwise.
+    fn matches(self, name: &str) -> bool {
+        match self {
+            Self::PythonHook => matches_python_glob(name),
+            _ => matches_sql_glob(name),
         }
     }
 }
 
-/// `GLOBAL_NAMED_DECLARATION_ROOTS` without Python hooks, in Python's dict order.
-const GLOBAL_NAMED_ROOTS: [(&str, NamedKind); 4] = [
+/// `GLOBAL_NAMED_DECLARATION_ROOTS`, in Python's dict order.
+const GLOBAL_NAMED_ROOTS: [(&str, NamedKind); 5] = [
     ("audits/generic", NamedKind::Audit),
     ("audits/singular", NamedKind::SingularAudit),
     ("schemas", NamedKind::Schema),
     ("hooks/sql", NamedKind::SqlHook),
+    ("hooks/python", NamedKind::PythonHook),
 ];
 
-/// `GROUPED_NAMED_DECLARATION_ROLES` without Python hooks, in Python's dict order.
-const GROUPED_NAMED_ROLES: [(&str, NamedKind, &str); 7] = [
+/// `GROUPED_NAMED_DECLARATION_ROLES`, in Python's dict order.
+const GROUPED_NAMED_ROLES: [(&str, NamedKind, &str); 9] = [
     ("audits/generic", NamedKind::Audit, "inherited"),
     ("_audits/generic", NamedKind::Audit, "local"),
     ("audits/singular", NamedKind::SingularAudit, "inherited"),
@@ -56,6 +67,8 @@ const GROUPED_NAMED_ROLES: [(&str, NamedKind, &str); 7] = [
     ("_schemas", NamedKind::Schema, "local"),
     ("hooks/sql", NamedKind::SqlHook, "inherited"),
     ("_hooks/sql", NamedKind::SqlHook, "local"),
+    ("hooks/python", NamedKind::PythonHook, "inherited"),
+    ("_hooks/python", NamedKind::PythonHook, "local"),
 ];
 
 const FUNCTIONS_ROOT: &str = "functions/sql";
@@ -94,14 +107,14 @@ pub(crate) fn declaration_files(
         .collect())
 }
 
-/// Every `*.sql` file below the named roles of `kinds`, root by root as Python yields them.
+/// Every file below the named roles of `kinds` matching its kind's glob, root by root as Python yields them.
 pub(crate) fn named_declaration_files(
     source: &CollectionSource<'_>,
     kinds: &[NamedKind],
     skip_underscored: bool,
 ) -> Result<Vec<ListedFile>, CollectionFailure> {
     let tree: &ProjectTree = source.tree;
-    let mut roots: Vec<(String, FileScope)> = Vec::new();
+    let mut roots: Vec<(String, NamedKind, FileScope)> = Vec::new();
     for (role, kind) in GLOBAL_NAMED_ROOTS {
         if kinds.contains(&kind) && tree.is_dir(role) {
             let scope = named_scope(&NamedRole {
@@ -111,7 +124,7 @@ pub(crate) fn named_declaration_files(
                 owning_path: None,
                 declaration_root: role,
             });
-            roots.push((role.to_owned(), scope));
+            roots.push((role.to_owned(), kind, scope));
         }
     }
     let layout: Arc<Result<DeclarationLayout, StageFailure>> =
@@ -139,14 +152,14 @@ pub(crate) fn named_declaration_files(
                     owning_path: Some(owning_path),
                     declaration_root: &directory,
                 });
-                roots.push((directory, scope));
+                roots.push((directory, kind, scope));
             }
         }
     }
     roots.sort_by(|left, right| compare_posix_text(&left.0, &right.0));
     let mut files: Vec<ListedFile> = Vec::new();
-    for (directory, scope) in roots {
-        for relative_path in rglob(tree, &directory, |entry| matches_sql_glob(&entry.name))
+    for (directory, kind, scope) in roots {
+        for relative_path in rglob(tree, &directory, |entry| kind.matches(&entry.name))
             .map_err(CollectionFailure::Stage)?
         {
             if skip_underscored && file_name(&relative_path).starts_with('_') {
@@ -224,6 +237,15 @@ fn matches_sql_glob(name: &str) -> bool {
         tail.as_slice(),
         ['l' | 'L', 'q' | 'Q', 's' | 'S' | '\u{17f}', '.']
     )
+}
+
+/// `fnmatch("*.py")` with the platform's case rule.
+pub(crate) fn matches_python_glob(name: &str) -> bool {
+    if !cfg!(windows) {
+        return name.ends_with(".py");
+    }
+    let tail: Vec<char> = name.chars().rev().take(3).collect();
+    matches!(tail.as_slice(), ['y' | 'Y', 'p' | 'P', '.'])
 }
 
 /// The final component of a `/`-separated relative path.

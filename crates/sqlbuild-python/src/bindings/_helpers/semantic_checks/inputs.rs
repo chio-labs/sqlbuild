@@ -3,13 +3,13 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyTuple};
 
+use crate::bindings::_helpers::analysis::binding_catalog::ignores_quoted_case;
 use crate::bindings::_helpers::semantic_shapes::declarations::{declared_types, function_names};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.analysis_session.models";
 const BINDING_REQUESTS_MODULE: &str =
     "sqlbuild.compiler.compile._helpers.analysis.binding_requests";
-const IDENTIFIER_CASE_MODULE: &str = "sqlbuild.compiler.sql_analysis.main._identifier_case";
 const RESOURCE_SQL_MODULE: &str = "sqlbuild.compiler.compile._helpers.diagnostics.resource_sql";
 const DATACLASSES_MODULE: &str = "dataclasses";
 
@@ -123,13 +123,7 @@ pub(crate) fn revalidation_request<'py>(
         .import(BINDING_REQUESTS_MODULE)?
         .getattr("get_complete_schema_binding_request")?
         .call((), Some(&arguments))?;
-    let case: Bound<'py, PyDict> = PyDict::new(py);
-    case.set_item("connection", project.getattr("effective_connection")?)?;
-    case.set_item("dialect", &dialect)?;
-    let ignores: Bound<'py, PyAny> = py
-        .import(IDENTIFIER_CASE_MODULE)?
-        .getattr("ignores_quoted_case")?
-        .call((), Some(&case))?;
+    let ignores: bool = ignores_quoted_case(&project.getattr("effective_connection")?, &dialect)?;
     let replaced: Bound<'py, PyDict> = PyDict::new(py);
     replaced.set_item("catalog", project.getattr("binding_catalog")?)?;
     replaced.set_item("quoted_identifiers_ignore_case", ignores)?;

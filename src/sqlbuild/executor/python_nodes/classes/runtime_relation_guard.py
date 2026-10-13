@@ -5,12 +5,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 
-from sqlbuild.compiler.references.main.extract_relation_names import extract_relation_names
-from sqlbuild.compiler.references.main.hard_coded_relation_remedy import (
+from sqlbuild._native import (
+    extract_relation_names,
     hard_coded_relation_remedy,
-)
-from sqlbuild.compiler.references.main.match_project_relation import match_project_relation
-from sqlbuild.compiler.references.main.runtime_project_relations import (
+    match_project_relation,
     runtime_project_relations,
 )
 from sqlbuild.compiler.references.models import (

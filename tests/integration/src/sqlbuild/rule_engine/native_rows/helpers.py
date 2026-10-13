@@ -5,7 +5,7 @@ from typing import Any, cast
 
 import pytest
 
-from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild._native import run_cli as main
 
 RULES_FIXTURE: Path = Path("tests/e2e/fixtures/waffle_shop")
 RULES_CONFIG: str = '\n[rules]\nselect = ["SQBR"]\n'

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild._native import DiscoveredSqlModelFile, NativeDiscoverySession
@@ -18,7 +18,6 @@ from sqlbuild.compiler.discovery.constants import (
 from sqlbuild.compiler.discovery.types import (
     LoaderConnectionMode,
     ProjectProvider,
-    ScopedDeclarationFile,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
 from sqlbuild.python_nodes.models import AuditCase, ColumnLineageRef, RetryPolicy, SqlResourceRef
@@ -183,29 +182,6 @@ class ModelSchemaDeclaration:
     relative_path: Path
     extends: str | None = None
     description: str | None = None
-
-
-@dataclass(frozen=True)
-class NamedDeclarationRoot:
-    """One directory whose files define audits, reusable schemas, or named hooks of one kind."""
-
-    directory: Path
-    relative_directory: Path
-    kind: DeclarationKind
-    scope_kind: ScopeKind
-    ownership_root: Path | None
-    owning_path: Path | None
-
-    def place[Placed: ScopedDeclarationFile](self, item: Placed) -> Placed:
-        """Return a discovered file annotated with this role's scope facts."""
-
-        return replace(
-            item,
-            scope_kind=self.scope_kind,
-            ownership_root=self.ownership_root,
-            owning_path=self.owning_path,
-            declaration_root=self.relative_directory,
-        )
 
 
 @dataclass(frozen=True)

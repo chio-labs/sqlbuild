@@ -24,16 +24,4 @@ type NativeSqlTestPlanRow = tuple[
     list[NativePlanWarningRow],
     list[str],
 ]
-type NativeSqlTestDiagnosticRow = tuple[int, int, int, int, str, str]
-type NativeSqlTestFactsRow = tuple[
-    str,
-    list[tuple[str, str]],
-    list[str],
-    str | None,
-    str,
-    list[NativeSqlTestDiagnosticRow],
-]
 type SqlTestAssemblyFailureKind = Literal["input", "internal", "decimal_overflow"]
-type NativeSqlTestAssemblyRow = tuple[
-    NativeSqlTestFactsRow | None, tuple[SqlTestAssemblyFailureKind, str] | None
-]

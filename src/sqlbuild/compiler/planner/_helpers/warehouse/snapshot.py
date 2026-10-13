@@ -9,6 +9,13 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 
+from sqlbuild._native import (
+    read_latest_fingerprints,
+    render_source_relation,
+    resolve_cursor_input_roles,
+    select_latest_fingerprints,
+    transitive_closure_many,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapter.contract.types import AdapterExecute
@@ -25,7 +32,6 @@ from sqlbuild.adapter.relations.main.run_recorded_inspection_query import (
 )
 from sqlbuild.adapter.relations.models import InspectionQueryRecord
 from sqlbuild.compiler.compile.constants import MIGRATE_FROM_CONFIG_KEY
-from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
@@ -45,10 +51,7 @@ from sqlbuild.compiler.fingerprints.constants import (
     NODE_TYPE_MODEL,
     NODE_TYPE_SEED,
 )
-from sqlbuild.compiler.fingerprints.main._select_latest import select_latest_fingerprints
-from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
-from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
 from sqlbuild.compiler.migrations.constants import MIGRATION_TABLE_NAME, OLD_NAME_VIEW_TABLE_NAME
 from sqlbuild.compiler.planner._helpers.graph.core import (
     build_execution_upstream_deps,
@@ -85,7 +88,6 @@ from sqlbuild.compiler.planner.types import (
     MaterializationType,
     MicrobatchStrategy,
 )
-from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError

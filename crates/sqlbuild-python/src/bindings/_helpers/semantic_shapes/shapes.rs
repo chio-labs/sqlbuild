@@ -4,12 +4,13 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::analysis::binding_catalog::{
+    BindingCatalog, CASE_SENSITIVE_BINDING_DIALECTS,
+};
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 
 const ADAPTER_MODELS_MODULE: &str = "sqlbuild.adapter.contract.models";
 const PLANNER_TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
-const BINDING_CATALOG_MODULE: &str = "sqlbuild.compiler.sql_analysis.main._binding_catalog";
-const SQL_ANALYSIS_CONSTANTS_MODULE: &str = "sqlbuild.compiler.sql_analysis.constants";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const UNKNOWN: &str = "UNKNOWN";
@@ -102,10 +103,8 @@ fn binding_shape<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = model.py();
     let dialect: Bound<'py, PyAny> = profile.getattr("sql_analysis_dialect")?;
-    let sensitive: bool = py
-        .import(SQL_ANALYSIS_CONSTANTS_MODULE)?
-        .getattr("CASE_SENSITIVE_BINDING_DIALECTS")?
-        .contains(&dialect)?;
+    let sensitive: bool = !dialect.is_none()
+        && CASE_SENSITIVE_BINDING_DIALECTS.contains(&dialect.extract::<String>()?.as_str());
     if profile
         .getattr("quoted_identifiers_ignore_case")?
         .is_truthy()?
@@ -115,19 +114,17 @@ fn binding_shape<'py>(
     }
     let mut catalog: Bound<'py, PyAny> = profile.getattr("binding_catalog")?;
     if !catalog.is_truthy()? {
-        let arguments: Bound<'py, PyDict> = PyDict::new(py);
-        arguments.set_item("dialect", or_generic(&dialect)?)?;
-        arguments.set_item("quoted_ignore_case", false)?;
-        arguments.set_item(
-            "known_functions",
-            profile.getattr("semantic_known_functions")?,
+        let created: BindingCatalog = BindingCatalog::create(
+            py,
+            (
+                or_generic(&dialect)?.extract()?,
+                false,
+                profile.getattr("semantic_known_functions")?.extract()?,
+                profile.getattr("semantic_known_types")?.extract()?,
+            ),
+            inputs.as_any(),
         )?;
-        arguments.set_item("known_types", profile.getattr("semantic_known_types")?)?;
-        arguments.set_item("relations", inputs)?;
-        catalog = py
-            .import(BINDING_CATALOG_MODULE)?
-            .getattr("create_binding_catalog")?
-            .call((), Some(&arguments))?;
+        catalog = Bound::new(py, created)?.into_any();
     }
     let request: Bound<'py, PyDict> = PyDict::new(py);
     request.set_item("sql", model.getattr("query_sql")?)?;

@@ -7,13 +7,15 @@ from typing import Any
 
 import pytest
 
+from sqlbuild._native import (
+    read_latest_fingerprints,
+    select_latest_fingerprints,
+    write_fingerprint,
+    write_fingerprints,
+)
 from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
-from sqlbuild.compiler.fingerprints.main._select_latest import select_latest_fingerprints
-from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
-from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
-from sqlbuild.compiler.fingerprints.main.write_many import write_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from tests.integration.src.sqlbuild.compiler.fingerprints.main._test_types import (
     BatchWriteTestCase,

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import promotion_conflict_diagnostics
 from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.compile.models import CompilerDiagnostic
-from sqlbuild.compiler.contracts.main.promotion_conflicts import promotion_conflict_diagnostics
 from tests.unit.src.sqlbuild.compiler.contracts._test_types import PromotionConflictTestCase
 from tests.unit.src.sqlbuild.compiler.contracts.helpers import make_promotion_project
 

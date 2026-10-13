@@ -60,14 +60,6 @@ class SelectorFileSummary:
 
 
 @dataclass(frozen=True)
-class SelectorInputs:
-    """Expanded selectors paired with selector-file provenance."""
-
-    selectors: tuple[str, ...]
-    files: tuple[SelectorFileSummary, ...]
-
-
-@dataclass(frozen=True)
 class ParsedCliInvocation:
     """Outcome of parsing CLI arguments: either a namespace or an exit code."""
 

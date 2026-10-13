@@ -1,7 +1,7 @@
 //! Relations named in SQL and temporary tables it creates, for hard-coded name checks.
 
-use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::{PyErr, pyfunction, wrap_pyfunction};
+use pyo3::PyErr;
+use pyo3::prelude::{PyResult, Python};
 use sqlbuild_analysis::relation_names::errors::RelationNamesFailure;
 use sqlbuild_analysis::relation_names::main::extract_relation_names::extract_relation_names;
 use sqlbuild_analysis::relation_names::models::{ExtractedRelations, RelationName};
@@ -13,12 +13,10 @@ use crate::bindings::types::CompilerDetach;
 const RELATION_NAMES_CONTEXT: &str = "native relation name extraction";
 
 /// `(name, schema, database)`.
-type RelationRow = (String, Option<String>, Option<String>);
+pub(crate) type RelationRow = (String, Option<String>, Option<String>);
 
-/// Python's `extract_relation_names_impl`: `(relations, temporary names)` or None if unparseable.
-#[pyfunction]
-#[pyo3(signature = (sql, dialect))]
-fn extract_sql_relation_names(
+/// `(relations, temporary names)` named in `sql`, or None if unparseable.
+pub(crate) fn extract_sql_relation_names(
     py: Python<'_>,
     sql: &str,
     dialect: Option<&str>,
@@ -47,9 +45,4 @@ fn relation_names_error(failure: RelationNamesFailure) -> PyErr {
             compiler_error(native_failure(RELATION_NAMES_CONTEXT, &reason))
         }
     }
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(extract_sql_relation_names, module)?)?;
-    Ok(())
 }

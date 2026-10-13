@@ -70,6 +70,36 @@ reason = "The SQL Server backend intentionally owns behavior through its adapter
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
+path = "src/sqlbuild/compiler/contracts/__init__.py"
+reason = "Model contracts are evaluated natively; the package keeps only the validation result model its callers read."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/compiler/fingerprints/__init__.py"
+reason = "Fingerprint hashing and storage run natively; the package keeps the stored-row models, column and node-type vocabulary adapters and the executor share."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/compiler/refactoring/__init__.py"
+reason = "Refactorings are planned natively; the package keeps the request, plan and error models the refactor commands read."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/compiler/sql_test_glue/__init__.py"
+reason = "SQL test assembly and planning run natively; the package keeps the request, result and row shapes the planner and compile stage read."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/compiler/graph/__init__.py"
+reason = "Graph algorithms and views run natively; the package keeps only the edge and view models their callers read."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/cli/output/__init__.py"
+reason = "Execution-result output is rendered natively; the package keeps only the integration-result models, constants and types its callers and readers share."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
 path = "src/sqlbuild/compiler/lineage/__init__.py"
 reason = "Column lineage is built natively; the package keeps only the lineage models, enums and errors the native graph and its callers share."
 

@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+from sqlbuild._native import read_latest_fingerprints, write_fingerprint
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
@@ -21,8 +22,6 @@ from sqlbuild.adapter.contract.models import (
 from sqlbuild.adapter.contract.types import FunctionNullabilityRule
 from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
-from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
-from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.source_freshness.main.data_version_hash import (

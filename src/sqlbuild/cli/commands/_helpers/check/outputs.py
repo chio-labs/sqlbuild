@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import write_execution_json_output
 from sqlbuild.cli.commands._helpers.check.core import format_check_json, write_check_results
 from sqlbuild.cli.commands.models import (
     CheckCommandRequest,
     CheckExecutionPreparation,
     CheckInvocation,
 )
-from sqlbuild.cli.output.main._write_execution_json_output import write_execution_json_output
 from sqlbuild.cli.target_artifacts.main._write_python_check_runtime_target import (
     write_python_check_runtime_target,
 )

@@ -10,7 +10,6 @@ from sqlbuild.cli.commands._helpers.entry.compute_log_diagnostics import (
     log_compute_capture_failure,
 )
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
-from sqlbuild.cli.commands.main.entrypoint._dispatch_with_observability import _creates_project
 from sqlbuild.diagnostics.classes.invocation_diagnostic_routing import InvocationDiagnosticRouting
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
 from sqlbuild.diagnostics.models import DiagnosticRoutingOptions
@@ -27,11 +26,15 @@ from sqlbuild.runtime.observability.models import ExecutionIdentity
 
 
 def dispatch_with_compute_logs(
-    *, args: CliNamespace, identity: ExecutionIdentity, operation: Callable[[], int]
+    *,
+    args: CliNamespace,
+    identity: ExecutionIdentity,
+    operation: Callable[[], int],
+    creates_project: bool,
 ) -> int:
     """Run one composed dispatch while retaining exact process streams best-effort."""
 
-    if _creates_project(args=args):
+    if creates_project:
         return operation()
     project_dir: Path = Path(args.project_dir) if args.project_dir is not None else Path.cwd()
     routing_options: DiagnosticRoutingOptions = DiagnosticRoutingOptions(

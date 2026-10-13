@@ -12,13 +12,14 @@ from unittest.mock import Mock
 
 import pytest
 
-from sqlbuild.cli.output.classes import execution_event_writer
-from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
-from sqlbuild.cli.output.classes.terminal_event_index import (
+from sqlbuild._native import (
+    TerminalEventClaim,
     TerminalEventIndex,
     current_terminal_event_index,
     terminal_event_index_scope,
 )
+from sqlbuild.cli.output.classes import execution_event_writer
+from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
 from sqlbuild.cli.output.constants import (
     MAX_INTEGRATION_NESTING_DEPTH,
     MAX_INTEGRATION_STRING_CHARS,
@@ -26,7 +27,6 @@ from sqlbuild.cli.output.constants import (
 from sqlbuild.cli.output.models import (
     IntegrationAssetResult,
     IntegrationResultEnvelope,
-    TerminalEventClaim,
 )
 from sqlbuild.executor.clone.types import CloneAction
 from sqlbuild.executor.run.models import ModelExecutionResult

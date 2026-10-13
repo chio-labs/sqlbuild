@@ -9,9 +9,12 @@ from dataclasses import replace
 from numbers import Number
 from typing import Any, cast
 
+from sqlbuild._native import (
+    assert_no_unresolved_sql_markers,
+    evaluate_measurement,
+    render_audit_sql,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.auditing.main.evaluate_measurement import evaluate_measurement
-from sqlbuild.compiler.auditing.main.render import render_audit_sql
 from sqlbuild.compiler.auditing.types import (
     AuditEvaluationMode,
     AuditOutcome,
@@ -19,9 +22,6 @@ from sqlbuild.compiler.auditing.types import (
 )
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.planner.models import AuditPlanEntry
-from sqlbuild.compiler.references.main.assert_no_unresolved_sql_markers import (
-    assert_no_unresolved_sql_markers,
-)
 from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.constants import (

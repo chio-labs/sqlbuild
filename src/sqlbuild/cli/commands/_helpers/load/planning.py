@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import render_source_relation
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.load.references import validate_reference_source_targets
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
@@ -19,7 +20,6 @@ from sqlbuild.compiler.planner.main.cursor_window.typed_cursor_overrides import 
     typed_cursor_overrides,
 )
 from sqlbuild.compiler.planner.models import CursorOverrides
-from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
 from sqlbuild.provider.main.session import build_provider_session
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.python_nodes.types import SqlResourceRefKind

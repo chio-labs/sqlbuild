@@ -14,10 +14,10 @@ import pytest
 from _pytest.capture import CaptureResult
 
 import sqlbuild.compiler.planner.classes.migration_fingerprint_cache as fingerprint_cache_module
+from sqlbuild._native import run_cli as main
 from sqlbuild.adapter.contract.models import MigrationStagePlan
 from sqlbuild.adapter.contract.types import MigrationTransfer
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.executor.build._helpers import scheduler as scheduler_module
 

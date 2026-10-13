@@ -13,7 +13,6 @@ PYTHON_INIT_MODULE_STEM: str = "__init__"
 PYTHON_CACHE_DIRECTORY_NAME: str = "__pycache__"
 LANGUAGE_PYTHON_ROOT_PART_COUNT: int = 2
 PYTHON_NODE_ROOT: str = "python"
-PYTHON_UDF_DECORATOR_NAME: str = "udf"
 SQL_FUNCTION_HEADER_KEYS: frozenset[str] = frozenset(
     {"arguments", "returns", "database", "schema", "tags", "description"}
 )
@@ -105,20 +104,6 @@ SQL_MODEL_HEADER_KEYS: frozenset[str] = frozenset(
     }
 )
 REMOVED_SQL_MODEL_HEADER_KEYS: frozenset[str] = frozenset({"run_despite_unchanged"})
-PYTHON_UDF_KEYS: frozenset[str] = frozenset(
-    {
-        "description",
-        "arguments",
-        "returns",
-        "runtime_version",
-        "entry_point",
-        "packages",
-        "database",
-        "schema",
-        "tags",
-    }
-)
-PYTHON_UDF_IMPORT_MODULES: frozenset[str] = frozenset({"sqlbuild", "sqlbuild.functions"})
 
 DLT_SOURCE_TYPE_SQL_DATABASE: str = "sql_database"
 DLT_SOURCE_TYPE_REST_API: str = "rest_api"

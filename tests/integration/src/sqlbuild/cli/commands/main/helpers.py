@@ -15,6 +15,7 @@ import pytest
 
 import sqlbuild._native as native_module
 from sqlbuild._native import PlannedStaticSqlTests, PreparedCompileArtifacts
+from sqlbuild._native import run_cli as main
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.models import (
     RenderedRetentionChange,
@@ -23,15 +24,14 @@ from sqlbuild.adapter.contract.models import (
 )
 from sqlbuild.adapter.contract.types import RetentionChangePhase
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.compiler.analysis_session.models import NativeQueryColumns
 from sqlbuild.compiler.frontier.constants import STAGE_CAPTURE_SUFFIX
 from sqlbuild.compiler.frontier.types import CompilerStage
 from sqlbuild.compiler.planner.exceptions import NativeSqlTestPlanningError
-from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
-from sqlbuild.compiler.sql_test_glue.main import (
-    plan_native_sql_test_artifacts as plan_artifacts_module,
+from sqlbuild.compiler.planner.main.execution import (
+    _plan_compiled_sql_test_artifacts as plan_artifacts_module,
 )
+from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     RepeatedJsonParseTestCase,
 )
@@ -170,7 +170,7 @@ def fail_native_planner(monkeypatch: pytest.MonkeyPatch) -> None:
     def fail(**kwargs: object) -> tuple[NativeSqlTestArtifact, ...]:
         raise NativeSqlTestPlanningError("native SQL-test planning failed: worker stopped")
 
-    monkeypatch.setattr(plan_artifacts_module, "plan_native_sql_test_artifacts", fail)
+    monkeypatch.setattr(plan_artifacts_module, "plan_compiled_sql_test_artifacts", fail)
 
 
 def record_test_planning_threads(monkeypatch: pytest.MonkeyPatch) -> list[str]:

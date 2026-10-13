@@ -1,12 +1,9 @@
 import pytest
 
+from sqlbuild._native import compare_contract_evidence, edit_contract_model
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
-from sqlbuild.compiler.contract_adoption._helpers.compare import compare_evidence
-from sqlbuild.compiler.contract_adoption._helpers.repository_edits import (
-    edit_model,
-)
 from sqlbuild.compiler.contract_adoption.models import ContractEvidence
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 from tests.unit.src.sqlbuild.compiler.contract_adoption._helpers._test_types import (
@@ -54,7 +51,7 @@ SELECT * FROM category_amounts
         authored_sql=authored_sql,
     ).models[0]
 
-    edited, reason = edit_model(
+    edited, reason = edit_contract_model(
         model=model,
         physical_columns=(
             ColumnInfo(name="customer_id", type="INTEGER"),
@@ -104,7 +101,7 @@ def test_given_dynamic_family_when_inspecting_contract_then_compares_generated_m
         ),
     )
 
-    matching: ContractEvidence = compare_evidence(
+    matching: ContractEvidence = compare_contract_evidence(
         item=evidence,
         physical_columns=(
             ColumnInfo(name="customer_id", type="INTEGER"),
@@ -112,7 +109,7 @@ def test_given_dynamic_family_when_inspecting_contract_then_compares_generated_m
         ),
         adapter=DuckDbAdapter(),
     )
-    mismatching: ContractEvidence = compare_evidence(
+    mismatching: ContractEvidence = compare_contract_evidence(
         item=evidence,
         physical_columns=(
             ColumnInfo(name="customer_id", type="INTEGER"),

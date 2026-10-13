@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import project_lineage_views
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
@@ -20,7 +21,6 @@ from sqlbuild.compiler.discovery.models import (
     PythonHookEntry,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.graph.main.project_lineage_views import project_lineage_views
 from sqlbuild.compiler.graph.models import LineageGraphViews
 from sqlbuild.compiler.planner._helpers.fixtures.completion import (
     build_relation_fixture_context,

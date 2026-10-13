@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import pytest
 
-from sqlbuild.compiler.auditing.main.identity import build_audit_gate_identity
+from sqlbuild._native import build_audit_gate_identity
 from sqlbuild.compiler.auditing.models import (
     AuditGateIdentity,
     AuditIdentity,

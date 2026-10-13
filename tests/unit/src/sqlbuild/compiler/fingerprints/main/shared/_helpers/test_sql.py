@@ -5,15 +5,10 @@ from datetime import datetime
 
 import pytest
 
+from sqlbuild._native import build_create_table_sql, build_read_latest_sql, write_fingerprint
 from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.fingerprints._helpers.sql import (
-    build_create_table_sql,
-    build_insert_sql,
-    build_qualified_table_name,
-    build_read_latest_sql,
-)
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from tests.unit.src.sqlbuild.compiler.fingerprints.main.shared._helpers._test_types import (
@@ -53,16 +48,16 @@ RENDER_FRAMEWORK_TYPE: Callable[[FrameworkType], str] = DuckDbAdapter().render_f
     ],
     ids=lambda case: case.description,
 )
-def test_given_schema_when_building_qualified_name_then_returns_expected(
+def test_given_schema_when_building_read_sql_then_reads_adapter_qualified_table(
     test_case: BuildQualifiedTableNameTestCase,
 ) -> None:
-    result: str = build_qualified_table_name(
+    result: str = build_read_latest_sql(
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=test_case.render_qualified_name,
     )
 
-    assert result == test_case.expected_name
+    assert f"FROM {test_case.expected_name}" in result
 
 
 @pytest.mark.parametrize(
@@ -212,10 +207,13 @@ def test_given_schema_when_building_read_latest_sql_then_contains_windowed_lates
     ],
     ids=lambda case: case.description,
 )
-def test_given_fingerprint_values_when_building_insert_sql_then_contains_expected_fragments(
+def test_given_fingerprint_values_when_writing_then_insert_sql_contains_expected_fragments(
     test_case: BuildInsertSqlTestCase,
 ) -> None:
-    result: str = build_insert_sql(
+    executed: list[str] = []
+    write_fingerprint(
+        connection=object(),
+        execute=lambda *, connection, sql: executed.append(sql),
         database=test_case.database,
         schema=test_case.schema,
         fingerprint=Fingerprint(
@@ -233,8 +231,10 @@ def test_given_fingerprint_values_when_building_insert_sql_then_contains_expecte
             ts=datetime.fromisoformat(test_case.ts),
         ),
         render_qualified_name=RENDER_QUALIFIED_NAME,
+        render_framework_type=RENDER_FRAMEWORK_TYPE,
     )
 
+    result: str = executed[-1]
     fragment: str
     for fragment in test_case.expected_contains:
         assert fragment in result

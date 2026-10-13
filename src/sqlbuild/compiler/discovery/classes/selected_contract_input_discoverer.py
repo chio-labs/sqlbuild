@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild._native import (
+    directory_snapshot_scope,
     discover_model_files,
     discover_model_schema_files,
     discover_schema_files,
@@ -15,7 +16,6 @@ from sqlbuild.compiler.discovery._helpers.yml.project import (
     load_local_config,
     load_project_config,
 )
-from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
@@ -34,7 +34,7 @@ class SelectedContractInputDiscoverer:
 
         project_config: ProjectConfig = load_project_config(project_dir=project_dir)
         local_config: LocalConfig = load_local_config(project_dir=project_dir)
-        with DirectorySnapshot.scope(project_dir=project_dir):
+        with directory_snapshot_scope(project_dir=project_dir):
             return DiscoveredProjectInputs(
                 project_config=project_config,
                 local_config=local_config,

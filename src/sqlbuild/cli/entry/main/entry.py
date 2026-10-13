@@ -17,6 +17,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         NATIVE_ALLOCATOR_PURGE_DELAY_VARIABLE, NATIVE_ALLOCATOR_PURGE_DELAY_MILLISECONDS
     )
     _ = use_utf8_output_streams()
-    from sqlbuild.cli.commands.main.entrypoint.entry import main as run_cli
+    import sqlbuild._native as _native
 
-    return run_cli(argv)
+    return _native.run_cli(argv)

@@ -6,7 +6,7 @@ import re
 from datetime import UTC, datetime
 from itertools import islice, product
 
-from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
+from sqlbuild._native import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import ReferenceRename
 from sqlbuild.lint.main.scan_interpolation_sites import scan_interpolation_sites

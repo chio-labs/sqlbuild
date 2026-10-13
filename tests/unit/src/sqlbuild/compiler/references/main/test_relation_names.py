@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.references.main.extract_relation_names import extract_relation_names
-from sqlbuild.compiler.references.main.match_project_relation import match_project_relation
+from sqlbuild._native import extract_relation_names, match_project_relation
 from sqlbuild.compiler.references.models import (
     ProjectRelation,
     ProjectRelationIndex,

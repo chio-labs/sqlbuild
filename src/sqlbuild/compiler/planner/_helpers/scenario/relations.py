@@ -8,6 +8,7 @@ from dataclasses import replace
 
 from sqlbuild._native import (
     compiled_model_record,
+    render_source_relation,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo
@@ -81,7 +82,6 @@ from sqlbuild.compiler.planner.types import (
 from sqlbuild.compiler.references.main._reference_call_prefix_pattern_text import (
     reference_call_prefix_pattern_text,
 )
-from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import SourceEntry

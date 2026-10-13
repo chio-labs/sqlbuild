@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
+from sqlbuild._native import compute_query_hash
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     QueryFingerprintEditE2ETestCase,
 )

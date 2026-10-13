@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from sqlbuild._native import render_source_relation
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
@@ -19,7 +20,6 @@ from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.references.main._quoted_reference_call_pattern import (
     quoted_reference_call_pattern,
 )
-from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.spec.contracts.models import SourceColumnEntry, SourceEntry

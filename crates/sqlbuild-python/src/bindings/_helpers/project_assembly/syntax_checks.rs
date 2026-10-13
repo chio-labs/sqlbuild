@@ -1,0 +1,149 @@
+//! The model and hook SQL assembly validates, and the SQL standalone pivot proofs read.
+
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
+use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_sqltext::compiler::main::placeholder_defaults::placeholder_defaults;
+
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::project_assembly::syntax_validation::hook_sql_statements;
+
+const CURSOR_INTRINSICS_MODULE: &str =
+    "sqlbuild.compiler.compile._helpers.render.cursor_intrinsics";
+const HOOK_NAMES: [&str; 2] = ["pre_hooks", "post_hooks"];
+
+fn config_value<'py>(model_input: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
+    model_input
+        .getattr("config")?
+        .getattr("values")?
+        .call_method1("get", (key,))
+}
+
+fn model_name(model_input: &Bound<'_, PyAny>) -> PyResult<String> {
+    model_input
+        .getattr("model_file")?
+        .getattr("file_path")?
+        .getattr("stem")?
+        .extract()
+}
+
+/// The model's `@@@name` placeholder defaults as strings, or `None`.
+#[pyfunction]
+pub(crate) fn model_placeholders<'py>(
+    model_input: &Bound<'py, PyAny>,
+) -> PyResult<Option<Bound<'py, PyDict>>> {
+    let raw: Bound<'py, PyAny> = config_value(model_input, "placeholders")?;
+    let Ok(raw) = raw.downcast::<PyDict>() else {
+        return Ok(None);
+    };
+    let placeholders: Bound<'py, PyDict> = PyDict::new(model_input.py());
+    for (key, value) in raw.iter() {
+        placeholders.set_item(key.str()?, value.str()?)?;
+    }
+    Ok(Some(placeholders))
+}
+
+/// The model query with cursor intrinsics replaced by typed literals for static analysis.
+fn analysis_sql<'py>(model_input: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = model_input.py();
+    call_with(
+        &imported(
+            py,
+            CURSOR_INTRINSICS_MODULE,
+            "cursor_intrinsics_analysis_sql",
+        )?,
+        &[
+            ("sql", model_input.getattr("query_sql")?),
+            ("cursor_type", config_value(model_input, "cursor_type")?),
+        ],
+    )
+}
+
+fn syntax_checks<'py>(
+    model_input: &Bound<'py, PyAny>,
+    analysis_model_names: &Bound<'py, PyAny>,
+    analysis_succeeded: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let py: Python<'py> = model_input.py();
+    let name: String = model_name(model_input)?;
+    if !model_input.getattr("sql_validation_enabled")?.is_truthy()?
+        || (!analysis_model_names.is_none() && !analysis_model_names.contains(&name)?)
+    {
+        return Ok(PyTuple::empty(py));
+    }
+    let placeholders: Bound<'py, PyAny> = match model_placeholders(model_input)? {
+        Some(placeholders) => placeholders.into_any(),
+        None => py.None().into_bound(py),
+    };
+    let mut statements: Vec<Bound<'py, PyAny>> = Vec::new();
+    for hook_name in HOOK_NAMES {
+        for statement in hook_sql_statements(config_value(model_input, hook_name)?)? {
+            statements.push(PyString::new(py, &statement).into_any());
+        }
+    }
+    if !analysis_succeeded.contains(&name)? {
+        statements.push(analysis_sql(model_input)?);
+    }
+    let checks: Vec<Bound<'py, PyTuple>> = statements
+        .into_iter()
+        .map(|statement| PyTuple::new(py, [statement, placeholders.clone()]))
+        .collect::<PyResult<_>>()?;
+    PyTuple::new(py, checks)
+}
+
+/// Each model's `(sql, placeholders)` that assembly passes to syntax validation.
+#[pyfunction]
+#[pyo3(signature = (*, model_inputs, analysis_model_names, analysis_succeeded))]
+fn model_syntax_checks<'py>(
+    model_inputs: &Bound<'py, PyAny>,
+    analysis_model_names: &Bound<'py, PyAny>,
+    analysis_succeeded: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let checks: Vec<Bound<'py, PyTuple>> = model_inputs
+        .try_iter()?
+        .map(|model_input| syntax_checks(&model_input?, analysis_model_names, analysis_succeeded))
+        .collect::<PyResult<_>>()?;
+    PyTuple::new(model_inputs.py(), checks)
+}
+
+/// `(sql, families)` by model index for each pivot model no analysis covered.
+#[pyfunction]
+#[pyo3(signature = (*, model_inputs, analysed))]
+fn standalone_pivot_models<'py>(
+    model_inputs: &Bound<'py, PyAny>,
+    analysed: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let py: Python<'py> = model_inputs.py();
+    let models: Bound<'py, PyDict> = PyDict::new(py);
+    for (index, model_input) in model_inputs.try_iter()?.enumerate() {
+        let model_input: Bound<'py, PyAny> = model_input?;
+        let schema_entry: Bound<'py, PyAny> = model_input.getattr("schema_entry")?;
+        if schema_entry.is_none() {
+            continue;
+        }
+        let families: Bound<'py, PyAny> = schema_entry.getattr("dynamic_columns")?;
+        if !families.is_truthy()? || analysed.contains(model_name(&model_input)?)? {
+            continue;
+        }
+        let query_sql: String = analysis_sql(&model_input)?.extract()?;
+        let sql: String = match model_placeholders(&model_input)? {
+            Some(placeholders) if !placeholders.is_empty() => {
+                let pairs: Vec<(String, String)> = placeholders
+                    .iter()
+                    .map(|(key, value)| Ok((key.extract()?, value.extract()?)))
+                    .collect::<PyResult<_>>()?;
+                placeholder_defaults(&query_sql, &pairs)
+            }
+            _ => query_sql,
+        };
+        models.set_item(index, (sql, families))?;
+    }
+    Ok(models)
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(model_placeholders, module)?)?;
+    module.add_function(wrap_pyfunction!(model_syntax_checks, module)?)?;
+    module.add_function(wrap_pyfunction!(standalone_pivot_models, module)?)?;
+    Ok(())
+}

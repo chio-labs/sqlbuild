@@ -6,6 +6,9 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::analysis::binding_catalog::{
+    self, CASE_SENSITIVE_BINDING_DIALECTS, NATIVE_DIALECT_ALIASES, schema_validations,
+};
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::semantic_shapes::declarations::{declared_types, function_names};
 use crate::bindings::_helpers::semantic_shapes::shapes::{
@@ -17,9 +20,7 @@ const ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.analysis_session.models"
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
-const SQL_ANALYSIS_CONSTANTS_MODULE: &str = "sqlbuild.compiler.sql_analysis.constants";
-const IDENTIFIER_CASE_MODULE: &str = "sqlbuild.compiler.sql_analysis.main._identifier_case";
-const SCHEMA_VALIDATION_MODULE: &str = "sqlbuild.compiler.sql_analysis.main._schema_validation";
+const BINDING_UNKNOWN_TABLE_INTERNAL_CODE: &str = "B000";
 const BINDING_REQUESTS_MODULE: &str =
     "sqlbuild.compiler.compile._helpers.analysis.binding_requests";
 const CURSOR_INTRINSICS_MODULE: &str =
@@ -51,7 +52,6 @@ fn source_binding_diagnostics<'py>(
     {
         return Ok(PyTuple::empty(py));
     }
-    let constants = py.import(SQL_ANALYSIS_CONSTANTS_MODULE)?;
     let profile: Object<'py> = request.get("profile")?;
     let raw_dialect: Object<'py> = profile.getattr("sql_analysis_dialect")?;
     let key: Object<'py> = if raw_dialect.is_truthy()? {
@@ -59,9 +59,14 @@ fn source_binding_diagnostics<'py>(
     } else {
         PyString::new(py, GENERIC_DIALECT).into_any()
     };
-    let dialect: Object<'py> = constants
-        .getattr("NATIVE_DIALECT_ALIASES")?
-        .call_method1("get", (key, &raw_dialect))?;
+    let key: String = key.extract()?;
+    let dialect: Object<'py> = match NATIVE_DIALECT_ALIASES
+        .iter()
+        .find(|(alias, _)| *alias == key)
+    {
+        Some((_, native)) => PyString::new(py, native).into_any(),
+        None => raw_dialect.clone(),
+    };
     let ignore_case: Object<'py> = ignores_quoted_case(&project, &raw_dialect)?;
     let profile: Object<'py> = replaced(
         &profile,
@@ -71,9 +76,8 @@ fn source_binding_diagnostics<'py>(
         ],
     )?;
     let shapes: Bound<'py, PyDict> = project_shapes(&project, Some(profile.clone()))?;
-    let sensitive: bool = constants
-        .getattr("CASE_SENSITIVE_BINDING_DIALECTS")?
-        .contains(&dialect)?
+    let sensitive: bool = !dialect.is_none()
+        && CASE_SENSITIVE_BINDING_DIALECTS.contains(&dialect.extract::<String>()?.as_str())
         && !ignore_case.is_truthy()?;
     let mut changed: HashSet<String> = HashSet::new();
     for item in columns.call_method0("items")?.try_iter()? {
@@ -304,11 +308,8 @@ fn validated_diagnostics<'py>(
             ],
         )?);
     }
-    let results: Object<'py> = call(
-        &py.import(SCHEMA_VALIDATION_MODULE)?
-            .getattr("get_schema_validations")?,
-        &[("requests", PyTuple::new(py, &requests)?.into_any())],
-    )?;
+    let results: Object<'py> =
+        schema_validations(py, PyTuple::new(py, &requests)?.as_any())?.into_any();
     let expansions: Bound<'py, PyDict> = PyDict::new(py);
     for item in project
         .getattr("sql_expansions")?
@@ -318,9 +319,7 @@ fn validated_diagnostics<'py>(
         let (path, expansion): (Object<'py>, Object<'py>) = item?.extract()?;
         expansions.set_item(path.getattr("stem")?, expansion)?;
     }
-    let skipped: Object<'py> = py
-        .import(SQL_ANALYSIS_CONSTANTS_MODULE)?
-        .getattr("BINDING_UNKNOWN_TABLE_INTERNAL_CODE")?;
+    let skipped: Object<'py> = PyString::new(py, BINDING_UNKNOWN_TABLE_INTERNAL_CODE).into_any();
     let models_module = py.import(COMPILE_MODELS_MODULE)?;
     let types = py.import(COMPILE_TYPES_MODULE)?;
     let diagnostic_class: Object<'py> = models_module.getattr("CompilerDiagnostic")?;
@@ -470,16 +469,9 @@ fn placeholders<'py>(model: &Object<'py>) -> PyResult<Object<'py>> {
 }
 
 fn ignores_quoted_case<'py>(project: &Object<'py>, dialect: &Object<'py>) -> PyResult<Object<'py>> {
-    call(
-        &project
-            .py()
-            .import(IDENTIFIER_CASE_MODULE)?
-            .getattr("ignores_quoted_case")?,
-        &[
-            ("connection", project.getattr("effective_connection")?),
-            ("dialect", dialect.clone()),
-        ],
-    )
+    let ignores: bool =
+        binding_catalog::ignores_quoted_case(&project.getattr("effective_connection")?, dialect)?;
+    Ok(PyBool::new(project.py(), ignores).to_owned().into_any())
 }
 
 fn replaced<'py>(value: &Object<'py>, pairs: &[(&str, Object<'py>)]) -> PyResult<Object<'py>> {

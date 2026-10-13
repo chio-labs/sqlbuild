@@ -1,21 +1,21 @@
-//! The Python directory snapshot one discovery pass shares, and the native tree it memoises.
+//! The directory snapshot one discovery pass shares, and the native tree it memoises.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods, PyTuple};
+use pyo3::prelude::{
+    Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRefMut, PyResult, Python,
+};
+use pyo3::sync::PyOnceLock;
+use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods};
+use pyo3::{pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_discovery::models::ProjectRoot;
 use sqlbuild_discovery::tree::models::ProjectTree;
-use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::Mutex;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 use crate::bindings::_helpers::discovery::raised::discovery_error;
-use crate::bindings::models::NativeProjectTree;
+use crate::bindings::models::{
+    NativeDirectorySnapshot, NativeDirectorySnapshotScope, NativeProjectTree,
+};
 
-const SNAPSHOT_MODULE: &str = "sqlbuild.compiler.discovery.classes.directory_snapshot";
-const SNAPSHOT_CLASS: &str = "DirectorySnapshot";
-const DISCOVERY_TYPES_MODULE: &str = "sqlbuild.compiler.discovery.types";
-const SNAPSHOT_ENTRY_CLASS: &str = "DirectorySnapshotEntry";
+const SNAPSHOT_VARIABLE: &str = "sqlbuild_directory_snapshot";
 const TREE_MEMO_KEY: &str = "native_project_tree";
 const DISPLAY_PROBE: &str = "_";
 const PROJECT_PATH_KIND: &str = "project_path";
@@ -25,32 +25,155 @@ const ESCAPED_BYTE_LAST: u16 = 0xDCFF;
 const UTF16_ENCODING: &str = "utf-16-le";
 const SURROGATE_PASS: &str = "surrogatepass";
 
-/// Run `body` inside `DirectorySnapshot.scope(project_dir=project_dir)`.
+static ACTIVE_SNAPSHOT: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+
+/// The context variable holding the active snapshot, created once per interpreter.
+fn active_variable(py: Python<'_>) -> PyResult<&Bound<'_, PyAny>> {
+    ACTIVE_SNAPSHOT
+        .get_or_try_init(py, || {
+            let keywords: Bound<'_, PyDict> = PyDict::new(py);
+            keywords.set_item("default", py.None())?;
+            Ok::<_, pyo3::PyErr>(
+                py.import("contextvars")?
+                    .getattr("ContextVar")?
+                    .call((SNAPSHOT_VARIABLE,), Some(&keywords))?
+                    .unbind(),
+            )
+        })
+        .map(|variable| variable.bind(py))
+}
+
+/// The active snapshot when it belongs to `project_dir`.
+fn active_snapshot<'py>(
+    project_dir: &Bound<'py, PyAny>,
+) -> PyResult<Option<Bound<'py, NativeDirectorySnapshot>>> {
+    let py: Python<'py> = project_dir.py();
+    let active: Bound<'py, PyAny> = active_variable(py)?.call_method0("get")?;
+    let Ok(snapshot) = active.downcast_into::<NativeDirectorySnapshot>() else {
+        return Ok(None);
+    };
+    if snapshot.get().project_dir.bind(py).eq(project_dir)? {
+        return Ok(Some(snapshot));
+    }
+    Ok(None)
+}
+
+fn new_snapshot<'py>(
+    project_dir: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, NativeDirectorySnapshot>> {
+    let py: Python<'py> = project_dir.py();
+    Bound::new(
+        py,
+        NativeDirectorySnapshot {
+            project_dir: project_dir.clone().unbind(),
+            memo: PyDict::new(py).unbind(),
+        },
+    )
+}
+
+/// Activate a new snapshot for `project_dir` unless one is active; the token resets it.
+fn enter_scope<'py>(project_dir: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>> {
+    if active_snapshot(project_dir)?.is_some() {
+        return Ok(None);
+    }
+    let snapshot: Bound<'py, NativeDirectorySnapshot> = new_snapshot(project_dir)?;
+    Ok(Some(
+        active_variable(project_dir.py())?.call_method1("set", (snapshot,))?,
+    ))
+}
+
+fn exit_scope(token: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
+    match token {
+        Some(token) => {
+            active_variable(token.py())?.call_method1("reset", (token,))?;
+            Ok(())
+        }
+        None => Ok(()),
+    }
+}
+
+/// Run `body` with one snapshot of `project_dir` shared by every discovery call inside it.
 pub(crate) fn in_snapshot<'py, T>(
     project_dir: &Bound<'py, PyAny>,
     body: impl FnOnce() -> PyResult<T>,
 ) -> PyResult<T> {
-    let py: Python<'py> = project_dir.py();
-    let scope: Bound<'py, PyAny> = call_with(
-        &imported(py, SNAPSHOT_MODULE, SNAPSHOT_CLASS)?.getattr("scope")?,
-        &[("project_dir", project_dir.clone())],
-    )?;
-    within(&scope, |_| body())
+    let token: Option<Bound<'py, PyAny>> = enter_scope(project_dir)?;
+    let result: PyResult<T> = body();
+    exit_scope(token.as_ref())?;
+    result
 }
 
-/// `DirectorySnapshot.current(project_dir=project_dir).memo`.
+/// The memo of the active snapshot of `project_dir`, or of a single-use one outside a scope.
 pub(crate) fn snapshot_memo<'py>(project_dir: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
-    current_snapshot(project_dir)?
-        .getattr("memo")?
-        .downcast_into::<PyDict>()
-        .map_err(Into::into)
+    let snapshot: Bound<'py, NativeDirectorySnapshot> = match active_snapshot(project_dir)? {
+        Some(snapshot) => snapshot,
+        None => new_snapshot(project_dir)?,
+    };
+    Ok(snapshot.get().memo.bind(project_dir.py()).clone())
 }
 
-fn current_snapshot<'py>(project_dir: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    call_with(
-        &imported(project_dir.py(), SNAPSHOT_MODULE, SNAPSHOT_CLASS)?.getattr("current")?,
-        &[("project_dir", project_dir.clone())],
-    )
+#[pymethods]
+impl NativeDirectorySnapshot {
+    /// The project directory the snapshot lists.
+    #[getter]
+    fn project_dir(&self, py: Python<'_>) -> Py<PyAny> {
+        self.project_dir.clone_ref(py)
+    }
+
+    /// The values the pass's native calls share.
+    #[getter]
+    fn memo(&self, py: Python<'_>) -> Py<PyDict> {
+        self.memo.clone_ref(py)
+    }
+}
+
+#[pymethods]
+impl NativeDirectorySnapshotScope {
+    fn __enter__<'py>(
+        mut slf: PyRefMut<'py, Self>,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, NativeDirectorySnapshot>> {
+        let project_dir: Bound<'py, PyAny> = slf.project_dir.bind(py).clone();
+        slf.token = enter_scope(&project_dir)?.map(Bound::unbind);
+        active_snapshot(&project_dir)?.map_or_else(|| new_snapshot(&project_dir), Ok)
+    }
+
+    #[pyo3(signature = (*_exc_info))]
+    fn __exit__(
+        &mut self,
+        py: Python<'_>,
+        _exc_info: Bound<'_, pyo3::types::PyTuple>,
+    ) -> PyResult<bool> {
+        let token: Option<Py<PyAny>> = self.token.take();
+        exit_scope(token.as_ref().map(|token| token.bind(py)))?;
+        Ok(false)
+    }
+}
+
+/// Share one directory snapshot across every discovery call for `project_dir` inside the scope.
+#[pyfunction]
+#[pyo3(signature = (*, project_dir))]
+fn directory_snapshot_scope(project_dir: Bound<'_, PyAny>) -> NativeDirectorySnapshotScope {
+    NativeDirectorySnapshotScope {
+        project_dir: project_dir.unbind(),
+        token: None,
+    }
+}
+
+/// The active snapshot of `project_dir`, or `None` outside its scope.
+#[pyfunction]
+#[pyo3(signature = (*, project_dir))]
+fn active_directory_snapshot<'py>(
+    project_dir: &Bound<'py, PyAny>,
+) -> PyResult<Option<Bound<'py, NativeDirectorySnapshot>>> {
+    active_snapshot(project_dir)
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<NativeDirectorySnapshot>()?;
+    module.add_class::<NativeDirectorySnapshotScope>()?;
+    module.add_function(wrap_pyfunction!(directory_snapshot_scope, module)?)?;
+    module.add_function(wrap_pyfunction!(active_directory_snapshot, module)?)
 }
 
 /// `str(project_dir / "_")` without its probe: the text printed before a relative path.
@@ -101,33 +224,10 @@ pub(crate) fn project_tree<'py>(
         py,
         NativeProjectTree {
             inner: ProjectTree::new(std::path::Path::new(directory.to_str()?)),
-            exported: Mutex::new(HashSet::new()),
         },
     )?;
     memo.set_item(TREE_MEMO_KEY, &created)?;
     Ok(created)
-}
-
-/// Share the native walk's new listings with the pass's Python directory snapshot.
-pub(crate) fn seed_listings(
-    project_dir: &Bound<'_, PyAny>,
-    tree: &Bound<'_, NativeProjectTree>,
-) -> PyResult<()> {
-    let py: Python<'_> = project_dir.py();
-    let entry_class: Bound<'_, PyAny> = imported(py, DISCOVERY_TYPES_MODULE, SNAPSHOT_ENTRY_CLASS)?;
-    let listings: Bound<'_, PyDict> = PyDict::new(py);
-    for (directory, entries) in tree.get().exported_listings(py)? {
-        let entries: Vec<Bound<'_, PyAny>> = entries
-            .into_iter()
-            .map(|(name, is_dir, walkable)| entry_class.call1((name, is_dir, walkable)))
-            .collect::<PyResult<_>>()?;
-        listings.set_item(
-            project_dir.div(directory.bind(py))?,
-            PyTuple::new(py, entries)?,
-        )?;
-    }
-    current_snapshot(project_dir)?.call_method1("seed_listings", (listings,))?;
-    Ok(())
 }
 
 /// Python's `_escaped`: undecodable name bytes as `\xNN`, other lone surrogates as `\uXXXX`.

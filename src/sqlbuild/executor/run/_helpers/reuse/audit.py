@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.auditing.main.identity import build_audit_gate_identity
+from sqlbuild._native import build_audit_gate_identity
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope, AuditSeverity
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult

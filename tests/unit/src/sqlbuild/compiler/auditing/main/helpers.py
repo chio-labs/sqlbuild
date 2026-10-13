@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from types import MappingProxyType
 from typing import cast
 
+from sqlbuild._native import parse_audit_instances
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.discovery.main.builtins import builtin_adapter_classes
 from sqlbuild.compiler.auditing.types import (
@@ -16,7 +18,7 @@ from sqlbuild.compiler.auditing.types import (
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import AuditPlanEntry
-from sqlbuild.spec.contracts.models import SourceEntry
+from sqlbuild.spec.contracts.models import SchemaAuditInstance, SourceEntry
 
 
 def build_render_adapter(adapter_name: str | None) -> BaseAdapter | None:
@@ -118,3 +120,17 @@ def build_audit_plan_entry(
 
 def _audit_key(name: str) -> CompiledObjectKey:
     return CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name=name)
+
+
+def parse_audit_instance(
+    *, raw_audit: object, file_path: Path, label: str, error_class: type[Exception]
+) -> SchemaAuditInstance:
+    """Parse one authored audit as the only entry of an audit list."""
+
+    return parse_audit_instances(
+        raw_audits=[raw_audit],
+        file_path=file_path,
+        label=label,
+        error_class=error_class,
+        null_as_empty=True,
+    )[0]

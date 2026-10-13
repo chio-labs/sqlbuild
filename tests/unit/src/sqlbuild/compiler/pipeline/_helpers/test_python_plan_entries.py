@@ -7,8 +7,7 @@ from datetime import datetime
 
 import pytest
 
-from sqlbuild._native import build_python_plan_entries
-from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
+from sqlbuild._native import build_python_plan_entries, read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.python_nodes._helpers.run_lifecycle import (

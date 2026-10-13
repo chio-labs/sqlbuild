@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import replace
 
 import sqlbuild._native as _native
+from sqlbuild._native import assemble_native_sql_tests
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import report_compile_diagnostic
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
@@ -19,9 +20,6 @@ from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.sql_test_glue.constants import (
     SQL_TEST_DECIMAL_OVERFLOW,
     SQL_TEST_INPUT_FAILURE,
-)
-from sqlbuild.compiler.sql_test_glue.main._assemble_native_sql_tests import (
-    assemble_native_sql_tests,
 )
 from sqlbuild.compiler.sql_test_glue.models import NativeSqlTestAssembly
 

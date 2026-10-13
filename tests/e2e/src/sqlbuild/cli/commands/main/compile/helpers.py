@@ -37,20 +37,16 @@ import sqlbuild.compiler.compile._helpers.diagnostics.recovery as diagnostic_rec
 import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stages
 import sqlbuild.compiler.compile._helpers.native_stages.sql_tests as native_sql_test_stage
-import sqlbuild.compiler.contracts.main._evaluate_native_model_contracts as contract_entry
-import sqlbuild.compiler.contracts.main.promotion_conflicts as promotion_conflicts
-import sqlbuild.compiler.contracts.main.validate as contract_validation
 import sqlbuild.compiler.frontier.main.compiled_code_identity as compiled_code_identity_module
 import sqlbuild.compiler.macro_bridge.classes.macro_bridge as macro_bridge_class
-import sqlbuild.compiler.sql_test_glue.main.plan_native_sql_test_artifacts as plan_artifacts_module
 from scripts.cold_compile_performance.main.read_compile_measurement import read_compile_measurement
 from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
     semantic_compile_fingerprint,
 )
 from scripts.compiler_differential.constants import FAILURE_BASE_FILES
+from sqlbuild._native import run_cli as main
 from sqlbuild.adapter.contract.classes.duckdb_backed_adapter import DuckDbBackedAdapter
 from sqlbuild.adapter.contract.types import TypeDialect
-from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.cli.compile_reuse.constants import (
     EXCLUDED_ROOT_DIRECTORIES,
     NATIVE_REUSE_DIRECTORY_NAME,
@@ -72,6 +68,9 @@ from sqlbuild.compiler.frontier.constants import (
 )
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from sqlbuild.compiler.macro_bridge.constants import MACRO_CALL_STORE_FILE_NAME
+from sqlbuild.compiler.planner.main.execution import (
+    _plan_compiled_sql_test_artifacts as plan_artifacts_module,
+)
 from sqlbuild.observability import EventDispatcher, LifecycleEvent
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     FreshProcessCompileCachePerformanceGuardTestCase,
@@ -726,6 +725,8 @@ def _run_timed_sqb(
         "--no-color",
         *sqb_args,
     ]
+    # Flush the previous run's artifact writes so their disk write-back is not timed here.
+    os.sync()
     started: float = time.monotonic()
     try:
         with (
@@ -4815,10 +4816,10 @@ _ANALYSIS_SEAMS: tuple[tuple[ModuleType, str], ...] = (
     (native_stages, "analyze_native_model_sql"),
     (native_sql_test_stage, "assemble_native_sql_tests"),
     (diagnostic_recovery, "complete_semantic_project"),
-    (contract_validation, "evaluate_native_model_contracts"),
-    (promotion_conflicts, "native_promotion_conflict_diagnostics"),
+    (native_module, "evaluate_model_contracts"),
+    (native_module, "promotion_conflict_diagnostics"),
     (native_module, "build_project_column_lineage"),
-    (plan_artifacts_module, "plan_native_sql_test_artifacts"),
+    (plan_artifacts_module, "plan_compiled_sql_test_artifacts"),
 )
 
 
@@ -4883,7 +4884,7 @@ def type_system_compile(
     statuses: Counter[str] = Counter()
     normalize: Callable[[str, str], object] = native_module.normalize_type
     evaluate_contracts: Callable[..., ContractValidationResult] = (
-        contract_entry.native_model_contracts
+        native_module.evaluate_model_contracts
     )
 
     def recorded(type_sql: str, dialect: str) -> object:
@@ -4901,7 +4902,7 @@ def type_system_compile(
     type_normalization.normalize_type.cache_clear()
     with monkeypatch.context() as patch:
         patch.setattr(native_module, "normalize_type", recorded)
-        patch.setattr(contract_entry, "native_model_contracts", recorded_contracts)
+        patch.setattr(native_module, "evaluate_model_contracts", recorded_contracts)
         for name, value in {REUSE_DISABLE_ENV_VAR: "1"}.items():
             patch.setenv(name, value)
         run: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)

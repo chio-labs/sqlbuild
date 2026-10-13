@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild._native import run_cli as main
 from sqlbuild.compiler.sql_analysis.main._normalize_analysis import normalize_analysis_sql
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     IdentifierBindingCase,

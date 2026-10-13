@@ -6,13 +6,13 @@ import time
 from pathlib import Path
 from typing import Any, TextIO
 
+from sqlbuild._native import compare_contracts
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.models import AdapterConnectionContext, ContractCommandRequest
 from sqlbuild.cli.progress.classes.connection_progress_reporter import (
     ConnectionProgressReporter,
 )
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledSourceView
-from sqlbuild.compiler.contract_adoption.main.compare import compare_contracts
 from sqlbuild.compiler.contract_adoption.models import ContractAdoptionResult, ContractEvidence
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter

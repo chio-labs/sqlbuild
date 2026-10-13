@@ -6,6 +6,7 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
+from sqlbuild._native import find_python_string_locations
 from sqlbuild.compiler.compile.models import (
     CompiledSqlExpansion,
     ExpansionSpan,
@@ -20,9 +21,6 @@ from sqlbuild.compiler.refactoring.constants import (
     GENERIC_DIALECT,
     MIGRATE_FROM_KEY,
     MODEL_KIND_PREFIX,
-)
-from sqlbuild.compiler.refactoring.main.find_python_string_locations import (
-    find_python_string_locations,
 )
 from sqlbuild.compiler.refactoring.models import ManualLocation, RefactorProject, RefactorRequest
 from sqlbuild.compiler.refactoring.types import RefactorOperation, SqlFileRole

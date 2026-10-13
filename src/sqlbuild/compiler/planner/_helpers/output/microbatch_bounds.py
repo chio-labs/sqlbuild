@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from sqlbuild._native import resolve_cursor_input_roles
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
 from sqlbuild.compiler.compile.models import (
     CompileSqlReference,
 )

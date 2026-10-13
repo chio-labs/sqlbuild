@@ -2,8 +2,9 @@
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
-use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
+use crate::bindings::_helpers::compile_attachment::storage_policies::inherited_storage;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::compiled_project::loop_classes::table_backed;
 
@@ -11,8 +12,6 @@ const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 const UNICODE_ENVIRONMENT_MODULE: &str = "sqlbuild.compiler.compile.classes.unicode_environment";
-const RETENTION_MODULE: &str = "sqlbuild.compiler.compile._helpers.config.retention";
-const TABLE_TYPE_MODULE: &str = "sqlbuild.compiler.compile._helpers.config.table_type";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
 
 /// Capture the project inputs every model's native config build and validation read.
@@ -63,26 +62,12 @@ pub(crate) fn native_model_config_session<'py>(
             ),
         ))?;
     let inherited: Bound<'py, PyDict> = PyDict::new(py);
-    let empty_name: Bound<'py, PyAny> = PyString::new(py, "").into_any();
     let mut materializations: Vec<Bound<'py, PyAny>> = vec![py.None().into_bound(py)];
     materializations.extend(table_backed(py)?);
     for materialized in materializations {
-        let policy = |module: &str, name: &str| -> PyResult<Bound<'py, PyAny>> {
-            call_with(
-                &imported(py, module, name)?,
-                &[
-                    ("materialized", materialized.clone()),
-                    ("model_value", py.None().into_bound(py)),
-                    ("materialization_defaults", materialization_defaults.clone()),
-                    ("target_config", target.clone()),
-                    ("model_name", empty_name.clone()),
-                ],
-            )
-        };
-        let retention: Bound<'py, PyAny> =
-            policy(RETENTION_MODULE, "resolve_time_travel_retention")?;
-        let table_type: Bound<'py, PyAny> = policy(TABLE_TYPE_MODULE, "resolve_table_type")?;
-        inherited.set_item(&materialized, (retention, table_type))?;
+        let storage: Bound<'py, PyTuple> =
+            inherited_storage(&materialized, &materialization_defaults, &target)?;
+        inherited.set_item(&materialized, storage)?;
     }
     call_with(
         &imported(py, COMPILE_MODELS_MODULE, "NativeModelConfigSession")?,

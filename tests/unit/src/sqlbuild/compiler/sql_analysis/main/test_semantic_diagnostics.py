@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.compiler.sql_analysis.main._binding_catalog import create_binding_catalog
+from sqlbuild._native import BindingCatalog
 from sqlbuild.compiler.sql_analysis.models import SqlBindingResult
 from tests.unit.src.sqlbuild.compiler.sql_analysis.main._test_types import (
     SemanticDiagnosticMappingCase,
@@ -71,7 +71,7 @@ def test_given_native_semantic_errors_when_validating_then_codes_and_locations_s
     ]
     payloads: list[dict[str, Any]] = [
         json.loads(
-            create_binding_catalog(
+            BindingCatalog(
                 dialect=dialect,
                 quoted_ignore_case=False,
                 known_functions=(),

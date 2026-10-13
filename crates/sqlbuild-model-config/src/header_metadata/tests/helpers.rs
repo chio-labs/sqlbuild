@@ -1,6 +1,7 @@
 use crate::errors::ConfigError;
 use crate::header_metadata::main::parse_header_metadata::parse_header_metadata;
-use crate::header_metadata::models::{ParsedAudit, ParsedColumn};
+use crate::header_metadata::main::parse_schema_columns::parse_schema_columns;
+use crate::header_metadata::models::{ColumnRequest, ParsedAudit, ParsedColumn};
 use crate::tests::test_types::Value;
 use crate::types::AuthoredNode;
 
@@ -16,6 +17,26 @@ pub(super) fn map(entries: &[(&'static str, Value)]) -> Value {
 
 /// The model file path the parse errors name.
 pub(super) const MODEL_PATH: &str = "/project/models/orders.sql";
+
+/// The comma-separated column names a SCHEMA declaration `orders` parses, or its first error.
+pub(super) fn schema_column_summary(columns: &Value) -> String {
+    let request = ColumnRequest {
+        path: SCHEMA_PATH,
+        label: "schema 'orders'",
+        require_columns: true,
+        allow_migrate_from: false,
+    };
+    parse_schema_columns(columns, request).map_or_else(stop_summary, |parsed| {
+        parsed
+            .iter()
+            .map(|column| text(Some(&column.name)))
+            .collect::<Vec<String>>()
+            .join(",")
+    })
+}
+
+/// The schema file path the parse errors name.
+pub(super) const SCHEMA_PATH: &str = "/project/schemas/orders.sql";
 
 /// The parse as one line per column and model audit, or the first error or `unsupported`.
 pub(super) fn summary(columns: &Value, audits: &Value) -> Result<Vec<String>, String> {

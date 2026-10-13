@@ -13,6 +13,7 @@ from sqlbuild._native import (
     build_compile_inputs,
     build_dag_json,
     discover_project_inputs,
+    project_lineage_views,
     project_with,
 )
 from sqlbuild.compiler.compile.models import (
@@ -21,7 +22,6 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
 from sqlbuild.compiler.dag.types import NodeKind
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.graph.main.project_lineage_views import project_lineage_views
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     DUCKDB_COMPILE_ADAPTER_CONTEXT,

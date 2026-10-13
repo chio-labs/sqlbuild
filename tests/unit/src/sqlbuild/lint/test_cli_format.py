@@ -12,7 +12,7 @@ from _pytest.capture import CaptureResult
 import sqlbuild._native as native_module
 import sqlbuild.cli.commands._helpers.lint.selection as lint_selection_module
 import sqlbuild.compiler.planner._helpers.sql_tests.fixture_formatting as fixture_formatting_module
-from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild._native import run_cli as main
 from tests.unit.src.sqlbuild.lint._test_types import (
     FormatCliTestCase,
     FormatSelectionWorkTestCase,

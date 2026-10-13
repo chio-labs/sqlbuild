@@ -6,7 +6,6 @@ from collections.abc import Mapping
 from typing import Protocol
 
 type NativeDiagnosticRow = tuple[str, str, int | None, int | None, int | None, int | None, str]
-type NativeBindingRequest = tuple[str, list[tuple[str, bool]], dict[str, Mapping[str, str]]]
 type NativeNormalizationRequest = tuple[str, dict[str, str], dict[str, str]]
 
 
@@ -21,26 +20,18 @@ class NativeProjectCatalog(Protocol):
     def with_relations(
         self, relations: Mapping[str, Mapping[str, str]]
     ) -> NativeProjectCatalog: ...
-    def validation_payload(self, requests: list[NativeBindingRequest]) -> str: ...
+    def validation_payload(
+        self, requests: list[tuple[str, list[tuple[str, bool]], dict[str, Mapping[str, str]]]]
+    ) -> str: ...
     def update_analysis(
         self, relations: Mapping[str, tuple[Mapping[str, str], Mapping[str, str]]]
     ) -> None: ...
     def register_override(self, relations: Mapping[str, Mapping[str, str]]) -> int: ...
     def prepare_compact(self, payload: bytes) -> NativeCompactAnalysisJob: ...
     def update_relations(self, relations: Mapping[str, Mapping[str, str]]) -> None: ...
-    def binding_results(
-        self, requests: list[NativeBindingRequest]
-    ) -> list[list[NativeDiagnosticRow]]: ...
     def normalize_analysis_sqls(
         self, *, dialect: str, requests: list[NativeNormalizationRequest]
     ) -> list[str | Exception]: ...
-
-
-class NativeCatalogModule(Protocol):
-    def ProjectCatalog(
-        self,
-        request: dict[str, object],
-    ) -> NativeProjectCatalog: ...
 
 
 class NativeBindingPositions(Protocol):

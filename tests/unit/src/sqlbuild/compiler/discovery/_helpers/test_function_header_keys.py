@@ -7,13 +7,18 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.compiler.discovery._helpers.python.functions import parse_python_function
 from sqlbuild.compiler.discovery.exceptions import ModelSqlParseError
-from sqlbuild.compiler.discovery.models import DiscoveredSqlFunctionFile
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredPythonFunctionFile,
+    DiscoveredSqlFunctionFile,
+)
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     FunctionHeaderKeysTestCase,
 )
-from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import discover_declaration_file
+from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
+    discover_declaration_file,
+    discover_python_function_file,
+)
 
 
 @pytest.mark.parametrize(
@@ -119,12 +124,21 @@ def test_given_unknown_sql_function_header_key_when_parsing_then_rejects_key_wit
     ids=lambda case: case.description,
 )
 def test_given_unknown_python_udf_key_when_parsing_then_rejects_key_with_location(
-    test_case: FunctionHeaderKeysTestCase,
+    test_case: FunctionHeaderKeysTestCase, tmp_path: Path
 ) -> None:
+    file_path: Path = tmp_path / "functions" / "python" / test_case.file_name
     with pytest.raises(ModelSqlParseError) as raised:
-        parse_python_function(contents=test_case.contents, file_path=Path(test_case.file_name))
+        discover_python_function_file(
+            project_dir=tmp_path, file_name=test_case.file_name, contents=test_case.contents
+        )
 
-    assert raised.value.message == test_case.expected_error
+    assert raised.value.message == test_case.expected_error.replace(
+        f"'{test_case.file_name}", f"'{file_path}"
+    )
+    assert raised.value.help == (
+        "supported keys: arguments, database, description, entry_point, packages, returns, "
+        "runtime_version, schema, tags"
+    )
 
 
 @pytest.mark.parametrize(
@@ -167,12 +181,12 @@ def test_given_unknown_python_udf_key_when_parsing_then_rejects_key_with_locatio
     ids=lambda case: case.description,
 )
 def test_given_python_udf_when_parsing_then_description_comes_from_decorator_or_docstring(
-    test_case: FunctionHeaderKeysTestCase,
+    test_case: FunctionHeaderKeysTestCase, tmp_path: Path
 ) -> None:
-    header_values: dict[str, object]
-    header_values, _, _ = parse_python_function(
-        contents=test_case.contents, file_path=Path(test_case.file_name)
+    function_file: DiscoveredPythonFunctionFile = discover_python_function_file(
+        project_dir=tmp_path, file_name=test_case.file_name, contents=test_case.contents
     )
+    header_values: dict[str, object] = function_file.header_values
 
     assert header_values.get("description") == test_case.expected_description
 

@@ -9,6 +9,7 @@ import pytest
 from sqlbuild._native import (
     compiled_model_record,
     project_with,
+    write_fingerprint,
 )
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
@@ -21,7 +22,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.warehouse.snapshot import gather_warehouse_snapshot
 from sqlbuild.compiler.planner._helpers.warehouse.source_columns import gather_source_columns

@@ -1,0 +1,265 @@
+//! Model contract and promotion-conflict diagnostics, built as compile's `CompilerDiagnostic`s.
+
+use pyo3::prelude::{
+    Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRef, PyResult, Python,
+};
+use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
+use sqlbuild_sqltext::compiler::main::model_output_columns::model_output_columns;
+
+use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::contracts::model_contracts::{
+    ConflictRow, DiagnosticRow, evaluate_project_model_contracts, project_promotion_conflicts,
+};
+use crate::bindings::_helpers::sqltext::model_headers::{ColumnLocation, location_rows};
+
+const NATIVE_MODULE: &str = "sqlbuild._native";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
+const CONTRACT_MODELS_MODULE: &str = "sqlbuild.compiler.contracts.models";
+const SPEC_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
+const PATHLIB_MODULE: &str = "pathlib";
+const IMPLICIT_COLUMN_CONTRACTS: &str = "implicit";
+const GENERIC_DIALECT: &str = "generic";
+const OUTPUT_LABEL: &str = "output";
+const CONTRACT_PHASE: &str = "contract";
+const MODEL_RESOURCE: &str = "model";
+
+fn keyword_call<'py>(
+    callable: &Bound<'py, PyAny>,
+    pairs: Vec<(&str, Bound<'py, PyAny>)>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let keywords: Bound<'py, PyDict> = PyDict::new(callable.py());
+    for (name, value) in pairs {
+        keywords.set_item(name, value)?;
+    }
+    callable.call((), Some(&keywords))
+}
+
+/// The compile's retained native project, read through `_native.compiled_project_facts`.
+fn native_project<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    project
+        .py()
+        .import(NATIVE_MODULE)?
+        .getattr("compiled_project_facts")?
+        .call1((project,))
+}
+
+/// Where the model's SQL produces `column_name`, recovered from the authored SQL when needed.
+fn output_column_location<'py>(
+    model: &Bound<'py, PyAny>,
+    column_name: &str,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let recorded: Bound<'py, PyAny> = model
+        .getattr("output_column_locations")?
+        .call_method1("get", (column_name,))?;
+    let authored: Option<String> = model.getattr("authored_sql")?.extract()?;
+    let authored: String = authored.unwrap_or_default();
+    if !recorded.is_none() || authored.is_empty() {
+        return Ok(Some(recorded).filter(|location| !location.is_none()));
+    }
+    let implicit: bool = model
+        .getattr("extract_implicit_alias_columns")?
+        .is_truthy()?;
+    let rows: Vec<ColumnLocation> = location_rows(model_output_columns(&authored, implicit));
+    let Some((_, line, column, end_line, end_column)) = rows
+        .into_iter()
+        .rev()
+        .find(|(name, ..)| name == column_name)
+    else {
+        return Ok(None);
+    };
+    let py: Python<'py> = model.py();
+    let location: Bound<'py, PyAny> = keyword_call(
+        &py.import(SPEC_MODELS_MODULE)?.getattr("SourceLocation")?,
+        vec![
+            ("path", model.getattr("relative_path")?),
+            ("line", line.into_pyobject(py)?.into_any()),
+            ("column", column.into_pyobject(py)?.into_any()),
+            ("end_line", end_line.into_pyobject(py)?.into_any()),
+            ("end_column", end_column.into_pyobject(py)?.into_any()),
+        ],
+    )?;
+    Ok(Some(location))
+}
+
+/// The diagnostic's primary location: a declared column, else the output column.
+fn diagnostic_location<'py>(
+    model: &Bound<'py, PyAny>,
+    (declared_index, output_column): (Option<usize>, Option<&str>),
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = model.py();
+    let schema_entry: Bound<'py, PyAny> = model.getattr("schema_entry")?;
+    if let Some(index) = declared_index
+        && !schema_entry.is_none()
+    {
+        return schema_entry
+            .getattr("columns")?
+            .get_item(index)?
+            .getattr("location");
+    }
+    if let Some(column_name) = output_column
+        && let Some(location) = output_column_location(model, column_name)?
+    {
+        return Ok(location);
+    }
+    Ok(py.None().into_bound(py))
+}
+
+fn related_locations<'py>(
+    model: &Bound<'py, PyAny>,
+    related: Option<(String, String)>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let py: Python<'py> = model.py();
+    let Some((column_name, message)) = related else {
+        return Ok(PyTuple::empty(py));
+    };
+    let Some(location) = output_column_location(model, &column_name)? else {
+        return Ok(PyTuple::empty(py));
+    };
+    let related: Bound<'py, PyAny> = keyword_call(
+        &py.import(COMPILE_MODELS_MODULE)?
+            .getattr("RelatedLocation")?,
+        vec![
+            ("label", OUTPUT_LABEL.into_pyobject(py)?.into_any()),
+            ("location", location),
+            ("message", message.into_pyobject(py)?.into_any()),
+        ],
+    )?;
+    PyTuple::new(py, [related])
+}
+
+fn contract_diagnostic<'py>(
+    model: &Bound<'py, PyAny>,
+    row: DiagnosticRow,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = model.py();
+    let (code, is_error, message, column_name, declared_index, output_column, related, help) = row;
+    let severity: &str = if is_error { "error" } else { "warning" };
+    keyword_call(
+        &py.import(COMPILE_MODELS_MODULE)?
+            .getattr("CompilerDiagnostic")?,
+        vec![
+            ("phase", CONTRACT_PHASE.into_pyobject(py)?.into_any()),
+            ("severity", severity.into_pyobject(py)?.into_any()),
+            ("code", code.into_pyobject(py)?.into_any()),
+            ("message", message.into_pyobject(py)?.into_any()),
+            ("resource_type", model_resource_type(py)?),
+            ("resource_name", model.getattr("name")?),
+            ("column_name", column_name.into_pyobject(py)?.into_any()),
+            ("path", model.getattr("relative_path")?),
+            (
+                "location",
+                diagnostic_location(model, (declared_index, output_column.as_deref()))?,
+            ),
+            (
+                "related_locations",
+                related_locations(model, related)?.into_any(),
+            ),
+            ("help", help.into_pyobject(py)?.into_any()),
+        ],
+    )
+}
+
+fn model_resource_type(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
+    py.import(COMPILE_TYPES_MODULE)?
+        .getattr("CompiledResourceType")?
+        .call1((MODEL_RESOURCE,))
+}
+
+/// Every model's column contract diagnostics, in model order.
+#[pyfunction]
+#[pyo3(signature = (*, project, dialect = None))]
+fn evaluate_model_contracts<'py>(
+    py: Python<'py>,
+    project: &Bound<'py, PyAny>,
+    dialect: Option<&Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let mode: String = project
+        .getattr("settings")?
+        .getattr("column_contract_mode")?
+        .str()?
+        .extract()?;
+    let mut dialect_name: String = GENERIC_DIALECT.to_owned();
+    if let Some(dialect) = dialect
+        && dialect.is_truthy()?
+    {
+        dialect_name = dialect.str()?.extract()?;
+    }
+    let native: Bound<'py, PyAny> = native_project(project)?;
+    let native: PyRef<'py, NativeCompiledProject> = native.extract()?;
+    let outcomes: Vec<(String, Vec<DiagnosticRow>)> = evaluate_project_model_contracts(
+        py,
+        (dialect_name, mode == IMPLICIT_COLUMN_CONTRACTS),
+        &native,
+    )?;
+    let mut diagnostics: Vec<Bound<'py, PyAny>> = Vec::new();
+    for model in project.getattr("models")?.try_iter()? {
+        let model: Bound<'py, PyAny> = model?;
+        let name: String = model.getattr("name")?.extract()?;
+        let Some((_, rows)) = outcomes.iter().rev().find(|(owner, _)| *owner == name) else {
+            continue;
+        };
+        for row in rows {
+            diagnostics.push(contract_diagnostic(&model, row.clone())?);
+        }
+    }
+    keyword_call(
+        &py.import(CONTRACT_MODELS_MODULE)?
+            .getattr("ContractValidationResult")?,
+        vec![("diagnostics", PyTuple::new(py, diagnostics)?.into_any())],
+    )
+}
+
+/// One K011 error per enforced-contract table model under immediate promotion.
+#[pyfunction]
+#[pyo3(signature = (*, project, adapter_default, settings_file))]
+fn promotion_conflict_diagnostics<'py>(
+    py: Python<'py>,
+    project: &Bound<'py, PyAny>,
+    adapter_default: &Bound<'py, PyAny>,
+    settings_file: String,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let explicit_mode: Option<String> = project
+        .getattr("settings")?
+        .getattr("table_promotion_mode")?
+        .extract()?;
+    let native: Bound<'py, PyAny> = native_project(project)?;
+    let native: PyRef<'py, NativeCompiledProject> = native.extract()?;
+    let conflicts: Vec<ConflictRow> = project_promotion_conflicts(
+        py,
+        (
+            explicit_mode,
+            adapter_default.str()?.extract()?,
+            settings_file,
+        ),
+        &native,
+    )?;
+    let diagnostic_type: Bound<'py, PyAny> = py
+        .import(COMPILE_MODELS_MODULE)?
+        .getattr("CompilerDiagnostic")?;
+    let path_type: Bound<'py, PyAny> = py.import(PATHLIB_MODULE)?.getattr("Path")?;
+    let mut diagnostics: Vec<Bound<'py, PyAny>> = Vec::with_capacity(conflicts.len());
+    for (name, relative_path, code, message, help) in conflicts {
+        diagnostics.push(keyword_call(
+            &diagnostic_type,
+            vec![
+                ("phase", CONTRACT_PHASE.into_pyobject(py)?.into_any()),
+                ("severity", "error".into_pyobject(py)?.into_any()),
+                ("code", code.into_pyobject(py)?.into_any()),
+                ("message", message.into_pyobject(py)?.into_any()),
+                ("resource_type", model_resource_type(py)?),
+                ("resource_name", name.into_pyobject(py)?.into_any()),
+                ("path", path_type.call1((relative_path,))?),
+                ("help", help.into_pyobject(py)?.into_any()),
+            ],
+        )?);
+    }
+    PyTuple::new(py, diagnostics)
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(evaluate_model_contracts, module)?)?;
+    module.add_function(wrap_pyfunction!(promotion_conflict_diagnostics, module)?)?;
+    Ok(())
+}

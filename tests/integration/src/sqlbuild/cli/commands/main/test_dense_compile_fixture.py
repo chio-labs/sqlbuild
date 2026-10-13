@@ -8,7 +8,7 @@ import pytest
 from scripts.cold_compile_performance._helpers.dense_project import (
     write_dense_compile_project,
 )
-from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild._native import run_cli as main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import DenseCompileFixtureTestCase
 
 

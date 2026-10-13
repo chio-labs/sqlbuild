@@ -3,18 +3,18 @@
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyDict, PyDictMethods, PySet, PySetMethods};
+use pyo3::types::{PyDict, PyDictMethods, PySet, PySetMethods, PyString};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::references::source_relations::render_source_relation;
 
 const REF_MODELS_MODULE: &str = "sqlbuild.python_nodes.models";
 const REF_TYPES_MODULE: &str = "sqlbuild.python_nodes.types";
 const QUALIFIED_NAME_MODULE: &str =
     "sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name";
-const SOURCE_RELATION_MODULE: &str = "sqlbuild.compiler.references.main.render_source_relation";
 const SHARED_EXCEPTIONS_MODULE: &str = "sqlbuild.errors.contracts.exceptions";
 
 /// The `SqlResourceRefKind` members a relation map distinguishes.
@@ -215,10 +215,8 @@ fn planned_relation<'py>(
         if source.is_none() {
             return Ok(source);
         }
-        return call_with(
-            &imported(py, SOURCE_RELATION_MODULE, "render_source_relation")?,
-            &[("entry", source), ("adapter", adapter.clone())],
-        );
+        let rendered: String = render_source_relation(&source, Some(adapter))?;
+        return Ok(PyString::new(py, &rendered).into_any());
     }
     let locations: Bound<'py, PyAny> = plan_output.getattr(if kind.eq(&kinds.model)? {
         "model_locations"

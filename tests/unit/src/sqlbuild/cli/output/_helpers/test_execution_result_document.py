@@ -8,16 +8,10 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import format_audit_execution_json
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.cli.commands._helpers.test.sql_progress import format_parameterized_test_label
-from sqlbuild.cli.output._helpers.execution_result_document import (
-    _format_audit_checks,
-    _format_model_assets,
-    _format_sql_test_checks,
-    _format_sql_test_step,
-    format_audit_execution_json,
-)
 from sqlbuild.compiler.auditing.models import (
     MeasurementThresholdBound,
     MeasurementThresholds,
@@ -62,6 +56,12 @@ from tests.unit.src.sqlbuild.cli.output._helpers._test_types import (
     SqlTestCaseExecutionProtocolTestCase,
     SqlTestDifferenceOutputTestCase,
 )
+from tests.unit.src.sqlbuild.cli.output._helpers.helpers import (
+    formatted_audit_check,
+    formatted_model_asset,
+    formatted_sql_test_check,
+    formatted_sql_test_step,
+)
 
 
 @pytest.mark.parametrize(
@@ -90,7 +90,7 @@ def test_given_failed_model_when_formatting_json_then_last_recorded_sql_is_prese
         failed_sql=test_case.expected_failed_sql,
     )
 
-    assets: tuple[dict[str, object], ...] = _format_model_assets(results=(result,), plan=None)
+    assets: tuple[dict[str, object], ...] = (formatted_model_asset(result),)
 
     assert assets[0]["last_recorded_sql"] == test_case.expected_recorded_sql
     assert assets[0]["failed_sql"] == test_case.expected_failed_sql
@@ -125,7 +125,7 @@ def test_given_difference_samples_when_formatting_json_then_structured_diagnosti
         ),
     )
 
-    payload: dict[str, object] = _format_sql_test_step(step)
+    payload: dict[str, object] = formatted_sql_test_step(step)
 
     assert payload["unexpected_row_count"] == test_case.expected_unexpected_count
     assert payload["missing_row_count"] == test_case.expected_missing_count
@@ -169,7 +169,7 @@ def test_given_end_scheduled_model_audit_when_formatting_json_then_logical_ident
         executed_sql="SELECT 1 WHERE FALSE",
     )
 
-    check: dict[str, object] = _format_audit_checks(results=(result,))[0]
+    check: dict[str, object] = formatted_audit_check(result)
 
     assert check["check_id"] == test_case.expected_check_id
     assert check["attachment_kind"] == test_case.expected_attachment_kind
@@ -212,7 +212,7 @@ def test_given_measurement_audit_when_formatting_execution_document_then_summary
         evidence_truncated=True,
     )
 
-    check: dict[str, object] = _format_audit_checks(results=(result,))[0]
+    check: dict[str, object] = formatted_audit_check(result)
 
     assert check["passed"] is test_case.expected_passed
     assert check["status"] == test_case.expected_status
@@ -316,7 +316,7 @@ def test_given_microbatch_result_when_formatting_json_then_interval_provenance_i
         ),
     )
 
-    asset: dict[str, object] = _format_model_assets(results=(result,), plan=None)[0]
+    asset: dict[str, object] = formatted_model_asset(result)
 
     assert asset["microbatch"] == {
         "run_type": test_case.expected_run_type,
@@ -387,7 +387,7 @@ def test_given_future_cursor_cap_when_formatting_execution_json_then_structured_
         future_cursor_safety=evidence,
     )
 
-    asset: dict[str, object] = _format_model_assets(results=(result,), plan=None)[0]
+    asset: dict[str, object] = formatted_model_asset(result)
 
     assert asset["future_cursor_safety"] == {
         "action": test_case.expected_action,
@@ -447,7 +447,7 @@ def test_given_maximum_start_cap_when_formatting_execution_json_then_evidence_is
         maximum_start_safety=evidence,
     )
 
-    asset: dict[str, object] = _format_model_assets(results=(result,), plan=None)[0]
+    asset: dict[str, object] = formatted_model_asset(result)
 
     maximum_start: object = asset["maximum_start_safety"]
     assert maximum_start == {
@@ -519,7 +519,7 @@ def test_given_parameterized_sql_test_result_when_formatting_json_then_case_meta
         ),
     )
 
-    check: dict[str, object] = _format_sql_test_checks((result,))[0]
+    check: dict[str, object] = formatted_sql_test_check(result)
 
     assert check["check_id"] == test_case.expected_check_id
     assert check["source_path"] == "tests/unit/orders.sql"
@@ -528,18 +528,18 @@ def test_given_parameterized_sql_test_result_when_formatting_json_then_case_meta
     assert check["case_name"] == "large_order"
     assert check["case_index"] == 1
     assert check["case_fingerprint"] == test_case.expected_fingerprint
-    assert check["parameter_schema"] == (
+    assert check["parameter_schema"] == [
         {"name": "amount", "type": "decimal", "nullable": False},
         {"name": "note", "type": "string", "nullable": True},
-    )
-    assert check["parameters"] == (
+    ]
+    assert check["parameters"] == [
         {
             "name": "amount",
             "type": "decimal",
             "value": test_case.expected_decimal_value,
         },
         {"name": "note", "type": "string", "value": None},
-    )
+    ]
     assert (
         format_parameterized_test_label(
             name=result.test_name,

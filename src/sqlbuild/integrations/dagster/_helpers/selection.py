@@ -5,8 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from sqlbuild.compiler.graph.main.path_nodes import path_nodes
-from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
+from sqlbuild._native import path_nodes, transitive_closure_many
 from sqlbuild.compiler.planner.constants import SELECTOR_KIND_SEPARATOR
 from sqlbuild.compiler.planner.main.selection.selector_parse import parse_project_selector
 from sqlbuild.compiler.planner.main.selection.unit_test_selector_error import (

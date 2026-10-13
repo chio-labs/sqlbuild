@@ -6,7 +6,7 @@ import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from sqlbuild.compiler.compile.classes.compile_input_reads import CompileInputReads
+from sqlbuild._native import CompileInputReads
 from sqlbuild.compiler.compile.types import CompileContextKey
 
 

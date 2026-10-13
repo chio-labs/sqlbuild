@@ -21,8 +21,10 @@ from sqlbuild._native import (
     build_compile_inputs,
     discover_project_inputs,
     infer_native_expression_source_shapes,
+    model_placeholders,
     prove_native_dynamic_contracts,
     session_outcome_analysis,
+    substitute_placeholder_defaults,
 )
 from sqlbuild._native import dynamic_contract_proof as contract_proof
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
@@ -36,11 +38,6 @@ from sqlbuild.compiler.analysis_session.models import (
 )
 from sqlbuild.compiler.analysis_session.types import ProofRow
 from sqlbuild.compiler.compile._helpers.analysis.cache import build_analysis_cache_context
-from sqlbuild.compiler.compile._helpers.analysis.pivot_requests import (
-    model_dynamic_families,
-    model_pivot_sql,
-)
-from sqlbuild.compiler.compile._helpers.analysis.syntax_checks import model_placeholders
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsics_analysis_sql,
 )
@@ -725,22 +722,21 @@ def _compare_proofs(
         dynamic_families_by_table=request.dynamic_families_by_table,
     )
     proved: list[bool] = [
-        bool(model_dynamic_families(model_input))
-        and model_input.model_file.file_path.stem in analyses
+        bool(_dynamic_families(model_input)) and model_input.model_file.file_path.stem in analyses
         for model_input in request.model_inputs
     ]
     pivot_inputs: list[ModelInput] = list(itertools.compress(request.model_inputs, proved))
     for model_input in pivot_inputs:
-        families: tuple[SchemaDynamicColumnFamily, ...] = model_dynamic_families(model_input)
+        families: tuple[SchemaDynamicColumnFamily, ...] = _dynamic_families(model_input)
         analysis: ModelSqlAnalysis = analyses[model_input.model_file.file_path.stem]
         models: tuple[tuple[str, tuple[SchemaDynamicColumnFamily, ...]], ...] = (
             (
-                model_pivot_sql(
-                    query_sql=cursor_intrinsics_analysis_sql(
+                substitute_placeholder_defaults(
+                    cursor_intrinsics_analysis_sql(
                         sql=model_input.query_sql,
                         cursor_type=model_input.config.values.get("cursor_type"),
                     ),
-                    placeholders=model_placeholders(model_input),
+                    list((model_placeholders(model_input) or {}).items()),
                 ),
                 families,
             ),
@@ -908,3 +904,7 @@ def projection_view(
 
     types, null_literal_names, quoted_names = row
     return dict(types), frozenset(null_literal_names), frozenset(quoted_names)
+
+
+def _dynamic_families(model_input: ModelInput) -> tuple[SchemaDynamicColumnFamily, ...]:
+    return getattr(model_input.schema_entry, "dynamic_columns", ())

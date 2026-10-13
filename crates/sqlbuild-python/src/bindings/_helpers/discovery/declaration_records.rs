@@ -22,9 +22,10 @@ use crate::bindings::_helpers::discovery::header_declarations::typed_constant_re
 use crate::bindings::_helpers::discovery::project_files::path_object;
 use crate::bindings::_helpers::discovery::raised::{failure_error, read_error, stage_error};
 use crate::bindings::_helpers::discovery::snapshot::{
-    in_snapshot, project_root, project_tree, seed_listings, snapshot_memo,
+    in_snapshot, project_root, project_tree, snapshot_memo,
 };
 use crate::bindings::_helpers::discovery::sorted_keys::sorted_keys;
+use crate::bindings::_helpers::model_config::header_columns::schema_columns;
 use crate::bindings::_helpers::sqltext::authored_values::map_to_python;
 use crate::bindings::models::{NativeDiscoverySession, NativeProjectTree};
 
@@ -32,9 +33,7 @@ const MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
 const AUDITING_MODELS_MODULE: &str = "sqlbuild.compiler.auditing.models";
 const AUDITING_TYPES_MODULE: &str = "sqlbuild.compiler.auditing.types";
-const SCHEMA_COLUMNS_MODULE: &str = "sqlbuild.compiler.discovery._helpers.sql.schema_columns";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
-const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild.compiler.discovery.exceptions";
 const PATHLIB_MODULE: &str = "pathlib";
 const SESSION_MEMO_KEY: &str = "native_discovery_session";
 const MEASUREMENT_MODE: &str = "MEASUREMENT";
@@ -66,28 +65,10 @@ impl<'py> FileContext<'_, 'py> {
 
     /// Add the scope fields of a file native discovery listed in a role.
     fn add_scope(&self, fields: &Bound<'py, PyDict>) -> PyResult<()> {
-        let Some(scope) = self.scope else {
-            return Ok(());
-        };
-        let py: Python<'py> = self.py();
-        fields.set_item(
-            "scope_kind",
-            imported(py, SCOPE_TYPES_MODULE, "ScopeKind")?.call1((scope.scope_kind,))?,
-        )?;
-        for (name, path) in [
-            ("ownership_root", &scope.ownership_root),
-            ("owning_path", &scope.owning_path),
-            ("declaration_root", &scope.declaration_root),
-        ] {
-            let value: Bound<'py, PyAny> = match path {
-                Some(path) => {
-                    path_class(py)?.call1((path_object(py, self.tree, path.clone())?,))?
-                }
-                None => py.None().into_bound(py),
-            };
-            fields.set_item(name, value)?;
+        match self.scope {
+            Some(scope) => add_scope_fields(self.tree, scope, fields),
+            None => Ok(()),
         }
-        Ok(())
     }
 
     fn record(&self, class: &str, fields: &Bound<'py, PyDict>) -> PyResult<Bound<'py, PyAny>> {
@@ -95,7 +76,32 @@ impl<'py> FileContext<'_, 'py> {
     }
 }
 
-fn path_class(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
+/// Set `scope_kind`, `ownership_root`, `owning_path` and `declaration_root` of a listed file.
+pub(crate) fn add_scope_fields(
+    tree: &ProjectTree,
+    scope: &FileScope,
+    fields: &Bound<'_, PyDict>,
+) -> PyResult<()> {
+    let py: Python<'_> = fields.py();
+    fields.set_item(
+        "scope_kind",
+        imported(py, SCOPE_TYPES_MODULE, "ScopeKind")?.call1((scope.scope_kind,))?,
+    )?;
+    for (name, path) in [
+        ("ownership_root", &scope.ownership_root),
+        ("owning_path", &scope.owning_path),
+        ("declaration_root", &scope.declaration_root),
+    ] {
+        let value: Bound<'_, PyAny> = match path {
+            Some(path) => path_class(py)?.call1((path_object(py, tree, path.clone())?,))?,
+            None => py.None().into_bound(py),
+        };
+        fields.set_item(name, value)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn path_class(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     imported(py, PATHLIB_MODULE, "Path")
 }
 
@@ -208,8 +214,7 @@ fn schema_file<'py>(
     file: &SchemaFile,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = context.py();
-    let parse_columns: Bound<'py, PyAny> =
-        imported(py, SCHEMA_COLUMNS_MODULE, "parse_schema_columns")?;
+    let file_path: String = context.file_path.str()?.to_string();
     let declaration_class: Bound<'py, PyAny> =
         imported(py, MODELS_MODULE, "ModelSchemaDeclaration")?;
     let mut declarations: Vec<Bound<'py, PyAny>> = Vec::with_capacity(file.declarations.len());
@@ -217,27 +222,14 @@ fn schema_file<'py>(
         let raw_columns: Bound<'py, PyAny> =
             single_value(py, "columns", declaration.columns.as_ref())?
                 .unwrap_or_else(|| py.None().into_bound(py));
-        let columns: Bound<'py, PyAny> = call_with(
-            &parse_columns,
-            &[
-                ("raw_columns", raw_columns),
-                ("file_path", context.file_path.clone()),
-                (
-                    "label",
-                    format!("schema '{}'", declaration.name).into_bound_py_any(py)?,
-                ),
-                (
-                    "error_class",
-                    imported(py, DISCOVERY_ERRORS_MODULE, "DeclarationParseError")?,
-                ),
-                (
-                    "column_locations",
-                    source_locations(py, &context.relative_path, &declaration.column_locations)?
-                        .into_any(),
-                ),
-                ("require_columns", true.into_bound_py_any(py)?),
-            ],
-        )?;
+        let label: String = format!("schema '{}'", declaration.name);
+        let columns: Bound<'py, PyAny> = schema_columns(
+            &raw_columns,
+            (&file_path, &label),
+            (true, false, true),
+            &source_locations(py, &context.relative_path, &declaration.column_locations)?,
+        )?
+        .into_any();
         declarations.push(call_with(
             &declaration_class,
             &[
@@ -371,7 +363,7 @@ fn macro_file<'py>(
 }
 
 /// The session of this pass, created and memoised by the first declaration collection.
-fn discovery_session<'py>(
+pub(crate) fn discovery_session<'py>(
     project_dir: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, NativeDiscoverySession>> {
     let py: Python<'py> = project_dir.py();
@@ -437,7 +429,6 @@ fn collection<'py>(
                 CollectionFailure::Layout(failure) => failure_error(py, failure.clone()),
             });
         }
-        seed_listings(project_dir, &tree)?;
         Ok((tree, collection))
     })
 }

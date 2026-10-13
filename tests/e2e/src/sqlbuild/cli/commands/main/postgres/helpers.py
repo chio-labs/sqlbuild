@@ -816,7 +816,7 @@ def no_postgres_failure(monkeypatch: pytest.MonkeyPatch) -> None:
 def build_in_process(*, project_dir: Path, capsys: pytest.CaptureFixture[str]) -> int:
     """Run sqb build in-process so faults can be injected, returning its exit code."""
 
-    from sqlbuild.cli.commands.main.entrypoint.entry import main
+    from sqlbuild._native import run_cli as main
 
     _ = capsys.readouterr()
     exit_code: int = main(["--project-dir", str(project_dir), "--no-color", "build"])

@@ -1,0 +1,617 @@
+//! The `sqb` entry: invocation scopes, parsing, observed dispatch and the error projection.
+
+use std::time::Instant;
+
+use pyo3::exceptions::PySystemExit;
+use pyo3::prelude::{
+    Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
+use pyo3::types::{PyBool, PyCFunction, PyDict, PyDictMethods, PyInt, PyList, PyString, PyTuple};
+use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
+use sqlbuild_cli::dispatch::main::failure_report::failure_report;
+use sqlbuild_cli::dispatch::main::invocation_policy::invocation_policy;
+use sqlbuild_cli::dispatch::models::{CommandFacts, CommandFailure, InvocationPolicy};
+
+use crate::bindings::_helpers::cli::dispatch::{command_facts, dispatch_command};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+
+const NO_COLOR_OPTION: &str = "--no-color";
+const EXCEPTIONS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
+const PARSING_MODULE: &str = "sqlbuild.cli.commands._helpers.entry.parsing";
+const COMPUTE_LOGS_MODULE: &str =
+    "sqlbuild.cli.commands.main.entrypoint._dispatch_with_compute_logs";
+const OBSERVABILITY_MODULE: &str = "sqlbuild.cli.commands._helpers.entry.observability";
+const LIFECYCLE_EVENT_MODULE: &str = "sqlbuild.runtime.observability.main.create_lifecycle_event";
+const INVOCATION_SCOPE_MODULE: &str = "sqlbuild.runtime.observability.main.invocation_scope";
+const EXTERNAL_SCOPE_MODULE: &str =
+    "sqlbuild.runtime.observability.main.invocation_external_context_scope";
+const INVOCATION_CONTEXT_MODULE: &str = "sqlbuild.runtime.output_capture.main.invocation_context";
+const OUTPUT_CAPTURE_ERRORS_MODULE: &str = "sqlbuild.runtime.output_capture.exceptions";
+const DIAGNOSTICS_MODULE: &str = "sqlbuild.diagnostics.main.diagnostics_context";
+const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
+const CODED_ERROR_MODULE: &str = "sqlbuild.presentation.main.coded_error_text";
+const TRANSIENT_LINE_MODULE: &str = "sqlbuild.presentation.main.transient_line_coordinator";
+const SKILLS_MODULE: &str = "sqlbuild.cli.commands._helpers.skills.update";
+const DIFF_JSON_MODULE: &str = "sqlbuild.cli.commands._helpers.diff.json_output";
+const RULES_ERRORS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
+const LINT_ERRORS_MODULE: &str = "sqlbuild.lint.exceptions";
+const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
+const NATIVE_MODULE: &str = "sqlbuild._native";
+const CLI_LOGGER: &str = "sqlbuild.cli";
+const UNKNOWN_COMMAND: &str = "unknown";
+const DIFF_PUBLICATION_CODE: &str = "C257";
+const DIFF_EXECUTION_STATUS: &str = "execution_failed";
+const DIFF_OUTCOME_PREFIX: &str = "Query diff outcome  ";
+/// Expected command failures by module and class, loaded only once a command raised.
+const EXPECTED_COMMAND_FAILURES: [(&str, &str); 4] = [
+    (
+        "sqlbuild.executor.pipeline.exceptions",
+        "AuditExecutionError",
+    ),
+    ("sqlbuild.compiler.discovery.exceptions", "DiscoveryError"),
+    (
+        "sqlbuild.runtime.execution_limits.exceptions",
+        "ExecutionDurationLimitError",
+    ),
+    ("sqlbuild.spec.contracts.exceptions", "SpecConfigError"),
+];
+
+/// One parsed invocation: its namespace, injected handlers and error colour.
+struct Invocation<'py> {
+    args: Bound<'py, PyAny>,
+    handlers: Option<Bound<'py, PyAny>>,
+    use_color: bool,
+    facts: CommandFacts,
+}
+
+impl<'py> Invocation<'py> {
+    fn py(&self) -> Python<'py> {
+        self.args.py()
+    }
+
+    fn command_is(&self, name: &str) -> bool {
+        self.facts.command.as_deref() == Some(name)
+    }
+
+    fn flag(&self, name: &str) -> PyResult<bool> {
+        self.args.getattr(name)?.is_truthy()
+    }
+
+    fn project_dir(&self) -> PyResult<Bound<'py, PyAny>> {
+        let path: Bound<'py, PyAny> = imported(self.py(), "pathlib", "Path")?;
+        let raw: Bound<'py, PyAny> = self.args.getattr("project_dir")?;
+        if raw.is_none() {
+            path.call_method0("cwd")
+        } else {
+            path.call1((raw,))
+        }
+    }
+
+    fn command_name(&self) -> String {
+        self.facts
+            .command
+            .clone()
+            .unwrap_or_else(|| UNKNOWN_COMMAND.to_owned())
+    }
+}
+
+/// `print(value, file=sys.<stream>, end=<end>)`.
+fn print_object(value: &Bound<'_, PyAny>, stream: Option<&str>, end: Option<&str>) -> PyResult<()> {
+    let py: Python<'_> = value.py();
+    let keywords: Bound<'_, PyDict> = PyDict::new(py);
+    if let Some(stream) = stream {
+        keywords.set_item("file", py.import("sys")?.getattr(stream)?)?;
+    }
+    if let Some(end) = end {
+        keywords.set_item("end", end)?;
+    }
+    py.import("builtins")?
+        .getattr("print")?
+        .call((value,), Some(&keywords))?;
+    Ok(())
+}
+
+fn class<'py>(py: Python<'py>, module: &str, name: &str) -> PyResult<Bound<'py, PyAny>> {
+    imported(py, module, name)
+}
+
+/// `(code, message, help)` of an expected error as Python objects, as the CLI renders it.
+fn error_parts<'py>(
+    error: &Bound<'py, PyAny>,
+    fallback_code: &str,
+) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>, Bound<'py, PyAny>)> {
+    let py: Python<'py> = error.py();
+    let code: Bound<'py, PyAny> = match error.getattr_opt("code")? {
+        Some(code) => code.str()?.into_any(),
+        None => PyString::new(py, fallback_code).into_any(),
+    };
+    let message: Bound<'py, PyAny> = match error.getattr_opt("message")? {
+        Some(message) => message.str()?.into_any(),
+        None => error.str()?.into_any(),
+    };
+    let help: Bound<'py, PyAny> = error
+        .getattr_opt("help")?
+        .unwrap_or_else(|| py.None().into_bound(py));
+    Ok((code, message, help))
+}
+
+/// Print the coded error text of `error` to stderr.
+fn print_expected_error(
+    invocation: &Invocation<'_>,
+    error: &Bound<'_, PyAny>,
+    fallback_code: &str,
+) -> PyResult<()> {
+    let py: Python<'_> = invocation.py();
+    let (code, message, help) = error_parts(error, fallback_code)?;
+    let text: Bound<'_, PyAny> = call_with(
+        &imported(py, CODED_ERROR_MODULE, "format_coded_error")?,
+        &[
+            ("code", code),
+            ("message", message),
+            ("help", help),
+            (
+                "use_color",
+                PyBool::new(py, invocation.use_color).to_owned().into_any(),
+            ),
+        ],
+    )?;
+    print_object(&text.add("\n")?, Some("stderr"), None)
+}
+
+/// The compile JSON error document `sqb compile --json` prints for a failure.
+fn write_compile_machine_error(
+    invocation: &Invocation<'_>,
+    error: &Bound<'_, PyAny>,
+    fallback_code: &str,
+) -> PyResult<()> {
+    if !invocation.command_is("compile") || !invocation.flag("json")? {
+        return Ok(());
+    }
+    let py: Python<'_> = invocation.py();
+    let (code, message, help) = error_parts(error, fallback_code)?;
+    let location: Bound<'_, PyAny> = error
+        .getattr_opt("location")?
+        .unwrap_or_else(|| py.None().into_bound(py));
+    let location: Bound<'_, PyAny> =
+        if location.is_instance(&class(py, CONTRACT_MODELS_MODULE, "SourceLocation")?)? {
+            location
+        } else {
+            py.None().into_bound(py)
+        };
+    let document: Bound<'_, PyAny> = call_with(
+        &imported(py, NATIVE_MODULE, "format_compile_error_json")?,
+        &[
+            ("code", code),
+            ("message", message),
+            ("help_text", help),
+            ("location", location),
+        ],
+    )?;
+    print_object(&document, None, None)
+}
+
+fn render_diff_error<'py>(
+    py: Python<'py>,
+    fields: &[(&str, Bound<'py, PyAny>)],
+) -> PyResult<Bound<'py, PyAny>> {
+    call_with(
+        &imported(py, DIFF_JSON_MODULE, "render_diff_error_json")?,
+        fields,
+    )
+}
+
+/// The diff JSON error document, and the publication error that replaces `error` if any.
+fn write_diff_machine_error<'py>(
+    invocation: &Invocation<'py>,
+    error: &Bound<'py, PyAny>,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    if !invocation.command_is("diff") {
+        return Ok(None);
+    }
+    let py: Python<'py> = invocation.py();
+    let json_stdout: bool = invocation.flag("json")?;
+    let json_path: Bound<'py, PyAny> = invocation.args.getattr("json_output")?;
+    if !json_stdout && json_path.is_none() {
+        return Ok(None);
+    }
+    let status: Bound<'py, PyAny> = match error.getattr_opt("status")? {
+        Some(status) => status.str()?.into_any(),
+        None => PyString::new(py, DIFF_EXECUTION_STATUS).into_any(),
+    };
+    let size_guard: Bound<'py, PyAny> = error
+        .getattr_opt("details")?
+        .unwrap_or_else(|| py.None().into_bound(py));
+    let payload: Bound<'py, PyAny> = render_diff_error(
+        py,
+        &[
+            ("status", status),
+            ("code", error.getattr("code")?),
+            ("message", error.getattr("message")?),
+            ("help_text", error.getattr("help")?),
+            ("size_guard", size_guard),
+        ],
+    )?;
+    if !json_path.is_none() {
+        let published: PyResult<()> = (|| {
+            let parent: Bound<'py, PyAny> = json_path.getattr("parent")?;
+            let options: Bound<'py, PyDict> = PyDict::new(py);
+            options.set_item("parents", true)?;
+            options.set_item("exist_ok", true)?;
+            parent.call_method("mkdir", (), Some(&options))?;
+            let encoding: Bound<'py, PyDict> = PyDict::new(py);
+            encoding.set_item("encoding", "utf-8")?;
+            json_path.call_method("write_text", (payload.add("\n")?,), Some(&encoding))?;
+            Ok(())
+        })();
+        if let Err(output_error) = published {
+            let value: Bound<'py, PyAny> = output_error.value(py).clone().into_any();
+            if !value.is_instance_of::<pyo3::exceptions::PyOSError>()
+                && !value.is_instance_of::<pyo3::exceptions::PyUnicodeError>()
+            {
+                return Err(output_error);
+            }
+            let keywords: Bound<'py, PyDict> = PyDict::new(py);
+            keywords.set_item("code", DIFF_PUBLICATION_CODE)?;
+            let publication: Bound<'py, PyAny> =
+                class(py, EXCEPTIONS_MODULE, "QueryDiffExecutionError")?.call(
+                    (format!(
+                        "failed to publish query diff output: {}",
+                        value.str()?
+                    ),),
+                    Some(&keywords),
+                )?;
+            if json_stdout {
+                let document: Bound<'py, PyAny> = render_diff_error(
+                    py,
+                    &[
+                        ("status", publication.getattr("status")?),
+                        ("code", publication.getattr("code")?),
+                        ("message", publication.getattr("message")?),
+                    ],
+                )?;
+                print_object(&document, None, None)?;
+            }
+            return Ok(Some(publication));
+        }
+    }
+    if json_stdout {
+        print_object(&payload, None, None)?;
+    }
+    Ok(None)
+}
+
+/// Log `error` with its traceback at error level, as `logger.exception` does.
+fn log_failure(py: Python<'_>, message: &str, error: &Bound<'_, PyAny>) -> PyResult<()> {
+    let keywords: Bound<'_, PyDict> = PyDict::new(py);
+    keywords.set_item("exc_info", error)?;
+    py.import("logging")?
+        .getattr("getLogger")?
+        .call1((CLI_LOGGER,))?
+        .call_method("error", (message,), Some(&keywords))?;
+    Ok(())
+}
+
+fn exit<'py>(py: Python<'py>, code: i64) -> PyResult<Bound<'py, PyAny>> {
+    code.into_bound_py_any(py)
+}
+
+/// The kind of expected failure `error` is, or `None` when it propagates.
+fn failure_kind(py: Python<'_>, error: &Bound<'_, PyAny>) -> PyResult<Option<CommandFailure>> {
+    if error.is_instance(&class(py, EXCEPTIONS_MODULE, "CliUserError")?)?
+        || error.is_instance(&class(py, RULES_ERRORS_MODULE, "RulesError")?)?
+    {
+        return Ok(Some(CommandFailure::User));
+    }
+    if error.is_instance(&class(py, LINT_ERRORS_MODULE, "LintError")?)? {
+        return Ok(Some(CommandFailure::Lint));
+    }
+    if error.is_instance_of::<pyo3::exceptions::PyValueError>() {
+        return Ok(Some(CommandFailure::Command));
+    }
+    for (module, name) in EXPECTED_COMMAND_FAILURES {
+        if error.is_instance(&class(py, module, name)?)? {
+            return Ok(Some(CommandFailure::Command));
+        }
+    }
+    Ok(None)
+}
+
+/// Report one expected failure and return the command's exit code.
+fn report_failure<'py>(
+    invocation: &Invocation<'py>,
+    error: Bound<'py, PyAny>,
+    kind: CommandFailure,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = invocation.py();
+    let (fallback_code, log_message) = failure_report(kind);
+    log_failure(py, log_message, &error)?;
+    let user_error_class: Bound<'py, PyAny> = class(py, EXCEPTIONS_MODULE, "CliUserError")?;
+    let is_user_error: bool = error.is_instance(&user_error_class)?;
+    let effective: Bound<'py, PyAny> = if is_user_error {
+        write_diff_machine_error(invocation, &error)?.unwrap_or(error)
+    } else {
+        error
+    };
+    write_compile_machine_error(invocation, &effective, fallback_code)?;
+    if effective.is_instance(&class(py, EXCEPTIONS_MODULE, "QueryDiffOutcomeError")?)? {
+        let line: Bound<'py, PyAny> = PyString::new(py, DIFF_OUTCOME_PREFIX)
+            .into_any()
+            .add(effective.getattr("status")?.str()?)?;
+        print_object(&line, Some("stderr"), None)?;
+    }
+    print_expected_error(invocation, &effective, fallback_code)?;
+    if effective.is_instance(&user_error_class)? {
+        let code: Bound<'py, PyAny> = effective
+            .getattr_opt("exit_code")?
+            .unwrap_or_else(|| PyInt::new(py, 1).into_any());
+        return py.get_type::<PyInt>().call1((code,));
+    }
+    exit(py, 1)
+}
+
+/// Check or refresh installed SQLBuild skills, printing what changed.
+fn report_skill_freshness(invocation: &Invocation<'_>, policy: InvocationPolicy) -> PyResult<()> {
+    if !policy.maintains_skills {
+        return Ok(());
+    }
+    let py: Python<'_> = invocation.py();
+    let project_dir: Bound<'_, PyAny> = invocation.project_dir()?;
+    let result: Bound<'_, PyAny> = match call_with(
+        &imported(py, SKILLS_MODULE, "maintain_sqlbuild_skills")?,
+        &[("project_dir", project_dir)],
+    ) {
+        Ok(result) => result,
+        Err(error) => {
+            let value: Bound<'_, PyAny> = error.value(py).clone().into_any();
+            if value.is_instance(&class(py, EXCEPTIONS_MODULE, "CliUserError")?)?
+                || value.is_instance_of::<pyo3::exceptions::PyOSError>()
+                || value.is_instance_of::<pyo3::exceptions::PyUnicodeError>()
+            {
+                return Ok(());
+            }
+            return Err(error);
+        }
+    };
+    let message: Bound<'_, PyAny> = result.getattr("message")?;
+    if message.is_truthy()? {
+        print_object(&message, Some("stderr"), Some(""))?;
+    }
+    Ok(())
+}
+
+fn lifecycle_event<'py>(
+    py: Python<'py>,
+    event_type: &str,
+    payload: Bound<'py, PyDict>,
+) -> PyResult<Bound<'py, PyAny>> {
+    call_with(
+        &imported(py, LIFECYCLE_EVENT_MODULE, "create_lifecycle_event")?,
+        &[
+            ("event_type", PyString::new(py, event_type).into_any()),
+            ("payload", payload.into_any()),
+        ],
+    )
+}
+
+/// Dispatch once while publishing canonical invocation lifecycle facts.
+fn observed_dispatch<'py>(
+    invocation: &Invocation<'py>,
+    policy: InvocationPolicy,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = invocation.py();
+    if !policy.observed {
+        return dispatch_command(&invocation.args, invocation.handlers.clone());
+    }
+    let command: String = invocation.command_name();
+    let started: Instant = Instant::now();
+    let elapsed = |started: Instant| -> PyResult<Bound<'py, PyAny>> {
+        u64::try_from(started.elapsed().as_millis())
+            .unwrap_or(u64::MAX)
+            .into_bound_py_any(py)
+    };
+    let scope: Bound<'py, PyAny> = call_with(
+        &imported(py, OBSERVABILITY_MODULE, "cli_observability_scope")?,
+        &[
+            ("args", invocation.args.clone()),
+            ("project_dir", invocation.project_dir()?),
+        ],
+    )?;
+    within(&scope, |dispatcher| {
+        let publish = |event: Bound<'py, PyAny>| -> PyResult<()> {
+            dispatcher.call_method1("publish_lifecycle", (event,))?;
+            Ok(())
+        };
+        let payload: Bound<'py, PyDict> = PyDict::new(py);
+        payload.set_item("command", &command)?;
+        publish(lifecycle_event(py, "invocation_started", payload)?)?;
+        match dispatch_command(&invocation.args, invocation.handlers.clone()) {
+            Ok(exit_code) => {
+                let payload: Bound<'py, PyDict> = PyDict::new(py);
+                payload.set_item("command", &command)?;
+                payload.set_item("duration_ms", elapsed(started)?)?;
+                payload.set_item("exit_code", &exit_code)?;
+                let terminal: &str = if exit_code.eq(0)? {
+                    "invocation_completed"
+                } else {
+                    "invocation_failed"
+                };
+                publish(lifecycle_event(py, terminal, payload)?)?;
+                Ok(exit_code)
+            }
+            Err(error) => {
+                let payload: Bound<'py, PyDict> = PyDict::new(py);
+                payload.set_item("command", &command)?;
+                payload.set_item("duration_ms", elapsed(started)?)?;
+                payload.set_item("error_type", error.get_type(py).getattr("__name__")?)?;
+                publish(lifecycle_event(py, "invocation_failed", payload)?)?;
+                Err(error)
+            }
+        }
+    })
+}
+
+/// Dispatch once and project every expected failure to its coded error and exit code.
+fn handled_dispatch<'py>(invocation: &Invocation<'py>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = invocation.py();
+    let policy: InvocationPolicy = invocation_policy(&invocation.facts);
+    report_skill_freshness(invocation, policy)?;
+    let dispatched: PyResult<Bound<'py, PyAny>> = observed_dispatch(invocation, policy);
+    imported(
+        py,
+        TRANSIENT_LINE_MODULE,
+        "shared_transient_line_coordinator",
+    )?
+    .call0()?
+    .call_method0("clear_active")?;
+    let error: PyErr = match dispatched {
+        Ok(exit_code) => return Ok(exit_code),
+        Err(error) => error,
+    };
+    let value: Bound<'py, PyAny> = error.value(py).clone().into_any();
+    if error.is_instance_of::<PySystemExit>(py) {
+        let code: Bound<'py, PyAny> = value.getattr("code")?;
+        return if code.is_instance_of::<PyInt>() {
+            Ok(code)
+        } else {
+            exit(py, 1)
+        };
+    }
+    match failure_kind(py, &value)? {
+        Some(kind) => report_failure(invocation, value, kind),
+        None => Err(error),
+    }
+}
+
+/// `invocation_context_from_environment()`, or `{}` when the environment context is invalid.
+fn external_context(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
+    match imported(
+        py,
+        INVOCATION_CONTEXT_MODULE,
+        "invocation_context_from_environment",
+    )?
+    .call0()
+    {
+        Ok(context) => Ok(context),
+        Err(error)
+            if error.is_instance(
+                py,
+                &class(py, OUTPUT_CAPTURE_ERRORS_MODULE, "OutputCaptureInputError")?,
+            ) =>
+        {
+            Ok(PyDict::new(py).into_any())
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn parsed_invocation<'py>(
+    argv: &Bound<'py, PyAny>,
+    handlers: Option<Bound<'py, PyAny>>,
+    identity: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = argv.py();
+    let use_color: bool = !argv.contains(NO_COLOR_OPTION)?
+        && imported(py, COLOR_MODULE, "supports_color")?
+            .call0()?
+            .is_truthy()?;
+    let parsed: Bound<'py, PyAny> = call_with(
+        &imported(py, PARSING_MODULE, "parse_cli_invocation")?,
+        &[
+            ("argv", argv.clone()),
+            (
+                "use_color",
+                PyBool::new(py, use_color).to_owned().into_any(),
+            ),
+        ],
+    )?;
+    let args: Bound<'py, PyAny> = parsed.getattr("args")?;
+    if args.is_none() {
+        let exit_code: Bound<'py, PyAny> = parsed.getattr("exit_code")?;
+        return if exit_code.is_none() {
+            exit(py, 1)
+        } else {
+            Ok(exit_code)
+        };
+    }
+    let facts: CommandFacts = command_facts(&args)?;
+    let policy: InvocationPolicy = invocation_policy(&facts);
+    let retained: (Py<PyAny>, Option<Py<PyAny>>) =
+        (args.clone().unbind(), handlers.map(Bound::unbind));
+    let operation: Bound<'py, PyCFunction> = PyCFunction::new_closure(
+        py,
+        None,
+        None,
+        move |call_args: &Bound<'_, PyTuple>,
+              _: Option<&Bound<'_, PyDict>>|
+              -> PyResult<Py<PyAny>> {
+            let py: Python<'_> = call_args.py();
+            let invocation = Invocation {
+                args: retained.0.bind(py).clone(),
+                handlers: retained
+                    .1
+                    .as_ref()
+                    .map(|handlers| handlers.bind(py).clone()),
+                use_color,
+                facts: facts.clone(),
+            };
+            Ok(handled_dispatch(&invocation)?.unbind())
+        },
+    )?;
+    call_with(
+        &imported(py, COMPUTE_LOGS_MODULE, "dispatch_with_compute_logs")?,
+        &[
+            ("args", args),
+            ("identity", identity.clone()),
+            ("operation", operation.into_any()),
+            (
+                "creates_project",
+                PyBool::new(py, policy.creates_project)
+                    .to_owned()
+                    .into_any(),
+            ),
+        ],
+    )
+}
+
+/// Run the CLI for `argv` (default `sys.argv[1:]`) and return its exit code.
+#[pyfunction]
+#[pyo3(signature = (argv=None, handlers=None))]
+fn run_cli<'py>(
+    py: Python<'py>,
+    argv: Option<Bound<'py, PyAny>>,
+    handlers: Option<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let argv: Bound<'py, PyAny> = match argv {
+        Some(argv) => PyList::new(py, argv.try_iter()?.collect::<PyResult<Vec<_>>>()?)?.into_any(),
+        None => py
+            .import("sys")?
+            .getattr("argv")?
+            .get_item(pyo3::types::PySlice::new(py, 1, isize::MAX, 1))?,
+    };
+    let external: Bound<'py, PyAny> = external_context(py)?;
+    let invocation_scope: Bound<'py, PyAny> =
+        imported(py, INVOCATION_SCOPE_MODULE, "invocation_scope")?.call0()?;
+    within(&invocation_scope, |identity| {
+        let external_scope: Bound<'py, PyAny> = call_with(
+            &imported(
+                py,
+                EXTERNAL_SCOPE_MODULE,
+                "invocation_external_context_scope",
+            )?,
+            &[("external_context", external.clone())],
+        )?;
+        within(&external_scope, |_| {
+            let diagnostics: Bound<'py, PyAny> = call_with(
+                &imported(py, DIAGNOSTICS_MODULE, "diagnostics_context")?,
+                &[("sqlbuild_invocation_id", identity.getattr("invocation_id")?)],
+            )?;
+            within(&diagnostics, |_| {
+                parsed_invocation(&argv, handlers.clone(), identity)
+            })
+        })
+    })
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(run_cli, module)?)
+}

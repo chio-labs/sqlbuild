@@ -2,10 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.graph.main.invert_edges import invert_edges
-from sqlbuild.compiler.graph.main.path_nodes import path_nodes
-from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
-from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
+from sqlbuild._native import invert_edges, path_nodes, transitive_closure, transitive_closure_many
 from tests.unit.src.sqlbuild.compiler.graph.main._test_types import (
     InvertEdgesTestCase,
     PathNodesTestCase,

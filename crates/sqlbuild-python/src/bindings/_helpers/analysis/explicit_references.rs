@@ -204,16 +204,28 @@ fn python_literal_sql_calls(
 
 /// How an owner of `owner_kind` should read `target` instead of naming its relation in SQL.
 #[pyfunction]
+#[pyo3(signature = (*, owner_kind, r#ref, upstream_loader_by_source = None))]
 fn hard_coded_relation_remedy(
     owner_kind: &str,
-    target: ResourceKey,
-    upstream_loaders: Vec<(String, String)>,
-) -> String {
-    relation_remedy(owner_kind, &target, &upstream_loaders)
+    r#ref: &Bound<'_, PyAny>,
+    upstream_loader_by_source: Option<&Bound<'_, PyAny>>,
+) -> PyResult<String> {
+    let target: ResourceKey = (
+        r#ref.getattr("kind")?.getattr("value")?.extract()?,
+        r#ref.getattr("name")?.extract()?,
+    );
+    let mut upstream_loaders: Vec<(String, String)> = Vec::new();
+    if let Some(loaders) = upstream_loader_by_source.filter(|loaders| !loaders.is_none()) {
+        for item in loaders.call_method0("items")?.try_iter()? {
+            upstream_loaders.push(item?.extract()?);
+        }
+    }
+    Ok(relation_remedy(owner_kind, &target, &upstream_loaders))
 }
 
 /// The P008 message for SQL naming a relation kept only as a compatibility view.
 #[pyfunction]
+#[pyo3(signature = (*, owner_label, written, method, model_name))]
 fn old_name_reference_message(
     owner_label: &str,
     written: &str,
@@ -224,9 +236,9 @@ fn old_name_reference_message(
 }
 
 /// `(audit name, target, gated, read)` for one attached-audit ordering edge.
-type GateRow = (String, ResourceKey, ResourceKey, ResourceKey);
+pub(crate) type GateRow = (String, ResourceKey, ResourceKey, ResourceKey);
 /// `(hook name, gated, read, HookReadType value, path)` for one hook-read ordering edge.
-type HookRow = (
+pub(crate) type HookRow = (
     String,
     ResourceKey,
     ResourceKey,
@@ -235,8 +247,7 @@ type HookRow = (
 );
 
 /// The attached-audit gate edges and hook-read edges of one project, in Python's order.
-#[pyfunction]
-fn native_execution_gate_edges(
+pub(crate) fn native_execution_gate_edges(
     project: &Bound<'_, PyAny>,
 ) -> PyResult<(Vec<GateRow>, Vec<HookRow>)> {
     let facts: ProjectFacts = project_facts(project, false)?;
@@ -268,7 +279,6 @@ fn hook_row(edge: HookEdge) -> HookRow {
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(explicit_reference_report, module)?)?;
     module.add_function(wrap_pyfunction!(python_literal_sql_calls, module)?)?;
-    module.add_function(wrap_pyfunction!(native_execution_gate_edges, module)?)?;
     module.add_function(wrap_pyfunction!(hard_coded_relation_remedy, module)?)?;
     module.add_function(wrap_pyfunction!(old_name_reference_message, module)?)?;
     Ok(())

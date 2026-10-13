@@ -5,7 +5,7 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import Any
 
-from sqlbuild.compiler.fingerprints._helpers.sql import build_read_latest_sql
+from sqlbuild._native import build_read_latest_sql
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 
 

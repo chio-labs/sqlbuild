@@ -12,7 +12,7 @@ import pytest
 
 import sqlbuild._native as native_module
 from sqlbuild._native import PreparedCompileArtifacts
-from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild._native import run_cli as main
 from sqlbuild.cli.compile_reuse._helpers import native_reuse as native_reuse_module
 from sqlbuild.cli.compile_reuse._helpers import provider_settings as provider_settings_module
 from sqlbuild.cli.compile_reuse._helpers.runtime_identity import runtime_identity

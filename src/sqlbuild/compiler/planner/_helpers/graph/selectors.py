@@ -5,10 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Iterator, Mapping
 
 import sqlbuild._native as _native
+from sqlbuild._native import compiled_graph_keys, native_graph_from_views, native_graph_keys
 from sqlbuild.compiler.compile.models import CompiledObjectKey
-from sqlbuild.compiler.graph.main._compiled_graph_keys import compiled_graph_keys
-from sqlbuild.compiler.graph.main._native_graph_from_views import native_graph_from_views
-from sqlbuild.compiler.graph.main._native_graph_keys import native_graph_keys
 from sqlbuild.compiler.planner.constants import (
     UNIT_TEST_SELECTOR_ERROR_CODE,
     UNIT_TEST_SELECTOR_ONLY_TEST_AND_BUILD,

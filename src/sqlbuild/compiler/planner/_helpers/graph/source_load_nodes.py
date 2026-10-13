@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import transitive_closure_many
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
-from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
 from sqlbuild.compiler.planner._helpers.graph.loader_dag import (
     build_intermediate_source_map,
     build_upstream_intermediate_source_map,

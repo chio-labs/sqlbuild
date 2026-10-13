@@ -7,7 +7,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlbuild._native import build_project_graph, discover_project_inputs
+from sqlbuild._native import (
+    build_project_graph,
+    discover_project_inputs,
+    write_execution_json_output,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.freshness.observe import (
     observe_source_freshness_for_command,
@@ -29,7 +33,6 @@ from sqlbuild.cli.commands.models import (
     FreshnessCommandRequest,
     FreshnessCommandResult,
 )
-from sqlbuild.cli.output.main._write_execution_json_output import write_execution_json_output
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.compiler.pipeline.models import ProjectGraph

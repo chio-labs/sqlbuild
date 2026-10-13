@@ -24,7 +24,7 @@ from sqlbuild.executor.build._helpers.retention import (
     reconcile_retention_after_build,
 )
 from sqlbuild.executor.build.classes.build_scheduler import BuildScheduler
-from sqlbuild.executor.build.main.aggregate_result import aggregate_build_result
+from sqlbuild.executor.build.main._aggregate_result import aggregate_build_result
 from sqlbuild.executor.build.models import (
     BuildCallbacks,
     BuildCustomizations,

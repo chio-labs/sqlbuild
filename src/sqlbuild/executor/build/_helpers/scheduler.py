@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 
+from sqlbuild._native import assert_no_unresolved_sql_markers
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
@@ -18,9 +19,6 @@ from sqlbuild.compiler.planner.types import (
     MaterializationType,
     PlanAction,
     PlanReason,
-)
-from sqlbuild.compiler.references.main.assert_no_unresolved_sql_markers import (
-    assert_no_unresolved_sql_markers,
 )
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.build.constants import (

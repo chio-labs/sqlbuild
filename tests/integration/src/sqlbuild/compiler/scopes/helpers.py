@@ -42,7 +42,6 @@ from sqlbuild.compiler.scopes.main._resolve_scope_declaration_visibility import 
 from sqlbuild.compiler.scopes.main._resolve_scope_path_visibility import (
     resolve_scope_path_visibility,
 )
-from sqlbuild.compiler.scopes.main.load_or_build_scope_index import load_or_build_scope_index
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
@@ -310,7 +309,7 @@ def scope_outcome(*, project_dir: Path) -> ScopeOutcome:
 def scope_command_index(*, project_dir: Path) -> ScopeIndex:
     """Return the offline `sqb scope` index."""
 
-    return load_or_build_scope_index(project_dir=project_dir, no_cache=True)
+    return _native.load_or_build_scope_index(project_dir=project_dir, no_cache=True)
 
 
 def native_scope_attempts(

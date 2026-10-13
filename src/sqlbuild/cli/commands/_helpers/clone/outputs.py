@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import format_clone_execution_json, write_execution_json_output
 from sqlbuild.cli.commands._helpers.clone.output import (
     is_clone_success,
     render_clone_header,
@@ -13,8 +14,6 @@ from sqlbuild.cli.commands.models import (
     CloneInvocation,
     CloneRunOutcome,
 )
-from sqlbuild.cli.output.main._clone_execution_json import format_clone_execution_json
-from sqlbuild.cli.output.main._write_execution_json_output import write_execution_json_output
 from sqlbuild.compiler.planner.models import (
     CloneSourcePlanEntry,
     FunctionPlanEntry,

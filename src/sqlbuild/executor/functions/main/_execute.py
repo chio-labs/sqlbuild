@@ -6,14 +6,14 @@ import hashlib
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlbuild._native import (
+    compute_function_definition_hash,
+    write_fingerprint,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import FunctionDefinition
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.fingerprints.main.compute_function_definition_hash import (
-    compute_function_definition_hash,
-)
-from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import FunctionPlanEntry
 from sqlbuild.compiler.resource_names.main.function_node_type import function_node_type

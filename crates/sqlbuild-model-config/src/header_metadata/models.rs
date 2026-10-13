@@ -35,6 +35,16 @@ pub struct ParsedThresholds {
     pub error: Option<ThresholdBound>,
 }
 
+/// Where one columns mapping is read and which column shapes it accepts.
+#[derive(Clone, Copy, Debug)]
+pub struct ColumnRequest<'a> {
+    pub path: &'a str,
+    /// The label messages name, such as `model` or `schema 'orders'`.
+    pub label: &'a str,
+    pub require_columns: bool,
+    pub allow_migrate_from: bool,
+}
+
 /// One MODEL column.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ParsedColumn<N> {

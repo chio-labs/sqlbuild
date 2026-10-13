@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from sqlbuild._native import transitive_closure_many
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
 from sqlbuild.compiler.planner._helpers.graph.scope import build_planner_scope
 from sqlbuild.compiler.planner.models import (
     PlannerPolicies,

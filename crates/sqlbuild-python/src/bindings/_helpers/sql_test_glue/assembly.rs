@@ -1,8 +1,8 @@
 //! Assemble compiled SQL test facts from compile inputs' own objects, without a JSON request.
 
+use pyo3::PyErr;
 use pyo3::exceptions::PyValueError;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::{FromPyObject, PyErr, pyfunction, wrap_pyfunction};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use sqlbuild_analysis::compiler::main::sql_test_assembly::assemble_sql_test_batch;
 use sqlbuild_analysis::compiler::models::{
     AssembledSqlTestFacts, SqlTestAssemblyBatch, SqlTestAssemblyFailure, SqlTestAssemblyModel,
@@ -23,9 +23,9 @@ const DECIMAL_OVERFLOW: &str = "decimal_overflow";
 const SQL_TEST_ASSEMBLY_CONTEXT: &str = "native SQL test assembly";
 
 /// `(line, column, end line, end column, message, help)` of one P013 diagnostic.
-type DiagnosticRow = (usize, usize, usize, usize, String, String);
+pub(crate) type DiagnosticRow = (usize, usize, usize, usize, String, String);
 /// `(name, scope deps, target models, case fingerprint, diagnostic resource, diagnostics)`.
-type FactsRow = (
+pub(crate) type FactsRow = (
     String,
     Vec<(&'static str, String)>,
     Vec<String>,
@@ -34,22 +34,17 @@ type FactsRow = (
     Vec<DiagnosticRow>,
 );
 /// The test's facts, and the `(kind, message)` of the error its assembly raises, if any.
-type AssemblyRow = (Option<FactsRow>, Option<(&'static str, String)>);
+pub(crate) type AssemblyRow = (Option<FactsRow>, Option<(&'static str, String)>);
 
-/// The Python assembly request: the project's model inputs and the SQL test inputs.
-#[derive(FromPyObject)]
-struct AssemblyRequest<'py> {
-    #[pyo3(attribute)]
-    model_inputs: Vec<Bound<'py, PyAny>>,
-    #[pyo3(attribute)]
-    test_inputs: Vec<Bound<'py, PyAny>>,
-    #[pyo3(attribute)]
-    lexical_syntax: LexicalSyntaxInput,
+/// The compile inputs assembly reads: model inputs, SQL test inputs and lexical rules.
+pub(crate) struct AssemblyRequest<'py> {
+    pub(crate) model_inputs: Vec<Bound<'py, PyAny>>,
+    pub(crate) test_inputs: Vec<Bound<'py, PyAny>>,
+    pub(crate) lexical_syntax: LexicalSyntaxInput,
 }
 
 /// Each test input's assembled facts, or the error its assembly raises.
-#[pyfunction]
-fn assemble_compiled_sql_tests(
+pub(crate) fn assemble_compiled_sql_tests(
     py: Python<'_>,
     request: AssemblyRequest<'_>,
 ) -> PyResult<Vec<AssemblyRow>> {
@@ -263,9 +258,4 @@ fn facts_row(facts: AssembledSqlTestFacts) -> FactsRow {
             })
             .collect(),
     )
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(assemble_compiled_sql_tests, module)?)?;
-    Ok(())
 }

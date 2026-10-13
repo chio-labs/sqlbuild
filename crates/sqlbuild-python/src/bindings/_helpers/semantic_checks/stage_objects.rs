@@ -10,7 +10,7 @@ const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
 const PROJECT_WITH_MODULE: &str = "sqlbuild._native";
 const TYPE_RECOVERY_MODULE: &str = "sqlbuild._native";
 const BINDING_DIAGNOSTICS_MODULE: &str = "sqlbuild._native";
-const SCHEMA_VALIDATION_MODULE: &str = "sqlbuild.compiler.sql_analysis.main._schema_validation";
+const NATIVE_MODULE: &str = "sqlbuild._native";
 const NORMALIZE_TYPE_MODULE: &str = "sqlbuild.adapter.type_system.main.normalize_type";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const DISCOVERY_CONSTANTS_MODULE: &str = "sqlbuild.compiler.discovery.constants";
@@ -71,9 +71,7 @@ impl<'py> StageClasses<'py> {
             with_binding_diagnostics: py
                 .import(BINDING_DIAGNOSTICS_MODULE)?
                 .getattr("with_binding_diagnostics")?,
-            schema_validations: py
-                .import(SCHEMA_VALIDATION_MODULE)?
-                .getattr("get_schema_validations")?,
+            schema_validations: py.import(NATIVE_MODULE)?.getattr("schema_validations")?,
             normalize_type: py
                 .import(NORMALIZE_TYPE_MODULE)?
                 .getattr("normalize_type")?,

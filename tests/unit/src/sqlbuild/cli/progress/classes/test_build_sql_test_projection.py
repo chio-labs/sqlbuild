@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.cli.commands.classes.build_progress_callbacks import BuildProgressCallbacks
-from sqlbuild.cli.output.classes.terminal_event_index import (
+from sqlbuild._native import (
     TerminalEventIndex,
     terminal_event_index_scope,
 )
+from sqlbuild.cli.commands.classes.build_progress_callbacks import BuildProgressCallbacks
 from sqlbuild.cli.progress.classes.native_progress_projector import NativeProgressProjector
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType

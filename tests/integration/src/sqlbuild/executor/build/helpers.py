@@ -11,9 +11,9 @@ from typing import Any
 import duckdb
 
 from sqlbuild._native import discover_project_inputs, run_compile_pipeline
+from sqlbuild._native import run_cli as main
 from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
 from sqlbuild.compiler.planner.models import PlanOutput, TableTypePlanEntry

@@ -11,8 +11,8 @@ from typing import Any
 import pytest
 from _pytest.capture import CaptureResult
 
+from sqlbuild._native import run_cli as main
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.executor.build._helpers import scheduler as scheduler_module
 from tests.integration.src.sqlbuild.cli.commands.main.model_migrations.helpers import (
     execute,

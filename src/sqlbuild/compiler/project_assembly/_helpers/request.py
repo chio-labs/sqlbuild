@@ -6,7 +6,7 @@ import os
 from collections.abc import Iterable
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.authored_values.main._project_var_values import render_project_var_text
+from sqlbuild._native import render_project_var_text
 from sqlbuild.compiler.compile.models import CompileSqlReference
 from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.project_assembly.constants import (

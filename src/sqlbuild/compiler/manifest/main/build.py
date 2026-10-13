@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import sqlbuild._native as _native
+from sqlbuild._native import native_graph_from_edges
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.graph.main._native_graph_from_edges import native_graph_from_edges
 from sqlbuild.compiler.manifest.main._build_graph_manifest import build_graph_manifest
 from sqlbuild.compiler.planner.models import PlanOutput
 

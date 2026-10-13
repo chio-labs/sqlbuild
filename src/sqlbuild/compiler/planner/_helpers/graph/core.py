@@ -4,6 +4,13 @@ from __future__ import annotations
 
 import heapq
 
+from sqlbuild._native import (
+    attached_audit_gate_edges,
+    hook_read_edges,
+    invert_edges,
+    native_graph_key,
+    transitive_closure,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledSqlTest,
@@ -13,11 +20,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     SqlTestMode,
 )
-from sqlbuild.compiler.graph.main._attached_audit_gate_edges import attached_audit_gate_edges
-from sqlbuild.compiler.graph.main._hook_read_edges import hook_read_edges
-from sqlbuild.compiler.graph.main._native_graph_key import native_graph_key
-from sqlbuild.compiler.graph.main.invert_edges import invert_edges
-from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
 from sqlbuild.compiler.graph.models import AttachedAuditGateEdge, HookReadEdge
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 

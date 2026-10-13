@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import format_test_execution_json, write_execution_json_output
 from sqlbuild.cli.commands._helpers.test.sql_progress import format_parameterized_test_label
 from sqlbuild.cli.commands.models import TestCommandRequest, TestInvocation
-from sqlbuild.cli.output.main._sql_test_execution_json import format_test_execution_json
-from sqlbuild.cli.output.main._write_execution_json_output import write_execution_json_output
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.presentation.classes.cli_style import CliStyle

@@ -9,11 +9,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import sqlbuild._native as _native
+from sqlbuild._native import model_python_hook_names
 from sqlbuild.compiler.compile.models import PythonSqlReferenceReport
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.main.explicit_references_help import explicit_references_help
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.graph.main._model_python_hook_names import model_python_hook_names
 from sqlbuild.compiler.references.types import HardCodedRelationOwnerKind
 from sqlbuild.python_nodes.main.read_loader_definition import read_loader_definition
 from sqlbuild.python_nodes.models import LoaderDefinition, SqlResourceRef

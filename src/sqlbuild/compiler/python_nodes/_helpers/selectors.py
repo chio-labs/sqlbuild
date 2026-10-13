@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fnmatch import fnmatchcase
 
-from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
+from sqlbuild._native import transitive_closure_many
 from sqlbuild.compiler.planner.constants import PATH_SELECTOR_EXPLICIT_ROOT_ERROR
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.selection.selector_parse import parse_project_selector

@@ -11,6 +11,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from sqlbuild._native import compute_query_hash
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
@@ -22,7 +23,6 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
-from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.planner.main.cursor_window.empty_cursor_window import empty_cursor_window
 from sqlbuild.compiler.planner.main.execution.aligned_timestamp_bounds import (
     aligned_timestamp_bounds,

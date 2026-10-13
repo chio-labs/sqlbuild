@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import cast
 
-from sqlbuild.compiler.references.main.extract_relation_names import extract_relation_names
+from sqlbuild._native import extract_relation_names
 from sqlbuild.compiler.references.models import RelationName
 from tests.integration.src.sqlbuild.compiler.compile.helpers import ExpansionFailureCapture
 

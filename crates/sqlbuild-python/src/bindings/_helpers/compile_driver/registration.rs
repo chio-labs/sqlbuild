@@ -3,8 +3,8 @@
 use pyo3::prelude::{Bound, PyModule, PyResult};
 
 use crate::bindings::_helpers::compile_driver::{
-    analysis, assembly, command, deferral, diff, discovery, inputs, pipeline, pipeline_entries,
-    project, python_plan_entries, relation_targets, targets,
+    analysis, assembly, command, deferral, diff, discovery, input_reads, inputs, pipeline,
+    pipeline_entries, project, python_plan_entries, relation_targets, targets,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -13,6 +13,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     command::register(module)?;
     project::register(module)?;
     inputs::register(module)?;
+    input_reads::register(module)?;
     discovery::register(module)?;
     pipeline::register(module)?;
     pipeline_entries::register(module)?;

@@ -3,9 +3,10 @@
 use std::path::PathBuf;
 
 use pyo3::exceptions::{PyTypeError, PyValueError};
-use pyo3::prelude::{Bound, Py, PyAny, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_scopes::scope_cache::main::encode_scope_cache::encode_scope_cache;
+use sqlbuild_scopes::scope_cache::main::project_fingerprint_inputs::project_fingerprint_inputs;
 use sqlbuild_scopes::scope_cache::main::read_scope_cache::read_scope_cache;
 use sqlbuild_scopes::scope_cache::main::scope_fingerprint::scope_fingerprint;
 use sqlbuild_scopes::scope_cache::main::write_scope_cache::write_scope_cache;
@@ -17,25 +18,28 @@ use crate::bindings::_helpers::scopes::scope_objects::{
 };
 use crate::bindings::types::CompilerDetach;
 
-/// Config files, candidate roots, declaration folders, named declaration folders, version.
-type FingerprintRow = (Vec<String>, Vec<String>, Vec<String>, Vec<String>, String);
+const METADATA_MODULE: &str = "importlib.metadata";
+const DISTRIBUTION_NAME: &str = "sqlbuild";
+const UNKNOWN_VERSION: &str = "0+unknown";
+
+/// `importlib.metadata.version("sqlbuild")`, or `0+unknown` when it is not installed.
+fn sqlbuild_version(py: Python<'_>) -> PyResult<String> {
+    let metadata: Bound<'_, PyModule> = py.import(METADATA_MODULE)?;
+    match metadata.getattr("version")?.call1((DISTRIBUTION_NAME,)) {
+        Ok(version) => version.extract(),
+        Err(error) if error.is_instance(py, &metadata.getattr("PackageNotFoundError")?) => {
+            Ok(UNKNOWN_VERSION.to_owned())
+        }
+        Err(error) => Err(error),
+    }
+}
 
 /// The scope index fingerprint of `project_dir`, `None` when it cannot be read.
-#[pyfunction]
-fn scope_index_fingerprint(
+pub(crate) fn project_fingerprint(
     py: Python<'_>,
     project_dir: PathBuf,
-    inputs: FingerprintRow,
 ) -> PyResult<Option<String>> {
-    let (config_files, roots, declaration_directories, named_declaration_directories, version) =
-        inputs;
-    let inputs: FingerprintInputs = FingerprintInputs {
-        config_files,
-        roots,
-        declaration_directories,
-        named_declaration_directories,
-        sqlbuild_version: version,
-    };
+    let inputs: FingerprintInputs = project_fingerprint_inputs(sqlbuild_version(py)?);
     let fingerprint: Fingerprint = py
         .compiler_detach(|| Ok(scope_fingerprint(&project_dir, &inputs)))
         .map_err(compiler_error)?;
@@ -48,9 +52,15 @@ fn scope_index_fingerprint(
     }
 }
 
-/// The verified cached `ScopeIndex` at `path` for `fingerprint`; every fault is a miss.
+/// Hash the canonical scope-relevant authored inputs, or `None` when they cannot be read.
 #[pyfunction]
-fn read_scope_index_cache(
+#[pyo3(signature = (*, project_dir))]
+fn scope_index_fingerprint(py: Python<'_>, project_dir: PathBuf) -> PyResult<Option<String>> {
+    project_fingerprint(py, project_dir)
+}
+
+/// The verified cached `ScopeIndex` at `path` for `fingerprint`; every fault is a miss.
+pub(crate) fn read_scope_index_cache(
     py: Python<'_>,
     path: PathBuf,
     fingerprint: String,
@@ -69,8 +79,7 @@ fn read_scope_index_cache(
 }
 
 /// Atomically write one complete `ScopeIndex` for `fingerprint`; whether the write landed.
-#[pyfunction]
-fn write_scope_index_cache(
+pub(crate) fn write_scope_index_cache(
     py: Python<'_>,
     location: (PathBuf, String),
     fingerprint: String,
@@ -92,7 +101,5 @@ fn write_scope_index_cache(
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(scope_index_fingerprint, module)?)?;
-    module.add_function(wrap_pyfunction!(read_scope_index_cache, module)?)?;
-    module.add_function(wrap_pyfunction!(write_scope_index_cache, module)?)?;
     Ok(())
 }

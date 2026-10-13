@@ -6,7 +6,12 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild._native import discover_project_inputs, run_compile_only_pipeline
+from sqlbuild._native import (
+    discover_project_inputs,
+    format_scenario_snapshot_execution_json,
+    run_compile_only_pipeline,
+    write_execution_json_output,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.cli.commands._helpers.planning.external_refs import (
@@ -46,10 +51,6 @@ from sqlbuild.cli.commands.models import (
     ScenarioSnapshotLimitInputs,
     ScenarioTestCommandRequest,
 )
-from sqlbuild.cli.output.main._scenario_snapshot_execution_json import (
-    format_scenario_snapshot_execution_json,
-)
-from sqlbuild.cli.output.main._write_execution_json_output import write_execution_json_output
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.cli.progress.main._write_execution_header import write_execution_header

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from sqlbuild._native import transitive_closure
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import LoadSelectionSets, LoadSelectorSets
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction, DiscoveredProjectInputs
-from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
 from sqlbuild.spec.contracts.main.loader_destination_parts import loader_destination_parts
 from sqlbuild.spec.contracts.models import LoaderDestinationParts, SourceEntry, TargetConfig
 

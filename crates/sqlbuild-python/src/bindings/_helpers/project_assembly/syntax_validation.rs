@@ -240,7 +240,7 @@ pub(crate) fn hook_statements(
 
 /// The hook SQL strings a hook value holds, in validation order.
 #[pyfunction]
-fn hook_sql_statements(value: Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+pub(crate) fn hook_sql_statements(value: Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     let sql_hook_entry: Bound<'_, PyAny> = value
         .py()
         .import(DISCOVERY_MODELS_MODULE)?

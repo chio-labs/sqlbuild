@@ -34,7 +34,7 @@ def test_given_plain_compile_when_running_fresh_cli_then_optional_artifact_impor
 import json
 import sys
 from pathlib import Path
-from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild._native import run_cli as main
 
 exit_code = main([
     "--project-dir", sys.argv[1], "--no-color", "compile", "--json", "--no-cache"
@@ -91,7 +91,6 @@ expected_modules = {
     "CliEntrypointHandlers": entry_models,
     "ParsedCliInvocation": entry_models,
     "SelectorFileSummary": entry_models,
-    "SelectorInputs": entry_models,
     "SkillInstallTarget": output_models,
     "SkillMaintenanceResult": output_models,
     "SkillSettings": output_models,
@@ -126,7 +125,7 @@ def test_given_project_when_running_unaffected_dag_after_model_split_then_json_c
     write_compile_startup_project(tmp_path)
     script = """
 import sys
-from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild._native import run_cli as main
 
 raise SystemExit(main(["--project-dir", sys.argv[1], "--no-color", "dag", "--json"]))
 """

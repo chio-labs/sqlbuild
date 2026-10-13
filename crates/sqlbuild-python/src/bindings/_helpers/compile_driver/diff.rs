@@ -15,9 +15,9 @@ use sqlbuild_analysis::diff_selection::models::DiffGraph;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
+use crate::bindings::_helpers::graph::views::project_lineage_views;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const LINEAGE_VIEWS_MODULE: &str = "sqlbuild.compiler.graph.main.project_lineage_views";
 const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 
@@ -60,8 +60,7 @@ fn adjacency<'py>(
 /// The project's names, lineage edges and selector indexes over resource indexes.
 fn diff_graph<'py>(project: &Bound<'py, PyAny>, keys: &KeyIndexes<'py>) -> PyResult<DiffGraph> {
     let py: Python<'py> = project.py();
-    let lineage: Bound<'py, PyAny> =
-        imported(py, LINEAGE_VIEWS_MODULE, "project_lineage_views")?.call1((project,))?;
+    let lineage: Bound<'py, PyAny> = project_lineage_views(py, project)?;
     let mut graph: DiffGraph = DiffGraph::default();
     for attribute in ["models", "sources", "seeds"] {
         for resource in project.getattr(attribute)?.try_iter()? {

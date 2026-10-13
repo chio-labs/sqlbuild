@@ -11,7 +11,7 @@ from typing import Any, NamedTuple, TypeGuard
 
 import pytest
 
-import sqlbuild.compiler.contracts.main._evaluate_native_model_contracts as contract_entry
+import sqlbuild._native as native_module
 from sqlbuild._native import (
     build_project_graph,
     compiled_model_record,
@@ -27,7 +27,6 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
-from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.planner.types import ContractPolicy, IncrementalMode, MaterializationType
@@ -285,7 +284,7 @@ def _dynamic_proof(*, rng: random.Random) -> DynamicColumnContractProof:
 def contract_diagnostics(*, project: CompiledProjectView, dialect: str | None) -> ContractView:
     """The project's contract diagnostics, through the public contract entry point."""
 
-    return evaluate_model_contracts(project=project, dialect=dialect).diagnostics
+    return native_module.evaluate_model_contracts(project=project, dialect=dialect).diagnostics
 
 
 def diagnostic_view(*, diagnostics: ContractView, project_dir: Path) -> str:
@@ -320,7 +319,7 @@ def record_native_outcomes(*, monkeypatch: pytest.MonkeyPatch) -> NativeContract
     """Record native contract outcomes for the rest of the test."""
 
     record: NativeContractRecord = NativeContractRecord(statuses=Counter(), codes=Counter())
-    evaluate: Callable[..., ContractValidationResult] = contract_entry.native_model_contracts
+    evaluate: Callable[..., ContractValidationResult] = native_module.evaluate_model_contracts
 
     def counted(
         *, project: CompiledProjectView, dialect: TypeDialect | str | None
@@ -330,7 +329,7 @@ def record_native_outcomes(*, monkeypatch: pytest.MonkeyPatch) -> NativeContract
         record.codes.update(diagnostic.code for diagnostic in result.diagnostics)
         return result
 
-    monkeypatch.setattr(contract_entry, "native_model_contracts", counted)
+    monkeypatch.setattr(native_module, "evaluate_model_contracts", counted)
     return record
 
 

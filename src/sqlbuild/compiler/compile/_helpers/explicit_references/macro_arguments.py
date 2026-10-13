@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile._helpers.refs.references import (
-    extract_sql_references,
-)
+from sqlbuild._native import extract_sql_references
 from sqlbuild.compiler.compile.models import (
     CompileSqlReference,
 )

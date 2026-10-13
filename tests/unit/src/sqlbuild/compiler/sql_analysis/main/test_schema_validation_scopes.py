@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.sql_analysis.classes.binding_catalog import BindingCatalog
-from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
+from sqlbuild._native import BindingCatalog, schema_validations
 from sqlbuild.compiler.sql_analysis.models import SqlBindingResult, SqlSchemaValidationRequest
 from tests.unit.src.sqlbuild.compiler.sql_analysis.main._test_types import (
     ExactColumnCatalogValidationTestCase,
@@ -189,7 +188,7 @@ _SUPPORTED_SCHEMA_DIALECTS: tuple[str, ...] = (
 def test_given_nested_query_scopes_when_validating_complete_schema_then_resolves_columns(
     test_case: SchemaValidationScopeTestCase,
 ) -> None:
-    results: tuple[SqlBindingResult, ...] = get_schema_validations(
+    results: tuple[SqlBindingResult, ...] = schema_validations(
         requests=tuple(
             SqlSchemaValidationRequest(
                 sql=test_case.query_sql,
@@ -253,7 +252,7 @@ def test_given_exact_name_relations_when_validating_join_using_then_matches_auth
         relations={},
     )
 
-    results: tuple[SqlBindingResult, ...] = get_schema_validations(
+    results: tuple[SqlBindingResult, ...] = schema_validations(
         requests=(
             SqlSchemaValidationRequest(
                 sql=test_case.query_sql,

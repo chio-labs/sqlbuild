@@ -9,7 +9,7 @@ import sys
 import time
 from pathlib import Path
 
-from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
+from sqlbuild._native import compute_query_hash
 
 _FORMAT_ELAPSED_PATTERN: re.Pattern[str] = re.compile(r"Formatting SQL  OK  \(([0-9.]+)s;")
 

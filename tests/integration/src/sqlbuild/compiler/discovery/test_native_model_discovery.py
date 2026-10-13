@@ -8,9 +8,10 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    directory_snapshot_scope,
     discover_model_files,
+    discover_python_module_files,
 )
-from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     NativeRuntimeTestCase,
@@ -70,9 +71,8 @@ def test_given_runtime_and_root_when_discovering_natively_then_supported_runs_an
     "test_case",
     [
         SharedSnapshotTestCase(
-            description="a schema file created after the model walk stays unseen",
-            created_file="models/marts/schema.yml",
-            pattern="schema.yml",
+            description="a Python file created after the model walk stays unseen",
+            created_file="models/marts/late.py",
         ),
     ],
     ids=lambda case: case.description,
@@ -81,15 +81,15 @@ def test_given_native_model_walk_when_globbing_models_later_in_the_pass_then_the
     test_case: SharedSnapshotTestCase, tmp_path: Path
 ) -> None:
     write_project(project_dir=tmp_path, files=(("models/marts/orders.sql", _VALID_MODEL),))
-    with DirectorySnapshot.scope(project_dir=tmp_path) as snapshot:
+    with directory_snapshot_scope(project_dir=tmp_path):
         _ = discover_model_files(
             project_dir=tmp_path,
             extract_implicit_alias_columns=True,
             extract_output_column_locations=True,
         )
-        _ = (tmp_path / test_case.created_file).write_text("models: []\n", encoding="utf-8")
-        matches: tuple[Path, ...] = snapshot.rglob(
-            root=tmp_path / "models", pattern=test_case.pattern
+        _ = (tmp_path / test_case.created_file).write_text("VALUE = 1\n", encoding="utf-8")
+        matches: tuple[Path, ...] = discover_python_module_files(
+            project_dir=tmp_path, root="models", public_only=False
         )
 
     assert tuple(path.relative_to(tmp_path).as_posix() for path in matches) == (

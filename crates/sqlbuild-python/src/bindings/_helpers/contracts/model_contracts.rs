@@ -1,7 +1,6 @@
 //! Model column contracts and promotion conflicts.
 
-use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyRef, PyResult, Python};
-use pyo3::{pyfunction, wrap_pyfunction};
+use pyo3::prelude::{PyResult, Python};
 use sqlbuild_analysis::compiled_project::main::project_models::project_models;
 use sqlbuild_analysis::compiled_project::models::{
     CompiledModelFacts, DynamicProofFact, ModelAnalysisFact, ModelSchemaFact,
@@ -22,7 +21,7 @@ use crate::bindings::_helpers::type_system::normalization::normalization_error;
 use crate::bindings::types::CompilerDetach;
 
 /// `(code, is_error, message, column, declared_index, output_column, related, help)`.
-type DiagnosticRow = (
+pub(crate) type DiagnosticRow = (
     &'static str,
     bool,
     String,
@@ -34,11 +33,10 @@ type DiagnosticRow = (
 );
 
 /// Evaluate the column contract of every model the compile's owner recorded, in its order.
-#[pyfunction]
-fn evaluate_project_model_contracts(
+pub(crate) fn evaluate_project_model_contracts(
     py: Python<'_>,
     settings: (String, bool),
-    project: PyRef<'_, NativeCompiledProject>,
+    project: &NativeCompiledProject,
 ) -> PyResult<Vec<(String, Vec<DiagnosticRow>)>> {
     let (dialect, implicit_column_contracts) = settings;
     let models: &[CompiledModelFacts] = project_models(project.facts());
@@ -136,14 +134,13 @@ fn fact_dynamic_proof(proof: &DynamicProofFact) -> DynamicContractProof {
 }
 
 /// `(model name, model path, code, message, help)`.
-type ConflictRow = (String, String, &'static str, String, String);
+pub(crate) type ConflictRow = (String, String, &'static str, String, String);
 
 /// The K011 conflicts of enforced contracts under immediate table promotion, by model name.
-#[pyfunction]
-fn project_promotion_conflicts(
+pub(crate) fn project_promotion_conflicts(
     py: Python<'_>,
     settings: (Option<String>, String, String),
-    project: PyRef<'_, NativeCompiledProject>,
+    project: &NativeCompiledProject,
 ) -> PyResult<Vec<ConflictRow>> {
     let (explicit_mode, adapter_default, settings_file) = settings;
     let models: &[CompiledModelFacts] = project_models(project.facts());
@@ -194,10 +191,4 @@ fn diagnostic_row(diagnostic: ContractDiagnostic) -> DiagnosticRow {
             .map(|related| (related.column_name, related.message)),
         diagnostic.help,
     )
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(evaluate_project_model_contracts, module)?)?;
-    module.add_function(wrap_pyfunction!(project_promotion_conflicts, module)?)?;
-    Ok(())
 }

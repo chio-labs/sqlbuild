@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild._native import read_latest_fingerprints
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapter.relations.main.get_columns_for_inspection import get_columns_for_inspection
@@ -12,7 +13,6 @@ from sqlbuild.adapter.relations.main.list_relations_for_inspection import (
 )
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME, NODE_TYPE_MODEL
-from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.migrations.constants import (
     COLUMN_MIGRATION_TABLE_NAME,

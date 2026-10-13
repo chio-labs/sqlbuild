@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import lineage_graph_names
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
-from sqlbuild.compiler.graph.main._lineage_graph_names import lineage_graph_names
 from sqlbuild.compiler.planner._helpers.graph.auto_load import managed_source_upstream_keys
 from sqlbuild.compiler.planner._helpers.graph.core import (
     build_downstream_deps,

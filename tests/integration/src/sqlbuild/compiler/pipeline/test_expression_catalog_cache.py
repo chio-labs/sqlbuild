@@ -10,7 +10,7 @@ from sqlbuild._native import (
     project_with,
     semantic_shapes,
 )
-from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild._native import run_cli as main
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from tests.integration.src.sqlbuild.compiler.lineage.helpers import compiled_project
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (

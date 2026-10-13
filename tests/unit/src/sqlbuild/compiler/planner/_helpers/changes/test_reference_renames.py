@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
+from sqlbuild._native import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.changes.reference_renames import origin_reference_names
 from sqlbuild.compiler.planner.models import ReferenceRename

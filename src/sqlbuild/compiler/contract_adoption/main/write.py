@@ -5,7 +5,13 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from sqlbuild._native import build_compiled_project, discover_project_inputs
+from sqlbuild._native import (
+    build_compiled_project,
+    discover_project_inputs,
+    edit_contract_model,
+    edit_contract_source,
+    remaining_contract_findings,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
     CompileAnalysisSelection,
@@ -14,11 +20,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledResourceType,
     CompiledSourceView,
-)
-from sqlbuild.compiler.contract_adoption._helpers.repository_edits import (
-    edit_model,
-    edit_source,
-    remaining_findings,
 )
 from sqlbuild.compiler.contract_adoption.models import (
     ContractAdoptionResult,
@@ -53,7 +54,7 @@ def write_contracts(
             updated_evidence.append(evidence)
             continue
         if evidence.resource_type == CompiledResourceType.MODEL:
-            contents, conflict = edit_model(
+            contents, conflict = edit_contract_model(
                 model=models[evidence.resource_name],
                 physical_columns=evidence.physical_columns,
                 overwrite=overwrite,
@@ -61,7 +62,7 @@ def write_contracts(
             path: Path = project_dir / models[evidence.resource_name].relative_path
         else:
             path = sources[evidence.resource_name].source_file.file_path
-            contents, conflict = edit_source(
+            contents, conflict = edit_contract_source(
                 source=sources[evidence.resource_name],
                 physical_columns=evidence.physical_columns,
                 overwrite=overwrite,
@@ -69,7 +70,7 @@ def write_contracts(
             )
         if contents is not None and contents != path.read_text(encoding="utf-8"):
             updates[path] = contents
-        remaining: tuple[ContractFinding, ...] = remaining_findings(
+        remaining: tuple[ContractFinding, ...] = remaining_contract_findings(
             findings=evidence.findings,
             overwrite=overwrite,
             conflict=conflict,

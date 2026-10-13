@@ -1,6 +1,8 @@
 pub(crate) mod analysis;
 pub(crate) mod analysis_session;
 pub(crate) mod attachments;
+pub(crate) mod auditing;
+pub(crate) mod authored_values;
 pub(crate) mod boundary;
 pub(crate) mod cache;
 pub(crate) mod cli;
@@ -24,7 +26,9 @@ pub(crate) mod plan_output;
 pub(crate) mod project_assembly;
 pub(crate) mod python_values;
 pub(crate) mod refactor;
+pub(crate) mod references;
 pub(crate) mod render;
+pub(crate) mod result_output;
 pub(crate) mod rules;
 pub(crate) mod scopes;
 pub(crate) mod semantic_checks;

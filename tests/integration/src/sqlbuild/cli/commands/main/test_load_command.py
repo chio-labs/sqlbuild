@@ -13,7 +13,7 @@ from _pytest.capture import CaptureFixture, CaptureResult
 from _pytest.monkeypatch import MonkeyPatch
 from duckdb import DuckDBPyConnection
 
-from sqlbuild._native import discover_project_inputs
+from sqlbuild._native import discover_project_inputs, format_load_execution_json
 from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands._helpers.load.selection import select_load_entries
@@ -32,7 +32,6 @@ from sqlbuild.cli.commands.models import (
     ScenarioTestCommandRequest,
     TestCommandRequest,
 )
-from sqlbuild.cli.output.main._load_execution_json import format_load_execution_json
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import CursorOverrides

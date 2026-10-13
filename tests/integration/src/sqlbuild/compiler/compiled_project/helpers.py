@@ -19,12 +19,12 @@ from sqlbuild._native import (
     build_compile_inputs,
     build_compiled_project,
     discover_project_inputs,
+    extract_sql_references,
 )
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.models import MeasurementThresholdBound, MeasurementThresholds
 from sqlbuild.compiler.compile import models as compile_models
-from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompileModelConfig,
@@ -40,8 +40,6 @@ from sqlbuild.compiler.compile.types import (
     CompileInputsView,
     ModelInput,
 )
-from sqlbuild.compiler.contracts._helpers import native_contracts as native_contracts_module
-from sqlbuild.compiler.contracts._helpers import native_promotion as native_promotion_module
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.rule_engine._helpers.run import native_rows as native_rows_module
@@ -71,8 +69,7 @@ TYPE_PROOF_FILES: dict[str, str] = {
 
 _FACTS_CONSUMERS: tuple[ModuleType, ...] = (
     native_rows_module,
-    native_contracts_module,
-    native_promotion_module,
+    _native,
 )
 
 

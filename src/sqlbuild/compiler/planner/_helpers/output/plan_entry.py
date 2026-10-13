@@ -7,11 +7,11 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
+from sqlbuild._native import render_source_relation, resolve_cursor_input_roles
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.constants import CURSOR_INPUTS_CONFIG_KEY
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
 from sqlbuild.compiler.compile.main._source_bindings import get_source_binding_diagnostics
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
@@ -140,7 +140,6 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
     WarningSeverity,
 )
-from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.cursor_algebra.main.parse import parse
 from sqlbuild.cursor_algebra.main.render import render

@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.authored_values.main._project_var_values import render_project_var_text
+from sqlbuild._native import render_project_var_text
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     expand_scanned_declaration_references,
 )

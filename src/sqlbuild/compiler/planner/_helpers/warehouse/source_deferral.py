@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import replace
 
-from sqlbuild.compiler.authored_values.main._project_var_values import render_project_var_text
+from sqlbuild._native import render_project_var_text
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
 )

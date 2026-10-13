@@ -5,10 +5,8 @@ from unittest.mock import Mock
 
 import pytest
 
+from sqlbuild._native import write_fingerprint, write_fingerprints
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_WRITE_ATTEMPTS
-from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
-from sqlbuild.compiler.fingerprints.main.write_many import write_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from tests.unit.src.sqlbuild.compiler.fingerprints.main._test_types import (
     WriteFingerprintBatchTestCase,
@@ -23,6 +21,8 @@ from tests.unit.src.sqlbuild.compiler.fingerprints.main.helpers import (
     build_write_test_fingerprint,
     render_qualified_name,
 )
+
+FINGERPRINT_WRITE_ATTEMPTS: int = 5
 
 
 @pytest.mark.parametrize(
@@ -96,9 +96,7 @@ def test_given_later_batch_failure_when_writing_then_progress_only_confirms_comp
     execute: Mock = Mock(
         side_effect=(None, None, *([RuntimeError("warehouse request interrupted")] * 5))
     )
-    monkeypatch.setattr(
-        "sqlbuild.compiler.fingerprints._helpers.write_many.time.sleep", lambda _: None
-    )
+    monkeypatch.setattr("time.sleep", lambda _: None)
     progress: list[tuple[int, int]] = []
 
     with pytest.raises(RuntimeError, match="warehouse request interrupted"):
@@ -154,7 +152,7 @@ def test_given_transient_write_conflicts_when_writing_fingerprint_then_retries_u
         error_message=test_case.error_message,
     )
     sleeper: RecordingSleeper = RecordingSleeper()
-    monkeypatch.setattr("sqlbuild.compiler.fingerprints.main.write.time.sleep", sleeper)
+    monkeypatch.setattr("time.sleep", sleeper)
 
     write_fingerprint(
         connection=object(),
@@ -198,7 +196,7 @@ def test_given_persistent_write_conflicts_when_writing_fingerprint_then_raises_a
         error_message=test_case.error_message,
     )
     sleeper: RecordingSleeper = RecordingSleeper()
-    monkeypatch.setattr("sqlbuild.compiler.fingerprints.main.write.time.sleep", sleeper)
+    monkeypatch.setattr("time.sleep", sleeper)
 
     with pytest.raises(RuntimeError) as error_info:
         write_fingerprint(

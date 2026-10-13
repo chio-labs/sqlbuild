@@ -174,18 +174,9 @@ def test_given_frontier_value_when_rendering_capture_then_json_is_canonical(
             expected_identical=False,
         ),
         StageCaptureOrderTestCase(
-            description="shared_analysis_memo_fill_is_not_visible",
-            first=lambda: orders_binding_catalog(
-                shared_analyses=(("orders_key", "orders"), ("customers_key", "customers")),
-                relations=("orders", "customers"),
-            ),
-            second=lambda: orders_binding_catalog(
-                shared_analyses=(
-                    ("customers_key", "customers_copy"),
-                    ("orders_key", "orders_copy"),
-                ),
-                relations=("customers", "orders"),
-            ),
+            description="binding_catalog_relation_order_is_not_visible",
+            first=lambda: orders_binding_catalog(relations=("orders", "customers")),
+            second=lambda: orders_binding_catalog(relations=("customers", "orders")),
             expected_identical=True,
         ),
         StageCaptureOrderTestCase(
@@ -196,10 +187,8 @@ def test_given_frontier_value_when_rendering_capture_then_json_is_canonical(
         ),
         StageCaptureOrderTestCase(
             description="binding_catalog_relations_stay_visible",
-            first=lambda: orders_binding_catalog(
-                shared_analyses=(), relations=("orders", "customers")
-            ),
-            second=lambda: orders_binding_catalog(shared_analyses=(), relations=("orders",)),
+            first=lambda: orders_binding_catalog(relations=("orders", "customers")),
+            second=lambda: orders_binding_catalog(relations=("orders",)),
             expected_identical=False,
         ),
     ],

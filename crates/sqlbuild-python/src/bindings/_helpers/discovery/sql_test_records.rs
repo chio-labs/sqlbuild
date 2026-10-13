@@ -21,9 +21,7 @@ use crate::bindings::_helpers::discovery::project_files::path_object;
 use crate::bindings::_helpers::discovery::raised::{
     discovery_error, failure_error, read_error, stage_error,
 };
-use crate::bindings::_helpers::discovery::snapshot::{
-    in_snapshot, project_root, project_tree, seed_listings,
-};
+use crate::bindings::_helpers::discovery::snapshot::{in_snapshot, project_root, project_tree};
 use crate::bindings::_helpers::discovery::sorted_keys::sorted_keys;
 use crate::bindings::_helpers::discovery::sql_test_blocks::{
     sql_test_block_records, validate_block_names,
@@ -81,7 +79,6 @@ fn discovered_files<'py, T: Send>(
         };
         let files =
             discovered.map_err(|failure| stage_error(&tree.get().inner, project_dir, failure))?;
-        seed_listings(project_dir, &tree)?;
         Ok((tree, files))
     })
 }

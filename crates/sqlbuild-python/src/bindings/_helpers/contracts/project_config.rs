@@ -177,7 +177,10 @@ fn built(py: Python<'_>, value: Built) -> PyResult<Py<PyAny>> {
 
 /// `load_project_config`: the validated `ProjectConfig` of `project_dir`.
 #[pyfunction]
-fn load_project_config_file(py: Python<'_>, project_dir: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+pub(crate) fn load_project_config_file(
+    py: Python<'_>,
+    project_dir: &Bound<'_, PyAny>,
+) -> PyResult<Py<PyAny>> {
     let files = files(project_dir)?;
     match load_project_config(&files.native) {
         Ok(config) => built(py, config),
@@ -187,7 +190,10 @@ fn load_project_config_file(py: Python<'_>, project_dir: &Bound<'_, PyAny>) -> P
 
 /// `load_local_config`: the validated `LocalConfig` of `project_dir`, or the default.
 #[pyfunction]
-fn load_local_config_file(py: Python<'_>, project_dir: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+pub(crate) fn load_local_config_file(
+    py: Python<'_>,
+    project_dir: &Bound<'_, PyAny>,
+) -> PyResult<Py<PyAny>> {
     let files = files(project_dir)?;
     match load_local_config(&files.native) {
         Ok(config) => built(py, config),

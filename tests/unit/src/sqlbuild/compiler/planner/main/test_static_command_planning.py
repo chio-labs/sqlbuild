@@ -221,6 +221,7 @@ def test_given_selected_seed_without_state_table_when_reading_reason_then_only_s
     )
     adapter: Mock = Mock()
     adapter.list_relations.return_value = ()
+    adapter.render_qualified_name.return_value = "analytics._sqlbuild_fingerprints"
     connection: object = object()
 
     fingerprints: dict[str, Fingerprint] = read_selected_seed_fingerprints(

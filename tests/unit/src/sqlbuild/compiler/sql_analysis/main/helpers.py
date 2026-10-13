@@ -1,12 +1,14 @@
 """Helpers for SQL analysis public-entry tests."""
 
+from collections.abc import Callable, Mapping, Sequence
 from typing import cast
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.sql_analysis.classes.binding_catalog import BindingCatalog
+from sqlbuild._native import BindingCatalog
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic, SqlBindingResult
 from sqlbuild.compiler.sql_analysis.types import (
     NativeDiagnosticRow,
+    NativeNormalizationRequest,
     NativePositionsModule,
     NativeProjectCatalog,
 )
@@ -46,3 +48,30 @@ def mapped_binding_result(
         sql=sql, dialect=dialect, rows=rows
     )
     return SqlBindingResult(diagnostics=tuple(SqlBindingDiagnostic(*row) for row in mapped))
+
+
+def normalize_analysis_sql_results(
+    *,
+    dialect: str | None,
+    requests: Sequence[tuple[str, Mapping[str, str] | None, Mapping[str, str] | None]],
+    catalog: NativeProjectCatalog | None,
+) -> list[str | Exception]:
+    """Normalize `(sql, stubs, placeholders)` natively in order, keeping failures in place."""
+
+    normalize: Callable[..., list[str | Exception]] = getattr(
+        catalog,
+        "normalize_analysis_sqls",
+        cast(NativePositionsModule, _native).normalize_analysis_sqls,
+    )
+    batch: list[NativeNormalizationRequest] = [
+        (sql, dict(stubs or {}), dict(placeholders or {})) for sql, stubs, placeholders in requests
+    ]
+    return normalize(dialect=dialect or "generic", requests=batch)
+
+
+def normalize_sql_for_polyglot(*, sql: str, dialect: str | None) -> str:
+    """Return analysis-equivalent SQL for Polyglot's supported dialect surface."""
+
+    return cast(NativePositionsModule, _native).normalize_dialect_sql(
+        sql=sql, dialect=dialect or "generic"
+    )

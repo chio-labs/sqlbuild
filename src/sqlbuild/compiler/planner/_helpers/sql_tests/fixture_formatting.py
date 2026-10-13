@@ -15,7 +15,6 @@ from sqlbuild.compiler.compile.constants import (
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileSqlTestCte
 from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
-from sqlbuild.compiler.discovery.main._model_schema_columns import parse_schema_columns
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSqlModelFile,
@@ -177,13 +176,11 @@ def _fixture_relations(
         contract = model_file.header_values.get("contract", contract)
         if contract != ContractPolicy.ENFORCED.value:
             continue
-        columns: tuple[SchemaColumn, ...] = parse_schema_columns(
-            raw_columns=model_file.header_values.get("columns"),
-            file_path=model_file.file_path,
-            label="model",
-            error_class=CompileInputError,
-            column_locations=model_file.header_column_locations,
-            allow_migrate_from=True,
+        columns: tuple[SchemaColumn, ...] = _native.parse_schema_columns(
+            model_file.header_values.get("columns"),
+            (str(model_file.file_path), "model"),
+            (False, True, False),
+            model_file.header_column_locations,
         )
         if not columns:
             continue
