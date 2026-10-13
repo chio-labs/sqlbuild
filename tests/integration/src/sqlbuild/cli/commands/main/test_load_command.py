@@ -17,6 +17,7 @@ from sqlbuild._native import (
     discover_project_inputs,
     format_load_execution_json,
     run_audit_command,
+    run_build_command,
     run_load_command,
     run_scenario_test_command,
     run_test_command,
@@ -25,7 +26,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.main.execution._build import run_build
 from sqlbuild.cli.commands.main.project._plan import run_plan
 from sqlbuild.cli.commands.models import (
     AuditCommandRequest,
@@ -809,8 +809,8 @@ def test_given_selected_model_references_managed_source_when_build_or_run_then_a
 ) -> None:
     write_repo_files(tmp_path, _BUILD_RUN_AUTO_LOAD_PROJECT_FILES)
 
-    exit_code: int = run_build(
-        BuildCommandRequest(project_dir=tmp_path, no_color=True, select=("stg_orders",))
+    exit_code: int = run_build_command(
+        request=BuildCommandRequest(project_dir=tmp_path, no_color=True, select=("stg_orders",))
     )
 
     captured: CaptureResult[str] = capsys.readouterr()
@@ -856,8 +856,8 @@ def test_given_self_managed_source_when_running_build_then_auto_loads_before_mod
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_build(
-        BuildCommandRequest(project_dir=tmp_path, no_color=True, select=("stg_orders",))
+    exit_code: int = run_build_command(
+        request=BuildCommandRequest(project_dir=tmp_path, no_color=True, select=("stg_orders",))
     )
 
     captured: CaptureResult[str] = capsys.readouterr()
@@ -978,8 +978,8 @@ def test_given_managed_source_environment_when_building_or_running_then_reads_co
     finally:
         setup_connection.close()
 
-    exit_code: int = run_build(
-        BuildCommandRequest(
+    exit_code: int = run_build_command(
+        request=BuildCommandRequest(
             project_dir=tmp_path,
             no_color=True,
             select=("stg_orders",),
@@ -1230,7 +1230,7 @@ def test_given_no_managed_source_read_ambiguity_when_building_then_source_deferr
 
     command_runners: dict[str, Callable[..., int]] = {
         "audit": lambda **kwargs: run_audit_command(request=AuditCommandRequest(**kwargs)),
-        "build": lambda **kwargs: run_build(BuildCommandRequest(**kwargs)),
+        "build": lambda **kwargs: run_build_command(request=BuildCommandRequest(**kwargs)),
         "scenario": lambda **kwargs: run_scenario_test_command(
             request=ScenarioTestCommandRequest(**kwargs)
         ),
@@ -1363,7 +1363,7 @@ def test_given_source_deferral_when_writing_artifacts_then_sql_uses_deferred_rel
 
     command_runners: dict[str, Callable[..., int]] = {
         "audit": lambda **kwargs: run_audit_command(request=AuditCommandRequest(**kwargs)),
-        "build": lambda **kwargs: run_build(BuildCommandRequest(**kwargs)),
+        "build": lambda **kwargs: run_build_command(request=BuildCommandRequest(**kwargs)),
     }
     exit_code: int = command_runners[test_case.command](
         project_dir=tmp_path,
@@ -1485,8 +1485,8 @@ def test_given_build_or_run_load_flags_when_running_then_applies_loader_control(
     finally:
         setup_connection.close()
 
-    exit_code: int = run_build(
-        BuildCommandRequest(
+    exit_code: int = run_build_command(
+        request=BuildCommandRequest(
             project_dir=tmp_path,
             no_color=True,
             select=(test_case.args[test_case.args.index("--select") + 1],),
@@ -1569,8 +1569,8 @@ def test_given_downstream_selection_when_running_build_then_loads_only_direct_se
     finally:
         setup_connection.close()
 
-    exit_code: int = run_build(
-        BuildCommandRequest(
+    exit_code: int = run_build_command(
+        request=BuildCommandRequest(
             project_dir=tmp_path,
             no_color=True,
             select=(test_case.args[test_case.args.index("--select") + 1],),
@@ -1616,8 +1616,8 @@ def test_given_source_loader_fails_when_running_build_then_downstream_model_is_n
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_build(
-        BuildCommandRequest(project_dir=tmp_path, no_color=True, select=("stg_orders",))
+    exit_code: int = run_build_command(
+        request=BuildCommandRequest(project_dir=tmp_path, no_color=True, select=("stg_orders",))
     )
 
     captured: CaptureResult[str] = capsys.readouterr()
@@ -1664,8 +1664,8 @@ def test_given_build_auto_loads_source_when_json_output_then_includes_source_ass
     write_repo_files(tmp_path, test_case.project_files)
     json_output_path: Path = tmp_path / "target" / "build.json"
 
-    exit_code: int = run_build(
-        BuildCommandRequest(
+    exit_code: int = run_build_command(
+        request=BuildCommandRequest(
             project_dir=tmp_path,
             no_color=True,
             select=("stg_orders",),
@@ -1844,8 +1844,8 @@ def test_given_build_skips_loader_when_manifest_is_written_then_marks_source_aut
     finally:
         setup_connection.close()
 
-    exit_code: int = run_build(
-        BuildCommandRequest(
+    exit_code: int = run_build_command(
+        request=BuildCommandRequest(
             project_dir=tmp_path,
             no_color=True,
             select=("stg_orders",),

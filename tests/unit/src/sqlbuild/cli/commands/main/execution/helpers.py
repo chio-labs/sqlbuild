@@ -1,9 +1,9 @@
 """Test helpers for build execution command boundaries."""
 
 import sys
+from contextlib import nullcontext
 from io import StringIO
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 from unittest.mock import Mock
 
@@ -12,24 +12,25 @@ import pytest
 from sqlbuild import _native as native
 from sqlbuild.cli.commands._helpers.planning import external_refs as external_refs_module
 from sqlbuild.cli.commands._helpers.runtime import adapters as adapters_module
-from sqlbuild.cli.commands.models import BuildInvocation
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledSqlScenario
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlScenarioFile
+from sqlbuild.diagnostics.main import process_resource_reporting as resource_reporting_module
 from sqlbuild.executor.pipeline.main import run as executor_run_module
 from sqlbuild.presentation.main import supports_color as supports_color_module
-from sqlbuild.spec.contracts.models import ExecutionLimitsConfig, LocalConfig, ProjectConfig
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
 
-def stub_resolved_build_invocation(
-    *, monkeypatch: pytest.MonkeyPatch, build_module: ModuleType
-) -> None:
-    """Keep command-wrapper tests isolated from project discovery."""
+def fail_build_discovery(*, monkeypatch: pytest.MonkeyPatch, error: BaseException) -> Mock:
+    """Make project discovery raise and record the debug resource reporter calls."""
 
-    invocation: Mock = Mock(spec=BuildInvocation)
-    invocation.execution_limits = ExecutionLimitsConfig()
-    invocation.effective_target_name = None
-    monkeypatch.setattr(build_module, "resolve_build_invocation", lambda **_kwargs: invocation)
+    def discover(**_kwargs: object) -> DiscoveredProjectInputs:
+        raise error
+
+    reporter: Mock = Mock(return_value=nullcontext())
+    monkeypatch.setattr(native, "discover_project_inputs", discover)
+    monkeypatch.setattr(resource_reporting_module, "process_resource_reporting", reporter)
+    return reporter
 
 
 class ScenarioProgressStream(StringIO):

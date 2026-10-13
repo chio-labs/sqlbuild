@@ -190,9 +190,9 @@ const BUILD_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const BUILD_ROUTE: Route = routed(
     "run_build",
-    ("sqlbuild.cli.commands.main.execution._build", "run_build"),
+    ("sqlbuild._native", "run_build_command"),
     &BUILD_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const FRESHNESS_FIELDS: [Field; 12] = [

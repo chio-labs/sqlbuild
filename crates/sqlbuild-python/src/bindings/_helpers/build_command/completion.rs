@@ -1,0 +1,412 @@
+//! Cost finalization, runtime targets, the footer, execution JSON and phase timings.
+
+use std::time::Instant;
+
+use pyo3::exceptions::PyKeyboardInterrupt;
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use sqlbuild_core::build_command::main::build_exit_code::build_exit_code;
+use sqlbuild_core::build_command::main::python_node_failed::python_node_failed;
+use sqlbuild_core::build_command::main::render_phase_timings::render_phase_timings;
+use sqlbuild_core::build_command::models::PhaseTimings;
+use sqlbuild_core::cli_text::models::CliStyle;
+
+use crate::bindings::_helpers::build_command::execution::{
+    Outcome, Preparation, write_run_context,
+};
+use crate::bindings::_helpers::build_command::invocation::BuildContext;
+use crate::bindings::_helpers::build_command::support::{
+    boolean, emit, joined, none, text, utc_now,
+};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+
+const NATIVE_MODULE: &str = "sqlbuild._native";
+const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
+const COST_COLLECTION_MODULE: &str = "sqlbuild.cli.commands._helpers.cost.collection";
+const COST_TYPES: &str = "sqlbuild.cost.types";
+const BUILD_MODELS: &str = "sqlbuild.executor.build.models";
+const BUILD_TYPES: &str = "sqlbuild.executor.build.types";
+const CALLBACKS_MODULE: &str = "sqlbuild.cli.commands.classes.build_progress_callbacks";
+const RUNTIME_TARGET_MODULE: &str = "sqlbuild.cli.target_artifacts.main._write_runtime_target";
+const CHECK_TARGET_MODULE: &str =
+    "sqlbuild.cli.target_artifacts.main._write_python_check_runtime_target";
+const SUCCESS_STATUS: &str = "success";
+const PENDING_MESSAGE: &str = "Build cost collection has not completed.";
+const INTERRUPTED_MESSAGE: &str = "Build was interrupted before cost collection completed.";
+
+/// How one cost finalization differs from a completed collection.
+pub(crate) struct CostRequest<'py> {
+    pub(crate) status: &'static str,
+    pub(crate) started_at: Bound<'py, PyAny>,
+    pub(crate) completed_at: Bound<'py, PyAny>,
+    pub(crate) overrides: Vec<(&'static str, Bound<'py, PyAny>)>,
+}
+
+/// `finalize_build_cost(BuildCostFinalization(...))`.
+pub(crate) fn finalize_build_cost<'py>(
+    context: &BuildContext<'py>,
+    pipeline: &Bound<'py, PyAny>,
+    cost: CostRequest<'py>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = context.py();
+    let project: Bound<'py, PyAny> = pipeline.getattr("project")?;
+    let mut fields: Vec<(&str, Bound<'py, PyAny>)> = vec![
+        ("project_dir", context.get("effective_project_dir")?),
+        ("adapter_name", context.get("adapter_name")?),
+        ("adapter", context.get("adapter")?),
+        ("connection_config", context.get("connection_config")?),
+        ("target_name", project.getattr("effective_target_name")?),
+        (
+            "target_database",
+            project.getattr("effective_target_database")?,
+        ),
+        ("run_id", project.getattr("run_id")?),
+        ("build_status", text(py, cost.status)),
+        ("started_at", cost.started_at),
+        ("completed_at", cost.completed_at),
+        (
+            "config",
+            context
+                .get("discovered_inputs")?
+                .getattr("project_config")?
+                .getattr("cost")?,
+        ),
+        ("output_stream", context.stream.clone()),
+        ("use_color", boolean(py, context.use_color)),
+    ];
+    fields.extend(cost.overrides);
+    let finalization: Bound<'py, PyAny> = call_with(
+        &imported(py, COMMAND_MODELS, "BuildCostFinalization")?,
+        &fields,
+    )?;
+    imported(py, COST_COLLECTION_MODULE, "finalize_build_cost")?.call1((finalization,))
+}
+
+fn cost_status<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
+    imported(py, COST_TYPES, "CostStatus")?.getattr(name)
+}
+
+/// Record a pending cost state before execution starts.
+pub(crate) fn record_pending_cost<'py>(
+    context: &BuildContext<'py>,
+    pipeline: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = context.py();
+    let started_at: Bound<'py, PyAny> = utc_now(py)?;
+    finalize_build_cost(
+        context,
+        pipeline,
+        CostRequest {
+            status: "running",
+            started_at: started_at.clone(),
+            completed_at: started_at.clone(),
+            overrides: vec![
+                ("collect", boolean(py, false)),
+                ("render", boolean(py, false)),
+                ("cost_status", cost_status(py, "PENDING")?),
+                ("cost_message", text(py, PENDING_MESSAGE)),
+            ],
+        },
+    )?;
+    Ok(started_at)
+}
+
+/// Retain cost collection elapsed time on the active timing tracker.
+fn finish_cost_timing(context: &BuildContext<'_>, started: Instant) -> f64 {
+    let elapsed: f64 = started.elapsed().as_secs_f64();
+    let _ = context.tracker.setattr("cost_collection_seconds", elapsed);
+    elapsed
+}
+
+fn style(context: &BuildContext<'_>) -> CliStyle {
+    CliStyle {
+        use_color: context.use_color,
+    }
+}
+
+fn write_timings(context: &BuildContext<'_>, timings: &PhaseTimings) -> PyResult<()> {
+    emit(
+        &context.stream,
+        &render_phase_timings(timings, style(context)),
+    )
+}
+
+/// Write the phases the tracker measured before an exceptional exit, to stderr without colour.
+pub(crate) fn write_partial_timings(py: Python<'_>, tracker: &Bound<'_, PyAny>) -> PyResult<()> {
+    let snapshot: Bound<'_, PyAny> = tracker.call_method0("snapshot")?;
+    let seconds = |name: &str| -> PyResult<Option<f64>> { snapshot.getattr(name)?.extract() };
+    let timings: PhaseTimings = PhaseTimings {
+        compile_seconds: seconds("compile_seconds")?,
+        planning_seconds: seconds("planning_seconds")?,
+        connection_preparation_seconds: seconds("connection_preparation_seconds")?,
+        schema_preparation_seconds: seconds("schema_preparation_seconds")?,
+        execution_seconds: seconds("execution_seconds")?,
+        cost_collection_seconds: seconds("cost_collection_seconds")?,
+        total_seconds: seconds("total_seconds")?,
+    };
+    emit(
+        &py.import("sys")?.getattr("stderr")?,
+        &render_phase_timings(&timings, CliStyle { use_color: false }),
+    )
+}
+
+fn cost_payload<'py>(py: Python<'py>, record: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    if record.is_none() {
+        return Ok(none(py));
+    }
+    call_with(
+        &imported(py, NATIVE_MODULE, "cost_output_payload")?,
+        &[("record", record.clone())],
+    )
+}
+
+fn run_id_for<'py>(
+    pipeline: &Bound<'py, PyAny>,
+    record: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    if record.is_none() {
+        return Ok(none(pipeline.py()));
+    }
+    pipeline.getattr("project")?.getattr("run_id")
+}
+
+fn write_json(context: &BuildContext<'_>, payload: Bound<'_, PyAny>) -> PyResult<()> {
+    call_with(
+        &imported(context.py(), NATIVE_MODULE, "write_execution_json_output")?,
+        &[
+            ("payload", payload),
+            ("json_output", context.request.getattr("json_output")?),
+            (
+                "json_output_path",
+                context.request.getattr("json_output_path")?,
+            ),
+        ],
+    )?;
+    Ok(())
+}
+
+/// Persist and emit a completed zero-cost record when the plan has no work.
+fn finalize_no_work(context: &BuildContext<'_>, pipeline: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let py: Python<'_> = context.py();
+    let plan: Bound<'_, PyAny> = pipeline.getattr("plan_output")?;
+    if call_with(
+        &imported(py, NATIVE_MODULE, "plan_has_executable_work")?,
+        &[
+            ("plan", plan.clone()),
+            (
+                "python_plan_entries",
+                pipeline.getattr("python_plan_entries")?,
+            ),
+        ],
+    )?
+    .is_truthy()?
+    {
+        return Ok(false);
+    }
+    if context.verbose {
+        write_run_context(context, pipeline)?;
+    }
+    let completed_at: Bound<'_, PyAny> = utc_now(py)?;
+    let record: Bound<'_, PyAny> = finalize_build_cost(
+        context,
+        pipeline,
+        CostRequest {
+            status: SUCCESS_STATUS,
+            started_at: completed_at.clone(),
+            completed_at,
+            overrides: vec![
+                ("collect", boolean(py, false)),
+                ("had_executable_work", boolean(py, false)),
+            ],
+        },
+    )?;
+    let result: Bound<'_, PyAny> = call_with(
+        &imported(py, BUILD_MODELS, "BuildExecutionResult")?,
+        &[(
+            "status",
+            imported(py, BUILD_TYPES, "BuildStatus")?.getattr("SUCCESS")?,
+        )],
+    )?;
+    let payload: Bound<'_, PyAny> = call_with(
+        &imported(py, NATIVE_MODULE, "format_build_execution_json")?,
+        &[
+            ("result", result),
+            ("plan", plan),
+            ("run_id", run_id_for(pipeline, &record)?),
+            ("cost", cost_payload(py, &record)?),
+        ],
+    )?;
+    write_json(context, payload)?;
+    Ok(true)
+}
+
+/// Finalize a build without executable work, with verbose phase timings.
+pub(crate) fn finalize_no_work_with_timings(
+    context: &BuildContext<'_>,
+    pipeline: &Bound<'_, PyAny>,
+) -> PyResult<bool> {
+    let cost_started: Instant = Instant::now();
+    let finalized: PyResult<bool> = finalize_no_work(context, pipeline);
+    let cost_seconds: f64 = finish_cost_timing(context, cost_started);
+    let finalized: bool = finalized?;
+    if finalized && context.verbose {
+        write_timings(
+            context,
+            &PhaseTimings {
+                compile_seconds: pipeline.getattr("compile_seconds")?.extract()?,
+                planning_seconds: pipeline.getattr("planning_seconds")?.extract()?,
+                cost_collection_seconds: Some(cost_seconds),
+                total_seconds: Some(context.started.elapsed().as_secs_f64()),
+                ..PhaseTimings::default()
+            },
+        )?;
+    }
+    Ok(finalized)
+}
+
+/// Persist failed or interrupted cost state without masking the active error.
+pub(crate) fn finalize_exceptional_cost(
+    context: &BuildContext<'_>,
+    pipeline: &Bound<'_, PyAny>,
+    (started_at, error): (&Bound<'_, PyAny>, &PyErr),
+) {
+    let py: Python<'_> = context.py();
+    let cost_started: Instant = Instant::now();
+    let interrupted: bool = error.is_instance_of::<PyKeyboardInterrupt>(py);
+    let _ = (|| -> PyResult<Bound<'_, PyAny>> {
+        finalize_build_cost(
+            context,
+            pipeline,
+            CostRequest {
+                status: if interrupted { "interrupted" } else { "failed" },
+                started_at: started_at.clone(),
+                completed_at: utc_now(py)?,
+                overrides: vec![
+                    ("collect", boolean(py, !interrupted)),
+                    ("render", boolean(py, false)),
+                    ("cost_status", cost_status(py, "PARTIAL")?),
+                    ("cost_message", text(py, INTERRUPTED_MESSAGE)),
+                ],
+            },
+        )
+    })();
+    let _ = finish_cost_timing(context, cost_started);
+}
+
+fn any_failed(
+    results: &Bound<'_, PyAny>,
+    failed: impl Fn(&Bound<'_, PyAny>) -> PyResult<bool>,
+) -> PyResult<bool> {
+    for result in results.try_iter()? {
+        if failed(&result?)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// Persist and render a completed direct build and return its exit code.
+pub(crate) fn complete_direct_build<'py>(
+    context: &BuildContext<'py>,
+    pipeline: &Bound<'py, PyAny>,
+    (preparation, outcome, check_results): (&Preparation<'py>, &Outcome<'py>, &Bound<'py, PyAny>),
+    started_at: &Bound<'py, PyAny>,
+) -> PyResult<i32> {
+    let py: Python<'py> = context.py();
+    let completed_at: Bound<'py, PyAny> = utc_now(py)?;
+    let result: &Bound<'py, PyAny> = &outcome.result;
+    let plan: Bound<'py, PyAny> = pipeline.getattr("plan_output")?;
+    let succeeded: bool = result.getattr("status")?.str()?.extract::<String>()? == SUCCESS_STATUS;
+    let python_failed: bool = any_failed(&outcome.python_results, |result| {
+        Ok(python_node_failed(
+            &result.getattr("status")?.str()?.extract::<String>()?,
+        ))
+    })?;
+    let checks_failed: bool = any_failed(check_results, |result| {
+        result.getattr("failed")?.is_truthy()
+    })?;
+    let exit_code: i32 = build_exit_code(succeeded, (python_failed, checks_failed));
+    let target_dir: Bound<'py, PyAny> =
+        joined(&context.get("effective_project_dir")?, &["target"])?;
+    call_with(
+        &imported(py, RUNTIME_TARGET_MODULE, "write_runtime_target")?,
+        &[
+            ("target_dir", target_dir.clone()),
+            ("plan_output", plan.clone()),
+            ("result", result.clone()),
+        ],
+    )?;
+    call_with(
+        &imported(py, CHECK_TARGET_MODULE, "write_python_check_runtime_target")?,
+        &[
+            ("target_dir", target_dir),
+            ("results", check_results.clone()),
+        ],
+    )?;
+    let cost_started: Instant = Instant::now();
+    let record: PyResult<Bound<'py, PyAny>> = finalize_build_cost(
+        context,
+        pipeline,
+        CostRequest {
+            status: if exit_code == 0 {
+                SUCCESS_STATUS
+            } else {
+                "failed"
+            },
+            started_at: started_at.clone(),
+            completed_at,
+            overrides: vec![("render", boolean(py, false))],
+        },
+    );
+    let cost_seconds: f64 = finish_cost_timing(context, cost_started);
+    let record: Bound<'py, PyAny> = record?;
+    let footer: String = call_with(
+        &imported(py, CALLBACKS_MODULE, "format_build_footer")?,
+        &[
+            ("result", result.clone()),
+            ("elapsed", preparation.callbacks.getattr("elapsed")?),
+            ("use_color", boolean(py, context.use_color)),
+            ("python_node_results", outcome.python_results.clone()),
+        ],
+    )?
+    .extract()?;
+    emit(&context.stream, &format!("\n{footer}\n"))?;
+    let payload: Bound<'py, PyAny> = call_with(
+        &imported(py, NATIVE_MODULE, "format_degradable_build_execution_json")?,
+        &[
+            ("result", result.clone()),
+            ("plan", plan),
+            ("python_node_results", outcome.python_results.clone()),
+            ("python_check_results", check_results.clone()),
+            ("command", text(py, "build")),
+            ("run_id", run_id_for(pipeline, &record)?),
+            ("cost", cost_payload(py, &record)?),
+            ("execution_succeeded", boolean(py, exit_code == 0)),
+        ],
+    )?;
+    write_json(context, payload)?;
+    call_with(
+        &imported(py, COST_COLLECTION_MODULE, "render_build_cost")?,
+        &[
+            ("record", record),
+            ("output_stream", context.stream.clone()),
+            ("use_color", boolean(py, context.use_color)),
+        ],
+    )?;
+    if context.verbose {
+        let timings: Bound<'py, PyAny> = result.getattr("timings")?;
+        let seconds = |name: &str| -> PyResult<Option<f64>> { timings.getattr(name)?.extract() };
+        write_timings(
+            context,
+            &PhaseTimings {
+                compile_seconds: pipeline.getattr("compile_seconds")?.extract()?,
+                planning_seconds: pipeline.getattr("planning_seconds")?.extract()?,
+                connection_preparation_seconds: seconds("connection_preparation_seconds")?,
+                schema_preparation_seconds: seconds("schema_preparation_seconds")?,
+                execution_seconds: seconds("execution_seconds")?,
+                cost_collection_seconds: Some(cost_seconds),
+                total_seconds: Some(context.started.elapsed().as_secs_f64()),
+            },
+        )?;
+    }
+    Ok(exit_code)
+}

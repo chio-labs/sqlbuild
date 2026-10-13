@@ -2,8 +2,9 @@
 
 use pyo3::prelude::{Bound, PyModule, PyResult};
 
-use crate::bindings::_helpers::build_command::policies;
+use crate::bindings::_helpers::build_command::{command, policies};
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    policies::register(module)
+    policies::register(module)?;
+    command::register(module)
 }

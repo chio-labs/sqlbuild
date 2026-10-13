@@ -39,15 +39,6 @@ class ModelExecutionLimitTestCase:
 
 
 @dataclass(frozen=True)
-class UnsupportedDurationLimitTestCase:
-    description: str
-    max_duration: str
-    remediation: str
-    expected_code: str
-    expected_error_fragment: str
-
-
-@dataclass(frozen=True)
 class RetentionDecreasePolicyTestCase:
     description: str
     plan_output: PlanOutput

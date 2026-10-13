@@ -16,8 +16,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 const PIPELINE_MODELS_MODULE: &str = "sqlbuild.compiler.pipeline.models";
 const PLANNER_MODELS_MODULE: &str = "sqlbuild.compiler.planner.models";
 const PLANNER_TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
-const NODE_GRAPH_MODULE: &str = "sqlbuild.compiler.python_nodes.main.graph";
-const RUN_LIFECYCLE_MODULE: &str = "sqlbuild.compiler.python_nodes.main.run_lifecycle";
+const NODE_GRAPH_MODULE: &str = "sqlbuild.compiler.python_nodes.main._graph";
+const RUN_LIFECYCLE_MODULE: &str = "sqlbuild.compiler.python_nodes.main._run_lifecycle";
 const PYTHON_NODE_MODELS_MODULE: &str = "sqlbuild.compiler.python_nodes.models";
 const PYTHON_NODE_TYPES_MODULE: &str = "sqlbuild.compiler.python_nodes.types";
 const REF_TYPES_MODULE: &str = "sqlbuild.python_nodes.types";

@@ -40,3 +40,11 @@ class ExecutionJsonCostTestCase:
 class ExecutionJsonMicrobatchLimitTestCase:
     description: str
     expected_microbatch: dict[str, object]
+
+
+@dataclass(frozen=True)
+class ExecutionJsonAuditDegradationTestCase:
+    description: str
+    result: BuildExecutionResult
+    expected_status: str
+    expected_projection: dict[str, int]
