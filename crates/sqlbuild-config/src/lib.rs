@@ -4,6 +4,7 @@
 
 pub mod command_connection;
 pub(crate) mod constants;
+pub mod dbt_profile;
 pub mod effective;
 pub mod errors;
 pub mod models;

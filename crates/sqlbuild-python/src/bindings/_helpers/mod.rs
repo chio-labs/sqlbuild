@@ -17,6 +17,7 @@ pub(crate) mod contracts;
 pub(crate) mod cost_report;
 pub(crate) mod cursor;
 pub(crate) mod dag_artifact;
+pub(crate) mod dbt_interop;
 pub(crate) mod debug_command;
 pub(crate) mod discovery;
 pub(crate) mod fingerprints;

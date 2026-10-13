@@ -6,8 +6,8 @@ use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
 use crate::bindings::_helpers::{
     analysis, analysis_session, attachments, auditing, authored_values, boundary, cache, cli,
     clone, command_runtime, compile_attachment, compile_command, compile_driver, compile_outputs,
-    compiled_project, contracts, cost_report, cursor, dag_artifact, debug_command, discovery,
-    fingerprints, freshness, frontier, graph, janitor, lineage, macro_bridge, manifest,
+    compiled_project, contracts, cost_report, cursor, dag_artifact, dbt_interop, debug_command,
+    discovery, fingerprints, freshness, frontier, graph, janitor, lineage, macro_bridge, manifest,
     model_config, plan_output, presentation_text, project_assembly, refactor, references, render,
     result_output, rules, scopes, semantic_checks, semantic_shapes, sql_test_glue, sqltext,
     state_rows, type_system, workspace_commands,
@@ -54,6 +54,7 @@ fn register_project_stages(module: &Bound<'_, PyModule>) -> PyResult<()> {
     result_output::registration::register(module)?;
     cost_report::registration::register(module)?;
     debug_command::registration::register(module)?;
+    dbt_interop::registration::register(module)?;
     command_runtime::registration::register(module)?;
     presentation_text::registration::register(module)?;
     workspace_commands::registration::register(module)?;

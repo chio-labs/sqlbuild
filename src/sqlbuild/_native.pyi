@@ -226,6 +226,10 @@ from sqlbuild.executor.python_nodes.models import (
 )
 from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotCaptureRunResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
+from sqlbuild.integrations.dbt.models import (
+    NormalizedDbtProfileConnection,
+    ResolvedDbtProfileOutput,
+)
 from sqlbuild.lint.models import HeaderSpan, LintConfig, LintViolation
 from sqlbuild.lint.types import RelationKeyRow
 from sqlbuild.presentation.classes.cli_style import CliStyle
@@ -1372,6 +1376,21 @@ def resolve_target_connection_config(
 def validate_preview_target(
     *, discovered_inputs: DiscoveredProjectInputs, as_target: str | None, command_name: str
 ) -> None: ...
+def normalize_dbt_profile_connection(
+    *, resolved: ResolvedDbtProfileOutput
+) -> NormalizedDbtProfileConnection: ...
+def build_dbt_init_project_toml(
+    *,
+    project_name: str,
+    adapter: str,
+    target_name: str,
+    profile_name: str,
+    dbt_project_dir: str,
+    profiles_dir: str,
+    target_path: str,
+    target_schema: str | None,
+    target_database: str | None,
+) -> str: ...
 def run_debug_command(
     *,
     project_dir: Path | None = None,
