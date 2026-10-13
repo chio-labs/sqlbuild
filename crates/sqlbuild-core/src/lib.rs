@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 pub mod audit_command;
+pub mod build_command;
 pub mod check_command;
 pub mod cli_text;
 pub mod clone_text;
