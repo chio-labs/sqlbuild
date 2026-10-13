@@ -2,13 +2,13 @@
 
 from pathlib import Path
 
-from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.compiled_project.main.compiled_audit_record import compiled_audit_record
-from sqlbuild.compiler.compiled_project.main.compiled_function_record import (
+from sqlbuild._native import (
+    compiled_audit_record,
     compiled_function_record,
+    compiled_seed_record,
+    compiled_source_record,
 )
-from sqlbuild.compiler.compiled_project.main.compiled_seed_record import compiled_seed_record
-from sqlbuild.compiler.compiled_project.main.compiled_source_record import compiled_source_record
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine.classes.project_tree import ProjectTree, public_model
 from sqlbuild.rule_engine.models import Model
 

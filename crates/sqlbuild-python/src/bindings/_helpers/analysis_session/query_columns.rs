@@ -24,7 +24,7 @@ const QUERY_COLUMNS_CONTEXT: &str = "native query column analysis";
 const PROJECTION_FACTS_CONTEXT: &str = "native fixture projection facts";
 
 /// `(sql, placeholders, analysis names, lineage references, recover CTE facts, mode)`.
-type QueryRow = (
+pub(crate) type QueryRow = (
     String,
     Pairs,
     Vec<String>,
@@ -37,12 +37,12 @@ type RequestRow = (String, Pairs, Pairs, Shapes, Shapes, Vec<QueryRow>, String);
 /// `([(name, type)], NULL literal names, quoted names)`.
 type ProjectionFactsRow = (Vec<(String, String)>, Vec<String>, Vec<String>);
 /// `(succeeded, [(name, type, nullability)] or None, has star)`.
-type ColumnsRow = (bool, Option<Vec<(String, Option<String>, String)>>, bool);
+pub(crate) type ColumnsRow = (bool, Option<Vec<(String, Option<String>, String)>>, bool);
 
 /// Each query's columns, as Python's analysis outside the session inferred them.
 #[pyfunction]
 #[pyo3(signature = (catalog, request, adapter_rules=None))]
-fn infer_query_columns(
+pub(crate) fn infer_query_columns(
     py: Python<'_>,
     catalog: Option<PyRef<'_, ProjectCatalog>>,
     request: RequestRow,
@@ -141,7 +141,6 @@ fn fixture_projection_facts(
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(infer_query_columns, module)?)?;
     module.add_function(wrap_pyfunction!(fixture_projection_facts, module)?)?;
     Ok(())
 }

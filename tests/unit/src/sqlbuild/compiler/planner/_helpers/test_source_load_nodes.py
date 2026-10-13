@@ -7,6 +7,9 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import (
+    project_with,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
@@ -19,7 +22,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.planner._helpers.graph.loader_dag import (
     build_intermediate_source_map,
     expand_selected_loader_dependencies,

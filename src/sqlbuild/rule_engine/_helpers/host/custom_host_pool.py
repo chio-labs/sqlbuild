@@ -17,9 +17,11 @@ from typing import Any, cast
 import orjson
 
 import sqlbuild._native as _native
+from sqlbuild._native import (
+    compiled_project_record,
+)
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
-from sqlbuild.compiler.compiled_project.main.compiled_project_record import compiled_project_record
 from sqlbuild.rule_engine._helpers.host.host_capacity import available_cores
 from sqlbuild.rule_engine.constants import (
     CUSTOM_HOST_ABANDONED_SUFFIX,

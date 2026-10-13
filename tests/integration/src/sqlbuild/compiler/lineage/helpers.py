@@ -10,11 +10,15 @@ from typing import cast
 import pytest
 
 import sqlbuild._native as native_module
-from sqlbuild._native import ProjectColumnLineage, build_project_graph, discover_project_inputs
+from sqlbuild._native import (
+    ProjectColumnLineage,
+    build_project_graph,
+    compiled_model_record,
+    discover_project_inputs,
+    project_with,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 
 _PROJECT_TOML: str = (

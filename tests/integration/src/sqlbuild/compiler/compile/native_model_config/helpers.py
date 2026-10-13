@@ -6,11 +6,7 @@ from pathlib import Path
 from typing import cast
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile._helpers.attachment.model_config import (
-    native_model_config_session,
-    native_model_validation,
-    native_validation_error,
-)
+from sqlbuild._native import native_model_config_session
 from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     CompileSqlReference,
@@ -19,6 +15,7 @@ from sqlbuild.compiler.compile.models import (
     NativeModelConfigSession,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
+from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import ProjectConfig
 
@@ -66,12 +63,28 @@ def validation_outcome(*, values: dict[str, object]) -> object:
     )
     outcome: _native.NativeConfigError | None = cast(
         _native.NativeConfigError | None,
-        native_model_validation(session=session, request=request, rejected=[False]),
+        session.validator.validate(
+            request.config.values,
+            (
+                request.model_file.file_path.stem,
+                request.query_sql,
+                str(request.model_file.relative_path),
+            ),
+            (
+                [
+                    (str(reference.ref_kind), reference.ref_name, False)
+                    for reference in request.references
+                ],
+                None,
+                request.config.time_travel_retention.unmanaged,
+                request.config.table_type.declared,
+            ),
+        ),
     )
     return [
         _ACCEPTED,
         *(
-            raised_error_shape(native_validation_error(error=error, values=values))
+            raised_error_shape(native_config_error(error=error, values=values))
             for error in filter(None, (outcome,))
         ),
     ][-1]

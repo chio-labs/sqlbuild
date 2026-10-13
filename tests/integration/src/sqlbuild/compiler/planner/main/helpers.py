@@ -12,7 +12,12 @@ from tempfile import gettempdir
 from types import MappingProxyType
 from typing import Any, cast
 
-from sqlbuild._native import discover_project_inputs, run_compile_pipeline
+from sqlbuild._native import (
+    compiled_model_record,
+    discover_project_inputs,
+    project_with,
+    run_compile_pipeline,
+)
 from sqlbuild.adapter.contract.models import RelationInfo, RelationReadProbe
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
@@ -36,8 +41,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledSourceView,
     FunctionLanguage,
 )
-from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSchemaFile,

@@ -13,8 +13,10 @@ from typing import Protocol
 import pytest
 
 import sqlbuild._native as native_module
+from sqlbuild._native import (
+    project_with,
+)
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue
 from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
 from sqlbuild.rule_engine._helpers.host import custom_host_pool

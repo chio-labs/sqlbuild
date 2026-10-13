@@ -7,6 +7,9 @@ from dataclasses import replace
 from typing import cast
 
 import sqlbuild._native as _native
+from sqlbuild._native import (
+    project_with,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledRelationLocation,
@@ -18,8 +21,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledSeedView,
 )
-from sqlbuild.compiler.compiled_project.main._with_target_defaults import with_target_defaults
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 
 
 def apply_target_defaults(
@@ -76,10 +77,8 @@ def _model_with_defaults(
     render_qualified_name: Callable[..., str | None],
 ) -> CompiledModelView:
     if not isinstance(model, CompiledModel):
-        return with_target_defaults(
-            model=cast(_native.NativeCompiledModel, model),
-            defaults=(default_schema, default_database),
-            render_qualified_name=render_qualified_name,
+        return cast(_native.NativeCompiledModel, model).with_target_defaults(
+            (default_schema, default_database), render_qualified_name
         )
     return replace(
         model,

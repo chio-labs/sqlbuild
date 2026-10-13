@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import sqlbuild._native as _native
+from sqlbuild._native import (
+    compiled_project_facts,
+)
 from sqlbuild.adapter.contract.types import TypeDialect
 from sqlbuild.compiler.compile.models import (
     CompilerDiagnostic,
@@ -15,7 +18,6 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticPhase,
     DiagnosticSeverity,
 )
-from sqlbuild.compiler.compiled_project.main.compiled_project_facts import compiled_project_facts
 from sqlbuild.compiler.contracts._helpers.output_locations import (
     output_column_location,
     output_related_locations,

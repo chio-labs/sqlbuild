@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile._helpers.attachment.core import (
+from sqlbuild._native import (
     build_effective_vars,
 )
 from sqlbuild.compiler.compile._helpers.render.context_templates import resolve_run_id

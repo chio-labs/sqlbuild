@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import json
 from collections.abc import Callable
 from pathlib import Path
@@ -7,7 +8,8 @@ from typing import Any
 
 import pytest
 
-import sqlbuild._native as native_module
+import sqlbuild.compiler.compile._helpers.assembly.semantic_shapes as semantic_shapes_module
+import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stage_assembly
 from sqlbuild._native import (
     build_compile_inputs,
     build_compiled_project,
@@ -15,6 +17,7 @@ from sqlbuild._native import (
     run_compile_pipeline,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import semantic_shapes
@@ -212,17 +215,32 @@ def apply_warehouse_setup_sql(*, project_dir: Path, statements: tuple[str, ...])
 
 
 def traced_shape_batches(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ...]]:
-    """Record the expressions of every native expression-source shape batch."""
+    """Record each shape request's expressions the binding catalog's shape cache misses."""
 
-    original: Callable[..., Any] = native_module.infer_expression_source_shapes
     batches: list[tuple[str, ...]] = []
-
-    def traced(catalog: object, request: tuple[Any, ...], *rules: Any) -> Any:
-        batches.append(tuple(request[4]))
-        return original(catalog, request, *rules)
-
-    monkeypatch.setattr(native_module, "infer_expression_source_shapes", traced)
+    for module in (native_stage_assembly, semantic_shapes_module):
+        original: Callable[..., Any] = module.infer_native_expression_source_shapes
+        monkeypatch.setattr(
+            module,
+            "infer_native_expression_source_shapes",
+            functools.partial(_traced_shapes, original=original, batches=batches),
+        )
     return batches
+
+
+def _traced_shapes(
+    *,
+    original: Callable[..., Any],
+    batches: list[tuple[str, ...]],
+    expressions: tuple[str, ...],
+    profile: ExpressionInferenceProfile,
+) -> tuple[dict[str, str] | None, ...]:
+    cache: dict[str, object] = getattr(profile.binding_catalog, "expression_shapes", {})
+    pending: tuple[str, ...] = tuple(
+        dict.fromkeys(filter(lambda item: item not in cache, expressions))
+    )
+    batches.extend((pending,) * bool(pending))
+    return original(expressions=expressions, profile=profile)
 
 
 _OFFLINE_POSTGRES_CONNECTION: dict[str, object] = {

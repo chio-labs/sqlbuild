@@ -32,7 +32,7 @@ const CURSOR_INPUTS_KEY: &str = "cursor_inputs";
 const PYTHON_UDF_DECORATOR: &str = "udf";
 
 /// A loader's description, relative path and whether that path is a YAML file.
-type LoaderRow = (Option<String>, String, bool);
+pub(crate) type LoaderRow = (Option<String>, String, bool);
 
 /// A Python resource's kind, name, description (a `str` that may hold surrogates), location, help.
 type PythonResourceRow = (String, String, Option<Py<PyString>>, Py<PyAny>, String);

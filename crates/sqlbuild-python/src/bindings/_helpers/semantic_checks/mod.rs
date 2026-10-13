@@ -1,7 +1,10 @@
 pub(crate) mod completion;
 pub(crate) mod failures;
+pub(crate) mod help_catalogue;
 pub(crate) mod metadata;
 pub(crate) mod registration;
 pub(crate) mod resource_sql;
 pub(crate) mod session_facts;
+pub(crate) mod stage;
+pub(crate) mod stage_objects;
 pub(crate) mod type_recovery;

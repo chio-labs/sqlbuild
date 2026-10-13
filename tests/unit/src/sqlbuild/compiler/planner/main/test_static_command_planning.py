@@ -9,10 +9,12 @@ from unittest.mock import Mock
 
 import pytest
 
+from sqlbuild._native import (
+    compiled_model_record,
+    project_with,
+)
 from sqlbuild.compiler.compile.models import CompileModelConfig
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledSeedView
-from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import DiscoveredSeedFile
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.main.commands._relations import resolve_static_relation_context

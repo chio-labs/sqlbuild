@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile._helpers.named_declarations.model_schemas import (
-    model_schema_scope_usages,
-)
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.scopes.main._get_placement_validated_scope_index import (
     get_placement_validated_scope_index,
@@ -16,11 +14,9 @@ def scope_index_with_compile_usages(*, inputs: CompileInputsView) -> ScopeIndex:
     """Return compile inputs' canonical index with all usage and placement facts."""
 
     collected_usages: list[UsageRecord] = list(
-        model_schema_scope_usages(
-            schema_files=inputs.discovered_inputs.model_schema_files,
-            resolver=(
-                inputs.declaration_scope.resolver if inputs.declaration_scope is not None else None
-            ),
+        _native.model_schema_scope_usages(
+            inputs.discovered_inputs.model_schema_files,
+            inputs.declaration_scope.resolver if inputs.declaration_scope is not None else None,
         )
     )
     for model_input in inputs.model_inputs:

@@ -3,7 +3,10 @@
 use std::collections::HashMap;
 
 use pyo3::exceptions::PyValueError;
-use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult};
+use pyo3::prelude::{
+    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
+use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_scopes::compile_usages::main::distinct_positions::distinct_positions;
 use sqlbuild_scopes::compile_usages::main::merged_dependencies::merged_dependencies;
@@ -16,6 +19,13 @@ use sqlbuild_scopes::scope_index::models::{
 };
 
 use crate::bindings::_helpers::compiled_project::model_loop_named::scope_path_message;
+
+const SCOPE_ERRORS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
+const SCOPE_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
+const COLLECTOR_MODULE: &str = "sqlbuild.compiler.compile._helpers.diagnostics.collector";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const INACCESSIBLE_DECLARATION_CODE: &str = "S006";
+const SCHEMA_USAGE_KINDS: [&str; 2] = ["schema", "enum"];
 
 type IdentityRow = (String, String);
 /// A declaration's kind, name and private owner; a resource's kind and name with no owner.
@@ -75,8 +85,135 @@ fn diagnostic_row(diagnostic: InaccessibleDiagnostic) -> DiagnosticRow {
     )
 }
 
-/// Each schema's parent and enum usages over `records` by `(kind, name)` handle, with S006s.
+/// `model_schema_scope_usages`: each schema's parent and enum `UsageRecord`s; S006s are reported.
 #[pyfunction]
+fn model_schema_scope_usages<'py>(
+    schema_files: &Bound<'py, PyAny>,
+    resolver: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let py: Python<'py> = schema_files.py();
+    if resolver.is_none() {
+        return Ok(PyTuple::empty(py));
+    }
+    let mut records: Vec<Bound<'py, PyAny>> = Vec::new();
+    let mut record_rows: Vec<(IdentityRow, RecordRow)> = Vec::new();
+    let declarations = resolver.getattr("lookup")?.getattr("declarations")?;
+    for item in declarations.call_method0("items")?.try_iter()? {
+        let (identity, found): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
+        if !found.is_truthy()?
+            || !identity.getattr("owner")?.is_none()
+            || !SCHEMA_USAGE_KINDS.contains(
+                &identity
+                    .getattr("kind")?
+                    .getattr("value")?
+                    .extract::<String>()?
+                    .as_str(),
+            )
+        {
+            continue;
+        }
+        let record: Bound<'py, PyAny> = found.get_item(0)?;
+        let recorded: Bound<'py, PyAny> = record.getattr("identity")?;
+        record_rows.push((
+            (
+                recorded.getattr("kind")?.getattr("value")?.extract()?,
+                recorded.getattr("name")?.extract()?,
+            ),
+            record_row(&record)?,
+        ));
+        records.push(record);
+    }
+    let mut schemas: Vec<SchemaRow> = Vec::new();
+    for file in schema_files.try_iter()? {
+        for declaration in file?.getattr("declarations")?.try_iter()? {
+            let declaration: Bound<'py, PyAny> = declaration?;
+            let mut columns: Vec<(String, Option<String>)> = Vec::new();
+            for column in declaration.getattr("columns")?.try_iter()? {
+                let column: Bound<'py, PyAny> = column?;
+                columns.push((
+                    column.getattr("name")?.extract()?,
+                    column.getattr("type")?.extract()?,
+                ));
+            }
+            schemas.push((
+                declaration.getattr("name")?.extract()?,
+                declaration.getattr("extends")?.extract()?,
+                columns,
+            ));
+        }
+    }
+    let (usages, diagnostics, error) = scope_schema_usages(schemas, record_rows)?;
+    if let Some(message) = error {
+        return Err(PyErr::from_value(
+            py.import(SCOPE_ERRORS_MODULE)?
+                .getattr("InvalidScopePathError")?
+                .call1((message,))?,
+        ));
+    }
+    report_inaccessible(py, diagnostics)?;
+    let usage_record = py.import(SCOPE_MODELS_MODULE)?.getattr("UsageRecord")?;
+    let mut built: Vec<Bound<'py, PyAny>> = Vec::with_capacity(usages.len());
+    for (consumer, used) in usages {
+        let fields: Bound<'py, PyDict> = PyDict::new(py);
+        fields.set_item("consumer", records[consumer].getattr("identity")?)?;
+        fields.set_item("declaration", records[used].getattr("identity")?)?;
+        built.push(usage_record.call((), Some(&fields))?);
+    }
+    PyTuple::new(py, built)
+}
+
+/// A declaration record's path, scope, private owner, owning path and ownership root path.
+fn record_row(record: &Bound<'_, PyAny>) -> PyResult<RecordRow> {
+    let identity: Bound<'_, PyAny> = record.getattr("identity")?;
+    let owner: Bound<'_, PyAny> = identity.getattr("owner")?;
+    Ok((
+        record.getattr("path")?.extract()?,
+        record.getattr("scope")?.getattr("value")?.extract()?,
+        if owner.is_none() {
+            None
+        } else {
+            Some((
+                owner.getattr("kind")?.getattr("value")?.extract()?,
+                owner.getattr("name")?.extract()?,
+            ))
+        },
+        record.getattr("owning_path")?.extract()?,
+        record
+            .getattr("ownership_root")?
+            .getattr("path")?
+            .extract()?,
+    ))
+}
+
+/// Report each S006 through the active compile diagnostic collector.
+fn report_inaccessible(py: Python<'_>, diagnostics: Vec<DiagnosticRow>) -> PyResult<()> {
+    if diagnostics.is_empty() {
+        return Ok(());
+    }
+    let report = py
+        .import(COLLECTOR_MODULE)?
+        .getattr("report_compile_diagnostic")?;
+    let compiler_diagnostic = py
+        .import(COMPILE_MODELS_MODULE)?
+        .getattr("CompilerDiagnostic")?;
+    let path_class = py.import("pathlib")?.getattr("Path")?;
+    for (key, message, path, help) in diagnostics {
+        let fields: Bound<'_, PyDict> = PyDict::new(py);
+        fields.set_item("phase", "compile")?;
+        fields.set_item("severity", "error")?;
+        fields.set_item("code", INACCESSIBLE_DECLARATION_CODE)?;
+        fields.set_item("message", message)?;
+        fields.set_item("path", path_class.call1((path,))?)?;
+        fields.set_item("help", help)?;
+        let arguments: Bound<'_, PyDict> = PyDict::new(py);
+        arguments.set_item("key", PyTuple::new(py, key)?)?;
+        arguments.set_item("diagnostic", compiler_diagnostic.call((), Some(&fields))?)?;
+        report.call((), Some(&arguments))?;
+    }
+    Ok(())
+}
+
+/// Each schema's parent and enum usages over `records` by `(kind, name)` handle, with S006s.
 fn scope_schema_usages(
     schemas: Vec<SchemaRow>,
     records: Vec<(IdentityRow, RecordRow)>,
@@ -157,6 +294,6 @@ pub(crate) fn merged_usage_rows(
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(scope_schema_usages, module)?)?;
+    module.add_function(wrap_pyfunction!(model_schema_scope_usages, module)?)?;
     Ok(())
 }

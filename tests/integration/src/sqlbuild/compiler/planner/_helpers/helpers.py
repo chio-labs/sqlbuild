@@ -6,6 +6,10 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+from sqlbuild._native import (
+    compiled_model_record,
+    project_with,
+)
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
@@ -25,8 +29,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledSeedView,
     CompiledSourceView,
 )
-from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSchemaFile,
     DiscoveredSeedFile,

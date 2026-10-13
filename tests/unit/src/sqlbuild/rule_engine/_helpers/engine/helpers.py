@@ -8,6 +8,9 @@ from typing import Any, cast
 
 import pytest
 
+from sqlbuild._native import (
+    project_with,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledDirectLogicSqlTestPayload,
     CompiledModelSqlTestPayload,
@@ -17,7 +20,6 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlTestCte,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType, SqlTestMode
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, DiscoveredSqlTestFile
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.rule_engine._helpers.engine import native

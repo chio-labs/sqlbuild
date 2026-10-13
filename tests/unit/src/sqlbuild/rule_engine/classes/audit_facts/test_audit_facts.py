@@ -4,8 +4,10 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import (
+    project_with,
+)
 from sqlbuild.compiler.compile.types import CompiledAuditView, CompiledProjectView
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.rule_engine.classes.audit_facts import AuditFacts
 from sqlbuild.rule_engine.models import Model
 from tests.unit.src.sqlbuild.rule_engine.classes.audit_facts._test_types import (

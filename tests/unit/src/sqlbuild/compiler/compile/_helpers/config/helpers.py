@@ -1,28 +1,32 @@
 """Helpers for model configuration reuse and native validation tests."""
 
 from pathlib import Path
+from typing import cast
 
 import sqlbuild._native as _native
-from sqlbuild._native import build_compile_inputs, discover_project_inputs
-from sqlbuild.compiler.compile._helpers.attachment.model_config import (
-    build_native_model_config,
+from sqlbuild._native import (
+    build_compile_inputs,
+    discover_project_inputs,
     native_model_config_session,
-    native_validation_error,
 )
+from sqlbuild.compiler.compile._helpers.render.templating import record_template_reads
 from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     NativeModelConfigInputs,
     NativeModelConfigSession,
 )
 from sqlbuild.compiler.compile.types import CompileInputsView
-from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
+from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     MaterializationDefaultsConfig,
     ProjectConfig,
+    ResolvedTableType,
+    ResolvedTimeTravelRetention,
     SchemaColumn,
     TargetConfig,
 )
+from sqlbuild.spec.contracts.types import TableType, TableTypeSource, TimeTravelRetentionSource
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     DUCKDB_COMPILE_ADAPTER_CONTEXT,
 )
@@ -83,7 +87,7 @@ def validate_natively(  # noqa: PLR0913
     )
     assert not isinstance(outcome, int)
     for error in filter(None, (outcome,)):
-        raise native_validation_error(error=error, values=config.values)
+        raise native_config_error(error=error, values=config.values)
 
 
 def build_config_natively(  # noqa: PLR0913
@@ -117,16 +121,32 @@ def build_config_natively(  # noqa: PLR0913
             ({"orders"}, set(), set(), set(), set()), set(), False
         ),
     )
-    return build_native_model_config(
-        session=session,
-        model_file=DiscoveredSqlModelFile(
-            file_path=Path("models/marts/orders.sql"),
-            relative_path=Path("models/marts/orders.sql"),
-            contents="SELECT 1",
-            header_values=model_header_values,
-            header_column_locations={},
-            output_column_locations={},
-            query_sql="SELECT 1",
-        ),
-        matched_path_default=matched_path_default,
+    built: object = session.builder.model_config(
+        model_header_values,
+        (matched_path_default, "orders"),
+        native_config_classes(session=session),
     )
+    for error in filter(_is_config_error, (built,)):
+        raise native_config_error(error=cast(_native.NativeConfigError, error))
+    return cast(CompileModelConfig, built)
+
+
+def native_config_classes(*, session: NativeModelConfigSession) -> dict[str, object]:
+    """The builder, storage defaults and classes a model's `CompileModelConfig` is made of."""
+
+    return {
+        "builder": session.builder,
+        "inherited_storage": session.inherited_storage,
+        "table_backed": ("table", "incremental", "snapshot"),
+        "compile_model_config": CompileModelConfig,
+        "resolved_retention": ResolvedTimeTravelRetention,
+        "retention_source": TimeTravelRetentionSource.MODEL,
+        "resolved_table_type": ResolvedTableType,
+        "table_type": TableType,
+        "table_type_source": TableTypeSource.MODEL,
+        "record_template_reads": record_template_reads,
+    }
+
+
+def _is_config_error(value: object) -> bool:
+    return isinstance(value, _native.NativeConfigError)

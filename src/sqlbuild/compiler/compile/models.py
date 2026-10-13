@@ -385,6 +385,23 @@ class DeclarationExpansionResult:
 
 
 @dataclass(frozen=True)
+class VisibleModelDeclarations:
+    """One model's visible declarations and macros, as the native model loop resolves them."""
+
+    local_enums: dict[str, EnumDeclaration]
+    local_constants: dict[str, ConstantDeclaration]
+    enums: dict[str, EnumDeclaration]
+    constants: dict[str, ConstantDeclaration]
+    inaccessible_enums: dict[str, DeclarationRecord]
+    inaccessible_constants: dict[str, DeclarationRecord]
+    enum_visibility: dict[str, tuple[VisibilityRecord, ...]]
+    constant_visibility: dict[str, tuple[VisibilityRecord, ...]]
+    macros: dict[str, LoadedMacro]
+    macro_records: dict[str, DeclarationRecord]
+    inaccessible_macros: dict[str, DeclarationRecord]
+
+
+@dataclass(frozen=True)
 class DeclarationResolutionContext:
     """Declarations visible during one authored SQL expansion."""
 
@@ -496,26 +513,6 @@ class SqlReferenceScan:
 
     references: tuple[CompileSqlReference, ...]
     invalid_calls: tuple[InvalidSqlReferenceCall, ...] = ()
-
-
-@dataclass(frozen=True)
-class SqlReferenceSourceMap:
-    """Where the authored body starts in its file and the expansion passes from it to the SQL."""
-
-    body_start: Callable[[], int | None]
-    passes: tuple[tuple[ExpansionSpan, ...], ...]
-
-
-@dataclass(frozen=True)
-class SqlReferenceOrigin:
-    """The authored file that SQL handed to reference extraction came from."""
-
-    file_path: Path
-    relative_path: Path
-    contents: str
-    resource_type: CompiledResourceType | None = None
-    resource_name: str | None = None
-    source_map: SqlReferenceSourceMap | None = None
 
 
 @dataclass(frozen=True)

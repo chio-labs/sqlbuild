@@ -126,3 +126,11 @@ debug = false
 
 [profile.release]
 strip = "symbols"
+
+# Local iteration: release-level optimisation with incremental builds, so rebuilding after a
+# focused change does not recompile the whole binding crate. CI and wheels use `release`.
+[profile.fast]
+inherits = "release"
+incremental = true
+codegen-units = 256
+strip = "none"

@@ -14,6 +14,9 @@ from threading import Event
 from typing import Any
 
 import sqlbuild._native as _native
+from sqlbuild._native import (
+    project_with,
+)
 from sqlbuild.compiler.compile.constants import MACRO_TOKEN
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
@@ -28,7 +31,6 @@ from sqlbuild.compiler.compile.types import (
     CompileInputsView,
     ModelInput,
 )
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.lint.classes.stop_context import LintStopContext

@@ -5,10 +5,8 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
+from sqlbuild._native import infer_native_expression_source_shapes
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.analysis_session.main._infer_native_expression_source_shapes import (
-    infer_native_expression_source_shapes,
-)
 from sqlbuild.compiler.compile._helpers.analysis.reference_names import table_function_analysis_name
 from sqlbuild.compiler.compile.models import (
     CompileSqlReference,

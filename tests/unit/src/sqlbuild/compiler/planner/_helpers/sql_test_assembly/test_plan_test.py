@@ -5,6 +5,9 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import (
+    project_with,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
@@ -20,7 +23,6 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlTestCte,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType, SqlTestMode
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, DiscoveredSqlTestFile
 from sqlbuild.compiler.planner._helpers.sql_tests.native_planning import (
     plan_compiled_sql_test_artifacts,

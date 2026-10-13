@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 from sqlbuild.sql_values.models import SqlValue
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
     from pathlib import Path
 
     import sqlbuild._native as _native
@@ -673,3 +673,4 @@ class SqlTestMode(StrEnum):
 
 
 type SqlReferenceScanFailure = tuple[str, int]
+type PythonResourceRow = tuple[str, str, str | None, Callable[[], SourceLocation], str]

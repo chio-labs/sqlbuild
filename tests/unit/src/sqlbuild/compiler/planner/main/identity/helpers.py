@@ -1,6 +1,9 @@
 from dataclasses import replace
 from pathlib import Path
 
+from sqlbuild._native import (
+    compiled_model_record,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModel,
@@ -10,7 +13,6 @@ from sqlbuild.compiler.compile.models import (
     FunctionReturnColumn,
 )
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
-from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.planner._helpers.graph.core import build_downstream_deps
 from sqlbuild.compiler.planner._helpers.identity.direct import (
     build_direct_model_version_identities,

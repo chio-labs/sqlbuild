@@ -6,6 +6,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from sqlbuild._native import (
+    project_with,
+)
 from sqlbuild.adapter.contract.models import LifeCycleEvent, QueryResult
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
@@ -29,7 +32,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     FunctionLanguage,
 )
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,

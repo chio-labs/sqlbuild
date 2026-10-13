@@ -10,8 +10,10 @@ from pathlib import Path
 import pytest
 
 import sqlbuild._native as native_module
+from sqlbuild._native import (
+    project_with,
+)
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from tests.integration.src.sqlbuild.compiler.helpers import (
     GoldenEntry,
     golden_differences,
@@ -32,14 +34,14 @@ from tests.integration.src.sqlbuild.compiler.semantic_checks.helpers import (
     completion_view,
     files_with_non_ascii,
     generated_semantic_files,
+    has_blocking_binding,
     native_completion,
     note_kinds,
     outcome_label,
     proven_output_count,
-    record_native_statuses,
-    record_session_models,
     semantic_outcome,
     session_corpus_files,
+    session_fact_models,
     with_dialect,
     without_session,
 )
@@ -78,7 +80,7 @@ def test_given_generated_failing_projects_when_completing_natively_then_matches_
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     rng: random.Random = random.Random(test_case.seed)
-    statuses: Counter[str] = record_native_statuses(monkeypatch=monkeypatch)
+    statuses: Counter[str] = Counter()
     codes: Counter[str] = Counter()
     golden: list[GoldenEntry] = []
     for index in range(test_case.count):
@@ -93,6 +95,9 @@ def test_given_generated_failing_projects_when_completing_natively_then_matches_
         views: dict[str, object] = {}
         for dialect in test_case.dialects:
             native: CompiledProjectView = completed_natively(with_dialect(captured, dialect))
+            statuses["completion_native"] += 1
+            statuses["diagnostics_native"] += len(native.diagnostics)
+            statuses["type_recovery_planned"] += has_blocking_binding(captured.project)
             codes.update(item.code for item in native.diagnostics)
             codes.update(note_kinds(native, _NOTE_KINDS))
             views[dialect] = completion_view(native)
@@ -261,7 +266,7 @@ def test_given_compiles_when_completing_from_the_session_then_matches_payload_an
         )
         for index in range(test_case.count)
     ]
-    selections: list[frozenset[str]] = record_session_models(monkeypatch=monkeypatch)
+    selections: list[frozenset[str]] = [session_fact_models(inputs) for inputs in captured]
     codes: Counter[str] = Counter()
     golden: list[GoldenEntry] = []
     payload_views: list[tuple[object, ...]] = []

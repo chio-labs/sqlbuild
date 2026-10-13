@@ -8,6 +8,9 @@ from typing import Any, cast
 import pytest
 
 import sqlbuild._native as _native
+from sqlbuild._native import (
+    project_with,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     LoadedMacro,
@@ -18,7 +21,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledSeedView,
     CompiledSourceView,
 )
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import DiscoveredSqlHookFile, SqlHookEntry
 from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ChainStep, PlanOutput, SqlTestPlanEntry

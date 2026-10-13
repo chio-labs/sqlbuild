@@ -6,10 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.analysis_session.main._dynamic_contract_proof import dynamic_contract_proof
-from sqlbuild.compiler.analysis_session.main._session_outcome_analysis import (
-    session_outcome_analysis,
-)
+from sqlbuild._native import dynamic_contract_proof, session_outcome_analysis
 from sqlbuild.compiler.compile._helpers.assembly.targets import build_model_relation_target
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,

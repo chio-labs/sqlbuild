@@ -849,9 +849,8 @@ class DescriptionInputClassificationCase:
 @dataclass(frozen=True)
 class CollectedReferenceCallSyntaxTestCase:
     description: str
-    contents: str
     sql: str
-    expected_diagnostics: tuple[tuple[str, str, Path, SourceLocation | None], ...]
+    expected_diagnostics: tuple[tuple[str, str, Path | None, SourceLocation | None], ...]
 
 
 @dataclass(frozen=True)

@@ -15,6 +15,7 @@ from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt
 from sqlbuild.cli.entry.models import CompileCommandRequest, CompileProfileFlags
 from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
+from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompileAnalysisSelection,
@@ -22,7 +23,9 @@ from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
     CompiledLineageColumnFact,
+    CompiledModel,
     CompiledObjectKey,
+    CompiledProject,
     CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
@@ -38,21 +41,36 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlScenarioInput,
     CompileSqlTestInput,
     DeclarationScopeBuild,
+    DeclarationScopeResolver,
     DynamicColumnContractProof,
     FunctionArgument,
     FunctionReturnColumn,
     InferredColumn,
     LoadedMacro,
     MacroContext,
+    ModelInputBuildContext,
+    NativeModelConfigInputs,
+    NativeModelConfigSession,
+    PythonSqlReferenceReport,
     StaticMacroExport,
     StaticMacroFault,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    AuditInput,
+    CompiledAuditView,
+    CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
+    CompiledSeedView,
+    CompiledSourceView,
     CompileInputsView,
+    FunctionInput,
     FunctionLanguage,
+    ModelInput,
+    SeedInput,
+    SourceInput,
+    TypedSqlValueRenderer,
 )
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
@@ -140,6 +158,7 @@ from sqlbuild.spec.contracts.models import (
     SourceLocation,
     TargetConfig,
 )
+from sqlbuild.sql_values.models import SqlValue
 
 BUILD_IDENTITY: str
 
@@ -768,6 +787,112 @@ class NativeCompiledProject:
     def graph_builds(self) -> int: ...
     def __eq__(self, other: object) -> bool: ...
 
+def compiled_model_record(model: CompiledModelView) -> CompiledModel: ...
+def compiled_audit_record(audit: CompiledAuditView) -> CompiledAudit: ...
+def compiled_function_record(function: CompiledFunctionView) -> CompiledFunction: ...
+def compiled_source_record(source: CompiledSourceView) -> CompiledSource: ...
+def compiled_seed_record(seed: CompiledSeedView) -> CompiledSeed: ...
+def compiled_project_record(
+    project: CompiledProjectView, *, include_sql_expansions: bool = True
+) -> CompiledProject: ...
+def with_binding_diagnostics(
+    *, model: CompiledModelView, diagnostics: tuple[CompilerDiagnostic, ...]
+) -> CompiledModelView: ...
+def with_type_recovery(
+    *,
+    model: CompiledModelView,
+    diagnostics: tuple[CompilerDiagnostic, ...],
+    poisoned: frozenset[tuple[str, str]],
+) -> CompiledModelView: ...
+def project_with(*, project: CompiledProjectView, **changes: Any) -> CompiledProjectView: ...
+def inputs_with(*, inputs: CompileInputsView, **changes: Any) -> CompileInputsView: ...
+def compile_inputs_view(
+    *, fields: dict[str, Any], native_project: NativeCompiledProject | None
+) -> CompileInputsView: ...
+def plain_typed_value(value: SqlValue) -> object: ...
+def declaration_rows(
+    *, enums: Sequence[EnumDeclaration], constants: Sequence[ConstantDeclaration]
+) -> tuple[list[tuple[object, ...]], list[tuple[object, ...]]]: ...
+def record_model_analyses(
+    *, project: NativeCompiledProject, models: Sequence[CompiledModelView]
+) -> int: ...
+def compiled_project_facts(project: CompiledProjectView) -> NativeCompiledProject: ...
+def attach_resources(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    native_project: NativeCompiledProject,
+    settings: tuple[SettingsConfig, TargetConfig | None, str],
+    no_sql_validation: bool,
+    python_functions_inherit_default_namespace: bool,
+) -> tuple[tuple[SeedInput, ...], tuple[FunctionInput, ...], tuple[SourceInput, ...]]: ...
+def attach_checks(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    native_project: NativeCompiledProject,
+    settings: tuple[SettingsConfig, TypedSqlValueRenderer, SqlLexicalSyntax],
+    scan_cache: SqlTestScanCache,
+    source_inputs: tuple[SourceInput, ...],
+) -> tuple[
+    tuple[CompileSqlTestInput, ...],
+    tuple[CompileSqlScenarioInput, ...],
+    tuple[AuditInput, ...],
+    tuple[CompilerDiagnostic, ...],
+]: ...
+def build_effective_connection(
+    *,
+    project_config: ProjectConfig,
+    local_config: LocalConfig,
+    target_config: TargetConfig | None,
+    effective_vars: dict[str, object],
+) -> dict[str, object]: ...
+def build_effective_settings(
+    *, project_config: ProjectConfig, local_config: LocalConfig
+) -> SettingsConfig: ...
+def build_effective_vars(
+    *,
+    project_config: ProjectConfig,
+    local_config: LocalConfig,
+    target_config: TargetConfig | None,
+    cli_vars: dict[str, object],
+) -> dict[str, object]: ...
+def native_model_config_session(
+    *, inputs: NativeModelConfigInputs, validator: NativeModelValidator
+) -> NativeModelConfigSession: ...
+def build_model_inputs(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    context: ModelInputBuildContext,
+    no_sql_validation: bool = False,
+    defer_model_sql_validation: bool = False,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    native_project: NativeCompiledProject,
+) -> tuple[ModelInput, ...]: ...
+def build_compile_target_context(
+    *, discovered_inputs: DiscoveredProjectInputs, selected_target: str | None, no_cache: bool
+) -> tuple[str | None, TargetConfig | None, Path | None]: ...
+def build_effective_target_namespace(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    selected_target: str | None,
+    connection_database: object | None,
+    connection_schema: object | None,
+    default_database: str | None,
+    default_schema: str | None,
+) -> tuple[str | None, TargetConfig | None, str | None, str | None]: ...
+def build_declaration_scope(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    loaded_macros: dict[str, LoadedMacro],
+    sql_lexical_syntax: SqlLexicalSyntax,
+    compile_cache_dir: Path | None = None,
+) -> DeclarationScopeBuild: ...
+def rebind_declaration_scope(
+    *,
+    scope: DeclarationScopeBuild,
+    discovered_inputs: DiscoveredProjectInputs,
+    loaded_macros: dict[str, LoadedMacro],
+) -> DeclarationScopeBuild | None: ...
+
 class NativeMacroExpansion:
     def __init__(
         self,
@@ -1308,7 +1433,14 @@ def unknown_mapping_keys(
     keys: list[tuple[str, bool]], allowed: list[str], /
 ) -> tuple[str, str] | None: ...
 def unsupported_keys_help(keys: list[str], supported_keys: list[str], /) -> str: ...
-def resource_sql_diagnostic_rows(catalog: object, request: object, /) -> list[object]: ...
+def semantic_help_catalogue() -> list[tuple[str, str]]: ...
+def resource_sql_diagnostics_of(
+    catalog: object,
+    project: Any,
+    shapes: dict[str, dict[str, str]],
+    profile: ExpressionInferenceProfile,
+    /,
+) -> tuple[CompilerDiagnostic, ...]: ...
 def compiler_query_hash(sql: str, dialect: str | None, /) -> str: ...
 def function_definition_hash(sql: str, language: str, dialect: str | None, /) -> str: ...
 def normalize_query_text(sql: str, /) -> str: ...
@@ -1377,10 +1509,11 @@ def read_scope_index_cache(path: Path, fingerprint: str, /) -> ScopeIndex | None
 def write_scope_index_cache(
     location: tuple[Path, str], fingerprint: str, index: ScopeIndex, /
 ) -> bool: ...
-def scope_schema_usages(
-    schemas: list[tuple[str, str | None, list[tuple[str, str | None]]]],
-    records: list[tuple[tuple[str, str], tuple[str, str, tuple[str, str] | None, str | None, str]]],
-) -> tuple[list[tuple[int, int]], list[tuple[list[str], str, str, str]], str | None]: ...
+def model_schema_scope_usages(
+    schema_files: Sequence[DiscoveredModelSchemaFile],
+    resolver: DeclarationScopeResolver | None,
+    /,
+) -> tuple[UsageRecord, ...]: ...
 
 class NativeConfigError:
     class_name: str
@@ -1605,35 +1738,33 @@ def start_model_analysis_session(
     cache: tuple[str, str] | None = None,
     adapter_rules: tuple[Mapping[str, Callable[..., object]], type] | None = None,
 ) -> NativeModelAnalysisSession: ...
-def prove_dynamic_column_contracts(
-    request: tuple[
-        str,
-        list[tuple[str, list[tuple[str, str]]]],
-        list[tuple[str, list[tuple[str, str]]]],
-        list[tuple[str, list[tuple[str, str]]]],
-        list[tuple[str, list[tuple[str, str, str, str, str, str | None]]]],
-        list[tuple[str, list[tuple[str, str, str, str, str, str | None]]]],
-    ],
-    /,
-) -> list[_PivotContractRow]: ...
-def infer_query_columns(
-    catalog: object | None,
-    request: tuple[
-        str,
-        list[tuple[str, str]],
-        list[tuple[str, str]],
-        list[tuple[str, list[tuple[str, str]]]],
-        list[tuple[str, list[tuple[str, str]]]],
-        list[tuple[object, ...]],
-        str,
-    ],
-    adapter_rules: tuple[Mapping[str, Callable[..., object]], type] | None = None,
+def analyze_native_model_sql(*, request: Any) -> Any: ...
+def session_outcome_analysis(
+    *, session: Any, position: int, placeholders: dict[str, str] | None
+) -> Any: ...
+def dynamic_contract_proof(row: Any, /) -> Any: ...
+def infer_native_query_column_rows(
+    *,
+    queries: Sequence[Any],
+    profile: Any,
+    column_nullability_by_table: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> list[tuple[bool, list[tuple[str, str | None, str]] | None, bool]]: ...
-def infer_expression_source_shapes(
-    catalog: object,
-    request: tuple[str, bool, list[tuple[str, str]], list[tuple[str, str]], list[str]],
-    adapter_rules: tuple[Mapping[str, Callable[..., object]], type] | None = None,
-) -> list[list[tuple[str, str]] | None]: ...
+def infer_native_query_columns(
+    *,
+    queries: Sequence[Any],
+    profile: Any,
+    column_types_by_table: Mapping[str, Mapping[str, str]] | None = None,
+    column_nullability_by_table: Mapping[str, Mapping[str, Any]] | None = None,
+) -> tuple[Any, ...]: ...
+def infer_native_expression_source_shapes(
+    *, expressions: tuple[str, ...], profile: Any
+) -> tuple[dict[str, str] | None, ...]: ...
+def prove_native_dynamic_contracts(
+    *,
+    session: NativeModelAnalysisSession | None,
+    tables: Any,
+    models: tuple[tuple[str, tuple[Any, ...]], ...],
+) -> tuple[Any, ...]: ...
 def _oracle_names_set_operation(sql: str, /) -> bool: ...
 def _oracle_cte_fact_recovery(
     request: tuple[
@@ -1649,112 +1780,19 @@ def _oracle_cte_fact_recovery(
 ) -> tuple[str | None, list[tuple[str, str]], list[tuple[str, str]], list[str], list[str]]: ...
 
 # Native analysis: semantic completion.
-class SemanticTypeRecovery:
-    @property
-    def status(self) -> str: ...
-    @property
-    def poisoned(self) -> list[tuple[str, str]]: ...
-    @property
-    def revalidated(self) -> list[int]: ...
-    def finish(
-        self, revised: list[list[tuple[str, int | None, int | None]]], /
-    ) -> tuple[list[tuple[int, str | None]], list[list[int]]]: ...
-
-def plan_semantic_type_recovery(
-    catalog: object,
-    request: tuple[
-        str | None,
-        list[
-            tuple[
-                str,
-                str,
-                list[str] | None,
-                list[str],
-                list[tuple[str, list[tuple[str, str]]]] | None,
-                list[tuple[int, str, str, bool]],
-                list[tuple[int, str, str, int | None, int | None]],
-            ]
-        ],
-        list[tuple[int, str, bool, str | None]],
+def complete_semantic_project(
+    *,
+    project: Any,
+    profile: Any,
+    binding_results: dict[
+        str, list[tuple[str, str, int | None, int | None, int | None, int | None, str]]
     ],
+    resource_sql_analysis: bool,
     session: NativeModelAnalysisSession | None = None,
-    /,
-) -> SemanticTypeRecovery: ...
-def check_semantic_metadata_rows(
-    catalog: object,
-    request: tuple[
-        str | None,
-        bool,
-        list[tuple[str, str]],
-        list[tuple[str, list[tuple[str, str]]]],
-        list[tuple[str, list[tuple[str, str]]]],
-        list[tuple[object, ...]],
-        list[str],
-        list[tuple[str, str | None, int]],
-        list[tuple[int, list[tuple[str, list[str]]]]],
-    ],
-    /,
-) -> tuple[
-    list[
-        tuple[
-            list[tuple[str, str, int, int]],
-            list[tuple[str, str, int, int, bool]],
-            list[tuple[str, str, int, int]],
-        ]
-    ],
-    list[tuple[int, tuple[str, str, int, int]]],
-    list[tuple[int, tuple[str, str, int, int], int]],
-    list[str],
-]: ...
-def complete_semantic_checks(
-    catalog: object,
-    request: tuple[
-        str | None,
-        list[
-            tuple[
-                int,
-                str,
-                str,
-                str | None,
-                str | None,
-                int | None,
-                int | None,
-                tuple[int, int, int | None, int | None] | None,
-                str | None,
-                list[str],
-            ]
-        ],
-        list[
-            tuple[
-                str,
-                str,
-                str,
-                list[str] | None,
-                list[tuple[str, list[tuple[str, str]]]] | None,
-                list[str],
-                str | None,
-            ]
-        ],
-        list[tuple[str, list[tuple[str, str]]]],
-    ],
-    session: NativeModelAnalysisSession | None = None,
-    /,
-) -> tuple[
-    list[
-        tuple[
-            int,
-            str,
-            str | None,
-            list[str],
-            tuple[int, int, int | None, int | None] | None,
-            int | None,
-            int | None,
-            bool,
-        ]
-    ],
-    list[list[int]] | None,
-    list[tuple[int | None, tuple[int, str, str, str] | None]],
-]: ...
+) -> Any: ...
+def semantic_metadata_diagnostics(
+    *, project: Any, profile: Any, resource_sql_analysis: bool
+) -> tuple[Any, ...]: ...
 
 # Native analysis: contracts.
 type _ContractDiagnosticRow = tuple[
@@ -1909,9 +1947,20 @@ def assemble_project_resource_facts(
     list[bool],
     tuple[str, int, str, str, str | None, int | None] | None,
 ]: ...
-def check_native_explicit_references(request_json: str, /) -> str: ...
+def explicit_reference_report(
+    project: Any,
+    settings: dict[str, object],
+    owners: list[tuple[Any, int, list[tuple[str, str, int]]]],
+    /,
+) -> PythonSqlReferenceReport: ...
+def hard_coded_relation_remedy(
+    owner_kind: str, target: tuple[str, str], upstream_loaders: list[tuple[str, str]], /
+) -> str: ...
+def old_name_reference_message(
+    owner_label: str, written: str, method: str, model_name: str, /
+) -> str: ...
 def native_execution_gate_edges(
-    request_json: str, /
+    project: Any, /
 ) -> tuple[
     list[tuple[str, tuple[str, str], tuple[str, str], tuple[str, str]]],
     list[tuple[str, tuple[str, str], tuple[str, str], str, str | None]],

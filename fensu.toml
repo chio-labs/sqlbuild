@@ -24,11 +24,6 @@ exclude = ["tests/e2e/fixtures/**"]
 max_positional_args = 1
 
 [[targets.python.rule_exceptions]]
-rule = "FFS120"
-path = "src/sqlbuild/compiler/compiled_project/main/compiled_project_record.py"
-reason = "Preserve the existing positional project argument while adding an optional keyword-only projection flag for custom-rule hosts."
-
-[[targets.python.rule_exceptions]]
 rule = "FFR001"
 path = "src/sqlbuild/cli/commands/models.py"
 reason = "The TYPE_CHECKING block contains annotation-only imports, avoiding executor and integration imports for read-only commands; runtime declarations remain structured models."
@@ -77,6 +72,11 @@ reason = "The SQL Server backend intentionally owns behavior through its adapter
 rule = "FFR309"
 path = "src/sqlbuild/compiler/lineage/__init__.py"
 reason = "Column lineage is built natively; the package keeps only the lineage models, enums and errors the native graph and its callers share."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/compiler/analysis_session/__init__.py"
+reason = "Model analysis runs natively; the package keeps only the request and result models, row types and constants the native session and its callers share."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR601"

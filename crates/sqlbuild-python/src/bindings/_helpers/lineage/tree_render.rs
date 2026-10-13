@@ -2,7 +2,6 @@
 
 use std::collections::HashSet;
 
-use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
@@ -12,6 +11,8 @@ use sqlbuild_analysis::lineage_graph::main::trace_limit_note::trace_limit_note;
 use sqlbuild_analysis::lineage_graph::main::tree_lines::tree_lines;
 use sqlbuild_analysis::lineage_graph::models::TreeLine;
 use sqlbuild_analysis::lineage_graph::types::TreeVisitor;
+
+use crate::bindings::_helpers::boundary::keyword_request::Request;
 
 const BUILTINS_MODULE: &str = "builtins";
 
@@ -109,48 +110,6 @@ fn serialize_column_edge<'py>(
     payload.set_item("transform", edge.getattr("transform_kind")?.str()?)?;
     payload.set_item("confidence", edge.getattr("confidence")?.str()?)?;
     Ok(payload)
-}
-
-/// Keyword arguments of one call, each required.
-struct Request<'a, 'py> {
-    function: &'static str,
-    arguments: Option<&'a Bound<'py, PyDict>>,
-    py: Python<'py>,
-}
-
-impl<'a, 'py> Request<'a, 'py> {
-    fn new(function: &'static str, arguments: Option<&'a Bound<'py, PyDict>>) -> PyResult<Self> {
-        let py: Python<'py> = match arguments {
-            Some(arguments) => arguments.py(),
-            None => {
-                return Err(PyTypeError::new_err(format!(
-                    "{function}() missing required keyword-only arguments"
-                )));
-            }
-        };
-        Ok(Self {
-            function,
-            arguments,
-            py,
-        })
-    }
-
-    fn py(&self) -> Python<'py> {
-        self.py
-    }
-
-    fn get(&self, name: &str) -> PyResult<Bound<'py, PyAny>> {
-        let value: Option<Bound<'py, PyAny>> = match self.arguments {
-            Some(arguments) => arguments.get_item(name)?,
-            None => None,
-        };
-        value.ok_or_else(|| {
-            PyTypeError::new_err(format!(
-                "{}() missing 1 required keyword-only argument: '{name}'",
-                self.function
-            ))
-        })
-    }
 }
 
 /// `str(value)`, as an f-string renders a callback's text.

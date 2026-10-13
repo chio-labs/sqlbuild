@@ -4,16 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.analysis_session.main._analyze_native_model_sql import (
+from sqlbuild._native import (
     analyze_native_model_sql,
-)
-from sqlbuild.compiler.analysis_session.main._infer_native_expression_source_shapes import (
     infer_native_expression_source_shapes,
-)
-from sqlbuild.compiler.analysis_session.main._prove_native_dynamic_contracts import (
     prove_native_dynamic_contracts,
 )
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.analysis_session.models import (
     NativeModelAnalyses,
     NativeModelAnalysisRequest,

@@ -6,10 +6,8 @@ from dataclasses import replace
 from graphlib import TopologicalSorter
 from typing import Any
 
+from sqlbuild._native import infer_native_query_columns
 from sqlbuild.adapter.contract.models import ColumnInfo, ExpressionInferenceProfile
-from sqlbuild.compiler.analysis_session.main._infer_native_query_columns import (
-    infer_native_query_columns,
-)
 from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeQueryColumns
 from sqlbuild.compiler.compile._helpers.analysis.binding_requests import (
     get_complete_schema_binding_request,

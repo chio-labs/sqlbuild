@@ -5,11 +5,14 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from sqlbuild._native import build_compiled_project, discover_project_inputs
+from sqlbuild._native import (
+    build_compiled_project,
+    compiled_model_record,
+    discover_project_inputs,
+    project_with,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 
 _PROJECT_TOML: str = 'name = "orders"\nadapter = "duckdb"\n[rules]\nselect = []\n'
 

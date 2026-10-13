@@ -33,7 +33,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
                 "infer_native_expression_source_shapes": [ANY],
                 "analyze_native_model_sql": [ANY],
                 "assemble_native_sql_tests": [ANY],
-                "complete_native_semantic_diagnostics": [ANY],
+                "complete_semantic_project": [ANY],
                 "evaluate_native_model_contracts": [ANY],
                 "native_promotion_conflict_diagnostics": [()],
                 "build_compile_lineage": [ANY],
@@ -76,9 +76,7 @@ def test_given_project_when_compiling_then_native_seams_answer(
         assert planned_artifacts
         assert all(isinstance(artifact, NativeSqlTestArtifact) for artifact in planned_artifacts)
         planned_counts.append(len(planned_artifacts))
-        assert isinstance(
-            seams["complete_native_semantic_diagnostics"][0], native_module.NativeProjectView
-        )
+        assert isinstance(seams["complete_semantic_project"][0], native_module.NativeProjectView)
         assert isinstance(seams["evaluate_native_model_contracts"][0], ContractValidationResult)
     assert [
         len(call.args[0].tests) for call in native_sql_test_planning.call_args_list

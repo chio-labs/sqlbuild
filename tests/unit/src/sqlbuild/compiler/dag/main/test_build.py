@@ -13,12 +13,12 @@ from sqlbuild._native import (
     build_compile_inputs,
     build_dag_json,
     discover_project_inputs,
+    project_with,
 )
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.dag.types import NodeKind
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.graph.main.project_lineage_views import project_lineage_views

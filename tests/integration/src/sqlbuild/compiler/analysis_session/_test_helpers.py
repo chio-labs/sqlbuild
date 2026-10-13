@@ -14,13 +14,29 @@ from sqlbuild.adapter.type_system.main.conditional_result_nullability import (
     conditional_result_nullability,
 )
 from sqlbuild.adapter.type_system.main.first_arg_nullability import first_arg_nullability
+from sqlbuild.adapter.type_system.main.safe_cast_nullability import safe_cast_nullability
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
-from sqlbuild.compiler.analysis_session._helpers.profile_rows import nullability_rule_rows
+
+_NULLABILITY_RULE_IDS: dict[object, str] = {
+    first_arg_nullability: "first_arg",
+    conditional_result_nullability: "conditional_result",
+    safe_cast_nullability: "safe_cast",
+}
+
+
+def nullability_rule_rows(profile: ExpressionInferenceProfile) -> list[tuple[str, str]]:
+    """The profile's nullability rules as the native `(name, rule id)` rows."""
+
+    return [
+        (name, _NULLABILITY_RULE_IDS.get(rule, "python"))
+        for name, rule in profile.function_nullability_rules.items()
+    ]
+
 
 type Generate = Callable[[random.Random, list[str], int], str]
 type CteFactView = (

@@ -6,10 +6,12 @@ from typing import Any
 
 import pytest
 
+from sqlbuild._native import (
+    project_with,
+)
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import semantic_shapes
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from tests.integration.src.sqlbuild.compiler.lineage.helpers import compiled_project
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     ExpressionBatchCase,

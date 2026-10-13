@@ -12,6 +12,10 @@ from types import MappingProxyType
 from typing import ClassVar
 
 import sqlbuild._native as _native
+from sqlbuild._native import (
+    compiled_model_record,
+    project_with,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.auditing.types import AuditSeverity
@@ -46,8 +50,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledSourceView,
     SqlTestMode,
 )
-from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
     DiscoveredAuditFile,

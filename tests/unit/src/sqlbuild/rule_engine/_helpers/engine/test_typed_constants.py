@@ -3,7 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compiled_project.main.declaration_rows import declaration_rows
+from sqlbuild._native import (
+    declaration_rows,
+)
 from sqlbuild.compiler.discovery.models import ConstantDeclaration
 from sqlbuild.sql_values.main.normalize import normalize_sql_value
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (

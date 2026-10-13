@@ -8,6 +8,10 @@ from unittest.mock import Mock
 import pytest
 
 import sqlbuild._native as _native
+from sqlbuild._native import (
+    compiled_model_record,
+    project_with,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands._helpers.compile import target_writer as target_writer_module
 from sqlbuild.cli.commands._helpers.compile.target_writer import (
@@ -24,8 +28,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     DiagnosticPhase,
 )
-from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.planner.models import ChainStep, PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql

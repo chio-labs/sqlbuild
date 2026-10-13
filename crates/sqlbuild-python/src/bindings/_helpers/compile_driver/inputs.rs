@@ -9,18 +9,17 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 
 const CALL_STORE_MODULE: &str = "sqlbuild.compiler.compile._helpers.macro_bridge.call_store";
-const ATTACHMENT_MODULE: &str = "sqlbuild.compiler.compile._helpers.attachment.core";
-const DECLARATION_SCOPE_MODULE: &str =
-    "sqlbuild.compiler.compile._helpers.attachment.declaration_scope";
+const ATTACHMENT_MODULE: &str = "sqlbuild._native";
+const DECLARATION_SCOPE_MODULE: &str = "sqlbuild._native";
 const COLLECTOR_MODULE: &str = "sqlbuild.compiler.compile._helpers.diagnostics.collector";
 const CONTEXT_TEMPLATES_MODULE: &str =
     "sqlbuild.compiler.compile._helpers.render.context_templates";
 const MACROS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.macros";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
-const ATTACH_CHECKS_MODULE: &str = "sqlbuild.compiler.compiled_project.main._attach_checks";
-const ATTACH_RESOURCES_MODULE: &str = "sqlbuild.compiler.compiled_project.main._attach_resources";
-const INPUTS_VIEW_MODULE: &str = "sqlbuild.compiler.compiled_project.main._compile_inputs_view";
-const INPUTS_WITH_MODULE: &str = "sqlbuild.compiler.compiled_project.main.inputs_with";
+const ATTACH_CHECKS_MODULE: &str = "sqlbuild._native";
+const ATTACH_RESOURCES_MODULE: &str = "sqlbuild._native";
+const INPUTS_VIEW_MODULE: &str = "sqlbuild._native";
+const INPUTS_WITH_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 
