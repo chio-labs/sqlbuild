@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.auditing.main.evaluate_measurement import evaluate_measurement
+from sqlbuild._native import evaluate_measurement
 from sqlbuild.compiler.auditing.models import (
     MeasurementThresholdBound,
     MeasurementThresholds,

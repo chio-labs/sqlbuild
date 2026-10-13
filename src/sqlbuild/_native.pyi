@@ -21,8 +21,12 @@ from sqlbuild.cli.compile.models import CompileAnalysis
 from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt
 from sqlbuild.cli.entry.models import CompileCommandRequest, CompileProfileFlags
 from sqlbuild.cli.output.models import WrittenTarget
-from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
-from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
+from sqlbuild.compiler.auditing.models import (
+    AuditGateIdentity,
+    MeasurementContract,
+    MeasurementThresholds,
+)
+from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditOutcome, AuditSeverity
 from sqlbuild.compiler.compile.classes.compile_input_reads import CompileInputReads
 from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
 from sqlbuild.compiler.compile.models import (
@@ -131,6 +135,7 @@ from sqlbuild.compiler.pipeline.models import (
     StaticCommandContext,
 )
 from sqlbuild.compiler.planner.models import (
+    AuditPlanEntry,
     DeferralInputs,
     FutureCursorSafetyEvidence,
     MaximumStartSafetyEvidence,
@@ -206,6 +211,7 @@ from sqlbuild.spec.contracts.models import (
     ProjectConfig,
     ScenarioConfig,
     SchemaColumn,
+    SchemaAuditInstance,
     SchemaModelEntry,
     SchemaSeedEntry,
     SettingsConfig,
@@ -2223,6 +2229,31 @@ def semantic_metadata_diagnostics(
 ) -> tuple[Any, ...]: ...
 
 # Native analysis: contracts.
+def build_audit_gate_identity(*, audits: tuple[AuditPlanEntry, ...]) -> AuditGateIdentity: ...
+def evaluate_measurement(
+    *,
+    measured_value: float,
+    sample_count: int | None,
+    minimum_samples: int | None,
+    thresholds: MeasurementThresholds,
+) -> AuditOutcome: ...
+def render_audit_sql(
+    *,
+    unresolved_sql: str,
+    model_locations: Mapping[str, CompiledRelationLocation],
+    seed_locations: Mapping[str, CompiledRelationLocation],
+    source_map: Mapping[str, SourceEntry],
+    adapter: BaseAdapter | None = None,
+    relation_overrides: Mapping[str, str] | None = None,
+) -> str: ...
+def parse_audit_instances(
+    *,
+    raw_audits: object | None,
+    file_path: Path,
+    label: str,
+    error_class: type[Exception],
+    null_as_empty: bool,
+) -> tuple[SchemaAuditInstance, ...]: ...
 def optional_named_string(
     *,
     raw_value: object | None,

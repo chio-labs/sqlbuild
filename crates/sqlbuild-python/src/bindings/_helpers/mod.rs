@@ -1,6 +1,7 @@
 pub(crate) mod analysis;
 pub(crate) mod analysis_session;
 pub(crate) mod attachments;
+pub(crate) mod auditing;
 pub(crate) mod authored_values;
 pub(crate) mod boundary;
 pub(crate) mod cache;

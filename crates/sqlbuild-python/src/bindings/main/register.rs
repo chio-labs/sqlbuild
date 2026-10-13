@@ -4,7 +4,7 @@ use sqlbuild_rules::constants::{API_VERSION, NATIVE_BUILD_IDENTITY};
 
 use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
 use crate::bindings::_helpers::{
-    analysis, analysis_session, attachments, authored_values, boundary, cache, cli,
+    analysis, analysis_session, attachments, auditing, authored_values, boundary, cache, cli,
     compile_attachment, compile_command, compile_driver, compile_outputs, compiled_project,
     contracts, dag_artifact, discovery, fingerprints, frontier, graph, lineage, macro_bridge,
     manifest, model_config, plan_output, project_assembly, refactor, references, render,
@@ -50,6 +50,7 @@ fn register_project_stages(module: &Bound<'_, PyModule>) -> PyResult<()> {
     references::registration::register(module)?;
     authored_values::registration::register(module)?;
     result_output::registration::register(module)?;
+    auditing::registration::register(module)?;
     Ok(())
 }
 
