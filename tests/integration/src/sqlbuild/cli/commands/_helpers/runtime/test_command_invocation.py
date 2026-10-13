@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.cli.commands import models as command_models
-from sqlbuild.cli.commands._helpers.audit.invocation import resolve_audit_invocation
 from sqlbuild.cli.commands._helpers.runtime.command_invocation import (
     resolve_command_invocation,
     resolve_reported_command_invocation,
@@ -28,7 +27,10 @@ _PROJECT_TOML: str = (
     (
         CommandInvocationTestCase(
             description="audit json output reports progress on stderr",
-            resolve=resolve_audit_invocation,
+            resolve=partial(
+                resolve_reported_command_invocation,
+                invocation_type=command_models.AuditInvocation,
+            ),
             request_type=command_models.AuditCommandRequest,
             json_output=True,
             expected_invocation_type_name="AuditInvocation",

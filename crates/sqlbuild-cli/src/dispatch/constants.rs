@@ -286,9 +286,9 @@ const AUDIT_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const AUDIT_ROUTE: Route = routed(
     "run_audit",
-    ("sqlbuild.cli.commands.main.execution._audit", "run_audit"),
+    ("sqlbuild._native", "run_audit_command"),
     &AUDIT_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const LOAD_FIELDS: [Field; 11] = [

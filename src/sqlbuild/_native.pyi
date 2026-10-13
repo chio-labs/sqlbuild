@@ -19,6 +19,7 @@ from sqlbuild.adapter.contract.types import (
 from sqlbuild.adapter.relations.models import InspectionQueryRecord
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.models import (
+    AuditCommandRequest,
     CheckCommandRequest,
     CloneCommandRequest,
     DiffCommandRequest,
@@ -2877,6 +2878,7 @@ def write_check_results(
 def format_check_json(*, results: tuple[PythonCheckExecutionResult, ...]) -> str: ...
 def run_test_command(*, request: TestCommandRequest) -> int: ...
 def run_seed_command(*, request: SeedCommandRequest) -> int: ...
+def run_audit_command(*, request: AuditCommandRequest) -> int: ...
 def format_parameterized_test_label(
     *,
     name: str,

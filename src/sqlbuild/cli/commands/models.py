@@ -48,7 +48,6 @@ if TYPE_CHECKING:
     from sqlbuild.cli.commands.classes.direct_python_lifecycle_state import (
         DirectPythonLifecycleState,
     )
-    from sqlbuild.cli.progress.classes.audit_progress_reporter import AuditProgressReporter
     from sqlbuild.compiler.compile.models import (
         CompiledSqlScenario,
         CompilerDiagnostic,
@@ -99,16 +98,6 @@ class AuditInvocation:
     progress_stream: TextIO
     connection_progress: ConnectionProgressReporter
     planning_progress: PlanningProgressReporter
-
-
-@dataclass(frozen=True)
-class AuditExecutionPreparation:
-    """Prepared nested progress and execution reporters for audit runs."""
-
-    progress: AuditProgressReporter
-    execution_connection_progress: ConnectionProgressReporter
-    effective_concurrency: int
-    worker_count: int
 
 
 @dataclass(frozen=True)

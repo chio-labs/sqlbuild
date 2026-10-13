@@ -16,6 +16,7 @@ from duckdb import DuckDBPyConnection
 from sqlbuild._native import (
     discover_project_inputs,
     format_load_execution_json,
+    run_audit_command,
     run_load_command,
     run_test_command,
     select_load_entries,
@@ -23,7 +24,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.main.execution._audit import run_audit
 from sqlbuild.cli.commands.main.execution._build import run_build
 from sqlbuild.cli.commands.main.execution._scenario import run_scenario
 from sqlbuild.cli.commands.main.project._plan import run_plan
@@ -1229,7 +1229,7 @@ def test_given_no_managed_source_read_ambiguity_when_building_then_source_deferr
         setup_connection.close()
 
     command_runners: dict[str, Callable[..., int]] = {
-        "audit": lambda **kwargs: run_audit(AuditCommandRequest(**kwargs)),
+        "audit": lambda **kwargs: run_audit_command(request=AuditCommandRequest(**kwargs)),
         "build": lambda **kwargs: run_build(BuildCommandRequest(**kwargs)),
         "scenario": lambda **kwargs: run_scenario(ScenarioTestCommandRequest(**kwargs)),
         "test": lambda **kwargs: run_test_command(request=TestCommandRequest(**kwargs)),
@@ -1360,7 +1360,7 @@ def test_given_source_deferral_when_writing_artifacts_then_sql_uses_deferred_rel
         setup_connection.close()
 
     command_runners: dict[str, Callable[..., int]] = {
-        "audit": lambda **kwargs: run_audit(AuditCommandRequest(**kwargs)),
+        "audit": lambda **kwargs: run_audit_command(request=AuditCommandRequest(**kwargs)),
         "build": lambda **kwargs: run_build(BuildCommandRequest(**kwargs)),
     }
     exit_code: int = command_runners[test_case.command](
