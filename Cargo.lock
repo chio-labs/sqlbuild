@@ -1210,6 +1210,9 @@ dependencies = [
 [[package]]
 name = "sqlbuild-core"
 version = "0.156.1"
+dependencies = [
+ "regex",
+]
 
 [[package]]
 name = "sqlbuild-cursor"

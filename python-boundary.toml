@@ -60,6 +60,46 @@ reason = "public-api"
 note = "Public custom-rule API and test helper."
 
 [[stays]]
+path = "diagnostics/_helpers/logging.py"
+reason = "public-api"
+note = "Installs SQLBuild's handlers on Python's logging, which users and integrations configure."
+
+[[stays]]
+path = "diagnostics/_helpers/logging_formatters.py"
+reason = "public-api"
+note = "Python logging formatters for console and file diagnostics."
+
+[[stays]]
+path = "diagnostics/_helpers/redaction.py"
+reason = "public-api"
+note = "Collects redacted extra fields from a Python LogRecord; the redaction itself is native."
+
+[[stays]]
+path = "diagnostics/classes/diagnostic_record_redactor.py"
+reason = "public-api"
+note = "Redaction entry points that Python logging handlers call per record."
+
+[[stays]]
+path = "diagnostics/classes/diagnostics_console_formatter.py"
+reason = "public-api"
+note = "A logging.Formatter subclass for the console stream."
+
+[[stays]]
+path = "diagnostics/classes/dynamic_stderr_handler.py"
+reason = "public-api"
+note = "A logging.Handler that follows the current sys.stderr."
+
+[[stays]]
+path = "diagnostics/classes/invocation_diagnostic_routing.py"
+reason = "public-api"
+note = "Attaches and removes per-invocation logging handlers."
+
+[[stays]]
+path = "diagnostics/classes/log_record_route_filter.py"
+reason = "public-api"
+note = "A logging.Filter that routes records to destinations."
+
+[[stays]]
 path = "rule_engine/_helpers/host"
 reason = "user-code"
 note = "Subprocess host that loads and runs user rule modules."
