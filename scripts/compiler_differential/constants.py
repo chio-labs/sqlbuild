@@ -661,7 +661,6 @@ ANALYSIS_INDIRECT_KINDS: dict[str, str] = {
 ANALYSIS_CODE_SCAN_ROOTS: tuple[str, ...] = (
     "compile/_helpers/assembly",
     "compile/_helpers/analysis",
-    "compile/_helpers/attachment/model_config.py",
     "compile/_helpers/diagnostics",
     "contracts",
     "pipeline/_helpers/target_validation.py",

@@ -11,9 +11,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 
 const COLLECTOR_MODULE: &str = "sqlbuild.compiler.compile._helpers.diagnostics.collector";
-const PROJECT_WITH_MODULE: &str = "sqlbuild.compiler.compiled_project.main.project_with";
-const RECORD_ANALYSES_MODULE: &str =
-    "sqlbuild.compiler.compiled_project.main._record_model_analyses";
+const PROJECT_WITH_MODULE: &str = "sqlbuild._native";
+const RECORD_ANALYSES_MODULE: &str = "sqlbuild._native";
 const EXPLICIT_REFERENCES_MODULE: &str =
     "sqlbuild.compiler.compile._helpers.explicit_references.checks";
 const ACTIVE_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.main.active_macro_bridge";

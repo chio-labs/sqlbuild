@@ -3,13 +3,15 @@ from typing import Any
 
 import pytest
 
+from sqlbuild._native import (
+    project_with,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledSqlScenario,
     CompiledSqlTest,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType, SqlTestMode
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlScenarioFile,
 )

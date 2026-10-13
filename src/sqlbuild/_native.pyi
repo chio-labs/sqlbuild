@@ -15,6 +15,7 @@ from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt
 from sqlbuild.cli.entry.models import CompileCommandRequest, CompileProfileFlags
 from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
+from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompileAnalysisSelection,
@@ -22,7 +23,9 @@ from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
     CompiledLineageColumnFact,
+    CompiledModel,
     CompiledObjectKey,
+    CompiledProject,
     CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
@@ -45,16 +48,29 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
     LoadedMacro,
     MacroContext,
+    ModelInputBuildContext,
+    NativeModelConfigInputs,
+    NativeModelConfigSession,
     PythonSqlReferenceReport,
     StaticMacroExport,
     StaticMacroFault,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    AuditInput,
+    CompiledAuditView,
+    CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
+    CompiledSeedView,
+    CompiledSourceView,
     CompileInputsView,
+    FunctionInput,
     FunctionLanguage,
+    ModelInput,
+    SeedInput,
+    SourceInput,
+    TypedSqlValueRenderer,
 )
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
@@ -142,6 +158,7 @@ from sqlbuild.spec.contracts.models import (
     SourceLocation,
     TargetConfig,
 )
+from sqlbuild.sql_values.models import SqlValue
 
 BUILD_IDENTITY: str
 
@@ -769,6 +786,112 @@ class NativeCompiledProject:
     def compiled_audit(self, index: int) -> NativeCompiledAudit: ...
     def graph_builds(self) -> int: ...
     def __eq__(self, other: object) -> bool: ...
+
+def compiled_model_record(model: CompiledModelView) -> CompiledModel: ...
+def compiled_audit_record(audit: CompiledAuditView) -> CompiledAudit: ...
+def compiled_function_record(function: CompiledFunctionView) -> CompiledFunction: ...
+def compiled_source_record(source: CompiledSourceView) -> CompiledSource: ...
+def compiled_seed_record(seed: CompiledSeedView) -> CompiledSeed: ...
+def compiled_project_record(
+    project: CompiledProjectView, *, include_sql_expansions: bool = True
+) -> CompiledProject: ...
+def with_binding_diagnostics(
+    *, model: CompiledModelView, diagnostics: tuple[CompilerDiagnostic, ...]
+) -> CompiledModelView: ...
+def with_type_recovery(
+    *,
+    model: CompiledModelView,
+    diagnostics: tuple[CompilerDiagnostic, ...],
+    poisoned: frozenset[tuple[str, str]],
+) -> CompiledModelView: ...
+def project_with(*, project: CompiledProjectView, **changes: Any) -> CompiledProjectView: ...
+def inputs_with(*, inputs: CompileInputsView, **changes: Any) -> CompileInputsView: ...
+def compile_inputs_view(
+    *, fields: dict[str, Any], native_project: NativeCompiledProject | None
+) -> CompileInputsView: ...
+def plain_typed_value(value: SqlValue) -> object: ...
+def declaration_rows(
+    *, enums: Sequence[EnumDeclaration], constants: Sequence[ConstantDeclaration]
+) -> tuple[list[tuple[object, ...]], list[tuple[object, ...]]]: ...
+def record_model_analyses(
+    *, project: NativeCompiledProject, models: Sequence[CompiledModelView]
+) -> int: ...
+def compiled_project_facts(project: CompiledProjectView) -> NativeCompiledProject: ...
+def attach_resources(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    native_project: NativeCompiledProject,
+    settings: tuple[SettingsConfig, TargetConfig | None, str],
+    no_sql_validation: bool,
+    python_functions_inherit_default_namespace: bool,
+) -> tuple[tuple[SeedInput, ...], tuple[FunctionInput, ...], tuple[SourceInput, ...]]: ...
+def attach_checks(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    native_project: NativeCompiledProject,
+    settings: tuple[SettingsConfig, TypedSqlValueRenderer, SqlLexicalSyntax],
+    scan_cache: SqlTestScanCache,
+    source_inputs: tuple[SourceInput, ...],
+) -> tuple[
+    tuple[CompileSqlTestInput, ...],
+    tuple[CompileSqlScenarioInput, ...],
+    tuple[AuditInput, ...],
+    tuple[CompilerDiagnostic, ...],
+]: ...
+def build_effective_connection(
+    *,
+    project_config: ProjectConfig,
+    local_config: LocalConfig,
+    target_config: TargetConfig | None,
+    effective_vars: dict[str, object],
+) -> dict[str, object]: ...
+def build_effective_settings(
+    *, project_config: ProjectConfig, local_config: LocalConfig
+) -> SettingsConfig: ...
+def build_effective_vars(
+    *,
+    project_config: ProjectConfig,
+    local_config: LocalConfig,
+    target_config: TargetConfig | None,
+    cli_vars: dict[str, object],
+) -> dict[str, object]: ...
+def native_model_config_session(
+    *, inputs: NativeModelConfigInputs, validator: NativeModelValidator
+) -> NativeModelConfigSession: ...
+def build_model_inputs(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    context: ModelInputBuildContext,
+    no_sql_validation: bool = False,
+    defer_model_sql_validation: bool = False,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    native_project: NativeCompiledProject,
+) -> tuple[ModelInput, ...]: ...
+def build_compile_target_context(
+    *, discovered_inputs: DiscoveredProjectInputs, selected_target: str | None, no_cache: bool
+) -> tuple[str | None, TargetConfig | None, Path | None]: ...
+def build_effective_target_namespace(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    selected_target: str | None,
+    connection_database: object | None,
+    connection_schema: object | None,
+    default_database: str | None,
+    default_schema: str | None,
+) -> tuple[str | None, TargetConfig | None, str | None, str | None]: ...
+def build_declaration_scope(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    loaded_macros: dict[str, LoadedMacro],
+    sql_lexical_syntax: SqlLexicalSyntax,
+    compile_cache_dir: Path | None = None,
+) -> DeclarationScopeBuild: ...
+def rebind_declaration_scope(
+    *,
+    scope: DeclarationScopeBuild,
+    discovered_inputs: DiscoveredProjectInputs,
+    loaded_macros: dict[str, LoadedMacro],
+) -> DeclarationScopeBuild | None: ...
 
 class NativeMacroExpansion:
     def __init__(

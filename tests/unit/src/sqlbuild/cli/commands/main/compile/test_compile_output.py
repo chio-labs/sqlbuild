@@ -6,7 +6,11 @@ from typing import cast
 
 import pytest
 
-from sqlbuild._native import ProjectColumnLineage
+from sqlbuild._native import (
+    ProjectColumnLineage,
+    compiled_model_record,
+    project_with,
+)
 from sqlbuild.cli.commands._helpers.compile.output import (
     format_compile_json,
     format_compile_text,
@@ -17,8 +21,6 @@ from sqlbuild.cli.output.models import (
 )
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompileModelConfig
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
-from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (

@@ -6,6 +6,10 @@ from dataclasses import replace
 from typing import Any
 
 import sqlbuild._native as _native
+from sqlbuild._native import (
+    project_with,
+    with_type_recovery,
+)
 from sqlbuild.compiler.analysis_session.types import DiagnosticRow
 from sqlbuild.compiler.compile.classes.semantic_completion_inputs import SemanticCompletionInputs
 from sqlbuild.compiler.compile.models import (
@@ -16,8 +20,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.compiled_project.main._with_type_recovery import with_type_recovery
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.semantic_checks._helpers.payloads import (
     diagnostic_ids,
     has_blocking_binding,

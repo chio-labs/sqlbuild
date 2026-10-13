@@ -334,7 +334,7 @@ impl NativeCompiledProject {
     }
 
     /// Retain one model's compile-input facts; a name recorded again is replaced in place.
-    fn record_model(&mut self, model: ModelInputPy<'_>) -> PyResult<()> {
+    pub(crate) fn record_model(&mut self, model: ModelInputPy<'_>) -> PyResult<()> {
         compiler_guard(|| {
             let facts: CompiledModelFacts = model_facts(model)?;
             record_model(&mut self.facts, facts);
@@ -343,7 +343,7 @@ impl NativeCompiledProject {
     }
 
     /// Attach a recorded model's typed analysis; `False` when that model was never recorded.
-    fn record_model_analysis(
+    pub(crate) fn record_model_analysis(
         &mut self,
         name: &str,
         columns: AnalysisPy,
@@ -373,7 +373,7 @@ impl NativeCompiledProject {
     }
 
     /// Record each assembled native model view's final typed analysis; return how many.
-    fn record_view_analyses(
+    pub(crate) fn record_view_analyses(
         slf: &Bound<'_, Self>,
         views: Vec<PyRef<'_, NativeCompiledModel>>,
     ) -> PyResult<usize> {
@@ -391,12 +391,15 @@ impl NativeCompiledProject {
     }
 
     /// The compile inputs view of this owner's model inputs with these input fields.
-    fn inputs_view(slf: Bound<'_, Self>, fields: Bound<'_, PyDict>) -> PyResult<NativeInputsView> {
+    pub(crate) fn inputs_view(
+        slf: Bound<'_, Self>,
+        fields: Bound<'_, PyDict>,
+    ) -> PyResult<NativeInputsView> {
         NativeInputsView::new(slf.unbind(), &fields)
     }
 
     /// The compiled project view of this owner's models with these project fields.
-    fn project_view(
+    pub(crate) fn project_view(
         slf: Bound<'_, Self>,
         fields: Bound<'_, PyDict>,
     ) -> PyResult<NativeProjectView> {
@@ -404,7 +407,7 @@ impl NativeCompiledProject {
     }
 
     /// Pair seed declarations with their CSV files and keep them; return each seed's view.
-    fn attach_seeds(
+    pub(crate) fn attach_seeds(
         slf: &Bound<'_, Self>,
         declarations: Vec<(Py<PyAny>, Py<PyAny>)>,
         seed_files: Vec<Py<PyAny>>,
@@ -430,7 +433,7 @@ impl NativeCompiledProject {
     }
 
     /// Attach every discovered source in order with the kept loop; return each source's view.
-    fn attach_sources(
+    pub(crate) fn attach_sources(
         slf: &Bound<'_, Self>,
         rows: Vec<SourceRow>,
         settings: SourceSettings,
@@ -447,7 +450,7 @@ impl NativeCompiledProject {
     }
 
     /// Attach every SQL, then Python, function with the kept loop; return each one's view.
-    fn attach_functions(
+    pub(crate) fn attach_functions(
         slf: &Bound<'_, Self>,
         rows: (Vec<FunctionRow>, Vec<FunctionRow>),
         settings: FunctionSettings,
@@ -495,7 +498,7 @@ impl NativeCompiledProject {
     }
 
     /// Attach every SQL test case, then every scenario, with the kept loop.
-    fn attach_sql_tests(
+    pub(crate) fn attach_sql_tests(
         slf: &Bound<'_, Self>,
         files: Vec<TestFileRow>,
         scenarios: Vec<ScenarioRow>,
@@ -524,7 +527,7 @@ impl NativeCompiledProject {
     }
 
     /// Attach singular, then resource-attached, audits; return views and override warnings.
-    fn attach_audits<'py>(
+    pub(crate) fn attach_audits<'py>(
         slf: &Bound<'py, Self>,
         files: Vec<AuditFileRow>,
         settings: AuditSettings,

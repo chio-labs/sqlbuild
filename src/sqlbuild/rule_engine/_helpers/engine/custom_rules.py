@@ -13,9 +13,11 @@ from typing import Any
 
 import orjson
 
+from sqlbuild._native import (
+    compiled_project_record,
+)
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.compiled_project.main.compiled_project_record import compiled_project_record
 from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (

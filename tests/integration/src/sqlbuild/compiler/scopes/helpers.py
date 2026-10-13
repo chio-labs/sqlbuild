@@ -13,10 +13,11 @@ from typing import cast
 import pytest
 
 import sqlbuild._native as _native
-from sqlbuild._native import discover_project_inputs
+from sqlbuild._native import (
+    build_declaration_scope,
+    discover_project_inputs,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile._helpers.attachment import declaration_scope
-from sqlbuild.compiler.compile._helpers.attachment.declaration_scope import build_declaration_scope
 from sqlbuild.compiler.compile._helpers.render.declarations import resolve_declaration_context
 from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
 from sqlbuild.compiler.compile.exceptions import CompileInputError
@@ -32,6 +33,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     EnumDeclaration,
 )
+from sqlbuild.compiler.scopes.main import _open_native_scope_index as open_index_module
 from sqlbuild.compiler.scopes.main._declaration_lexical_path import declaration_lexical_path
 from sqlbuild.compiler.scopes.main._open_native_scope_index import open_native_scope_index
 from sqlbuild.compiler.scopes.main._resolve_scope_declaration_visibility import (
@@ -328,7 +330,7 @@ def native_scope_attempts(
             discovered_inputs=discovered_inputs, loaded_macros=loaded_macros
         )
 
-    monkeypatch.setattr(declaration_scope, "open_native_scope_index", counted)
+    monkeypatch.setattr(open_index_module, "open_native_scope_index", counted)
     outcome: ScopeOutcome = _scope_outcome(
         discovered=discovered,
         macros=macros,

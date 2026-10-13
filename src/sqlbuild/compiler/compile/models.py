@@ -385,6 +385,23 @@ class DeclarationExpansionResult:
 
 
 @dataclass(frozen=True)
+class VisibleModelDeclarations:
+    """One model's visible declarations and macros, as the native model loop resolves them."""
+
+    local_enums: dict[str, EnumDeclaration]
+    local_constants: dict[str, ConstantDeclaration]
+    enums: dict[str, EnumDeclaration]
+    constants: dict[str, ConstantDeclaration]
+    inaccessible_enums: dict[str, DeclarationRecord]
+    inaccessible_constants: dict[str, DeclarationRecord]
+    enum_visibility: dict[str, tuple[VisibilityRecord, ...]]
+    constant_visibility: dict[str, tuple[VisibilityRecord, ...]]
+    macros: dict[str, LoadedMacro]
+    macro_records: dict[str, DeclarationRecord]
+    inaccessible_macros: dict[str, DeclarationRecord]
+
+
+@dataclass(frozen=True)
 class DeclarationResolutionContext:
     """Declarations visible during one authored SQL expansion."""
 

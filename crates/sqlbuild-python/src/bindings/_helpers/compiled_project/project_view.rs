@@ -274,7 +274,7 @@ impl NativeProjectView {
 
     /// Every field by name, for an explicit `CompiledProject` projection.
     #[pyo3(signature = (include_sql_expansions = true))]
-    fn fields<'py>(
+    pub(crate) fn fields<'py>(
         &self,
         py: Python<'py>,
         include_sql_expansions: bool,

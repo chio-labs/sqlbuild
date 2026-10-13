@@ -13,14 +13,18 @@ from typing import Any
 import pytest
 
 import sqlbuild._native as _native
-from sqlbuild._native import assemble_project, build_compile_inputs, discover_project_inputs
+from sqlbuild._native import (
+    assemble_project,
+    build_compile_inputs,
+    discover_project_inputs,
+    inputs_with,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
-from sqlbuild.compiler.compiled_project.main.inputs_with import inputs_with
 from sqlbuild.compiler.project_assembly.types import ProjectRequestRow
 from sqlbuild.sql_values.types import CollectionRendering
 

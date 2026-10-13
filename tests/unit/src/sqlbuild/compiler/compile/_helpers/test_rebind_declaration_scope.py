@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import discover_project_inputs
-from sqlbuild.compiler.compile._helpers.attachment.declaration_scope import (
+from sqlbuild._native import (
     build_declaration_scope,
+    discover_project_inputs,
     rebind_declaration_scope,
 )
 from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile._helpers.attachment.core import build_effective_settings
+from sqlbuild._native import (
+    build_effective_settings,
+)
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.contracts.models import SettingsConfig
 

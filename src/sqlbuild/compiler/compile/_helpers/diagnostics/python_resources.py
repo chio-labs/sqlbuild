@@ -1,4 +1,4 @@
-"""Rows the native resource diagnostics read: loaders and user Python resources."""
+"""User Python resources as the rows the native missing-description diagnostics read."""
 
 from __future__ import annotations
 
@@ -7,25 +7,10 @@ from collections.abc import Callable, Iterator
 from functools import partial
 from pathlib import Path
 
-from sqlbuild.compiler.compile.types import SourceInput
-from sqlbuild.compiler.compiled_project.types import PythonResourceRow
-from sqlbuild.compiler.discovery.constants import YAML_FILE_SUFFIXES
+from sqlbuild.compiler.compile.types import PythonResourceRow, SourceInput
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredProvider
 from sqlbuild.errors.setting_help.main.snippet_help import snippet_help
 from sqlbuild.spec.contracts.models import SourceLocation
-
-
-def loader_rows(discovered_inputs: DiscoveredProjectInputs) -> dict[str, tuple[object, ...]]:
-    """Each loader's description, relative path and whether that path is a YAML file."""
-
-    return {
-        loader.name: (
-            loader.description,
-            str(loader.relative_path),
-            loader.relative_path.suffix in YAML_FILE_SUFFIXES,
-        )
-        for loader in discovered_inputs.loader_functions
-    }
 
 
 def python_resource_rows(

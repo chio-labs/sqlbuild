@@ -1,6 +1,6 @@
 """Public effective target namespace operation."""
 
-from sqlbuild.compiler.compile._helpers.attachment.target import (
+from sqlbuild._native import (
     build_effective_target_namespace as _build_effective_target_namespace,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs

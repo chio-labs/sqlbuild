@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile._helpers.attachment.core import (
+from sqlbuild._native import (
     build_effective_connection,
     build_effective_vars,
 )

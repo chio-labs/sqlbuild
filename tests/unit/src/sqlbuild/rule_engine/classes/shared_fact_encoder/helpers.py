@@ -1,12 +1,14 @@
 from pathlib import Path
 
+from sqlbuild._native import (
+    project_with,
+)
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledSource
 from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
     CompiledSourceView,
 )
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import DiscoveredSourceFile
 from sqlbuild.rule_engine.classes.rule_context import RuleFactViews, build_rule_fact_views
 from sqlbuild.spec.contracts.models import SourceEntry

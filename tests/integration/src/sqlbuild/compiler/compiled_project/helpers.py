@@ -8,7 +8,8 @@ from collections import Counter
 from collections.abc import Callable, Iterator
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from types import ModuleType
+from typing import Any, cast
 
 import pytest
 
@@ -23,7 +24,6 @@ from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.models import MeasurementThresholdBound, MeasurementThresholds
 from sqlbuild.compiler.compile import models as compile_models
-from sqlbuild.compiler.compile._helpers.attachment import core as attachment_core
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
@@ -38,10 +38,13 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompileInputsView,
+    ModelInput,
 )
-from sqlbuild.compiler.compiled_project.main import compiled_project_facts as facts_module
+from sqlbuild.compiler.contracts._helpers import native_contracts as native_contracts_module
+from sqlbuild.compiler.contracts._helpers import native_promotion as native_promotion_module
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
+from sqlbuild.rule_engine._helpers.run import native_rows as native_rows_module
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SourceColumnEntry
 from sqlbuild.sql_values.types import CollectionRendering
 from tests.integration.src.sqlbuild.compiler.graph.helpers import write_files
@@ -66,13 +69,23 @@ TYPE_PROOF_FILES: dict[str, str] = {
 }
 
 
+_FACTS_CONSUMERS: tuple[ModuleType, ...] = (
+    native_rows_module,
+    native_contracts_module,
+    native_promotion_module,
+)
+
+
 def forbid_hand_built_projects(*, monkeypatch: pytest.MonkeyPatch) -> None:
     """Fail if a consumer records a project from `CompiledProject` instead of the compile's."""
 
-    def refuse(project: object) -> object:
-        raise AssertionError(f"rules rebuilt project facts from {type(project).__name__}")
+    def retained_only(project: CompiledProjectView) -> _native.NativeCompiledProject:
+        retained: _native.NativeCompiledProject | None = project.native_project
+        assert retained is not None, f"rules rebuilt project facts from {type(project).__name__}"
+        return retained
 
-    monkeypatch.setattr(facts_module, "hand_built_project_impl", refuse)
+    for module in _FACTS_CONSUMERS:
+        monkeypatch.setattr(module, "compiled_project_facts", retained_only)
 
 
 def skip_model_retention(*, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -82,22 +95,21 @@ def skip_model_retention(*, monkeypatch: pytest.MonkeyPatch) -> None:
     attaches its other resources.
     """
 
-    native_loop: Callable[..., object] = attachment_core._run_native_model_loop
+    build_inputs: Callable[..., tuple[ModelInput, ...]] = cast(
+        Callable[..., tuple[ModelInput, ...]], _native.build_model_inputs
+    )
 
-    def discarded(**kwargs: Any) -> object:
-        loop: Any = kwargs["loop"]
-        _ = native_loop(
-            **{
-                **kwargs,
-                "loop": replace(
-                    loop, discovered_inputs=replace(loop.discovered_inputs, model_files=())
-                ),
-            }
-        )
-        kwargs["native_project"] = _native.NativeCompiledProject()
-        return native_loop(**kwargs)
+    def discarded(**kwargs: Any) -> tuple[ModelInput, ...]:
+        discovered: DiscoveredProjectInputs = kwargs["discovered_inputs"]
+        without_models: dict[str, Any] = {
+            **kwargs,
+            "discovered_inputs": replace(discovered, model_files=()),
+        }
+        _ = build_inputs(**without_models)
+        throwaway: dict[str, Any] = {**kwargs, "native_project": _native.NativeCompiledProject()}
+        return build_inputs(**throwaway)
 
-    monkeypatch.setattr(attachment_core, "_run_native_model_loop", discarded)
+    monkeypatch.setattr(_native, "build_model_inputs", discarded)
 
 
 LEGACY_PROJECT_TYPES: tuple[str, ...] = (

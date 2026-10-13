@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.compiler.compile._helpers.attachment.target import build_compile_target_context
+from sqlbuild._native import (
+    build_compile_target_context,
+)
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 from sqlbuild.compiler.macro_bridge.main._claim_first_compile import claim_first_compile

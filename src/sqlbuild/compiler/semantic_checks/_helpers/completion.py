@@ -6,6 +6,10 @@ from dataclasses import replace
 from typing import Any
 
 import sqlbuild._native as _native
+from sqlbuild._native import (
+    project_with,
+    with_binding_diagnostics,
+)
 from sqlbuild.compiler.compile.classes.semantic_completion_inputs import SemanticCompletionInputs
 from sqlbuild.compiler.compile.constants import UNNEEDED_SQL_ANALYSIS_OPT_OUT_CODE
 from sqlbuild.compiler.compile.models import CompilerDiagnostic
@@ -16,10 +20,6 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticPhase,
     DiagnosticSeverity,
 )
-from sqlbuild.compiler.compiled_project.main._with_binding_diagnostics import (
-    with_binding_diagnostics,
-)
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.semantic_checks._helpers.payloads import diagnostic_ids, lineage_payload
 from sqlbuild.spec.contracts.models import SourceLocation
 

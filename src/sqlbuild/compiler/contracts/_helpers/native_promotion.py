@@ -5,6 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import sqlbuild._native as _native
+from sqlbuild._native import (
+    compiled_project_facts,
+)
 from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.compile.models import CompilerDiagnostic
 from sqlbuild.compiler.compile.types import (
@@ -13,7 +16,6 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticPhase,
     DiagnosticSeverity,
 )
-from sqlbuild.compiler.compiled_project.main.compiled_project_facts import compiled_project_facts
 
 
 def native_promotion_conflicts(

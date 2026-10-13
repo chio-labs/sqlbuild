@@ -5,11 +5,13 @@ from __future__ import annotations
 from typing import Any
 
 import sqlbuild._native as _native
+from sqlbuild._native import (
+    project_with,
+)
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.analysis_session.types import DiagnosticRow
 from sqlbuild.compiler.compile.models import CompilerDiagnostic
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.semantic_checks._helpers.completion import complete_native_diagnostics
 from sqlbuild.compiler.semantic_checks._helpers.metadata import native_metadata_diagnostics
 from sqlbuild.compiler.semantic_checks._helpers.payloads import session_fact_models

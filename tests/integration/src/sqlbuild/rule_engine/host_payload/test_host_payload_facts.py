@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
-from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.compiled_project.main.compiled_project_record import (
+from sqlbuild._native import (
     compiled_project_record,
 )
+from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine._helpers.engine.custom_rules import host_project
 from sqlbuild.rule_engine._helpers.host.custom_host_pool import host_payload_project
 from sqlbuild.rule_engine.classes.project_tree import public_model

@@ -10,8 +10,10 @@ from pathlib import Path
 import pytest
 
 import sqlbuild._native as native_module
+from sqlbuild._native import (
+    project_with,
+)
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from tests.integration.src.sqlbuild.compiler.helpers import (
     GoldenEntry,
     golden_differences,

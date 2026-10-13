@@ -6,6 +6,9 @@ import re
 from collections.abc import Callable
 from dataclasses import replace
 
+from sqlbuild._native import (
+    compiled_model_record,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.constants import (
@@ -28,7 +31,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     CompiledSeedView,
 )
-from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.planner._helpers.fixtures.completion import (
     build_relation_fixture_completion,
 )

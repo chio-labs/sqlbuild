@@ -5,10 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import sqlbuild._native as _native
-from sqlbuild._native import discover_project_inputs
-from sqlbuild.compiler.compile._helpers.attachment.core import build_effective_vars
-from sqlbuild.compiler.compile._helpers.attachment.declaration_scope import (
+from sqlbuild._native import (
     build_declaration_scope,
+    build_effective_vars,
+    discover_project_inputs,
     rebind_declaration_scope,
 )
 from sqlbuild.compiler.compile._helpers.render.declarations import (

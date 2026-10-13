@@ -9,6 +9,11 @@ from pathlib import Path
 import orjson
 
 import sqlbuild._native as _native
+from sqlbuild._native import (
+    compiled_project_facts,
+    declaration_rows,
+    plain_typed_value,
+)
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.compile.models import (
     CompiledModelSqlTestPayload,
@@ -17,9 +22,6 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlTestCte,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.compiled_project.main.compiled_project_facts import compiled_project_facts
-from sqlbuild.compiler.compiled_project.main.declaration_rows import declaration_rows
-from sqlbuild.compiler.compiled_project.main.plain_typed_value import plain_typed_value
 from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
 from sqlbuild.compiler.scopes.main.scope_metadata import scope_metadata_projection
 from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path

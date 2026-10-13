@@ -4,7 +4,10 @@ from dataclasses import replace
 
 import pytest
 
-from sqlbuild._native import ProjectColumnLineage
+from sqlbuild._native import (
+    ProjectColumnLineage,
+    compiled_model_record,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
@@ -14,7 +17,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.lineage.models import ColumnLineage, ModelColumnLineage
 from sqlbuild.compiler.lineage.types import (
     ColumnLineageConfidence,
