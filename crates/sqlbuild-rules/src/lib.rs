@@ -4,6 +4,7 @@
 
 pub mod configuration;
 pub mod constants;
+pub mod dsl_headers;
 pub mod engine;
 pub mod errors;
 pub mod models;

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.lint._helpers.headers import scan_headers, sql_body_ranges
+from sqlbuild._native import scan_headers, sql_body_ranges
 from sqlbuild.lint.models import HeaderSpan, LintBody
 from sqlbuild.lint.types import NativeLintPreparationRequest, NativePreparedSql
 

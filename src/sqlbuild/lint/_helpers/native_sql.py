@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from bisect import bisect_right
 from pathlib import Path
 from threading import Event
 from typing import Any, cast
@@ -32,7 +33,6 @@ from sqlbuild.compiler.discovery.main.omitted_ceremonial_select import (
     omitted_ceremonial_select_offset,
 )
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.lint._helpers.native import source_line_starts, source_position
 from sqlbuild.lint._helpers.sqlbuild_tokens import interpolation_text_at
 from sqlbuild.lint.classes.stop_context import LintStopContext
 from sqlbuild.lint.constants import (
@@ -501,3 +501,21 @@ def _violation_message(
     if token is None:
         return f"{message} {GENERATED_SQL_MESSAGE_SUFFIX}"
     return f"{message} {GENERATED_SQL_MESSAGE_TEMPLATE.format(token=token)}"
+
+
+def source_line_starts(contents: str) -> tuple[int, ...]:
+    """Return the offset where each line of contents starts."""
+
+    starts: list[int] = [0]
+    index: int = contents.find("\n")
+    while index != -1:
+        starts.append(index + 1)
+        index = contents.find("\n", index + 1)
+    return tuple(starts)
+
+
+def source_position(*, offset: int, line_starts: tuple[int, ...]) -> tuple[int, int]:
+    """Map a zero-based offset to a one-based line and column."""
+
+    line_index: int = bisect_right(line_starts, offset) - 1
+    return line_index + 1, offset - line_starts[line_index] + 1

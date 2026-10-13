@@ -4,20 +4,20 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.planner.classes.fixture_null_autofix import FixtureNullAutofix
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.lint._helpers.fixes import finalize_fix_reports, persist_changes, plan_rule_fixes
-from sqlbuild.lint._helpers.headers import scan_headers
-from sqlbuild.lint._helpers.native import (
-    drop_resolved_description_faults,
+from sqlbuild._native import (
     format_native_headers,
     lint_native_headers,
     prepare_native_header_cache,
     reject_unparseable_header_rewrites,
     safe_format_files,
+    scan_headers,
 )
+from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.planner.classes.fixture_null_autofix import FixtureNullAutofix
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
+from sqlbuild.lint._helpers.fixes import finalize_fix_reports, persist_changes, plan_rule_fixes
+from sqlbuild.lint._helpers.headers import drop_resolved_description_faults
 from sqlbuild.lint._helpers.native_format import format_native_sql_bodies
 from sqlbuild.lint._helpers.project_files import collect_project_files, sort_violations
 from sqlbuild.lint._helpers.suppressions import apply_suppressions

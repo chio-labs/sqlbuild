@@ -7,7 +7,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import sqlbuild._native as _native
-from sqlbuild._native import discover_project_inputs
+from sqlbuild._native import discover_project_inputs, external_identifiers_for_headers
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.discovery.main.resolve_adapter import resolve_adapter
 from sqlbuild.compiler.compile.constants import MACRO_TOKEN
@@ -25,7 +25,6 @@ from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.lint._helpers.headers import lint_body_ranges, lint_file_role
-from sqlbuild.lint._helpers.native import external_identifiers_for_headers
 from sqlbuild.lint._helpers.native_sql import check_lint_not_stopped
 from sqlbuild.lint._helpers.sqlbuild_tokens import (
     neutralize_context_interpolation,

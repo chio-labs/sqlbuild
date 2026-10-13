@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild._native import lint_native_headers, scan_headers
 from sqlbuild.compiler.compile.constants import MODEL_DIRECTORY_NAME
 from sqlbuild.compiler.compile.models import CompiledSqlExpansion, SqlExpansionContext
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
@@ -18,8 +19,6 @@ from sqlbuild.lint._helpers.expansion import (
     expand_file_bodies,
     prepare_expanded_files,
 )
-from sqlbuild.lint._helpers.headers import scan_headers
-from sqlbuild.lint._helpers.native import lint_native_headers
 from sqlbuild.lint._helpers.native_sql import run_native_sql_lint
 from sqlbuild.lint._helpers.project_files import collect_project_files, sort_violations
 from sqlbuild.lint._helpers.suppressions import apply_suppressions
