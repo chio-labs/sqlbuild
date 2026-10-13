@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-from sqlbuild.cli.output._helpers.integration_result import build_integration_result
-from sqlbuild.cli.output.models import IntegrationCheckResult, IntegrationResultEnvelope
+from sqlbuild._native import IntegrationCheckResult, IntegrationResultEnvelope
 from sqlbuild.compiler.auditing.models import (
     MeasurementThresholdBound,
     MeasurementThresholds,
@@ -20,6 +21,7 @@ from sqlbuild.compiler.auditing.types import (
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from tests.integration.src.sqlbuild.cli.output._test_types import MeasurementEnvelopeTestCase
+from tests.unit.src.sqlbuild.cli.output._helpers.helpers import written_integration_record
 from tests.unit.src.sqlbuild.runtime.observability.helpers import lifecycle_event
 
 
@@ -36,7 +38,7 @@ from tests.unit.src.sqlbuild.runtime.observability.helpers import lifecycle_even
     ids=lambda case: case.description,
 )
 def test_given_measurement_execution_result_when_building_envelope_then_decode_round_trip_is_complete(
-    test_case: MeasurementEnvelopeTestCase,
+    test_case: MeasurementEnvelopeTestCase, tmp_path: Path
 ) -> None:
     result: AuditExecutionResult = AuditExecutionResult(
         audit_name="valid_rate",
@@ -67,15 +69,10 @@ def test_given_measurement_execution_result_when_building_envelope_then_decode_r
         },
     )
 
-    envelope: IntegrationResultEnvelope | None = build_integration_result(
-        result=result,
-        terminal=terminal,
-        event_sequence=2,
-        plan=None,
-        command="audit",
+    envelope: IntegrationResultEnvelope = written_integration_record(
+        result=result, terminal=terminal, directory=tmp_path, command="audit"
     )
 
-    assert envelope is not None
     decoded: IntegrationResultEnvelope = IntegrationResultEnvelope.from_json(envelope.to_json())
     check: IntegrationCheckResult = decoded.checks[0]
     assert check.passed is test_case.expected_passed

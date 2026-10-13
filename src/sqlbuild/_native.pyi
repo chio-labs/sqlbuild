@@ -192,7 +192,7 @@ from sqlbuild.compiler.sql_test_glue.models import (
 from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestPlanRow
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
-from sqlbuild.executor.clone.models import CloneExecutionResult
+from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.models import (
     PythonCheckExecutionResult,
@@ -1098,6 +1098,92 @@ def format_plan(
     include_direct_freshness_diagnostics: bool = True,
     include_completion: bool = False,
 ) -> str: ...
+
+class IntegrationAssetResult:
+    kind: str
+    name: str
+    status: str
+    action: str | None
+    target: str | None
+    origin_relation: str | None
+    staging_relation: str | None
+    failed_phase: str | None
+    loader: str | None
+    rows_loaded: int | None
+    materialized: bool | None
+    future_cursor_safety: dict[str, object]
+    maximum_start_safety: dict[str, object]
+    microbatch: dict[str, object]
+    def as_dict(self) -> dict[str, Any]: ...
+
+class IntegrationCheckResult:
+    kind: str
+    name: str
+    check_id: str
+    passed: bool
+    status: str
+    dag_check_id: str | None
+    severity: str | None
+    asset_name: str | None
+    attachment_kind: str | None
+    attached_column_name: str | None
+    attached_target_name: str | None
+    run_scope_phase: str | None
+    row_count: int | None
+    reused: bool | None
+    evaluation_mode: str | None
+    measured_value: float | None
+    sample_count: int | None
+    sample_unit: str | None
+    minimum_samples: int | None
+    thresholds: dict[str, object] | None
+    evidence_count: int | None
+    evidence_truncated: bool | None
+    audit_definition_name: str | None
+    audit_description: str | None
+    def as_dict(self) -> dict[str, Any]: ...
+
+class IntegrationResultEnvelope:
+    schema_version: int
+    record_kind: str
+    event_id: str
+    event_sequence: int
+    event_type: str
+    occurred_at: str
+    invocation_id: str
+    run_id: str
+    resource_id: str
+    resource_attempt_id: str
+    operation_id: str | None
+    statement_id: str | None
+    resource_kind: str
+    resource_name: str
+    attempt_number: int
+    duration_ms: int | float | None
+    output_kind: str
+    command: str
+    error_code: str | None
+    error_type: str | None
+    skip_code: str | None
+    skip_mode: str | None
+    projection_degraded: bool
+    @property
+    def asset(self) -> IntegrationAssetResult | None: ...
+    @property
+    def checks(self) -> tuple[IntegrationCheckResult, ...]: ...
+    @staticmethod
+    def from_json(value: str) -> IntegrationResultEnvelope: ...
+    @staticmethod
+    def from_json_without_optional_enrichment(value: str) -> IntegrationResultEnvelope: ...
+    def to_json(self) -> str: ...
+
+class ExecutionEventWriter:
+    def __init__(self, *, path: Path | None = None) -> None: ...
+    def write_build_result(
+        self, *, result: object, plan: PlanOutput | None, command: str = "build"
+    ) -> None: ...
+    def write_clone_result(self, *, item: CloneItemResult, resource_type: str) -> None: ...
+    def close(self) -> None: ...
 
 class TerminalEventClaim:
     @property

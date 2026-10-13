@@ -6,12 +6,11 @@ import json
 import tempfile
 from collections.abc import Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
-from dataclasses import asdict
 from enum import Enum
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any, TextIO
 
-from sqlbuild.cli.output.models import IntegrationAssetResult, IntegrationResultEnvelope
+from sqlbuild._native import IntegrationAssetResult, IntegrationResultEnvelope
 from sqlbuild.integrations.dagster._helpers.translation import (
     is_dagster_asset_enabled,
     is_dagster_check_enabled,
@@ -549,12 +548,12 @@ def _build_results_from_integration_result(
             loader_result = _loader_result_for_source_payload(
                 dag=dag,
                 source_node=node,
-                payload_asset=asdict(asset),
+                payload_asset=asset.as_dict(),
                 loader_name=asset.loader,
             )
         asset_nodes: dict[str, tuple[Mapping[str, Any], Mapping[str, Any] | None]] = {}
         if node is not None:
-            asset_nodes[str(node.get("id"))] = (node, asdict(asset))
+            asset_nodes[str(node.get("id"))] = (node, asset.as_dict())
             if loader_result is not None:
                 loader_id, loader_payload = loader_result
                 loader_node: Mapping[str, Any] | None = nodes_by_id.get(loader_id)
@@ -608,7 +607,7 @@ def _build_results_from_integration_result(
             nodes_by_id=nodes_by_id,
             nodes_by_name=nodes_by_name,
             check={
-                **asdict(check),
+                **check.as_dict(),
                 "event_id": envelope.event_id,
                 "resource_attempt_id": envelope.resource_attempt_id,
                 "resource_id": envelope.resource_id,

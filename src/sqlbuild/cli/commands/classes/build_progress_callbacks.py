@@ -9,10 +9,10 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
+from sqlbuild._native import ExecutionEventWriter
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.cli.commands._helpers.test.sql_progress import format_parameterized_test_label
-from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
 from sqlbuild.cli.progress.classes.native_progress_projector import (
     NativeProgressProjector,
     current_native_progress_projector,

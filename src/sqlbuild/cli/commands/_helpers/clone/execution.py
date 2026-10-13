@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from typing import TextIO
 
+from sqlbuild._native import ExecutionEventWriter
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.clone.fingerprint_progress import (
     create_clone_fingerprint_progress_reporter,
@@ -20,7 +21,6 @@ from sqlbuild.cli.commands.models import (
     CloneInvocation,
     CloneRunOutcome,
 )
-from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (

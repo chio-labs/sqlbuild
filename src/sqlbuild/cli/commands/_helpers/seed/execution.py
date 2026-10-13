@@ -7,12 +7,12 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import TextIO
 
+from sqlbuild._native import ExecutionEventWriter
 from sqlbuild.cli.commands.models import (
     SeedExecutionPreparation,
     SeedInvocation,
     SeedRunOutcome,
 )
-from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 from sqlbuild.cli.progress.classes.native_progress_projector import (
     NativeProgressProjector,

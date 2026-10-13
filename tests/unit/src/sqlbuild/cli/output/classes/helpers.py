@@ -1,9 +1,10 @@
 """Builders for terminal integration-result tests."""
 
+import json
 from collections.abc import Mapping
 from typing import cast
 
-from sqlbuild.cli.output.models import IntegrationAssetResult
+from sqlbuild._native import IntegrationAssetResult, IntegrationResultEnvelope
 from sqlbuild.runtime.observability.types import JSONValue
 
 
@@ -56,12 +57,19 @@ def build_maximum_start_safety(action: str) -> Mapping[str, JSONValue]:
     )
 
 
-def build_integration_asset_with_maximum_start(action: str) -> IntegrationAssetResult:
-    """Construct an asset carrying canonical maximum-start action metadata."""
+def decode_asset(asset: Mapping[str, object]) -> IntegrationAssetResult:
+    """Decode a valid record carrying the given asset and return its validated asset."""
 
-    return IntegrationAssetResult(
-        kind="model",
-        name="orders",
-        status="success",
-        maximum_start_safety=build_maximum_start_safety(action),
-    )
+    payload: dict[str, object] = build_valid_integration_payload()
+    payload["asset"] = {"kind": "model", "name": "orders", "status": "success", **asset}
+    decoded: IntegrationAssetResult | None = IntegrationResultEnvelope.from_json(
+        json.dumps(payload)
+    ).asset
+    assert decoded is not None
+    return decoded
+
+
+def build_integration_asset_with_maximum_start(action: str) -> IntegrationAssetResult:
+    """Decode an asset carrying canonical maximum-start action metadata."""
+
+    return decode_asset({"maximum_start_safety": build_maximum_start_safety(action)})

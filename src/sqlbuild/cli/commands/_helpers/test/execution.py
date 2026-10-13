@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from sqlbuild._native import ExecutionEventWriter
 from sqlbuild.cli.commands._helpers.test.sql_progress import (
     build_test_expectation_rows,
     format_parameterized_test_label,
@@ -15,7 +16,6 @@ from sqlbuild.cli.commands.models import (
     TestExecutionPreparation,
     TestInvocation,
 )
-from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
 from sqlbuild.cli.progress.classes.connection_progress_reporter import (
     ConnectionProgressReporter,
 )

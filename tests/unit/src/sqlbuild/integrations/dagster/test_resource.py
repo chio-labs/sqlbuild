@@ -4,7 +4,6 @@ import json
 from collections import defaultdict
 from collections.abc import Generator, Iterator, Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
-from dataclasses import replace
 from pathlib import Path
 from threading import Event
 from typing import Any, cast
@@ -13,8 +12,7 @@ from unittest.mock import Mock
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild._native import serialize_maximum_start_safety
-from sqlbuild.cli.output.models import IntegrationCheckResult, IntegrationResultEnvelope
+from sqlbuild._native import IntegrationResultEnvelope, serialize_maximum_start_safety
 from sqlbuild.compiler.planner.models import MaximumStartSafetyEvidence
 from sqlbuild.integrations.dagster import (
     SqlBuildCliResource,
@@ -305,14 +303,12 @@ def test_given_two_audit_envelopes_when_projecting_then_each_check_keeps_own_can
 def test_given_standalone_check_command_when_projecting_live_result_then_parent_need_not_materialize(
     test_case: DagsterStandaloneCheckCommandTestCase,
 ) -> None:
-    envelope: IntegrationResultEnvelope = replace(
-        build_check_integration_envelope(
-            check_id="audit:not_null:model:orders:order_id",
-            name="not_null",
-            event_id="event-live-check",
-            attempt_id="attempt-live-check",
-            event_sequence=1,
-        ),
+    envelope: IntegrationResultEnvelope = build_check_integration_envelope(
+        check_id="audit:not_null:model:orders:order_id",
+        name="not_null",
+        event_id="event-live-check",
+        attempt_id="attempt-live-check",
+        event_sequence=1,
         command=test_case.command,
     )
 
@@ -378,14 +374,12 @@ def test_given_measurement_check_when_projecting_then_dagster_metadata_and_warni
         event_id="event-measurement",
         attempt_id="attempt-measurement",
         event_sequence=5,
+        check_overrides={
+            "status": test_case.expected_status,
+            "passed": test_case.expected_passed,
+            **test_case.expected_metadata,
+        },
     )
-    check: IntegrationCheckResult = replace(
-        envelope.checks[0],
-        status=test_case.expected_status,
-        passed=test_case.expected_passed,
-        **test_case.expected_metadata,
-    )
-    envelope = replace(envelope, checks=(check,))
 
     results: tuple[Any, ...] = _build_results_from_integration_result(
         dg=dg,

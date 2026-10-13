@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from sqlbuild._native import build_project_relation_targets
+from sqlbuild._native import ExecutionEventWriter, build_project_relation_targets
 from sqlbuild.cli.commands._helpers.check.core import (
     build_check_relation_targets,
     load_results_by_loader_name,
@@ -18,7 +18,6 @@ from sqlbuild.cli.commands.models import (
     CheckExecutionPreparation,
     CheckInvocation,
 )
-from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
 from sqlbuild.cli.progress.classes.native_progress_projector import (
     NativeProgressProjector,
     current_native_progress_projector,

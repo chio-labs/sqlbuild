@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-from sqlbuild.cli.output._helpers.integration_result import _audit_result
-from sqlbuild.cli.output.models import IntegrationCheckResult
+from sqlbuild._native import IntegrationCheckResult
 from sqlbuild.compiler.auditing.models import (
     MeasurementThresholdBound,
     MeasurementThresholds,
@@ -21,6 +22,10 @@ from sqlbuild.executor.auditing.models import AuditExecutionResult
 from tests.unit.src.sqlbuild.cli.output._helpers._test_types import (
     MeasurementAuditOutputTestCase,
 )
+from tests.unit.src.sqlbuild.cli.output._helpers.helpers import (
+    audit_terminal,
+    written_integration_record,
+)
 
 
 @pytest.mark.parametrize(
@@ -35,7 +40,7 @@ from tests.unit.src.sqlbuild.cli.output._helpers._test_types import (
     ids=lambda case: case.description,
 )
 def test_given_measurement_outcome_when_projecting_then_status_and_passed_remain_distinct(
-    test_case: MeasurementAuditOutputTestCase,
+    test_case: MeasurementAuditOutputTestCase, tmp_path: Path
 ) -> None:
     result: AuditExecutionResult = AuditExecutionResult(
         audit_name="valid_rate",
@@ -49,7 +54,9 @@ def test_given_measurement_outcome_when_projecting_then_status_and_passed_remain
         evaluation_mode=AuditEvaluationMode.MEASUREMENT,
     )
 
-    check: IntegrationCheckResult = _audit_result(result)
+    check: IntegrationCheckResult = written_integration_record(
+        result=result, terminal=audit_terminal(result), directory=tmp_path, command="audit"
+    ).checks[0]
 
     assert check.status == test_case.expected_status
     assert check.audit_definition_name == "dq_column_rate"
@@ -63,7 +70,7 @@ def test_given_measurement_outcome_when_projecting_then_status_and_passed_remain
     ids=lambda case: case.description,
 )
 def test_given_measurement_audit_when_projecting_then_all_summary_fields_are_retained(
-    test_case: MeasurementAuditOutputTestCase,
+    test_case: MeasurementAuditOutputTestCase, tmp_path: Path
 ) -> None:
     result: AuditExecutionResult = AuditExecutionResult(
         audit_name="valid_rate",
@@ -86,7 +93,9 @@ def test_given_measurement_audit_when_projecting_then_all_summary_fields_are_ret
         evidence_truncated=True,
     )
 
-    check: IntegrationCheckResult = _audit_result(result)
+    check: IntegrationCheckResult = written_integration_record(
+        result=result, terminal=audit_terminal(result), directory=tmp_path, command="audit"
+    ).checks[0]
 
     assert check.status == test_case.expected_status
     assert check.evaluation_mode == "measurement"
@@ -108,7 +117,7 @@ def test_given_measurement_audit_when_projecting_then_all_summary_fields_are_ret
     ids=lambda case: case.description,
 )
 def test_given_violations_audit_when_projecting_then_measurement_summary_is_absent(
-    test_case: MeasurementAuditOutputTestCase,
+    test_case: MeasurementAuditOutputTestCase, tmp_path: Path
 ) -> None:
     result: AuditExecutionResult = AuditExecutionResult(
         audit_name="not_null",
@@ -120,7 +129,9 @@ def test_given_violations_audit_when_projecting_then_measurement_summary_is_abse
         executed_sql="SELECT 1 WHERE FALSE",
     )
 
-    check: IntegrationCheckResult = _audit_result(result)
+    check: IntegrationCheckResult = written_integration_record(
+        result=result, terminal=audit_terminal(result), directory=tmp_path, command="audit"
+    ).checks[0]
 
     assert check.status == test_case.expected_status
     assert check.evaluation_mode == "violations"

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import ExecutionEventWriter
 from sqlbuild.cli.commands.models import (
     AuditCommandRequest,
     AuditExecutionPreparation,
     AuditInvocation,
 )
-from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
 from sqlbuild.cli.progress.classes.audit_progress_reporter import AuditProgressReporter
 from sqlbuild.cli.progress.classes.connection_progress_reporter import (
     ConnectionProgressReporter,

@@ -265,6 +265,25 @@ pub(crate) fn current_index(py: Python<'_>) -> PyResult<Option<PyRef<'_, Termina
     Ok(Some(installed.extract()?))
 }
 
+/// The installed terminal event index, as an owned reference.
+pub(crate) fn current_index_object(py: Python<'_>) -> PyResult<Option<Py<TerminalEventIndex>>> {
+    let installed: Bound<'_, PyAny> = context_variable(py)?.call_method0("get")?;
+    if installed.is_none() {
+        return Ok(None);
+    }
+    Ok(Some(installed.extract()?))
+}
+
+impl TerminalEventClaim {
+    pub(crate) fn terminal_event<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
+        self.terminal.bind(py).clone()
+    }
+
+    pub(crate) fn sequence(&self) -> usize {
+        self.event_sequence
+    }
+}
+
 /// Return the terminal event index installed for this invocation.
 #[pyfunction]
 fn current_terminal_event_index(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
