@@ -49,9 +49,6 @@ if TYPE_CHECKING:
         DirectPythonLifecycleState,
     )
     from sqlbuild.cli.progress.classes.audit_progress_reporter import AuditProgressReporter
-    from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
-        NestedCommandProgressCallbacks,
-    )
     from sqlbuild.compiler.compile.models import (
         CompiledSqlScenario,
         CompilerDiagnostic,
@@ -835,17 +832,6 @@ class TestInvocation:
     progress_stream: TextIO
     connection_progress: ConnectionProgressReporter
     planning_progress: PlanningProgressReporter
-
-
-@dataclass(frozen=True)
-class TestExecutionPreparation:
-    """Prepared nested progress and execution reporters for test runs."""
-
-    progress: NestedCommandProgressCallbacks
-    execution_connection_progress: ConnectionProgressReporter
-    preflight_progress: TransientStatusReporter
-    effective_concurrency: int
-    worker_count: int
 
 
 @dataclass(frozen=True)

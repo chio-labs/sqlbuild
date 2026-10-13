@@ -8,10 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import format_audit_execution_json
+from sqlbuild._native import format_audit_execution_json, format_parameterized_test_label
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
-from sqlbuild.cli.commands._helpers.test.sql_progress import format_parameterized_test_label
 from sqlbuild.compiler.auditing.models import (
     MeasurementThresholdBound,
     MeasurementThresholds,

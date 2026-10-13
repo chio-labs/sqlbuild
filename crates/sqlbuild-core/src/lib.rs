@@ -19,6 +19,7 @@ pub mod posix_path;
 pub mod progress;
 pub mod redaction;
 pub mod terminal_events;
+pub mod test_command;
 pub mod text;
 
 #[cfg(test)]

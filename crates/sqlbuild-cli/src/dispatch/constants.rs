@@ -240,9 +240,9 @@ const TEST_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const TEST_ROUTE: Route = routed(
     "run_test",
-    ("sqlbuild.cli.commands.main.execution._test", "run_test"),
+    ("sqlbuild._native", "run_test_command"),
     &TEST_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const CHECK_FIELDS: [Field; 9] = [

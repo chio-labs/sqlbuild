@@ -5,7 +5,7 @@ use pyo3::prelude::{Bound, PyModule, PyResult};
 use crate::bindings::_helpers::cli::{argv, entry, progress, progress_reporters, progress_text};
 use crate::bindings::_helpers::{
     check, clone, command_runtime, cost_report, dbt_interop, debug_command, diff_report, freshness,
-    janitor, load, presentation_text, result_output, workspace_commands,
+    janitor, load, presentation_text, result_output, sql_test_command, workspace_commands,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -27,5 +27,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     presentation_text::registration::register(module)?;
     workspace_commands::registration::register(module)?;
     check::registration::register(module)?;
+    sql_test_command::registration::register(module)?;
     Ok(())
 }

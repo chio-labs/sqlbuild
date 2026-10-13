@@ -31,7 +31,7 @@ from sqlbuild.compiler.planner._helpers.sql_tests.native_planning import (
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.commands._relations import resolve_static_relation_context
 from sqlbuild.compiler.planner.main.commands._scope import resolve_static_command_scope
-from sqlbuild.compiler.planner.main.commands.sql_test import build_test_command_plan
+from sqlbuild.compiler.planner.main.commands._sql_test import build_test_command_plan
 from sqlbuild.compiler.planner.models import (
     ChainStep,
     NativeSqlTestPlan,

@@ -17,6 +17,7 @@ from sqlbuild._native import (
     discover_project_inputs,
     format_load_execution_json,
     run_load_command,
+    run_test_command,
     select_load_entries,
 )
 from sqlbuild.adapter.contract.types import CursorKind
@@ -25,7 +26,6 @@ from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.main.execution._audit import run_audit
 from sqlbuild.cli.commands.main.execution._build import run_build
 from sqlbuild.cli.commands.main.execution._scenario import run_scenario
-from sqlbuild.cli.commands.main.execution._test import run_test
 from sqlbuild.cli.commands.main.project._plan import run_plan
 from sqlbuild.cli.commands.models import (
     AuditCommandRequest,
@@ -1232,7 +1232,7 @@ def test_given_no_managed_source_read_ambiguity_when_building_then_source_deferr
         "audit": lambda **kwargs: run_audit(AuditCommandRequest(**kwargs)),
         "build": lambda **kwargs: run_build(BuildCommandRequest(**kwargs)),
         "scenario": lambda **kwargs: run_scenario(ScenarioTestCommandRequest(**kwargs)),
-        "test": lambda **kwargs: run_test(TestCommandRequest(**kwargs)),
+        "test": lambda **kwargs: run_test_command(request=TestCommandRequest(**kwargs)),
     }
     exit_code: int = command_runners[test_case.command](
         project_dir=tmp_path,

@@ -14,7 +14,6 @@ from sqlbuild.cli.commands._helpers.runtime.command_invocation import (
     resolve_reported_command_invocation,
 )
 from sqlbuild.cli.commands._helpers.seed.invocation import resolve_seed_invocation
-from sqlbuild.cli.commands._helpers.test.invocation import resolve_test_invocation
 from tests.integration.src.sqlbuild.cli.commands._helpers.runtime._test_types import (
     CommandInvocationTestCase,
 )
@@ -50,7 +49,11 @@ _PROJECT_TOML: str = (
         ),
         CommandInvocationTestCase(
             description="test json output reports progress on stderr",
-            resolve=resolve_test_invocation,
+            resolve=partial(
+                resolve_reported_command_invocation,
+                invocation_type=command_models.TestInvocation,
+                require_connection=True,
+            ),
             request_type=command_models.TestCommandRequest,
             json_output=True,
             expected_invocation_type_name="TestInvocation",

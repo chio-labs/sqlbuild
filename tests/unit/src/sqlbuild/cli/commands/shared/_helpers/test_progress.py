@@ -9,13 +9,13 @@ from io import StringIO
 
 import pytest
 
-from sqlbuild._native import write_execution_header
-from sqlbuild.adapter.contract.models import LifeCycleEvent
-from sqlbuild.adapter.contract.types import LifeCycleEventKind
-from sqlbuild.cli.commands._helpers.test.sql_progress import (
+from sqlbuild._native import (
     build_test_expectation_rows,
     resolve_test_name_width,
+    write_execution_header,
 )
+from sqlbuild.adapter.contract.models import LifeCycleEvent
+from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.cli.commands.classes import build_progress_callbacks
 from sqlbuild.cli.commands.classes.build_progress_callbacks import (
     BuildProgressCallbacks,

@@ -29,6 +29,7 @@ from sqlbuild.cli.commands.models import (
     PlaygroundCommandRequest,
     RefactorCommandRequest,
     ScopeCommandRequest,
+    TestCommandRequest,
 )
 from sqlbuild.cli.commands.types import CompileLineageMode, ScopeIndexLoader
 from sqlbuild.cli.compile.models import CompileAnalysis
@@ -40,6 +41,7 @@ from sqlbuild.cli.entry.models import (
     ResolvedWarehouse,
 )
 from sqlbuild.cli.output.models import SkillMaintenanceResult, SkillUpdateResult, WrittenTarget
+from sqlbuild.cli.progress.models import NestedProgressChildRow
 from sqlbuild.compiler.auditing.models import (
     AuditGateIdentity,
     MeasurementContract,
@@ -133,6 +135,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveryFileFault,
     EnumDeclaration,
     ModelSchemaDeclaration,
+    SqlTestParameterDeclaration,
     TolerantScopeDiscovery,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
@@ -162,6 +165,7 @@ from sqlbuild.compiler.planner.models import (
     FutureCursorSafetyEvidence,
     MaximumStartSafetyEvidence,
     PlanOutput,
+    SqlTestPlanEntry,
 )
 from sqlbuild.compiler.planner.types import CursorGrain
 from sqlbuild.compiler.python_nodes.models import (
@@ -2889,6 +2893,18 @@ def write_check_results(
     python_graph: PythonNodeGraph | None = None,
 ) -> None: ...
 def format_check_json(*, results: tuple[PythonCheckExecutionResult, ...]) -> str: ...
+def run_test_command(*, request: TestCommandRequest) -> int: ...
+def format_parameterized_test_label(
+    *,
+    name: str,
+    source_path: Path | None,
+    parameter_schema: tuple[SqlTestParameterDeclaration, ...],
+    parameter_values: tuple[tuple[str, SqlValue], ...],
+) -> str: ...
+def resolve_test_name_width(test_entries: tuple[SqlTestPlanEntry, ...]) -> int: ...
+def build_test_expectation_rows(
+    result: SqlTestExecutionResult,
+) -> tuple[NestedProgressChildRow, ...]: ...
 def select_load_entries(
     *,
     discovered_inputs: DiscoveredProjectInputs,
