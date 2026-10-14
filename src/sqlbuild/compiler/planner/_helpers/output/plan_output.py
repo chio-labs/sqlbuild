@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild._native import (
+    build_relation_fixture_context,
     build_source_load_entries,
     project_lineage_views,
     upstream_loader_dependency_names,
@@ -26,9 +27,6 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.graph.models import LineageGraphViews
-from sqlbuild.compiler.planner._helpers.fixtures.completion import (
-    build_relation_fixture_context,
-)
 from sqlbuild.compiler.planner._helpers.output.audit_entry import plan_audit
 from sqlbuild.compiler.planner._helpers.output.plan_entry import (
     audit_is_selected,

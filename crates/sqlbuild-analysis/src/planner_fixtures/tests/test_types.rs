@@ -26,3 +26,19 @@ pub(crate) struct AlignmentTestCase {
     pub(crate) expected_completed: Option<Vec<usize>>,
     pub(crate) expected_diagnostics: &'static [&'static str],
 }
+#[derive(Debug)]
+pub(super) struct FixtureReadCacheTestCase {
+    pub description: &'static str,
+    pub sql: &'static str,
+    pub package: Option<&'static str>,
+    pub argument_count: Option<i64>,
+    pub dialect: Option<&'static str>,
+    pub expected_misses: u64,
+}
+
+#[derive(Debug)]
+pub(super) struct FixtureMarkerTestCase {
+    pub description: &'static str,
+    pub sql: &'static str,
+    pub expected_sql: &'static str,
+}

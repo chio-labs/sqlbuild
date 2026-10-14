@@ -4,6 +4,12 @@ from __future__ import annotations
 
 import re
 
+from sqlbuild._native import (
+    build_relation_fixture_completion,
+    build_relation_fixture_context,
+    complete_empty_fixture_sql,
+    complete_typed_null_columns,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledSqlTest,
@@ -11,12 +17,6 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
-from sqlbuild.compiler.planner._helpers.fixtures.completion import (
-    build_relation_fixture_completion,
-    build_relation_fixture_context,
-    complete_empty_fixture_sql,
-    complete_typed_null_columns,
-)
 from sqlbuild.compiler.planner.exceptions import SqlTestFixtureValidationError
 from sqlbuild.compiler.planner.models import (
     RelationFixtureCompletion,
@@ -54,8 +54,7 @@ def build_validated_test_fixtures(
     completion: RelationFixtureCompletion = build_relation_fixture_completion(
         project=project,
         adapter=adapter,
-        ordered_model_names=ordered_model_names,
-        fixture_groups=fixture_groups,
+        request=(ordered_model_names, fixture_groups),
         planning_context=fixture_context,
     )
     errors: list[str] = [

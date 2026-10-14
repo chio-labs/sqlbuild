@@ -211,14 +211,13 @@ fn complete_fixtures<'py>(
     let completion = call_with(
         &imported(
             py,
-            "sqlbuild.compiler.planner._helpers.fixtures.completion",
+            "sqlbuild._native",
             "build_relation_fixture_completion",
         )?,
         &[
             ("project", project.clone()),
             ("adapter", context.adapter.clone()),
-            ("ordered_model_names", PyTuple::new(py, names)?.into_any()),
-            ("fixture_groups", PyTuple::new(py, groups)?.into_any()),
+            ("request", PyTuple::new(py, [PyTuple::new(py, names)?.into_any(), PyTuple::new(py, groups)?.into_any()])?.into_any()),
         ],
     )?;
     let diagnostics = completion.getattr("diagnostics")?;

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from sqlbuild._native import build_relation_fixture_context
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.constants import (
     DBT_REF_TEST_CTE_PREFIX,
@@ -26,7 +27,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     SqlTestMode,
 )
-from sqlbuild.compiler.planner._helpers.fixtures.completion import build_relation_fixture_context
 from sqlbuild.compiler.planner._helpers.sql_tests.fixture_validation import (
     build_validated_test_fixtures,
     fixture_location,

@@ -11,6 +11,7 @@ from sqlbuild.spec.contracts.models import SourceEntry
 class FixturePlanningIntegrationTestCase:
     description: str
     expected_sql_fragment: str
+    query_sql: str = 'SELECT order_id, status FROM __source("raw_orders")'
 
 
 @dataclass(frozen=True)

@@ -2506,6 +2506,20 @@ def expected_fixture_types(
     ordered_model_names: tuple[str, ...],
     model_map: dict[str, CompiledModelView],
 ) -> Mapping[tuple[CompiledResourceType, str], dict[str, str]]: ...
+def fixture_read_cache_info(*, reset: bool = False) -> tuple[int, int]: ...
+def required_fixture_columns(
+    *,
+    model_inputs: tuple[tuple[str, ...], dict[str, CompiledModelView]],
+    fixture_inputs: tuple[
+        frozenset[tuple[CompiledResourceType, str]],
+        dict[tuple[CompiledResourceType, str], FixtureRelationMetadata],
+        dict[tuple[CompiledResourceType, str], frozenset[str]],
+    ],
+    adapter: BaseAdapter,
+) -> tuple[
+    dict[tuple[CompiledResourceType, str], dict[str, set[str]]],
+    frozenset[tuple[CompiledResourceType, str]],
+]: ...
 def build_relation_fixture_context(
     *, project: CompiledProjectView, models_by_name: dict[str, CompiledModelView] | None = None
 ) -> RelationFixturePlanningContext: ...

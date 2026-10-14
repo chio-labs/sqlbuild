@@ -1,28 +1,22 @@
 //! Native-hosted relation fixture completion over Python boundary models.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PySet, PySetMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::planner_fixtures::main::align_columns::align_columns;
 use sqlbuild_analysis::planner_fixtures::models::{AlignmentInput, RequiredColumn};
 
+use crate::bindings::_helpers::planner_strategy::fixture_context::build_relation_fixture_context;
 use crate::bindings::_helpers::planner_strategy::fixture_preparation::{PreparedFixtures, prepare};
+use crate::bindings::_helpers::planner_strategy::fixture_reads::required_fixture_columns;
 use crate::bindings::_helpers::planner_strategy::fixture_selection::{
     fixture_keys_requiring_analysis, unknown_fixture_column_diagnostics,
 };
 use crate::bindings::_helpers::planner_strategy::fixture_sql::{CompletionSql, render_completed};
 use crate::bindings::_helpers::planner_strategy::fixture_types::expected_fixture_types;
 use crate::bindings::_helpers::planner_strategy::fixture_values::{
-    COMPLETION, columns, diagnostic, folded, label, record, strings,
+    columns, diagnostic, folded, label, record, strings,
 };
-
-fn helper<'py>(
-    py: Python<'py>,
-    name: &str,
-    kwargs: &Bound<'py, PyDict>,
-) -> PyResult<Bound<'py, PyAny>> {
-    py.import(COMPLETION)?.getattr(name)?.call((), Some(kwargs))
-}
 
 #[pyfunction]
 #[pyo3(signature = (*, project, adapter, request, planning_context = None))]
@@ -33,14 +27,9 @@ fn build_relation_fixture_completion<'py>(
     planning_context: Option<Bound<'py, PyAny>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let (ordered_model_names, fixture_groups) = request;
-    let py = project.py();
     let context = match planning_context {
         Some(context) if context.is_truthy()? => context,
-        _ => {
-            let kwargs = PyDict::new(py);
-            kwargs.set_item("project", project)?;
-            helper(py, "build_relation_fixture_context", &kwargs)?
-        }
+        _ => build_relation_fixture_context(project, None)?,
     };
     let relations = context.getattr("relations")?.cast_into::<PyDict>()?;
     let prepared = prepare(
@@ -55,19 +44,20 @@ fn build_relation_fixture_completion<'py>(
             .getattr("authoritative_columns")?
             .cast_into::<PyDict>()?,
     )?;
-    let kwargs = PyDict::new(py);
-    kwargs.set_item("ordered_model_names", &ordered_model_names)?;
-    kwargs.set_item("model_map", context.getattr("models_by_name")?)?;
-    kwargs.set_item("fixture_keys", fixture_keys)?;
-    kwargs.set_item("relations", &relations)?;
-    kwargs.set_item(
-        "authoritative_columns",
-        context.getattr("authoritative_columns")?,
+    let (required, stars) = required_fixture_columns(
+        (
+            ordered_model_names.extract()?,
+            context.getattr("models_by_name")?.cast_into::<PyDict>()?,
+        ),
+        (
+            fixture_keys.into_any(),
+            relations.clone(),
+            context
+                .getattr("authoritative_columns")?
+                .cast_into::<PyDict>()?,
+        ),
+        adapter,
     )?;
-    kwargs.set_item("adapter", adapter)?;
-    let required_and_stars = helper(py, "_required_fixture_columns", &kwargs)?;
-    let required = required_and_stars.get_item(0)?.cast_into::<PyDict>()?;
-    let stars = required_and_stars.get_item(1)?;
     let expected = expected_fixture_types(
         &context.getattr("expected_types")?.cast_into::<PyDict>()?,
         ordered_model_names.extract()?,
@@ -75,7 +65,7 @@ fn build_relation_fixture_completion<'py>(
     )?;
     complete_prepared(
         prepared,
-        (relations, required, stars),
+        (relations, required, stars.into_any()),
         expected.into_any(),
         adapter,
     )
