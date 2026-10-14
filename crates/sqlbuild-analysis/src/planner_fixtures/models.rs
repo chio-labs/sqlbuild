@@ -1,5 +1,42 @@
 //! Passive fixture schema and alignment facts.
 
+use std::collections::{BTreeSet, HashMap};
+
+/// One upstream typed column identified by its resource and folded name.
+#[derive(Debug)]
+pub struct FixtureTypeRead {
+    pub key: (String, String),
+    pub column: String,
+}
+
+/// Direct lineage facts used to propagate fixture types.
+#[derive(Debug)]
+pub struct FixtureTypeProjection {
+    pub output_column: String,
+    pub upstream: Vec<FixtureTypeRead>,
+}
+
+/// One model's ordered direct projections and initial fixture types.
+#[derive(Debug)]
+pub struct FixtureTypeModel {
+    pub key: (String, String),
+    pub projections: Vec<FixtureTypeProjection>,
+}
+
+/// A known relation type map and the ordered additions inferred from lineage.
+#[derive(Debug, Default)]
+pub struct FixtureTypeState {
+    pub known: HashMap<(String, String), HashMap<String, String>>,
+    pub additions: Vec<(FixtureTypeRead, String)>,
+}
+
+/// Derived column names and known types for one fixture relation.
+#[derive(Debug)]
+pub struct FixtureSchema {
+    pub authoritative_names: Option<BTreeSet<String>>,
+    pub expected_types: Vec<(String, String)>,
+}
+
 /// One authoritative or inferred fixture column.
 #[derive(Clone, Debug)]
 pub struct FixtureColumn {

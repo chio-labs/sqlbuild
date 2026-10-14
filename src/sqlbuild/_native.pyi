@@ -130,6 +130,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
+    CompiledResourceType,
     CompiledSeedView,
     CompiledSourceView,
     CompileInputsView,
@@ -238,6 +239,7 @@ from sqlbuild.compiler.planner.models import (
     QueryShape,
     ReferenceRename,
     RelationFixtureCompletion,
+    RelationFixtureDiagnostic,
     RelationFixturePlanningContext,
     SchemaAction,
     SchemaFinding,
@@ -2457,6 +2459,31 @@ def complete_typed_null_columns(
     adapter: BaseAdapter,
 ) -> str: ...
 def model_fixture_metadata(*, model: CompiledModelView) -> FixtureRelationMetadata: ...
+def expected_fixture_types(
+    *,
+    base_expected_types: dict[tuple[CompiledResourceType, str], dict[str, str]],
+    ordered_model_names: tuple[str, ...],
+    model_map: dict[str, CompiledModelView],
+) -> dict[tuple[CompiledResourceType, str], dict[str, str]]: ...
+def build_relation_fixture_context(
+    *, project: CompiledProjectView, models_by_name: dict[str, CompiledModelView] | None = None
+) -> RelationFixturePlanningContext: ...
+def authoritative_fixture_columns(
+    *, relations: dict[tuple[CompiledResourceType, str], FixtureRelationMetadata]
+) -> dict[tuple[CompiledResourceType, str], frozenset[str]]: ...
+def base_expected_fixture_types(
+    *, relations: dict[tuple[CompiledResourceType, str], FixtureRelationMetadata]
+) -> dict[tuple[CompiledResourceType, str], dict[str, str]]: ...
+def fixture_keys_requiring_analysis(
+    *,
+    inferred_by_fixture: dict[tuple[CompiledResourceType, str], tuple[InferredColumn, ...]],
+    authoritative_columns: dict[tuple[CompiledResourceType, str], frozenset[str]],
+) -> frozenset[tuple[CompiledResourceType, str]]: ...
+def unknown_fixture_column_diagnostics(
+    *,
+    inferred_by_fixture: dict[tuple[CompiledResourceType, str], tuple[InferredColumn, ...]],
+    relations: dict[tuple[CompiledResourceType, str], FixtureRelationMetadata],
+) -> tuple[RelationFixtureDiagnostic, ...]: ...
 def build_relation_fixture_completion(
     *,
     project: CompiledProjectView,

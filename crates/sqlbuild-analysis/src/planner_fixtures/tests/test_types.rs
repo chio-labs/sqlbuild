@@ -1,6 +1,22 @@
 //! Fixture alignment regression inputs.
 
 #[derive(Debug)]
+pub(crate) struct PropagationTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) upstream_type: Option<&'static str>,
+    pub(crate) expected_type: Option<&'static str>,
+}
+
+#[derive(Debug)]
+pub(crate) struct SchemaTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) authoritative: bool,
+    pub(crate) supplied: &'static [&'static str],
+    pub(crate) expected_analysis: bool,
+    pub(crate) expected_diagnostic: Option<&'static str>,
+}
+
+#[derive(Debug)]
 pub(crate) struct AlignmentTestCase {
     pub(crate) description: &'static str,
     pub(crate) supplied: &'static [&'static str],

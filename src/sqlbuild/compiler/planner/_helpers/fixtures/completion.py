@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections import ChainMap
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from functools import lru_cache
 from typing import Any
 
@@ -15,13 +14,13 @@ from sqlbuild._native import (
     build_relation_fixture_completion as _native_fixture_completion,
 )
 from sqlbuild._native import (
+    build_relation_fixture_context as build_relation_fixture_context,
+)
+from sqlbuild._native import (
     complete_empty_fixture_sql as complete_empty_fixture_sql,
 )
 from sqlbuild._native import (
     complete_typed_null_columns as complete_typed_null_columns,
-)
-from sqlbuild._native import (
-    model_fixture_metadata as _model_fixture_metadata,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
@@ -29,7 +28,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledLineageSourceFact,
     CompileSqlReference,
     DynamicColumnContractProof,
-    InferredColumn,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
@@ -38,16 +36,13 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.lineage.types import (
     ColumnLineageConfidence,
-    ColumnTransformKind,
 )
 from sqlbuild.compiler.planner.models import (
-    FixtureColumnMetadata,
     FixtureRelationMetadata,
     RelationFixtureCompletion,
-    RelationFixtureDiagnostic,
     RelationFixturePlanningContext,
 )
-from sqlbuild.compiler.planner.types import ContractPolicy, FixtureGroups, FixtureKey
+from sqlbuild.compiler.planner.types import FixtureGroups, FixtureKey
 from sqlbuild.compiler.references.constants import REF_PATTERN, SEED_PATTERN, SOURCE_PATTERN
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
@@ -71,57 +66,6 @@ def build_relation_fixture_completion(
         request=(ordered_model_names, fixture_groups),
         planning_context=planning_context,
     )
-
-
-def _fixture_keys_requiring_analysis(
-    *,
-    inferred_by_fixture: dict[FixtureKey, tuple[InferredColumn, ...]],
-    authoritative_columns: dict[FixtureKey, frozenset[str]],
-) -> frozenset[FixtureKey]:
-    required: set[FixtureKey] = set()
-    for key, inferred in inferred_by_fixture.items():
-        expected_names: frozenset[str] | None = authoritative_columns.get(key)
-        supplied_names: frozenset[str] = frozenset(column.name.casefold() for column in inferred)
-        if expected_names is None or not expected_names.issubset(supplied_names):
-            required.add(key)
-    return frozenset(required)
-
-
-def build_relation_fixture_context(
-    *,
-    project: CompiledProjectView,
-    models_by_name: dict[str, CompiledModelView] | None = None,
-) -> RelationFixturePlanningContext:
-    """Build immutable project-wide fixture metadata once per planning invocation."""
-
-    model_map: dict[str, CompiledModelView] = (
-        {model.name: model for model in project.models}
-        if models_by_name is None
-        else models_by_name
-    )
-    relations: dict[FixtureKey, FixtureRelationMetadata] = _fixture_relation_metadata(
-        project=project,
-        model_map=model_map,
-    )
-    authoritative_columns: dict[FixtureKey, frozenset[str]] = _authoritative_fixture_columns(
-        relations=relations
-    )
-    return RelationFixturePlanningContext(
-        models_by_name=model_map,
-        relations=relations,
-        authoritative_columns=authoritative_columns,
-        expected_types=_base_expected_fixture_types(relations=relations),
-    )
-
-
-def _authoritative_fixture_columns(
-    *, relations: dict[FixtureKey, FixtureRelationMetadata]
-) -> dict[FixtureKey, frozenset[str]]:
-    authoritative: dict[FixtureKey, frozenset[str]] = {}
-    for key, relation in relations.items():
-        if relation.authoritative_names:
-            authoritative[key] = frozenset(column.name.casefold() for column in relation.columns)
-    return authoritative
 
 
 def _required_fixture_columns(
@@ -318,110 +262,3 @@ def _replace_relation_markers_with_stubs(query_sql: str) -> str:
     result = SEED_PATTERN.sub(r"\1", result)
     result = SOURCE_PATTERN.sub(r"\1", result)
     return _DBT_REF_PATTERN.sub(r"\2", result)
-
-
-def _fixture_relation_metadata(
-    *, project: CompiledProjectView, model_map: dict[str, CompiledModelView]
-) -> dict[FixtureKey, FixtureRelationMetadata]:
-    relations: dict[FixtureKey, FixtureRelationMetadata] = {}
-    for model_name, model in model_map.items():
-        relations[(CompiledResourceType.MODEL, model_name)] = _model_fixture_metadata(model=model)
-    for source in project.sources:
-        relations[(CompiledResourceType.SOURCE, source.name)] = FixtureRelationMetadata(
-            columns=tuple(
-                FixtureColumnMetadata(
-                    name=column.name,
-                    type=column.type,
-                    nullable=column.nullable,
-                )
-                for column in source.source_entry.columns
-            ),
-            authoritative_names=source.source_entry.contract == ContractPolicy.ENFORCED,
-        )
-    for seed in project.seeds:
-        seed_columns: tuple[FixtureColumnMetadata, ...] = tuple(
-            FixtureColumnMetadata(
-                name=column.name,
-                type=column.type,
-                nullable=column.nullable,
-            )
-            for column in seed.schema_entry.columns
-        )
-        relations[(CompiledResourceType.SEED, seed.name)] = FixtureRelationMetadata(
-            columns=seed_columns,
-            authoritative_names=bool(seed_columns),
-        )
-    return relations
-
-
-def _expected_fixture_types(
-    *,
-    base_expected_types: dict[FixtureKey, dict[str, str]],
-    ordered_model_names: tuple[str, ...],
-    model_map: dict[str, CompiledModelView],
-) -> Mapping[FixtureKey, dict[str, str]]:
-    expected_types: ChainMap[FixtureKey, dict[str, str]] = ChainMap({}, base_expected_types)
-    for model_name in ordered_model_names:
-        model: CompiledModelView | None = model_map.get(model_name)
-        if model is None:
-            continue
-        model_key: FixtureKey = (CompiledResourceType.MODEL, model_name)
-        model_types: dict[str, str] = dict(expected_types[model_key])
-        expected_types[model_key] = model_types
-        for lineage_column in model.fast_lineage_columns or ():
-            if lineage_column.transform_kind != ColumnTransformKind.DIRECT:
-                continue
-            upstream_types: set[str] = set()
-            for upstream in lineage_column.upstream_columns:
-                upstream_type: str | None = expected_types.get(
-                    (CompiledResourceType(upstream.resource_type), upstream.resource_name), {}
-                ).get(upstream.column_name.casefold())
-                if upstream_type is not None:
-                    upstream_types.add(upstream_type)
-            if len(upstream_types) == 1:
-                model_types.setdefault(
-                    lineage_column.output_column.casefold(), upstream_types.pop()
-                )
-    return expected_types
-
-
-def _base_expected_fixture_types(
-    *, relations: dict[FixtureKey, FixtureRelationMetadata]
-) -> dict[FixtureKey, dict[str, str]]:
-    expected_types: dict[FixtureKey, dict[str, str]] = {}
-    for key, relation in relations.items():
-        column_types: dict[str, str] = {}
-        for column in relation.columns:
-            if column.type is not None:
-                column_types[column.name.casefold()] = column.type
-        expected_types[key] = column_types
-    return expected_types
-
-
-def _unknown_fixture_column_diagnostics(
-    *,
-    inferred_by_fixture: dict[FixtureKey, tuple[InferredColumn, ...]],
-    relations: dict[FixtureKey, FixtureRelationMetadata],
-) -> tuple[RelationFixtureDiagnostic, ...]:
-    diagnostics: list[RelationFixtureDiagnostic] = []
-    for key, inferred in inferred_by_fixture.items():
-        relation: FixtureRelationMetadata | None = relations.get(key)
-        if relation is None or not relation.authoritative_names:
-            continue
-        expected_names: set[str] = {column.name.casefold() for column in relation.columns}
-        unknown: tuple[str, ...] = tuple(
-            sorted(
-                column.name for column in inferred if column.name.casefold() not in expected_names
-            )
-        )
-        if unknown:
-            diagnostics.append(
-                RelationFixtureDiagnostic(
-                    key=key,
-                    message=(
-                        f"mock {key[0].value} '{key[1]}' supplies unknown columns: "
-                        f"{', '.join(unknown)}"
-                    ),
-                )
-            )
-    return tuple(diagnostics)

@@ -1,6 +1,10 @@
 pub mod align_columns;
 pub mod empty_fixture_error;
 pub mod empty_fixture_marker;
+pub mod fixture_schema;
 pub mod merge_metadata;
+pub mod propagate_types;
 pub mod render_completed;
 pub mod render_empty;
+pub mod requires_analysis;
+pub mod unknown_columns;

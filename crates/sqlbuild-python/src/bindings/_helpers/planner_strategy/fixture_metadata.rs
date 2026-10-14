@@ -9,7 +9,9 @@ use crate::bindings::_helpers::planner_strategy::fixture_values::{columns, metad
 
 #[pyfunction]
 #[pyo3(signature = (*, model))]
-fn model_fixture_metadata<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn model_fixture_metadata<'py>(
+    model: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
     let py = model.py();
     let inferred = model.getattr("inferred_columns")?;
     let schema = model.getattr("schema_entry")?;

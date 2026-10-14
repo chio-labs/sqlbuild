@@ -13,6 +13,9 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     fixture_completion::register(module)?;
     fixture_metadata::register(module)?;
     fixture_sql::register(module)?;
+    super::fixture_context::register(module)?;
+    super::fixture_selection::register(module)?;
+    super::fixture_types::register(module)?;
     lineage::register(module)?;
     microbatches::register(module)?;
     strategy::register(module)

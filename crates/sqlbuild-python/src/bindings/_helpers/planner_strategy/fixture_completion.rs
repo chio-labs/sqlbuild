@@ -7,7 +7,11 @@ use sqlbuild_analysis::planner_fixtures::main::align_columns::align_columns;
 use sqlbuild_analysis::planner_fixtures::models::{AlignmentInput, RequiredColumn};
 
 use crate::bindings::_helpers::planner_strategy::fixture_preparation::{PreparedFixtures, prepare};
+use crate::bindings::_helpers::planner_strategy::fixture_selection::{
+    fixture_keys_requiring_analysis, unknown_fixture_column_diagnostics,
+};
 use crate::bindings::_helpers::planner_strategy::fixture_sql::{CompletionSql, render_completed};
+use crate::bindings::_helpers::planner_strategy::fixture_types::expected_fixture_types;
 use crate::bindings::_helpers::planner_strategy::fixture_values::{
     COMPLETION, columns, diagnostic, folded, label, record, strings,
 };
@@ -45,13 +49,12 @@ fn build_relation_fixture_completion<'py>(
         adapter,
         &context.getattr("fixture_inferences")?,
     )?;
-    let kwargs = PyDict::new(py);
-    kwargs.set_item("inferred_by_fixture", &prepared.inferred)?;
-    kwargs.set_item(
-        "authoritative_columns",
-        context.getattr("authoritative_columns")?,
+    let fixture_keys = fixture_keys_requiring_analysis(
+        &prepared.inferred,
+        &context
+            .getattr("authoritative_columns")?
+            .cast_into::<PyDict>()?,
     )?;
-    let fixture_keys = helper(py, "_fixture_keys_requiring_analysis", &kwargs)?;
     let kwargs = PyDict::new(py);
     kwargs.set_item("ordered_model_names", &ordered_model_names)?;
     kwargs.set_item("model_map", context.getattr("models_by_name")?)?;
@@ -65,12 +68,17 @@ fn build_relation_fixture_completion<'py>(
     let required_and_stars = helper(py, "_required_fixture_columns", &kwargs)?;
     let required = required_and_stars.get_item(0)?.cast_into::<PyDict>()?;
     let stars = required_and_stars.get_item(1)?;
-    let kwargs = PyDict::new(py);
-    kwargs.set_item("base_expected_types", context.getattr("expected_types")?)?;
-    kwargs.set_item("ordered_model_names", &ordered_model_names)?;
-    kwargs.set_item("model_map", context.getattr("models_by_name")?)?;
-    let expected = helper(py, "_expected_fixture_types", &kwargs)?;
-    complete_prepared(prepared, (relations, required, stars), expected, adapter)
+    let expected = expected_fixture_types(
+        &context.getattr("expected_types")?.cast_into::<PyDict>()?,
+        ordered_model_names.extract()?,
+        &context.getattr("models_by_name")?.cast_into::<PyDict>()?,
+    )?;
+    complete_prepared(
+        prepared,
+        (relations, required, stars),
+        expected.into_any(),
+        adapter,
+    )
 }
 
 fn complete_prepared<'py>(
@@ -96,10 +104,7 @@ fn complete_prepared<'py>(
             typed_nulls.set_item(key, selected)?;
         }
     }
-    let kwargs = PyDict::new(py);
-    kwargs.set_item("inferred_by_fixture", &prepared.inferred)?;
-    kwargs.set_item("relations", &relations)?;
-    for value in helper(py, "_unknown_fixture_column_diagnostics", &kwargs)?.try_iter()? {
+    for value in unknown_fixture_column_diagnostics(&prepared.inferred, &relations)?.try_iter()? {
         prepared.diagnostics.push(value?);
     }
     let completed_keys = PySet::empty(py)?;
