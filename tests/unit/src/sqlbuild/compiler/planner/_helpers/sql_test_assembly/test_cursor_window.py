@@ -4,17 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.planner._helpers.sql_tests.cursor_window import (
-    render_test_cursor_intrinsics,
-)
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     CursorWindowRenderingTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.helpers import (
     CURSOR_WINDOW_ADAPTERS,
-    CURSOR_WINDOW_MODEL_SQL,
     build_cursor_model,
     build_windowed_sql_test,
+    plan_cursor_window_model_sql,
 )
 
 
@@ -63,13 +60,12 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.helpers
 def test_given_model_using_cursor_intrinsics_when_rendering_default_window_then_bounds_are_typed(
     test_case: CursorWindowRenderingTestCase,
 ) -> None:
-    rendered: str = render_test_cursor_intrinsics(
-        sql=CURSOR_WINDOW_MODEL_SQL,
+    rendered: str = plan_cursor_window_model_sql(
         model=build_cursor_model(
             cursor_type=test_case.cursor_type, cursor_grain=test_case.cursor_grain
         ),
+        test=build_windowed_sql_test(cursor_start=None, cursor_end=None),
         adapter=CURSOR_WINDOW_ADAPTERS[test_case.adapter_name],
-        test=None,
     )
 
     assert rendered == test_case.expected_sql
@@ -96,15 +92,14 @@ def test_given_model_using_cursor_intrinsics_when_rendering_default_window_then_
 def test_given_declared_test_window_when_rendering_then_declared_bounds_replace_defaults(
     test_case: CursorWindowRenderingTestCase,
 ) -> None:
-    rendered: str = render_test_cursor_intrinsics(
-        sql=CURSOR_WINDOW_MODEL_SQL,
+    rendered: str = plan_cursor_window_model_sql(
         model=build_cursor_model(
             cursor_type=test_case.cursor_type, cursor_grain=test_case.cursor_grain
         ),
-        adapter=CURSOR_WINDOW_ADAPTERS[test_case.adapter_name],
         test=build_windowed_sql_test(
             cursor_start=test_case.cursor_start, cursor_end=test_case.cursor_end
         ),
+        adapter=CURSOR_WINDOW_ADAPTERS[test_case.adapter_name],
     )
 
     assert rendered == test_case.expected_sql

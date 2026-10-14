@@ -36,11 +36,7 @@ pub(crate) fn assemble_sql_test_plans<'py>(
             context = args.value("fixture_planning_context")?;
             if !context.is_truthy()? {
                 context = call_with(
-                    &imported(
-                        py,
-                        "sqlbuild._native",
-                        "build_relation_fixture_context",
-                    )?,
+                    &imported(py, "sqlbuild._native", "build_relation_fixture_context")?,
                     &[("project", project.clone())],
                 )?;
             }

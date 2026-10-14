@@ -1,0 +1,278 @@
+//! Cursor windows rendered for models that SQL tests evaluate from their real SQL.
+
+use std::cmp::Ordering;
+
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::types::PyString;
+use sqlbuild_cursor::algebra::main::compare::compare;
+use sqlbuild_cursor::algebra::main::floor_to_grain::floor_to_grain;
+use sqlbuild_cursor::algebra::models::{Grain, Scalar};
+
+use crate::bindings::_helpers::attachments::cursor_intrinsics::resolve_cursor_intrinsics;
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::cursor::conversion::CursorSession;
+use crate::bindings::_helpers::cursor::scalars::{parse_value, render_value};
+use crate::bindings::_helpers::model_config::config_values::config_str;
+use crate::bindings::_helpers::sql_test_glue::constants::{
+    COMPILE_EXCEPTIONS, CURSOR_ALGEBRA_EXCEPTIONS, CURSOR_END_KEY, CURSOR_START_KEY,
+    DEFAULT_INTEGER_END, DEFAULT_INTEGER_START, DEFAULT_TIMESTAMP_END, DEFAULT_TIMESTAMP_START,
+    INTEGER_CURSOR_TYPE, PLANNER_TYPES, TIMESTAMP_CURSOR_TYPE,
+};
+
+/// One model's cursor name, type and timestamp grain.
+struct ModelCursor<'py> {
+    name: String,
+    cursor_type: Bound<'py, PyAny>,
+    type_name: String,
+    grain: Option<(String, Grain)>,
+}
+
+/// One declared bound with the defaults and key used when it is absent or invalid.
+struct BoundRequest<'a, 'py> {
+    raw: Option<Bound<'py, PyAny>>,
+    default: &'a str,
+    key: &'a str,
+}
+
+/// Whether SQL calls `__cursor_start()` or `__cursor_end()`.
+pub(super) fn uses_cursor_intrinsics(py: Python<'_>, sql: &str) -> PyResult<bool> {
+    Ok(resolve_cursor_intrinsics(py, sql, None, None)?.1)
+}
+
+/// Whether a SQL test header declares its own cursor window.
+pub(super) fn declares_cursor_window(test: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let block = test.getattr("test_block")?;
+    Ok(!block.getattr("cursor_start")?.is_none() || !block.getattr("cursor_end")?.is_none())
+}
+
+/// SQL with intrinsics rendered from the test's declared window, or the wide default window.
+pub(super) fn render_test_cursor_intrinsics<'py>(
+    sql: Bound<'py, PyAny>,
+    model: &Bound<'py, PyAny>,
+    adapter: &Bound<'py, PyAny>,
+    test: Option<&Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = sql.py();
+    let text: String = sql.extract()?;
+    if !uses_cursor_intrinsics(py, &text)? {
+        return Ok(sql);
+    }
+    let cursor = model_cursor(model)?;
+    let (start, end) = test_window(&cursor, test)?;
+    let literal = |value: &Bound<'py, PyAny>| -> PyResult<String> {
+        call_with(
+            &adapter.getattr("render_cursor_bound_literal")?,
+            &[
+                ("value", PyString::new(py, &render_value(value)?).into_any()),
+                ("cursor_type", cursor.cursor_type.clone()),
+            ],
+        )?
+        .extract()
+    };
+    let (start_sql, end_sql) = (literal(&start)?, literal(&end)?);
+    let (rendered, _) = resolve_cursor_intrinsics(py, &text, Some(&start_sql), Some(&end_sql))?;
+    Ok(PyString::new(py, &rendered).into_any())
+}
+
+/// Chain models using intrinsics, after validating the test's declared window against each.
+pub(super) fn declared_window_cursor_models<'py>(
+    test: &Bound<'py, PyAny>,
+    chain_models: Vec<Bound<'py, PyAny>>,
+) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    let py = test.py();
+    let mut cursor_models: Vec<Bound<'py, PyAny>> = Vec::new();
+    for model in chain_models {
+        if uses_cursor_intrinsics(py, &model.getattr("query_sql")?.extract::<String>()?)? {
+            cursor_models.push(model);
+        }
+    }
+    if cursor_models.is_empty() {
+        return Err(compile_input_error(
+            py,
+            format!(
+                "{} declares cursor_start or cursor_end, but no model it evaluates uses __cursor_start() or __cursor_end()",
+                test_label(test)?
+            ),
+        ));
+    }
+    for model in &cursor_models {
+        test_window(&model_cursor(model)?, Some(test))?;
+    }
+    Ok(cursor_models)
+}
+
+/// The start and exclusive end of one model's window, validating declared bounds.
+fn test_window<'py>(
+    cursor: &ModelCursor<'py>,
+    test: Option<&Bound<'py, PyAny>>,
+) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
+    let block = test.map(|test| test.getattr("test_block")).transpose()?;
+    let declared = |name: &str| -> PyResult<Option<Bound<'py, PyAny>>> {
+        let Some(block) = &block else {
+            return Ok(None);
+        };
+        let value = block.getattr(name)?;
+        Ok((!value.is_none()).then_some(value))
+    };
+    let integer = cursor.type_name == INTEGER_CURSOR_TYPE;
+    let start = bound(
+        BoundRequest {
+            raw: declared(CURSOR_START_KEY)?,
+            default: if integer {
+                DEFAULT_INTEGER_START
+            } else {
+                DEFAULT_TIMESTAMP_START
+            },
+            key: CURSOR_START_KEY,
+        },
+        cursor,
+        test,
+    )?;
+    let end = bound(
+        BoundRequest {
+            raw: declared(CURSOR_END_KEY)?,
+            default: if integer {
+                DEFAULT_INTEGER_END
+            } else {
+                DEFAULT_TIMESTAMP_END
+            },
+            key: CURSOR_END_KEY,
+        },
+        cursor,
+        test,
+    )?;
+    if let Some(test) = test
+        && ordering(&start, &end)? != Ordering::Less
+    {
+        return Err(compile_input_error(
+            test.py(),
+            format!(
+                "{}: cursor_start '{}' must be before the exclusive cursor_end '{}' for model '{}'",
+                test_label(test)?,
+                render_value(&start)?,
+                render_value(&end)?,
+                cursor.name
+            ),
+        ));
+    }
+    Ok((start, end))
+}
+
+/// One parsed bound, or the parsed default when the test declares none.
+fn bound<'py>(
+    request: BoundRequest<'_, 'py>,
+    cursor: &ModelCursor<'py>,
+    test: Option<&Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = cursor.cursor_type.py();
+    let (Some(raw), Some(test)) = (request.raw, test) else {
+        return parse_value(
+            &PyString::new(py, request.default).into_any(),
+            &cursor.cursor_type,
+        );
+    };
+    let value = match parse_value(&raw, &cursor.cursor_type) {
+        Ok(value) => value,
+        Err(error)
+            if error.value(py).is_instance(&imported(
+                py,
+                CURSOR_ALGEBRA_EXCEPTIONS,
+                "CursorAlgebraError",
+            )?)? =>
+        {
+            let expected = if cursor.type_name == INTEGER_CURSOR_TYPE {
+                "an integer"
+            } else {
+                "an ISO timestamp or date"
+            };
+            return Err(compile_input_error(
+                py,
+                format!(
+                    "{}: {} '{}' must be {expected} because model '{}' uses cursor_type {}",
+                    test_label(test)?,
+                    request.key,
+                    raw.str()?,
+                    cursor.name,
+                    cursor.type_name
+                ),
+            ));
+        }
+        Err(error) => return Err(error),
+    };
+    if let Some((grain_name, grain)) = &cursor.grain {
+        let session = CursorSession::new(py)?;
+        let scalar: Scalar = session.scalar(&value)?;
+        let floored: Scalar = floor_to_grain(&scalar, Some(*grain));
+        if session.checked(compare(&floored, &scalar, &session))? != Ordering::Equal {
+            return Err(compile_input_error(
+                py,
+                format!(
+                    "{}: {} '{}' is not aligned to cursor_grain {grain_name} of model '{}'",
+                    test_label(test)?,
+                    request.key,
+                    raw.str()?,
+                    cursor.name
+                ),
+            ));
+        }
+    }
+    Ok(value)
+}
+
+/// How two parsed cursor values order.
+fn ordering(left: &Bound<'_, PyAny>, right: &Bound<'_, PyAny>) -> PyResult<Ordering> {
+    let session = CursorSession::new(left.py())?;
+    let (left, right) = (session.scalar(left)?, session.scalar(right)?);
+    session.checked(compare(&left, &right, &session))
+}
+
+/// The cursor type and timestamp grain a model's config declares.
+fn model_cursor<'py>(model: &Bound<'py, PyAny>) -> PyResult<ModelCursor<'py>> {
+    let py = model.py();
+    let values = model.getattr("config")?.getattr("values")?;
+    let declared = config_str(&values, "cursor_type")?.filter(|value| {
+        value
+            .extract::<String>()
+            .is_ok_and(|value| !value.is_empty())
+    });
+    let cursor_type = imported(py, PLANNER_TYPES, "CursorType")?.call1((
+        declared.unwrap_or_else(|| PyString::new(py, TIMESTAMP_CURSOR_TYPE).into_any()),
+    ))?;
+    let type_name: String = cursor_type.getattr("value")?.extract()?;
+    let grain = match config_str(&values, "cursor_grain")? {
+        Some(grain) if type_name == TIMESTAMP_CURSOR_TYPE => {
+            let grain = imported(py, PLANNER_TYPES, "CursorGrain")?.call1((grain,))?;
+            let session = CursorSession::new(py)?;
+            session
+                .grain(&grain)?
+                .map(|known| PyResult::Ok((grain.getattr("value")?.extract()?, known)))
+                .transpose()?
+        }
+        _ => None,
+    };
+    Ok(ModelCursor {
+        name: model.getattr("name")?.extract()?,
+        cursor_type,
+        type_name,
+        grain,
+    })
+}
+
+/// `SQL test '<name>' in '<path>'`.
+fn test_label(test: &Bound<'_, PyAny>) -> PyResult<String> {
+    Ok(format!(
+        "SQL test '{}' in '{}'",
+        test.getattr("name")?.str()?,
+        test.getattr("test_file")?.getattr("relative_path")?.str()?
+    ))
+}
+
+/// A `CompileInputError` carrying `message`.
+fn compile_input_error(py: Python<'_>, message: String) -> PyErr {
+    match imported(py, COMPILE_EXCEPTIONS, "CompileInputError")
+        .and_then(|class| class.call1((message,)))
+    {
+        Ok(error) => PyErr::from_value(error),
+        Err(error) => error,
+    }
+}

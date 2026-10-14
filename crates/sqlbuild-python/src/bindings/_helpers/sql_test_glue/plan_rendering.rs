@@ -5,29 +5,15 @@ use crate::bindings::_helpers::sql_test_glue::plan_values::{model_payload, strin
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
-use crate::bindings::_helpers::sql_test_glue::constants::{CURSOR_WINDOW, SENTINEL};
+use crate::bindings::_helpers::sql_test_glue::constants::SENTINEL;
+use crate::bindings::_helpers::sql_test_glue::cursor_window::{
+    declared_window_cursor_models, declares_cursor_window, render_test_cursor_intrinsics,
+};
 
 pub(super) fn mentions(sql: &str) -> bool {
     ["__cursor_start", "__cursor_end"]
         .iter()
         .any(|name| sql.contains(name))
-}
-
-fn render<'py>(
-    sql: Bound<'py, PyAny>,
-    model: Bound<'py, PyAny>,
-    adapter: &Bound<'py, PyAny>,
-    test: Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    call_with(
-        &imported(adapter.py(), CURSOR_WINDOW, "render_test_cursor_intrinsics")?,
-        &[
-            ("sql", sql),
-            ("model", model),
-            ("adapter", adapter.clone()),
-            ("test", test),
-        ],
-    )
 }
 
 pub(super) fn models<'py>(
@@ -42,7 +28,7 @@ pub(super) fn models<'py>(
         if mentions(&sql.extract::<String>()?) {
             result.set_item(
                 index,
-                render(sql, model, adapter, py.None().into_bound(py))?,
+                render_test_cursor_intrinsics(sql, &model, adapter, None)?,
             )?;
         }
     }
@@ -64,13 +50,7 @@ pub(super) fn overrides<'py>(
     let mut indexes: Vec<usize> = Vec::new();
     let mut windowed: Vec<Bound<'py, PyAny>> = Vec::new();
     for (index, test) in tests.iter().enumerate() {
-        if model_payload(test)?
-            && call_with(
-                &imported(py, CURSOR_WINDOW, "declares_cursor_window")?,
-                &[("test", test.clone())],
-            )?
-            .is_truthy()?
-        {
+        if model_payload(test)? && declares_cursor_window(test)? {
             indexes.push(index);
             windowed.push(test.clone());
         }
@@ -115,15 +95,11 @@ pub(super) fn overrides<'py>(
         for (name, sql) in overrides.iter() {
             let name: String = name.extract()?;
             let sql = if let Some(model) = models.get_item(&name)? {
-                render(
+                render_test_cursor_intrinsics(
                     sql,
-                    model,
+                    &model,
                     adapter,
-                    if chain_names.contains(&name) {
-                        test.clone()
-                    } else {
-                        py.None().into_bound(py)
-                    },
+                    chain_names.contains(&name).then_some(test),
                 )?
             } else {
                 sql
@@ -137,20 +113,17 @@ pub(super) fn overrides<'py>(
                     chain_models.push(model);
                 }
             }
-            let cursor_models = call_with(
-                &imported(py, CURSOR_WINDOW, "declared_window_cursor_models")?,
-                &[
-                    ("test", test.clone()),
-                    ("chain_models", PyTuple::new(py, chain_models)?.into_any()),
-                ],
-            )?;
-            for model in cursor_models.try_iter()? {
-                let model = model?;
+            for model in declared_window_cursor_models(test, chain_models)? {
                 let name = model.getattr("name")?;
                 if !rendered.contains(&name)? {
                     rendered.set_item(
                         name,
-                        render(model.getattr("query_sql")?, model, adapter, test.clone())?,
+                        render_test_cursor_intrinsics(
+                            model.getattr("query_sql")?,
+                            &model,
+                            adapter,
+                            Some(test),
+                        )?,
                     )?;
                 }
             }
