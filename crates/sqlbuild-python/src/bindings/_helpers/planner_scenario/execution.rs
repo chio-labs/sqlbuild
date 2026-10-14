@@ -209,15 +209,21 @@ fn complete_fixtures<'py>(
         .map(|key| key.getattr("name"))
         .collect::<PyResult<Vec<_>>>()?;
     let completion = call_with(
-        &imported(
-            py,
-            "sqlbuild._native",
-            "build_relation_fixture_completion",
-        )?,
+        &imported(py, "sqlbuild._native", "build_relation_fixture_completion")?,
         &[
             ("project", project.clone()),
             ("adapter", context.adapter.clone()),
-            ("request", PyTuple::new(py, [PyTuple::new(py, names)?.into_any(), PyTuple::new(py, groups)?.into_any()])?.into_any()),
+            (
+                "request",
+                PyTuple::new(
+                    py,
+                    [
+                        PyTuple::new(py, names)?.into_any(),
+                        PyTuple::new(py, groups)?.into_any(),
+                    ],
+                )?
+                .into_any(),
+            ),
         ],
     )?;
     let diagnostics = completion.getattr("diagnostics")?;

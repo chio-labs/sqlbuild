@@ -209,6 +209,7 @@ from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     BackfillResult,
     ChangeDetectionResult,
+    ColumnMigrationPlanEntry,
     ColumnMigrationPlanning,
     ColumnRenameHint,
     CursorBounds,
@@ -233,6 +234,7 @@ from sqlbuild.compiler.planner.models import (
     ModelPlanContext,
     ModelPlanEntry,
     OldNameView,
+    OldNameViewPlanning,
     ParsedScenarioArtifactName,
     ParsedSelector,
     PathSelector,
@@ -4753,6 +4755,14 @@ def migration_destination_fingerprints(
 ) -> dict[str, tuple[str, ...]]: ...
 def stored_migration_fingerprint(fingerprint: Fingerprint) -> str | None: ...
 def declared_column_aliases(model: CompiledModelView) -> tuple[tuple[str, str], ...]: ...
+def plan_old_name_views(
+    *,
+    runtime: PlannerRuntime,
+    scope: PlannerScope,
+    snapshot: WarehouseSnapshot,
+    migration_entries: tuple[ModelMigrationPlanEntry, ...],
+    column_entries: tuple[ColumnMigrationPlanEntry, ...],
+) -> OldNameViewPlanning: ...
 def manual_migration_requests(*, scope: PlannerScope) -> tuple[ModelMigrationRequest, ...]: ...
 def discover_model_migrations(
     *,

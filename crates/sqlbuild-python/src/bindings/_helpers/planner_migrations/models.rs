@@ -2,6 +2,17 @@ use pyo3::prelude::{Bound, PyAny};
 use pyo3::types::PyDict;
 
 #[derive(Debug)]
+pub(crate) struct OldNamePlanner<'py> {
+    pub runtime: Bound<'py, PyAny>,
+    pub models: Vec<Bound<'py, PyAny>>,
+    pub histories: Vec<Bound<'py, PyAny>>,
+    pub views: Bound<'py, PyAny>,
+    pub columns: Bound<'py, PyAny>,
+    pub retention: Bound<'py, PyAny>,
+    pub now: Bound<'py, PyAny>,
+}
+
+#[derive(Debug)]
 pub(crate) struct ColumnCandidate<'py> {
     pub model: Bound<'py, PyAny>,
     pub warehouse: Bound<'py, PyDict>,
