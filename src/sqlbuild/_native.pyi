@@ -210,11 +210,14 @@ from sqlbuild.compiler.planner.models import (
     CursorOverridePair,
     DeferralInputs,
     DirectModelVersionIdentities,
+    EmptyCursorInputDecision,
     FixtureRelationMetadata,
     FutureCursorSafetyEvidence,
+    MaximumStartPolicyInputs,
     MaximumStartSafetyEvidence,
     MigrationCompatibilityResult,
     MissingUpstream,
+    ModelCursorSnapshot,
     ModelMigrationRequest,
     ModelPlanContext,
     ModelPlanEntry,
@@ -1068,6 +1071,79 @@ class NativeCompiledProject:
 
 def compiled_model_record(model: CompiledModelView) -> CompiledModel: ...
 def compiled_audit_record(audit: CompiledAuditView) -> CompiledAudit: ...
+def compute_model_cursor_bounds(
+    *,
+    model: CompiledModelView,
+    snapshot: WarehouseSnapshot,
+    backfill: BackfillResult,
+    full_refresh: bool,
+    start_cursor_override: str | None,
+    end_cursor_override: str | None,
+    runtime_cursor_producer_names: frozenset[str],
+    context: ModelPlanContext,
+    replaces_relation: bool = False,
+) -> CursorBounds | None: ...
+def compute_cursor_bounds(
+    *,
+    cursor_snapshot: ModelCursorSnapshot,
+    cursor_type: str | None,
+    cursor_start: str | None,
+    lookback: str | None,
+    backfill_duration: str | None,
+    start_cursor_override: str | None,
+    end_cursor_override: str | None,
+    is_microbatch: bool,
+    cursor_grain: str | None = None,
+    maximum_start_policy: MaximumStartPolicyInputs | None = None,
+) -> CursorBounds | None: ...
+def apply_typed_cursor_replay_policy(
+    *,
+    start: CursorScalar,
+    end: CursorScalar,
+    cursor_start: CursorScalar | str | None,
+    cursor_type: str | None,
+    lookback: Duration | str | None,
+    backfill_duration: Duration | str | None,
+    has_start_override: bool,
+) -> CursorScalar: ...
+def cursor_inputs_without_rows(
+    *, cursor_snapshot: ModelCursorSnapshot
+) -> EmptyCursorInputDecision: ...
+def decide_empty_cursor_inputs(
+    *,
+    empty_input_names: tuple[str, ...],
+    waits_for_every_input: bool,
+    inputs_with_rows: bool,
+    has_window_start: bool,
+) -> EmptyCursorInputDecision: ...
+def empty_cursor_window(*, cursor_type: str | None, cursor_start: str | None) -> CursorBounds: ...
+def cursor_window_override_flags(*, cursor_type: str | None) -> str: ...
+def empty_input_rebuild_refusal(
+    *,
+    model_name: str,
+    input_names: tuple[str, ...],
+    cursor_type: str | None,
+) -> tuple[str, str]: ...
+def unreadable_cursor_inputs_error(
+    *,
+    model_name: str,
+    cursor_type: str | None,
+    input_names: tuple[str, ...],
+) -> PlannerInputError: ...
+def without_destination_cursor(*, cursor_snapshot: ModelCursorSnapshot) -> ModelCursorSnapshot: ...
+def resolve_effective_timestamp_grain(
+    *,
+    cursor_type: str | None,
+    downstream_grain: str | None,
+    cursor_input_grains: tuple[str | None, ...],
+    microbatch_strategy: str | None = None,
+) -> str | None: ...
+def normalize_cursor_snapshot_grain(
+    *,
+    cursor_snapshot: ModelCursorSnapshot,
+    cursor_type: str | None,
+    effective_grain: str | None,
+) -> ModelCursorSnapshot: ...
 def resolve_model_sql(
     *,
     adapter: BaseAdapter,

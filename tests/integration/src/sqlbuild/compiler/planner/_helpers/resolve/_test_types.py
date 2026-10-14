@@ -3,9 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, field
 from sqlbuild.spec.contracts.models import SourceEntry
+
+
+@dataclass(frozen=True)
+class CursorPlannerTestCase:
+    """Expected bounds and rows through a custom cursor-rendering planner."""
+
+    description: str
+    expected_start: str
+    expected_end: str
+    expected_rows: list[tuple[datetime]]
 
 
 @dataclass(frozen=True)

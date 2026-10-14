@@ -51,6 +51,18 @@ class OrchestrationOverrideAdapter(DuckDbAdapter):
         return "(SELECT 9 AS order_id)"
 
 
+class CursorLiteralOverrideAdapter(DuckDbAdapter):
+    """Keep custom cursor rendering observable through complete planner execution."""
+
+    def __init__(self) -> None:
+        self.cursor_literals: list[tuple[str, str | None]] = []
+
+    def render_cursor_bound_literal(self, *, value: str, cursor_type: str | None) -> str:
+        self.cursor_literals.append((value, cursor_type))
+        literal: str = super().render_cursor_bound_literal(value=value, cursor_type=cursor_type)
+        return f"{literal} /* custom cursor literal */"
+
+
 def compile_resolution_project(project_dir: Path) -> CompiledProjectView:
     """Compile a real model, dependent table function and SQL hook project."""
 

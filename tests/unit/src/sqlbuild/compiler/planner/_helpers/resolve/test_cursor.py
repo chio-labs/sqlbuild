@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -23,7 +24,7 @@ from sqlbuild.compiler.planner.types import (
     CursorType,
     CursorWatermarkMode,
 )
-from sqlbuild.cursor_algebra.models import AlignedInterval, DateValue
+from sqlbuild.cursor_algebra.models import AlignedInterval, DateValue, TimestampValue
 from sqlbuild.cursor_algebra.types import CursorScalar
 from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types import (
     CursorBoundsTestCase,
@@ -141,6 +142,48 @@ def test_given_observed_timestamp_when_resolving_partition_then_boundaries_are_g
 @pytest.mark.parametrize(
     "test_case",
     [
+        CursorBoundsTestCase(
+            description="negative integer override through zero has an exclusive end of one",
+            cursor_snapshot=ModelCursorSnapshot(
+                target_max="-2",
+                upstream_mins=("-9",),
+                upstream_maxes=("0",),
+            ),
+            cursor_type="integer",
+            lookback="1d",
+            backfill_duration="2d",
+            start_cursor_override="-3",
+            end_cursor_override="0",
+            is_microbatch=False,
+            expected_bounds=CursorBounds(start="-3", end="1"),
+        ),
+        CursorBoundsTestCase(
+            description="external timezone replay retains wall time across daylight saving",
+            cursor_snapshot=ModelCursorSnapshot(
+                target_max=TimestampValue(
+                    value=datetime(2024, 3, 31, 12, tzinfo=ZoneInfo("Europe/Paris"))
+                ),
+                upstream_mins=(
+                    TimestampValue(value=datetime(2024, 3, 1, tzinfo=ZoneInfo("Europe/Paris"))),
+                ),
+                upstream_maxes=(
+                    TimestampValue(value=datetime(2024, 4, 1, 18, tzinfo=ZoneInfo("Europe/Paris"))),
+                ),
+            ),
+            cursor_type="timestamp",
+            cursor_grain="day",
+            lookback="1d",
+            backfill_duration=None,
+            start_cursor_override=None,
+            end_cursor_override=None,
+            is_microbatch=False,
+            expected_bounds=CursorBounds(
+                start=TimestampValue(
+                    value=datetime(2024, 3, 30, 12, tzinfo=ZoneInfo("Europe/Paris"))
+                ),
+                end=TimestampValue(value=datetime(2024, 4, 2, tzinfo=ZoneInfo("Europe/Paris"))),
+            ),
+        ),
         CursorBoundsTestCase(
             description="normal incremental uses target max as start and min of upstream maxes as end",
             cursor_snapshot=ModelCursorSnapshot(

@@ -8,7 +8,6 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyTuple};
 use pyo3::{IntoPyObject, PyErr, pyfunction, wrap_pyfunction};
 
-const RESOLVE_MODULE: &str = "sqlbuild.compiler.planner._helpers.resolve.resolve";
 const CONFIG_MODULE: &str = "sqlbuild.compiler.planner._helpers.resolve.config";
 const INTRINSICS_MODULE: &str = "sqlbuild.compiler.planner._helpers.resolve.cursor_intrinsics";
 const MODELS_MODULE: &str = "sqlbuild.compiler.planner.models";
@@ -183,7 +182,7 @@ fn resolve_model_sql<'py>(
     )?;
     let overrides = args.value("cursor_overrides")?;
     let bounds = call_with(
-        &imported(py, RESOLVE_MODULE, "_compute_model_cursor_bounds")?,
+        &imported(py, NATIVE_MODULE, "compute_model_cursor_bounds")?,
         &[
             ("model", model.clone()),
             ("snapshot", args.value("snapshot")?),
