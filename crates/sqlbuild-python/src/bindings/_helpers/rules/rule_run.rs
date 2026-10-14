@@ -143,10 +143,9 @@ fn rules_bulk_cache_path(project_dir: PathBuf, file_name: &str) -> PathBuf {
 }
 
 /// Hand freed glibc heap pages back to the OS; a no-op elsewhere or without `malloc_trim`.
-#[pyfunction]
-fn release_freed_memory(py: Python<'_>) -> PyResult<()> {
+pub(crate) fn freed_memory_released(py: Python<'_>) {
     if !cfg!(target_os = "linux") {
-        return Ok(());
+        return;
     }
     let trim = || -> PyResult<()> {
         let process: Bound<'_, PyAny> = imported(py, CTYPES_MODULE, "CDLL")?.call1((py.None(),))?;
@@ -154,13 +153,11 @@ fn release_freed_memory(py: Python<'_>) -> PyResult<()> {
         Ok(())
     };
     let _ = trim();
-    Ok(())
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(finish_rule_run, module)?)?;
     module.add_function(wrap_pyfunction!(run_rules, module)?)?;
     module.add_function(wrap_pyfunction!(rules_bulk_cache_path, module)?)?;
-    module.add_function(wrap_pyfunction!(release_freed_memory, module)?)?;
     Ok(())
 }

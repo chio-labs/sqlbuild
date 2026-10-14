@@ -10,6 +10,7 @@ use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     Status, call_with, imported, keywords, within,
 };
+use crate::bindings::_helpers::rules::early_sql_lint::EarlySqlLint;
 use crate::bindings::_helpers::rules::results::rules_progress;
 use crate::bindings::_helpers::rules::rules_config::load_rules_config;
 
@@ -30,7 +31,6 @@ const SELECTION_MODULE: &str = "sqlbuild._native";
 const RULE_THREADS_MODULE: &str = "sqlbuild.rule_engine._helpers.run.rule_threads";
 const RULE_MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
 const RULE_CONSTANTS_MODULE: &str = "sqlbuild.rule_engine.constants";
-const EARLY_LINT_MODULE: &str = "sqlbuild.rule_engine.classes.early_sql_lint";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const CLI_COMPILE_MODELS_MODULE: &str = "sqlbuild.cli.compile.models";
@@ -141,11 +141,7 @@ pub(crate) fn analyze<'py>(
     let selection: &Bound<'py, PyAny> = &options.analysis_selection;
     let enabled: bool = !(selection.getattr("select")?.is_truthy()?
         || selection.getattr("exclude")?.is_truthy()?);
-    let early_lint_class: Bound<'py, PyAny> = imported(py, EARLY_LINT_MODULE, "EarlySqlLint")?;
-    let manager: Bound<'py, PyAny> = call_with(
-        &early_lint_class,
-        &[("enabled", PyBool::new(py, enabled).to_owned().into_any())],
-    )?;
+    let manager: Bound<'py, PyAny> = Bound::new(py, EarlySqlLint::new(py, enabled)?)?.into_any();
     within(&manager, |early_lint| analyzed(py, &options, early_lint))
 }
 
