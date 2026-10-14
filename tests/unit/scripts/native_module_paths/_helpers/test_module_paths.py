@@ -116,6 +116,7 @@ def test_given_native_source_when_checking_module_paths_then_reports_errors(
                 "sqlbuild.executor.runtime",
                 "sqlbuild.fingerprints",
                 "sqlbuild.lineage",
+                "sqlbuild.planner",
                 "sqlbuild.planner.changes",
             ),
         ),

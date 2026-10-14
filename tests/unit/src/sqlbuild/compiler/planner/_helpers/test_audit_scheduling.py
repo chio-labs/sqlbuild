@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import (
+    reads_outside_target_lineage,
+    resolve_attachment_kind,
+    resolve_effective_run_scope,
+)
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditRunScope,
@@ -15,11 +20,6 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledAuditView,
-)
-from sqlbuild.compiler.planner._helpers.output.audit_scheduling import (
-    reads_outside_target_lineage,
-    resolve_attachment_kind,
-    resolve_effective_run_scope,
 )
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.compiler.references.types import SqlReferenceKind

@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import check_cursor_type_consistency
 from sqlbuild.adapter.contract.models import ColumnInfo
-from sqlbuild.compiler.planner._helpers.output.cursor_type_check import (
-    check_cursor_type_consistency,
-)
 from sqlbuild.compiler.planner.models import PlanWarning
 from sqlbuild.compiler.planner.types import WarningSeverity
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (

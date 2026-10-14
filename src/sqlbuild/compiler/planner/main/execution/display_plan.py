@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild._native import get_config_str
+from sqlbuild._native import get_config_str, get_materialization_type
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
 )
@@ -11,7 +11,6 @@ from sqlbuild.compiler.planner._helpers.graph.core import (
     build_downstream_deps,
     build_execution_upstream_deps,
 )
-from sqlbuild.compiler.planner._helpers.output.strategy import get_materialization_type
 from sqlbuild.compiler.planner._helpers.planning.full_refresh import resolve_model_full_refresh
 from sqlbuild.compiler.planner.models import BackfillResult, ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.planner.types import (

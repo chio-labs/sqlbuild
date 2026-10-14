@@ -11,7 +11,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 const BUILTINS_MODULE: &str = "builtins";
 
 /// Keys within `max_depth` edges of any start, plus the starts when `include_starts`.
-fn closure<'py>(
+pub(crate) fn closure<'py>(
     starts: Vec<Bound<'py, PyAny>>,
     edges: &Bound<'py, PyAny>,
     (include_starts, max_depth): (bool, Option<i64>),

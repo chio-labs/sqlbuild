@@ -62,7 +62,13 @@ from sqlbuild.compiler.auditing.models import (
     MeasurementContract,
     MeasurementThresholds,
 )
-from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditOutcome, AuditSeverity
+from sqlbuild.compiler.auditing.types import (
+    AuditAttachmentKind,
+    AuditEvaluationMode,
+    AuditOutcome,
+    AuditRunScope,
+    AuditSeverity,
+)
 from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
@@ -197,12 +203,21 @@ from sqlbuild.compiler.planner.models import (
     PlannerRuntime,
     PlannerScope,
     PlanOutput,
+    PlanWarning,
     ReferenceRename,
+    SchemaAction,
     SchemaFinding,
     SqlTestPlanEntry,
     WarehouseSnapshot,
 )
-from sqlbuild.compiler.planner.types import CursorGrain, MaterializationType, PlanAction
+from sqlbuild.compiler.planner.types import (
+    CursorGrain,
+    CursorType,
+    MaterializationType,
+    OnSchemaChange,
+    PlanAction,
+    PlanReason,
+)
 from sqlbuild.compiler.project_assembly.models import NativeProjectResources
 from sqlbuild.compiler.python_nodes.models import (
     PythonNodeGraph,
@@ -332,6 +347,7 @@ from sqlbuild.spec.contracts.models import (
     TargetConfig,
 )
 from sqlbuild.spec.contracts.types import (
+    MicrobatchLimitAction,
     SourceFreshnessStrategy,
     SourceFreshnessValueKind,
     WarehouseGroup,
@@ -3846,6 +3862,78 @@ def replaces_incremental_relation(
     *, materialization_type: MaterializationType, action: PlanAction
 ) -> bool: ...
 def version_identity_metadata_payload(metadata_json: str | None) -> Any: ...
+def get_materialization_type(model: CompiledModelView) -> MaterializationType: ...
+def resolve_model_plan_action(
+    *, model: CompiledModelView, change_result: ChangeDetectionResult, full_refresh: bool
+) -> tuple[PlanAction, PlanReason]: ...
+def resolve_schema_actions(
+    *, schema_findings: tuple[SchemaFinding, ...], on_schema_change: OnSchemaChange | None
+) -> tuple[SchemaAction, ...]: ...
+def build_model_warnings(
+    *,
+    model_name: str,
+    materialization_type: MaterializationType,
+    change_result: ChangeDetectionResult,
+    schema_actions: tuple[SchemaAction, ...],
+    on_schema_change: OnSchemaChange | None,
+    type_enforcement: bool,
+) -> tuple[PlanWarning, ...]: ...
+def resolve_attachment_kind(
+    *,
+    audit: CompiledAuditView,
+    downstream_deps: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+) -> tuple[AuditAttachmentKind, str | None]: ...
+def reads_outside_target_lineage(
+    *,
+    audit: CompiledAuditView,
+    upstream_deps: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+) -> bool: ...
+def resolve_effective_run_scope(
+    *, requested_run_scope: AuditRunScope, attached_model_materialization: str | None
+) -> AuditRunScope: ...
+def classify_cursor_sql_type(sql_type: str) -> CursorType | None: ...
+def check_cursor_type_consistency(
+    *,
+    model_name: str,
+    cursor_column: str | None,
+    cursor_type: str | None,
+    warehouse_columns: tuple[ColumnInfo, ...],
+    sql_analysis_enabled: bool,
+) -> PlanWarning | None: ...
+def count_microbatches(
+    *,
+    bounds: CursorBounds,
+    batch_size: str,
+    cursor_type: str,
+    equal_bounds_are_batch: bool = False,
+) -> int: ...
+def cap_microbatch_bounds(
+    *,
+    bounds: CursorBounds,
+    batch_size: str,
+    cursor_type: str,
+    max_batches: int,
+    action: MicrobatchLimitAction,
+) -> CursorBounds: ...
+def microbatch_limit_warning(
+    *, model_name: str, max_batches: int | None, batch_count: int, action: MicrobatchLimitAction
+) -> str | None: ...
+def resolve_microbatch_limit_config(
+    *, values: Mapping[str, object]
+) -> tuple[int | None, MicrobatchLimitAction | None]: ...
+def resolve_lineage_reference(
+    *,
+    model: CompiledModelView,
+    input_name: str,
+    models_by_name: Mapping[str, CompiledModelView],
+    functions_by_name: Mapping[str, CompiledFunctionView],
+) -> CompileSqlReference: ...
+def validate_capped_watermark_inputs(
+    *,
+    model: CompiledModelView,
+    models_by_name: Mapping[str, CompiledModelView],
+    functions_by_name: Mapping[str, CompiledFunctionView] | None = None,
+) -> None: ...
 def detect_schema_changes(
     *,
     yml_columns: tuple[ColumnInfo, ...],

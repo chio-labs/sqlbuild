@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild._native import get_materialization_type
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
@@ -24,7 +25,6 @@ from sqlbuild.compiler.planner._helpers.graph.selectors import resolve_graph_sel
 from sqlbuild.compiler.planner._helpers.identity.functions import (
     build_compiled_function_fingerprint_sql,
 )
-from sqlbuild.compiler.planner._helpers.output.strategy import get_materialization_type
 from sqlbuild.compiler.planner._helpers.resolve.refs import (
     build_function_locations,
     build_model_locations,

@@ -16,6 +16,7 @@ from sqlbuild._native import (
     compute_query_hash,
     cursor_bound_display,
     inclusive_cursor_end,
+    microbatch_limit_warning,
     resolve_effective_microbatch_batch_size,
 )
 from sqlbuild._native import cursor_cap_from_end as cap_from_end
@@ -44,9 +45,6 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
 from sqlbuild.compiler.planner.main.cursor_window.empty_cursor_window import empty_cursor_window
 from sqlbuild.compiler.planner.main.execution.future_cursor_warning import future_cursor_cap_warning
 from sqlbuild.compiler.planner.main.execution.maximum_start_warning import maximum_start_cap_warning
-from sqlbuild.compiler.planner.main.execution.microbatch_limit import (
-    microbatch_limit_warning,
-)
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
     Duration,

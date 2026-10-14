@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import resolve_model_plan_action
 from sqlbuild.compiler.compile.types import CompiledModelView
-from sqlbuild.compiler.planner._helpers.output.strategy import resolve_model_plan_action
 from sqlbuild.compiler.planner.models import ChangeDetectionResult, SchemaFinding
 from sqlbuild.compiler.planner.types import (
     BackfillAction,

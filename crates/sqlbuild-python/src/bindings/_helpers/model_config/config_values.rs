@@ -38,7 +38,10 @@ fn wrong_type(key: &str, expected: &str, value: &Bound<'_, PyAny>) -> PyErr {
 /// An authored string, preserving a present empty string.
 #[pyfunction(name = "get_config_str")]
 #[pyo3(signature = (*, values, key))]
-fn config_str<'py>(values: &Bound<'py, PyAny>, key: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
+pub(crate) fn config_str<'py>(
+    values: &Bound<'py, PyAny>,
+    key: &str,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
     let Some(value) = authored(values, key)? else {
         return Ok(None);
     };
