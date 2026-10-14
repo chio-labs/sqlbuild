@@ -8,7 +8,13 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-from sqlbuild._native import expand_sql_macros
+from sqlbuild._native import (
+    expand_sql_macros,
+    plan_compiled_sql_test_artifacts,
+    plan_sql_tests,
+    plan_sql_tests_natively,
+    sql_test_plan_error_messages,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
@@ -44,13 +50,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
-from sqlbuild.compiler.planner._helpers.sql_tests.assembly import plan_sql_tests
 from sqlbuild.compiler.planner._helpers.sql_tests.comments import uncommented_pattern_matches
-from sqlbuild.compiler.planner._helpers.sql_tests.native_planning import (
-    plan_compiled_sql_test_artifacts,
-    plan_sql_tests_natively,
-    sql_test_plan_error_messages,
-)
 from sqlbuild.compiler.planner.models import (
     NativeSqlTestPlan,
     PlanWarning,

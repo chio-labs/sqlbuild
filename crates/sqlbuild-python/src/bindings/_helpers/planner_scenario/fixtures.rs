@@ -15,15 +15,10 @@ pub(super) fn extract_fixtures<'py>(
     scenario: &Bound<'py, PyAny>,
     prefix: &str,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let result = PyDict::new(scenario.py());
-    for cte in scenario.getattr("authored_ctes")?.try_iter()? {
-        let cte = cte?;
-        let name: String = cte.getattr("name")?.extract()?;
-        if let Some(name) = name.strip_prefix(prefix) {
-            result.set_item(name, cte.getattr("sql_body")?)?;
-        }
-    }
-    Ok(result)
+    crate::bindings::_helpers::sql_test_glue::authored_ctes::prefixed_ctes(
+        &scenario.getattr("authored_ctes")?,
+        prefix,
+    )
 }
 
 pub(super) fn fixture_plans<'py>(

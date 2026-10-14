@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
+import sqlbuild._native as sql_test_assembly
 from sqlbuild import _native as fixture_completion
 from sqlbuild._native import (
     compiled_model_record,
@@ -22,7 +23,6 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.planner._helpers.output import plan_output
 from sqlbuild.compiler.planner._helpers.output.plan_output import build_selected_test_entries
-from sqlbuild.compiler.planner._helpers.sql_tests import assembly as sql_test_assembly
 from sqlbuild.compiler.planner.classes import fixture_column_inferences as fixture_inferences
 from sqlbuild.compiler.planner.models import (
     FixtureColumnMetadata,

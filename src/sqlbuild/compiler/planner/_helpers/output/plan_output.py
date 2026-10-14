@@ -6,6 +6,7 @@ from sqlbuild._native import (
     build_relation_fixture_context,
     build_selected_audit_entries,
     build_source_load_entries,
+    plan_sql_tests,
     upstream_loader_dependency_names,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -31,7 +32,6 @@ from sqlbuild.compiler.planner._helpers.output.plan_entry import (
     scope_overlaps,
 )
 from sqlbuild.compiler.planner._helpers.resolve.resolve import resolve_function_sql
-from sqlbuild.compiler.planner._helpers.sql_tests.assembly import plan_sql_tests
 from sqlbuild.compiler.planner.exceptions import (
     PlannerInputError,
 )

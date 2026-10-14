@@ -236,6 +236,8 @@ from sqlbuild.compiler.planner.models import (
     OldNameView,
     OldNameViewPlanEntry,
     OldNameViewPlanning,
+    NativeSqlTestArtifact,
+    NativeSqlTestPlan,
     ParsedScenarioArtifactName,
     ParsedSelector,
     PathSelector,
@@ -266,6 +268,7 @@ from sqlbuild.compiler.planner.models import (
     SelectorExpansion,
     SourceLoadPlanEntry,
     SqlTestPlanEntry,
+    SqlTestPlanResult,
     SqlTestSelection,
     UnitTestSelectorSplit,
     WarehouseSnapshot,
@@ -455,6 +458,39 @@ from sqlbuild.sql_values.models import SqlValue, SqlValueLimits
 from sqlbuild.sql_values.types import CollectionRendering, StateSqlValueType
 
 BUILD_IDENTITY: str
+
+def plan_sql_tests(
+    *,
+    tests: tuple[CompiledSqlTest, ...],
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    sql_analysis_enabled: bool = False,
+    validate_fixtures: bool = False,
+    fixture_planning_context: RelationFixturePlanningContext | None = None,
+) -> tuple[SqlTestPlanResult, ...]: ...
+def plan_sql_tests_natively(
+    *,
+    project: CompiledProjectView,
+    tests: tuple[CompiledSqlTest, ...],
+    adapter: BaseAdapter,
+    sql_analysis_enabled: bool,
+    render_sql: bool,
+    include_plan: bool = True,
+) -> tuple[NativeSqlTestPlan, ...]: ...
+def plan_compiled_sql_test_artifacts(
+    *,
+    project: CompiledProjectView,
+    tests: tuple[CompiledSqlTest, ...],
+    adapter: BaseAdapter,
+    sql_analysis_enabled: bool,
+) -> tuple[NativeSqlTestArtifact, ...]: ...
+def resolve_sql_test_model_chains(
+    *,
+    project: CompiledProjectView,
+    tests: tuple[CompiledSqlTest, ...],
+) -> tuple[tuple[str, ...], ...]: ...
+def sql_test_plan_error_messages(*, warnings: tuple[PlanWarning, ...]) -> tuple[str, ...]: ...
+
 STAGE_CAPTURE_OMITTED_ATTRIBUTES: dict[str, frozenset[str]]
 
 def migration_planning_database(*, runtime: PlannerRuntime) -> str | None: ...
