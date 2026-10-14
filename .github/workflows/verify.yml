@@ -660,7 +660,7 @@ jobs:
     needs: [changes, lockfile]
     if: needs.changes.outputs.performance == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -682,6 +682,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --all-groups --all-extras
       - name: Run fresh-process compile cache guard under 4 GiB
+        timeout-minutes: 15
         env:
           BENCHMARK_MODELS: ${{ matrix.models }}
           MEMORY_LIMIT_BYTES: "4294967296"
@@ -704,6 +705,7 @@ jobs:
 
       - name: Run varied 1k warm-cache guard under 4 GiB
         if: matrix.models == 3000
+        timeout-minutes: 15
         env:
           MEMORY_LIMIT_BYTES: "4294967296"
         run: |
