@@ -169,6 +169,9 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullabili
 from sqlbuild.compiler.migrations.models import MigrationRelation
 from sqlbuild.compiler.migrations.types import OldNameViewEventType
 from sqlbuild.compiler.pipeline.models import (
+    ClonePipelineConnection,
+    ClonePipelineOptions,
+    ClonePipelineResult,
     CompiledProjectPhaseResult,
     CompilePipelineOptions,
     CompilePipelineResult,
@@ -2511,6 +2514,16 @@ def resolve_effective_scenario_config(
 def scenario_local_type_overrides_for_dialect(
     *, scenario_config: ScenarioConfig, sql_analysis_dialect: str | None
 ) -> dict[str, str]: ...
+def run_clone_pipeline_with_options(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    origin_target_name: str,
+    destination_target_name: str,
+    destination_connection: ClonePipelineConnection,
+    options: ClonePipelineOptions,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+) -> ClonePipelineResult: ...
 def loader_destination_parts(
     *, destination: str, default_database: str | None, default_schema: str | None
 ) -> LoaderDestinationParts: ...

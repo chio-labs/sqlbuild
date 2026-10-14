@@ -21,6 +21,7 @@ use sqlbuild_core::clone_text::models::CloneItemText;
 use crate::bindings::_helpers::clone::clone_execution::{
     destination_entry_count, execute_clone_plan, resource_types_by_name,
 };
+use crate::bindings::_helpers::clone::clone_pipeline::{ClonePipeline, prepared_clone_pipeline};
 use crate::bindings::_helpers::clone::clone_progress::{clone_item_text, write_line};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 
@@ -33,7 +34,6 @@ const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild.cli.commands._helpers.planning.external_refs";
-const CLONE_PIPELINE_MODULE: &str = "sqlbuild.compiler.pipeline.main._clone";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const NO_DESTINATION: (&str, &str) = (
@@ -265,20 +265,27 @@ fn prepare<'py>(
                 &imported(py, PIPELINE_MODELS, "ClonePipelineConnection")?,
                 &[("config", config.clone()), ("handle", connection.clone())],
             )?;
-            let pipeline: Bound<'py, PyAny> = call_with(
-                &imported(py, CLONE_PIPELINE_MODULE, "run_clone_pipeline")?,
+            let options: Bound<'py, PyAny> = call_with(
+                &imported(py, PIPELINE_MODELS, "ClonePipelineOptions")?,
                 &[
-                    ("discovered_inputs", invocation.discovered.clone()),
-                    ("adapter", invocation.adapter.clone()),
-                    ("origin_target_name", request.getattr("origin_target_name")?),
-                    ("destination_target_name", text(py, &invocation.destination)),
                     ("no_sql_validation", request.getattr("no_sql_validation")?),
                     ("select", request.getattr("select")?),
                     ("exclude", request.getattr("exclude")?),
                     ("cli_vars", request.getattr("cli_vars")?),
-                    ("destination_connection", destination_connection),
-                    ("external_sql_reference_resolver", resolver),
                 ],
+            )?;
+            let pipeline: Bound<'py, PyAny> = prepared_clone_pipeline(
+                &ClonePipeline {
+                    discovered: invocation.discovered.clone(),
+                    adapter: invocation.adapter.clone(),
+                    connection: destination_connection,
+                    options,
+                    resolver,
+                },
+                (
+                    &request.getattr("origin_target_name")?,
+                    &text(py, &invocation.destination),
+                ),
             )?;
             progress.call_method1(
                 "on_progress",

@@ -10,6 +10,7 @@ from sqlbuild._native import (
     build_compiled_project,
     enforce_model_execution_limit,
     resolve_target_config,
+    run_clone_pipeline_with_options,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.planning.external_refs import (
@@ -34,7 +35,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.clone_with_options import run_clone_pipeline_with_options
 from sqlbuild.compiler.pipeline.main.unit_test_selection import split_unit_test_selectors
 from sqlbuild.compiler.pipeline.models import (
     ClonePipelineConnection,
