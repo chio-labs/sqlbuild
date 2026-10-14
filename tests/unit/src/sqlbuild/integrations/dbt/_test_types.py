@@ -12,6 +12,14 @@ from sqlbuild.spec.contracts.models import DbtConfig, LocalDbtConfig
 
 
 @dataclass(frozen=True)
+class DbtResultBackfillTestCase:
+    description: str
+    message: str
+    failures: int
+    expected_message: str
+
+
+@dataclass(frozen=True)
 class DbtConfigResolutionTestCase:
     description: str
     config: DbtConfig

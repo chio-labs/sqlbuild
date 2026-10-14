@@ -324,9 +324,14 @@ from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.models import (
     DbtCliConfigOverrides,
     DbtCliOptions,
+    DbtCommandExecutionResult,
     DbtInteropCommandArgs,
+    DbtInteropCompiledProject,
+    DbtInteropExecutionRequest,
+    DbtInteropInvocation,
     DbtInteropParsedArgs,
     DbtInteropPlan,
+    DbtInteropPlanResolution,
     DbtInteropRoutedArgs,
     DbtInteropSelectionResult,
     DbtLsNode,
@@ -1698,6 +1703,47 @@ def build_dbt_ls_argv(
     exclude: Sequence[str] | None = None,
     resource_types: Sequence[str] | None = None,
 ) -> tuple[str, ...]: ...
+def resolve_dbt_execution_invocation(
+    request: DbtInteropExecutionRequest,
+) -> DbtInteropInvocation: ...
+def load_compiled_dbt_manifest(
+    *,
+    runner: DbtRunner,
+    dbt_options: DbtCliOptions,
+    full_refresh: bool,
+    on_progress: Callable[[str], None] | None,
+) -> DbtManifestIndex: ...
+def compile_dbt_interop_project(
+    *,
+    project_dir: Path,
+    discovered_inputs: DiscoveredProjectInputs,
+    manifest: DbtManifestIndex,
+    dbt_vars: dict[str, object],
+    no_sql_validation: bool,
+    on_progress: Callable[[str], None] | None,
+) -> DbtInteropCompiledProject: ...
+def resolve_dbt_interop_plan(
+    *,
+    command: DbtInteropCommand,
+    invocation: DbtInteropInvocation,
+    compiled: DbtInteropCompiledProject,
+    manifest: DbtManifestIndex,
+    sqlbuild_executable: str,
+    on_progress: Callable[[str], None] | None,
+) -> DbtInteropPlanResolution: ...
+def execute_dbt_commands(
+    *,
+    runner: DbtRunner,
+    options: DbtCliOptions,
+    merged_argv: tuple[str, ...] | None,
+    progress_stream: TextIO,
+    stdout_stream: TextIO,
+    use_color: bool,
+    skip_message: str = "Skipping dbt: no dbt work selected.",
+    expected_nodes: tuple[DbtLsNode, ...] | None = None,
+    on_node_result: Callable[[DbtNodeExecutionResult], None] | None = None,
+    on_progress: Callable[[str], None] | None = None,
+) -> DbtCommandExecutionResult: ...
 def parse_dbt_ls_json_lines(*, stdout: str) -> tuple[DbtLsNode, ...]: ...
 def route_dbt_interop_args(
     *, command: DbtInteropCommand | str, parsed: DbtInteropParsedArgs

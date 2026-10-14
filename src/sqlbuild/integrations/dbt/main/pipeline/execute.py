@@ -5,7 +5,11 @@ from __future__ import annotations
 from sqlbuild._native import (
     build_failed_sqlbuild_model_names,
     build_merged_dbt_execution_argv,
+    compile_dbt_interop_project,
+    load_compiled_dbt_manifest,
     plan_has_executable_work,
+    resolve_dbt_execution_invocation,
+    resolve_dbt_interop_plan,
 )
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt._helpers.pipeline.execution_phases import (
@@ -16,12 +20,6 @@ from sqlbuild.integrations.dbt._helpers.pipeline.execution_phases import (
     write_dbt_execution_plan_text,
     write_dbt_execution_summary,
     write_sqlbuild_skip_notice,
-)
-from sqlbuild.integrations.dbt._helpers.pipeline.interop_prologue import (
-    compile_dbt_interop_project,
-    load_compiled_dbt_manifest,
-    resolve_dbt_execution_invocation,
-    resolve_dbt_interop_plan,
 )
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
 from sqlbuild.integrations.dbt.models import (

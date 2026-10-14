@@ -13,5 +13,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     manifest::register(module)?;
     orchestration::register(module)?;
     plan::register(module)?;
-    profile::register(module)
+    profile::register(module)?;
+    super::runtime_execution::register(module)?;
+    super::pipeline_prologue::register(module)
 }

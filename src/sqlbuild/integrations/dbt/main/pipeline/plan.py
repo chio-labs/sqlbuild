@@ -7,8 +7,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TextIO
 
-from sqlbuild._native import ConnectionProgressReporter
-from sqlbuild.integrations.dbt._helpers.pipeline.interop_prologue import (
+from sqlbuild._native import (
+    ConnectionProgressReporter,
     compile_dbt_interop_project,
     load_compiled_dbt_manifest,
     resolve_dbt_execution_invocation,
