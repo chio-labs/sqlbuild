@@ -44,6 +44,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     evaluation::register(module)?;
     lint::register(module)?;
     lint_text::register(module)?;
+    crate::bindings::_helpers::rules::fixture_formatting::register(module)?;
     lint_expansion::register(module)?;
     lint_sql_bodies::register(module)?;
     dsl_headers::register(module)?;

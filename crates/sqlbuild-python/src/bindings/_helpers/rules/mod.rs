@@ -9,6 +9,7 @@ pub(crate) mod findings;
 pub(crate) mod fix_facts;
 pub(crate) mod fix_session;
 pub(crate) mod fix_verdict;
+pub(crate) mod fixture_formatting;
 pub(crate) mod guidance;
 pub(crate) mod lint;
 pub(crate) mod lint_expansion;

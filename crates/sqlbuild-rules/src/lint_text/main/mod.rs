@@ -11,3 +11,4 @@ pub mod neutralize_interpolation;
 pub mod resolve_format_settings;
 pub mod restore_interpolation;
 pub mod scan_fixture_null_candidates;
+pub mod simplify_fixture_nulls;

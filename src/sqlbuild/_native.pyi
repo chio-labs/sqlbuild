@@ -207,6 +207,7 @@ from sqlbuild.compiler.planner.models import (
     CursorBounds,
     DeferralInputs,
     DirectModelVersionIdentities,
+    FixtureRelationMetadata,
     FutureCursorSafetyEvidence,
     MaximumStartSafetyEvidence,
     MigrationCompatibilityResult,
@@ -2314,6 +2315,7 @@ def lint_interpolation_text_at(body: str, start: int, dialect: str) -> str | Non
 def scan_fixture_typed_null_candidates(
     project_dir: Path, selected_paths: frozenset[Path] | None = None
 ) -> tuple[frozenset[Path], frozenset[str]]: ...
+def simplify_fixture_null_projections(*, sql: str, relation: FixtureRelationMetadata) -> str: ...
 def format_lint_sql_bodies(
     files: list[tuple[Path, str]], project_dir: Path, config: LintConfig
 ) -> tuple[dict[Path, str], list[LintViolation]]: ...

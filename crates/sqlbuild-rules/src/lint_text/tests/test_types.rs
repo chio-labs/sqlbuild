@@ -73,3 +73,9 @@ pub(super) struct RoleKindTestCase {
     pub(super) relative_parts: &'static [&'static str],
     pub(super) expected_kind: Option<&'static str>,
 }
+pub(crate) struct FixtureFormattingTestCase {
+    pub description: &'static str,
+    pub sql: &'static str,
+    pub columns: Vec<(String, Option<String>, Option<bool>)>,
+    pub expected_sql: &'static str,
+}

@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 import sqlbuild._native as _native
+from sqlbuild._native import simplify_fixture_null_projections as _remove_redundant_typed_null_lines
 from sqlbuild.compiler.compile.classes.sql_test_cte_extractor import SqlTestCteExtractor
 from sqlbuild.compiler.compile.constants import (
     REF_TEST_CTE_PREFIX,
@@ -30,41 +31,10 @@ from sqlbuild.compiler.planner.types import ContractPolicy, FixtureKey
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import SchemaColumn, SchemaSeedEntry, SourceEntry
 
-_TYPED_NULL_LINE_PATTERN: re.Pattern[str] = re.compile(
-    r"^(?P<indent>[ \t]*)(?:"
-    r"CAST\s*\(\s*NULL\s+AS\s+(?P<cast_type>"
-    r"[A-Za-z_][A-Za-z0-9_]*(?:\s*\([^()]*\))?"
-    r"(?:\s+[A-Za-z_][A-Za-z0-9_]*(?:\s*\([^()]*\))?)*"
-    r")\)"
-    r"|NULL\s*::\s*(?P<colon_type>[A-Za-z_][A-Za-z0-9_]*(?:\([^)]*\))?)"
-    r")\s+AS\s+(?P<alias>\"[^\"]+\"|`[^`]+`|[A-Za-z_][A-Za-z0-9_]*)"
-    r"(?P<comma>\s*,)?[ \t]*$",
-    re.IGNORECASE,
-)
-_CLAUSE_LINE_PATTERN: re.Pattern[str] = re.compile(
-    r"^\s*(?:FROM|WHERE|GROUP|HAVING|QUALIFY|ORDER|LIMIT|UNION|INTERSECT|EXCEPT)\b",
-    re.IGNORECASE,
-)
-_SET_OPERATION_PATTERN: re.Pattern[str] = re.compile(
-    r"\b(?:UNION|INTERSECT|EXCEPT)\b", re.IGNORECASE
-)
 _MACRO_INVOCATION_MARKER: str = "@"
 _TYPED_NULL_CANDIDATE_PATTERN: re.Pattern[str] = re.compile(
     r"(?:CAST\s*\(\s*NULL\s+AS\b|NULL\s*::)", re.IGNORECASE
 )
-_PROJECTION_ALIAS_PATTERN: re.Pattern[str] = re.compile(
-    r"\bAS\s+(?P<alias>\"[^\"]+\"|`[^`]+`|[A-Za-z_][A-Za-z0-9_]*)\s*,?\s*$",
-    re.IGNORECASE,
-)
-_SELECT_LINE_PATTERN: re.Pattern[str] = re.compile(r"^\s*SELECT\b(?P<body>.*)$", re.IGNORECASE)
-_EMPTY_TYPED_NULL_QUERY_PATTERN: re.Pattern[str] = re.compile(
-    r"^\s*SELECT\s+(?P<projection>.+?)\s+WHERE\s+FALSE\s*$",
-    re.IGNORECASE | re.DOTALL,
-)
-_SQL_QUOTE_CHARACTERS: frozenset[str] = frozenset({"'", '"', "`"})
-_OPEN_PARENTHESIS_CHARACTER: str = "("
-_CLOSE_PARENTHESIS_CHARACTER: str = ")"
-_COMMA_CHARACTER: str = ","
 
 
 def format_redundant_fixture_nulls(
@@ -226,159 +196,6 @@ def _relation_metadata(*, columns: tuple[SchemaColumn, ...]) -> FixtureRelationM
         ),
         authoritative_names=True,
     )
-
-
-def _remove_redundant_typed_null_lines(*, sql: str, relation: FixtureRelationMetadata) -> str:
-    if _SET_OPERATION_PATTERN.search(sql) is not None:
-        return sql
-    metadata_by_name: dict[str, FixtureColumnMetadata] = {
-        column.name.casefold(): column for column in relation.columns
-    }
-    if _is_empty_typed_null_query(sql=sql, metadata_by_name=metadata_by_name):
-        return "SELECT * FROM __empty_fixture()"
-    lines: list[str] = sql.splitlines()
-    typed_null_indexes: set[int] = set()
-    remove_indexes: set[int] = set()
-    for index, line in enumerate(lines):
-        match: re.Match[str] | None = _TYPED_NULL_LINE_PATTERN.fullmatch(line)
-        if match is None:
-            continue
-        alias: str = match.group("alias").strip('"`')
-        column: FixtureColumnMetadata | None = metadata_by_name.get(alias.casefold())
-        if column is None or column.type is None:
-            continue
-        typed_null_indexes.add(index)
-        if column.nullable is False:
-            continue
-        remove_indexes.add(index)
-    empty_retained: list[str] = [
-        line for index, line in enumerate(lines) if index not in typed_null_indexes
-    ]
-    empty_retained = _without_trailing_projection_comma(lines=empty_retained)
-    empty_candidate: str = "\n".join(empty_retained)
-    if re.fullmatch(r"\s*SELECT\s+WHERE\s+FALSE\s*", empty_candidate, re.IGNORECASE):
-        return "SELECT * FROM __empty_fixture()"
-    if not remove_indexes:
-        return sql
-    authored_names: tuple[str, ...] | None = _projection_aliases(lines=lines)
-    if authored_names is None or not _names_form_schema_prefix(
-        names=authored_names,
-        relation=relation,
-    ):
-        return sql
-    retained: list[str] = [line for index, line in enumerate(lines) if index not in remove_indexes]
-    retained = _without_trailing_projection_comma(lines=retained)
-    candidate: str = "\n".join(retained)
-    retained_names: tuple[str, ...] | None = _projection_aliases(lines=retained)
-    if retained_names is None or not retained_names:
-        return sql
-    if not _names_form_schema_prefix(names=retained_names, relation=relation):
-        return sql
-    return candidate
-
-
-def _is_empty_typed_null_query(
-    *, sql: str, metadata_by_name: dict[str, FixtureColumnMetadata]
-) -> bool:
-    """Return whether an empty fixture projects only known typed-null columns."""
-
-    query_match: re.Match[str] | None = _EMPTY_TYPED_NULL_QUERY_PATTERN.fullmatch(sql)
-    if query_match is None:
-        return False
-    projections: tuple[str, ...] = _split_top_level_expressions(
-        value=query_match.group("projection")
-    )
-    if not projections:
-        return False
-    for projection in projections:
-        typed_null_match: re.Match[str] | None = _TYPED_NULL_LINE_PATTERN.fullmatch(
-            projection.strip()
-        )
-        if typed_null_match is None:
-            return False
-        alias: str = typed_null_match.group("alias").strip('"`')
-        column: FixtureColumnMetadata | None = metadata_by_name.get(alias.casefold())
-        if column is None or column.type is None:
-            return False
-    return True
-
-
-def _split_top_level_expressions(*, value: str) -> tuple[str, ...]:
-    """Split a projection list without splitting commas inside types or quoted values."""
-
-    expressions: list[str] = []
-    start: int = 0
-    depth: int = 0
-    quote: str | None = None
-    index: int = 0
-    while index < len(value):
-        character: str = value[index]
-        if quote is not None:
-            if character == quote:
-                if index + 1 < len(value) and value[index + 1] == quote:
-                    index += 2
-                    continue
-                quote = None
-            index += 1
-            continue
-        if character in _SQL_QUOTE_CHARACTERS:
-            quote = character
-        elif character == _OPEN_PARENTHESIS_CHARACTER:
-            depth += 1
-        elif character == _CLOSE_PARENTHESIS_CHARACTER:
-            depth = max(0, depth - 1)
-        elif character == _COMMA_CHARACTER and depth == 0:
-            expressions.append(value[start:index])
-            start = index + 1
-        index += 1
-    expressions.append(value[start:])
-    return tuple(expression for expression in expressions if expression.strip())
-
-
-def _projection_aliases(*, lines: list[str]) -> tuple[str, ...] | None:
-    aliases: list[str] = []
-    saw_select: bool = False
-    for line in lines:
-        candidate: str = line
-        if not saw_select:
-            select_match: re.Match[str] | None = _SELECT_LINE_PATTERN.match(line)
-            if select_match is None:
-                if line.strip():
-                    return None
-                continue
-            saw_select = True
-            candidate = select_match.group("body")
-        if _CLAUSE_LINE_PATTERN.match(candidate):
-            break
-        if not candidate.strip():
-            continue
-        alias_match: re.Match[str] | None = _PROJECTION_ALIAS_PATTERN.search(candidate)
-        if alias_match is None:
-            return None
-        aliases.append(alias_match.group("alias").strip('"`').casefold())
-    return tuple(aliases) if saw_select else None
-
-
-def _names_form_schema_prefix(*, names: tuple[str, ...], relation: FixtureRelationMetadata) -> bool:
-    schema_prefix: tuple[str, ...] = tuple(
-        column.name.casefold() for column in relation.columns[: len(names)]
-    )
-    return names == schema_prefix
-
-
-def _without_trailing_projection_comma(*, lines: list[str]) -> list[str]:
-    updated: list[str] = list(lines)
-    clause_index: int | None = next(
-        (index for index, line in enumerate(updated) if _CLAUSE_LINE_PATTERN.match(line)),
-        None,
-    )
-    search_end: int = len(updated) if clause_index is None else clause_index
-    for index in range(search_end - 1, -1, -1):
-        if not updated[index].strip():
-            continue
-        updated[index] = re.sub(r",\s*$", "", updated[index])
-        break
-    return updated
 
 
 def _fixture_key(name: str) -> tuple[CompiledResourceType, str] | None:
