@@ -8,6 +8,7 @@ pub mod custom_rule_cache;
 pub mod dsl_headers;
 pub mod engine;
 pub mod errors;
+pub mod fix_verification;
 pub mod lint_text;
 pub mod models;
 pub mod rule_cache;

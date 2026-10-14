@@ -6,7 +6,13 @@ from collections import Counter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from sqlbuild._native import build_compiled_project, compiled_relation_keys, run_lint
+from sqlbuild._native import (
+    build_compiled_project,
+    compile_facts,
+    compiled_relation_keys,
+    fix_verdict,
+    run_lint,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import CompiledProjectView, TypedSqlValueRenderer
@@ -18,8 +24,6 @@ from sqlbuild.lint.constants import (
     VIOLATION_SEVERITY_WARNING,
 )
 from sqlbuild.lint.exceptions import ProjectCompileError
-from sqlbuild.lint.main.compile_facts import compile_facts
-from sqlbuild.lint.main.fix_verdict import fix_verdict
 from sqlbuild.lint.models import (
     CompileFacts,
     FixVerdict,

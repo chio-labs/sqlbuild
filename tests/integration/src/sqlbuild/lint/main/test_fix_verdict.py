@@ -6,9 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import compile_facts, fix_verdict
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.lint.main.compile_facts import compile_facts
-from sqlbuild.lint.main.fix_verdict import fix_verdict
 from sqlbuild.lint.models import FixVerdict
 from tests.integration.src.sqlbuild.lint.main._test_types import FixVerdictTestCase
 from tests.integration.src.sqlbuild.lint.main.helpers import compile_models, without_lineage
@@ -27,6 +26,37 @@ _CUSTOMERS: str = (
 @pytest.mark.parametrize(
     "test_case",
     (
+        FixVerdictTestCase(
+            description="a changed model inventory cannot be attributed to one edit",
+            before_models=(("orders.sql", _ORDERS),),
+            after_models=(("orders.sql", _ORDERS), ("payments.sql", _PAYMENTS)),
+            edited=("orders.sql",),
+            expected_failing=(),
+            expected_unattributed=True,
+        ),
+        FixVerdictTestCase(
+            description="an edited model without inferred columns cannot verify",
+            before_models=(
+                (
+                    "orders.sql",
+                    'MODEL (description "Orders", sql_analysis false);\nSELECT 1 AS order_id\n',
+                ),
+            ),
+            after_models=(
+                (
+                    "orders.sql",
+                    'MODEL (description "Orders", sql_analysis false);\nSELECT 1 AS order_id\n',
+                ),
+            ),
+            edited=("orders.sql",),
+            expected_failing=(
+                (
+                    "orders.sql",
+                    "Output columns could not be inferred, so the fix cannot be verified",
+                ),
+            ),
+            expected_unattributed=False,
+        ),
         FixVerdictTestCase(
             description="an edit that adds a diagnostic fails its own file",
             before_models=(("orders.sql", _ORDERS), ("payments.sql", _PAYMENTS)),

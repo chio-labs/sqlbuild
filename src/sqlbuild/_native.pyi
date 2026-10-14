@@ -338,7 +338,15 @@ from sqlbuild.integrations.dbt.models import (
     ResolvedDbtProfileOutput,
 )
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
-from sqlbuild.lint.models import HeaderSpan, LintBody, LintConfig, LintRunResult, LintViolation
+from sqlbuild.lint.models import (
+    CompileFacts,
+    FixVerdict,
+    HeaderSpan,
+    LintBody,
+    LintConfig,
+    LintRunResult,
+    LintViolation,
+)
 from sqlbuild.lint.types import RelationKeyRow, RelationKeys
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.models import DisplayOptions
@@ -1186,6 +1194,10 @@ def declared_relation_keys(
     sources: Iterable[SourceEntry],
 ) -> RelationKeys: ...
 def compiled_relation_keys(project: CompiledProjectView) -> RelationKeys: ...
+def compile_facts(*, project: CompiledProjectView, project_dir: Path) -> CompileFacts: ...
+def fix_verdict(
+    *, before: CompileFacts, after: CompileFacts, edited: frozenset[Path]
+) -> FixVerdict: ...
 def build_lint_expansion_context(
     *,
     project_dir: Path,
