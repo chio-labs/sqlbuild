@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyTuple};
+use pyo3::types::{PyDict, PyTuple, PyTupleMethods};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_rules::rule_cache::main::rules_bulk_cache_path::rules_bulk_cache_path as bulk_cache_path;
 use sqlbuild_rules::rule_results::main::group_unevaluated::group_unevaluated;
@@ -13,9 +13,9 @@ use sqlbuild_rules::rule_results::models::RuleFinding;
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::rules::results::rule_finding;
+use crate::bindings::_helpers::rules::rows::finalize_rule_findings_rows;
 
 const RULE_THREADS_MODULE: &str = "sqlbuild.rule_engine._helpers.run.rule_threads";
-const NATIVE_ROWS_MODULE: &str = "sqlbuild.rule_engine._helpers.run.native_rows";
 const MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
 const PATHLIB_MODULE: &str = "pathlib";
 const CTYPES_MODULE: &str = "ctypes";
@@ -56,28 +56,22 @@ fn finish_rule_run<'py>(
     result: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = plan.py();
-    let mut evaluated_codes: Vec<Bound<'py, PyAny>> = Vec::new();
+    let mut evaluated_codes: Vec<String> = Vec::new();
     for rule in plan.getattr("selected")?.try_iter()? {
-        evaluated_codes.push(rule?.getattr("code")?);
+        evaluated_codes.push(rule?.getattr("code")?.extract()?);
     }
     let mut combined: Vec<Bound<'py, PyAny>> = Vec::new();
     for findings in [sql_result.getattr("findings")?, result.getattr("findings")?] {
         combined.extend(findings.try_iter()?.collect::<PyResult<Vec<_>>>()?);
     }
-    let finalized: Vec<RuleFinding> = call_with(
-        &imported(py, NATIVE_ROWS_MODULE, "finalize_rules_rows")?,
-        &[
-            ("config", plan.getattr("config")?),
-            ("project_dir", plan.getattr("project_dir")?),
-            (
-                "evaluated_codes",
-                PyTuple::new(py, evaluated_codes)?.into_any(),
-            ),
-            ("findings", PyTuple::new(py, combined)?.into_any()),
-        ],
+    let finalized: Vec<RuleFinding> = finalize_rule_findings_rows(
+        &plan.getattr("config")?,
+        &plan.getattr("project_dir")?,
+        evaluated_codes,
+        combined,
     )?
-    .try_iter()?
-    .map(|finding| rule_finding(&finding?))
+    .iter()
+    .map(|finding| rule_finding(&finding))
     .collect::<PyResult<_>>()?;
     let grouped: Vec<RuleFinding> = compiler_guard(|| Ok(group_unevaluated(finalized)))?;
     let unevaluated: BTreeSet<String> = grouped

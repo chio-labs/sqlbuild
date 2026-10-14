@@ -341,6 +341,7 @@ from sqlbuild.presentation.types import CompletionState
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.rule_engine.models import (
     Finding,
+    NativeRulesEvaluation,
     PreparedSqlLint,
     Rule,
     RuleRunPlan,
@@ -419,14 +420,16 @@ class NativeRulesRequest:
     def sql_facts_json(self) -> str: ...
 
 def build_rules_request(
-    project: dict[str, object],
-    models: tuple[NativeCompiledProject, list[str]],
-    sql_tests: list[CompiledSqlTest],
-    scenarios: list[CompiledSqlScenario],
+    *,
+    project: CompiledProjectView,
+    config: RulesConfig,
+    project_dir: Path,
+    dialect: str,
+    initial_findings: tuple[Finding, ...],
+    custom_payloads: list[dict[str, object]],
+    include_type_proof: bool,
 ) -> NativeRulesRequest: ...
-def evaluate_rules_request(
-    request: NativeRulesRequest,
-) -> tuple[list[Finding], list[str], int, int, int, int, bool]: ...
+def evaluate_rules_request(request: NativeRulesRequest) -> NativeRulesEvaluation: ...
 def emit_orjson_report(report: object) -> str: ...
 def emit_json_report(report: object) -> str: ...
 
@@ -2041,7 +2044,13 @@ class PreparedCompileArtifacts:
     ) -> WrittenTarget | None: ...
     def planning_diagnostics(self) -> tuple[CompilerDiagnostic, ...] | None: ...
 
-def finalize_rule_findings_rows(request: dict[str, object]) -> list[Finding]: ...
+def finalize_rule_findings_rows(
+    *,
+    config: RulesConfig,
+    project_dir: Path,
+    evaluated_codes: Sequence[str],
+    findings: Sequence[Finding],
+) -> tuple[Finding, ...]: ...
 def run_custom_host_json(spec_json: str) -> str: ...
 def format_sql_json(request_json: str) -> str: ...
 def format_sql_batch_json(request_json: str) -> str: ...

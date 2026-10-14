@@ -9,6 +9,7 @@ from typing import Any, cast
 
 import pytest
 
+from sqlbuild import _native
 from sqlbuild._native import (
     NativeRulesRequest,
     build_rule_catalogue,
@@ -28,7 +29,6 @@ from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, Discovere
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.rule_engine._helpers.engine import custom_dispatch as native
 from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
-from sqlbuild.rule_engine._helpers.run import native_rows
 from sqlbuild.rule_engine.constants import MIN_CUSTOM_RULE_TEST_CASES, RULES_SKILL_PATHS
 from sqlbuild.rule_engine.main._evaluate import evaluate
 from sqlbuild.rule_engine.models import (
@@ -48,7 +48,8 @@ from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_proj
 _MODEL_SQL: str = "WITH final AS (SELECT 1 AS id) SELECT id FROM final"
 
 
-_BUILD_RULES_REQUEST: Callable[..., NativeRulesRequest] = native_rows._native.build_rules_request
+_BUILD_RULES_REQUEST: Callable[..., NativeRulesRequest] = _native.build_rules_request
+_SCOPE_PROJECTION: Callable[..., dict[str, Any]] = _native.scope_metadata_projection
 
 
 def project_with_scope(*, index: ScopeIndex) -> CompiledProjectView:
@@ -70,17 +71,14 @@ def captured_native_request(
 
     captured: dict[str, Any] = {}
 
-    def build_rules_request(
-        project_rows: dict[str, Any],
-        models: tuple[object, list[str]],
-        sql_tests: list[object],
-        sql_scenarios: list[object],
-    ) -> object:
-        request: NativeRulesRequest = _BUILD_RULES_REQUEST(
-            project_rows, models, sql_tests, sql_scenarios
-        )
-        captured.update(cast(dict[str, Any], json.loads(project_rows["header_json"])))
-        captured.update(models=models, **json.loads(request.sql_facts_json()))
+    def scope_metadata_projection(**kwargs: Any) -> dict[str, Any]:
+        projection: dict[str, Any] = _SCOPE_PROJECTION(**kwargs)
+        captured.update(scope_index=projection)
+        return projection
+
+    def build_rules_request(**kwargs: Any) -> object:
+        request: NativeRulesRequest = _BUILD_RULES_REQUEST(**kwargs)
+        captured.update(cast(dict[str, Any], json.loads(request.sql_facts_json())))
         return request
 
     def evaluate_rules_request(request: object) -> NativeRulesEvaluation:
@@ -94,7 +92,8 @@ def captured_native_request(
             reused=False,
         )
 
-    monkeypatch.setattr(native_rows._native, "build_rules_request", build_rules_request)
+    monkeypatch.setattr(_native, "scope_metadata_projection", scope_metadata_projection)
+    monkeypatch.setattr(native, "build_rules_request", build_rules_request)
     monkeypatch.setattr(native, "evaluate_rules_request", evaluate_rules_request)
     native.evaluate_native(
         project=project,
