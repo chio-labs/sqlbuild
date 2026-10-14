@@ -35,7 +35,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const SCOPE_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.warehouse_scope";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
+const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const CONTRACT_TYPES_MODULE: &str = "sqlbuild.spec.contracts.types";
 const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 const DEBUG_OPTIONS: (&[&str], &[&str]) = (

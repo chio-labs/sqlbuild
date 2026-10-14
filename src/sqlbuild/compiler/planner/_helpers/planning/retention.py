@@ -6,6 +6,7 @@ import hashlib
 from collections import defaultdict
 from dataclasses import replace
 
+from sqlbuild._native import resolve_target_config
 from sqlbuild.adapter.contract.models import (
     RelationInfo,
     RelationLookup,
@@ -28,7 +29,6 @@ from sqlbuild.compiler.planner.types import (
     RetentionDirection,
     RetentionPlanPhase,
 )
-from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention, TargetConfig
 from sqlbuild.spec.contracts.types import TableType
 

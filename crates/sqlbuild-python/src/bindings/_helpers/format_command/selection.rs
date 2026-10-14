@@ -23,7 +23,7 @@ const UNIT_TEST_SELECTORS_MODULE: &str =
     "sqlbuild.compiler.pipeline.main.reject_unit_test_selectors";
 const GRAPH_SELECTION_MODULE: &str = "sqlbuild.compiler.pipeline.main.project_graph_selection";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
+const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const RESOLVE_ADAPTER_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const SELECTION_CODE: &str = "S007";
 

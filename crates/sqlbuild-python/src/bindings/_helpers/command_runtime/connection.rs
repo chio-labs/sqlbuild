@@ -21,9 +21,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 const DBT_PROFILE_MODULE: &str = "sqlbuild.integrations.dbt.main.profile.profile_connection";
 const DBT_ERRORS_MODULE: &str = "sqlbuild.integrations.dbt.exceptions";
 const EFFECTIVE_CONFIG_MODULE: &str = "sqlbuild.compiler.compile.main.effective_config";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
-const TARGET_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_target_name";
-const TARGET_CONFIG_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_target_config";
+const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
+const TARGET_NAME_MODULE: &str = "sqlbuild._native";
+const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
 const CONNECTION_OPTIONS: (&[&str], &[&str]) = (
     &["raw_config", "project_dir", "adapter_name"],
     &["discovered_inputs", "cli_vars", "selected_target"],

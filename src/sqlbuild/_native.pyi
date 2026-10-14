@@ -300,6 +300,7 @@ from sqlbuild.spec.contracts.models import (
     DbtConfig,
     DefaultsConfig,
     ExecutionLimitsConfig,
+    LoaderDestinationParts,
     LocalConfig,
     LocalDbtConfig,
     ProjectConfig,
@@ -2492,11 +2493,30 @@ def effective_config_settings(
     settings: tuple[object, object], overrides: frozenset[str], names: list[str], /
 ) -> dict[str, object]: ...
 def yaml_entry_line_index(contents: str, /) -> list[tuple[str, int]]: ...
-
-class NamePattern:
-    def __init__(self, pattern: str) -> None: ...
-    def matches(self, column_name: str) -> bool: ...
-
+def resolve_target_name(
+    *, project_config: ProjectConfig, local_config: LocalConfig, selected_target: str | None
+) -> str | None: ...
+def resolve_target_config(
+    *, project_config: ProjectConfig, local_config: LocalConfig, target_name: str
+) -> TargetConfig: ...
+def resolve_effective_adapter_name(
+    *, project_config: ProjectConfig, local_config: LocalConfig
+) -> str: ...
+def resolve_effective_collection_rendering(
+    *, project_config: ProjectConfig, declaration_override: CollectionRendering | None
+) -> CollectionRendering: ...
+def resolve_effective_scenario_config(
+    *, project_config: ProjectConfig, local_config: LocalConfig
+) -> ScenarioConfig: ...
+def scenario_local_type_overrides_for_dialect(
+    *, scenario_config: ScenarioConfig, sql_analysis_dialect: str | None
+) -> dict[str, str]: ...
+def loader_destination_parts(
+    *, destination: str, default_database: str | None, default_schema: str | None
+) -> LoaderDestinationParts: ...
+def matching_dynamic_families(
+    *, families: tuple[SchemaDynamicColumnFamily, ...], column_name: str
+) -> tuple[SchemaDynamicColumnFamily, ...]: ...
 def assert_no_unresolved_sql_markers(*, sql: str, context: str) -> None: ...
 def normalize_typed_sql_value(
     raw_value: object, typing: tuple[str, str | None], limits: tuple[int, int, int], /

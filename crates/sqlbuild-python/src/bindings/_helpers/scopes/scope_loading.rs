@@ -20,9 +20,8 @@ const NATIVE_MODULE: &str = "sqlbuild._native";
 const CACHE_DIRECTORY_MODULE: &str = "sqlbuild.compiler.frontier.main.compiler_cache_directory";
 const SCOPE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.scopes.constants";
 const SQL_ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.sql_analysis.models";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
-const COLLECTION_RENDERING_MODULE: &str =
-    "sqlbuild.spec.contracts.main.resolve_effective_collection_rendering";
+const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
+const COLLECTION_RENDERING_MODULE: &str = "sqlbuild._native";
 const RESOLVE_ADAPTER_MODULE: &str = "sqlbuild.adapter.discovery.main.resolve_adapter";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";

@@ -18,7 +18,7 @@ use crate::bindings::_helpers::diff_report::support::{
 };
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
+const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const NAMESPACE_MODULE: &str = "sqlbuild.compiler.compile.main._effective_target_namespace";
 const RUNTIME_MODULE: &str = "sqlbuild.compiler.compile.main.effective_runtime";

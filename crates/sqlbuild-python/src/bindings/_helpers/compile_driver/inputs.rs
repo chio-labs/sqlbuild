@@ -19,7 +19,7 @@ const ATTACH_CHECKS_MODULE: &str = "sqlbuild._native";
 const ATTACH_RESOURCES_MODULE: &str = "sqlbuild._native";
 const INPUTS_VIEW_MODULE: &str = "sqlbuild._native";
 const INPUTS_WITH_MODULE: &str = "sqlbuild._native";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
+const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 
 const REQUIRED: [&str; 2] = ["discovered_inputs", "adapter_context"];

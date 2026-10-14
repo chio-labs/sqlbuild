@@ -9,8 +9,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild.compiler.discovery.exceptions";
 const SPEC_ERRORS_MODULE: &str = "sqlbuild.spec.contracts.exceptions";
-const TARGET_CONFIG_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_target_config";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
+const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
+const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const SESSION_WAREHOUSE_MODULE: &str = "sqlbuild.adapter.discovery.main._session_warehouse_support";
 const PROJECT_CONFIG_FILENAME: &str = "sqlbuild_project.toml";
 const LOCAL_CONFIG_FILENAME: &str = "sqlbuild_local.toml";

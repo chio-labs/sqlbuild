@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild._native import build_compiled_project
+from sqlbuild._native import build_compiled_project, resolve_target_config
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompileAnalysisSelection
 from sqlbuild.compiler.compile.types import CompiledProjectView
@@ -14,7 +14,6 @@ from sqlbuild.compiler.pipeline.models import (
 )
 from sqlbuild.compiler.planner.main.clone._clone import run_clone_planning
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
-from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.models import TargetConfig
 
 

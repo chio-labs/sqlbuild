@@ -26,8 +26,8 @@ use crate::bindings::_helpers::discovery::configuration::discover_project_config
 
 const ENTRY_MODELS: &str = "sqlbuild.cli.entry.models";
 const SCOPE_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.warehouse_scope";
-const TARGET_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_target_name";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
+const TARGET_NAME_MODULE: &str = "sqlbuild._native";
+const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const SESSION_WAREHOUSE_MODULE: &str = "sqlbuild.adapter.discovery.main._session_warehouse_support";
 const EFFECTIVE_RUNTIME_MODULE: &str = "sqlbuild.compiler.compile.main.effective_runtime";
 const EXPAND_TEMPLATE_MODULE: &str = "sqlbuild._native";

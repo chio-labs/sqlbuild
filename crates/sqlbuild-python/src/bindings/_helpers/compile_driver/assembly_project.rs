@@ -21,11 +21,9 @@ use crate::bindings::_helpers::scopes::scope_errors::report_scope_index_errors;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const SCOPE_USAGES_MODULE: &str = "sqlbuild.compiler.compile.main._scope_index_with_compile_usages";
-pub(crate) const ADAPTER_NAME_MODULE: &str =
-    "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
+pub(crate) const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const ADAPTER_TYPES_MODULE: &str = "sqlbuild.adapter.contract.types";
-const SCENARIO_CONFIG_MODULE: &str =
-    "sqlbuild.spec.contracts.main.resolve_effective_scenario_config";
+const SCENARIO_CONFIG_MODULE: &str = "sqlbuild._native";
 const SQL_TESTS_MODULE: &str = "sqlbuild.compiler.compile._helpers.native_stages.sql_tests";
 const RECOVERY_MODULE: &str = "sqlbuild.compiler.compile._helpers.diagnostics.recovery";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";

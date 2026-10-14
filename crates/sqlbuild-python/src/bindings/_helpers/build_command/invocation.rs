@@ -17,9 +17,9 @@ const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const REPORTERS_MODULE: &str = "sqlbuild.cli.progress.main._build_command_progress_reporters";
 const SETTINGS_MODULE: &str = "sqlbuild.compiler.compile.main.effective_settings";
 const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
-const TARGET_CONFIG_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_target_config";
-const TARGET_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_target_name";
+const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
+const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
+const TARGET_NAME_MODULE: &str = "sqlbuild._native";
 const CONTRACT_MODELS: &str = "sqlbuild.spec.contracts.models";
 const DEFER_CONFLICT_CODE: &str = "C408";
 

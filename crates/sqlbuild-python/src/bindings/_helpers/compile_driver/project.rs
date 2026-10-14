@@ -28,9 +28,8 @@ const DISCOVERY_CONSTANTS_MODULE: &str = "sqlbuild.compiler.discovery.constants"
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const ANALYSIS_SELECTION_MODULE: &str = "sqlbuild.compiler.pipeline._helpers.analysis_selection";
 const PROFILING_MODULE: &str = "sqlbuild.compiler.profiling.main._record";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
-const COLLECTION_RENDERING_MODULE: &str =
-    "sqlbuild.spec.contracts.main.resolve_effective_collection_rendering";
+const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
+const COLLECTION_RENDERING_MODULE: &str = "sqlbuild._native";
 /// Optional keywords of the project graph builders.
 const GRAPH_OPTIONAL: [&str; 7] = [
     "selected_target",

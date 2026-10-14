@@ -7,7 +7,11 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-from sqlbuild._native import build_project_graph, discover_project_inputs
+from sqlbuild._native import (
+    build_project_graph,
+    discover_project_inputs,
+    resolve_effective_adapter_name,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
 from sqlbuild.cli.commands.constants import (
@@ -29,9 +33,6 @@ from sqlbuild.rule_engine.main.render_skipped_rules import format_skipped_type_p
 from sqlbuild.rule_engine.main.run_rules import run_rules
 from sqlbuild.rule_engine.main.skills import install_skills
 from sqlbuild.rule_engine.models import Rule, RulesConfig, RulesResult, RulesRunResult
-from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
-    resolve_effective_adapter_name,
-)
 
 
 def run_rules_command(request: RulesCommandRequest) -> int:

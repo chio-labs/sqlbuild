@@ -6,7 +6,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-from sqlbuild._native import build_compiled_project, enforce_model_execution_limit
+from sqlbuild._native import (
+    build_compiled_project,
+    enforce_model_execution_limit,
+    resolve_target_config,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
@@ -61,7 +65,6 @@ from sqlbuild.executor.clone.models import (
     CloneSourceEntries,
 )
 from sqlbuild.executor.clone.types import CloneStatus
-from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.types import RetentionDecreasePolicy
 
 

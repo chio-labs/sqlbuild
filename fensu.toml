@@ -35,6 +35,11 @@ reason = "The native cursor algebra in sqlbuild-cursor owns cursor behavior; thi
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
+path = "src/sqlbuild/spec/contracts/__init__.py"
+reason = "Native bindings own configuration resolution; this package only declares the configuration models, constants and errors callers import."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
 path = "src/sqlbuild/compiler/dag/types.py"
 reason = "The native DAG builder owns DAG behavior; this package only declares the node kinds integrations read from the artifact."
 

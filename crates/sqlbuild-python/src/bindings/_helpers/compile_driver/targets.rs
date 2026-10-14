@@ -23,8 +23,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 
 const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
-const TARGET_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_target_name";
-const TARGET_CONFIG_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_target_config";
+const TARGET_NAME_MODULE: &str = "sqlbuild._native";
+const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
 const EFFECTIVE_RUNTIME_MODULE: &str = "sqlbuild.compiler.compile.main.effective_runtime";
 const EFFECTIVE_CONFIG_MODULE: &str = "sqlbuild.compiler.compile.main.effective_config";
 const EXPAND_TEMPLATE_MODULE: &str = "sqlbuild._native";

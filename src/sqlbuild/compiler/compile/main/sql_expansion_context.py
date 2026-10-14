@@ -10,6 +10,8 @@ from sqlbuild._native import (
     build_effective_vars,
     discover_project_inputs,
     rebind_declaration_scope,
+    resolve_effective_adapter_name,
+    resolve_effective_collection_rendering,
 )
 from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
 from sqlbuild.compiler.compile.models import (
@@ -24,12 +26,6 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
-    resolve_effective_adapter_name,
-)
-from sqlbuild.spec.contracts.main.resolve_effective_collection_rendering import (
-    resolve_effective_collection_rendering,
-)
 
 
 def build_sql_expansion_context(

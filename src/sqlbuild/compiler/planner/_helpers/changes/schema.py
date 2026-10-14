@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from sqlbuild._native import matching_dynamic_families
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.planner.models import SchemaFinding
 from sqlbuild.compiler.planner.types import SchemaChangeKind, SchemaColumnSource
-from sqlbuild.spec.contracts.main.matching_dynamic_families import matching_dynamic_families
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
 _CASE_FOLDING_DIALECT: str = "snowflake"

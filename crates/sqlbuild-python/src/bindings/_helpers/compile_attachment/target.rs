@@ -10,8 +10,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::model_config::template_data::{early_model_templates, run_id};
 
-const TARGET_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_target_name";
-const TARGET_CONFIG_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_target_config";
+const TARGET_NAME_MODULE: &str = "sqlbuild._native";
+const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
 const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";
 const FRONTIER_CONSTANTS_MODULE: &str = "sqlbuild.compiler.frontier.constants";
 const CACHE_DIRECTORY_MODULE: &str = "sqlbuild.compiler.frontier.main.compiler_cache_directory";

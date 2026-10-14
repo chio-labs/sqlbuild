@@ -11,6 +11,7 @@ from sqlbuild._native import (
     discover_project_inputs,
     expand_sql_with_spans,
     external_identifiers_for_headers,
+    resolve_effective_adapter_name,
 )
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.discovery.main.resolve_adapter import resolve_adapter
@@ -46,9 +47,6 @@ from sqlbuild.lint.models import (
     PreparedLintFiles,
 )
 from sqlbuild.lint.types import NativePreparedSql
-from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
-    resolve_effective_adapter_name,
-)
 
 _DEPENDENCY_INTRINSIC_PATTERN: re.Pattern[str] = re.compile(
     r"^__(?:ref|source)\s*\(", re.IGNORECASE

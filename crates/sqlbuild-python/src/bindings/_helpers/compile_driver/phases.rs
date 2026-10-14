@@ -13,7 +13,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{Status, call_with,
 use crate::bindings::_helpers::dag_artifact::artifact::build_dag_json;
 
 const MANIFEST_MODULE: &str = "sqlbuild.compiler.manifest.main._build_graph_manifest";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
+const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const PYTHON_NODES_MODULE: &str = "sqlbuild.compiler.python_nodes.main._graph";
 const OUTPUT_MODELS_MODULE: &str = "sqlbuild.cli.output.models";
 const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";

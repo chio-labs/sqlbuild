@@ -12,15 +12,17 @@ from typing import TypeGuard, cast
 import pytest
 
 import sqlbuild._native as _native
-from sqlbuild._native import build_compile_inputs, discover_project_inputs, parse_audit_instances
+from sqlbuild._native import (
+    build_compile_inputs,
+    discover_project_inputs,
+    parse_audit_instances,
+    resolve_effective_collection_rendering,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileAdapterContext
 from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
-from sqlbuild.spec.contracts.main.resolve_effective_collection_rendering import (
-    resolve_effective_collection_rendering,
-)
 from sqlbuild.spec.contracts.models import SchemaModelEntry, SourceLocation
 
 _TEXTS: tuple[object, ...] = (

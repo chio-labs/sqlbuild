@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import replace
 
-from sqlbuild._native import render_project_var_text
+from sqlbuild._native import render_project_var_text, resolve_target_config
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
 )
@@ -28,7 +28,6 @@ from sqlbuild.compiler.references.main._quoted_reference_call_pattern import (
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.python_nodes.types import SqlResourceRefKind
-from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SourceEntry, TargetConfig
 
 _CTX_PATTERN: re.Pattern[str] = re.compile(r"\$\{CTX:([^}]+)\}")
