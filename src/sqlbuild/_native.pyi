@@ -130,6 +130,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
+    CompiledResourceType,
     CompiledSeedView,
     CompiledSourceView,
     CompileInputsView,
@@ -182,7 +183,11 @@ from sqlbuild.compiler.lineage.models import (
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.compiler.migrations.models import MigrationRelation
-from sqlbuild.compiler.migrations.types import OldNameViewEventType
+from sqlbuild.compiler.migrations.types import (
+    MigrationDecision,
+    MigrationPromotion,
+    OldNameViewEventType,
+)
 from sqlbuild.compiler.pipeline.models import (
     ClonePipelineConnection,
     ClonePipelineOptions,
@@ -195,24 +200,43 @@ from sqlbuild.compiler.pipeline.models import (
     PythonRunPlanOutputs,
     StaticCommandContext,
 )
+from sqlbuild.compiler.planner.classes.migration_fingerprint_cache import MigrationFingerprintCache
 from sqlbuild.compiler.planner.classes.migration_state_inspection import (
     MigrationStateInspection,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
+    BackfillResult,
     ChangeDetectionResult,
+    ColumnMigrationPlanning,
     ColumnRenameHint,
     CursorBounds,
+    CursorInputEvidence,
+    CursorOverridePair,
+    CursorOverrides,
     DeferralInputs,
     DirectModelVersionIdentities,
+    EmptyCursorInputDecision,
+    FixtureRelationMetadata,
     FutureCursorSafetyEvidence,
+    MaximumStartPolicyInputs,
     MaximumStartSafetyEvidence,
+    MigrationCompatibilityResult,
     MissingUpstream,
+    ModelCursorSnapshot,
+    ModelMigrationDeclaration,
+    ModelMigrationDiscovery,
+    ModelMigrationPlanEntry,
+    ModelMigrationPlanning,
+    ModelMigrationRequest,
+    ModelPlanContext,
     ModelPlanEntry,
+    OldNameView,
     ParsedSelector,
     PathSelector,
     PlannerChangeResults,
+    PlannerOverrides,
     PlannerResolvedActions,
     PlannerRuntime,
     PlannerScope,
@@ -220,6 +244,13 @@ from sqlbuild.compiler.planner.models import (
     PlanWarning,
     QueryShape,
     ReferenceRename,
+    RelationFixtureCompletion,
+    RelationFixtureDiagnostic,
+    RelationFixturePlanningContext,
+    ScenarioExecutionPlan,
+    ScenarioGraphPlan,
+    ScenarioRelationMap,
+    ScenarioRelationPlan,
     SchemaAction,
     SchemaFinding,
     SelectionStalenessGraph,
@@ -234,6 +265,7 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import (
     CursorGrain,
     CursorType,
+    FixtureGroups,
     InputColumns,
     MaterializationType,
     OnSchemaChange,
@@ -386,6 +418,7 @@ from sqlbuild.spec.contracts.models import (
     DbtConfig,
     DefaultsConfig,
     ExecutionLimitsConfig,
+    FutureCursorsConfig,
     LoaderDestinationParts,
     LocalConfig,
     LocalDbtConfig,
@@ -405,6 +438,7 @@ from sqlbuild.spec.contracts.models import (
 )
 from sqlbuild.spec.contracts.types import (
     MicrobatchLimitAction,
+    MissingMigrationOriginPolicy,
     SourceFreshnessStrategy,
     SourceFreshnessValueKind,
     WarehouseGroup,
@@ -414,6 +448,32 @@ from sqlbuild.sql_values.types import CollectionRendering, StateSqlValueType
 
 BUILD_IDENTITY: str
 STAGE_CAPTURE_OMITTED_ATTRIBUTES: dict[str, frozenset[str]]
+
+def migration_planning_database(*, runtime: PlannerRuntime) -> str | None: ...
+def migration_project_schemas(*, runtime: PlannerRuntime) -> set[str]: ...
+def migration_missing_origin_policy(*, runtime: PlannerRuntime) -> MissingMigrationOriginPolicy: ...
+def migration_require_same_database(
+    *, state: MigrationStateInspection, location: CompiledRelationLocation
+) -> None: ...
+def migration_resolve_origin(
+    *, request: ModelMigrationRequest, runtime: PlannerRuntime, state: MigrationStateInspection
+) -> tuple[CompiledRelationLocation, str | None]: ...
+def migration_promotion(
+    *, runtime: PlannerRuntime, decision: MigrationDecision
+) -> MigrationPromotion: ...
+def migration_with_execution(
+    *, runtime: PlannerRuntime, model: CompiledModelView, entry: ModelMigrationPlanEntry
+) -> ModelMigrationPlanEntry: ...
+def migration_redirected_cursor_snapshots(
+    *,
+    runtime: PlannerRuntime,
+    scope: PlannerScope,
+    existing_relations: dict[str, RelationInfo],
+    target_relations: dict[str, str],
+    overrides: PlannerOverrides,
+    deferral: DeferralInputs,
+    origin_cursor_columns: dict[str, str] | None = None,
+) -> dict[str, ModelCursorSnapshot]: ...
 
 class CompileInputReads:
     """Environment, settings, and run-identity reads observed during one compile."""
@@ -1058,6 +1118,119 @@ class NativeCompiledProject:
 
 def compiled_model_record(model: CompiledModelView) -> CompiledModel: ...
 def compiled_audit_record(audit: CompiledAuditView) -> CompiledAudit: ...
+def compute_model_cursor_bounds(
+    *,
+    model: CompiledModelView,
+    snapshot: WarehouseSnapshot,
+    backfill: BackfillResult,
+    full_refresh: bool,
+    start_cursor_override: str | None,
+    end_cursor_override: str | None,
+    runtime_cursor_producer_names: frozenset[str],
+    context: ModelPlanContext,
+    replaces_relation: bool = False,
+) -> CursorBounds | None: ...
+def compute_cursor_bounds(
+    *,
+    cursor_snapshot: ModelCursorSnapshot,
+    cursor_type: str | None,
+    cursor_start: str | None,
+    lookback: str | None,
+    backfill_duration: str | None,
+    start_cursor_override: str | None,
+    end_cursor_override: str | None,
+    is_microbatch: bool,
+    cursor_grain: str | None = None,
+    maximum_start_policy: MaximumStartPolicyInputs | None = None,
+) -> CursorBounds | None: ...
+def apply_typed_cursor_replay_policy(
+    *,
+    start: CursorScalar,
+    end: CursorScalar,
+    cursor_start: CursorScalar | str | None,
+    cursor_type: str | None,
+    lookback: Duration | str | None,
+    backfill_duration: Duration | str | None,
+    has_start_override: bool,
+) -> CursorScalar: ...
+def cursor_inputs_without_rows(
+    *, cursor_snapshot: ModelCursorSnapshot
+) -> EmptyCursorInputDecision: ...
+def decide_empty_cursor_inputs(
+    *,
+    empty_input_names: tuple[str, ...],
+    waits_for_every_input: bool,
+    inputs_with_rows: bool,
+    has_window_start: bool,
+) -> EmptyCursorInputDecision: ...
+def empty_cursor_window(*, cursor_type: str | None, cursor_start: str | None) -> CursorBounds: ...
+def cursor_window_override_flags(*, cursor_type: str | None) -> str: ...
+def empty_input_rebuild_refusal(
+    *,
+    model_name: str,
+    input_names: tuple[str, ...],
+    cursor_type: str | None,
+) -> tuple[str, str]: ...
+def unreadable_cursor_inputs_error(
+    *,
+    model_name: str,
+    cursor_type: str | None,
+    input_names: tuple[str, ...],
+) -> PlannerInputError: ...
+def without_destination_cursor(*, cursor_snapshot: ModelCursorSnapshot) -> ModelCursorSnapshot: ...
+def resolve_effective_timestamp_grain(
+    *,
+    cursor_type: str | None,
+    downstream_grain: str | None,
+    cursor_input_grains: tuple[str | None, ...],
+    microbatch_strategy: str | None = None,
+) -> str | None: ...
+def normalize_cursor_snapshot_grain(
+    *,
+    cursor_snapshot: ModelCursorSnapshot,
+    cursor_type: str | None,
+    effective_grain: str | None,
+) -> ModelCursorSnapshot: ...
+def resolve_model_sql(
+    *,
+    adapter: BaseAdapter,
+    model: CompiledModelView,
+    snapshot: WarehouseSnapshot,
+    context: ModelPlanContext,
+    backfill: BackfillResult,
+    full_refresh: bool,
+    cursor_overrides: CursorOverridePair,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    replaces_relation: bool = False,
+    full_rebuild_cause: str | None = None,
+) -> str: ...
+def resolve_function_sql(
+    *,
+    adapter: BaseAdapter,
+    function: CompiledFunctionView,
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
+    function_locations: dict[str, CompiledRelationLocation],
+    source_map: dict[str, SourceEntry],
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
+    star_exclude_keyword: str,
+) -> str: ...
+def resolve_model_hook_entries(
+    *,
+    model: CompiledModelView,
+    adapter: BaseAdapter,
+    context: ModelPlanContext,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
+) -> tuple[object, object]: ...
+def build_model_locations(
+    models: tuple[CompiledModelView, ...],
+) -> dict[str, CompiledRelationLocation]: ...
+def build_seed_locations(
+    seeds: tuple[CompiledSeedView, ...],
+) -> dict[str, CompiledRelationLocation]: ...
+def build_function_locations(
+    functions: tuple[CompiledFunctionView, ...],
+) -> dict[str, CompiledRelationLocation]: ...
 def compiled_function_record(function: CompiledFunctionView) -> CompiledFunction: ...
 def compiled_source_record(source: CompiledSourceView) -> CompiledSource: ...
 def compiled_seed_record(seed: CompiledSeedView) -> CompiledSeed: ...
@@ -2310,6 +2483,58 @@ def lint_interpolation_text_at(body: str, start: int, dialect: str) -> str | Non
 def scan_fixture_typed_null_candidates(
     project_dir: Path, selected_paths: frozenset[Path] | None = None
 ) -> tuple[frozenset[Path], frozenset[str]]: ...
+def simplify_fixture_null_projections(*, sql: str, relation: FixtureRelationMetadata) -> str: ...
+def is_empty_fixture_query(sql: str) -> bool: ...
+def complete_empty_fixture_sql(
+    *, sql: str, relation: FixtureRelationMetadata | None, adapter: BaseAdapter
+) -> tuple[str, str | None]: ...
+def complete_typed_null_columns(
+    *,
+    sql: str,
+    inference: FixtureColumnInference,
+    expected_types: dict[str, str],
+    adapter: BaseAdapter,
+) -> str: ...
+def model_fixture_metadata(*, model: CompiledModelView) -> FixtureRelationMetadata: ...
+def expected_fixture_types(
+    *,
+    base_expected_types: dict[tuple[CompiledResourceType, str], dict[str, str]],
+    ordered_model_names: tuple[str, ...],
+    model_map: dict[str, CompiledModelView],
+) -> Mapping[tuple[CompiledResourceType, str], dict[str, str]]: ...
+def build_relation_fixture_context(
+    *, project: CompiledProjectView, models_by_name: dict[str, CompiledModelView] | None = None
+) -> RelationFixturePlanningContext: ...
+def authoritative_fixture_columns(
+    *, relations: dict[tuple[CompiledResourceType, str], FixtureRelationMetadata]
+) -> dict[tuple[CompiledResourceType, str], frozenset[str]]: ...
+def base_expected_fixture_types(
+    *, relations: dict[tuple[CompiledResourceType, str], FixtureRelationMetadata]
+) -> dict[tuple[CompiledResourceType, str], dict[str, str]]: ...
+def fixture_keys_requiring_analysis(
+    *,
+    inferred_by_fixture: dict[tuple[CompiledResourceType, str], tuple[InferredColumn, ...]],
+    authoritative_columns: dict[tuple[CompiledResourceType, str], frozenset[str]],
+) -> frozenset[tuple[CompiledResourceType, str]]: ...
+def unknown_fixture_column_diagnostics(
+    *,
+    inferred_by_fixture: dict[tuple[CompiledResourceType, str], tuple[InferredColumn, ...]],
+    relations: dict[tuple[CompiledResourceType, str], FixtureRelationMetadata],
+) -> tuple[RelationFixtureDiagnostic, ...]: ...
+def build_relation_fixture_completion(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    request: tuple[tuple[str, ...], FixtureGroups],
+    planning_context: RelationFixturePlanningContext | None = None,
+) -> RelationFixtureCompletion: ...
+def format_redundant_fixture_nulls(
+    *,
+    files: dict[Path, str],
+    project_dir: Path,
+    discovered_inputs: DiscoveredProjectInputs,
+    sql_lexical_syntax: SqlLexicalSyntax,
+) -> dict[Path, str]: ...
 def format_lint_sql_bodies(
     files: list[tuple[Path, str]], project_dir: Path, config: LintConfig
 ) -> tuple[dict[Path, str], list[LintViolation]]: ...
@@ -3238,6 +3463,54 @@ def runtime_project_relations(
     *, relations: Mapping[SqlResourceRef, str], dialect: str | None
 ) -> ProjectRelationIndex: ...
 def render_source_relation(*, entry: SourceEntry, adapter: StrictAdapter | None = None) -> str: ...
+def render_source_read_relation(*, adapter: BaseAdapter, source_entry: SourceEntry) -> str: ...
+def resolve_ref_references(
+    *,
+    query_sql: str,
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
+    cursor_bounds: CursorBounds | None,
+    cursor_filter_inputs: dict[str, str],
+    adapter: BaseAdapter,
+    cursor_type: str | None,
+    lower_bound_inclusive: bool,
+) -> str: ...
+def resolve_source_references(
+    *,
+    query_sql: str,
+    source_map: dict[str, SourceEntry],
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
+    star_exclude_keyword: str,
+    cursor_bounds: CursorBounds | None,
+    cursor_filter_inputs: dict[str, str],
+    adapter: BaseAdapter,
+    cursor_type: str | None,
+    lower_bound_inclusive: bool,
+) -> str: ...
+def resolve_dbt_ref_references(
+    *,
+    query_sql: str,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+) -> str: ...
+def resolve_udf_references(
+    *,
+    query_sql: str,
+    function_locations: dict[str, CompiledRelationLocation],
+    adapter: BaseAdapter,
+) -> str: ...
+def resolve_table_function_references(
+    *,
+    query_sql: str,
+    function_locations: dict[str, CompiledRelationLocation],
+    adapter: BaseAdapter,
+) -> str: ...
+def apply_deferred_locations(
+    *,
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
+    deferred_locations: dict[str, CompiledRelationLocation],
+    selected_keys: frozenset[CompiledObjectKey],
+) -> tuple[dict[str, CompiledRelationLocation], dict[str, CompiledRelationLocation]]: ...
 def substitute_placeholder_defaults(sql: str, placeholders: list[tuple[str, str]], /) -> str: ...
 def fixture_projection_facts(
     sql: str, dialect: str | None, /
@@ -3659,6 +3932,30 @@ def run_dag_command(
     json_output: bool = False,
     cli_vars: dict[str, object] | None = None,
 ) -> int: ...
+def plan_scenario_graph(
+    *,
+    scenario: CompiledSqlScenario,
+    project: CompiledProjectView,
+    sql_analysis_enabled: bool = True,
+    sql_analysis_dialect: str | None = None,
+) -> tuple[ScenarioGraphPlan, tuple[PlanWarning, ...]]: ...
+def build_scenario_relation_plan(
+    *,
+    project: CompiledProjectView,
+    graph_plan: ScenarioGraphPlan,
+    relation_map: ScenarioRelationMap,
+    render_qualified_name: Callable[..., str | None],
+    database: str | None = None,
+    schema: str | None = None,
+) -> ScenarioRelationPlan: ...
+def build_cli_scenario_plan(
+    *,
+    scenario: CompiledSqlScenario,
+    pipeline_result: CompilePipelineResult,
+    adapter: BaseAdapter,
+    project_name: str,
+    source_lexical_syntax: SqlLexicalSyntax,
+) -> ScenarioExecutionPlan: ...
 def run_scenario_test_command(*, request: ScenarioTestCommandRequest) -> int: ...
 def run_scenario_capture_command(*, request: ScenarioCaptureCommandRequest) -> int: ...
 def sql_analysis_off_guidance(
@@ -4057,6 +4354,34 @@ def cursor_render(*, value: CursorScalar) -> str: ...
 def cursor_sentinel_to_token(*, sentinel: Bound) -> str: ...
 def cursor_sentinel_from_token(*, token: str) -> BoundSentinel | None: ...
 def cursor_compare(*, left: CursorScalar, right: CursorScalar) -> int: ...
+def type_cursor_overrides(
+    *, cursor_overrides: CursorOverrides | None, selected_models: Iterable[CompiledModelView]
+) -> CursorOverrides | None: ...
+def maximum_allowed_start(
+    *, discovered_value: str, cursor_grain: str | None, invocation_time: datetime, max_ahead: str
+) -> str: ...
+def apply_maximum_start_policy(
+    *,
+    bounds: CursorBounds,
+    snapshot: ModelCursorSnapshot,
+    cursor_type: str | None,
+    cursor_grain: str | None,
+    cursor_start: CursorScalar | str | None,
+    lookback: Duration | str | None,
+    backfill_duration: Duration | str | None,
+    policy: MaximumStartPolicyInputs,
+    has_start_override: bool,
+) -> CursorBounds: ...
+def resolve_future_cursor_safety(
+    *,
+    bounds: CursorBounds,
+    cursor_type: str | None,
+    cursor_grain: str | None,
+    config: FutureCursorsConfig | None,
+    invocation_time: datetime | None,
+    has_complete_override: bool,
+    input_evidence: tuple[CursorInputEvidence, ...] = (),
+) -> CursorBounds: ...
 def cursor_sort_key(*, raw: object, cursor_type: str) -> datetime | int: ...
 def cursor_max_bound[T](*, values: tuple[T, ...] | list[T], cursor_type: str) -> T: ...
 def cursor_min_bound[T](*, values: tuple[T, ...] | list[T], cursor_type: str) -> T: ...
@@ -4300,6 +4625,114 @@ def build_migration_fingerprint(
     *, query_sql: str, metadata_json: str, ref_identities: Mapping[str, str], dialect: str | None
 ) -> str | None: ...
 def migration_fingerprint_ref_names(*, query_sql: str, metadata_json: str) -> frozenset[str]: ...
+def check_migration_compatibility(
+    *,
+    model: CompiledModelView,
+    origin_relation: RelationInfo,
+    origin_columns: tuple[ColumnInfo, ...],
+    sql_analysis_enabled: bool,
+    column_dialect: str | None,
+    snapshots_config: SnapshotsConfig,
+) -> MigrationCompatibilityResult: ...
+def migration_incremental_blocking_findings(
+    *,
+    model: CompiledModelView,
+    findings: tuple[SchemaFinding, ...],
+    dialect: str | None,
+) -> tuple[str, ...]: ...
+def migration_snapshot_blocking_findings(
+    *,
+    model: CompiledModelView,
+    findings: tuple[SchemaFinding, ...],
+    dialect: str | None,
+    snapshots_config: SnapshotsConfig,
+) -> tuple[str, ...]: ...
+def match_migration_fingerprints(
+    *,
+    models: tuple[CompiledModelView, ...],
+    new_names: frozenset[str],
+    seed_variants: tuple[dict[str, str], ...],
+    candidates: tuple[Fingerprint, ...],
+    metadata_jsons: dict[str, str],
+    dialect: str | None,
+    fingerprints: MigrationFingerprintCache,
+) -> tuple[tuple[dict[str, str], ...], dict[str, Fingerprint], dict[str, str]]: ...
+def migration_destination_fingerprints(
+    *,
+    requests: tuple[ModelMigrationRequest, ...],
+    variants: tuple[dict[str, str], ...],
+    metadata_jsons: dict[str, str],
+    dialect: str | None,
+    fingerprints: MigrationFingerprintCache,
+) -> dict[str, tuple[str, ...]]: ...
+def stored_migration_fingerprint(fingerprint: Fingerprint) -> str | None: ...
+def declared_column_aliases(model: CompiledModelView) -> tuple[tuple[str, str], ...]: ...
+def manual_migration_requests(*, scope: PlannerScope) -> tuple[ModelMigrationRequest, ...]: ...
+def discover_model_migrations(
+    *,
+    runtime: PlannerRuntime,
+    scope: PlannerScope,
+    snapshot: WarehouseSnapshot,
+    manual_requests: tuple[ModelMigrationRequest, ...],
+    declarations: tuple[ModelMigrationDeclaration, ...],
+    state: MigrationStateInspection,
+    project_schemas: set[str],
+    fingerprints: MigrationFingerprintCache,
+) -> ModelMigrationDiscovery: ...
+def decide_model_migration(
+    *,
+    runtime: PlannerRuntime,
+    request: ModelMigrationRequest,
+    origin: CompiledRelationLocation,
+    origin_model: str | None,
+    snapshot: WarehouseSnapshot,
+    state: MigrationStateInspection,
+    snapshots_config: SnapshotsConfig,
+) -> tuple[ModelMigrationPlanEntry, Fingerprint | None, bool]: ...
+def plan_model_migrations(
+    *,
+    runtime: PlannerRuntime,
+    scope: PlannerScope,
+    snapshot: WarehouseSnapshot,
+    overrides: PlannerOverrides,
+    deferral: DeferralInputs,
+    fingerprints: MigrationFingerprintCache,
+) -> ModelMigrationPlanning: ...
+def plan_column_migrations(
+    *,
+    runtime: PlannerRuntime,
+    scope: PlannerScope,
+    snapshot: WarehouseSnapshot,
+    full_refresh_model_names: frozenset[str],
+    physical_relations: Mapping[str, str],
+    overrides: PlannerOverrides,
+    deferral: DeferralInputs,
+    source_columns: Mapping[str, tuple[ColumnInfo, ...]],
+) -> ColumnMigrationPlanning: ...
+def old_name_schemas_to_read(*, snapshot: WarehouseSnapshot, needed: set[str]) -> set[str]: ...
+def old_name_claim_message(*, model_name: str, view: OldNameView, now: datetime) -> str: ...
+def old_name_claim_errors(
+    *,
+    selected: Iterable[CompiledModelView],
+    snapshot: WarehouseSnapshot,
+    views: tuple[OldNameView, ...],
+    now: datetime,
+) -> tuple[PlanWarning, ...]: ...
+def old_name_view_skip_reason(
+    *,
+    origin: CompiledRelationLocation,
+    origin_tracked: bool | None,
+    retention: str | None,
+    models: Iterable[CompiledModelView],
+    views: tuple[OldNameView, ...],
+) -> str | None: ...
+def with_migration_fingerprints(
+    *,
+    entries: tuple[ModelPlanEntry, ...],
+    models_by_name: Mapping[str, CompiledModelView],
+    fingerprints: MigrationFingerprintCache,
+    dialect: str | None,
+) -> tuple[ModelPlanEntry, ...]: ...
 def identical_renames(
     *,
     previous: QueryShape,

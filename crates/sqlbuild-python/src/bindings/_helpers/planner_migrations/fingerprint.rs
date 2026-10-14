@@ -3,7 +3,7 @@
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyFrozenSet};
+use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::planner_migrations::main::{migration_fingerprint, migration_ref_names};
 use std::collections::BTreeMap;
@@ -64,6 +64,53 @@ fn migration_fingerprint_ref_names<'py>(
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(with_migration_fingerprints, module)?)?;
     module.add_function(wrap_pyfunction!(build_migration_fingerprint, module)?)?;
     module.add_function(wrap_pyfunction!(migration_fingerprint_ref_names, module)?)
+}
+
+/// Attach persisted migration identities through the existing cache boundary.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+fn with_migration_fingerprints<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+    let arguments = KeywordArguments::read(
+        py,
+        "with_migration_fingerprints",
+        options,
+        (
+            &["entries", "models_by_name", "fingerprints", "dialect"],
+            &[],
+        ),
+    )?;
+    let cache = arguments.value("fingerprints")?;
+    let mut attached: Vec<Bound<'py, pyo3::PyAny>> = Vec::new();
+    for entry in arguments.value("entries")?.try_iter()? {
+        let entry = entry?;
+        let model = arguments
+            .value("models_by_name")?
+            .call_method1("get", (entry.getattr("name")?,))?;
+        let metadata = entry.getattr("fingerprint_metadata_json")?;
+        if model.is_none() || metadata.is_none() || entry.getattr("action")?.eq("skip")? {
+            attached.push(entry);
+            continue;
+        }
+        let fingerprint = call_with(
+            &cache.getattr("fingerprint")?,
+            &[
+                ("query_sql", model.getattr("query_sql")?),
+                ("metadata_json", metadata),
+                ("ref_identities", PyDict::new(py).into_any()),
+                ("dialect", arguments.value("dialect")?),
+            ],
+        )?;
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("migration_fingerprint", fingerprint)?;
+        attached.push(imported(py, "dataclasses", "replace")?.call((entry,), Some(&kwargs))?);
+    }
+    cache.call_method0("persist")?;
+    PyTuple::new(py, attached)
 }

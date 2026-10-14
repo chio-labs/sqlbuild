@@ -1,5 +1,6 @@
 pub(crate) mod builtin_catalogue;
 pub(crate) mod catalogue;
+pub(crate) mod constants;
 pub(crate) mod custom_rule_cache;
 pub(crate) mod custom_rule_evidence;
 pub(crate) mod dsl_headers;
@@ -9,6 +10,8 @@ pub(crate) mod findings;
 pub(crate) mod fix_facts;
 pub(crate) mod fix_session;
 pub(crate) mod fix_verdict;
+pub(crate) mod fixture_formatting;
+pub(crate) mod fixture_schemas;
 pub(crate) mod guidance;
 pub(crate) mod lint;
 pub(crate) mod lint_expansion;

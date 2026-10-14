@@ -1,7 +1,7 @@
 //! Prove that output renames explain the entire query change.
 
-use crate::planner_migrations::_helpers::binding_proof::{binding_proven, substitute};
-use crate::planner_migrations::_helpers::encoding::encode;
+use crate::planner_migrations::_helpers::proofs::binding_proof::{binding_proven, substitute};
+use crate::planner_migrations::_helpers::proofs::encoding::encode;
 use crate::planner_migrations::models::QueryShape;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};

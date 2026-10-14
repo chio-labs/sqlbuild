@@ -1,0 +1,28 @@
+//! Alias boundaries retained from the planner resolution contract.
+
+pub(super) const EXTERNAL_REFERENCE: &str = "dbt_ref";
+
+pub(super) const REF_CLAUSES: &[&str] = &[
+    "WHERE", "JOIN", "INNER", "LEFT", "RIGHT", "FULL", "CROSS", "ON", "GROUP", "ORDER", "HAVING",
+    "LIMIT", "UNION", "QUALIFY",
+];
+pub(super) const SOURCE_CLAUSES: &[&str] = &[
+    "APPLY",
+    "CROSS",
+    "EXCEPT",
+    "FULL",
+    "GROUP",
+    "HAVING",
+    "INNER",
+    "INTERSECT",
+    "JOIN",
+    "LEFT",
+    "LIMIT",
+    "OFFSET",
+    "ON",
+    "ORDER",
+    "OUTER",
+    "RIGHT",
+    "UNION",
+    "WHERE",
+];

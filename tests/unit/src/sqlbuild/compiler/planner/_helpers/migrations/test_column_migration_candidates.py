@@ -8,6 +8,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from sqlbuild._native import plan_column_migrations
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
@@ -18,7 +19,6 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner._helpers.migrations.columns import plan_column_migrations
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     DeferralInputs,

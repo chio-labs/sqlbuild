@@ -1,5 +1,13 @@
 pub(crate) mod audits;
 pub(crate) mod cursor_types;
+pub(crate) mod fixture_completion;
+pub(crate) mod fixture_context;
+pub(crate) mod fixture_metadata;
+pub(crate) mod fixture_preparation;
+pub(crate) mod fixture_selection;
+pub(crate) mod fixture_sql;
+pub(crate) mod fixture_types;
+pub(crate) mod fixture_values;
 pub(crate) mod lineage;
 pub(crate) mod microbatches;
 pub(crate) mod registration;

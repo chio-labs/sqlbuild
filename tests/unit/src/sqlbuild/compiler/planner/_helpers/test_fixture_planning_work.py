@@ -20,6 +20,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
 )
 from sqlbuild.compiler.planner._helpers.fixtures import completion as fixture_completion
+from sqlbuild.compiler.planner._helpers.output import plan_output
 from sqlbuild.compiler.planner._helpers.output.plan_output import build_selected_test_entries
 from sqlbuild.compiler.planner._helpers.sql_tests import assembly as sql_test_assembly
 from sqlbuild.compiler.planner.classes import fixture_column_inferences as fixture_inferences
@@ -99,8 +100,8 @@ def test_given_many_tests_when_building_entries_then_project_fixture_metadata_is
         sql_tests=tests,
         settings=SettingsConfig(sql_analysis=True),
     )
-    metadata_builder: Mock = Mock(wraps=fixture_completion._model_fixture_metadata)
-    monkeypatch.setattr(fixture_completion, "_model_fixture_metadata", metadata_builder)
+    metadata_builder: Mock = Mock(wraps=fixture_completion.build_relation_fixture_context)
+    monkeypatch.setattr(plan_output, "build_relation_fixture_context", metadata_builder)
     fixture_completion._cached_resolved_column_reads.cache_clear()
     fallback_analyzer: Mock = Mock(wraps=fixture_completion.analyze_resolved_column_reads)
     monkeypatch.setattr(

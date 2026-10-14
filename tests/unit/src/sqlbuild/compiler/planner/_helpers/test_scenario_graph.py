@@ -4,12 +4,12 @@ from collections import defaultdict
 
 import pytest
 
+from sqlbuild._native import plan_scenario_graph
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledSqlScenario,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner._helpers.scenario.graph import plan_scenario_graph
 from sqlbuild.compiler.planner.models import ScenarioGraphPlan
 from sqlbuild.compiler.planner.types import WarningSeverity
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (

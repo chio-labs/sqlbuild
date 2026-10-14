@@ -1,11 +1,11 @@
 //! Parse the conservative shape used for column migration proofs.
 
-use crate::planner_migrations::_helpers::ast::{canonical, strip_formatting};
-use crate::planner_migrations::_helpers::clauses::{clause_references, positional};
-use crate::planner_migrations::_helpers::encoding::encode;
-use crate::planner_migrations::_helpers::inputs::select_inputs;
-use crate::planner_migrations::_helpers::parse::parse;
-use crate::planner_migrations::_helpers::projection::named_projections;
+use crate::planner_migrations::_helpers::proofs::ast::{canonical, strip_formatting};
+use crate::planner_migrations::_helpers::proofs::clauses::{clause_references, positional};
+use crate::planner_migrations::_helpers::proofs::encoding::encode;
+use crate::planner_migrations::_helpers::proofs::inputs::select_inputs;
+use crate::planner_migrations::_helpers::proofs::parse::parse;
+use crate::planner_migrations::_helpers::proofs::projection::named_projections;
 use crate::planner_migrations::models::QueryShape;
 use serde_json::json;
 

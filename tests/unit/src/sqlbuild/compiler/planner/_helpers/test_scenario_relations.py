@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    build_scenario_relation_plan,
     project_with,
 )
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
@@ -24,7 +25,6 @@ from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner._helpers.scenario.relations import (
     build_scenario_execution_plan,
     build_scenario_fixture_plans,
-    build_scenario_relation_plan,
     resolve_scenario_check_sql,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError

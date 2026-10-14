@@ -1,6 +1,6 @@
 //! Model names that participate in a migration identity.
 
-use crate::planner_migrations::_helpers::fingerprint::metadata;
+use crate::planner_migrations::_helpers::proofs::fingerprint::metadata;
 use crate::planner_migrations::constants::REF_MARKER;
 use regex::Regex;
 use std::collections::BTreeSet;

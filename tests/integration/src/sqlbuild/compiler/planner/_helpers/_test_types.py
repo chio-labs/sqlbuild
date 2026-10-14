@@ -119,3 +119,13 @@ class ExecuteAuditTestCase:
     model_locations: dict[str, str]
     source_map: dict[str, SourceEntry]
     expected_row_count: int
+
+
+@dataclass(frozen=True)
+class FixtureSchemaIntegrationTestCase:
+    """Closed and open source schemas through compilation and fixture planning."""
+
+    description: str
+    contract: str
+    expected_authoritative: bool
+    expected_diagnostics: tuple[str, ...]

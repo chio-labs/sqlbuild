@@ -1,6 +1,7 @@
 pub mod apply_suppressions;
 pub mod dependency_sites;
 pub mod first_header_only;
+pub mod format_fixture_blocks;
 pub mod format_sql_bodies;
 pub mod interpolation_text_at;
 pub mod lint_sql_bodies;
@@ -11,3 +12,4 @@ pub mod neutralize_interpolation;
 pub mod resolve_format_settings;
 pub mod restore_interpolation;
 pub mod scan_fixture_null_candidates;
+pub mod simplify_fixture_nulls;

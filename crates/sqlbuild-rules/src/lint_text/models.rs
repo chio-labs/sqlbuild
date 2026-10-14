@@ -1,5 +1,20 @@
 //! Interpolation sites, suppression outcomes and fixture-null candidates.
 
+use crate::lint_text::types::FixtureFormatColumn;
+
+/// A schema whose names are authoritative for an authored fixture CTE.
+#[derive(Clone, Debug)]
+pub struct FixtureFormatRelation {
+    pub columns: Vec<FixtureFormatColumn>,
+}
+
+/// An authored SQL-test block eligible for model fixture formatting.
+#[derive(Clone, Debug)]
+pub struct FixtureFormatBlock {
+    pub sql_body: String,
+    pub model_mode: bool,
+}
+
 /// Dependency sentinels and keyed relations derived from authored interpolation sites.
 #[derive(Debug, Default)]
 pub struct DependencySites {
