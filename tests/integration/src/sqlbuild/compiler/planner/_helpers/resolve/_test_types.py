@@ -9,6 +9,16 @@ from sqlbuild.spec.contracts.models import SourceEntry
 
 
 @dataclass(frozen=True)
+class OrchestrationTestCase:
+    """Expected rows and ordered adapter calls across the resolution entry points."""
+
+    description: str
+    expected_rows: list[tuple[int]]
+    expected_model_calls: list[str]
+    expected_relation_calls: list[str]
+
+
+@dataclass(frozen=True)
 class AdapterOverrideTestCase:
     """Expected SQL and rows from adapter-owned source rendering."""
 

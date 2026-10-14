@@ -7,16 +7,13 @@ from collections.abc import Callable, Iterator
 
 import sqlbuild._native as _native
 from sqlbuild._native import apply_deferred_locations as apply_deferred_locations
+from sqlbuild._native import build_function_locations as build_function_locations
+from sqlbuild._native import build_model_locations as build_model_locations
+from sqlbuild._native import build_seed_locations as build_seed_locations
 from sqlbuild._native import resolve_dbt_ref_references as resolve_dbt_ref_references
 from sqlbuild._native import resolve_ref_references as resolve_ref_references
 from sqlbuild._native import resolve_table_function_references as resolve_table_function_references
 from sqlbuild._native import resolve_udf_references as resolve_udf_references
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.compile.types import (
-    CompiledFunctionView,
-    CompiledModelView,
-    CompiledSeedView,
-)
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 _REFERENCE_SCAN_CONTEXT: str = "SQL reference resolution"
@@ -60,27 +57,3 @@ def _iter_code_matches(
             continue
         yield match
         index = match.end()
-
-
-def build_model_locations(
-    models: tuple[CompiledModelView, ...],
-) -> dict[str, CompiledRelationLocation]:
-    """Build a lookup of model name to compiled relation location."""
-
-    return {model.name: model.destination for model in models}
-
-
-def build_seed_locations(
-    seeds: tuple[CompiledSeedView, ...],
-) -> dict[str, CompiledRelationLocation]:
-    """Build a lookup of seed name to compiled relation location."""
-
-    return {seed.name: seed.destination for seed in seeds}
-
-
-def build_function_locations(
-    functions: tuple[CompiledFunctionView, ...],
-) -> dict[str, CompiledRelationLocation]:
-    """Build a lookup of function name to compiled relation location."""
-
-    return {function.name: function.destination for function in functions}

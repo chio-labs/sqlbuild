@@ -1,29 +1,20 @@
-"""Per-model SQL resolution orchestration."""
+"""Cursor-bound computation and native per-model SQL resolution."""
 
 from __future__ import annotations
 
-from dataclasses import replace
 from datetime import datetime
 
 from sqlbuild._native import (
-    assert_no_unresolved_sql_markers,
     get_config_cursor_bound,
     get_config_str,
     resolve_bounded_cursor_override,
     resolve_cursor_input_roles,
-    resolve_cursor_intrinsics,
 )
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, RelationLookup
-from sqlbuild.compiler.compile.models import (
-    CompiledRelationLocation,
-    CursorInputRoles,
-)
-from sqlbuild.compiler.compile.types import CompiledFunctionView, CompiledModelView
-from sqlbuild.compiler.discovery.models import SqlHookEntry
-from sqlbuild.compiler.planner._helpers.resolve.config import (
-    get_config_append_cursor_inclusive,
-)
+from sqlbuild._native import resolve_function_sql as resolve_function_sql
+from sqlbuild._native import resolve_model_hook_entries as resolve_model_hook_entries
+from sqlbuild._native import resolve_model_sql as resolve_model_sql
+from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.planner._helpers.resolve.cursor import (
     compute_cursor_bounds,
     cursor_inputs_without_rows,
@@ -32,181 +23,23 @@ from sqlbuild.compiler.planner._helpers.resolve.cursor import (
     unreadable_cursor_inputs_error,
     without_destination_cursor,
 )
-from sqlbuild.compiler.planner._helpers.resolve.cursor_intrinsics import (
-    render_cursor_intrinsic_bounds,
-)
 from sqlbuild.compiler.planner._helpers.resolve.cursor_policies import (
     resolve_future_cursor_config,
     resolve_start_cursor_config,
-)
-from sqlbuild.compiler.planner._helpers.resolve.refs import (
-    resolve_dbt_ref_references,
-    resolve_ref_references,
-    resolve_table_function_references,
-    resolve_udf_references,
-)
-from sqlbuild.compiler.planner._helpers.resolve.sources import (
-    resolve_source_references,
-)
-from sqlbuild.compiler.planner.constants import (
-    MODEL_POST_HOOKS_CONFIG_KEY,
-    MODEL_PRE_HOOKS_CONFIG_KEY,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.execution.future_cursor_safety import apply_future_cursor_safety
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CursorBounds,
-    CursorOverridePair,
     MaximumStartPolicyInputs,
     ModelCursorSnapshot,
     ModelPlanContext,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, IncrementalMode, MaterializationType
-from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.cursor_algebra.types import BoundSentinel
-from sqlbuild.spec.contracts.models import FutureCursorsConfig, SourceEntry, StartCursorsConfig
-
-
-def resolve_model_sql(
-    *,
-    adapter: BaseAdapter,
-    model: CompiledModelView,
-    snapshot: WarehouseSnapshot,
-    context: ModelPlanContext,
-    backfill: BackfillResult,
-    full_refresh: bool,
-    cursor_overrides: CursorOverridePair,
-    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
-    replaces_relation: bool = False,
-    full_rebuild_cause: str | None = None,
-) -> str:
-    """Resolve all references in a model's query SQL to produce executable SQL."""
-
-    model_locations: dict[str, CompiledRelationLocation] = context.model_locations
-    seed_locations: dict[str, CompiledRelationLocation] = context.seed_locations
-    function_locations: dict[str, CompiledRelationLocation] = context.function_locations
-    source_map: dict[str, SourceEntry] = context.source_map
-    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]] = context.source_warehouse_columns
-    star_exclude_keyword: str = context.star_exclude_keyword
-    query_sql: str = model.query_sql
-    cursor_type: str | None = get_config_str(values=model.config.values, key="cursor_type")
-
-    cursor_bounds: CursorBounds | None = _compute_model_cursor_bounds(
-        model=model,
-        snapshot=snapshot,
-        backfill=backfill,
-        full_refresh=full_refresh,
-        start_cursor_override=cursor_overrides.start_cursor_override,
-        end_cursor_override=cursor_overrides.end_cursor_override,
-        runtime_cursor_producer_names=context.runtime_cursor_producer_names,
-        context=context,
-        replaces_relation=replaces_relation,
-    )
-
-    cursor_roles: CursorInputRoles = resolve_cursor_input_roles(model=model)
-    lower_bound_inclusive: bool = get_config_append_cursor_inclusive(model)
-
-    query_sql = resolve_source_references(
-        query_sql=query_sql,
-        source_map=source_map,
-        source_warehouse_columns=source_warehouse_columns,
-        star_exclude_keyword=star_exclude_keyword,
-        cursor_bounds=cursor_bounds,
-        cursor_filter_inputs=cursor_roles.filter_inputs,
-        adapter=adapter,
-        cursor_type=cursor_type,
-        lower_bound_inclusive=lower_bound_inclusive,
-    )
-
-    query_sql = resolve_ref_references(
-        query_sql=query_sql,
-        model_locations=model_locations,
-        seed_locations=seed_locations,
-        cursor_bounds=cursor_bounds,
-        cursor_filter_inputs=cursor_roles.filter_inputs,
-        adapter=adapter,
-        cursor_type=cursor_type,
-        lower_bound_inclusive=lower_bound_inclusive,
-    )
-
-    query_sql = resolve_dbt_ref_references(
-        query_sql=query_sql,
-        external_sql_reference_resolver=external_sql_reference_resolver,
-    )
-    query_sql = resolve_udf_references(
-        query_sql=query_sql,
-        function_locations=function_locations or {},
-        adapter=adapter,
-    )
-    query_sql = resolve_table_function_references(
-        query_sql=query_sql,
-        function_locations=function_locations or {},
-        adapter=adapter,
-    )
-    _, has_intrinsics = resolve_cursor_intrinsics(sql=query_sql)
-    if has_intrinsics:
-        if cursor_bounds is None:
-            raise _unresolved_cursor_bounds_error(
-                model_name=model.name,
-                full_rebuild_cause=full_rebuild_cause
-                or ("--full-refresh" if full_refresh else None),
-            )
-        query_sql = render_cursor_intrinsic_bounds(
-            sql=query_sql, bounds=cursor_bounds, cursor_type=cursor_type, adapter=adapter
-        )
-
-    assert_no_unresolved_sql_markers(sql=query_sql, context=f"Model '{model.name}' planned SQL")
-    return query_sql
-
-
-def _unresolved_cursor_bounds_error(
-    *, model_name: str, full_rebuild_cause: str | None
-) -> PlannerInputError:
-    if full_rebuild_cause is None:
-        return PlannerInputError(
-            f"Model '{model_name}' uses cursor intrinsics, but cursor bounds could not be resolved"
-        )
-    return PlannerInputError(
-        f"Model '{model_name}' was given a FULL backfill ({full_rebuild_cause}), but it uses "
-        "cursor intrinsics and a non-microbatch full rebuild has no cursor interval",
-        help=(
-            "rebuild it with an explicit cursor interval (--start-cursor-ts and "
-            "--end-cursor-ts, or the -int forms), or make it a microbatch model so a full "
-            "rebuild can run batch by batch"
-        ),
-    )
-
-
-def resolve_function_sql(
-    *,
-    adapter: BaseAdapter,
-    function: CompiledFunctionView,
-    model_locations: dict[str, CompiledRelationLocation],
-    seed_locations: dict[str, CompiledRelationLocation],
-    function_locations: dict[str, CompiledRelationLocation],
-    source_map: dict[str, SourceEntry],
-    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
-    star_exclude_keyword: str,
-) -> str:
-    """Resolve relation and function references in a SQL function body."""
-
-    return _resolve_unbounded_sql(
-        sql=function.body_sql,
-        context=ModelPlanContext(
-            model_locations=model_locations,
-            models_by_name={},
-            seed_locations=seed_locations,
-            function_locations=function_locations,
-            source_map=source_map,
-            source_warehouse_columns=source_warehouse_columns,
-            star_exclude_keyword=star_exclude_keyword,
-        ),
-        adapter=adapter,
-        external_sql_reference_resolver=None,
-        label=f"Function '{function.name}'",
-    )
+from sqlbuild.spec.contracts.models import FutureCursorsConfig, StartCursorsConfig
 
 
 def _compute_model_cursor_bounds(
@@ -362,101 +195,3 @@ def _history_redirected(*, model: CompiledModelView, cursor_snapshot: ModelCurso
         cursor_snapshot.target_relation is not None
         and cursor_snapshot.target_relation != model.destination.qualified_name
     )
-
-
-def resolve_model_hook_entries(
-    *,
-    model: CompiledModelView,
-    adapter: BaseAdapter,
-    context: ModelPlanContext,
-    external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
-) -> tuple[object, object]:
-    """Return the model's pre and post hooks with SQL hook references resolved like model SQL."""
-
-    pre_hooks, post_hooks = (
-        _resolve_hook_value(
-            value=model.config.values.get(hook_key),
-            label=f"Model '{model.name}' {hook_key}",
-            adapter=adapter,
-            context=context,
-            external_sql_reference_resolver=external_sql_reference_resolver,
-        )
-        for hook_key in (MODEL_PRE_HOOKS_CONFIG_KEY, MODEL_POST_HOOKS_CONFIG_KEY)
-    )
-    return pre_hooks, post_hooks
-
-
-def _resolve_hook_value(
-    *,
-    value: object,
-    label: str,
-    adapter: BaseAdapter,
-    context: ModelPlanContext,
-    external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
-) -> object:
-    if isinstance(value, SqlHookEntry):
-        return replace(
-            value,
-            statement=_resolve_unbounded_sql(
-                sql=value.statement,
-                label=label,
-                adapter=adapter,
-                context=context,
-                external_sql_reference_resolver=external_sql_reference_resolver,
-            ),
-        )
-    if isinstance(value, list | tuple):
-        resolved: list[object] = [
-            _resolve_hook_value(
-                value=item,
-                label=f"{label}[{index}]",
-                adapter=adapter,
-                context=context,
-                external_sql_reference_resolver=external_sql_reference_resolver,
-            )
-            for index, item in enumerate(value)
-        ]
-        return resolved if isinstance(value, list) else tuple(resolved)
-    return value
-
-
-def _resolve_unbounded_sql(
-    *,
-    sql: str,
-    label: str,
-    adapter: BaseAdapter,
-    context: ModelPlanContext,
-    external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
-) -> str:
-    resolved: str = resolve_source_references(
-        query_sql=sql,
-        source_map=context.source_map,
-        source_warehouse_columns=context.source_warehouse_columns,
-        star_exclude_keyword=context.star_exclude_keyword,
-        cursor_bounds=None,
-        cursor_filter_inputs={},
-        adapter=adapter,
-        cursor_type=None,
-        lower_bound_inclusive=True,
-    )
-    resolved = resolve_ref_references(
-        query_sql=resolved,
-        model_locations=context.model_locations,
-        seed_locations=context.seed_locations,
-        cursor_bounds=None,
-        cursor_filter_inputs={},
-        adapter=adapter,
-        cursor_type=None,
-        lower_bound_inclusive=True,
-    )
-    resolved = resolve_dbt_ref_references(
-        query_sql=resolved, external_sql_reference_resolver=external_sql_reference_resolver
-    )
-    resolved = resolve_udf_references(
-        query_sql=resolved, function_locations=context.function_locations or {}, adapter=adapter
-    )
-    resolved = resolve_table_function_references(
-        query_sql=resolved, function_locations=context.function_locations or {}, adapter=adapter
-    )
-    assert_no_unresolved_sql_markers(sql=resolved, context=f"{label} planned SQL")
-    return resolved

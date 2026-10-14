@@ -202,9 +202,11 @@ from sqlbuild.compiler.planner.classes.migration_state_inspection import (
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
+    BackfillResult,
     ChangeDetectionResult,
     ColumnRenameHint,
     CursorBounds,
+    CursorOverridePair,
     DeferralInputs,
     DirectModelVersionIdentities,
     FixtureRelationMetadata,
@@ -213,6 +215,7 @@ from sqlbuild.compiler.planner.models import (
     MigrationCompatibilityResult,
     MissingUpstream,
     ModelMigrationRequest,
+    ModelPlanContext,
     ModelPlanEntry,
     OldNameView,
     ParsedSelector,
@@ -1063,6 +1066,46 @@ class NativeCompiledProject:
 
 def compiled_model_record(model: CompiledModelView) -> CompiledModel: ...
 def compiled_audit_record(audit: CompiledAuditView) -> CompiledAudit: ...
+def resolve_model_sql(
+    *,
+    adapter: BaseAdapter,
+    model: CompiledModelView,
+    snapshot: WarehouseSnapshot,
+    context: ModelPlanContext,
+    backfill: BackfillResult,
+    full_refresh: bool,
+    cursor_overrides: CursorOverridePair,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    replaces_relation: bool = False,
+    full_rebuild_cause: str | None = None,
+) -> str: ...
+def resolve_function_sql(
+    *,
+    adapter: BaseAdapter,
+    function: CompiledFunctionView,
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
+    function_locations: dict[str, CompiledRelationLocation],
+    source_map: dict[str, SourceEntry],
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
+    star_exclude_keyword: str,
+) -> str: ...
+def resolve_model_hook_entries(
+    *,
+    model: CompiledModelView,
+    adapter: BaseAdapter,
+    context: ModelPlanContext,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
+) -> tuple[object, object]: ...
+def build_model_locations(
+    models: tuple[CompiledModelView, ...],
+) -> dict[str, CompiledRelationLocation]: ...
+def build_seed_locations(
+    seeds: tuple[CompiledSeedView, ...],
+) -> dict[str, CompiledRelationLocation]: ...
+def build_function_locations(
+    functions: tuple[CompiledFunctionView, ...],
+) -> dict[str, CompiledRelationLocation]: ...
 def compiled_function_record(function: CompiledFunctionView) -> CompiledFunction: ...
 def compiled_source_record(source: CompiledSourceView) -> CompiledSource: ...
 def compiled_seed_record(seed: CompiledSeedView) -> CompiledSeed: ...
