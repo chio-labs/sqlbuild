@@ -15,6 +15,11 @@ use crate::lint_text::constants::{
 use crate::lint_text::errors::LintTextError;
 use crate::lint_text::models::{InterpolationSite, Neutralized};
 
+pub(crate) static DEPENDENCY_SITE_PATTERN: LazyLock<Result<Regex, regex::Error>> =
+    LazyLock::new(|| Regex::new(r"(?i)^__(?:ref|source)\s*\("));
+pub(crate) static KEYED_RELATION_SITE_PATTERN: LazyLock<Result<Regex, regex::Error>> =
+    LazyLock::new(|| Regex::new(r#"(?i)^__(ref|source|seed)\s*\(\s*['"]([^'"]+)['"]\s*\)$"#));
+
 static LINT_SITE: LazyLock<Result<Regex, regex::Error>> =
     LazyLock::new(|| Regex::new(LINT_SITE_PATTERN));
 static FORMAT_SITE: LazyLock<Result<Regex, regex::Error>> =

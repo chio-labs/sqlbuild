@@ -11,13 +11,13 @@ import sqlbuild._native as native_module
 from sqlbuild._native import (
     build_lint_expansion_context,
     expand_sql_with_spans,
+    lint_file_role,
     map_expanded_offset,
+    prepare_lint_body,
     run_lint,
 )
 from sqlbuild.compiler.compile.models import MappedOffset, SqlExpansionContext
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.lint._helpers.expansion import prepare_lint_body
-from sqlbuild.lint._helpers.headers import lint_file_role
 from sqlbuild.lint.exceptions import ProjectCompileError
 from sqlbuild.lint.models import LintBody, LintConfig, LintRunResult
 from tests.unit.src.sqlbuild.lint._test_types import (

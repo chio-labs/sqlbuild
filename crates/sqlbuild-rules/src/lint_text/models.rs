@@ -1,5 +1,12 @@
 //! Interpolation sites, suppression outcomes and fixture-null candidates.
 
+/// Dependency sentinels and keyed relations derived from authored interpolation sites.
+#[derive(Debug, Default)]
+pub struct DependencySites {
+    pub identifiers: Vec<String>,
+    pub relations: Vec<(String, String)>,
+}
+
 /// One interpolation occurrence replaced by a sentinel; offsets are character positions.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InterpolationSite {

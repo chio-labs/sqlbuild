@@ -31,7 +31,7 @@ reason = "The TYPE_CHECKING block contains annotation-only imports, avoiding exe
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
 path = "src/sqlbuild/lint/__init__.py"
-reason = "Native bindings own the lint entry points and compile-fact verification; this package retains boundary models, custom-rule and macro callbacks, and expansion and fix-planning helpers."
+reason = "Native bindings own lint entry points, expansion preparation and compiler-verified fix planning; this package retains boundary models, custom-rule and macro callbacks."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"

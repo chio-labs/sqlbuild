@@ -19,7 +19,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::rules::lint_expansion::build_lint_expansion_context;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const EXPANSION_MODULE: &str = "sqlbuild.lint._helpers.expansion";
+const EXPANSION_MODULE: &str = "sqlbuild._native";
 const STOP_CONTEXT_MODULE: &str = "sqlbuild.lint.classes.stop_context";
 const LINT_MODELS_MODULE: &str = "sqlbuild.lint.models";
 

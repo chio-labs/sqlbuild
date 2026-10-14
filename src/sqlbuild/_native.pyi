@@ -345,12 +345,16 @@ from sqlbuild.integrations.dbt.models import (
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from sqlbuild.lint.models import (
     CompileFacts,
+    ExpandedLintFile,
     FixVerdict,
     HeaderSpan,
     LintBody,
     LintConfig,
+    LintFileRole,
     LintRunResult,
     LintViolation,
+    PendingLintBody,
+    PreparedLintFiles,
     RuleFixResult,
 )
 from sqlbuild.lint.types import RelationKeyRow, RelationKeys
@@ -1201,6 +1205,58 @@ def declared_relation_keys(
 ) -> RelationKeys: ...
 def compiled_relation_keys(project: CompiledProjectView) -> RelationKeys: ...
 def compile_facts(*, project: CompiledProjectView, project_dir: Path) -> CompileFacts: ...
+def lint_file_role(
+    *, file_path: Path, project_dir: Path, relative_path: PurePath | None = None
+) -> LintFileRole: ...
+def lint_body_ranges(
+    *,
+    contents: str,
+    headers: tuple[HeaderSpan, ...],
+    file_path: Path,
+    project_dir: Path,
+    role: LintFileRole | None = None,
+) -> tuple[tuple[int, int], ...]: ...
+def prepare_lint_body(
+    *,
+    role: LintFileRole,
+    file_path: Path,
+    contents: str,
+    body_range: tuple[int, int],
+    context: SqlExpansionContext,
+    dialect: str,
+    external_identifiers: tuple[str, ...] = (),
+    allows_ceremonial_select: bool = False,
+    allows_dynamic_output_star: bool = False,
+    compiled_expansion: CompiledSqlExpansion | None = None,
+) -> LintBody: ...
+def expand_lint_body(
+    *,
+    role: LintFileRole,
+    file_path: Path,
+    contents: str,
+    body_range: tuple[int, int],
+    context: SqlExpansionContext,
+    dialect: str,
+    external_identifiers: tuple[str, ...] = (),
+    allows_ceremonial_select: bool = False,
+    allows_dynamic_output_star: bool = False,
+    compiled_expansion: CompiledSqlExpansion | None = None,
+) -> PendingLintBody: ...
+def expand_file_bodies(
+    *,
+    file_path: Path,
+    contents: str,
+    headers: tuple[HeaderSpan, ...],
+    context: SqlExpansionContext,
+    dialect: str,
+    project_dir: Path,
+    relative_path: Path,
+    dynamic_output_paths: frozenset[Path],
+    compiled_expansions: dict[Path, CompiledSqlExpansion] | None,
+) -> ExpandedLintFile: ...
+def prepare_expanded_files(
+    *, expanded_files: tuple[ExpandedLintFile, ...], dialect: str, skip_unexpandable: bool
+) -> PreparedLintFiles: ...
 def plan_rule_fixes(
     *,
     project_dir: Path,
