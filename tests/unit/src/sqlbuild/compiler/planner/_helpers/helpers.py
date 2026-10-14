@@ -8,8 +8,8 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from itertools import chain
 from pathlib import Path
-from types import MappingProxyType
-from typing import ClassVar
+from types import MappingProxyType, SimpleNamespace
+from typing import Any, ClassVar
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
@@ -83,6 +83,7 @@ from sqlbuild.compiler.planner.types import (
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import (
+    DefaultsConfig,
     SchemaColumn,
     SchemaModelEntry,
     SchemaSeedEntry,
@@ -1478,9 +1479,19 @@ def native_audit_scope_deps(
         ],
         attached,
     )
-    audit_deps: list[list[tuple[str, str]]] = _native.assemble_project_resource_facts(
-        ("generic", None, (None, None, None, None), [], [], [], [], [], [], [audit_row])
-    )[4]
+    inputs: Any = SimpleNamespace(
+        effective_vars={},
+        effective_target=None,
+        project_config=SimpleNamespace(defaults=DefaultsConfig()),
+        seed_inputs=(),
+        model_inputs=(),
+        source_inputs=(),
+        sql_function_inputs=(),
+        audit_inputs=(SimpleNamespace(assembly_row=audit_row),),
+    )
+    audit_deps: tuple[list[tuple[str, str]], ...] = _native.assemble_native_project_resources(
+        inputs=inputs, dialect=None, syntax_checks=()
+    ).audit_scope_deps
     return tuple(
         CompiledObjectKey(resource_type=CompiledResourceType(kind), name=name)
         for kind, name in audit_deps[0]
