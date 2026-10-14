@@ -1,0 +1,290 @@
+//! Warnings for selected models stale through changed upstreams outside the run set.
+
+use std::collections::{HashMap, HashSet};
+
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::{PyDict, PyString, PyTuple};
+use pyo3::{pyfunction, wrap_pyfunction};
+
+use sqlbuild_analysis::planner_identity::constants::{
+    MODEL_RESOURCE, SEED_RESOURCE, SOURCE_RESOURCE,
+};
+use sqlbuild_analysis::planner_identity::main::classify_selection_staleness::classify_selection_staleness;
+use sqlbuild_analysis::planner_identity::main::stale_upstream_warning_message::stale_upstream_warning_message;
+use sqlbuild_analysis::planner_identity::models::{
+    GraphKey, StaleWarning, StalenessGraph, StalenessNames,
+};
+
+use crate::bindings::_helpers::compile_driver::python_calls::{
+    KeywordArguments, call_with, imported,
+};
+use crate::bindings::_helpers::planner_changes::detect::{ModelPass, model_change};
+use crate::bindings::_helpers::planner_changes::results::{MODELS_MODULE, planner_enum};
+use crate::bindings::_helpers::planner_identity::hashing::graph_key;
+
+/// Change kinds that mean the model's own identity changed.
+const OWN_CHANGE_KINDS: [&str; 5] = [
+    "first_run",
+    "query_changed",
+    "function_changed",
+    "config_changed",
+    "schema_changed",
+];
+
+fn own_change(change: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let kind: String = change.getattr("change_kind")?.str()?.extract()?;
+    Ok(OWN_CHANGE_KINDS.contains(&kind.as_str()))
+}
+
+fn names_of_kind(keys: &Bound<'_, PyAny>, kind: &str) -> PyResult<HashSet<String>> {
+    let mut names: HashSet<String> = HashSet::new();
+    for key in keys.try_iter()? {
+        let key: GraphKey = graph_key(&key?)?;
+        if key.kind == kind {
+            names.insert(key.name);
+        }
+    }
+    Ok(names)
+}
+
+fn upstream_graph(upstream_deps: &Bound<'_, PyAny>) -> PyResult<HashMap<GraphKey, Vec<GraphKey>>> {
+    let mut deps: HashMap<GraphKey, Vec<GraphKey>> = HashMap::new();
+    for item in upstream_deps.call_method0("items")?.try_iter()? {
+        let (key, upstream): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;
+        let upstream_keys: Vec<GraphKey> = upstream
+            .try_iter()?
+            .map(|upstream_key| graph_key(&upstream_key?))
+            .collect::<PyResult<_>>()?;
+        deps.insert(graph_key(&key)?, upstream_keys);
+    }
+    Ok(deps)
+}
+
+/// Inputs of one stale-warning pass.
+struct StalenessInputs<'py> {
+    original_scope: Bound<'py, PyAny>,
+    changes: Bound<'py, PyAny>,
+    snapshot: Bound<'py, PyAny>,
+    identities: Bound<'py, PyAny>,
+    model_changes_complete: bool,
+}
+
+fn changed_model_names(inputs: &StalenessInputs<'_>) -> PyResult<HashSet<String>> {
+    let py: Python<'_> = inputs.snapshot.py();
+    let models: Bound<'_, PyAny> = inputs.changes.getattr("models")?;
+    let mut changed: HashSet<String> = HashSet::new();
+    for item in models.call_method0("items")?.try_iter()? {
+        let (name, change): (String, Bound<'_, PyAny>) = item?.extract()?;
+        if own_change(&change)? {
+            changed.insert(name);
+        }
+    }
+    let version_hashes: Bound<'_, PyAny> = inputs.identities.getattr("model_version_hashes")?;
+    let metadata_jsons: Bound<'_, PyAny> = inputs.identities.getattr("model_metadata_jsons")?;
+    let pass = ModelPass {
+        snapshot: inputs.snapshot.clone(),
+        query_change_tracking: true,
+        full_refresh: false,
+        function_local_hashes: py.None().into_bound(py),
+        hook_version_hashes: py.None().into_bound(py),
+    };
+    let models_by_name: Bound<'_, PyAny> = inputs.original_scope.getattr("models_by_name")?;
+    for item in models_by_name.call_method0("items")?.try_iter()? {
+        let (name, model): (String, Bound<'_, PyAny>) = item?.extract()?;
+        let selected_change: Bound<'_, PyAny> = models.call_method1("get", (&name,))?;
+        if !selected_change.is_none()
+            && (inputs.model_changes_complete || own_change(&selected_change)?)
+        {
+            if own_change(&selected_change)? {
+                changed.insert(name);
+            }
+            continue;
+        }
+        if model.is_none() {
+            continue;
+        }
+        let change: Bound<'_, PyAny> = model_change(
+            &pass,
+            &model,
+            (
+                version_hashes.call_method1("get", (&name,))?.extract()?,
+                metadata_jsons.call_method1("get", (&name,))?.extract()?,
+            ),
+        )?;
+        if own_change(&change)? {
+            changed.insert(name);
+        }
+    }
+    Ok(changed)
+}
+
+fn changed_seed_names(inputs: &StalenessInputs<'_>) -> PyResult<HashSet<String>> {
+    let recorded: Bound<'_, PyAny> = inputs.snapshot.getattr("fingerprints")?.getattr("seeds")?;
+    let mut changed: HashSet<String> = HashSet::new();
+    for item in inputs
+        .identities
+        .getattr("seed_version_hashes")?
+        .call_method0("items")?
+        .try_iter()?
+    {
+        let (name, expected): (String, Bound<'_, PyAny>) = item?.extract()?;
+        if expected.is_none() {
+            continue;
+        }
+        let fingerprint: Bound<'_, PyAny> = recorded.call_method1("get", (&name,))?;
+        if fingerprint.is_none() || !fingerprint.getattr("version_hash")?.eq(&expected)? {
+            changed.insert(name);
+        }
+    }
+    Ok(changed)
+}
+
+fn plan_warnings<'py>(
+    py: Python<'py>,
+    warnings: Vec<StaleWarning>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let warning_class: Bound<'py, PyAny> = imported(py, MODELS_MODULE, "PlanWarning")?;
+    let severity: Bound<'py, PyAny> = planner_enum(py, "WarningSeverity", "warning")?;
+    let mut rendered: Vec<Bound<'py, PyAny>> = Vec::with_capacity(warnings.len());
+    for warning in warnings {
+        let message: String = stale_upstream_warning_message(
+            ("selected model", &warning.model_name),
+            "upstream(s)",
+            &warning.trigger_names,
+        );
+        rendered.push(call_with(
+            &warning_class,
+            &[
+                (
+                    "model_name",
+                    PyString::new(py, &warning.model_name).into_any(),
+                ),
+                ("severity", severity.clone()),
+                ("message", PyString::new(py, &message).into_any()),
+            ],
+        )?);
+    }
+    PyTuple::new(py, rendered)
+}
+
+/// Warn for selected models stale through changed upstreams outside the run set.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+fn build_stale_out_of_selection_warnings<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let arguments: KeywordArguments<'py> = KeywordArguments::read(
+        py,
+        "build_stale_out_of_selection_warnings",
+        options,
+        (
+            &[
+                "original_scope",
+                "execution_scope",
+                "changes",
+                "snapshot",
+                "version_identities",
+                "source_freshness",
+            ],
+            &["include_sources", "model_changes_complete"],
+        ),
+    )?;
+    let include_sources: bool =
+        !arguments.passed("include_sources")? || arguments.flag("include_sources")?;
+    let inputs = StalenessInputs {
+        original_scope: arguments.value("original_scope")?,
+        changes: arguments.value("changes")?,
+        snapshot: arguments.value("snapshot")?,
+        identities: arguments.value("version_identities")?,
+        model_changes_complete: arguments.flag("model_changes_complete")?,
+    };
+    let run_keys: Bound<'py, PyAny> = arguments
+        .value("execution_scope")?
+        .getattr("selected_keys")?;
+    let source_freshness: Bound<'py, PyAny> = arguments.value("source_freshness")?;
+    let mut changed_sources: HashSet<String> = HashSet::new();
+    if include_sources && !source_freshness.is_none() {
+        for identity in source_freshness.getattr("changed_identities")?.try_iter()? {
+            changed_sources.insert(identity?.getattr("source_name")?.extract()?);
+        }
+    }
+    let graph = StalenessGraph {
+        upstream_deps: upstream_graph(&inputs.original_scope.getattr("upstream_deps")?)?,
+        selected_model_names: names_of_kind(
+            &inputs.original_scope.getattr("selected_keys")?,
+            MODEL_RESOURCE,
+        )?
+        .into_iter()
+        .collect(),
+        run: StalenessNames {
+            models: names_of_kind(&run_keys, MODEL_RESOURCE)?,
+            seeds: names_of_kind(&run_keys, SEED_RESOURCE)?,
+            sources: names_of_kind(&run_keys, SOURCE_RESOURCE)?,
+        },
+        changed: StalenessNames {
+            models: changed_model_names(&inputs)?,
+            seeds: changed_seed_names(&inputs)?,
+            sources: changed_sources,
+        },
+    };
+    plan_warnings(py, classify_selection_staleness(&graph))
+}
+
+fn name_set(values: &Bound<'_, PyAny>) -> PyResult<HashSet<String>> {
+    values.try_iter()?.map(|value| value?.extract()).collect()
+}
+
+/// Stale warnings for selected models with changed upstreams outside the run set.
+#[pyfunction]
+fn classify_selection_staleness_warnings<'py>(
+    graph: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let py: Python<'py> = graph.py();
+    let staleness = StalenessGraph {
+        upstream_deps: upstream_graph(&graph.getattr("upstream_deps")?)?,
+        selected_model_names: name_set(&graph.getattr("selected_model_names")?)?
+            .into_iter()
+            .collect(),
+        run: StalenessNames {
+            models: name_set(&graph.getattr("run_model_names")?)?,
+            seeds: name_set(&graph.getattr("run_seed_names")?)?,
+            sources: name_set(&graph.getattr("run_source_names")?)?,
+        },
+        changed: StalenessNames {
+            models: name_set(&graph.getattr("changed_model_names")?)?,
+            seeds: name_set(&graph.getattr("changed_seed_names")?)?,
+            sources: name_set(&graph.getattr("changed_source_names")?)?,
+        },
+    };
+    let warning_class: Bound<'py, PyAny> =
+        imported(py, MODELS_MODULE, "SelectionStalenessWarning")?;
+    let mut warnings: Vec<Bound<'py, PyAny>> = Vec::new();
+    for warning in classify_selection_staleness(&staleness) {
+        warnings.push(call_with(
+            &warning_class,
+            &[
+                (
+                    "model_name",
+                    PyString::new(py, &warning.model_name).into_any(),
+                ),
+                (
+                    "trigger_names",
+                    PyTuple::new(py, warning.trigger_names)?.into_any(),
+                ),
+            ],
+        )?);
+    }
+    PyTuple::new(py, warnings)
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(
+        build_stale_out_of_selection_warnings,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        classify_selection_staleness_warnings,
+        module
+    )?)
+}

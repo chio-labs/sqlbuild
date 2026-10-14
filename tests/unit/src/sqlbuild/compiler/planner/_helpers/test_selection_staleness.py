@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
-from unittest.mock import Mock
 
 import pytest
 
 from sqlbuild._native import (
+    build_stale_out_of_selection_warnings,
     compiled_model_record,
 )
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
@@ -18,13 +18,6 @@ from sqlbuild.compiler.compile.types import (
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_SEED
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.planning.scopes import resolve_planner_scopes
-from sqlbuild.compiler.planner._helpers.pruning import selection_staleness
-from sqlbuild.compiler.planner._helpers.pruning.selection_classifier import (
-    format_stale_upstream_warning_message,
-)
-from sqlbuild.compiler.planner._helpers.pruning.selection_staleness import (
-    build_stale_out_of_selection_warnings,
-)
 from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     DirectModelVersionIdentities,
@@ -47,10 +40,10 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     PlannerStaleWarningScopeTestCase,
     SelectionStalenessGraphWarningTestCase,
     SelectionStalenessWarningTestCase,
-    StaleWarningMessageTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
     build_selection_model,
+    build_unreadable_model,
 )
 
 MODEL_KEY: CompiledObjectKey = CompiledObjectKey(
@@ -64,20 +57,15 @@ MODEL_KEY: CompiledObjectKey = CompiledObjectKey(
     [
         CompleteModelChangesWorkTestCase(
             description="complete model changes",
-            expected_detector_calls=0,
+            expected_warnings=(),
         )
     ],
     ids=lambda case: case.description,
 )
 def test_given_complete_change_results_when_building_stale_warnings_then_models_are_not_redetected(
     test_case: CompleteModelChangesWorkTestCase,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    model: CompiledModelView = build_selection_model(
-        key=MODEL_KEY,
-        name=MODEL_KEY.name,
-        materialized="table",
-    )
+    model: CompiledModelView = build_unreadable_model()
     scope: PlannerScope = PlannerScope(
         upstream_deps={MODEL_KEY: ()},
         downstream_deps={},
@@ -86,11 +74,6 @@ def test_given_complete_change_results_when_building_stale_warnings_then_models_
         selected_keys=frozenset({MODEL_KEY}),
         execution_order=(MODEL_KEY,),
     )
-    model_detector: Mock = Mock(
-        side_effect=AssertionError("complete change results must not trigger model detection")
-    )
-    monkeypatch.setattr(selection_staleness, "detect_model_changes", model_detector)
-
     warnings: tuple[PlanWarning, ...] = build_stale_out_of_selection_warnings(
         original_scope=scope,
         execution_scope=scope,
@@ -116,8 +99,7 @@ def test_given_complete_change_results_when_building_stale_warnings_then_models_
         model_changes_complete=True,
     )
 
-    assert warnings == ()
-    assert model_detector.call_count == test_case.expected_detector_calls
+    assert warnings == test_case.expected_warnings
 
 
 SEED_KEY: CompiledObjectKey = CompiledObjectKey(
@@ -561,60 +543,3 @@ def test_given_stale_upstream_graph_when_classifying_then_reports_expected_trigg
     unexpected_fragment: str
     for unexpected_fragment in test_case.unexpected_warning_fragments:
         assert unexpected_fragment not in warning_text
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        StaleWarningMessageTestCase(
-            description="lists every trigger as a bullet when under the cap",
-            model_label="selected model",
-            model_name="leaf",
-            trigger_label="upstream(s)",
-            trigger_names=("a", "b", "c"),
-            expected_fragments=(
-                "selected model 'leaf' will build on 3 stale upstream(s) not selected for rebuild:",
-                "    - a",
-                "    - b",
-                "    - c",
-                "    rebuild the closure to refresh them: --select +leaf",
-            ),
-            unexpected_fragments=("more",),
-            expected_bullet_count=3,
-        ),
-        StaleWarningMessageTestCase(
-            description="caps the bullet list at five and summarizes the remainder",
-            model_label="selected dbt model",
-            model_name="leaf",
-            trigger_label="upstream(s)",
-            trigger_names=("a", "b", "c", "d", "e", "f", "g"),
-            expected_fragments=(
-                "selected dbt model 'leaf' will build on 7 stale upstream(s) not selected for rebuild:",
-                "    - a",
-                "    - e",
-                "    +2 more",
-                "    rebuild the closure to refresh them: --select +leaf",
-            ),
-            unexpected_fragments=("    - f", "    - g"),
-            expected_bullet_count=5,
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_trigger_names_when_formatting_stale_warning_then_caps_and_structures_message(
-    test_case: StaleWarningMessageTestCase,
-) -> None:
-    message: str = format_stale_upstream_warning_message(
-        model_label=test_case.model_label,
-        model_name=test_case.model_name,
-        trigger_label=test_case.trigger_label,
-        trigger_names=test_case.trigger_names,
-    )
-
-    fragment: str
-    for fragment in test_case.expected_fragments:
-        assert fragment in message
-    for fragment in test_case.unexpected_fragments:
-        assert fragment not in message
-    bullet_count: int = sum(line.strip().startswith("- ") for line in message.splitlines())
-    assert bullet_count == test_case.expected_bullet_count

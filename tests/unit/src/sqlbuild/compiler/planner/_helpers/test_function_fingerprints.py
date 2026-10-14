@@ -5,10 +5,6 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.compile.types import CompiledFunctionView
-from sqlbuild.compiler.planner._helpers.identity.functions import (
-    build_compiled_function_fingerprint_sql,
-    detect_function_change,
-)
 from sqlbuild.compiler.planner.types import PlanReason
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     DetectFunctionChangeTestCase,
@@ -16,6 +12,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
     build_compiled_function,
     build_fingerprint,
+    detect_function_reason,
 )
 
 
@@ -69,13 +66,8 @@ def test_given_function_fingerprint_when_detecting_change_then_returns_reason(
         body_sql=test_case.body_sql,
         target_schema=test_case.target_schema,
     )
-    reason: PlanReason = detect_function_change(
-        function=function,
-        fingerprint_sql=build_compiled_function_fingerprint_sql(function),
-        fingerprint=test_case.existing_function_fingerprints.get(function.name),
-        query_change_tracking=True,
-        full_refresh=False,
-        dialect=None,
+    reason: PlanReason = detect_function_reason(
+        function=function, fingerprints=test_case.existing_function_fingerprints
     )
 
     assert reason == test_case.expected_reason

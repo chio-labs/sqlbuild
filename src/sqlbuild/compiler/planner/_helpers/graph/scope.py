@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from sqlbuild._native import lineage_graph_names
-from sqlbuild.compiler.compile.models import CompiledObjectKey
-from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
-from sqlbuild.compiler.planner._helpers.graph.auto_load import managed_source_upstream_keys
-from sqlbuild.compiler.planner._helpers.graph.core import (
+from sqlbuild._native import (
     build_downstream_deps,
     build_execution_edge_origins,
     build_execution_upstream_deps,
+    lineage_graph_names,
     topologically_order_keys,
 )
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
+from sqlbuild.compiler.planner._helpers.graph.auto_load import managed_source_upstream_keys
 from sqlbuild.compiler.planner._helpers.graph.loader_dag import expand_selected_loader_dependencies
 from sqlbuild.compiler.planner._helpers.graph.selectors import (
     parse_selector,

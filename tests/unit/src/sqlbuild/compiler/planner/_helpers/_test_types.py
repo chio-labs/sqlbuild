@@ -16,11 +16,10 @@ from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
     EmptyCursorInputDecision,
-    GraphIdentityNode,
-    GraphNodeKey,
     MissingUpstream,
     ParsedSelector,
     PathSelector,
+    PlanWarning,
     ScenarioArtifactIdentity,
     ScenarioGraphPlan,
     ScenarioRelationMap,
@@ -66,7 +65,7 @@ class CompleteFixturePlanningTestCase:
 @dataclass(frozen=True)
 class CompleteModelChangesWorkTestCase:
     description: str
-    expected_detector_calls: int
+    expected_warnings: tuple[PlanWarning, ...]
 
 
 @dataclass(frozen=True)
@@ -194,18 +193,6 @@ class SelectionStalenessWarningTestCase:
 
 
 @dataclass(frozen=True)
-class StaleWarningMessageTestCase:
-    description: str
-    model_label: str
-    model_name: str
-    trigger_label: str
-    trigger_names: tuple[str, ...]
-    expected_fragments: tuple[str, ...]
-    unexpected_fragments: tuple[str, ...]
-    expected_bullet_count: int
-
-
-@dataclass(frozen=True)
 class SelectionStalenessGraphWarningTestCase:
     description: str
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
@@ -216,32 +203,6 @@ class SelectionStalenessGraphWarningTestCase:
     changed_source_names: frozenset[str]
     expected_warning_fragments: tuple[str, ...]
     unexpected_warning_fragments: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class GraphIdentityExpectedHashesTestCase:
-    description: str
-    nodes: dict[GraphNodeKey, GraphIdentityNode]
-    execution_order: tuple[GraphNodeKey, ...]
-    expected_hashes: dict[GraphNodeKey, str | None]
-
-
-@dataclass(frozen=True)
-class GraphIdentityWriteHashesTestCase:
-    description: str
-    nodes: dict[GraphNodeKey, GraphIdentityNode]
-    execution_order: tuple[GraphNodeKey, ...]
-    selected_keys: frozenset[GraphNodeKey]
-    base_identity_hashes: dict[GraphNodeKey, str]
-    expected_hashes: dict[GraphNodeKey, str]
-
-
-@dataclass(frozen=True)
-class GraphIdentityWritePerfTestCase:
-    description: str
-    layer_count: int
-    expected_max_seconds: float
-    layer_width: int = 2
 
 
 @dataclass(frozen=True)

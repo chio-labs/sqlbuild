@@ -7,6 +7,7 @@ import pytest
 
 from sqlbuild._native import (
     build_model_warnings,
+    build_version_identity_metadata_json,
     compute_query_hash,
     detect_changes,
     detect_model_changes,
@@ -18,9 +19,6 @@ from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.constants import RECORDED_RELATION_MISSING_WARNING_CODE
-from sqlbuild.compiler.planner.main.identity._version_identity_metadata import (
-    build_version_identity_metadata_json,
-)
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     ChangeDetectionResult,

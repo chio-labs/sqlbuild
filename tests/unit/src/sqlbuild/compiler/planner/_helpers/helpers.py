@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Callable, Iterator
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -10,11 +9,14 @@ from itertools import chain
 from pathlib import Path
 from types import MappingProxyType, SimpleNamespace
 from typing import Any, ClassVar
+from unittest.mock import Mock
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    build_downstream_deps,
     compiled_model_record,
     compute_query_hash,
+    detect_changes,
     project_with,
     scan_sql_reference_calls,
 )
@@ -64,13 +66,11 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.planner._helpers.graph.core import build_downstream_deps
 from sqlbuild.compiler.planner._helpers.scenario.artifacts import build_scenario_relation_map
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     ChangeDetectionResult,
-    GraphIdentityNode,
-    GraphNodeKey,
+    PlannerChangeResults,
     PlanOutput,
     ScenarioArtifactIdentity,
     ScenarioRelationMap,
@@ -78,7 +78,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
-    GraphResourceKind,
+    PlanReason,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
@@ -157,77 +157,6 @@ class PlannerTestAdapter(BaseAdapter):
 
     def close(self, connection: object) -> None:
         del connection
-
-
-def compose_readable_identity(
-    *, local_hash: str, upstream_hashes: tuple[tuple[GraphNodeKey, str], ...]
-) -> str:
-    rendered: str = ",".join(
-        f"{key.node_type}:{key.node_name}={upstream_hash}" for key, upstream_hash in upstream_hashes
-    )
-    return (f"{local_hash}|{rendered}", local_hash)[not upstream_hashes]
-
-
-def compose_hashed_identity(
-    *, local_hash: str, upstream_hashes: tuple[tuple[GraphNodeKey, str], ...]
-) -> str:
-    payload: str = (
-        local_hash + "|" + ",".join(upstream_hash for _, upstream_hash in upstream_hashes)
-    )
-    return (hashlib.sha256(payload.encode()).hexdigest(), local_hash)[not upstream_hashes]
-
-
-def build_diamond_ladder_identity_nodes(
-    *, layer_count: int
-) -> tuple[dict[GraphNodeKey, GraphIdentityNode], tuple[GraphNodeKey, ...]]:
-    """Build a dense ladder where each layer depends on both nodes of the prior layer."""
-
-    def node_key(name: str) -> GraphNodeKey:
-        return GraphNodeKey(node_type="model", node_name=name)
-
-    nodes: dict[GraphNodeKey, GraphIdentityNode] = {}
-    order: list[GraphNodeKey] = []
-    previous: tuple[GraphNodeKey, ...] = ()
-    layer_index: int
-    for layer_index in range(layer_count):
-        current: list[GraphNodeKey] = []
-        suffix: str
-        for suffix in ("a", "b"):
-            key: GraphNodeKey = node_key(f"L{layer_index}_{suffix}")
-            nodes[key] = GraphIdentityNode(
-                key=key,
-                resource_kind=GraphResourceKind.MODEL,
-                upstream_keys=previous,
-                local_hash=f"local_{key.node_name}",
-            )
-            order.append(key)
-            current.append(key)
-        previous = tuple(current)
-    return nodes, tuple(order)
-
-
-def build_wide_layered_identity_nodes(
-    *, layer_count: int, layer_width: int
-) -> tuple[dict[GraphNodeKey, GraphIdentityNode], tuple[GraphNodeKey, ...]]:
-    """Build a wide project graph where each node reads two nodes of the prior layer."""
-
-    nodes: dict[GraphNodeKey, GraphIdentityNode] = {}
-    previous: tuple[GraphNodeKey, ...] = ()
-    layer: int
-    for layer in range(layer_count):
-        current: list[GraphNodeKey] = []
-        column: int
-        for column in range(layer_width):
-            key: GraphNodeKey = GraphNodeKey(node_type="model", node_name=f"L{layer}_{column}")
-            nodes[key] = GraphIdentityNode(
-                key=key,
-                resource_kind=GraphResourceKind.MODEL,
-                upstream_keys=previous[column : column + 2],
-                local_hash=f"local_{key.node_name}",
-            )
-            current.append(key)
-        previous = tuple(current)
-    return nodes, tuple(nodes)
 
 
 def _append_relation_info(listed: list[RelationInfo], relation: RelationInfo) -> None:
@@ -1509,3 +1438,32 @@ def _assertion_ref_targets(assertion_sql: tuple[str, ...]) -> tuple[str, ...]:
         lambda reference: reference.ref_kind == SqlReferenceKind.REF, references
     )
     return tuple(dict.fromkeys(reference.ref_name for reference in refs))
+
+
+def build_unreadable_model() -> CompiledModelView:
+    """Build a model view whose every attribute read fails, so change detection cannot run."""
+
+    model: CompiledModelView = Mock(spec=())
+    return model
+
+
+def detect_function_reason(
+    *, function: CompiledFunctionView, fingerprints: dict[str, Fingerprint]
+) -> PlanReason:
+    """Detect one selected function's change reason through planner change detection."""
+
+    project: Mock = Mock(
+        functions=(function,),
+        settings=SimpleNamespace(query_change_tracking=True),
+        sql_analysis_dialect=None,
+        hook_functions=(),
+    )
+    scope: Mock = Mock(
+        selected_keys=frozenset({function.key}), execution_order=(), models_by_name={}
+    )
+    snapshot: Mock = Mock(fingerprints=SimpleNamespace(functions=fingerprints), column_dialect=None)
+    changes: PlannerChangeResults = detect_changes(
+        project=project, scope=scope, snapshot=snapshot, full_refresh=False
+    )
+    reason: PlanReason = changes.functions[function.name].reason
+    return reason

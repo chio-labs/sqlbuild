@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import build_downstream_model_name_closure
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.main.selection._model_downstream_closure import (
-    build_downstream_model_names,
-)
 from sqlbuild.compiler.planner.models import PlannerScope
 from sqlbuild.compiler.source_freshness.models import (
     DirectSourceFreshnessPlanningResult,
@@ -65,7 +63,7 @@ def _downstream_model_names(*, source_name: str, scope: PlannerScope) -> frozens
         resource_type=CompiledResourceType.SOURCE,
         name=source_name,
     )
-    return build_downstream_model_names(
+    return build_downstream_model_name_closure(
         start_keys=(source_key,),
         downstream_deps=scope.downstream_deps,
     )

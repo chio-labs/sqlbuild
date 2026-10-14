@@ -45,6 +45,7 @@ pub(crate) mod manifest;
 pub(crate) mod model_config;
 pub(crate) mod plan_output;
 pub(crate) mod planner_changes;
+pub(crate) mod planner_identity;
 pub(crate) mod planner_strategy;
 pub(crate) mod presentation_text;
 pub(crate) mod project_assembly;

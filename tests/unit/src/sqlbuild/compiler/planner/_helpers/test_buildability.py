@@ -2,11 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import check_buildability, missing_upstream_message
 from sqlbuild.adapter.contract.models import RelationInfo
-from sqlbuild.compiler.planner._helpers.graph.buildability import (
-    check_buildability,
-    missing_upstream_message,
-)
 from sqlbuild.compiler.planner.models import MissingUpstream, WarehouseSnapshot
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     CheckBuildabilityTestCase,

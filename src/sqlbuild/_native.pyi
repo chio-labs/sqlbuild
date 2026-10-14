@@ -198,8 +198,10 @@ from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     CursorBounds,
     DeferralInputs,
+    DirectModelVersionIdentities,
     FutureCursorSafetyEvidence,
     MaximumStartSafetyEvidence,
+    MissingUpstream,
     ModelPlanEntry,
     PlannerChangeResults,
     PlannerResolvedActions,
@@ -210,6 +212,8 @@ from sqlbuild.compiler.planner.models import (
     ReferenceRename,
     SchemaAction,
     SchemaFinding,
+    SelectionStalenessGraph,
+    SelectionStalenessWarning,
     SqlTestPlanEntry,
     WarehouseSnapshot,
 )
@@ -257,7 +261,11 @@ from sqlbuild.compiler.scopes.models import (
     VisibilityResolution,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, JsonValue, ScopeQueryTarget
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessIdentity, SourceFreshnessRecord
+from sqlbuild.compiler.source_freshness.models import (
+    DirectSourceFreshnessPlanningResult,
+    SourceFreshnessIdentity,
+    SourceFreshnessRecord,
+)
 from sqlbuild.compiler.source_freshness.types import (
     SourceFreshnessAgeStatus,
     SourceFreshnessComparableRecord,
@@ -3992,6 +4000,92 @@ def origin_reference_names(
 ) -> dict[str, str] | None: ...
 def with_declared_columns_hash(*, metadata_json: str, declared_columns_hash: str) -> str: ...
 def without_declared_columns_hash(metadata_json: str) -> str: ...
+def model_definition_hash(*, model_name: str, query_sql: str, dialect: str | None) -> str: ...
+def build_version_identity_metadata_json(
+    *,
+    model_name: str,
+    config_values: Mapping[str, object],
+    local_function_hashes: Mapping[str, str] | None = None,
+    execution_signature: Mapping[str, object] | None = None,
+) -> str: ...
+def build_model_version_identity_metadata_json(
+    *,
+    model: CompiledModelView,
+    function_local_hashes: Mapping[str, str] | None = None,
+    hook_version_hashes: Mapping[str, str] | None = None,
+) -> str: ...
+def declared_columns_hash(*, model: CompiledModelView) -> str: ...
+def build_function_local_hashes(
+    *, functions: Iterable[CompiledFunctionView], dialect: str | None
+) -> dict[str, str]: ...
+def build_compiled_function_fingerprint_sql(function: CompiledFunctionView) -> str: ...
+def build_seed_identity(seed: CompiledSeedView) -> tuple[str, str]: ...
+def build_direct_model_version_identities(
+    *,
+    functions: Iterable[CompiledFunctionView],
+    scope: PlannerScope,
+    dialect: str | None,
+    seeds: Iterable[CompiledSeedView] = (),
+    source_version_hashes: Mapping[str, str] | None = None,
+    hook_functions: Iterable[DiscoveredHookFunction] = (),
+) -> DirectModelVersionIdentities: ...
+def with_honest_model_write_hashes(
+    *,
+    scope: PlannerScope,
+    snapshot: WarehouseSnapshot,
+    changes: PlannerChangeResults,
+    version_identities: DirectModelVersionIdentities,
+    available_model_hashes: Mapping[str, str] | None = None,
+) -> PlannerChangeResults: ...
+def merge_recomputed_model_changes(
+    *, resolved_actions: PlannerResolvedActions, changes: PlannerChangeResults
+) -> PlannerResolvedActions: ...
+def build_stale_out_of_selection_warnings(
+    *,
+    original_scope: PlannerScope,
+    execution_scope: PlannerScope,
+    changes: PlannerChangeResults,
+    snapshot: WarehouseSnapshot,
+    version_identities: DirectModelVersionIdentities,
+    source_freshness: DirectSourceFreshnessPlanningResult | None,
+    include_sources: bool = True,
+    model_changes_complete: bool = False,
+) -> tuple[PlanWarning, ...]: ...
+def classify_selection_staleness_warnings(
+    graph: SelectionStalenessGraph,
+) -> tuple[SelectionStalenessWarning, ...]: ...
+def build_execution_upstream_deps(
+    project: CompiledProjectView,
+) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]: ...
+def build_execution_edge_origins(
+    project: CompiledProjectView,
+) -> dict[tuple[CompiledObjectKey, CompiledObjectKey], str]: ...
+def build_downstream_deps(
+    upstream: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]: ...
+def topologically_order_keys(
+    *,
+    upstream: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    injected_edge_origins: Mapping[tuple[CompiledObjectKey, CompiledObjectKey], str] | None = None,
+) -> tuple[CompiledObjectKey, ...]: ...
+def build_downstream_model_name_closure(
+    *,
+    start_keys: Iterable[CompiledObjectKey],
+    downstream_deps: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+) -> frozenset[str]: ...
+def check_buildability(
+    *,
+    selected_keys: Set[CompiledObjectKey],
+    upstream_deps: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    snapshot: WarehouseSnapshot,
+    deferred_relations: Mapping[str, RelationInfo] | None = None,
+    satisfied_keys: Set[CompiledObjectKey] | None = None,
+) -> tuple[MissingUpstream, ...]: ...
+def missing_upstream_message(
+    *,
+    missing: tuple[MissingUpstream, ...],
+    edge_origins: Mapping[tuple[CompiledObjectKey, CompiledObjectKey], str],
+) -> str: ...
 def model_resource_type(entry: ModelPlanEntry | None) -> str: ...
 def model_execution_annotation(entry: ModelPlanEntry | None) -> str: ...
 def materialization_type_display(resource_kind: ExecutionResourceKind) -> str: ...

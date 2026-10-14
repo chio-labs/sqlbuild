@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild._native import get_materialization_type
+from sqlbuild._native import (
+    build_compiled_function_fingerprint_sql,
+    build_downstream_deps,
+    build_execution_upstream_deps,
+    get_materialization_type,
+    topologically_order_keys,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
@@ -16,15 +22,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledSourceView,
 )
-from sqlbuild.compiler.planner._helpers.graph.core import (
-    build_downstream_deps,
-    build_execution_upstream_deps,
-    topologically_order_keys,
-)
 from sqlbuild.compiler.planner._helpers.graph.selectors import resolve_graph_selectors
-from sqlbuild.compiler.planner._helpers.identity.functions import (
-    build_compiled_function_fingerprint_sql,
-)
 from sqlbuild.compiler.planner._helpers.resolve.refs import (
     build_function_locations,
     build_model_locations,

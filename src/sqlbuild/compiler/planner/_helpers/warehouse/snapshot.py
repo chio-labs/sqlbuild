@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlbuild._native import (
+    build_execution_upstream_deps,
     classify_cursor_sql_type,
     get_config_cursor_bound,
     get_config_str,
@@ -62,9 +63,6 @@ from sqlbuild.compiler.fingerprints.constants import (
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.migrations.constants import MIGRATION_TABLE_NAME, OLD_NAME_VIEW_TABLE_NAME
-from sqlbuild.compiler.planner._helpers.graph.core import (
-    build_execution_upstream_deps,
-)
 from sqlbuild.compiler.planner._helpers.graph.loader_dag import (
     build_upstream_intermediate_source_map,
 )

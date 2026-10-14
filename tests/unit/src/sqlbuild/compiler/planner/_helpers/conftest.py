@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import project_lineage_views
+from sqlbuild._native import (
+    build_downstream_deps,
+    build_execution_upstream_deps,
+    project_lineage_views,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.planner._helpers.graph.core import (
-    build_downstream_deps,
-    build_execution_upstream_deps,
-)
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
     build_test_project,
     model_key,

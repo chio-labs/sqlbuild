@@ -10,6 +10,7 @@ import pytest
 from sqlbuild._native import (
     assemble_project,
     build_compile_inputs,
+    build_model_version_identity_metadata_json,
     discover_project_inputs,
     evaluate_model_contracts,
 )
@@ -24,9 +25,6 @@ from sqlbuild.compiler.compile.types import (
     CompileInputsView,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.planner.main.identity.version_identity_model_metadata import (
-    build_model_version_identity_metadata_json,
-)
 from sqlbuild.spec.contracts.models import SchemaAuditInstance, SchemaModelEntry, SourceLocation
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     DynamicModelSchemaTestCase,

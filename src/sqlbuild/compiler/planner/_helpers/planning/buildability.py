@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey
-from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.planner._helpers.graph.buildability import (
+from sqlbuild._native import (
+    build_execution_edge_origins,
     check_buildability,
     missing_upstream_message,
 )
-from sqlbuild.compiler.planner._helpers.graph.core import build_execution_edge_origins
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.planner._helpers.warehouse.source_tables import (
     check_selected_source_tables_exist,
 )

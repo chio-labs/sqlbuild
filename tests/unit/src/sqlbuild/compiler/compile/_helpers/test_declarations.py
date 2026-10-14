@@ -10,6 +10,7 @@ import pytest
 from sqlbuild._native import (
     assemble_project,
     build_compile_inputs,
+    build_model_version_identity_metadata_json,
     compute_query_hash,
     discover_project_inputs,
 )
@@ -22,9 +23,6 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, SqlHookEntry
-from sqlbuild.compiler.planner.main.identity.version_identity_model_metadata import (
-    build_model_version_identity_metadata_json,
-)
 from sqlbuild.compiler.resource_names.exceptions import ResourceIdentityError
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     CompileDeclarationsErrorTestCase,

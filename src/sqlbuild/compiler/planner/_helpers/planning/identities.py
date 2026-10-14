@@ -4,12 +4,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from sqlbuild._native import detect_model_changes_in_scope
+from sqlbuild._native import build_direct_model_version_identities, detect_model_changes_in_scope
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
-from sqlbuild.compiler.planner._helpers.identity.direct import (
-    build_direct_model_version_identities,
-)
 from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     DirectModelVersionIdentities,

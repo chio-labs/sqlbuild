@@ -15,9 +15,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::planner_changes::results::MODELS_MODULE;
+use crate::bindings::_helpers::planner_identity::hashing::model_query_hash;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const HASHING_MODULE: &str = "sqlbuild.compiler.planner._helpers.identity.hashing";
 const REFERENCE_TYPES_MODULE: &str = "sqlbuild.compiler.references.types";
 const GENERIC_DIALECT: &str = "generic";
 const FINAL_NEWLINE: &str = "\n";
@@ -238,7 +238,7 @@ fn changed_referencing_query(
     let recorded_models: Bound<'_, PyAny> = snapshot.getattr("fingerprints")?.getattr("models")?;
     let ref_kind: Bound<'_, PyAny> =
         imported(py, REFERENCE_TYPES_MODULE, "SqlReferenceKind")?.getattr("REF")?;
-    let definition_hash: Bound<'_, PyAny> = imported(py, HASHING_MODULE, "model_definition_hash")?;
+    let dialect: Option<String> = snapshot.getattr("column_dialect")?.extract()?;
     for model in selected {
         let recorded: Bound<'_, PyAny> =
             recorded_models.call_method1("get", (model.getattr("name")?,))?;
@@ -253,15 +253,14 @@ fn changed_referencing_query(
             }
         }
         if references_models
-            && call_with(
-                &definition_hash,
-                &[
-                    ("model_name", model.getattr("name")?),
-                    ("query_sql", model.getattr("query_sql")?),
-                    ("dialect", snapshot.getattr("column_dialect")?),
-                ],
-            )?
-            .ne(recorded.getattr("definition_hash")?)?
+            && model_query_hash(
+                py,
+                &model.getattr("name")?.extract::<String>()?,
+                (
+                    &model.getattr("query_sql")?.extract::<String>()?,
+                    dialect.as_deref(),
+                ),
+            )? != recorded.getattr("definition_hash")?.extract::<String>()?
         {
             return Ok(true);
         }

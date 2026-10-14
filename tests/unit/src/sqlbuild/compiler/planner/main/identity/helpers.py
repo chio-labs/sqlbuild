@@ -1,7 +1,13 @@
+import json
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 from sqlbuild._native import (
+    build_direct_model_version_identities,
+    build_downstream_deps,
+    build_model_version_identity_metadata_json,
+    build_version_identity_metadata_json,
     compiled_model_record,
 )
 from sqlbuild.compiler.compile.models import (
@@ -10,18 +16,27 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
     CompileModelConfig,
+    FunctionArgument,
     FunctionReturnColumn,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
-from sqlbuild.compiler.planner._helpers.graph.core import build_downstream_deps
-from sqlbuild.compiler.planner._helpers.identity.direct import (
-    build_direct_model_version_identities,
-)
-from sqlbuild.compiler.planner.main.identity.version_identity_model_metadata import (
-    build_model_version_identity_metadata_json,
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledResourceType,
+    FunctionLanguage,
 )
 from sqlbuild.compiler.planner.models import DirectModelVersionIdentities, PlannerScope
+from sqlbuild.spec.contracts.models import SchemaColumn, SeedCsvSettings
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import build_compiled_function
+
+
+def build_version_identity_config(config_values: dict[str, object]) -> dict[str, object]:
+    """Return the config entries recorded in a model's version identity metadata."""
+
+    metadata: dict[str, object] = json.loads(
+        build_version_identity_metadata_json(model_name="orders", config_values=config_values)
+    )
+    config: dict[str, object] = metadata["config"]
+    return config
 
 
 def build_table_function_graph_identities(*, base_query: str) -> DirectModelVersionIdentities:
@@ -110,4 +125,49 @@ def build_hooked_model_identity_json(*, hook_config: dict[str, object]) -> str:
     return build_model_version_identity_metadata_json(
         model=model,
         hook_version_hashes={"notify_orders": "notify-hash-v1"},
+    )
+
+
+def build_contract_model() -> SimpleNamespace:
+    """Build a model view with one enforced declared column."""
+
+    return SimpleNamespace(
+        config=SimpleNamespace(values={"contract": "enforced"}),
+        schema_entry=SimpleNamespace(
+            columns=(SchemaColumn(name="id", type="int", nullable=False),),
+            dynamic_columns=(),
+            type_enforcement=True,
+        ),
+    )
+
+
+def build_identity_function() -> SimpleNamespace:
+    """Build a SQL scalar function view with one argument."""
+
+    return SimpleNamespace(
+        name="add_one",
+        arguments=(FunctionArgument(name="x", type="int"),),
+        returns="int",
+        return_columns=(),
+        body_sql="x + 1",
+        language=FunctionLanguage.SQL,
+        runtime_version=None,
+        entry_point=None,
+        packages=(),
+    )
+
+
+def build_identity_seed(directory: Path) -> SimpleNamespace:
+    """Build a seed view over a two-row CSV file with Windows line endings."""
+
+    file_path: Path = directory / "regions.csv"
+    file_path.write_text("id,name\r\n1,café\r\n", encoding="utf-8")
+    return SimpleNamespace(
+        name="regions",
+        external=False,
+        seed_file=SimpleNamespace(file_path=file_path),
+        schema_entry=SimpleNamespace(
+            csv_settings=SeedCsvSettings(),
+            columns=(SchemaColumn(name="id", type="int"),),
+        ),
     )

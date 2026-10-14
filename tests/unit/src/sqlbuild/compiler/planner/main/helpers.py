@@ -5,7 +5,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlbuild._native import compute_query_hash, write_fingerprint
+from sqlbuild._native import (
+    build_version_identity_metadata_json,
+    compute_query_hash,
+    write_fingerprint,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
@@ -21,9 +25,6 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.main.execution.execution import build_execution_plan
-from sqlbuild.compiler.planner.main.identity._version_identity_metadata import (
-    build_version_identity_metadata_json,
-)
 from sqlbuild.compiler.planner.models import (
     DeferralInputs,
     PlannerOverrides,

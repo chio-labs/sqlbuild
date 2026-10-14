@@ -1,4 +1,6 @@
+from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -46,3 +48,10 @@ class HookIdentityPayloadTestCase:
     hooks: dict[str, object]
     expected_fragments: tuple[str, ...]
     forbidden_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PersistedIdentityTestCase:
+    description: str
+    build: Callable[[Path], object]
+    expected_identity: object
