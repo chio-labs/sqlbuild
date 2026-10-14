@@ -53,17 +53,6 @@ class OptOutTestCase:
 
 
 @dataclass(frozen=True)
-class GraphFactsTestCase:
-    """A project whose assembly request carries each resource's project-graph facts."""
-
-    description: str
-    files: dict[str, str]
-    expected_model_tags: tuple[list[str], ...]
-    expected_seeds: list[tuple[str, list[str]]]
-    expected_function_kinds: tuple[str, ...]
-
-
-@dataclass(frozen=True)
 class NativePanicTestCase:
     """A project whose native assembly panics in the parser."""
 

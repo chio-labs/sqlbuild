@@ -188,6 +188,7 @@ from sqlbuild.compiler.planner.models import (
     SqlTestPlanEntry,
 )
 from sqlbuild.compiler.planner.types import CursorGrain
+from sqlbuild.compiler.project_assembly.models import NativeProjectResources
 from sqlbuild.compiler.python_nodes.models import (
     PythonNodeGraph,
     PythonNodeIdentity,
@@ -2574,7 +2575,6 @@ def select_latest_fingerprints(
     node_names: tuple[str, ...],
     filtered_node_types: tuple[str, ...] = (),
 ) -> FingerprintSet: ...
-def environment_template_names(values: list[str | None], /) -> list[str]: ...
 def find_python_string_locations(
     *,
     project_dir: Path,
@@ -3320,38 +3320,12 @@ def sql_syntax_error(
 def check_native_sql_syntax(
     request: tuple[str, list[tuple[str, list[tuple[str, str]]]]], /
 ) -> bool: ...
-def assemble_project_resource_facts(
-    request: tuple[
-        str,
-        tuple[str | None, str | None, str | None] | None,
-        tuple[str | None, str | None, str | None, str | None],
-        list[tuple[str, str, str, tuple[str, str] | None]],
-        list[tuple[str, str | None]],
-        list[
-            tuple[
-                str,
-                str,
-                list[str],
-                list[tuple[str, str, str | None]],
-                list[tuple[str, list[tuple[str, str]]]],
-            ]
-        ],
-        list[tuple[str, bool, str | None, str | None]],
-        list[tuple[str, list[str], str | None, str | None]],
-        list[tuple[str, str, list[str], list[tuple[str, str, str | None]]]],
-        list[tuple[list[tuple[str, str, str | None]], tuple[str, str] | None]],
-    ],
-    /,
-) -> tuple[
-    list[list[tuple[str, str]]],
-    list[tuple[str | None, str | None] | None],
-    list[tuple[str | None, str | None, str | None, str | None]],
-    list[list[tuple[str, str]]],
-    list[list[tuple[str, str]]],
-    list[tuple[str, str]],
-    list[bool],
-    tuple[str, int, str, str, str | None, int | None] | None,
-]: ...
+def assemble_native_project_resources(
+    *,
+    inputs: CompileInputsView,
+    dialect: str | None,
+    syntax_checks: tuple[tuple[tuple[str, dict[str, str] | None], ...], ...],
+) -> NativeProjectResources: ...
 def explicit_reference_report(
     project: Any,
     settings: dict[str, object],

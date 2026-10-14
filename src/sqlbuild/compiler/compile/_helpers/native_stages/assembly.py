@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlbuild._native import (
     analyze_native_model_sql,
+    assemble_native_project_resources,
     infer_native_expression_source_shapes,
     model_syntax_checks,
     prove_native_dynamic_contracts,
@@ -20,9 +21,6 @@ from sqlbuild.compiler.analysis_session.models import (
 from sqlbuild.compiler.analysis_session.types import ProofRow
 from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.compiler.project_assembly.main._assemble_native_project_resources import (
-    assemble_native_project_resources,
-)
 from sqlbuild.compiler.project_assembly.models import (
     NativeModelFacts,
     NativeProjectFacts,

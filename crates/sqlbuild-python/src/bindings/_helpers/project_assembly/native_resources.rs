@@ -1,0 +1,479 @@
+//! The native project assembly request built from compile inputs, and its resource facts.
+
+use pyo3::exceptions::{PyException, PyValueError};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::{PyBool, PyBoolMethods, PyInt, PyList, PyString, PyStringMethods, PyTuple};
+use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
+use sqlbuild_analysis::assembly::analysis_session::types::Pairs;
+use sqlbuild_analysis::assembly::project::errors::AssemblyError;
+use sqlbuild_analysis::assembly::project::main::assemble_project_resources::assemble_project_resources;
+use sqlbuild_analysis::assembly::project::main::environment_template_names::environment_template_names;
+use sqlbuild_analysis::assembly::project::models::{
+    AuditFacts, FunctionFacts, InputRead, ModelFacts, Namespace, OpaqueRender, OpaqueVariable,
+    ProjectRequest, ProjectResources, Reference, ResourceFailure, ResourceSlot, SeedDefaults,
+    SeedFacts, SourceFacts, SyntaxCheck, TargetNamespace, Variable,
+};
+use sqlbuild_core::panics::main::native_failure::native_failure;
+use sqlbuild_model_config::templates::models::Scalar;
+
+use crate::bindings::_helpers::authored_values::project_vars::project_var_text;
+use crate::bindings::_helpers::boundary::panics::{NativeCompilerError, compiler_error};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::model_config::template_data::record_reads;
+use crate::bindings::types::CompilerDetach;
+
+const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
+const ASSEMBLY_MODELS_MODULE: &str = "sqlbuild.compiler.project_assembly.models";
+const OS_MODULE: &str = "os";
+const PROJECT_ASSEMBLY_CONTEXT: &str = "native project assembly";
+const GENERIC_DIALECT: &str = "generic";
+const RENDER_LABEL: &str = "\u{0}";
+const SOURCE_SLOT: &str = "source";
+const SEED_SLOT: &str = "seed";
+const AUDIT_SLOT: &str = "audit";
+const ENVIRONMENT_READ: &str = "env";
+const CONTEXT_READ: &str = "ctx";
+const NATIVE_FAILURE_PREFIX: &str = "NativeCompilerError: ";
+
+/// `(kind, name, package)`.
+type ReferenceRow = (String, String, Option<String>);
+/// `(name, managed, database, schema)`.
+type SourceRow = (String, bool, Option<String>, Option<String>);
+/// `(kind, name, tags, references)`.
+type FunctionRow = (String, String, Vec<String>, Vec<ReferenceRow>);
+/// `(references, attached (kind, name))`.
+type AuditRow = (Vec<ReferenceRow>, Option<(String, String)>);
+
+/// How one opaque variable renders as text, or the Python exception rendering it raises.
+enum Render<'py> {
+    Text(String),
+    Rejected(String),
+    Raises(Bound<'py, PyAny>),
+}
+
+/// The plain scalar `value` crosses as: `None`, exact `bool`, `str` or 64-bit `int`.
+fn plain_scalar(value: &Bound<'_, PyAny>) -> PyResult<Option<Scalar>> {
+    if value.is_none() {
+        return Ok(Some(Scalar::Null));
+    }
+    if let Ok(flag) = value.downcast_exact::<PyBool>() {
+        return Ok(Some(Scalar::Bool(flag.is_true())));
+    }
+    if let Ok(text) = value.downcast_exact::<PyString>() {
+        return Ok(Some(Scalar::Text(text.to_str()?.to_owned())));
+    }
+    if value.is_exact_instance_of::<PyInt>() {
+        return Ok(match value.extract::<i64>() {
+            Ok(number) => Some(Scalar::Text(number.to_string())),
+            Err(_) => None,
+        });
+    }
+    Ok(None)
+}
+
+/// `render_project_var_text` under a label no message starts with otherwise.
+fn opaque_render<'py>(value: &Bound<'py, PyAny>) -> PyResult<Render<'py>> {
+    let py: Python<'py> = value.py();
+    match project_var_text(value, RENDER_LABEL) {
+        Ok(text) => Ok(Render::Text(text)),
+        Err(error) if !error.is_instance_of::<PyException>(py) => Err(error),
+        Err(error) => {
+            let raised: Bound<'py, PyAny> = error.value(py).clone().into_any();
+            if error.is_instance_of::<PyValueError>(py) {
+                let message: String = raised.str()?.extract()?;
+                if let Some(rest) = message.strip_prefix(RENDER_LABEL) {
+                    return Ok(Render::Rejected(rest.to_owned()));
+                }
+            }
+            Ok(Render::Raises(raised))
+        }
+    }
+}
+
+/// Each effective var as the native request reads it, and the exceptions opaque ones raise.
+fn variables<'py>(
+    effective_vars: &Bound<'py, PyAny>,
+) -> PyResult<(Vec<(String, Variable)>, Vec<Bound<'py, PyAny>>)> {
+    let mut rows: Vec<(String, Variable)> = Vec::new();
+    let mut held: Vec<Bound<'py, PyAny>> = Vec::new();
+    for item in effective_vars.call_method0("items")?.try_iter()? {
+        let (name, value): (String, Bound<'py, PyAny>) = item?.extract()?;
+        if let Some(scalar) = plain_scalar(&value)? {
+            rows.push((name, Variable::Scalar(scalar)));
+            continue;
+        }
+        let render: OpaqueRender = match opaque_render(&value)? {
+            Render::Text(text) => OpaqueRender::Text(text),
+            Render::Rejected(message) => OpaqueRender::Rejected(message),
+            Render::Raises(error) => {
+                held.push(error);
+                OpaqueRender::Raises(held.len() - 1)
+            }
+        };
+        let text: String = value.str()?.extract::<String>()?;
+        rows.push((name, Variable::Opaque(OpaqueVariable { text, render })));
+    }
+    Ok((rows, held))
+}
+
+fn optional_text(value: &Bound<'_, PyAny>, attribute: &str) -> PyResult<Option<String>> {
+    value.getattr(attribute)?.extract()
+}
+
+/// Python's own `os.environ` lookup of every name an `ENV:` template may read.
+fn environment_rows(
+    py: Python<'_>,
+    values: &[Option<String>],
+) -> PyResult<Vec<(String, Option<String>)>> {
+    let environment: Bound<'_, PyAny> = imported(py, OS_MODULE, "environ")?;
+    environment_template_names(values)
+        .into_iter()
+        .map(|name| {
+            let value: Option<String> = environment.call_method1("get", (&name,))?.extract()?;
+            Ok((name, value))
+        })
+        .collect()
+}
+
+fn references(rows: Vec<ReferenceRow>) -> Vec<Reference> {
+    rows.into_iter()
+        .map(|(kind, name, package)| Reference {
+            kind,
+            name,
+            package,
+        })
+        .collect()
+}
+
+/// Model config tags as the project graph indexes them.
+fn tags(value: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+    if !(value.is_instance_of::<PyList>() || value.is_instance_of::<PyTuple>()) {
+        return Ok(Vec::new());
+    }
+    value
+        .try_iter()?
+        .map(|item| Ok(item?.str()?.extract::<String>()?))
+        .collect()
+}
+
+fn model_facts(model_input: &Bound<'_, PyAny>, checks: &Bound<'_, PyAny>) -> PyResult<ModelFacts> {
+    let model_file: Bound<'_, PyAny> = model_input.getattr("model_file")?;
+    let mut reference_rows: Vec<ReferenceRow> = Vec::new();
+    for reference in model_input.getattr("references")?.try_iter()? {
+        let reference: Bound<'_, PyAny> = reference?;
+        reference_rows.push((
+            reference.getattr("ref_kind")?.str()?.extract::<String>()?,
+            reference.getattr("ref_name")?.extract()?,
+            reference.getattr("ref_package")?.extract()?,
+        ));
+    }
+    let mut syntax_checks: Vec<SyntaxCheck> = Vec::new();
+    for check in checks.try_iter()? {
+        let (sql, placeholders): (String, Bound<'_, PyAny>) = check?.extract()?;
+        let placeholders: Pairs = if placeholders.is_truthy()? {
+            placeholders
+                .call_method0("items")?
+                .try_iter()?
+                .map(|pair| pair?.extract())
+                .collect::<PyResult<_>>()?
+        } else {
+            Vec::new()
+        };
+        syntax_checks.push(SyntaxCheck { sql, placeholders });
+    }
+    Ok(ModelFacts {
+        name: model_file
+            .getattr("file_path")?
+            .getattr("stem")?
+            .extract()?,
+        directory: model_file
+            .getattr("relative_path")?
+            .getattr("parent")?
+            .str()?
+            .to_string(),
+        tags: tags(
+            &model_input
+                .getattr("config")?
+                .getattr("values")?
+                .call_method1("get", ("tags",))?,
+        )?,
+        references: references(reference_rows),
+        syntax_checks,
+    })
+}
+
+/// Every item of `inputs.<attribute>`.
+fn items<'py>(inputs: &Bound<'py, PyAny>, attribute: &str) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    inputs.getattr(attribute)?.try_iter()?.collect()
+}
+
+/// The native assembly request for compile inputs, and the exceptions opaque vars raise.
+fn project_request<'py>(
+    inputs: &Bound<'py, PyAny>,
+    dialect: Option<String>,
+    syntax_checks: &Bound<'py, PyAny>,
+) -> PyResult<(ProjectRequest, Vec<Bound<'py, PyAny>>)> {
+    let py: Python<'py> = inputs.py();
+    let (variables, held) = variables(&inputs.getattr("effective_vars")?)?;
+    let target: Bound<'py, PyAny> = inputs.getattr("effective_target")?;
+    let target: Option<TargetNamespace> = if target.is_none() {
+        None
+    } else {
+        Some(TargetNamespace {
+            database: optional_text(&target, "database")?,
+            schema: optional_text(&target, "schema")?,
+            loader_schema: optional_text(&target, "loader_schema")?,
+        })
+    };
+    let defaults: Bound<'py, PyAny> = inputs.getattr("project_config")?.getattr("defaults")?;
+    let defaults = SeedDefaults {
+        database: optional_text(&defaults, "database")?,
+        schema: optional_text(&defaults, "schema")?,
+        seed_database: optional_text(&defaults, "seed_database")?,
+        seed_schema: optional_text(&defaults, "seed_schema")?,
+    };
+    let seed_inputs: Vec<Bound<'py, PyAny>> = items(inputs, "seed_inputs")?;
+    let mut seeds: Vec<SeedFacts> = Vec::with_capacity(seed_inputs.len());
+    for seed_input in &seed_inputs {
+        let entry: Bound<'py, PyAny> = seed_input.getattr("schema_entry")?;
+        seeds.push(SeedFacts {
+            name: entry.getattr("name")?.extract()?,
+            tags: entry
+                .getattr("tags")?
+                .try_iter()?
+                .map(|tag| tag?.extract())
+                .collect::<PyResult<_>>()?,
+            database: optional_text(&entry, "database")?,
+            schema: optional_text(&entry, "schema")?,
+        });
+    }
+    let mut template_values: Vec<Option<String>> = Vec::new();
+    if let Some(target) = &target {
+        template_values.extend([
+            target.database.clone(),
+            target.schema.clone(),
+            target.loader_schema.clone(),
+        ]);
+    }
+    template_values.extend([
+        defaults.database.clone(),
+        defaults.schema.clone(),
+        defaults.seed_database.clone(),
+        defaults.seed_schema.clone(),
+    ]);
+    for seed in &seeds {
+        template_values.extend([seed.database.clone(), seed.schema.clone()]);
+    }
+    let model_inputs: Vec<Bound<'py, PyAny>> = items(inputs, "model_inputs")?;
+    let checks: Vec<Bound<'py, PyAny>> = syntax_checks.try_iter()?.collect::<PyResult<_>>()?;
+    if checks.len() != model_inputs.len() {
+        return Err(PyValueError::new_err(
+            "zip() arguments have different lengths: model inputs and syntax checks",
+        ));
+    }
+    let models: Vec<ModelFacts> = model_inputs
+        .iter()
+        .zip(&checks)
+        .map(|(model_input, checks)| model_facts(model_input, checks))
+        .collect::<PyResult<_>>()?;
+    let rows = |attribute: &str| -> PyResult<Vec<Bound<'py, PyAny>>> {
+        items(inputs, attribute)?
+            .into_iter()
+            .map(|input| input.getattr("assembly_row"))
+            .collect()
+    };
+    let sources: Vec<SourceFacts> = rows("source_inputs")?
+        .into_iter()
+        .map(|row| {
+            let (name, managed, database, schema): SourceRow = row.extract()?;
+            Ok(SourceFacts {
+                name,
+                managed,
+                database,
+                schema,
+            })
+        })
+        .collect::<PyResult<_>>()?;
+    let functions: Vec<FunctionFacts> = rows("sql_function_inputs")?
+        .into_iter()
+        .map(|row| {
+            let (kind, name, tags, reference_rows): FunctionRow = row.extract()?;
+            Ok(FunctionFacts {
+                kind,
+                name,
+                tags,
+                references: references(reference_rows),
+            })
+        })
+        .collect::<PyResult<_>>()?;
+    let audits: Vec<AuditFacts> = rows("audit_inputs")?
+        .into_iter()
+        .map(|row| {
+            let (reference_rows, attached): AuditRow = row.extract()?;
+            Ok(AuditFacts {
+                references: references(reference_rows),
+                attached,
+            })
+        })
+        .collect::<PyResult<_>>()?;
+    let request = ProjectRequest {
+        dialect: dialect
+            .filter(|dialect| !dialect.is_empty())
+            .unwrap_or_else(|| GENERIC_DIALECT.to_owned()),
+        target,
+        defaults,
+        variables,
+        environment: environment_rows(py, &template_values)?,
+        models,
+        sources,
+        seeds,
+        functions,
+        audits,
+    };
+    Ok((request, held))
+}
+
+/// The exception Python's assembly raises at the failing resource.
+fn failure_error<'py>(
+    py: Python<'py>,
+    error: AssemblyError,
+    held: &[Bound<'py, PyAny>],
+) -> PyResult<Bound<'py, PyAny>> {
+    match error {
+        AssemblyError::CompileInput { message, help } => {
+            imported(py, COMPILE_ERRORS_MODULE, "CompileInputError")?.call(
+                (message,),
+                Some(&keywords(
+                    py,
+                    &[("help", help.into_pyobject(py)?.into_any())],
+                )?),
+            )
+        }
+        AssemblyError::Value(message) => {
+            Ok(PyValueError::new_err(message).value(py).clone().into_any())
+        }
+        AssemblyError::Raise(index) => match held.get(index) {
+            Some(error) => Ok(error.clone()),
+            None => Ok(NativeCompilerError::new_err(format!(
+                "{NATIVE_FAILURE_PREFIX}{PROJECT_ASSEMBLY_CONTEXT}: unknown failure kind 'held'"
+            ))
+            .value(py)
+            .clone()
+            .into_any()),
+        },
+        AssemblyError::Internal(reason) => Err(compiler_error(native_failure(
+            PROJECT_ASSEMBLY_CONTEXT,
+            &reason,
+        ))),
+    }
+}
+
+fn failure_object<'py>(
+    py: Python<'py>,
+    failure: ResourceFailure,
+    held: &[Bound<'py, PyAny>],
+) -> PyResult<Bound<'py, PyAny>> {
+    let slot: &str = match failure.slot {
+        ResourceSlot::Source => SOURCE_SLOT,
+        ResourceSlot::Seed => SEED_SLOT,
+        ResourceSlot::Audit => AUDIT_SLOT,
+    };
+    call_with(
+        &imported(py, ASSEMBLY_MODELS_MODULE, "NativeResourceFailure")?,
+        &[
+            ("slot", PyString::new(py, slot).into_any()),
+            ("index", failure.index.into_pyobject(py)?.into_any()),
+            ("error", failure_error(py, failure.error, held)?),
+        ],
+    )
+}
+
+fn namespace_row(
+    namespace: Namespace,
+) -> (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+) {
+    (
+        namespace.database,
+        namespace.schema,
+        namespace.logical_database,
+        namespace.logical_schema,
+    )
+}
+
+/// `NativeProjectResources` for the native result, replaying its template reads first.
+fn resources_object<'py>(
+    py: Python<'py>,
+    resources: ProjectResources,
+    held: &[Bound<'py, PyAny>],
+) -> PyResult<Bound<'py, PyAny>> {
+    record_reads(
+        py,
+        resources.reads.iter().map(|read| match read {
+            InputRead::Environment(name) => (ENVIRONMENT_READ, name.as_str()),
+            InputRead::Context(name) => (CONTEXT_READ, name.as_str()),
+        }),
+    )?;
+    let tuple = |values: Bound<'py, PyAny>| -> PyResult<Bound<'py, PyAny>> {
+        Ok(PyTuple::new(py, values.try_iter()?.collect::<PyResult<Vec<_>>>()?)?.into_any())
+    };
+    let failure: Bound<'py, PyAny> = match resources.failure {
+        Some(failure) => failure_object(py, failure, held)?,
+        None => py.None().into_bound(py),
+    };
+    let seeds: Vec<_> = resources.seeds.into_iter().map(namespace_row).collect();
+    call_with(
+        &imported(py, ASSEMBLY_MODELS_MODULE, "NativeProjectResources")?,
+        &[
+            (
+                "model_deps",
+                tuple(resources.model_deps.into_pyobject(py)?.into_any())?,
+            ),
+            (
+                "model_syntax_valid",
+                tuple(resources.model_syntax_valid.into_pyobject(py)?.into_any())?,
+            ),
+            (
+                "source_namespaces",
+                tuple(resources.sources.into_pyobject(py)?.into_any())?,
+            ),
+            (
+                "seed_namespaces",
+                tuple(seeds.into_pyobject(py)?.into_any())?,
+            ),
+            (
+                "function_deps",
+                tuple(resources.function_deps.into_pyobject(py)?.into_any())?,
+            ),
+            (
+                "audit_scope_deps",
+                tuple(resources.audit_deps.into_pyobject(py)?.into_any())?,
+            ),
+            ("failure", failure),
+        ],
+    )
+}
+
+/// Return the resource facts and the resource Python's assembly raises at, if any.
+#[pyfunction]
+#[pyo3(signature = (*, inputs, dialect, syntax_checks))]
+fn assemble_native_project_resources<'py>(
+    inputs: &Bound<'py, PyAny>,
+    dialect: Option<String>,
+    syntax_checks: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = inputs.py();
+    let (request, held) = project_request(inputs, dialect, syntax_checks)?;
+    let resources: ProjectResources = py
+        .compiler_detach(|| assemble_project_resources(&request))
+        .map_err(|reason| compiler_error(native_failure(PROJECT_ASSEMBLY_CONTEXT, &reason)))?;
+    resources_object(py, resources, &held)
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(assemble_native_project_resources, module)?)?;
+    Ok(())
+}

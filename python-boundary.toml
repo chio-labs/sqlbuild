@@ -347,7 +347,3 @@ note = "A baseline that does not compile yields no relation keys, as before the 
 [[handled_native_errors]]
 location = "lint/_helpers/fixes.py::_FixSession._verdict"
 note = "A candidate fix whose project fails to compile is unverified and not applied, as before the compile entry became native; no Python implementation runs instead."
-
-[[handled_native_errors]]
-location = "compiler/project_assembly/_helpers/request.py::_opaque_render"
-note = "A var that cannot render as text is recorded as the error a template using it raises; no Python implementation runs."
