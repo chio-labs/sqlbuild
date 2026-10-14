@@ -14,7 +14,7 @@ from scripts.cold_compile_performance._helpers.dense_project import (
 from scripts.cold_compile_performance.main.assert_required_cgroup_memory_limit import (
     assert_required_cgroup_memory_limit,
 )
-from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue, select_rules
+from sqlbuild._native import build_rule_catalogue, select_catalogue_rules
 from sqlbuild.rule_engine.main.load_config import load_rules_config
 from sqlbuild.rule_engine.models import Rule, RulesConfig
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
@@ -77,8 +77,10 @@ def test_given_dense_project_when_compiling_cold_then_preserves_rules_semantics_
     project_dir: Path = tmp_path / "dense_orders"
     write_dense_compile_project(project_dir=project_dir, model_count=test_case.model_count)
     config: RulesConfig = load_rules_config(project_dir=project_dir)
-    catalogue: tuple[Rule, ...] = build_catalogue(config=config, project_dir=project_dir)
-    selected: tuple[Rule, ...] = select_rules(
+    catalogue: tuple[Rule, ...] = build_rule_catalogue(
+        config=config, project_dir=project_dir, include_custom=True
+    )
+    selected: tuple[Rule, ...] = select_catalogue_rules(
         catalogue=catalogue, config=config, project_dir=project_dir
     )
     builtin_codes: set[str] = {rule.code for rule in filterfalse(attrgetter("custom"), catalogue)}

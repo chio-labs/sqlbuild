@@ -14,9 +14,9 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, BinaryIO
 
+from sqlbuild._native import build_rule_catalogue
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue
 from sqlbuild.rule_engine._helpers.engine.fact_replay import fact_key_payload
 from sqlbuild.rule_engine._helpers.host.custom_evaluation import evaluate_custom_rules
 from sqlbuild.rule_engine.classes.runtime_guard import RuntimeGuard
@@ -80,7 +80,9 @@ def main() -> int:
         guard.guard_filesystem_metadata()
         messages: io.StringIO = io.StringIO()
         with contextlib.redirect_stdout(messages):
-            catalogue: tuple[Rule, ...] = build_catalogue(config=config, project_dir=project_dir)
+            catalogue: tuple[Rule, ...] = build_rule_catalogue(
+                config=config, project_dir=project_dir, include_custom=True
+            )
             guard.raise_violation()
             by_code: dict[str, Rule] = {rule.code: rule for rule in catalogue}
             selected: tuple[Rule, ...] = tuple(by_code[code] for code in sorted(plan))

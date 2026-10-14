@@ -7,7 +7,7 @@ from pathlib import Path
 from scripts.cold_compile_performance._helpers.dense_project import dense_model_name
 from scripts.cold_compile_performance._helpers.varied_project import write_varied_compile_project
 from scripts.cold_compile_performance.exceptions import CompileBenchmarkFixtureError
-from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue, select_rules
+from sqlbuild._native import build_rule_catalogue, select_catalogue_rules
 from sqlbuild.rule_engine.main.load_config import load_rules_config
 from sqlbuild.rule_engine.models import Rule, RulesConfig
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import VariedCompileCacheTestCase
@@ -51,8 +51,10 @@ def run_varied_cache_benchmark(
 
 def _assert_complete_rules(project_dir: Path) -> None:
     config: RulesConfig = load_rules_config(project_dir=project_dir)
-    catalogue: tuple[Rule, ...] = build_catalogue(config=config, project_dir=project_dir)
-    selected: tuple[Rule, ...] = select_rules(
+    catalogue: tuple[Rule, ...] = build_rule_catalogue(
+        config=config, project_dir=project_dir, include_custom=True
+    )
+    selected: tuple[Rule, ...] = select_catalogue_rules(
         catalogue=catalogue, config=config, project_dir=project_dir
     )
     builtin_codes: set[str] = {rule.code for rule in filterfalse(attrgetter("custom"), catalogue)}

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from sqlbuild._native import (
     build_lint_expansion_context,
+    build_rule_catalogue,
     collect_lint_project_files,
     compiled_relation_keys,
     declared_relation_keys,
@@ -16,7 +17,9 @@ from sqlbuild._native import (
     load_sql_rule_cache,
     lookup_sql_rule_cache,
     project_with,
+    resolve_rule_ignore_selectors,
     run_lint,
+    select_catalogue_rules,
     selected_sql_rule_codes,
     sql_file_rule_key,
     sql_model_rule_keys,
@@ -49,8 +52,6 @@ from sqlbuild.lint.constants import (
 from sqlbuild.lint.exceptions import NativeLintError
 from sqlbuild.lint.models import LintConfig, LintRunResult, LintViolation
 from sqlbuild.lint.types import RelationKeys
-from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue, select_rules
-from sqlbuild.rule_engine._helpers.engine.config import resolve_rule_ignore_selectors
 from sqlbuild.rule_engine._helpers.engine.custom_payloads import custom_rule_payloads
 from sqlbuild.rule_engine._helpers.engine.hermeticity import verify_custom_rules
 from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
@@ -98,7 +99,7 @@ def plan_rule_run(
     )
     resolved_project_dir: Path = project_dir.resolve()
     include_custom: bool = _config_references_custom_rules(effective_config)
-    catalogue: tuple[Rule, ...] = build_catalogue(
+    catalogue: tuple[Rule, ...] = build_rule_catalogue(
         config=effective_config,
         project_dir=resolved_project_dir,
         include_custom=include_custom,
@@ -106,7 +107,7 @@ def plan_rule_run(
     custom_payloads: list[dict[str, object]] = custom_rule_payloads(
         catalogue=catalogue, project_dir=resolved_project_dir
     )
-    selected: tuple[Rule, ...] = select_rules(
+    selected: tuple[Rule, ...] = select_catalogue_rules(
         catalogue=catalogue,
         config=effective_config,
         project_dir=resolved_project_dir,

@@ -125,6 +125,11 @@ reason = "user-code"
 note = "Reads user rule functions (source lines, qualified names, import closures) to describe custom rules for native selection."
 
 [[stays]]
+path = "rule_engine/_helpers/engine/_custom_catalogue.py"
+reason = "user-code"
+note = "Imports the project's custom rule modules and collects their @rule functions for the native catalogue."
+
+[[stays]]
 path = "rule_engine/_helpers/engine/custom_rules.py"
 reason = "user-code"
 note = "Dispatches custom rules to the rule-host worker pool and digests the fact views they read."

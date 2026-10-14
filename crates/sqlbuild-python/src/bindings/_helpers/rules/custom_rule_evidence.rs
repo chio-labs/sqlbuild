@@ -64,7 +64,7 @@ fn custom_rule_import_closure<'py>(
 /// One rule's source file and helper closure fingerprint, or its check's source digest.
 #[pyfunction]
 #[pyo3(signature = (*, rule, project_dir, import_closure = None))]
-fn custom_rule_implementation_fingerprint(
+pub(crate) fn custom_rule_implementation_fingerprint(
     rule: &Bound<'_, PyAny>,
     project_dir: &Bound<'_, PyAny>,
     import_closure: Option<&Bound<'_, PyAny>>,

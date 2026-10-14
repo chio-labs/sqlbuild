@@ -5,11 +5,11 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    build_rule_catalogue,
     custom_rule_implementation_fingerprint,
     custom_rule_test_evidence,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.main._evaluate import evaluate
 from sqlbuild.rule_engine.models import Rule, RulesConfig, RulesResult
@@ -401,7 +401,7 @@ def test_given_duplicate_source_codes_when_building_catalogue_then_rejects_dupli
     config: RulesConfig = RulesConfig()
 
     with pytest.raises(RulesError, match=test_case.test_source) as raised:
-        build_catalogue(config=config, project_dir=tmp_path)
+        build_rule_catalogue(config=config, project_dir=tmp_path, include_custom=True)
     assert str(raised.value).count("XSQBRT101") == test_case.expected_count
 
 

@@ -1,9 +1,11 @@
 pub(crate) mod builtin_catalogue;
+pub(crate) mod catalogue;
 pub(crate) mod custom_rule_cache;
 pub(crate) mod custom_rule_evidence;
 pub(crate) mod dsl_headers;
 pub(crate) mod evaluation;
 pub(crate) mod findings;
+pub(crate) mod guidance;
 pub(crate) mod lint;
 pub(crate) mod lint_expansion;
 pub(crate) mod lint_sql_bodies;

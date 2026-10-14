@@ -14,10 +14,10 @@ import pytest
 
 import sqlbuild._native as native_module
 from sqlbuild._native import (
+    build_rule_catalogue,
     project_with,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue
 from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
 from sqlbuild.rule_engine._helpers.host import custom_host_pool
 from sqlbuild.rule_engine._helpers.host.module_state import module_state_token, rule_namespaces
@@ -102,7 +102,10 @@ def evaluate_order_rules(
         select=(_MODEL_RULE, _PROJECT_RULE), cache=RulesCacheConfig(enabled=cache_enabled)
     )
     rules: tuple[Rule, ...] = tuple(
-        filter(attrgetter("custom"), build_catalogue(config=config, project_dir=root))
+        filter(
+            attrgetter("custom"),
+            build_rule_catalogue(config=config, project_dir=root, include_custom=True),
+        )
     )
     return evaluate_custom_rules_cached(
         project=project, config=config, project_dir=root, rules=rules, dialect="duckdb"
@@ -365,7 +368,10 @@ def load_state_rules(*, root: Path, files: tuple[tuple[str, str], ...]) -> tuple
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(contents, encoding="utf-8")
     return tuple(
-        filter(attrgetter("custom"), build_catalogue(config=RulesConfig(), project_dir=root))
+        filter(
+            attrgetter("custom"),
+            build_rule_catalogue(config=RulesConfig(), project_dir=root, include_custom=True),
+        )
     )
 
 

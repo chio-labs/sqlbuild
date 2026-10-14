@@ -4,11 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue, select_rules
-from sqlbuild.rule_engine._helpers.engine.ruleset import resolve_ruleset
-from sqlbuild.rule_engine._helpers.guidance.skills import render_skills
+from sqlbuild._native import (
+    build_rule_catalogue,
+    format_rule,
+    install_rules_skills,
+    select_catalogue_rules,
+)
 from sqlbuild.rule_engine.main._evaluate import evaluate
-from sqlbuild.rule_engine.main.render_rule import format_rule
 from sqlbuild.rule_engine.models import (
     Rule,
     RulesCacheConfig,
@@ -22,6 +24,7 @@ from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (
     PolicySelectionTestCase,
     SqlTestPolicyGuidanceTestCase,
 )
+from tests.unit.src.sqlbuild.rule_engine._helpers.engine.helpers import installed_skill
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_project
 
 RULES_BUILT_IN_CODES: tuple[str, ...] = (
@@ -167,9 +170,11 @@ def test_given_rule_selectors_when_resolving_then_returns_expected_codes(
     test_case: PolicySelectionTestCase,
 ) -> None:
     config: RulesConfig = RulesConfig(select=test_case.select, ignore=test_case.ignore)
-    catalogue: tuple[Rule, ...] = build_catalogue(config=config, project_dir=tmp_path)
+    catalogue: tuple[Rule, ...] = build_rule_catalogue(
+        config=config, project_dir=tmp_path, include_custom=True
+    )
 
-    selected: tuple[Rule, ...] = select_rules(
+    selected: tuple[Rule, ...] = select_catalogue_rules(
         catalogue=catalogue, config=config, project_dir=tmp_path
     )
 
@@ -195,12 +200,14 @@ def test_given_sql_test_policy_when_inspecting_and_rendering_skills_then_effecti
         select=("SQBRTEST",),
         sql_tests=SqlTestRulesConfig(pipeline_directory=test_case.pipeline_directory),
     )
-    catalogue: tuple[Rule, ...] = build_catalogue(config=config, project_dir=tmp_path)
+    catalogue: tuple[Rule, ...] = build_rule_catalogue(
+        config=config, project_dir=tmp_path, include_custom=True
+    )
     rules_by_code: dict[str, Rule] = {item.code: item for item in catalogue}
     rule: Rule = rules_by_code["SQBRTEST103"]
 
     inspection: str = format_rule(rule=rule, config=config)
-    skill, _ = render_skills(config=config, project_dir=tmp_path)
+    skill: str = installed_skill(config=config, project_dir=tmp_path)
 
     assert test_case.expected_path in inspection
     assert test_case.expected_path in skill
@@ -236,7 +243,9 @@ def test_given_minimum_test_rule_when_rendering_guidance_then_all_surfaces_have_
         threshold_overrides=(override,),
         cache=RulesCacheConfig(enabled=False),
     )
-    catalogue: tuple[Rule, ...] = build_catalogue(config=config, project_dir=tmp_path)
+    catalogue: tuple[Rule, ...] = build_rule_catalogue(
+        config=config, project_dir=tmp_path, include_custom=True
+    )
     rules_by_code: dict[str, Rule] = {item.code: item for item in catalogue}
     rule: Rule = rules_by_code["SQBRTEST202"]
     result: RulesResult = evaluate(
@@ -250,17 +259,16 @@ def test_given_minimum_test_rule_when_rendering_guidance_then_all_surfaces_have_
         project_dir=tmp_path,
     )
     inspection: str = format_rule(rule=rule, config=config)
-    skill, _ = render_skills(config=config, project_dir=tmp_path)
-    without_override: str = resolve_ruleset(
-        config=RulesConfig(select=("SQBRTEST202",)), project_dir=tmp_path
-    ).fingerprint
-    with_override: str = resolve_ruleset(config=config, project_dir=tmp_path).fingerprint
+    skill: str = installed_skill(config=config, project_dir=tmp_path)
+    fresh_without_override: bool = install_rules_skills(
+        config=RulesConfig(select=("SQBRTEST202",)), project_dir=tmp_path, check=True
+    )
 
     assert result.findings[0].remediation == rule.remediation
     assert f"Remediation: {rule.remediation}" in inspection
     assert f"Remediation: {rule.remediation}" in skill
     assert "marts require two focused tests" in inspection
     assert "marts require two focused tests" in skill
-    assert without_override != with_override
+    assert not fresh_without_override
     for snippet in test_case.expected_snippets:
         assert snippet in result.findings[0].remediation
