@@ -2514,6 +2514,30 @@ def resolve_effective_scenario_config(
 def scenario_local_type_overrides_for_dialect(
     *, scenario_config: ScenarioConfig, sql_analysis_dialect: str | None
 ) -> dict[str, str]: ...
+def apply_unit_test_selectors(
+    *, options: CompilePipelineOptions | None, discovered_inputs: DiscoveredProjectInputs
+) -> CompilePipelineOptions: ...
+def resolve_configured_rule_selection(
+    *,
+    options: CompilePipelineOptions,
+    discovered_inputs: DiscoveredProjectInputs,
+    project: CompiledProjectView,
+) -> frozenset[CompiledObjectKey] | None: ...
+def resolve_analysis_model_names(
+    *,
+    compile_inputs: CompileInputsView,
+    inference_profile: ExpressionInferenceProfile,
+    selection: CompileAnalysisSelection | None,
+) -> frozenset[str] | None: ...
+def compile_static_command_context(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    options: CompilePipelineOptions,
+    selected_keys: frozenset[CompiledObjectKey] | None = None,
+    relation_keys: frozenset[CompiledObjectKey] | None = None,
+    on_progress: Callable[[str], None] | None = None,
+) -> StaticCommandContext: ...
 def run_clone_pipeline_with_options(
     *,
     discovered_inputs: DiscoveredProjectInputs,
