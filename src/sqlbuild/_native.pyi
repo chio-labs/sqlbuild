@@ -54,8 +54,8 @@ from sqlbuild.cli.compile.models import CompileAnalysis
 from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt
 from sqlbuild.cli.entry.models import (
     AuthoredTargetWarehouse,
-    CompileCommandRequest,
     CommandWarehouseScope,
+    CompileCommandRequest,
     CompileProfileFlags,
     ParsedCliInvocation,
     ResolvedWarehouse,
