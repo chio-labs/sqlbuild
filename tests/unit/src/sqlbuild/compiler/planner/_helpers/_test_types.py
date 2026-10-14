@@ -872,3 +872,11 @@ class EmptyCursorInputsSnapshotTestCase:
     expected_empty_input_names: tuple[str, ...]
     expected_unreadable_input_names: tuple[str, ...]
     expected_decision: EmptyCursorInputDecision
+
+
+@dataclass(frozen=True)
+class LoaderDependencyNamesTestCase:
+    """Expected first-seen loader names after resolving Python function dependencies."""
+
+    description: str
+    expected_names: tuple[str, ...]

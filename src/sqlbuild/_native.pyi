@@ -222,7 +222,9 @@ from sqlbuild.compiler.planner.models import (
     SelectionStalenessGraph,
     SelectionStalenessWarning,
     SelectorExpansion,
+    SourceLoadPlanEntry,
     SqlTestPlanEntry,
+    SqlTestSelection,
     UnitTestSelectorSplit,
     WarehouseSnapshot,
 )
@@ -4272,3 +4274,61 @@ def resolve_effective_microbatch_batch_size(*, batch_size: str, effective_grain:
 def aligned_timestamp_bounds(
     *, start: DateValue | TimestampValue, end: DateValue | TimestampValue
 ) -> tuple[datetime, datetime]: ...
+def build_planner_scope(
+    *,
+    project: CompiledProjectView,
+    select: tuple[str, ...] = (),
+    exclude: tuple[str, ...] = (),
+    auto_load_sources: bool = False,
+    selected_keys: frozenset[CompiledObjectKey] | None = None,
+    python_read_source_names: frozenset[str] = frozenset(),
+    sql_test_selection: SqlTestSelection | None = None,
+) -> PlannerScope: ...
+def managed_source_upstream_keys(
+    *,
+    selected_keys: frozenset[CompiledObjectKey],
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    project: CompiledProjectView,
+) -> frozenset[CompiledObjectKey]: ...
+def expand_selected_loader_dependencies(
+    *,
+    project: CompiledProjectView,
+    selected_keys: frozenset[CompiledObjectKey],
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    executable_dependency_source_keys: frozenset[CompiledObjectKey] = frozenset(),
+) -> tuple[
+    frozenset[CompiledObjectKey], dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
+]: ...
+def upstream_loader_dependency_names(
+    *,
+    loader_function: DiscoveredLoaderFunction,
+    loader_functions: tuple[DiscoveredLoaderFunction, ...],
+) -> tuple[str, ...]: ...
+def loader_to_source_entry(
+    *,
+    project: CompiledProjectView,
+    loader: DiscoveredLoaderFunction,
+) -> SourceEntry: ...
+def build_intermediate_source_map(
+    *,
+    project: CompiledProjectView,
+    selected_keys: frozenset[CompiledObjectKey],
+) -> dict[str, SourceEntry]: ...
+def build_upstream_intermediate_source_map(
+    *,
+    project: CompiledProjectView,
+    selected_keys: frozenset[CompiledObjectKey],
+) -> dict[str, SourceEntry]: ...
+def build_source_load_map(
+    *,
+    project: CompiledProjectView,
+    selected_keys: frozenset[CompiledObjectKey],
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] | None = None,
+) -> dict[str, SourceEntry]: ...
+def build_source_load_entries(
+    *,
+    execution_order: tuple[CompiledObjectKey, ...],
+    selected_keys: frozenset[CompiledObjectKey],
+    source_map: dict[str, SourceEntry],
+    is_reload: bool,
+) -> tuple[SourceLoadPlanEntry, ...]: ...

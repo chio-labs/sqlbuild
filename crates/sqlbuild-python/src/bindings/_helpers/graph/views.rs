@@ -51,7 +51,7 @@ fn lineage_graph_names<'py>(
     Ok(names)
 }
 
-fn edge_dict<'py>(
+pub(crate) fn edge_dict<'py>(
     cache: &KeyCache<'py>,
     edges: &[(ObjectKey, Vec<ObjectKey>)],
 ) -> PyResult<Bound<'py, PyDict>> {

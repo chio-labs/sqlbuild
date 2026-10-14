@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from sqlbuild._native import project_lineage_views
+from sqlbuild._native import (
+    build_source_load_entries,
+    project_lineage_views,
+    upstream_loader_dependency_names,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
@@ -25,8 +29,6 @@ from sqlbuild.compiler.graph.models import LineageGraphViews
 from sqlbuild.compiler.planner._helpers.fixtures.completion import (
     build_relation_fixture_context,
 )
-from sqlbuild.compiler.planner._helpers.graph.loader_dag import upstream_loader_dependency_names
-from sqlbuild.compiler.planner._helpers.graph.source_load_nodes import build_source_load_entries
 from sqlbuild.compiler.planner._helpers.output.audit_entry import plan_audit
 from sqlbuild.compiler.planner._helpers.output.plan_entry import (
     audit_is_selected,

@@ -20,7 +20,7 @@ use crate::bindings::_helpers::rules::selection::{rules_error, selected_rule_cod
 const CUSTOM_CATALOGUE_MODULE: &str = "sqlbuild.rule_engine._helpers.engine._custom_catalogue";
 const CUSTOM_PAYLOADS_MODULE: &str = "sqlbuild.rule_engine._helpers.engine.custom_payloads";
 const HERMETICITY_MODULE: &str = "sqlbuild.rule_engine._helpers.engine.hermeticity";
-const PLANNER_SCOPE_MODULE: &str = "sqlbuild.compiler.planner.main.selection.scope";
+const PLANNER_SCOPE_MODULE: &str = "sqlbuild._native";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const JSON_MODULE: &str = "json";
 const BUILTINS_MODULE: &str = "builtins";

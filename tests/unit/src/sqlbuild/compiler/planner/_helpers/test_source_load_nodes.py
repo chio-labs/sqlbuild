@@ -8,7 +8,12 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    build_intermediate_source_map,
+    build_source_load_entries,
+    build_source_load_map,
+    expand_selected_loader_dependencies,
     project_with,
+    upstream_loader_dependency_names,
 )
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
@@ -22,14 +27,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.planner._helpers.graph.loader_dag import (
-    build_intermediate_source_map,
-    expand_selected_loader_dependencies,
-)
-from sqlbuild.compiler.planner._helpers.graph.source_load_nodes import (
-    build_source_load_entries,
-    build_source_load_map,
-)
+from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner._helpers.warehouse.snapshot import _build_metadata_name_filter
 from sqlbuild.compiler.planner.models import SourceLoadPlanEntry
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
@@ -37,6 +35,7 @@ from sqlbuild.spec.contracts.models import SourceEntry
 from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     LoaderDagExpansionTestCase,
+    LoaderDependencyNamesTestCase,
     LoaderDestinationPlanningTestCase,
     MetadataNameFilterTestCase,
     SourceLoadNodesTestCase,
@@ -326,3 +325,31 @@ def test_given_qualified_intermediate_destination_when_building_map_then_parses_
 
     entry: SourceEntry = entries["fetch_orders"]
     assert (entry.database, entry.schema, entry.table) == test_case.expected_parts
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoaderDependencyNamesTestCase(
+            description="drops non-loader function dependencies and deduplicates repeated loaders",
+            expected_names=("fetch_orders",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_mixed_function_dependencies_when_resolving_then_returns_only_known_loaders(
+    test_case: LoaderDependencyNamesTestCase,
+) -> None:
+    project: CompiledProjectView = build_source_load_nodes_project()
+    dependency: DiscoveredLoaderFunction = project.loader_functions[0]
+    root: DiscoveredLoaderFunction = replace(
+        project.loader_functions[1],
+        depends_on=(dependency.function, build_source_load_nodes_project, dependency.function),
+    )
+    assert (
+        upstream_loader_dependency_names(
+            loader_function=root,
+            loader_functions=project.loader_functions,
+        )
+        == test_case.expected_names
+    )

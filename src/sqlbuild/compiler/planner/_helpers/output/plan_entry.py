@@ -9,6 +9,7 @@ from typing import Any
 
 from sqlbuild._native import (
     build_model_warnings,
+    build_source_load_map,
     cap_microbatch_bounds,
     check_cursor_type_consistency,
     count_microbatches,
@@ -57,7 +58,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledSeedView,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner._helpers.graph.source_load_nodes import build_source_load_map
 from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
     check_full_rebuild_allowed,
     describe_full_rebuild_cause,
