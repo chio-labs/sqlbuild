@@ -31,6 +31,7 @@ from sqlbuild.cli.commands.models import (
     ContractCommandRequest,
     CostCommandRequest,
     DbtInitCommandRequest,
+    DbtSqlbuildWorkContext,
     DiffCommandRequest,
     FreshnessCommandRequest,
     JanitorCommandRequest,
@@ -325,6 +326,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtCliConfigOverrides,
     DbtCliOptions,
     DbtCommandExecutionResult,
+    DbtCommandResult,
     DbtInteropCommandArgs,
     DbtInteropCompiledProject,
     DbtInteropExecutionRequest,
@@ -338,6 +340,8 @@ from sqlbuild.integrations.dbt.models import (
     DbtManifestIndex,
     DbtManifestModel,
     DbtNodeExecutionResult,
+    DbtPlanEnvironment,
+    DbtSqlbuildPlanRequest,
     NormalizedDbtProfileConnection,
     ResolvedDbtConfig,
     ResolvedDbtProfileOutput,
@@ -1772,6 +1776,33 @@ def build_dbt_ls_argv(
 def resolve_dbt_execution_invocation(
     request: DbtInteropExecutionRequest,
 ) -> DbtInteropInvocation: ...
+def dbt_interop_plan_safety_gates() -> PlanSafetyGates: ...
+def execute_dbt_sqlbuild_work(
+    *,
+    context: DbtSqlbuildWorkContext,
+    command: DbtInteropCommand,
+    project: CompiledProjectView,
+    project_dir: Path,
+    fail_fast: bool,
+    verbose: bool,
+) -> int: ...
+def build_sqlbuild_plan_output(
+    *,
+    environment: DbtPlanEnvironment,
+    request: DbtSqlbuildPlanRequest,
+    hooks: ConnectionHooks,
+) -> PlanOutput | None: ...
+def attach_sqlbuild_plan_output(
+    *,
+    plan: DbtInteropPlan,
+    project_dir: Path,
+    discovered_inputs: DiscoveredProjectInputs,
+    compiled: DbtInteropCompiledProject,
+    sqlbuild_args: tuple[str, ...],
+    connection_progress: Any | None,
+    on_progress: Callable[[str], None] | None,
+) -> DbtInteropPlan: ...
+def dbt_failure_detail(result: DbtCommandResult) -> str | None: ...
 def load_compiled_dbt_manifest(
     *,
     runner: DbtRunner,

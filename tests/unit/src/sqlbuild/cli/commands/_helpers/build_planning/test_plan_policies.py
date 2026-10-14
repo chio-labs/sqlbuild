@@ -4,8 +4,7 @@ from io import StringIO
 
 import pytest
 
-from sqlbuild._native import enforce_plan_safety_policies
-from sqlbuild.cli.commands._helpers.dbt.sqlbuild_work import dbt_interop_plan_safety_gates
+from sqlbuild._native import dbt_interop_plan_safety_gates, enforce_plan_safety_policies
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.spec.contracts.models import ExecutionLimitsConfig, SnapshotsConfig

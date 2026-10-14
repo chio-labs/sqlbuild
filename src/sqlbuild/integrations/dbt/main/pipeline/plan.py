@@ -9,13 +9,11 @@ from typing import Any, TextIO
 
 from sqlbuild._native import (
     ConnectionProgressReporter,
+    attach_sqlbuild_plan_output,
     compile_dbt_interop_project,
     load_compiled_dbt_manifest,
     resolve_dbt_execution_invocation,
     resolve_dbt_interop_plan,
-)
-from sqlbuild.integrations.dbt._helpers.pipeline.plan_output import (
-    attach_sqlbuild_plan_output,
 )
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.main.runtime._report_progress import report_progress
