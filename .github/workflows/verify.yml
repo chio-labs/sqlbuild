@@ -412,7 +412,7 @@ jobs:
     needs: [changes, lockfile]
     if: needs.changes.outputs.format_performance == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -430,6 +430,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --all-groups --all-extras --python 3.12
       - name: Run formatter performance guards
+        timeout-minutes: 10
         run: >-
           uv run pytest
           tests/e2e/src/sqlbuild/cli/commands/main/format/test_format_performance.py
