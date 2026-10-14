@@ -3,6 +3,7 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
 
+use crate::bindings::_helpers::attachments::cursor_intrinsics::validated_model_cursor_sql;
 use crate::bindings::_helpers::compile_driver::assembly_project::ADAPTER_NAME_MODULE;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 
@@ -10,8 +11,6 @@ const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const DECLARATIONS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.declarations";
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const CURSOR_INTRINSICS_MODULE: &str =
-    "sqlbuild.compiler.compile._helpers.render.cursor_intrinsics";
 /// The `CompiledSqlScenario` fields copied from its input, in Python's keyword order.
 const SCENARIO_FIELDS: [&str; 12] = [
     "sql_body",
@@ -74,11 +73,6 @@ pub(crate) fn test_model_query_overrides<'py>(
         ],
     )?;
     let expand: Bound<'py, PyAny> = py.import(NATIVE_MODULE)?.getattr("expand_sql_macros")?;
-    let intrinsics: Bound<'py, PyAny> = imported(
-        py,
-        CURSOR_INTRINSICS_MODULE,
-        "get_validated_model_cursor_intrinsics",
-    )?;
     for model_input in inputs.getattr("model_inputs")?.try_iter()? {
         let model_input: Bound<'py, PyAny> = model_input?;
         let file_path: Bound<'py, PyAny> =
@@ -102,16 +96,13 @@ pub(crate) fn test_model_query_overrides<'py>(
             ],
         )?
         .getattr("sql")?;
-        let query: Bound<'py, PyAny> = call_with(
-            &intrinsics,
-            &[
-                ("sql", expanded),
-                (
-                    "config_values",
-                    model_input.getattr("config")?.getattr("values")?,
-                ),
-                ("model_name", model_name.clone()),
-            ],
+        let query: String = validated_model_cursor_sql(
+            py,
+            &expanded.extract::<String>()?,
+            (
+                &model_name.extract::<String>()?,
+                &model_input.getattr("config")?.getattr("values")?,
+            ),
         )?;
         overrides.set_item(model_name, query)?;
     }

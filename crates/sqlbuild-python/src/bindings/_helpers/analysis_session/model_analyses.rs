@@ -9,13 +9,12 @@ use crate::bindings::_helpers::analysis_session::profile_inputs::{
     case_sensitive_shapes, nullability_rules, profile_dialect, return_types, shape_rows,
 };
 use crate::bindings::_helpers::analysis_session::stage_functions::family_rows;
+use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_sql;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.analysis_session.models";
 const ANALYSIS_CACHE_MODULE: &str = "sqlbuild.compiler.compile._helpers.analysis.cache";
-const CURSOR_INTRINSICS_MODULE: &str =
-    "sqlbuild.compiler.compile._helpers.render.cursor_intrinsics";
 const PLANNER_TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const CODE_IDENTITY_MODULE: &str = "sqlbuild.compiler.frontier.main.compiled_code_identity";
@@ -277,9 +276,6 @@ fn model_rows<'py>(
     py: Python<'py>,
     model_inputs: &[Bound<'py, PyAny>],
 ) -> PyResult<Bound<'py, PyAny>> {
-    let cursor_sql: Bound<'py, PyAny> = py
-        .import(CURSOR_INTRINSICS_MODULE)?
-        .getattr("cursor_intrinsics_analysis_sql")?;
     let planner = py.import(PLANNER_TYPES_MODULE)?;
     let enforced: Bound<'py, PyAny> = planner.getattr("ContractPolicy")?.getattr("ENFORCED")?;
     let snapshot: Bound<'py, PyAny> = planner
@@ -289,10 +285,15 @@ fn model_rows<'py>(
     for model_input in model_inputs {
         let values: Bound<'py, PyAny> = model_input.getattr("config")?.getattr("values")?;
         let get = |key: &str| values.call_method1("get", (key,));
-        let arguments: Bound<'py, PyDict> = PyDict::new(py);
-        arguments.set_item("sql", model_input.getattr("query_sql")?)?;
-        arguments.set_item("cursor_type", get("cursor_type")?)?;
-        let query_sql: Bound<'py, PyAny> = cursor_sql.call((), Some(&arguments))?;
+        let query_sql: Bound<'py, PyAny> = PyString::new(
+            py,
+            &analysis_cursor_sql(
+                py,
+                &model_input.getattr("query_sql")?.extract::<String>()?,
+                &get("cursor_type")?,
+            )?,
+        )
+        .into_any();
         let mut placeholders: Vec<(String, String)> = Vec::new();
         let raw: Bound<'py, PyAny> = get("placeholders")?;
         if raw.is_instance_of::<PyDict>() {

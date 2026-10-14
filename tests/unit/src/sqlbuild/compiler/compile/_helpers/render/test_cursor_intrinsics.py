@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import infer_native_query_columns
+from sqlbuild._native import (
+    cursor_intrinsics_analysis_sql,
+    infer_native_query_columns,
+    resolve_cursor_intrinsics,
+    validated_model_cursor_intrinsics,
+)
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.analysis_session.models import NativeColumnQuery
-from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
-    cursor_intrinsics_analysis_sql,
-    get_validated_model_cursor_intrinsics,
-    render_cursor_intrinsics,
-)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.lineage.types import InferredNullability
@@ -35,7 +35,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.render._test_types import
 def test_given_valid_incremental_query_when_validating_then_canonicalizes_intrinsics(
     test_case: CursorIntrinsicValidationTestCase,
 ) -> None:
-    sql: str = get_validated_model_cursor_intrinsics(
+    sql: str = validated_model_cursor_intrinsics(
         sql=test_case.sql,
         config_values={"materialized": "incremental", "cursor": "event_time"},
         model_name="events",
@@ -72,7 +72,7 @@ def test_given_valid_incremental_query_when_validating_then_canonicalizes_intrin
 def test_given_comments_and_literals_when_rendering_then_only_replaces_executable_calls(
     test_case: CursorIntrinsicRenderTestCase,
 ) -> None:
-    sql: str = render_cursor_intrinsics(
+    sql, _ = resolve_cursor_intrinsics(
         sql=test_case.sql,
         start_sql="TIMESTAMP '2026-01-01'",
         end_sql="TIMESTAMP '2026-01-02'",
@@ -106,7 +106,7 @@ def test_given_invalid_intrinsic_when_validating_then_raises(
     test_case: CursorIntrinsicErrorTestCase,
 ) -> None:
     with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
-        get_validated_model_cursor_intrinsics(
+        validated_model_cursor_intrinsics(
             sql=test_case.sql,
             config_values={"materialized": "incremental", "cursor": "event_time"},
             model_name="events",

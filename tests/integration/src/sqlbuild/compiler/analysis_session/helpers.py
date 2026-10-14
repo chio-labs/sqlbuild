@@ -19,6 +19,7 @@ import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stage
 from sqlbuild._native import (
     analyze_native_model_sql,
     build_compile_inputs,
+    cursor_intrinsics_analysis_sql,
     discover_project_inputs,
     infer_native_expression_source_shapes,
     model_placeholders,
@@ -38,9 +39,6 @@ from sqlbuild.compiler.analysis_session.models import (
 )
 from sqlbuild.compiler.analysis_session.types import ProofRow
 from sqlbuild.compiler.compile._helpers.analysis.cache import build_analysis_cache_context
-from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
-    cursor_intrinsics_analysis_sql,
-)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,

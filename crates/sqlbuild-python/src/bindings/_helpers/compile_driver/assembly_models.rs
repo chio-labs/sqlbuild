@@ -3,6 +3,7 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyList, PyString, PyTuple};
 
+use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_sql;
 use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
 use crate::bindings::_helpers::compile_driver::assembly_analysis::{
     ANALYSIS_MODELS_MODULE, AnalysisContext, model_stem, selected_for_analysis,
@@ -12,15 +13,12 @@ use crate::bindings::_helpers::hand_built::compiled_model::compiled_model as han
 use crate::bindings::_helpers::render::macro_calls::top_level_macro_call_names;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const CURSOR_INTRINSICS_MODULE: &str =
-    "sqlbuild.compiler.compile._helpers.render.cursor_intrinsics";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const NATIVE_FAILURE_PREFIX: &str = "NativeCompilerError: ";
 const HOOK_NAMES: [&str; 2] = ["pre_hooks", "post_hooks"];
 
 /// The Python stages each model's assembly calls, looked up once per project.
 struct ModelStages<'py> {
-    analysis_sql: Bound<'py, PyAny>,
     placeholders: Bound<'py, PyAny>,
     validate_hooks: Bound<'py, PyAny>,
     validate_sql: Bound<'py, PyAny>,
@@ -44,11 +42,6 @@ pub(crate) fn compiled_models<'py>(
     let py: Python<'py> = inputs.py();
     let native: Bound<'py, PyAny> = py.import(NATIVE_MODULE)?.into_any();
     let stages: ModelStages<'py> = ModelStages {
-        analysis_sql: imported(
-            py,
-            CURSOR_INTRINSICS_MODULE,
-            "cursor_intrinsics_analysis_sql",
-        )?,
         placeholders: native.getattr("model_placeholders")?,
         validate_hooks: native.getattr("validate_hook_sql_syntax")?,
         validate_sql: native.getattr("validate_sql_syntax")?,
@@ -83,16 +76,15 @@ fn compiled_model<'py>(
     let model_name: Bound<'py, PyAny> = model_stem(model_input)?;
     let syntax_validated: bool = request.native_model.getattr("syntax_valid")?.is_truthy()?;
     let config_values: Bound<'py, PyAny> = model_input.getattr("config")?.getattr("values")?;
-    let analysis_query_sql: Bound<'py, PyAny> = call_with(
-        &stages.analysis_sql,
-        &[
-            ("sql", model_input.getattr("query_sql")?),
-            (
-                "cursor_type",
-                config_values.call_method1("get", ("cursor_type",))?,
-            ),
-        ],
-    )?;
+    let analysis_query_sql: Bound<'py, PyAny> = PyString::new(
+        py,
+        &analysis_cursor_sql(
+            py,
+            &model_input.getattr("query_sql")?.extract::<String>()?,
+            &config_values.call_method1("get", ("cursor_type",))?,
+        )?,
+    )
+    .into_any();
     let placeholders: Bound<'py, PyAny> = stages.placeholders.call1((model_input,))?;
     let input_validated: bool = model_input.getattr("sql_validation_enabled")?.is_truthy()?;
     let location: Bound<'py, PyTuple> = PyTuple::new(

@@ -4,6 +4,7 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::{PyCFunction, PyDict, PyDictMethods, PyFrozenSet, PyList, PyTuple};
 
+use crate::bindings::_helpers::attachments::cursor_intrinsics::reserved_cursor_markers;
 use crate::bindings::_helpers::compile_attachment::model_config::native_model_config_session;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
@@ -21,7 +22,6 @@ const SCOPE_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
 const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
 const VALIDATION_MODULE: &str = "sqlbuild.compiler.compile._helpers.analysis.validation";
 const COLLECTOR_MODULE: &str = "sqlbuild.compiler.compile._helpers.diagnostics.collector";
-const CURSOR_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.cursor_intrinsics";
 const DECLARATIONS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.declarations";
 const TEMPLATING_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.templating";
 const UNICODE_ENVIRONMENT_MODULE: &str = "sqlbuild.compiler.compile.classes.unicode_environment";
@@ -291,7 +291,7 @@ pub(crate) fn build_model_inputs<'py>(
                 classes,
             ),
             syntax.getattr("native_mapping")?,
-            imported(py, CURSOR_MODULE, "cursor_intrinsic_semantics")?.call0()?,
+            reserved_cursor_markers(),
             (
                 (
                     settings.getattr("sql_analysis")?,

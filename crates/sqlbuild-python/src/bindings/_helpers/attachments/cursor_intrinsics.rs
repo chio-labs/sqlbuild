@@ -1,76 +1,157 @@
 //! Cursor intrinsic validation, rejection and rendering.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult};
 use pyo3::types::{PyString, PyStringMethods};
-use pyo3::{pyfunction, wrap_pyfunction};
+use pyo3::{Python, pyfunction, wrap_pyfunction};
 use sqlbuild_attachments::cursor_intrinsics::main::replace_intrinsics::replace_intrinsics;
 use sqlbuild_attachments::cursor_intrinsics::main::validated_model_intrinsics::validated_model_intrinsics;
 use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicModel;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 
+const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const INCREMENTAL_MATERIALIZATION: &str = "incremental";
 const CURSOR_START: &str = "__cursor_start";
+const CURSOR_START_CALL: &str = "__cursor_start()";
+const CURSOR_END_CALL: &str = "__cursor_end()";
+const INTEGER_CURSOR_TYPE: &str = "integer";
+const INTEGER_ANALYSIS_BOUND: &str = "CAST(0 AS BIGINT)";
+const TIMESTAMP_ANALYSIS_BOUND: &str = "CAST('2000-01-01 00:00:00' AS TIMESTAMP)";
+const MODEL_SQL_CONTEXT: &str = "Model SQL";
+const SQL_CONTEXT: &str = "SQL";
+const RESERVED_CURSOR_MARKERS: [&str; 2] = ["__SQB_CURSOR_START__", "__SQB_CURSOR_END__"];
 
-/// A model query with canonical intrinsic calls and no error, or no query and the error.
-#[pyfunction]
-fn validated_model_cursor_intrinsics(
-    sql: &str,
-    reserved_markers: Vec<String>,
-    model: (String, Bound<'_, PyAny>, Bound<'_, PyAny>),
-) -> PyResult<(Option<String>, Option<String>)> {
-    let (name, materialized, cursor) = model;
-    let incremental: bool = materialized
-        .downcast::<PyString>()
-        .is_ok_and(|text| text.to_string_lossy() == INCREMENTAL_MATERIALIZATION);
-    let cursor: Option<String> = match cursor.downcast::<PyString>() {
-        Ok(text) => Some(text.to_string_lossy().into_owned()),
-        Err(_) => None,
-    };
-    compiler_guard(|| {
-        Ok(
-            match validated_model_intrinsics(
-                sql,
-                &reserved_markers,
-                &IntrinsicModel {
-                    name: &name,
-                    incremental,
-                    cursor: cursor.as_deref(),
-                },
-            ) {
-                Ok(canonical) => (Some(canonical), None),
-                Err(message) => (None, Some(message)),
-            },
-        )
-    })
+/// The reserved executor bound markers no authored SQL may contain.
+pub(crate) fn reserved_cursor_markers() -> Vec<String> {
+    RESERVED_CURSOR_MARKERS
+        .iter()
+        .map(|marker| (*marker).to_owned())
+        .collect()
 }
 
-/// `sql` with intrinsic calls replaced and whether any was, or the error for `context`.
-#[pyfunction]
-fn replace_cursor_intrinsics(
+/// A `CompileInputError` carrying `message`.
+fn compile_input_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
+    Ok(PyErr::from_value(
+        imported(py, COMPILE_ERRORS_MODULE, "CompileInputError")?.call1((message,))?,
+    ))
+}
+
+/// `text` when it is a string, else `None`.
+fn text_value(value: &Bound<'_, PyAny>) -> Option<String> {
+    match value.downcast::<PyString>() {
+        Ok(text) => Some(text.to_string_lossy().into_owned()),
+        Err(_) => None,
+    }
+}
+
+/// `sql` with each intrinsic replaced by its bound and whether any was, raising for `context`.
+fn replaced(
+    py: Python<'_>,
     sql: &str,
     context: &str,
-    replacements: (String, String),
-) -> PyResult<(String, bool, Option<String>)> {
-    let (start, end) = replacements;
-    compiler_guard(|| {
-        Ok(
-            match replace_intrinsics(sql, context, |name| {
-                if name == CURSOR_START {
-                    start.clone()
-                } else {
-                    end.clone()
-                }
-            }) {
-                Ok((replaced, found)) => (replaced, found, None),
-                Err(message) => (String::new(), false, Some(message)),
+    (start, end): (&str, &str),
+) -> PyResult<(String, bool)> {
+    let outcome: Result<(String, bool), String> = compiler_guard(|| {
+        Ok(replace_intrinsics(sql, context, |name| {
+            if name == CURSOR_START {
+                start.to_owned()
+            } else {
+                end.to_owned()
+            }
+        }))
+    })?;
+    outcome.or_else(|message| Err(compile_input_error(py, message)?))
+}
+
+/// One model query with canonical intrinsic calls, raising when the model may not use them.
+pub(crate) fn validated_model_cursor_sql(
+    py: Python<'_>,
+    sql: &str,
+    (model_name, config_values): (&str, &Bound<'_, PyAny>),
+) -> PyResult<String> {
+    let incremental: bool = text_value(&config_values.call_method1("get", ("materialized",))?)
+        .is_some_and(|materialized| materialized == INCREMENTAL_MATERIALIZATION);
+    let cursor: Option<String> = text_value(&config_values.call_method1("get", ("cursor",))?);
+    let reserved_markers: Vec<String> = reserved_cursor_markers();
+    let outcome: Result<String, String> = compiler_guard(|| {
+        Ok(validated_model_intrinsics(
+            sql,
+            &reserved_markers,
+            &IntrinsicModel {
+                name: model_name,
+                incremental,
+                cursor: cursor.as_deref(),
             },
-        )
-    })
+        ))
+    })?;
+    outcome.or_else(|message| Err(compile_input_error(py, message)?))
+}
+
+/// `sql` with intrinsics replaced by stable typed literals, only for static SQL analysis.
+pub(crate) fn analysis_cursor_sql(
+    py: Python<'_>,
+    sql: &str,
+    cursor_type: &Bound<'_, PyAny>,
+) -> PyResult<String> {
+    let literal: &str = if text_value(cursor_type).as_deref() == Some(INTEGER_CURSOR_TYPE) {
+        INTEGER_ANALYSIS_BOUND
+    } else {
+        TIMESTAMP_ANALYSIS_BOUND
+    };
+    Ok(replaced(py, sql, MODEL_SQL_CONTEXT, (literal, literal))?.0)
+}
+
+/// One model query with canonical intrinsic calls, raising `CompileInputError` when invalid.
+#[pyfunction]
+#[pyo3(signature = (*, sql, config_values, model_name))]
+fn validated_model_cursor_intrinsics(
+    py: Python<'_>,
+    sql: &str,
+    config_values: &Bound<'_, PyAny>,
+    model_name: &str,
+) -> PyResult<String> {
+    validated_model_cursor_sql(py, sql, (model_name, config_values))
+}
+
+/// `sql` with intrinsics replaced by typed literals of `cursor_type` for static analysis.
+#[pyfunction]
+#[pyo3(signature = (*, sql, cursor_type))]
+fn cursor_intrinsics_analysis_sql(
+    py: Python<'_>,
+    sql: &str,
+    cursor_type: &Bound<'_, PyAny>,
+) -> PyResult<String> {
+    analysis_cursor_sql(py, sql, cursor_type)
+}
+
+/// Whether `sql` uses cursor intrinsics, and `sql` with both bounds rendered when given.
+#[pyfunction]
+#[pyo3(signature = (*, sql, start_sql=None, end_sql=None))]
+fn resolve_cursor_intrinsics(
+    py: Python<'_>,
+    sql: &str,
+    start_sql: Option<&str>,
+    end_sql: Option<&str>,
+) -> PyResult<(String, bool)> {
+    let (rendered, found) = replaced(
+        py,
+        sql,
+        SQL_CONTEXT,
+        (
+            start_sql.unwrap_or(CURSOR_START_CALL),
+            end_sql.unwrap_or(CURSOR_END_CALL),
+        ),
+    )?;
+    if !found || start_sql.is_none() || end_sql.is_none() {
+        return Ok((sql.to_owned(), found));
+    }
+    Ok((rendered, true))
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(validated_model_cursor_intrinsics, module)?)?;
-    module.add_function(wrap_pyfunction!(replace_cursor_intrinsics, module)?)?;
+    module.add_function(wrap_pyfunction!(cursor_intrinsics_analysis_sql, module)?)?;
+    module.add_function(wrap_pyfunction!(resolve_cursor_intrinsics, module)?)?;
     Ok(())
 }

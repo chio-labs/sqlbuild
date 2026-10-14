@@ -11,10 +11,10 @@ from sqlbuild._native import (
     get_config_str,
     resolve_bounded_cursor_override,
     resolve_cursor_input_roles,
+    resolve_cursor_intrinsics,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, RelationLookup
-from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
 from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
     CursorInputRoles,
