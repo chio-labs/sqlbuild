@@ -343,9 +343,7 @@ class MacroContext:
             raise CompileInputError(
                 "Constant SQL rendering requires a declaration resolved for this macro invocation"
             )
-        from sqlbuild.compiler.compile._helpers.render.declarations import (
-            render_constant_declaration,
-        )
+        from sqlbuild._native import render_constant_declaration
 
         return render_constant_declaration(
             declaration=declaration,
@@ -357,9 +355,7 @@ class MacroContext:
         """Render one visible enum member as a SQL scalar literal."""
 
         value: str | int = self.enums[enum_name][member_name]
-        from sqlbuild.compiler.compile._helpers.render.declarations import (
-            render_enum_member_value,
-        )
+        from sqlbuild._native import render_enum_member_value
 
         return render_enum_member_value(value=value)
 

@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import expand_authored_sql_with_spans
 from sqlbuild.compiler.compile._helpers.render.spans import map_through_passes
-from sqlbuild.compiler.compile._helpers.render.sql_vars import expand_authored_sql_with_spans
 from sqlbuild.compiler.compile.models import ExpansionSpan, LoadedMacro, MacroContext, MappedOffset
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import ExpandWithSpansTestCase
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (

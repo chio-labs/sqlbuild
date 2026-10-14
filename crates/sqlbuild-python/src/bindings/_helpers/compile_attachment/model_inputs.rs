@@ -2,7 +2,7 @@
 
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
-use pyo3::types::{PyCFunction, PyDict, PyDictMethods, PyFrozenSet, PyList, PyTuple};
+use pyo3::types::{PyCFunction, PyDict, PyDictMethods, PyFrozenSet, PyList, PyString, PyTuple};
 
 use crate::bindings::_helpers::attachments::cursor_intrinsics::reserved_cursor_markers;
 use crate::bindings::_helpers::compile_attachment::model_config::native_model_config_session;
@@ -10,6 +10,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::compiled_project::loop_classes::model_loop_classes;
+use crate::bindings::_helpers::render::declaration_values::constant_declaration_sql;
 use crate::bindings::_helpers::render::macro_expansion_result::macro_expansion_classes;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
@@ -22,7 +23,6 @@ const SCOPE_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
 const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
 const VALIDATION_MODULE: &str = "sqlbuild.compiler.compile._helpers.analysis.validation";
 const COLLECTOR_MODULE: &str = "sqlbuild.compiler.compile._helpers.diagnostics.collector";
-const DECLARATIONS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.declarations";
 const UNICODE_ENVIRONMENT_MODULE: &str = "sqlbuild.compiler.compile.classes.unicode_environment";
 const PROJECT_VARS_MODULE: &str = "sqlbuild._native";
 const MACRO_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.main.active_macro_bridge";
@@ -60,19 +60,13 @@ fn loop_host<'py>(context: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         let context: &Bound<'_, PyAny> = context.bind(py);
         let passed: Bound<'_, PyDict> =
             keywords.map_or_else(|| PyDict::new(py), |keywords| keywords.clone());
-        call_with(
-            &imported(py, DECLARATIONS_MODULE, "render_constant_declaration")?,
-            &[
-                ("declaration", passed.as_any().get_item("declaration")?),
-                ("value_renderer", context.getattr("value_renderer")?),
-                (
-                    "collection_rendering",
-                    context.getattr("collection_rendering")?,
-                ),
-                ("file_path", passed.as_any().get_item("file_path")?),
-            ],
-        )
-        .map(Bound::unbind)
+        let file_path: Bound<'_, PyAny> = passed.as_any().get_item("file_path")?;
+        let rendered: String = constant_declaration_sql(
+            &passed.as_any().get_item("declaration")?,
+            &context.getattr("value_renderer")?,
+            (&context.getattr("collection_rendering")?, Some(&file_path)),
+        )?;
+        Ok(PyString::new(py, &rendered).into_any().unbind())
     };
     let keywords: Bound<'py, PyDict> = PyDict::new(py);
     keywords.set_item(

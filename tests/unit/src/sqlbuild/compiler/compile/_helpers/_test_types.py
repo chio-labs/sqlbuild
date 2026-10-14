@@ -46,16 +46,6 @@ class SqlReferenceExtractionErrorTestCase:
 
 
 @dataclass(frozen=True)
-class StaticProjectVarBatchTestCase:
-    """Model SQL texts and the `(sql, error)` each interpolates to."""
-
-    description: str
-    sqls: tuple[str, ...]
-    effective_vars: dict[str, object]
-    expected_results: tuple[tuple[str, str | None], ...]
-
-
-@dataclass(frozen=True)
 class AuditFactoryAttachmentTestCase:
     description: str
     model_header: str

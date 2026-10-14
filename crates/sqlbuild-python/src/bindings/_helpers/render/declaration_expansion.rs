@@ -1,8 +1,8 @@
 //! Enum and constant references expanded natively, for model queries and every other caller.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult};
+use pyo3::FromPyObject;
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyInt, PyTuple};
-use pyo3::{FromPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::compiled_project::errors::DeclarationError;
 use sqlbuild_analysis::compiled_project::main::declaration_error_message::declaration_error_message;
 use sqlbuild_analysis::compiled_project::main::enum_member_literal::enum_member_literal;
@@ -291,36 +291,4 @@ pub(crate) fn span_rows(spliced: &SplicedSql) -> Vec<SpanRow> {
             )
         })
         .collect()
-}
-
-/// Expand one string's scanned references; `source` is `(sql, references, stop code)`.
-#[pyfunction]
-fn expand_declaration_references<'py>(
-    source: (String, Vec<ScannedReference>, Option<u8>),
-    context: Bound<'py, PyAny>,
-    consumer: (Option<Bound<'py, PyAny>>, bool, String),
-    renderers: (Bound<'py, PyAny>, ExpansionClasses<'py>),
-) -> PyResult<(String, Vec<SpanRow>, Vec<Bound<'py, PyAny>>)> {
-    let (sql, references, stop) = source;
-    let (identity, relationship_visibility, path) = consumer;
-    let (render_constant, classes) = renderers;
-    let expanded: ExpandedDeclarations<'py> = expand_declarations(&DeclarationExpansion {
-        sql: &sql,
-        references: &references,
-        stop,
-        context: &context,
-        consumer: ExpansionConsumer {
-            identity,
-            relationship_visibility,
-            path: &path,
-        },
-        render_constant: &render_constant,
-        classes: &classes,
-    })?;
-    let spans: Vec<SpanRow> = span_rows(&expanded.spliced);
-    Ok((expanded.spliced.sql, spans, expanded.usages))
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(expand_declaration_references, module)?)
 }

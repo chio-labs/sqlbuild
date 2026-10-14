@@ -6,10 +6,10 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
 use crate::bindings::_helpers::attachments::cursor_intrinsics::validated_model_cursor_sql;
 use crate::bindings::_helpers::compile_driver::assembly_project::ADAPTER_NAME_MODULE;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::render::declaration_values::declaration_scope_resolver;
 
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const DECLARATIONS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.declarations";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 /// The `CompiledSqlScenario` fields copied from its input, in Python's keyword order.
 const SCENARIO_FIELDS: [&str; 12] = [
@@ -63,14 +63,10 @@ pub(crate) fn test_model_query_overrides<'py>(
         declaration_scope.getattr("resolver")?.getattr("lookup")?
     };
     let loaded_macros: Bound<'py, PyAny> = inputs.getattr("loaded_macros")?;
-    let declaration_resolver: Bound<'py, PyAny> = call_with(
-        &imported(py, DECLARATIONS_MODULE, "build_declaration_scope_resolver")?,
-        &[
-            ("discovered_inputs", inputs.getattr("discovered_inputs")?),
-            ("scope_index", inputs.getattr("scope_index")?),
-            ("loaded_macros", loaded_macros.clone()),
-            ("lookup", lookup),
-        ],
+    let declaration_resolver: Bound<'py, PyAny> = declaration_scope_resolver(
+        &inputs.getattr("discovered_inputs")?,
+        &inputs.getattr("scope_index")?,
+        (&loaded_macros, &lookup),
     )?;
     let expand: Bound<'py, PyAny> = py.import(NATIVE_MODULE)?.getattr("expand_sql_macros")?;
     for model_input in inputs.getattr("model_inputs")?.try_iter()? {

@@ -3,9 +3,9 @@
 use std::cell::RefCell;
 
 use pyo3::exceptions::PyValueError;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyListMethods, PyString, PyStringMethods};
-use pyo3::{FromPyObject, PyErr, pyfunction, wrap_pyfunction};
+use pyo3::{FromPyObject, PyErr};
 use sqlbuild_sqltext::compiler::main::sql_interpolation::interpolate_sql;
 use sqlbuild_sqltext::compiler::models::InterpolationRead;
 use sqlbuild_sqltext::compiler::types::InterpolationHost;
@@ -142,15 +142,6 @@ fn key_text(key: &Bound<'_, PyAny>) -> String {
     key.str().map(|text| text.to_string()).unwrap_or_default()
 }
 
-/// Interpolate each `(sql, file path)`; an error is returned in its row, not raised.
-#[pyfunction]
-fn interpolate_sql_batch<'py>(
-    sqls: Vec<(String, String)>,
-    sources: InterpolationSources<'py>,
-) -> PyResult<Vec<InterpolationRow>> {
-    interpolation_batch(sources, &sqls)
-}
-
 /// Each `(sql, file path)` interpolated in order; non-rendering Python failures raise.
 pub(crate) fn interpolation_batch(
     sources: InterpolationSources<'_>,
@@ -210,9 +201,4 @@ fn read_rows(reads: Vec<InterpolationRead>) -> Vec<(&'static str, String)> {
             InterpolationRead::Context(name) => (CONTEXT_READ, name),
         })
         .collect()
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(interpolate_sql_batch, module)?)?;
-    Ok(())
 }

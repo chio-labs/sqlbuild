@@ -6,14 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.render.sql_vars import (
-    interpolate_sql_batch,
-    substitute_sql_vars_with_spans,
-)
+from sqlbuild._native import substitute_sql_vars_with_spans
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import SqlInterpolation
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
-    StaticProjectVarBatchTestCase,
     SubstituteSqlVarsErrorTestCase,
     SubstituteSqlVarsTestCase,
 )
@@ -24,6 +19,18 @@ _FILE_PATH: Path = Path("models/test_model.sql")
 @pytest.mark.parametrize(
     "test_case",
     [
+        SubstituteSqlVarsTestCase(
+            description="skips dollar-quoted text and positional parameters",
+            sql="SELECT $tag$ it's $$ -- @@status $tag$, price$1$, $1, @@revision",
+            effective_vars={"revision": 7, "status": "ready"},
+            expected_sql="SELECT $tag$ it's $$ -- ready $tag$, price$1$, $1, 7",
+        ),
+        SubstituteSqlVarsTestCase(
+            description="keeps deferred placeholders and commented tokens",
+            sql="-- @@revision\nSELECT @@revision, '@@status', @@@window_start",
+            effective_vars={"revision": 7, "status": "ready"},
+            expected_sql="-- @@revision\nSELECT 7, 'ready', @@@window_start",
+        ),
         SubstituteSqlVarsTestCase(
             description="replaces project var in SQL expression",
             sql="SELECT * FROM orders WHERE region = @@target_region",
@@ -221,49 +228,6 @@ def test_given_missing_var_when_substituting_then_raises(
             effective_vars=test_case.effective_vars,
             context_values=test_case.context_values,
         )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        StaticProjectVarBatchTestCase(
-            description="each model is interpolated; an error waits in its own result",
-            sqls=(
-                "SELECT @@revision, '@@status', @@@window_start",
-                "-- @@revision\nSELECT 1",
-                "SELECT '@@ENV:SQLBUILD_TEST_BATCH_UNSET'",
-                "SELECT $tag$ it's $$ -- @@status $tag$, price$1$, $1, @@revision",
-                "SELECT @@grants",
-            ),
-            effective_vars={"revision": 7, "status": "ready", "grants": {"role": "analyst"}},
-            expected_results=(
-                ("SELECT 7, 'ready', @@@window_start", None),
-                ("-- @@revision\nSELECT 1", None),
-                (
-                    "SELECT '@@ENV:SQLBUILD_TEST_BATCH_UNSET'",
-                    "unknown environment variable '@@ENV:SQLBUILD_TEST_BATCH_UNSET' in "
-                    "'models/test_model.sql'",
-                ),
-                ("SELECT $tag$ it's $$ -- ready $tag$, price$1$, $1, 7", None),
-                (
-                    "SELECT @@grants",
-                    "SQL variable '@@grants' is an object and cannot be interpolated as text: "
-                    '{"role":"analyst"}. Use a macro to consume structured vars.',
-                ),
-            ),
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_model_sqls_when_interpolating_a_batch_then_each_holds_its_sql_or_error(
-    test_case: StaticProjectVarBatchTestCase,
-) -> None:
-    results: tuple[SqlInterpolation, ...] = interpolate_sql_batch(
-        sqls=tuple((sql, _FILE_PATH) for sql in test_case.sqls),
-        effective_vars=test_case.effective_vars,
-    )
-
-    assert [(result.sql, result.error) for result in results] == list(test_case.expected_results)
 
 
 if __name__ == "__main__":

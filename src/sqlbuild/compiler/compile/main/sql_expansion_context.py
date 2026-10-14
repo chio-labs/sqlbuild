@@ -11,9 +11,6 @@ from sqlbuild._native import (
     discover_project_inputs,
     rebind_declaration_scope,
 )
-from sqlbuild.compiler.compile._helpers.render.declarations import (
-    build_model_declaration_indexes,
-)
 from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
 from sqlbuild.compiler.compile.models import (
     ConstantDeclaration,
@@ -68,12 +65,11 @@ def build_sql_expansion_context(
     enums, constants = _native.public_declaration_indexes(effective_discovered_inputs)
     local_declarations: dict[Path, DeclarationResolutionContext] = {}
     for model_file in effective_discovered_inputs.model_files:
-        local_enums: dict[str, EnumDeclaration]
-        local_constants: dict[str, ConstantDeclaration]
-        local_enums, local_constants = build_model_declaration_indexes(model_file=model_file)
         local_declarations[model_file.file_path] = DeclarationResolutionContext(
-            enums=local_enums,
-            constants=local_constants,
+            enums={declaration.name: declaration for declaration in model_file.enum_declarations},
+            constants={
+                declaration.name: declaration for declaration in model_file.constant_declarations
+            },
         )
     return SqlExpansionContext(
         effective_vars=effective_vars,

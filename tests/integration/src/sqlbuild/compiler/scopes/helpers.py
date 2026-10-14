@@ -16,9 +16,9 @@ import sqlbuild._native as _native
 from sqlbuild._native import (
     build_declaration_scope,
     discover_project_inputs,
+    resolve_declaration_context,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile._helpers.render.declarations import resolve_declaration_context
 from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (

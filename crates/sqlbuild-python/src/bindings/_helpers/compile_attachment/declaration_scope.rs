@@ -5,13 +5,13 @@ use pyo3::pyfunction;
 use pyo3::types::PyTuple;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::render::declaration_values::declaration_scope_resolver;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const SCAN_CACHE_MODULE: &str = "sqlbuild.compiler.compile.classes.sql_test_scan_cache";
 const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
-const DECLARATIONS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.declarations";
 const SCOPE_ERRORS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
 const OPEN_INDEX_MODULE: &str = "sqlbuild.compiler.scopes.main._open_native_scope_index";
 const VALIDATE_INDEX_MODULE: &str = "sqlbuild.compiler.scopes.main._validate_scope_index";
@@ -29,15 +29,8 @@ fn scope_build<'py>(
     (index, lookup, scan_cache): (Bound<'py, PyAny>, Bound<'py, PyAny>, Bound<'py, PyAny>),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = discovered.py();
-    let resolver: Bound<'py, PyAny> = call_with(
-        &imported(py, DECLARATIONS_MODULE, "build_declaration_scope_resolver")?,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("scope_index", index.clone()),
-            ("loaded_macros", loaded_macros.clone()),
-            ("lookup", lookup),
-        ],
-    )?;
+    let resolver: Bound<'py, PyAny> =
+        declaration_scope_resolver(discovered, &index, (loaded_macros, &lookup))?;
     call_with(
         &imported(py, COMPILE_MODELS_MODULE, "DeclarationScopeBuild")?,
         &[

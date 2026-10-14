@@ -93,6 +93,7 @@ from sqlbuild.compiler.compile.models import (
     DeclarationScopeBuild,
     DeclarationScopeResolver,
     DynamicColumnContractProof,
+    ExpansionSpan,
     FunctionArgument,
     FunctionReturnColumn,
     InferredColumn,
@@ -320,7 +321,7 @@ from sqlbuild.spec.contracts.types import (
     WarehouseGroup,
 )
 from sqlbuild.sql_values.models import SqlValue
-from sqlbuild.sql_values.types import StateSqlValueType
+from sqlbuild.sql_values.types import CollectionRendering, StateSqlValueType
 
 BUILD_IDENTITY: str
 STAGE_CAPTURE_OMITTED_ATTRIBUTES: dict[str, frozenset[str]]
@@ -2617,12 +2618,6 @@ def parse_schema_columns(
 def column_migration_problem(
     model_name: str, values: dict[str, object], columns: list[tuple[str, str | None]]
 ) -> NativeConfigError | None: ...
-def expand_declaration_references(
-    source: tuple[str, list[tuple[int, str, str | None, int, int]], int | None],
-    context: object,
-    consumer: tuple[object | None, bool, str],
-    renderers: tuple[object, dict[str, object]],
-) -> tuple[str, list[tuple[int, int, int, int]], list[Any]]: ...
 def expand_template_data(
     *,
     value: object,
@@ -2718,23 +2713,6 @@ def resolve_cursor_intrinsics(
     *, sql: str, start_sql: str | None = None, end_sql: str | None = None
 ) -> tuple[str, bool]: ...
 def parse_macro_arguments(text: str, nested: list[tuple[int, int]]) -> tuple[object, ...]: ...
-def scan_sql_declaration_references(
-    sqls: list[str],
-) -> list[tuple[list[tuple[int, str, str | None, int, int]], int | None]]: ...
-def scan_sql_declaration_usages(
-    sqls: list[str],
-) -> list[tuple[list[tuple[int, str, str | None, int, int]], int | None]]: ...
-def interpolate_sql_batch(
-    sqls: list[tuple[str, str]],
-    sources: tuple[
-        Mapping[str, object],
-        Mapping[str, str],
-        Mapping[str, str | None] | None,
-        Callable[..., str],
-    ],
-) -> list[
-    tuple[str | None, list[tuple[int, int, int, int]], list[tuple[str, str]], str | None]
-]: ...
 def scan_macro_call_sites(
     sql: str,
 ) -> tuple[
@@ -2760,6 +2738,43 @@ def fixture_projection_facts(
     sql: str, dialect: str | None, /
 ) -> tuple[list[tuple[str, str]], list[str], list[str]]: ...
 def find_macro_call_names(sql: str, /) -> tuple[str, ...]: ...
+def render_constant_declaration(
+    *,
+    declaration: ConstantDeclaration,
+    value_renderer: TypedSqlValueRenderer,
+    collection_rendering: CollectionRendering,
+    file_path: Path | None = None,
+) -> str: ...
+def render_enum_member_value(*, value: str | int) -> str: ...
+def resolve_declaration_context(
+    *,
+    resolver: DeclarationScopeResolver,
+    file_path: Path,
+    resource: ResourceIdentity | None = None,
+) -> DeclarationResolutionContext: ...
+def substitute_sql_vars_with_spans(
+    *,
+    sql: str,
+    file_path: Path,
+    effective_vars: dict[str, object],
+    context_values: Mapping[str, str | None] | None = None,
+) -> tuple[str, tuple[ExpansionSpan, ...]]: ...
+def expand_authored_sql_with_spans(
+    *,
+    sql: str,
+    file_path: Path,
+    effective_vars: dict[str, object],
+    loaded_macros: dict[str, LoadedMacro],
+    macro_context: MacroContext,
+    value_renderer: TypedSqlValueRenderer,
+    collection_rendering: CollectionRendering,
+    context_values: Mapping[str, str | None] | None = None,
+    declarations: DeclarationResolutionContext | None = None,
+    declaration_resolver: DeclarationScopeResolver | None = None,
+) -> tuple[str, tuple[tuple[ExpansionSpan, ...], ...]]: ...
+def expand_sql_with_spans(
+    *, sql: str, file_path: Path, context: SqlExpansionContext
+) -> tuple[str, tuple[tuple[ExpansionSpan, ...], ...]]: ...
 def expand_sql_macros(
     *,
     sql: str,
