@@ -7,7 +7,7 @@ from contextvars import Token
 from pathlib import Path
 from threading import Event
 
-from sqlbuild._native import run_lint
+from sqlbuild._native import build_lint_expansion_context, run_lint
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledSqlExpansion,
@@ -18,7 +18,6 @@ from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.lint.classes.stop_context import LintStopContext
-from sqlbuild.lint.main.build_expansion_context import build_expansion_context
 from sqlbuild.lint.models import LintConfig, LintRunResult
 from sqlbuild.rule_engine._helpers.engine.custom_dispatch import evaluate_native, start_custom_rules
 from sqlbuild.rule_engine._helpers.run.rules import (
@@ -135,7 +134,7 @@ def _prepare_sql_lint(
 ) -> PreparedSqlLintResult:
     stop_token: Token[Event | None] = LintStopContext.active.set(stop)
     try:
-        context: SqlExpansionContext = build_expansion_context(
+        context: SqlExpansionContext = build_lint_expansion_context(
             project_dir=project_dir,
             discovered_inputs=discovered_inputs,
             static_declaration_scope=static_declaration_scope,

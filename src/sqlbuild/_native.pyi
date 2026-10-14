@@ -224,7 +224,6 @@ from sqlbuild.compiler.planner.types import (
 from sqlbuild.compiler.project_assembly.models import NativeProjectResources
 from sqlbuild.compiler.python_nodes.models import (
     PythonNodeGraph,
-    PythonNodeIdentity,
     PythonSqlRunLifecyclePlan,
     PythonSqlRunSelection,
 )
@@ -318,7 +317,7 @@ from sqlbuild.integrations.dbt.models import (
 )
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from sqlbuild.lint.models import HeaderSpan, LintBody, LintConfig, LintRunResult, LintViolation
-from sqlbuild.lint.types import RelationKeyRow
+from sqlbuild.lint.types import RelationKeyRow, RelationKeys
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.presentation.types import CompletionState
@@ -355,7 +354,7 @@ from sqlbuild.spec.contracts.types import (
     SourceFreshnessValueKind,
     WarehouseGroup,
 )
-from sqlbuild.sql_values.models import SqlValue
+from sqlbuild.sql_values.models import SqlValue, SqlValueLimits
 from sqlbuild.sql_values.types import CollectionRendering, StateSqlValueType
 
 BUILD_IDENTITY: str
@@ -1146,16 +1145,25 @@ class NativeModelLoop:
 def relation_key_row(
     kind: str, name: str, values: dict[str, object], entry: object
 ) -> RelationKeyRow: ...
-def declared_relation_keys(rows: list[RelationKeyRow]) -> dict[str, list[list[str]]]: ...
+def declared_relation_keys(
+    *,
+    model_rows: Iterable[RelationKeyRow],
+    seeds: Iterable[SchemaSeedEntry],
+    sources: Iterable[SourceEntry],
+) -> RelationKeys: ...
+def compiled_relation_keys(project: CompiledProjectView) -> RelationKeys: ...
+def build_lint_expansion_context(
+    *,
+    project_dir: Path,
+    value_renderer: TypedSqlValueRenderer | None = None,
+    discovered_inputs: DiscoveredProjectInputs | None = None,
+    declaration_scope: DeclarationScopeBuild | None = None,
+    static_declaration_scope: DeclarationScopeBuild | None = None,
+) -> SqlExpansionContext: ...
+def write_atomically(*, path: Path, contents: str) -> None: ...
 def build_dag_json(
     *, graph: ProjectGraph, project_name: str, python_graph: PythonNodeGraph | None = None
 ) -> str: ...
-
-class _ManifestFacts(TypedDict):
-    project_name: str
-    adapter_type: str
-    generated_at: str
-    hook_identities: Mapping[str, PythonNodeIdentity]
 
 class NativeManifest:
     def contents(self) -> bytes: ...
@@ -1163,9 +1171,12 @@ class NativeManifest:
 def build_manifest(
     *,
     project: CompiledProjectView,
-    plan_output: PlanOutput | None,
-    graph: NativeProjectGraph,
-    facts: _ManifestFacts,
+    plan_output: PlanOutput | None = None,
+    project_name: str,
+    adapter_type: str,
+    graph: NativeProjectGraph | None = None,
+    upstream_deps: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]] | None = None,
+    downstream_deps: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]] | None = None,
 ) -> NativeManifest: ...
 
 class NativeProjectGraph:
@@ -2624,9 +2635,14 @@ def matching_dynamic_families(
     *, families: tuple[SchemaDynamicColumnFamily, ...], column_name: str
 ) -> tuple[SchemaDynamicColumnFamily, ...]: ...
 def assert_no_unresolved_sql_markers(*, sql: str, context: str) -> None: ...
-def normalize_typed_sql_value(
-    raw_value: object, typing: tuple[str, str | None], limits: tuple[int, int, int], /
-) -> object: ...
+def normalize_sql_value(
+    *,
+    raw_value: object,
+    context: str,
+    explicit_type: str | None = None,
+    limits: SqlValueLimits | None = None,
+) -> SqlValue: ...
+def render_state_sql_literal(*, value: object | None, declared_type: StateSqlValueType) -> str: ...
 def model_header_declarations(
     header: tuple[object | None, object | None], model_name: str, relative_path: Path, /
 ) -> tuple[tuple[object, ...], tuple[object, ...]]: ...
@@ -2709,9 +2725,10 @@ def find_python_string_locations(
     reason: str,
     context: str | None = None,
 ) -> tuple[ManualLocation, ...]: ...
-def resource_identity_suggestion(
-    name: str, private_identity: bool, /
-) -> tuple[str, str] | None: ...
+def validate_resource_identity(
+    *, name: str, kind: str, path: Path, private_identity: bool = False
+) -> None: ...
+def function_node_type(*, return_columns: tuple[object, ...]) -> str: ...
 def load_project_config_file(project_dir: Path, /) -> ProjectConfig: ...
 def load_local_config_file(project_dir: Path, /) -> LocalConfig: ...
 def resolve_config_file_path(project_dir: Path, local: bool, /) -> Path: ...

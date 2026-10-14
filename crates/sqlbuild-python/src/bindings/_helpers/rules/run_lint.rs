@@ -14,8 +14,9 @@ use sqlbuild_core::format_command::main::collect_lint_files::collect_lint_files;
 use sqlbuild_rules::lint_text::main::first_header_only::first_header_only;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
+    KeywordArguments, call_with, imported, keywords,
 };
+use crate::bindings::_helpers::rules::lint_expansion::build_lint_expansion_context;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const EXPANSION_MODULE: &str = "sqlbuild.lint._helpers.expansion";
@@ -167,13 +168,16 @@ fn expansion_context<'py>(
     if !run.config.getattr("native_enabled")?.is_truthy()? {
         return Ok(py.None().into_bound(py));
     }
-    call_with(
-        &imported(py, EXPANSION_MODULE, "build_lint_expansion_context")?,
-        &[
-            ("project_dir", run.project_dir.clone()),
-            ("value_renderer", arguments.value("value_renderer")?),
-            ("discovered_inputs", arguments.value("discovered_inputs")?),
-        ],
+    build_lint_expansion_context(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("project_dir", run.project_dir.clone()),
+                ("value_renderer", arguments.value("value_renderer")?),
+                ("discovered_inputs", arguments.value("discovered_inputs")?),
+            ],
+        )?),
     )
 }
 

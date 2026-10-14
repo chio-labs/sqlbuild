@@ -12,6 +12,7 @@ import sqlbuild._native as native_module
 from sqlbuild._native import (
     build_compile_inputs,
     build_compiled_project,
+    build_manifest,
     discover_project_inputs,
     run_compile_pipeline,
     semantic_shapes,
@@ -26,7 +27,6 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import AuditInput, CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.sql_values.types import CollectionRendering

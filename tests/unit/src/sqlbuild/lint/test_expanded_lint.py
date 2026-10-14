@@ -7,11 +7,16 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import expand_sql_with_spans, map_expanded_offset, run_lint
+import sqlbuild._native as native_module
+from sqlbuild._native import (
+    build_lint_expansion_context,
+    expand_sql_with_spans,
+    map_expanded_offset,
+    run_lint,
+)
 from sqlbuild.compiler.compile.models import MappedOffset, SqlExpansionContext
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.lint._helpers import expansion
-from sqlbuild.lint._helpers.expansion import build_lint_expansion_context, prepare_lint_body
+from sqlbuild.lint._helpers.expansion import prepare_lint_body
 from sqlbuild.lint._helpers.headers import lint_file_role
 from sqlbuild.lint.exceptions import ProjectCompileError
 from sqlbuild.lint.models import LintBody, LintConfig, LintRunResult
@@ -40,7 +45,7 @@ def test_given_lint_context_when_building_then_project_is_discovered_once(
 ) -> None:
     _ = (tmp_path / "sqlbuild_project.toml").write_text(PROJECT_TOML, encoding="utf-8")
     discovery_count: list[int] = [0]
-    discover: Callable[..., DiscoveredProjectInputs] = expansion.discover_project_inputs
+    discover: Callable[..., DiscoveredProjectInputs] = native_module.discover_project_inputs
 
     def counted_discovery(
         *,
@@ -55,7 +60,7 @@ def test_given_lint_context_when_building_then_project_is_discovered_once(
             extract_output_column_locations=extract_output_column_locations,
         )
 
-    monkeypatch.setattr(expansion, "discover_project_inputs", counted_discovery)
+    monkeypatch.setattr(native_module, "discover_project_inputs", counted_discovery)
 
     _ = build_lint_expansion_context(project_dir=tmp_path)
 

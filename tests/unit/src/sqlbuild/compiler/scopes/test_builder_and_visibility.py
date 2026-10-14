@@ -9,6 +9,7 @@ import pytest
 from sqlbuild._native import (
     build_scope_index,
     build_scope_lookup,
+    normalize_sql_value,
     query_scope_target,
     resolve_scope_visibility,
     validate_scope_index,
@@ -51,7 +52,6 @@ from sqlbuild.compiler.scopes.types import (
     VisibilityReason,
 )
 from sqlbuild.spec.contracts.models import SourceEntry
-from sqlbuild.sql_values.main.normalize import normalize_sql_value
 from tests.unit.src.sqlbuild.compiler.scopes._test_types import (
     ExpectedBooleanCase,
     ResourceExpectation,

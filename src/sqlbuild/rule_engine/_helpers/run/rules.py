@@ -8,7 +8,10 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 from sqlbuild._native import (
+    build_lint_expansion_context,
     collect_lint_project_files,
+    compiled_relation_keys,
+    declared_relation_keys,
     encode_sql_rule_findings,
     load_sql_rule_cache,
     lookup_sql_rule_cache,
@@ -44,9 +47,6 @@ from sqlbuild.lint.constants import (
     SAFE_RULE_FIX_CODES,
 )
 from sqlbuild.lint.exceptions import NativeLintError
-from sqlbuild.lint.main.build_expansion_context import build_expansion_context
-from sqlbuild.lint.main.compiled_relation_keys import compiled_relation_keys
-from sqlbuild.lint.main.declared_relation_keys import declared_relation_keys
 from sqlbuild.lint.models import LintConfig, LintRunResult, LintViolation
 from sqlbuild.lint.types import RelationKeys
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue, select_rules
@@ -577,7 +577,7 @@ def _lint_expansion_context(
         if expansion_reuse is not None and expansion_reuse.discovered_inputs is discovered_inputs
         else None
     )
-    return build_expansion_context(
+    return build_lint_expansion_context(
         project_dir=project_dir,
         discovered_inputs=discovered_inputs,
         declaration_scope=declaration_scope,

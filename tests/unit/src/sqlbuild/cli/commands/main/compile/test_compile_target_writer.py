@@ -9,6 +9,7 @@ import pytest
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    build_manifest,
     compiled_model_record,
     project_with,
     write_compile_target,
@@ -25,7 +26,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     DiagnosticPhase,
 )
-from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.planner.main.execution import (
     _plan_compiled_sql_test_artifacts as plan_artifacts_module,
 )

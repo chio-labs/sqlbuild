@@ -14,6 +14,7 @@ from types import ModuleType
 from typing import TYPE_CHECKING, Any, get_type_hints
 
 import sqlbuild._native as _native
+from sqlbuild._native import validate_resource_identity
 from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
 from sqlbuild.compiler.discovery._helpers.filesystem.scoped_paths import (
     project_relative_path,
@@ -41,9 +42,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProviderUsage,
     DiscoveredPythonNodeFunctions,
     DiscoveredTaskFunction,
-)
-from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
-    validate_resource_identity,
 )
 from sqlbuild.provider.exceptions import ProviderInputError
 from sqlbuild.python_nodes.main.read_asset_definition import read_asset_definition

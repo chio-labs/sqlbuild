@@ -14,6 +14,8 @@ const INCREMENTAL_STRATEGY_CONFIG: &str = "incremental_strategy";
 const CURSOR_CONFIG: &str = "cursor";
 const UNIQUE_KEY_CONFIG: &str = "unique_key";
 const UNIQUE_AUDIT_COLUMN_ARGUMENT: &str = "column";
+const RELATION_KIND_SEED: &str = "seed";
+const RELATION_KIND_SOURCE: &str = "source";
 
 /// `(kind, name, materialized, mode, strategy, cursor, unique key, columns, audits)`.
 pub(crate) type RelationKeyRow = (
@@ -143,14 +145,66 @@ fn declared_specs<'py>(entry: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<
     }
 }
 
-/// Keys that prove one row per key, by `kind:name` identity, from relation key rows.
+/// Keys that prove one row per key, by `kind:name` identity, from model rows, seeds and sources.
 #[pyfunction]
-fn declared_relation_keys(
-    py: Python<'_>,
-    rows: Vec<RelationKeyRow>,
-) -> BTreeMap<String, Vec<Vec<String>>> {
+#[pyo3(signature = (*, model_rows, seeds, sources))]
+fn declared_relation_keys<'py>(
+    py: Python<'py>,
+    model_rows: &Bound<'py, PyAny>,
+    seeds: &Bound<'py, PyAny>,
+    sources: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let mut rows: Vec<RelationKeyRow> = Vec::new();
+    for row in model_rows.try_iter()? {
+        rows.push(row?.extract()?);
+    }
+    for (kind, entries) in [(RELATION_KIND_SEED, seeds), (RELATION_KIND_SOURCE, sources)] {
+        for entry in entries.try_iter()? {
+            let entry: Bound<'py, PyAny> = entry?;
+            let name: String = entry.getattr("name")?.extract()?;
+            rows.push(entry_relation_key_row(
+                kind,
+                name,
+                &PyDict::new(py),
+                &entry,
+            )?);
+        }
+    }
     let relations: Vec<DeclaredRelation> = rows.into_iter().map(declared_relation).collect();
-    py.detach(|| derive_keys(&relations))
+    let keys: BTreeMap<String, Vec<Vec<String>>> = py.detach(|| derive_keys(&relations));
+    let found: Bound<'py, PyDict> = PyDict::new(py);
+    for (identity, unique_keys) in keys {
+        let mut tuples: Vec<Bound<'py, PyTuple>> = Vec::with_capacity(unique_keys.len());
+        for key in unique_keys {
+            tuples.push(PyTuple::new(py, key)?);
+        }
+        found.set_item(identity, PyTuple::new(py, tuples)?)?;
+    }
+    Ok(found)
+}
+
+/// Declared keys of a compiled project's models, seeds and sources.
+#[pyfunction]
+fn compiled_relation_keys<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+    let py: Python<'py> = project.py();
+    let mut model_rows: Vec<Bound<'py, PyAny>> = Vec::new();
+    for model in project.getattr("models")?.try_iter()? {
+        model_rows.push(model?.getattr("relation_key_row")?);
+    }
+    let mut seeds: Vec<Bound<'py, PyAny>> = Vec::new();
+    for seed in project.getattr("seeds")?.try_iter()? {
+        seeds.push(seed?.getattr("schema_entry")?);
+    }
+    let mut sources: Vec<Bound<'py, PyAny>> = Vec::new();
+    for source in project.getattr("sources")?.try_iter()? {
+        sources.push(source?.getattr("source_entry")?);
+    }
+    declared_relation_keys(
+        py,
+        PyTuple::new(py, model_rows)?.as_any(),
+        PyTuple::new(py, seeds)?.as_any(),
+        PyTuple::new(py, sources)?.as_any(),
+    )
 }
 
 fn declared_relation(row: RelationKeyRow) -> DeclaredRelation {
@@ -177,5 +231,6 @@ fn declared_relation(row: RelationKeyRow) -> DeclaredRelation {
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(entry_relation_key_row, module)?)?;
-    module.add_function(wrap_pyfunction!(declared_relation_keys, module)?)
+    module.add_function(wrap_pyfunction!(declared_relation_keys, module)?)?;
+    module.add_function(wrap_pyfunction!(compiled_relation_keys, module)?)
 }

@@ -6,8 +6,9 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use pyo3::exceptions::PyOSError;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
+use pyo3::{pyfunction, wrap_pyfunction};
 
 const LINE_FEED: &str = "\n";
 const CARRIAGE_RETURN_LINE_FEED: &str = "\r\n";
@@ -85,6 +86,17 @@ fn write_atomically(path: &Path, contents: &str) -> PyResult<()> {
     let written: std::io::Result<()> = write_replacing(path, &temporary, contents);
     let _ = fs::remove_file(&temporary);
     written.map_err(|error| PyOSError::new_err(format!("{}: {error}", path.display())))
+}
+
+/// `write_atomically(*, path, contents)`: replace a text file atomically, keeping its mode.
+#[pyfunction]
+#[pyo3(name = "write_atomically", signature = (*, path, contents))]
+fn write_file_atomically(path: PathBuf, contents: &str) -> PyResult<()> {
+    write_atomically(&path, contents)
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(write_file_atomically, module)?)
 }
 
 /// The changed files in path order, written in place when `write` is set.

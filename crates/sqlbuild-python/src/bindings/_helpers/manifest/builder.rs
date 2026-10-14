@@ -4,21 +4,25 @@ use pyo3::exceptions::{PyKeyError, PyRecursionError, PyTypeError, PyValueError};
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::PyBytes;
-use pyo3::{FromPyObject, PyRef, pyclass, pyfunction, pymethods, wrap_pyfunction};
+use pyo3::types::{PyBytes, PyDict};
+use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_analysis::graph::models::ProjectGraph;
 use sqlbuild_analysis::manifest::errors::{ManifestEncodeError, ManifestError};
 use sqlbuild_analysis::manifest::main::build_manifest_json::build_manifest_json;
 use sqlbuild_analysis::manifest::models::ManifestInput;
 use sqlbuild_core::json::errors::JsonEmitError;
 
+use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
+use crate::bindings::_helpers::graph::views::native_graph_from_edges;
 use crate::bindings::_helpers::manifest::rows::{
     ProjectRows, plan_input, project_rows, python_hooks,
 };
 
 const FINGERPRINT_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.fingerprints.exceptions";
+const HOOK_IDENTITIES_MODULE: &str = "sqlbuild.compiler.python_nodes.main._hook_identities";
+const DATETIME_MODULE: &str = "datetime";
 
 /// A built manifest: its `manifest.json` bytes, or the error `json.dumps` raised encoding it.
 #[pyclass(module = "sqlbuild._native", frozen)]
@@ -56,36 +60,41 @@ fn python_error(error: ManifestError, py: Python<'_>) -> PyErr {
     }
 }
 
-/// The manifest facts only Python knows: names, the generation stamp and hook identities.
-#[derive(FromPyObject)]
-#[pyo3(from_item_all)]
-pub(crate) struct ManifestFacts<'py> {
-    project_name: String,
-    adapter_type: String,
-    /// `datetime.now(tz=UTC).isoformat()`.
-    generated_at: String,
-    /// `build_hook_identities(project.hook_functions)`.
-    hook_identities: Bound<'py, PyAny>,
-}
-
-/// The manifest of `project` and the optional plan.
+/// The manifest of `project` and the optional plan, over `graph` or `upstream_deps`/`downstream_deps`.
 #[pyfunction]
-#[pyo3(signature = (*, project, plan_output, graph, facts))]
-pub(crate) fn build_manifest(
-    project: &Bound<'_, PyAny>,
-    plan_output: &Bound<'_, PyAny>,
-    graph: PyRef<'_, NativeProjectGraph>,
-    facts: ManifestFacts<'_>,
-) -> PyResult<Py<NativeManifest>> {
+#[pyo3(signature = (**options))]
+pub(crate) fn build_manifest(options: Option<&Bound<'_, PyDict>>) -> PyResult<Py<NativeManifest>> {
+    let request = Request::new("build_manifest", options)?;
+    let py: Python<'_> = request.py();
+    let project: Bound<'_, PyAny> = request.get("project")?;
+    let plan_output: Bound<'_, PyAny> = request
+        .optional("plan_output")?
+        .unwrap_or_else(|| py.None().into_bound(py));
+    let project_name: String = request.get("project_name")?.extract()?;
+    let adapter_type: String = request.get("adapter_type")?.extract()?;
+    let graph: Bound<'_, NativeProjectGraph> = match request.optional("graph")? {
+        Some(graph) if !graph.is_none() => graph.cast_into()?,
+        _ => Bound::new(
+            py,
+            native_graph_from_edges(
+                &request.get("upstream_deps")?,
+                &request.get("downstream_deps")?,
+            )?,
+        )?,
+    };
+    let utc: Bound<'_, PyAny> = py.import(DATETIME_MODULE)?.getattr("UTC")?;
+    let generated_at: String = py
+        .import(DATETIME_MODULE)?
+        .getattr("datetime")?
+        .call_method1("now", (utc,))?
+        .call_method0("isoformat")?
+        .extract()?;
+    let hook_identities: Bound<'_, PyAny> = py
+        .import(HOOK_IDENTITIES_MODULE)?
+        .getattr("build_hook_identities")?
+        .call1((project.getattr("hook_functions")?,))?;
     compiler_guard(|| {
-        let py: Python<'_> = project.py();
-        let ManifestFacts {
-            project_name,
-            adapter_type,
-            generated_at,
-            hook_identities,
-        } = facts;
-        let python_hooks = python_hooks(project, &hook_identities)?;
+        let python_hooks = python_hooks(&project, &hook_identities)?;
         let ProjectRows {
             run_id,
             sql_analysis_dialect,
@@ -95,7 +104,7 @@ pub(crate) fn build_manifest(
             macros,
             macro_declarations,
             sql_hooks,
-        } = project_rows(project)?;
+        } = project_rows(&project)?;
         let input: ManifestInput = ManifestInput {
             project_name,
             adapter_type,
@@ -109,8 +118,9 @@ pub(crate) fn build_manifest(
             macro_declarations,
             sql_hooks,
             python_hooks,
-            plan: plan_input(plan_output)?,
+            plan: plan_input(&plan_output)?,
         };
+        let graph = graph.borrow();
         let graph: &ProjectGraph = graph.graph();
         let contents = py
             .detach(|| build_manifest_json(&input, graph))

@@ -10,7 +10,7 @@ use pyo3::types::{
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_core::models::{SqlLogicalType, SqlValue};
 use sqlbuild_model_config::sql_values::errors::SqlValueFailure;
-use sqlbuild_model_config::sql_values::main::normalize_sql_value::normalize_sql_value;
+use sqlbuild_model_config::sql_values::main::normalize_sql_value::normalize_sql_value as normalized;
 use sqlbuild_model_config::sql_values::models::{RawKey, RawSqlValue, SqlValueLimits};
 
 const MODELS_MODULE: &str = "sqlbuild.sql_values.models";
@@ -191,27 +191,34 @@ pub(crate) fn sql_value_error(py: Python<'_>, failure: SqlValueFailure) -> PyRes
 
 /// `normalize_sql_value`: the canonical `SqlValue` of an authored value.
 #[pyfunction]
-fn normalize_typed_sql_value<'py>(
-    py: Python<'py>,
+#[pyo3(signature = (*, raw_value, context, explicit_type = None, limits = None))]
+fn normalize_sql_value<'py>(
     raw_value: &Bound<'py, PyAny>,
-    typing: (String, Option<String>),
-    limits: (i64, i64, i64),
+    context: &str,
+    explicit_type: Option<&str>,
+    limits: Option<&Bound<'py, PyAny>>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let (context, explicit_type) = typing;
+    let py: Python<'py> = raw_value.py();
     let classes = SqlValueClasses::load(py)?;
     let raw = self::raw_value(raw_value, &classes)?;
-    let (max_depth, max_elements, max_size) = limits;
-    let limits = SqlValueLimits {
-        max_depth,
-        max_elements,
-        max_size,
+    let applied: Bound<'py, PyAny> = match limits {
+        Some(limits) if !limits.is_none() => limits.clone(),
+        _ => py
+            .import(MODELS_MODULE)?
+            .getattr("SqlValueLimits")?
+            .call0()?,
     };
-    match normalize_sql_value(&raw, &context, explicit_type.as_deref(), limits) {
+    let limits = SqlValueLimits {
+        max_depth: applied.getattr("max_depth")?.extract()?,
+        max_elements: applied.getattr("max_elements")?.extract()?,
+        max_size: applied.getattr("max_size")?.extract()?,
+    };
+    match normalized(&raw, context, explicit_type, limits) {
         Ok(value) => sql_value(&value, &classes),
         Err(failure) => Err(sql_value_error(py, failure)?),
     }
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(normalize_typed_sql_value, module)?)
+    module.add_function(wrap_pyfunction!(normalize_sql_value, module)?)
 }

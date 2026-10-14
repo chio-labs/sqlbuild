@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any, cast
 
+from sqlbuild._native import build_manifest
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditRunScope,
@@ -34,7 +35,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSourceFile,
     DiscoveredSqlHookFile,
 )
-from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     ChainStep,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from sqlbuild._native import render_state_sql_literal
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.compiler.source_freshness.constants import (
     COLUMN_DATA_VERSION,
@@ -21,7 +22,6 @@ from sqlbuild.compiler.source_freshness.constants import (
     SOURCE_FRESHNESS_TABLE_NAME,
 )
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
-from sqlbuild.sql_values.main.render_state_literal import render_state_sql_literal
 
 
 def render_insert_source_freshness_records_sql(

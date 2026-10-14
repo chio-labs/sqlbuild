@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from sqlbuild._native import render_state_sql_literal
 from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.adapter.state_sql.main.render_state_table_create_sql import (
     render_state_table_create_sql,
@@ -27,7 +28,6 @@ from sqlbuild.executor.node_results.constants import (
     NODE_RESULTS_TABLE_NAME,
 )
 from sqlbuild.executor.node_results.models import NodeResultQuery, NodeResultRecord
-from sqlbuild.sql_values.main.render_state_literal import render_state_sql_literal
 
 _REQUIRED_NODE_RESULT_COLUMNS: frozenset[str] = frozenset(
     {
