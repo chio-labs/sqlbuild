@@ -12,7 +12,6 @@ pub mod format_phase_line;
 pub mod format_plan_completion;
 pub mod format_plan_text;
 pub mod format_status_cell;
-pub mod format_status_spinner_line;
 pub mod format_summary_footer;
 pub mod format_surface_header;
 pub mod format_tree_connector;

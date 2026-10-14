@@ -32,11 +32,3 @@ pub(super) struct DbtPlanTextTestCase {
     pub(super) max_entries: Option<usize>,
     pub(super) expected_text: &'static str,
 }
-
-pub(super) struct StatusSpinnerLineTestCase {
-    pub(super) description: &'static str,
-    pub(super) message: &'static str,
-    pub(super) columns: usize,
-    pub(super) style: CliStyle,
-    pub(super) expected_line: &'static str,
-}

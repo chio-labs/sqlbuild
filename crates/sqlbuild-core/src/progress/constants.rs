@@ -108,3 +108,5 @@ pub(crate) const DBT_COMMAND: &str = "dbt";
 pub(crate) const DBT_JSON_OPTION: &str = "--json";
 pub(crate) const JSON_FORMAT: &str = "json";
 pub(crate) const CSV_FORMAT: &str = "csv";
+/// What replaces the cut tail of a transient status message.
+pub(crate) const STATUS_ELLIPSIS: &str = "...";

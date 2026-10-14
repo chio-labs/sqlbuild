@@ -5,8 +5,8 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyclass, pymethods};
-use sqlbuild_core::cli_text::main::format_status_spinner_line::format_status_spinner_line;
 use sqlbuild_core::cli_text::models::CliStyle;
+use sqlbuild_core::progress::main::format_status_spinner_line::format_status_spinner_line;
 
 use crate::bindings::_helpers::build_progress::terminal::{
     CLEAR_LINE, HIDE_CURSOR, SHOW_CURSOR, SPINNER_FRAMES, SPINNER_TICK_SECONDS, claim, flush,

@@ -5,6 +5,7 @@ use crate::progress::main::execution_header_text::execution_header_text;
 use crate::progress::main::format_expectation_detail::format_expectation_detail;
 use crate::progress::main::format_expectation_name::format_expectation_name;
 use crate::progress::main::format_inspection_record::format_inspection_record;
+use crate::progress::main::format_status_spinner_line::format_status_spinner_line;
 use crate::progress::main::is_planning_completion_message::is_planning_completion_message;
 use crate::progress::main::machine_output_mode::machine_output_mode;
 use crate::progress::models::{ExpectationStep, InspectionRecord, OutputModeFacts};
@@ -12,7 +13,7 @@ use crate::progress::models::{ExpectationStep, InspectionRecord, OutputModeFacts
 const PLAIN: CliStyle = CliStyle { use_color: false };
 use crate::progress::tests::test_types::{
     CompletionMessageTestCase, ExpectationDetailTestCase, InspectionRecordTestCase,
-    OutputModeTestCase, ProgressLineTestCase,
+    OutputModeTestCase, ProgressLineTestCase, StatusSpinnerLineTestCase,
 };
 
 #[test]
@@ -248,6 +249,47 @@ fn given_parsed_options_when_choosing_output_mode_then_machine_output_is_detecte
         assert_eq!(
             machine_output_mode(&test_case.facts),
             test_case.expected_machine_output,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_status_message_when_rendering_spinner_line_then_fits_terminal() {
+    let test_cases = [
+        StatusSpinnerLineTestCase {
+            description: "short message is kept with a green frame",
+            message: "Compiling project graph...",
+            columns: 80,
+            style: CliStyle { use_color: true },
+            expected_line: "\x1b[32m\u{280b}\x1b[0m Compiling project graph...",
+        },
+        StatusSpinnerLineTestCase {
+            description: "long message is cut below the terminal width",
+            message: "Compiling project graph...",
+            columns: 15,
+            style: CliStyle { use_color: false },
+            expected_line: "\u{280b} Compiling...",
+        },
+        StatusSpinnerLineTestCase {
+            description: "unknown width keeps only the first line",
+            message: "first line\nsecond line",
+            columns: 0,
+            style: CliStyle { use_color: false },
+            expected_line: "\u{280b} first line",
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            format_status_spinner_line(
+                "\u{280b}",
+                test_case.message,
+                test_case.columns,
+                test_case.style
+            ),
+            test_case.expected_line,
             "{}",
             test_case.description
         );

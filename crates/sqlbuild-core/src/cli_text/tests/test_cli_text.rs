@@ -3,7 +3,6 @@ use crate::cli_text::main::format_compile_text::format_compile_text;
 use crate::cli_text::main::format_dbt_interop_plan::format_dbt_interop_plan;
 use crate::cli_text::main::format_plan_completion::format_plan_completion;
 use crate::cli_text::main::format_plan_text::format_plan_text;
-use crate::cli_text::main::format_status_spinner_line::format_status_spinner_line;
 use crate::cli_text::main::semantic_coverage_notice::semantic_coverage_notice;
 use crate::cli_text::models::{
     CliStyle, CompileTextReport, DbtInteropPlanText, DbtLsNodeText, DiagnosticText, DisplayLimit,
@@ -12,7 +11,7 @@ use crate::cli_text::models::{
 use crate::cli_text::tests::helpers::{diagnostic, location, plan_report, table_model};
 use crate::cli_text::tests::test_types::{
     CompileTextTestCase, DbtPlanTextTestCase, DiagnosticsTextTestCase, NoticeTestCase,
-    PlanTextTestCase, StatusSpinnerLineTestCase,
+    PlanTextTestCase,
 };
 
 /// Expectations recorded from the retired Python formatter.
@@ -228,47 +227,6 @@ fn given_dbt_interop_plan_when_formatting_then_matches_python_text() {
         assert_eq!(
             format_dbt_interop_plan(&test_case.plan, None, (&display, false)),
             test_case.expected_text,
-            "{}",
-            test_case.description
-        );
-    }
-}
-
-#[test]
-fn given_status_message_when_rendering_spinner_line_then_fits_terminal() {
-    let test_cases = [
-        StatusSpinnerLineTestCase {
-            description: "short message is kept with a green frame",
-            message: "Compiling project graph...",
-            columns: 80,
-            style: CliStyle { use_color: true },
-            expected_line: "\x1b[32m\u{280b}\x1b[0m Compiling project graph...",
-        },
-        StatusSpinnerLineTestCase {
-            description: "long message is cut below the terminal width",
-            message: "Compiling project graph...",
-            columns: 15,
-            style: CliStyle { use_color: false },
-            expected_line: "\u{280b} Compiling...",
-        },
-        StatusSpinnerLineTestCase {
-            description: "unknown width keeps only the first line",
-            message: "first line\nsecond line",
-            columns: 0,
-            style: CliStyle { use_color: false },
-            expected_line: "\u{280b} first line",
-        },
-    ];
-
-    for test_case in test_cases {
-        assert_eq!(
-            format_status_spinner_line(
-                "\u{280b}",
-                test_case.message,
-                test_case.columns,
-                test_case.style
-            ),
-            test_case.expected_line,
             "{}",
             test_case.description
         );

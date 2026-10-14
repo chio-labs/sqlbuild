@@ -1,7 +1,7 @@
 //! The live line of a transient status: a spinner frame and the current message.
 
-use crate::cli_text::constants::ELLIPSIS;
 use crate::cli_text::models::CliStyle;
+use crate::progress::constants::STATUS_ELLIPSIS;
 
 /// The frame and the first message line, cut to fit `columns` (`0` leaves it uncut).
 #[must_use]
@@ -17,9 +17,9 @@ pub fn format_status_spinner_line(
         text.to_owned()
     } else {
         format!(
-            "{}{ELLIPSIS}",
+            "{}{STATUS_ELLIPSIS}",
             text.chars()
-                .take(width.saturating_sub(ELLIPSIS.len()))
+                .take(width.saturating_sub(STATUS_ELLIPSIS.len()))
                 .collect::<String>()
         )
     };

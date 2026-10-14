@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import io
+import re
 from collections.abc import Callable
 from types import MappingProxyType
 from typing import cast
 
 import pytest
+
+from sqlbuild._native import TransientStatusReporter
 
 
 def _delete_no_progress_env(monkeypatch: pytest.MonkeyPatch, env_value: str | None) -> None:
@@ -53,3 +56,24 @@ class RecordingSpinnerOwner:
 
     def redraw_transient_line(self) -> None:
         self._events.append("redraw")
+
+
+def drive_status_reporter(reporter: TransientStatusReporter) -> None:
+    """Run one start, update, completion, preflight and error sequence."""
+
+    reporter.start("Discovering project...")
+    reporter.update("Compiling project graph...")
+    reporter.complete(message="Compiled project graph. (0.1s)", blank_line_after=True)
+    reporter.report_preflight_progress("Resolving tests...")
+    reporter.report_preflight_progress("Prepared 2 tests")
+    reporter.start("Formatting SQL...")
+    reporter.error("Formatting SQL  ERROR")
+    reporter.complete_styled(message="styled")
+    reporter.close()
+
+
+def persistent_lines(text: str) -> tuple[str, ...]:
+    """The lines left after transient status lines are erased."""
+
+    without_cursor: str = re.sub(r"\x1b\[\?25[hl]", "", text)
+    return tuple(line.rsplit("\x1b[K", 1)[-1] for line in without_cursor.split("\n"))
