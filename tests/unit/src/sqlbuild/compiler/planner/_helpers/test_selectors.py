@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import build_downstream_deps, project_lineage_views
+from sqlbuild._native import (
+    build_downstream_deps,
+    parse_project_selector,
+    project_lineage_views,
+    resolve_project_selectors,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.planner._helpers.graph.selectors import (
-    parse_selector,
-    resolve_selectors,
-)
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
 from sqlbuild.compiler.planner.types import SelectorKind
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
@@ -135,7 +136,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import build_test
 def test_given_raw_selector_when_parsing_then_returns_expected_result(
     test_case: ParseSelectorTestCase,
 ) -> None:
-    result: ParsedSelector | PathSelector = parse_selector(test_case.raw)
+    result: ParsedSelector | PathSelector = parse_project_selector(test_case.raw)
 
     assert result == test_case.expected_result
 
@@ -180,7 +181,7 @@ def test_given_invalid_selector_when_parsing_then_raises(
     test_case: ParseSelectorErrorTestCase,
 ) -> None:
     with pytest.raises(test_case.expected_error_type):
-        parse_selector(test_case.raw)
+        parse_project_selector(test_case.raw)
 
 
 @pytest.mark.parametrize(
@@ -331,12 +332,14 @@ def test_given_selectors_when_resolving_then_returns_expected_names(
     upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = diamond_graph[1]
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = diamond_graph[2]
 
-    result: frozenset[CompiledObjectKey] = resolve_selectors(
+    result: frozenset[CompiledObjectKey] = resolve_project_selectors(
         select=test_case.select,
         exclude=test_case.exclude,
         all_keys=all_keys,
-        upstream=upstream,
-        downstream=downstream,
+        upstream_deps=upstream,
+        downstream_deps=downstream,
+        tag_index={},
+        path_index={},
     )
     result_names: frozenset[str] = frozenset(key.name for key in result)
 
@@ -389,12 +392,14 @@ def test_given_model_table_function_dependency_when_selecting_then_graph_expands
         key.name: key for key in (base_key, function_key, consumer_key)
     }
 
-    selected: frozenset[CompiledObjectKey] = resolve_selectors(
+    selected: frozenset[CompiledObjectKey] = resolve_project_selectors(
         select=test_case.select,
         exclude=test_case.exclude,
         all_keys=all_keys,
-        upstream=upstream,
-        downstream=downstream,
+        upstream_deps=upstream,
+        downstream_deps=downstream,
+        tag_index={},
+        path_index={},
     )
 
     assert frozenset(key.name for key in selected) == test_case.expected_names
@@ -431,12 +436,14 @@ def test_given_unknown_name_when_resolving_then_raises(
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = diamond_graph[2]
 
     with pytest.raises(test_case.expected_error_type):
-        resolve_selectors(
+        resolve_project_selectors(
             select=test_case.select,
             exclude=test_case.exclude,
             all_keys=all_keys,
-            upstream=upstream,
-            downstream=downstream,
+            upstream_deps=upstream,
+            downstream_deps=downstream,
+            tag_index={},
+            path_index={},
         )
 
 
@@ -483,13 +490,14 @@ def test_given_tag_selectors_when_resolving_then_returns_expected_names(
     upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = diamond_graph[1]
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = diamond_graph[2]
 
-    result: frozenset[CompiledObjectKey] = resolve_selectors(
+    result: frozenset[CompiledObjectKey] = resolve_project_selectors(
         select=test_case.select,
         exclude=test_case.exclude,
         all_keys=all_keys,
-        upstream=upstream,
-        downstream=downstream,
+        upstream_deps=upstream,
+        downstream_deps=downstream,
         tag_index=diamond_tag_index,
+        path_index={},
     )
     result_names: frozenset[str] = frozenset(key.name for key in result)
 
@@ -603,12 +611,13 @@ def test_given_path_selectors_when_resolving_then_returns_expected_names(
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = path_graph[2]
     path_idx: dict[CompiledObjectKey, str] = path_graph[3]
 
-    result: frozenset[CompiledObjectKey] = resolve_selectors(
+    result: frozenset[CompiledObjectKey] = resolve_project_selectors(
         select=test_case.select,
         exclude=test_case.exclude,
         all_keys=all_keys,
-        upstream=upstream,
-        downstream=downstream,
+        upstream_deps=upstream,
+        downstream_deps=downstream,
+        tag_index={},
         path_index=path_idx,
     )
     result_names: frozenset[str] = frozenset(key.name for key in result)
@@ -658,12 +667,13 @@ def test_given_invalid_path_selector_when_resolving_then_raises_with_message(
     path_idx: dict[CompiledObjectKey, str] = path_graph[3]
 
     with pytest.raises(test_case.expected_error_type, match=test_case.expected_error_fragment):
-        resolve_selectors(
+        resolve_project_selectors(
             select=test_case.select,
             exclude=test_case.exclude,
             all_keys=all_keys,
-            upstream=upstream,
-            downstream=downstream,
+            upstream_deps=upstream,
+            downstream_deps=downstream,
+            tag_index={},
             path_index=path_idx,
         )
 

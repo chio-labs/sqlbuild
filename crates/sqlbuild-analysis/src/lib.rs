@@ -21,6 +21,7 @@ pub mod lineage_graph;
 pub mod manifest;
 pub mod planner_changes;
 pub mod planner_identity;
+pub mod planner_selection;
 pub mod planner_strategy;
 pub mod python_plan;
 pub mod python_selection;

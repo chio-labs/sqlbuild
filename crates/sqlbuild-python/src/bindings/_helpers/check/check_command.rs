@@ -25,12 +25,11 @@ const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
 const INVOCATION_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.command_invocation";
 const CHECK_CORE_MODULE: &str = "sqlbuild.cli.commands._helpers.check.core";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild.cli.commands._helpers.planning.external_refs";
-const REJECT_UNIT_TESTS_MODULE: &str =
-    "sqlbuild.compiler.pipeline.main._reject_unit_test_selectors";
+const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
 const STATIC_COMMAND_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const RELATION_PLAN_MODULE: &str = "sqlbuild.compiler.planner.main.commands._relation_plan";
-const SELECTOR_PARSE_MODULE: &str = "sqlbuild.compiler.planner.main.selection.selector_parse";
+const SELECTOR_PARSE_MODULE: &str = "sqlbuild._native";
 const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
 const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";

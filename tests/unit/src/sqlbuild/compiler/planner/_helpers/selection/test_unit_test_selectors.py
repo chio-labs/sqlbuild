@@ -4,21 +4,19 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.planner._helpers.selection.unit_test_selectors import (
-    split_unit_test_selectors,
-)
+from sqlbuild._native import split_project_unit_test_selectors
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.models import (
-    SqlTestSelection,
-    UnitTestSelectorNames,
-    UnitTestSelectorSplit,
-)
+from sqlbuild.compiler.planner.models import SqlTestSelection, UnitTestSelectorSplit
 from tests.unit.src.sqlbuild.compiler.planner._helpers.selection._test_types import (
     UnitTestSelectorErrorTestCase,
     UnitTestSelectorSplitTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.planner._helpers.selection.helpers import (
+    build_selector_discovered_inputs,
+)
 
-_NAMES: UnitTestSelectorNames = UnitTestSelectorNames(
+_DISCOVERED: DiscoveredProjectInputs = build_selector_discovered_inputs(
     tests=frozenset({"order_status", "order_totals_check", "customer_status"}),
     resources=frozenset({"orders", "order_totals", "customers", "raw_orders"}),
 )
@@ -93,10 +91,10 @@ _NAMES: UnitTestSelectorNames = UnitTestSelectorNames(
 def test_given_selectors_when_splitting_unit_tests_then_tests_and_resources_separate(
     test_case: UnitTestSelectorSplitTestCase,
 ) -> None:
-    split: UnitTestSelectorSplit = split_unit_test_selectors(
+    split: UnitTestSelectorSplit = split_project_unit_test_selectors(
         select=test_case.select,
         exclude=test_case.exclude,
-        names=_NAMES,
+        discovered_inputs=_DISCOVERED,
         accepts_unit_tests=True,
     )
 
@@ -183,10 +181,10 @@ def test_given_invalid_unit_test_selectors_when_splitting_then_it_raises_clear_e
     test_case: UnitTestSelectorErrorTestCase,
 ) -> None:
     with pytest.raises(PlannerInputError) as raised:
-        split_unit_test_selectors(
+        split_project_unit_test_selectors(
             select=test_case.select,
             exclude=(),
-            names=_NAMES,
+            discovered_inputs=_DISCOVERED,
             accepts_unit_tests=test_case.accepts_unit_tests,
         )
 

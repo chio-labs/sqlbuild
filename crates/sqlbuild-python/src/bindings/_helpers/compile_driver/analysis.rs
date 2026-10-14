@@ -13,7 +13,7 @@ use crate::bindings::_helpers::rules::results::rules_progress;
 use crate::bindings::_helpers::rules::rules_config::load_rules_config;
 
 const DISCOVER_MODULE: &str = "sqlbuild._native";
-const REJECT_SELECTORS_MODULE: &str = "sqlbuild.compiler.pipeline.main._reject_unit_test_selectors";
+const REJECT_SELECTORS_MODULE: &str = "sqlbuild._native";
 const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
@@ -26,7 +26,7 @@ const FAST_COLUMN_LINEAGE: &str = "FAST";
 
 const CONTRACTS_MODULE: &str = "sqlbuild._native";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.compiler.contracts.models";
-const SELECTION_MODULE: &str = "sqlbuild.compiler.pipeline.main._project_graph_selection";
+const SELECTION_MODULE: &str = "sqlbuild._native";
 const RULE_THREADS_MODULE: &str = "sqlbuild.rule_engine._helpers.run.rule_threads";
 const RULE_MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
 const RULE_CONSTANTS_MODULE: &str = "sqlbuild.rule_engine.constants";

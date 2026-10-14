@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import resolve_python_node_selection
-from sqlbuild.compiler.planner.main.selection.selector_parse import parse_project_selector
+from sqlbuild._native import parse_project_selector, resolve_python_node_selection
 from sqlbuild.compiler.planner.models import ParsedSelector
 from sqlbuild.compiler.planner.types import SelectorKind
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph

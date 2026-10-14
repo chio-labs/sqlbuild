@@ -26,10 +26,8 @@ use crate::bindings::_helpers::dbt_interop::manifest::resolve_sqlbuild_model_dbt
 
 const DBT_MODELS: &str = "sqlbuild.integrations.dbt.models";
 const DBT_EXCEPTIONS: &str = "sqlbuild.integrations.dbt.exceptions";
-const SELECTOR_EXPANSION_MODULE: &str =
-    "sqlbuild.compiler.planner.main.selection.selector_expansion";
-const MODEL_SELECTORS_MODULE: &str =
-    "sqlbuild.compiler.planner.main.selection.sqlbuild_model_selectors";
+const SELECTOR_EXPANSION_MODULE: &str = "sqlbuild._native";
+const MODEL_SELECTORS_MODULE: &str = "sqlbuild._native";
 const MODEL_RESOURCE_TYPE: &str = "model";
 const SELECTION_OPTIONS: (&[&str], &[&str]) = (
     &["project", "graph", "select"],

@@ -10,8 +10,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS_MODULE: &str = "sqlbuild.compiler.pipeline.models";
 const PLANNER_MODELS_MODULE: &str = "sqlbuild.compiler.planner.models";
-const SPLIT_SELECTORS_MODULE: &str =
-    "sqlbuild.compiler.planner.main.selection._split_unit_test_selectors";
+const SPLIT_SELECTORS_MODULE: &str = "sqlbuild._native";
 const PLANNER_SCOPES_MODULE: &str =
     "sqlbuild.compiler.planner.main.selection._resolve_planner_scopes";
 const STATIC_SCOPE_MODULE: &str = "sqlbuild.compiler.planner.main.commands._scope";

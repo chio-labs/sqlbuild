@@ -9,6 +9,7 @@ from sqlbuild._native import (
     build_downstream_deps,
     build_execution_upstream_deps,
     get_materialization_type,
+    resolve_graph_selection,
     topologically_order_keys,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -22,7 +23,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledSourceView,
 )
-from sqlbuild.compiler.planner._helpers.graph.selectors import resolve_graph_selectors
 from sqlbuild.compiler.planner._helpers.resolve.refs import (
     build_function_locations,
     build_model_locations,
@@ -65,7 +65,7 @@ def build_clone_plan_output(
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_downstream_deps(
         upstream_deps
     )
-    selected_keys: frozenset[CompiledObjectKey] = resolve_graph_selectors(
+    selected_keys: frozenset[CompiledObjectKey] = resolve_graph_selection(
         graph=project.lineage_graph, select=select, exclude=exclude
     )
     return PlanOutput(

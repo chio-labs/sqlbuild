@@ -7,16 +7,14 @@ from sqlbuild._native import (
     build_execution_edge_origins,
     build_execution_upstream_deps,
     lineage_graph_names,
+    parse_project_selector,
+    resolve_graph_selection,
     topologically_order_keys,
 )
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 from sqlbuild.compiler.planner._helpers.graph.auto_load import managed_source_upstream_keys
 from sqlbuild.compiler.planner._helpers.graph.loader_dag import expand_selected_loader_dependencies
-from sqlbuild.compiler.planner._helpers.graph.selectors import (
-    parse_selector,
-    resolve_graph_selectors,
-)
 from sqlbuild.compiler.planner.models import (
     ParsedSelector,
     PathSelector,
@@ -46,7 +44,7 @@ def build_planner_scope(
     resolved_selected_keys: frozenset[CompiledObjectKey] = (
         selected_keys
         if selected_keys is not None
-        else resolve_graph_selectors(graph=project.lineage_graph, select=select, exclude=exclude)
+        else resolve_graph_selection(graph=project.lineage_graph, select=select, exclude=exclude)
     )
     executable_dependency_source_keys: frozenset[CompiledObjectKey] = (
         _upstream_source_selector_keys(
@@ -105,7 +103,7 @@ def _upstream_source_selector_keys(
         for token in raw_select.split():
             part: str
             for part in token.split(","):
-                parsed: ParsedSelector | PathSelector = parse_selector(part)
+                parsed: ParsedSelector | PathSelector = parse_project_selector(part)
                 if isinstance(parsed, PathSelector) or not parsed.upstream:
                     continue
                 if parsed.kind not in {SelectorKind.NAME, SelectorKind.SOURCE}:

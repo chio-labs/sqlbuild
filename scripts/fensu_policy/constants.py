@@ -46,9 +46,6 @@ ALLOWED_METADATA_LOOP_PATHS: frozenset[str] = frozenset(
         "src/sqlbuild/integrations/dbt/_helpers/planning/model_planning.py",
     }
 )
-ALLOWED_SELECTOR_PARSE_PATH: str = (
-    "src/sqlbuild/compiler/planner/main/selection/selector_expansion.py"
-)
 CLIENT_STYLE_PREFIXES: frozenset[tuple[str, ...]] = frozenset(
     {("src", "sqlbuild", "adapters"), ("src", "sqlbuild", "integrations")}
 )

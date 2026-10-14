@@ -195,6 +195,7 @@ from sqlbuild.compiler.pipeline.models import (
 from sqlbuild.compiler.planner.classes.migration_state_inspection import (
     MigrationStateInspection,
 )
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     ChangeDetectionResult,
@@ -205,6 +206,8 @@ from sqlbuild.compiler.planner.models import (
     MaximumStartSafetyEvidence,
     MissingUpstream,
     ModelPlanEntry,
+    ParsedSelector,
+    PathSelector,
     PlannerChangeResults,
     PlannerResolvedActions,
     PlannerRuntime,
@@ -216,7 +219,9 @@ from sqlbuild.compiler.planner.models import (
     SchemaFinding,
     SelectionStalenessGraph,
     SelectionStalenessWarning,
+    SelectorExpansion,
     SqlTestPlanEntry,
+    UnitTestSelectorSplit,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import (
@@ -1221,10 +1226,68 @@ class NativeProjectGraph:
         self, selected: list[_GraphKey], include: tuple[bool, bool, bool]
     ) -> list[_GraphKey]: ...
 
-def parse_project_selector(
-    raw: str,
-) -> tuple[tuple[str, str, str, bool, bool] | None, _SelectorFailure | None]: ...
-def project_selector_name_help(value: str, candidates: list[str]) -> str | None: ...
+def parse_project_selector(raw: str) -> ParsedSelector | PathSelector: ...
+def resolve_graph_selection(
+    *, graph: NativeProjectGraph, select: Sequence[str], exclude: Sequence[str]
+) -> frozenset[CompiledObjectKey]: ...
+def select_project_graph(
+    *, graph: ProjectGraph, select: Sequence[str], exclude: Sequence[str]
+) -> frozenset[CompiledObjectKey]: ...
+def resolve_project_selectors(
+    *,
+    select: Sequence[str],
+    exclude: Sequence[str],
+    all_keys: Mapping[str, CompiledObjectKey],
+    upstream_deps: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    downstream_deps: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    tag_index: Mapping[str, Iterable[CompiledObjectKey]],
+    path_index: Mapping[CompiledObjectKey, str],
+) -> frozenset[CompiledObjectKey]: ...
+def resolve_project_selector_tokens(
+    *,
+    selectors: Sequence[str],
+    all_keys: Mapping[str, CompiledObjectKey],
+    upstream_deps: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    downstream_deps: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    tag_index: Mapping[str, Iterable[CompiledObjectKey]],
+    path_index: Mapping[CompiledObjectKey, str],
+) -> frozenset[CompiledObjectKey]: ...
+def match_project_selector(
+    *,
+    parsed: ParsedSelector,
+    all_keys: Mapping[str, CompiledObjectKey],
+    tag_index: Mapping[str, Iterable[CompiledObjectKey]],
+    path_index: Mapping[CompiledObjectKey, str],
+) -> frozenset[CompiledObjectKey]: ...
+def expand_project_upstream_keys(
+    *,
+    key: CompiledObjectKey,
+    upstream_deps: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+) -> frozenset[CompiledObjectKey]: ...
+def unit_test_selector_error(*, selector: str) -> PlannerInputError: ...
+def split_project_unit_test_selectors(
+    *,
+    select: Sequence[str],
+    exclude: Sequence[str],
+    discovered_inputs: DiscoveredProjectInputs,
+    accepts_unit_tests: bool,
+) -> UnitTestSelectorSplit: ...
+def split_unit_test_selectors(
+    *,
+    select: Sequence[str],
+    exclude: Sequence[str],
+    discovered_inputs: DiscoveredProjectInputs,
+) -> UnitTestSelectorSplit: ...
+def reject_unit_test_selectors(
+    *,
+    select: Sequence[str],
+    exclude: Sequence[str],
+    discovered_inputs: DiscoveredProjectInputs,
+) -> UnitTestSelectorSplit: ...
+def split_selector_expansion(raw: str) -> SelectorExpansion: ...
+def resolve_sqlbuild_model_selector_names(
+    *, project: CompiledProjectView, term: str
+) -> tuple[tuple[str, ...], str | None]: ...
 
 class NativeReuseAttempt:
     def outcome(self) -> str: ...

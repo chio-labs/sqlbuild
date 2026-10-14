@@ -153,8 +153,8 @@ def test_given_dbt_code_when_checking_graph_projection_then_matches_contract(
             expected_fault_count=2,
         ),
         CustomRuleTestCase(
-            description="central selector parsing passes",
-            path="src/sqlbuild/compiler/planner/main/selection/selector_expansion.py",
+            description="selector parsing outside the planner and dbt passes",
+            path="src/sqlbuild/cli/commands/_helpers/selection.py",
             source="result = raw.startswith('+'), raw.lstrip('+')\n",
             expected_fault_count=0,
         ),
