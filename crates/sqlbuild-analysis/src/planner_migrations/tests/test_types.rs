@@ -31,3 +31,10 @@ pub(super) struct ColumnDecisionTestCase {
     pub still_produced: bool,
     pub expected_decision: &'static str,
 }
+pub(super) struct ModelDecisionTestCase {
+    pub description: &'static str,
+    pub destination_exists: bool,
+    pub history: (bool, bool, bool),
+    pub force: bool,
+    pub expected_decision: &'static str,
+}

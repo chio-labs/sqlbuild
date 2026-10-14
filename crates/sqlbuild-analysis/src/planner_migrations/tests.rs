@@ -6,5 +6,7 @@ mod test_column_decision;
 mod test_column_renames;
 #[path = "tests/test_decisions.rs"]
 mod test_decisions;
+#[path = "tests/test_model_decision.rs"]
+mod test_model_decision;
 #[path = "tests/test_types.rs"]
 mod test_types;

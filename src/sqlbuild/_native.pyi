@@ -220,6 +220,8 @@ from sqlbuild.compiler.planner.models import (
     MigrationCompatibilityResult,
     MissingUpstream,
     ModelCursorSnapshot,
+    ModelMigrationPlanEntry,
+    ModelMigrationPlanning,
     ModelMigrationRequest,
     ModelPlanContext,
     ModelPlanEntry,
@@ -4577,6 +4579,26 @@ def migration_destination_fingerprints(
 ) -> dict[str, tuple[str, ...]]: ...
 def stored_migration_fingerprint(fingerprint: Fingerprint) -> str | None: ...
 def declared_column_aliases(model: CompiledModelView) -> tuple[tuple[str, str], ...]: ...
+def manual_migration_requests(*, scope: PlannerScope) -> tuple[ModelMigrationRequest, ...]: ...
+def decide_model_migration(
+    *,
+    runtime: PlannerRuntime,
+    request: ModelMigrationRequest,
+    origin: CompiledRelationLocation,
+    origin_model: str | None,
+    snapshot: WarehouseSnapshot,
+    state: MigrationStateInspection,
+    snapshots_config: SnapshotsConfig,
+) -> tuple[ModelMigrationPlanEntry, Fingerprint | None, bool]: ...
+def plan_model_migrations(
+    *,
+    runtime: PlannerRuntime,
+    scope: PlannerScope,
+    snapshot: WarehouseSnapshot,
+    overrides: PlannerOverrides,
+    deferral: DeferralInputs,
+    fingerprints: MigrationFingerprintCache,
+) -> ModelMigrationPlanning: ...
 def plan_column_migrations(
     *,
     runtime: PlannerRuntime,

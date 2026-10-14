@@ -6,6 +6,8 @@ pub mod identical_renames;
 pub mod match_migrations;
 pub mod migration_fingerprint;
 pub mod migration_ref_names;
+pub mod model_decision;
+pub mod model_warning;
 pub mod old_name_claim_message;
 pub mod old_name_schemas;
 pub mod old_name_skip_reason;

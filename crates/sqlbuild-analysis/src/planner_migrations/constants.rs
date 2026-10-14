@@ -46,3 +46,6 @@ pub(crate) const COLUMN_ADDED: &str = "column_added";
 pub(crate) const COLUMN_TYPE_CHANGED: &str = "column_type_changed";
 pub(crate) const POLICY_DENY: &str = "deny";
 pub(crate) const POLICY_FAIL: &str = "fail";
+pub(crate) const MODEL_DONE: &str = "done";
+pub(crate) const MODEL_RENAMED: &str = "renamed";
+pub(crate) const MODEL_CONFLICT: &str = "conflict";

@@ -82,3 +82,21 @@ pub struct ColumnWarning<'a> {
     pub missing_outcome: &'a str,
     pub message: &'a str,
 }
+/// Display facts and ordered gates for one model migration diagnostic.
+#[derive(Debug)]
+pub struct ModelWarning<'a> {
+    pub name: &'a str,
+    pub origin: &'a str,
+    pub destination: &'a str,
+    pub decision: &'a str,
+    pub manual: bool,
+    pub completed: Option<&'a str>,
+    pub target: &'a str,
+    pub hidden: bool,
+    pub missing: bool,
+    pub deny: bool,
+    pub blocked: bool,
+    pub remedy: &'a str,
+    pub outcome: &'a str,
+    pub findings: &'a str,
+}
