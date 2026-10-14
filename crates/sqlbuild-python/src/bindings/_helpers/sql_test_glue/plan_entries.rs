@@ -150,7 +150,7 @@ pub(super) fn expected_diagnostics(
         let message = call_with(
             &imported(
                 py,
-                "sqlbuild.executor.testing.main.missing_expected_columns",
+                "sqlbuild.executor.testing.main._missing_expected_columns",
                 "describe_missing_expected_columns",
             )?,
             &[
