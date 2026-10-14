@@ -26,9 +26,11 @@ from scripts.planner_differential.constants import (
     MUTATION_DECLARE_COLUMN,
     MUTATION_DROP_RELATION,
     MUTATION_EDIT_QUERY,
+    MUTATION_MATERIALIZATION,
     MUTATION_RENAME_COLUMN,
     MUTATION_RENAME_MODEL,
     MUTATION_SOURCE_GROWTH,
+    MUTATION_TAGS,
     RENAMED_SUFFIX,
     SOURCE_GROWTH_INTERVAL,
 )
@@ -41,6 +43,16 @@ from scripts.planner_differential.models import (
 )
 
 _TAGS_PATTERN: re.Pattern[str] = re.compile(r"^(\s*tags\s*\[)", re.MULTILINE)
+_SCHEMA_CHANGE_KEY: str = "on_schema_change"
+_SCHEMA_CHANGE_PATTERN: re.Pattern[str] = re.compile(
+    rf"^(\s*{_SCHEMA_CHANGE_KEY}\s+)(\w+)", re.MULTILINE
+)
+_APPEND_NEW_COLUMNS: str = "append_new_columns"
+_SCHEMA_CHANGE_TOGGLE: dict[str, str] = {
+    _APPEND_NEW_COLUMNS: "sync_all_columns",
+    "sync_all_columns": _APPEND_NEW_COLUMNS,
+}
+_MATERIALIZED_PATTERN: re.Pattern[str] = re.compile(r"^(\s*materialized\s+)\w+", re.MULTILINE)
 _COLUMNS_PATTERN: re.Pattern[str] = re.compile(r"^(\s*columns\s*\()", re.MULTILINE)
 _EDIT_ALIAS: str = "planner_differential_edit"
 _TAG: str = "planner_differential"
@@ -68,7 +80,9 @@ def apply_mutation(*, name: str, context: StepContext, target: ModelFacts) -> Mu
 
     mutations: dict[str, Callable[..., MutationResult]] = {
         MUTATION_EDIT_QUERY: _edit_query,
+        MUTATION_TAGS: _tags,
         MUTATION_CONFIG: _config,
+        MUTATION_MATERIALIZATION: _materialization,
         MUTATION_DECLARE_COLUMN: _declare_column,
         MUTATION_RENAME_COLUMN: _rename_column,
         MUTATION_ADD_MODEL: _add_model,
@@ -90,12 +104,44 @@ def _edit_query(*, context: StepContext, target: ModelFacts) -> MutationResult:
     )
 
 
-def _config(*, context: StepContext, target: ModelFacts) -> MutationResult:
+def _tags(*, context: StepContext, target: ModelFacts) -> MutationResult:
     def rewrite(model_file: ModelFile) -> ModelFile:
         header: str = (
             _TAGS_PATTERN.sub(rf"\g<1>{_TAG}, ", model_file.header, count=1)
             if _TAGS_PATTERN.search(model_file.header)
             else add_header_property(header=model_file.header, line=f"tags [{_TAG}],")
+        )
+        return ModelFile(header=header, query=model_file.query)
+
+    return _rewrite_model(context=context, target=target, rewrite=rewrite)
+
+
+def _config(*, context: StepContext, target: ModelFacts) -> MutationResult:
+    def rewrite(model_file: ModelFile) -> ModelFile:
+        found: re.Match[str] | None = _SCHEMA_CHANGE_PATTERN.search(model_file.header)
+        value: str = (
+            _SCHEMA_CHANGE_TOGGLE.get(found.group(2), _APPEND_NEW_COLUMNS)
+            if found is not None
+            else _APPEND_NEW_COLUMNS
+        )
+        header: str = (
+            _SCHEMA_CHANGE_PATTERN.sub(rf"\g<1>{value}", model_file.header, count=1)
+            if found is not None
+            else add_header_property(
+                header=model_file.header, line=f"{_SCHEMA_CHANGE_KEY} {value},"
+            )
+        )
+        return ModelFile(header=header, query=model_file.query)
+
+    return _rewrite_model(context=context, target=target, rewrite=rewrite)
+
+
+def _materialization(*, context: StepContext, target: ModelFacts) -> MutationResult:
+    def rewrite(model_file: ModelFile) -> ModelFile:
+        header: str = (
+            _MATERIALIZED_PATTERN.sub(r"\g<1>view", model_file.header, count=1)
+            if _MATERIALIZED_PATTERN.search(model_file.header)
+            else add_header_property(header=model_file.header, line="materialized view,")
         )
         return ModelFile(header=header, query=model_file.query)
 

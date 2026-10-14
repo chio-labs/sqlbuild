@@ -54,7 +54,9 @@ ROLE_LEAF: str = "leaf"
 ROLE_ANY: str = "any"
 
 MUTATION_EDIT_QUERY: str = "edit_query"
+MUTATION_TAGS: str = "tags"
 MUTATION_CONFIG: str = "config"
+MUTATION_MATERIALIZATION: str = "materialization"
 MUTATION_DECLARE_COLUMN: str = "declare_column"
 MUTATION_RENAME_COLUMN: str = "rename_column"
 MUTATION_ADD_MODEL: str = "add_model"
@@ -67,7 +69,8 @@ STEPS: tuple[PlannerStep, ...] = (
     PlannerStep(name="initial"),
     PlannerStep(name="no-op"),
     PlannerStep(name="edit-query", mutation=MUTATION_EDIT_QUERY, role=ROLE_TABLE),
-    PlannerStep(name="config-change", mutation=MUTATION_CONFIG, role=ROLE_TABLE, index=1),
+    PlannerStep(name="tag-change", mutation=MUTATION_TAGS, role=ROLE_TABLE, index=1),
+    PlannerStep(name="config-change", mutation=MUTATION_CONFIG, role=ROLE_INCREMENTAL, index=1),
     PlannerStep(name="declared-column", mutation=MUTATION_DECLARE_COLUMN, role=ROLE_INCREMENTAL),
     PlannerStep(name="column-rename", mutation=MUTATION_RENAME_COLUMN, role=ROLE_INCREMENTAL),
     PlannerStep(name="add-model", mutation=MUTATION_ADD_MODEL, role=ROLE_TABLE),
@@ -96,6 +99,9 @@ STEPS: tuple[PlannerStep, ...] = (
         arguments=("--exclude", "{model}"),
     ),
     PlannerStep(name="select-edited", role=ROLE_TABLE, index=1, arguments=SELECT_MODEL_ARGUMENTS),
+    PlannerStep(
+        name="materialization-change", mutation=MUTATION_MATERIALIZATION, role=ROLE_TABLE, index=2
+    ),
     PlannerStep(name="full-refresh", arguments=("--full-refresh",)),
     PlannerStep(name="final-no-op"),
 )

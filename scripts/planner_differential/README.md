@@ -7,7 +7,7 @@ that can alter planning (for example a port of planner code): record a baseline 
 before the change, then check the changed tree against it.
 
 ```bash
-# On the tree before the change (about 9 minutes with the defaults)
+# On the tree before the change (about 10 minutes with the defaults)
 make planner-differential PLANNER_DIFFERENTIAL_MODE=record
 # On the changed tree
 make planner-differential
@@ -42,10 +42,11 @@ relation. A step whose role has no model, or whose placeholders have no value, i
 skipped. Targets come from the previous unselected `sqb plan --json`, so later steps follow
 earlier renames.
 
-The script covers a no-op rebuild, a query edit, a config-only change, a new declared column, a
-column rename and a model rename through `sqb rename` (`migrate_from`), an added model, a
-relation dropped outside SQLBuild, source rows added with a later cursor value, and the
-`--max-microbatches`, cursor override, `--exclude`, `--select` and `--full-refresh` flags. To
+The script covers a no-op rebuild, a query edit, a tag change (metadata only), a config change
+(`on_schema_change`), a new declared column, a column rename and a model rename through
+`sqb rename` (`migrate_from`), an added model, a relation dropped outside SQLBuild, source rows
+added with a later cursor value, the `--max-microbatches`, cursor override, `--exclude` and
+`--select` flags, a table-to-view materialization change, and `--full-refresh`. To
 add a step, append a `PlannerStep`; a new kind of change adds a mutation function in
 `_helpers/steps/mutations.py`. When a mutation makes planning fail, the step is recorded and the
 project files are restored so later steps still run. `--steps` runs a subset (include `initial`
