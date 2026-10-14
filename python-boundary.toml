@@ -2,7 +2,7 @@
 # migration work that moves to Rust. `remaining_lines` must equal the current count of that work:
 # a PR that moves code lowers it, and adding movable Python fails the check.
 # Native failures must surface as errors; `handled_native_errors` lists the reviewed exceptions.
-remaining_lines = 66194
+remaining_lines = 66074
 
 [[stays]]
 path = "executor"
@@ -203,6 +203,11 @@ note = "Reads decorator definitions from loaded project Python node functions."
 path = "compiler/discovery/main/runtime_extensions.py"
 reason = "user-code"
 note = "Binds imported project providers to event exporter and sink declarations."
+
+[[stays]]
+path = "compiler/compile/_helpers/diagnostics/python_resources.py"
+reason = "user-code"
+note = "Reads docstrings and source lines of loaded project Python functions and provider classes."
 
 [[stays]]
 path = "compiler/discovery/_helpers/filesystem/command_output_sinks.py"
