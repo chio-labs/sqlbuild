@@ -6,12 +6,9 @@ PROJECT_CONFIG_FILENAME: str = "sqlbuild_project.toml"
 LOCAL_CONFIG_FILENAME: str = "sqlbuild_local.toml"
 LEGACY_PROJECT_CONFIG_FILENAME: str = "sqlbuild_project.yml"
 LEGACY_LOCAL_CONFIG_FILENAME: str = "sqlbuild_local.yml"
-TOML_FILE_SUFFIX: str = ".toml"
 YAML_FILE_SUFFIXES: frozenset[str] = frozenset({".yml", ".yaml"})
 
 PYTHON_INIT_MODULE_STEM: str = "__init__"
-PYTHON_CACHE_DIRECTORY_NAME: str = "__pycache__"
-LANGUAGE_PYTHON_ROOT_PART_COUNT: int = 2
 PYTHON_NODE_ROOT: str = "python"
 SQL_FUNCTION_HEADER_KEYS: frozenset[str] = frozenset(
     {"arguments", "returns", "database", "schema", "tags", "description"}
@@ -109,30 +106,20 @@ DLT_SOURCE_TYPE_SQL_DATABASE: str = "sql_database"
 DLT_SOURCE_TYPE_REST_API: str = "rest_api"
 DLT_SOURCE_TYPE_FILESYSTEM: str = "filesystem"
 
-CONFIG_CONCURRENCY_KEY: str = "concurrency"
-LEGACY_CONFIG_CONCURRENCY_KEY: str = "max_concurrency"
 SQL_ANALYSIS_CONFIG_KEY: str = "sql_analysis"
 SQL_TEST_HEADER_KEYS: frozenset[str] = frozenset(
     {"name", "mode", "parameters", "cases", "cursor_start", "cursor_end", SQL_ANALYSIS_CONFIG_KEY}
 )
 SQL_SCENARIO_HEADER_KEYS: frozenset[str] = frozenset({"description", "tags"})
-LEGACY_SQL_VALIDATION_CONFIG_KEY: str = "sql_validation"
 SQL_ANALYSIS_SETTING_KEY: str = "sql_analysis"
-REQUIRE_SQL_ANALYSIS_SETTING_KEY: str = "require_sql_analysis"
 SETTINGS_SECTION: str = "settings"
 QUERY_CHANGE_TRACKING_SETTING_KEY: str = "query_change_tracking"
-MICROBATCH_CONCURRENCY_SETTING_KEY: str = "microbatch_concurrency"
 REFERENCES_SECTION: str = "references"
 TABLE_PROMOTION_MODE_SETTING_KEY: str = "table_promotion_mode"
 STAGED_PROMOTION_MODE: str = "staged"
 DBT_SECTION: str = "dbt"
 DEFAULTS_SECTION: str = "defaults"
 DBT_PROJECT_DIR_KEY: str = "project_dir"
-ENFORCE_EXPLICIT_REFERENCES_KEY: str = "enforce_explicit"
-DBT_LEGACY_REUSE_FROM_CONFIG_KEY: str = "reuse_from"
-DBT_PRODUCTION_REF_CONFIG_KEY: str = "production_ref"
-DBT_DEFER_CLONE_CONFIG_KEY: str = "defer_clone_from"
-DBT_REPLAY_ON_CHANGE_CONFIG_KEY: str = "replay_on_change"
 
 MODELS_DIRECTORY_NAME: str = "models"
 SQL_TESTS_OWNERSHIP_ROOT: str = "tests/unit"

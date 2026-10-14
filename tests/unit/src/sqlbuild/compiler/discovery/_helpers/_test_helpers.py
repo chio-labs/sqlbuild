@@ -24,11 +24,11 @@ from sqlbuild._native import (
     discover_sql_hook_files,
     discover_test_files,
 )
-from sqlbuild.compiler.discovery._helpers.yml.project import (
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
     load_local_config,
     load_project_config,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 
 # Test-only reference grammar of the MODEL header the native matcher replaced.
 _REFERENCE_MODEL_HEADER_PATTERN: re.Pattern[str] = re.compile(

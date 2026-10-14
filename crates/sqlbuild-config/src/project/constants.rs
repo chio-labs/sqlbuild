@@ -246,3 +246,7 @@ pub(crate) const GLOB_SEGMENTS: [&str; 2] = ["*", "**"];
 pub(crate) const UNSUPPORTED_GLOB_MARKERS: [char; 3] = ['*', '?', '['];
 /// CPython's default `sys.get_int_max_str_digits()`, beyond which `int()` raises.
 pub(crate) const PYTHON_INT_MAX_STR_DIGITS: usize = 4_300;
+pub(crate) const MICROBATCH_CONCURRENCY_KEY: &str = "microbatch_concurrency";
+pub(crate) const REFERENCES_SECTION: &str = "references";
+pub(crate) const ENFORCE_EXPLICIT_KEY: &str = "enforce_explicit";
+pub(crate) const MICROBATCH_CONCURRENCY_PURPOSE: &str = "to run microbatches concurrently";

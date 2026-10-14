@@ -4,6 +4,9 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::types::{PyCFunction, PyDict, PySet, PySetMethods, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::compile_driver::config_validation::{
+    ProjectConfiguration, reject_invalid_project_configuration,
+};
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords, within,
 };
@@ -28,16 +31,15 @@ use crate::bindings::_helpers::discovery::yaml_records::{
 const FRONTIER_MODULE: &str = "sqlbuild._native";
 const FRONTIER_TYPES_MODULE: &str = "sqlbuild.compiler.frontier.types";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
-const PROJECT_YAML_MODULE: &str = "sqlbuild.compiler.discovery._helpers.yml.project";
-const TARGET_CONNECTIONS_MODULE: &str =
-    "sqlbuild.compiler.discovery._helpers.validation.target_connections";
 const VALIDATION_MODULE: &str = "sqlbuild.compiler.discovery._helpers.validation.discovery";
+const NATIVE_MODULE: &str = "sqlbuild._native";
 const DISCOVERY_CONSTANTS_MODULE: &str = "sqlbuild.compiler.discovery.constants";
 const EVENT_EXPORTERS_MODULE: &str =
     "sqlbuild.runtime.event_exporting.main._configure_discovered_event_exporters";
 const FILESYSTEM_MODULE: &str = "sqlbuild.compiler.discovery._helpers.filesystem.core";
 const SINKS_MODULE: &str = "sqlbuild.compiler.discovery._helpers.filesystem.command_output_sinks";
-const LOADERS_MODULE: &str = "sqlbuild.compiler.discovery._helpers.integrations.loaders";
+const INGESTR_LOADERS_MODULE: &str = "sqlbuild.integrations.ingestr.main.loaders";
+const DLT_LOADERS_MODULE: &str = "sqlbuild.integrations.dlt.main.loaders";
 const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 
 /// Declaration file collections counted into the declaration-parse lifecycle, in field order.
@@ -209,27 +211,15 @@ fn assembled_inputs<'py>(
     request: &DiscoveryRequest,
 ) -> PyResult<Bound<'py, PyAny>> {
     let project_dir: &Bound<'py, PyAny> = request.project_dir.bind(py);
-    let directory: [(&str, Bound<'py, PyAny>); 1] = [("project_dir", project_dir.clone())];
-    let project_config: Bound<'py, PyAny> = call_with(
-        &imported(py, PROJECT_YAML_MODULE, "load_project_config")?,
-        &directory,
-    )?;
-    let local_config: Bound<'py, PyAny> = call_with(
-        &imported(py, PROJECT_YAML_MODULE, "load_local_config")?,
-        &directory,
-    )?;
-    let configured: [(&str, Bound<'py, PyAny>); 3] = [
-        ("project_dir", project_dir.clone()),
-        ("project_config", project_config.clone()),
-        ("local_config", local_config.clone()),
-    ];
-    for (module, name) in [
-        (PROJECT_YAML_MODULE, "validate_local_sql_analysis_policy"),
-        (PROJECT_YAML_MODULE, "validate_target_warehouses_adapter"),
-        (TARGET_CONNECTIONS_MODULE, "validate_target_connections"),
-    ] {
-        call_with(&imported(py, module, name)?, &configured)?;
-    }
+    let project_config: Bound<'py, PyAny> =
+        imported(py, NATIVE_MODULE, "load_project_config_file")?.call1((project_dir,))?;
+    let local_config: Bound<'py, PyAny> =
+        imported(py, NATIVE_MODULE, "load_local_config_file")?.call1((project_dir,))?;
+    reject_invalid_project_configuration(&ProjectConfiguration {
+        project_dir,
+        project_config: &project_config,
+        local_config: &local_config,
+    })?;
     reject_unsupported_python_paths(project_dir)?;
     let sql_analysis_override: &Bound<'py, PyAny> = request.sql_analysis_enabled_override.bind(py);
     let sql_analysis_enabled: Bound<'py, PyAny> = if !sql_analysis_override.is_none() {
@@ -455,9 +445,14 @@ fn project_inputs<'py>(
         )?
         .into_any())
     };
+    let source_files: Bound<'py, PyAny> = declarations.get_item("source_files")?;
     let integration_loaders: Bound<'py, PyAny> =
-        imported(py, LOADERS_MODULE, "build_integration_loader_functions")?
-            .call1((declarations.get_item("source_files")?,))?;
+        imported(py, INGESTR_LOADERS_MODULE, "build_ingestr_loader_functions")?
+            .call1((&source_files,))?
+            .add(
+                imported(py, DLT_LOADERS_MODULE, "build_dlt_loader_functions")?
+                    .call1((&source_files,))?,
+            )?;
     let loader_functions: Bound<'py, PyAny> = tuple_of("loaders")?.add(integration_loaders)?;
     let mut fields: Vec<(&str, Bound<'py, PyAny>)> = vec![
         ("project_config", project_config.clone()),

@@ -11,6 +11,7 @@ use sqlbuild_rules::lint_text::errors::LintTextError;
 use sqlbuild_rules::lint_text::main::apply_suppressions::apply_suppressions;
 use sqlbuild_rules::lint_text::main::format_sql_bodies::format_sql_bodies;
 use sqlbuild_rules::lint_text::main::interpolation_text_at::interpolation_text_at;
+use sqlbuild_rules::lint_text::main::named_declaration_role_kind::named_declaration_role_kind as role_kind;
 use sqlbuild_rules::lint_text::main::neutralize_audit_parameters::neutralize_audit_parameters;
 use sqlbuild_rules::lint_text::main::neutralize_context_interpolation::neutralize_context_interpolation;
 use sqlbuild_rules::lint_text::main::neutralize_interpolation::neutralize_interpolation;
@@ -27,6 +28,7 @@ use crate::bindings::types::CompilerDetach;
 
 const LINT_MODELS_MODULE: &str = "sqlbuild.lint.models";
 const LINT_TYPES_MODULE: &str = "sqlbuild.lint.types";
+const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
 const NATIVE_ENGINE: &str = "native";
 const FORMAT_UNSAFE_CODE: &str = "format-unsafe";
 const FORMAT_UNSAFE_REMEDIATION: &str = "Rewrite the unsupported SQL shape or report a minimal formatter reproduction. No header, SQL body, or fixture changes were written to this file.";
@@ -117,6 +119,21 @@ fn scan_fixture_typed_null_candidates<'py>(
         PyFrozenSet::new(py, paths)?,
         PyFrozenSet::new(py, candidates.model_names)?,
     ))
+}
+
+/// The named declaration kind of a project-relative path, as `DeclarationKind`.
+#[pyfunction]
+#[pyo3(signature = (*, relative_path))]
+fn named_declaration_role_kind<'py>(
+    relative_path: &Bound<'py, PyAny>,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let parts: Vec<String> = relative_path.getattr("parts")?.extract()?;
+    match role_kind(&parts) {
+        Some(kind) => Ok(Some(
+            imported(relative_path.py(), SCOPE_TYPES_MODULE, "DeclarationKind")?.call1((kind,))?,
+        )),
+        None => Ok(None),
+    }
 }
 
 /// Remove violations matched by suppressions and add the suppression findings, as lint models.
@@ -327,5 +344,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module
     )?)?;
     module.add_function(wrap_pyfunction!(format_lint_sql_bodies, module)?)?;
+    module.add_function(wrap_pyfunction!(named_declaration_role_kind, module)?)?;
     module.add_function(wrap_pyfunction!(apply_lint_suppressions, module)?)
 }

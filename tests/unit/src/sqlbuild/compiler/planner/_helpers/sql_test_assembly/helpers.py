@@ -8,10 +8,10 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
+from sqlbuild._native import expand_sql_macros
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
-from sqlbuild.compiler.compile._helpers.render.macros import expand_sql_macros
 from sqlbuild.compiler.compile.constants import (
     ASSERT_TEST_CTE_PREFIX,
     DBT_REF_TEST_CTE_PREFIX,
@@ -427,7 +427,7 @@ def _expand_model_query_overrides(
             loaded_macros=loaded_macros,
             macro_overrides=test_case.macro_mocks,
             macro_context=_MACRO_CONTEXT,
-        )
+        ).sql
 
 
 def _keep_model_query_overrides(

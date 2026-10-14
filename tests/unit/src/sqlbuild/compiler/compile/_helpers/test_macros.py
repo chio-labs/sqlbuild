@@ -5,12 +5,9 @@ from unittest.mock import Mock
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.render import macros as macros_module
-from sqlbuild.compiler.compile._helpers.render.macros import (
-    expand_sql_macros,
-    find_macro_call_names,
-    load_project_macros,
-)
+from sqlbuild._native import expand_sql_macros, find_macro_call_names
+from sqlbuild.compiler.compile._helpers.render import user_macros as macros_module
+from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
 from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
@@ -641,7 +638,7 @@ def test_given_sql_macro_variants_when_expanding_then_it_returns_expected_sql(
         loaded_macros=loaded_macros,
         macro_overrides=test_case.macro_overrides,
         macro_context=_MACRO_CONTEXT,
-    )
+    ).sql
 
     assert expanded_sql == test_case.expected_sql
 

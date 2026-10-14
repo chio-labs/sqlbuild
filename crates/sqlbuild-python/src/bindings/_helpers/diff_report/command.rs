@@ -26,10 +26,10 @@ use crate::bindings::_helpers::diff_report::support::{
     EXCEPTIONS_MODULE, call, caused, cli_error, error_text, is_exception, matches_class, none,
     object, request_facts, user_error_parts,
 };
+use crate::bindings::_helpers::discovery::configuration::discover_project_configuration;
 use crate::bindings::_helpers::frontier::encoder::emit_error;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const CONFIGURATION_MODULE: &str = "sqlbuild.compiler.discovery.main._discover_configuration";
 const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild.compiler.pipeline.main.reject_unit_test_selectors";
 const TARGET_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_target_name";
 const TARGET_CONFIG_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_target_config";
@@ -85,10 +85,7 @@ fn resolve_invocation<'py>(
         _ => imported(py, "pathlib", "Path")?.call_method0("cwd")?,
     };
     let discovered: Bound<'py, PyAny> = if query_mode {
-        call(
-            &imported(py, CONFIGURATION_MODULE, "discover_project_configuration")?,
-            &[("project_dir", &project_dir)],
-        )?
+        discover_project_configuration(py, &project_dir)?
     } else {
         call(
             &imported(py, NATIVE_MODULE, "discover_project_inputs")?,

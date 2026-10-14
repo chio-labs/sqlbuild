@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery._helpers.yml.project import load_project_config
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError, ProjectConfigError
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     StatementHeaderKeysTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
+    load_project_config,
     parse_statement_header_file,
     statement_header_file_path,
 )

@@ -5,6 +5,7 @@ pub(crate) mod assembly_checks;
 pub(crate) mod assembly_models;
 pub(crate) mod assembly_project;
 pub(crate) mod command;
+pub(crate) mod config_validation;
 pub(crate) mod deferral;
 pub(crate) mod diff;
 pub(crate) mod discovery;

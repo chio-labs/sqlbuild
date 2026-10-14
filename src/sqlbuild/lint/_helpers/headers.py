@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path, PurePath
 
-from sqlbuild._native import measurement_body_ranges, sql_body_ranges
-from sqlbuild.compiler.compile.constants import HOOK_DIRECTORY_NAME
-from sqlbuild.compiler.discovery.main.named_declaration_role_kind import (
+from sqlbuild._native import (
+    measurement_body_ranges,
     named_declaration_role_kind,
+    sql_body_ranges,
 )
+from sqlbuild.compiler.compile.constants import HOOK_DIRECTORY_NAME
 from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.lint.models import HeaderSpan, LintFileRole
 

@@ -67,3 +67,9 @@ pub(super) struct FirstHeaderTestCase {
     pub(super) relative_parts: &'static [&'static str],
     pub(super) expected_first_only: bool,
 }
+
+pub(super) struct RoleKindTestCase {
+    pub(super) description: &'static str,
+    pub(super) relative_parts: &'static [&'static str],
+    pub(super) expected_kind: Option<&'static str>,
+}

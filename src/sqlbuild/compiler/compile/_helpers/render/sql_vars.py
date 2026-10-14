@@ -6,12 +6,9 @@ from collections.abc import Mapping
 from pathlib import Path
 
 import sqlbuild._native as _native
-from sqlbuild._native import render_project_var_text
+from sqlbuild._native import expand_sql_macros, render_project_var_text
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     expand_scanned_declaration_references,
-)
-from sqlbuild.compiler.compile._helpers.render.macros import (
-    expand_sql_macros_with_spans,
 )
 from sqlbuild.compiler.compile._helpers.render.templating import record_template_reads
 from sqlbuild.compiler.compile.classes.unicode_environment import UnicodeEnvironment
@@ -23,6 +20,7 @@ from sqlbuild.compiler.compile.models import (
     ExpansionSpan,
     LoadedMacro,
     MacroContext,
+    MacroExpansionResult,
     SqlInterpolation,
 )
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
@@ -76,16 +74,14 @@ def expand_authored_sql_with_spans(
     )
     declaration_expanded_sql: str = declaration_result.sql
     declaration_spans: tuple[ExpansionSpan, ...] = declaration_result.spans
-    macro_expanded_sql: str
-    macro_spans: tuple[ExpansionSpan, ...]
-    macro_expanded_sql, macro_spans = expand_sql_macros_with_spans(
+    expansion: MacroExpansionResult = expand_sql_macros(
         sql=declaration_expanded_sql,
         file_path=file_path,
         loaded_macros=loaded_macros,
         macro_context=macro_context,
         declaration_resolver=declaration_resolver,
     )
-    return macro_expanded_sql, (interpolation_spans, declaration_spans, macro_spans)
+    return expansion.sql, (interpolation_spans, declaration_spans, expansion.spans)
 
 
 def substitute_sql_vars_with_spans(

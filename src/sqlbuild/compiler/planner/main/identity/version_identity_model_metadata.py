@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild._native import serialize_hook_entries
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.discovery.constants import SQL_HOOK_IDENTITY_FIELDS
-from sqlbuild.compiler.discovery.main.serialize_hook_entries import serialize_hook_entries
 from sqlbuild.compiler.planner._helpers.identity.model_metadata import contract_output_signature
 from sqlbuild.compiler.planner.constants import (
     MODEL_CUSTOM_CONFIG_KEY,

@@ -14,7 +14,7 @@ from sqlbuild._native import (
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_model_declaration_indexes,
 )
-from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
+from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
 from sqlbuild.compiler.compile.models import (
     ConstantDeclaration,
     DeclarationResolutionContext,

@@ -525,7 +525,7 @@ fn name_set(names: &Bound<'_, PyAny>) -> PyResult<HashSet<String>> {
 /// Return resolved dbt refs used directly by SQLBuild models.
 #[pyfunction]
 #[pyo3(signature = (*, project, manifest, selected_model_names = None))]
-fn resolve_sqlbuild_model_dbt_refs<'py>(
+pub(crate) fn resolve_sqlbuild_model_dbt_refs<'py>(
     py: Python<'py>,
     project: Bound<'py, PyAny>,
     manifest: Bound<'py, PyAny>,

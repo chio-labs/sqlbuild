@@ -167,19 +167,6 @@ def empty_cursor_window(*, cursor_type: str | None, cursor_start: str | None) ->
     return CursorBounds(start=bound, end=bound)
 
 
-def format_no_input_rows(input_names: tuple[str, ...]) -> str:
-    """Explain that a cursor window is empty because its inputs have no rows."""
-
-    return f"no input rows ({', '.join(input_names)})"
-
-
-def format_waiting_on_empty_inputs(input_names: tuple[str, ...]) -> str:
-    """Explain that a cursor window waits on empty inputs while other inputs have rows."""
-
-    noun: str = "input" if len(input_names) == 1 else "inputs"
-    return f"waiting on empty {noun} {', '.join(input_names)}; other inputs have new rows"
-
-
 def cursor_window_override_flags(*, cursor_type: str | None) -> str:
     """Name the CLI flags that set a cursor window explicitly for this cursor type."""
 

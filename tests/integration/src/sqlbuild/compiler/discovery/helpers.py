@@ -24,6 +24,7 @@ from sqlbuild._native import (
     discover_audit_files,
     discover_constant_files,
     discover_enum_files,
+    discover_model_description_inputs,
     discover_model_schema_files,
     discover_project_inputs,
     discover_scope_snapshot,
@@ -31,19 +32,14 @@ from sqlbuild._native import (
     discover_sql_hook_files,
     render_stage_capture,
 )
-from sqlbuild.compiler.discovery.classes.selected_contract_input_discoverer import (
-    SelectedContractInputDiscoverer,
-)
 from sqlbuild.compiler.discovery.constants import (
     SQL_AUDIT_HEADER_KEYS,
     SQL_FUNCTION_HEADER_KEYS,
     SQL_HOOK_HEADER_KEYS,
 )
-from sqlbuild.compiler.discovery.main._model_description_inputs import (
-    discover_model_description_inputs,
-)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
+    DiscoveredSourceFile,
     DiscoveredSqlModelFile,
     DiscoveryFileFault,
     NamedSqlHookEntry,
@@ -536,12 +532,21 @@ def description_inputs_outcome(*, project_dir: Path) -> tuple[object, ...]:
 def selected_contract_outcome(*, project_dir: Path) -> tuple[object, ...]:
     """Return the model and source paths selected-contract discovery reads for `orders`."""
 
-    inputs: DiscoveredProjectInputs = SelectedContractInputDiscoverer.discover(
-        project_dir=project_dir,
-        selected_test_paths=frozenset(),
-        referenced_model_names=frozenset({"orders"}),
+    with _native.directory_snapshot_scope(project_dir=project_dir):
+        models: tuple[DiscoveredSqlModelFile, ...] = _native.discover_model_files(
+            project_dir=project_dir,
+            extract_implicit_alias_columns=False,
+            extract_output_column_locations=False,
+            selected_model_names=frozenset({"orders"}),
+        )
+        sources: tuple[DiscoveredSourceFile, ...] = _native.discover_source_files(
+            project_dir=project_dir
+        )
+    return (
+        tuple(model.relative_path.as_posix() for model in models),
+        tuple(source.relative_path.as_posix() for source in sources),
+        (),
     )
-    return (*_inputs_paths(inputs), ())
 
 
 def _inputs_paths(inputs: DiscoveredProjectInputs) -> tuple[object, ...]:

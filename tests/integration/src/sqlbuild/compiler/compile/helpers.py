@@ -18,11 +18,11 @@ from sqlbuild._native import (
     build_compile_inputs,
     compile_frontier,
     discover_project_inputs,
+    expand_sql_macros,
     mask_capture_noise,
     render_stage_capture,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile._helpers.render.macros import expand_sql_macros_result
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
@@ -343,7 +343,7 @@ def expansion_outcome(*, sql: str, bridge: MacroBridge | None) -> tuple[object, 
     capture: ExpansionFailureCapture = ExpansionFailureCapture()
     rendered: list[tuple[object, ...]] = [()]
     with capture:
-        result: MacroExpansionResult = expand_sql_macros_result(
+        result: MacroExpansionResult = expand_sql_macros(
             sql=sql,
             file_path=_DIFFERENTIAL_FILE,
             loaded_macros=DIFFERENTIAL_MACROS,

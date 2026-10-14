@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclusive_cursor_end
+from sqlbuild._native import inclusive_cursor_end
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
 from tests.unit.src.sqlbuild.compiler.planner.main._test_types import InclusiveCursorEndTestCase
 

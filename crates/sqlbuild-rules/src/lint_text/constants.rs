@@ -141,3 +141,23 @@ pub(crate) const SCOPED_DECLARATION_DIRECTORIES: [&str; 6] = [
     "_enums",
     "_constants",
 ];
+/// `GLOBAL_NAMED_DECLARATION_ROOTS`, in Python's dict order, with their declaration kinds.
+pub(crate) const GLOBAL_NAMED_ROOT_KINDS: [(&[&str], &str); 5] = [
+    (&["audits", "generic"], "audit"),
+    (&["audits", "singular"], "singular_audit"),
+    (&["schemas"], "schema"),
+    (&["hooks", "sql"], "sql_hook"),
+    (&["hooks", "python"], "python_hook"),
+];
+/// `GROUPED_NAMED_DECLARATION_ROLES`, in Python's dict order, with their declaration kinds.
+pub(crate) const GROUPED_NAMED_ROLE_KINDS: [(&[&str], &str); 9] = [
+    (&["audits", "generic"], "audit"),
+    (&["_audits", "generic"], "audit"),
+    (&["audits", "singular"], "singular_audit"),
+    (&["schemas"], "schema"),
+    (&["_schemas"], "schema"),
+    (&["hooks", "sql"], "sql_hook"),
+    (&["_hooks", "sql"], "sql_hook"),
+    (&["hooks", "python"], "python_hook"),
+    (&["_hooks", "python"], "python_hook"),
+];

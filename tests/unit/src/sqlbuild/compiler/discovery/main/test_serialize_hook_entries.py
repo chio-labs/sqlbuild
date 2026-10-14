@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import serialize_hook_entries
 from sqlbuild.compiler.discovery.constants import SQL_HOOK_OUTPUT_FIELDS
-from sqlbuild.compiler.discovery.main.serialize_hook_entries import serialize_hook_entries
 from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
 from tests.unit.src.sqlbuild.compiler.discovery.main._test_types import (
     SerializeHookEntriesTestCase,

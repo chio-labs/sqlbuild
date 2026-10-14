@@ -12,7 +12,7 @@ from sqlbuild._native import (
     discover_project_inputs,
     rebind_declaration_scope,
 )
-from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
+from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
 from sqlbuild.compiler.compile.models import DeclarationScopeBuild, LoadedMacro
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.scopes.models import DeclarationIdentity

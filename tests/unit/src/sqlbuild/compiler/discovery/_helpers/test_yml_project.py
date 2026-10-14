@@ -6,10 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery._helpers.yml.project import (
-    load_local_config,
-    load_project_config,
-)
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.runtime.event_exporting.types import LifecycleEventKind
 from sqlbuild.spec.contracts.models import (
@@ -52,6 +48,8 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     TooDeepProjectConnectionTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
+    load_local_config,
+    load_project_config,
     write_project_config_test_files,
 )
 

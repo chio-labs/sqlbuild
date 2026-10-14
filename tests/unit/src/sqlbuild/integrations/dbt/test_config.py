@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.integrations.dbt._helpers.config.core import resolve_dbt_config
+from sqlbuild._native import resolve_dbt_config
 from sqlbuild.integrations.dbt._helpers.planning.runtime import resolve_dbt_vars
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
 from sqlbuild.integrations.dbt.models import ResolvedDbtConfig

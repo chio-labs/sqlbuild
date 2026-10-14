@@ -18,7 +18,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredTaskFunction,
 )
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
-from sqlbuild.compiler.python_nodes._helpers.inventory import (
+from sqlbuild.compiler.python_nodes._helpers.user_inventory import (
     build_python_node_graph,
     build_python_nodes,
 )

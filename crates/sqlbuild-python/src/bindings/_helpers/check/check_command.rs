@@ -16,6 +16,7 @@ use crate::bindings::_helpers::check::check_results::{
     check_result_text, results_json, write_results,
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::graph::python_selection::python_node_names;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
@@ -32,7 +33,6 @@ const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
 const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
 const PYTHON_GRAPH_MODULE: &str = "sqlbuild.compiler.python_nodes.main._graph";
-const PYTHON_SELECTORS_MODULE: &str = "sqlbuild.compiler.python_nodes.main.selectors";
 const PYTHON_LIFECYCLE_MODULE: &str = "sqlbuild.compiler.python_nodes.main._run_lifecycle";
 const PYTHON_NODE_MODELS: &str = "sqlbuild.compiler.python_nodes.models";
 const PYTHON_NODE_TYPES: &str = "sqlbuild.compiler.python_nodes.types";
@@ -106,18 +106,7 @@ fn python_nodes<'py>(
     graph: &Bound<'py, PyAny>,
     (select, exclude): (Bound<'py, PyAny>, Bound<'py, PyAny>),
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(
-        &imported(
-            graph.py(),
-            PYTHON_SELECTORS_MODULE,
-            "resolve_python_nodes_from_selectors",
-        )?,
-        &[
-            ("select", select),
-            ("exclude", exclude),
-            ("graph", graph.clone()),
-        ],
-    )
+    Ok(python_node_names(graph, (select.extract()?, exclude.extract()?))?.into_any())
 }
 
 fn node_kind<'py>(

@@ -8,11 +8,9 @@ import pytest
 
 from sqlbuild._native import (
     discover_test_files,
+    omitted_ceremonial_select,
 )
 from sqlbuild.compiler.discovery.exceptions import SqlTestParseError
-from sqlbuild.compiler.discovery.main.omitted_ceremonial_select import (
-    omitted_ceremonial_select_offset,
-)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestCase,
@@ -76,7 +74,7 @@ def test_given_large_fixture_body_when_locating_omitted_select_then_completes_wi
 
     for _ in range(3):
         started: float = time.perf_counter()
-        offset = omitted_ceremonial_select_offset(sql=sql, syntax=SqlLexicalSyntax())
+        offset = omitted_ceremonial_select(sql, SqlLexicalSyntax().native_mapping)
         timings.append(time.perf_counter() - started)
 
     assert (offset is not None) == test_case.expected_offset_found

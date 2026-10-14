@@ -30,6 +30,7 @@ from sqlbuild.cli.commands.models import (
     CloneCommandRequest,
     ContractCommandRequest,
     CostCommandRequest,
+    DbtInitCommandRequest,
     DiffCommandRequest,
     FreshnessCommandRequest,
     JanitorCommandRequest,
@@ -97,6 +98,7 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
     LoadedMacro,
     MacroContext,
+    MacroExpansionResult,
     ModelInputBuildContext,
     NativeModelConfigInputs,
     NativeModelConfigSession,
@@ -176,9 +178,11 @@ from sqlbuild.compiler.pipeline.models import (
 )
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
+    CursorBounds,
     DeferralInputs,
     FutureCursorSafetyEvidence,
     MaximumStartSafetyEvidence,
+    ModelPlanEntry,
     PlanOutput,
     SqlTestPlanEntry,
 )
@@ -218,7 +222,7 @@ from sqlbuild.compiler.scopes.models import (
     UsageRecord,
     VisibilityResolution,
 )
-from sqlbuild.compiler.scopes.types import JsonValue, ScopeQueryTarget
+from sqlbuild.compiler.scopes.types import DeclarationKind, JsonValue, ScopeQueryTarget
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessIdentity, SourceFreshnessRecord
 from sqlbuild.compiler.source_freshness.types import (
     SourceFreshnessAgeStatus,
@@ -237,7 +241,12 @@ from sqlbuild.compiler.sql_test_glue.models import (
 )
 from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestPlanRow
 from sqlbuild.cost.models import CostRunRecord
-from sqlbuild.cursor_algebra.models import AlignedInterval, Duration
+from sqlbuild.cursor_algebra.models import (
+    AlignedInterval,
+    DateValue,
+    Duration,
+    TimestampValue,
+)
 from sqlbuild.cursor_algebra.types import Bound, BoundSentinel, CursorScalar
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
@@ -251,13 +260,21 @@ from sqlbuild.executor.python_nodes.models import (
 )
 from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotCaptureRunResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.models import (
+    DbtCliConfigOverrides,
+    DbtCliOptions,
+    DbtInteropCommandArgs,
+    DbtInteropParsedArgs,
     DbtInteropPlan,
+    DbtInteropRoutedArgs,
     DbtInteropSelectionResult,
     DbtLsNode,
     DbtManifestIndex,
     DbtManifestModel,
+    DbtNodeExecutionResult,
     NormalizedDbtProfileConnection,
+    ResolvedDbtConfig,
     ResolvedDbtProfileOutput,
 )
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
@@ -271,11 +288,14 @@ from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.rule_engine.models import Finding, Rule, RulesConfig, RulesResult
 from sqlbuild.rule_engine.types import RuleCheck
 from sqlbuild.runtime.contracts.models import ConnectionHooks
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.models import (
+    DbtConfig,
     DefaultsConfig,
     ExecutionLimitsConfig,
     LocalConfig,
+    LocalDbtConfig,
     ProjectConfig,
     ScenarioConfig,
     SchemaAuditInstance,
@@ -1449,6 +1469,91 @@ def resolve_sqlbuild_model_dbt_refs(
     manifest: DbtManifestIndex,
     selected_model_names: Iterable[str] | None = None,
 ) -> tuple[tuple[CompiledModelView, DbtManifestModel], ...]: ...
+
+class DbtCombinedGraph:
+    @property
+    def nodes(self) -> frozenset[str]: ...
+    @property
+    def upstream_deps(self) -> dict[str, tuple[str, ...]]: ...
+    @property
+    def downstream_deps(self) -> dict[str, tuple[str, ...]]: ...
+    def downstream_sqlbuild_model_names(self, unique_ids: Iterable[str]) -> tuple[str, ...]: ...
+
+def build_dbt_combined_graph(
+    *, manifest: DbtManifestIndex, project: CompiledProjectView
+) -> DbtCombinedGraph: ...
+def resolve_dbt_interop_sqlbuild_selection(
+    *,
+    project: CompiledProjectView,
+    graph: DbtCombinedGraph,
+    select: Sequence[str],
+    manifest: DbtManifestIndex | None = None,
+    exclude: Sequence[str] | None = None,
+    dbt_anchor_unique_ids_by_term: Mapping[str, Sequence[str]] | None = None,
+) -> DbtInteropSelectionResult: ...
+def dbt_fqn_selector_term(*, fqn: Sequence[str], fallback: str) -> str: ...
+def build_merged_dbt_execution_argv(
+    *,
+    command: DbtInteropCommand,
+    options: DbtCliOptions,
+    routed_args: Sequence[str],
+    plan: DbtInteropPlan,
+) -> tuple[str, ...] | None: ...
+def dbt_execution_ls_argv(*, argv: Sequence[str]) -> list[str] | None: ...
+def build_failed_sqlbuild_model_names(
+    *,
+    graph: DbtCombinedGraph,
+    manifest: DbtManifestIndex,
+    node_results: Sequence[DbtNodeExecutionResult],
+) -> tuple[str, ...]: ...
+def render_dbt_execution_summary_footer(
+    *, node_results: Sequence[DbtNodeExecutionResult], use_color: bool
+) -> str | None: ...
+def plan_dbt_interop_command(
+    *,
+    command: DbtInteropCommand | str,
+    project: CompiledProjectView,
+    manifest: DbtManifestIndex,
+    graph: DbtCombinedGraph,
+    dbt_runner: DbtRunner,
+    dbt_options: DbtCliOptions,
+    command_args: DbtInteropCommandArgs,
+) -> DbtInteropPlan: ...
+def resolve_dbt_executable() -> str: ...
+def build_dbt_compile_argv(
+    *, dbt_executable: str, options: DbtCliOptions, full_refresh: bool = False
+) -> tuple[str, ...]: ...
+def build_dbt_deps_argv(*, dbt_executable: str, options: DbtCliOptions) -> tuple[str, ...]: ...
+def build_dbt_debug_argv(
+    *, dbt_executable: str, options: DbtCliOptions, args: Sequence[str] | None = None
+) -> tuple[str, ...]: ...
+def build_dbt_command_argv(
+    *,
+    dbt_executable: str,
+    command: str,
+    options: DbtCliOptions,
+    args: Sequence[str] | None = None,
+) -> tuple[str, ...]: ...
+def build_dbt_ls_argv(
+    *,
+    dbt_executable: str,
+    options: DbtCliOptions,
+    select: Sequence[str] | None = None,
+    exclude: Sequence[str] | None = None,
+    resource_types: Sequence[str] | None = None,
+) -> tuple[str, ...]: ...
+def parse_dbt_ls_json_lines(*, stdout: str) -> tuple[DbtLsNode, ...]: ...
+def route_dbt_interop_args(
+    *, command: DbtInteropCommand | str, parsed: DbtInteropParsedArgs
+) -> DbtInteropRoutedArgs: ...
+def resolve_dbt_config(
+    *,
+    project_root: Path,
+    config: DbtConfig,
+    overrides: DbtCliConfigOverrides,
+    require_project_dir: bool,
+    local_config: LocalDbtConfig | None = None,
+) -> ResolvedDbtConfig: ...
 def resolve_dbt_reference_relation(
     *,
     manifest: DbtManifestIndex | None,
@@ -1583,6 +1688,38 @@ class ConnectionProgressReporter:
     def on_connection_start(self, connection_count: int) -> None: ...
     def on_connection_complete(self, *, connection_count: int, elapsed_seconds: float) -> None: ...
     def on_connection_error(self, *, connection_count: int, elapsed_seconds: float) -> None: ...
+
+class DbtEventStreamUpdate:
+    @property
+    def status_message(self) -> str | None: ...
+    @property
+    def result(self) -> DbtNodeExecutionResult | None: ...
+    @property
+    def row(self) -> str | None: ...
+    @property
+    def finished(self) -> bool: ...
+
+class DbtEventStream:
+    def __init__(
+        self,
+        *,
+        display_total: int | None,
+        detail_by_unique_id: Mapping[str, str] | None,
+        use_color: bool,
+    ) -> None: ...
+    def consume(self, line: str) -> DbtEventStreamUpdate | None: ...
+
+def render_dbt_node_result(
+    *,
+    result: DbtNodeExecutionResult,
+    use_color: bool,
+    display_index: int | None = None,
+    display_total: int | None = None,
+    detail: str = "",
+) -> str: ...
+def format_dbt_active_node_status(
+    *, active_nodes: Sequence[tuple[str, float]], now: float
+) -> str: ...
 
 class PlanningProgressReporter:
     def __init__(self, *, stream: TextIO, use_color: bool = False) -> None: ...
@@ -2438,8 +2575,8 @@ def find_python_string_locations(
 def resource_identity_suggestion(
     name: str, private_identity: bool, /
 ) -> tuple[str, str] | None: ...
-def load_project_config_file(project_dir: Path, /) -> object: ...
-def load_local_config_file(project_dir: Path, /) -> object: ...
+def load_project_config_file(project_dir: Path, /) -> ProjectConfig: ...
+def load_local_config_file(project_dir: Path, /) -> LocalConfig: ...
 def resolve_config_file_path(project_dir: Path, local: bool, /) -> Path: ...
 def validate_local_sql_analysis(project_dir: Path, flags: tuple[bool, bool, bool], /) -> None: ...
 def sql_test_cte_span(
@@ -2608,7 +2745,18 @@ def substitute_placeholder_defaults(sql: str, placeholders: list[tuple[str, str]
 def fixture_projection_facts(
     sql: str, dialect: str | None, /
 ) -> tuple[list[tuple[str, str]], list[str], list[str]]: ...
-def macro_call_names(sql: str, nested: bool, /) -> tuple[list[str] | None, str | None]: ...
+def find_macro_call_names(sql: str, /) -> tuple[str, ...]: ...
+def expand_sql_macros(
+    *,
+    sql: str,
+    file_path: Path,
+    loaded_macros: dict[str, LoadedMacro],
+    macro_context: MacroContext,
+    macro_overrides: dict[str, str] | None = None,
+    declaration_resolver: DeclarationScopeResolver | None = None,
+    declarations: DeclarationResolutionContext | None = None,
+    consumer: ResourceIdentity | DeclarationIdentity | None = None,
+) -> MacroExpansionResult: ...
 def inventory_macro_modules(
     sources: list[
         tuple[str, str, list[str], list[str] | None, list[str] | None, str, str, str | None]
@@ -2940,6 +3088,10 @@ def run_audit_command(*, request: AuditCommandRequest) -> int: ...
 def run_contract_command(*, request: ContractCommandRequest) -> int: ...
 def run_init_command(project_dir: Path | None = None) -> int: ...
 def run_cost_command(request: CostCommandRequest) -> int: ...
+def run_dbt_command(
+    *, command: DbtInteropCommand, project_dir: Path | None, args: tuple[str, ...], no_color: bool
+) -> int: ...
+def run_dbt_init_command(request: DbtInitCommandRequest) -> int: ...
 def refresh_pending_cost_run(request: CostCommandRequest) -> None: ...
 def parse_cost_since_bound(*, value: str | None) -> datetime | None: ...
 def run_query_command(
@@ -2961,6 +3113,19 @@ def run_dag_command(
 ) -> int: ...
 def run_scenario_test_command(*, request: ScenarioTestCommandRequest) -> int: ...
 def run_scenario_capture_command(*, request: ScenarioCaptureCommandRequest) -> int: ...
+def sql_analysis_off_guidance(
+    *, discovered_inputs: DiscoveredProjectInputs, purpose: str
+) -> tuple[str, str] | None: ...
+def serialize_hook_entries(
+    *,
+    value: object,
+    sql_fields: tuple[str, ...],
+    python_hook_fields: Mapping[str, Mapping[str, object]] | None = None,
+) -> list[dict[str, object]]: ...
+def named_declaration_role_kind(*, relative_path: PurePath) -> DeclarationKind | None: ...
+def discover_model_description_inputs(*, project_dir: Path) -> DiscoveredProjectInputs: ...
+def microbatch_guidance() -> tuple[str, str]: ...
+def explicit_references_help(*, allowed: str) -> str: ...
 def run_format_command(
     *,
     project_dir: Path | None,
@@ -3123,6 +3288,28 @@ def attached_audit_gate_edges(
 ) -> tuple[AttachedAuditGateEdge, ...]: ...
 def hook_read_edges(*, project: CompiledProjectView) -> tuple[HookReadEdge, ...]: ...
 def model_python_hook_names(*, model: CompiledModelView) -> tuple[str, ...]: ...
+def resolve_python_node_selection(
+    *, graph: PythonNodeGraph, select: Sequence[str], exclude: Sequence[str]
+) -> frozenset[str]: ...
+def resolve_python_check_excludes(
+    *, graph: PythonNodeGraph, exclude: Sequence[str]
+) -> frozenset[str]: ...
+def resolve_python_sql_run_selection(
+    *,
+    project_graph: ProjectGraph,
+    python_graph: PythonNodeGraph,
+    select: Sequence[str],
+    exclude: Sequence[str],
+) -> tuple[list[tuple[str, str]], list[str]]: ...
+def python_node_graph_indexes(
+    nodes: list[tuple[str, tuple[str, ...], str, list[str]]], /
+) -> tuple[
+    list[tuple[str, str]],
+    list[tuple[str, list[str]]],
+    list[tuple[str, list[str]]],
+    list[tuple[str, list[str]]],
+    list[tuple[str, str]],
+]: ...
 def sql_ref_key(reference: SqlResourceRef, /) -> CompiledObjectKey: ...
 def native_graph_key(key: CompiledObjectKey, /) -> tuple[str, str]: ...
 def native_graph_keys(keys: Iterable[CompiledObjectKey], /) -> list[tuple[str, str]]: ...
@@ -3400,3 +3587,24 @@ def parse_header_values(
 def model_output_column_locations(
     *, contents: str, relative_path: object, extract_implicit_alias_columns: bool = True
 ) -> dict[str, Any]: ...
+def inclusive_cursor_end(*, end: str, cursor_type: str | None, cursor_grain: str | None) -> str: ...
+def resolve_bounded_cursor_override(
+    *,
+    start_cursor_override: str | None,
+    end_cursor_override: str | None,
+    cursor_type: str | None,
+    cursor_grain: str | None,
+) -> CursorBounds | None: ...
+def cursor_bound_display(
+    *, value: str, cursor_type: str | None, cursor_grain: str | None
+) -> str: ...
+def model_materialization_label(entry: ModelPlanEntry) -> str: ...
+def model_resource_type(entry: ModelPlanEntry | None) -> str: ...
+def model_execution_annotation(entry: ModelPlanEntry | None) -> str: ...
+def materialization_type_display(resource_kind: ExecutionResourceKind) -> str: ...
+def format_no_input_rows(input_names: tuple[str, ...]) -> str: ...
+def format_waiting_on_empty_inputs(input_names: tuple[str, ...]) -> str: ...
+def resolve_effective_microbatch_batch_size(*, batch_size: str, effective_grain: str) -> str: ...
+def aligned_timestamp_bounds(
+    *, start: DateValue | TimestampValue, end: DateValue | TimestampValue
+) -> tuple[datetime, datetime]: ...

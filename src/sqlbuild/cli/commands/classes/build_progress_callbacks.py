@@ -13,31 +13,25 @@ from sqlbuild._native import (
     ExecutionEventWriter,
     NativeProgressProjector,
     current_native_progress_projector,
+    cursor_bound_display,
     format_completion_line,
     format_expectation_detail,
     format_expectation_name,
+    format_no_input_rows,
     format_parameterized_test_label,
     format_status_cell,
     format_summary_footer,
+    format_waiting_on_empty_inputs,
+    inclusive_cursor_end,
+    materialization_type_display,
+    model_execution_annotation,
+    model_resource_type,
 )
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.cli.progress.models import AuditDisplayEntry, ExecutionCounts
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.main.cursor_window.no_input_rows_display import format_no_input_rows
-from sqlbuild.compiler.planner.main.cursor_window.waiting_on_empty_inputs_display import (
-    format_waiting_on_empty_inputs,
-)
-from sqlbuild.compiler.planner.main.execution.cursor_bound_display import cursor_bound_display
-from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclusive_cursor_end
-from sqlbuild.compiler.planner.main.execution.materialization_type_display import (
-    materialization_type_display,
-)
-from sqlbuild.compiler.planner.main.execution.model_execution_annotation import (
-    model_execution_annotation,
-)
-from sqlbuild.compiler.planner.main.execution.model_resource_type import model_resource_type
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
 from sqlbuild.cost.models import StatementExecutionTelemetry

@@ -9,11 +9,11 @@ use crate::bindings::_helpers::compile_driver::assembly_analysis::{
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::hand_built::compiled_model::compiled_model as hand_built_model;
+use crate::bindings::_helpers::render::macro_calls::top_level_macro_call_names;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const CURSOR_INTRINSICS_MODULE: &str =
     "sqlbuild.compiler.compile._helpers.render.cursor_intrinsics";
-const MACROS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.macros";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const NATIVE_FAILURE_PREFIX: &str = "NativeCompilerError: ";
 const HOOK_NAMES: [&str; 2] = ["pre_hooks", "post_hooks"];
@@ -24,7 +24,6 @@ struct ModelStages<'py> {
     placeholders: Bound<'py, PyAny>,
     validate_hooks: Bound<'py, PyAny>,
     validate_sql: Bound<'py, PyAny>,
-    macro_calls: Bound<'py, PyAny>,
     native_input: Bound<'py, PyAny>,
 }
 
@@ -53,7 +52,6 @@ pub(crate) fn compiled_models<'py>(
         placeholders: native.getattr("model_placeholders")?,
         validate_hooks: native.getattr("validate_hook_sql_syntax")?,
         validate_sql: native.getattr("validate_sql_syntax")?,
-        macro_calls: imported(py, MACROS_MODULE, "find_macro_call_names")?,
         native_input: native.getattr("NativeModelInput")?,
     };
     let analysis_enabled: bool = context.sql_analysis_enabled.is_truthy()?;
@@ -158,9 +156,13 @@ fn compiled_model<'py>(
     let macro_deps: Bound<'py, PyAny> = if declared_macro_deps.is_truthy()? {
         declared_macro_deps
     } else {
-        stages
-            .macro_calls
-            .call1((model_input.getattr("macro_source_sql")?,))?
+        top_level_macro_call_names(
+            py,
+            &model_input
+                .getattr("macro_source_sql")?
+                .extract::<String>()?,
+        )?
+        .into_any()
     };
     let native_model: &Bound<'py, PyAny> = &request.native_model;
     if model_input.is_instance(&stages.native_input)? {

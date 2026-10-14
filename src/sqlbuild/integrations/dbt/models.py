@@ -7,17 +7,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, TextIO
 
+from sqlbuild._native import DbtCombinedGraph, dbt_fqn_selector_term
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.integrations.dbt._helpers.selection.selector_terms import dbt_fqn_selector_term
-from sqlbuild.integrations.dbt.types import (
-    DbtCombinedGraphOwner,
-    DbtCombinedGraphResourceType,
-    DbtInteropCommand,
-    DbtInteropSkipReason,
-)
+from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSkipReason
 
 
 @dataclass(frozen=True)
@@ -276,7 +271,6 @@ class DbtLsNode:
     name: str | None = None
     fqn: tuple[str, ...] = field(default_factory=tuple)
     original_file_path: str | None = None
-    payload: dict[str, object] = field(default_factory=dict)
 
     @property
     def selector_term(self) -> str:
@@ -289,43 +283,6 @@ class DbtLsResult:
 
     nodes: tuple[DbtLsNode, ...]
     command: DbtCommandResult
-
-
-@dataclass(frozen=True, order=True)
-class DbtCombinedGraphKey:
-    """Stable owner-qualified key for one combined dbt/SQLBuild graph node."""
-
-    owner: DbtCombinedGraphOwner
-    resource_type: DbtCombinedGraphResourceType
-    name: str
-
-    def __post_init__(self) -> None:
-        from sqlbuild.integrations.dbt.types import (
-            DbtCombinedGraphOwner,
-            DbtCombinedGraphResourceType,
-        )
-
-        object.__setattr__(self, "owner", DbtCombinedGraphOwner(self.owner))
-        object.__setattr__(
-            self,
-            "resource_type",
-            DbtCombinedGraphResourceType(self.resource_type),
-        )
-
-    @property
-    def stable_id(self) -> str:
-        """Return a stable string form for plan JSON and diagnostics."""
-
-        return f"{self.owner}:{self.resource_type}:{self.name}"
-
-
-@dataclass(frozen=True)
-class DbtCombinedGraph:
-    """Combined downstream-only dbt and SQLBuild graph."""
-
-    nodes: frozenset[DbtCombinedGraphKey]
-    upstream_deps: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]]
-    downstream_deps: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]]
 
 
 @dataclass(frozen=True)

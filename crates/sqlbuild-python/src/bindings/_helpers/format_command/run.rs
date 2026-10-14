@@ -8,6 +8,7 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyListMethods, PyTuple}
 use sqlbuild_core::format_command::main::collect_lint_files::collect_lint_files;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::discovery::description_inputs::externally_described_models;
 use crate::bindings::_helpers::format_command::files::{
     FormatChange, file_dictionary, overlaid, persist_changes, sorted_items,
 };
@@ -15,7 +16,6 @@ use crate::bindings::_helpers::format_command::files::{
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const FIXES_MODULE: &str = "sqlbuild.lint._helpers.fixes";
 const FIXTURE_AUTOFIX_MODULE: &str = "sqlbuild.compiler.planner.classes.fixture_null_autofix";
-const DESCRIPTION_MODULE: &str = "sqlbuild.compiler.compile.classes.model_description_resolution";
 const LINT_ERRORS_MODULE: &str = "sqlbuild.lint.exceptions";
 const DESCRIPTION_PRESENT: &str = "description-present";
 
@@ -198,15 +198,10 @@ fn drop_resolved_description_faults<'py>(
     if !has_description_fault {
         return Ok(violations);
     }
-    let py: Python<'py> = project_dir.py();
-    let described: BTreeSet<PathBuf> = call_with(
-        &imported(py, DESCRIPTION_MODULE, "ModelDescriptionResolution")?
-            .getattr("externally_described_models")?,
-        &[("project_dir", project_dir.clone())],
-    )?
-    .try_iter()?
-    .map(|path| path?.call_method0("resolve")?.extract())
-    .collect::<PyResult<_>>()?;
+    let described: BTreeSet<PathBuf> = externally_described_models(project_dir)?
+        .try_iter()?
+        .map(|path| path?.call_method0("resolve")?.extract())
+        .collect::<PyResult<_>>()?;
     let mut kept: Vec<Bound<'py, PyAny>> = Vec::new();
     for violation in violations {
         let resolved: PathBuf = violation

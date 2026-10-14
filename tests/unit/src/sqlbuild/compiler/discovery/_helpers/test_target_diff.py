@@ -6,15 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery._helpers.yml.project import (
-    load_local_config,
-    load_project_config,
-)
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     TargetDiffConfigErrorTestCase,
     TargetDiffConfigTestCase,
+)
+from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
+    load_local_config,
+    load_project_config,
 )
 
 _PROJECT: str = 'name = "shop"\nadapter = "duckdb"\n\n[targets.dev]\nschema = "dev"\n'

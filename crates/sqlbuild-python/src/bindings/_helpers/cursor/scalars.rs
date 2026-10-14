@@ -194,7 +194,7 @@ fn parse<'py>(
 /// Discovery values that may be dates or timestamps, or `None` when they do not parse.
 #[pyfunction(name = "cursor_try_parse")]
 #[pyo3(signature = (*, raw, cursor_type))]
-fn try_parse<'py>(
+pub(crate) fn try_parse<'py>(
     raw: &Bound<'py, PyAny>,
     cursor_type: &Bound<'py, PyAny>,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
@@ -363,7 +363,7 @@ fn next_value<'py>(
 /// An operator-declared inclusive bound advanced by one cursor unit.
 #[pyfunction(name = "cursor_inclusive_to_exclusive")]
 #[pyo3(signature = (*, value, grain))]
-fn to_exclusive<'py>(
+pub(crate) fn to_exclusive<'py>(
     value: &Bound<'py, PyAny>,
     grain: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -373,7 +373,7 @@ fn to_exclusive<'py>(
 /// An exclusive bound moved back by one cursor unit.
 #[pyfunction(name = "cursor_exclusive_to_inclusive")]
 #[pyo3(signature = (*, value, grain))]
-fn to_inclusive<'py>(
+pub(crate) fn to_inclusive<'py>(
     value: &Bound<'py, PyAny>,
     grain: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {

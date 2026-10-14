@@ -6,11 +6,8 @@ import pytest
 
 from scripts.setting_help.main.find_settings_without_snippet import find_settings_without_snippet
 from scripts.setting_help.main.parse_setting_snippet import parse_setting_snippet
+from sqlbuild._native import explicit_references_help, microbatch_guidance
 from sqlbuild.compiler.compile._helpers.analysis.validation import sql_analysis_opt_out_help
-from sqlbuild.compiler.discovery.main.explicit_references_help import explicit_references_help
-from sqlbuild.compiler.discovery.main.microbatch_guidance import (
-    microbatch_guidance,
-)
 from sqlbuild.errors.setting_help.main.join_helps import join_helps
 from sqlbuild.errors.setting_help.main.model_header_help import model_header_help
 from sqlbuild.errors.setting_help.main.setting_help import setting_help

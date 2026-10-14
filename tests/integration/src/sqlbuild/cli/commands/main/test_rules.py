@@ -12,7 +12,7 @@ import pytest
 from _pytest.capture import CaptureResult
 
 import sqlbuild._native as native_module
-import sqlbuild.compiler.compile._helpers.render.macros as macros_module
+import sqlbuild.compiler.compile._helpers.render.user_macros as macros_module
 import sqlbuild.compiler.compile.main.sql_expansion_context as expansion_context_module
 import sqlbuild.rule_engine._helpers.host.custom_host_pool as custom_host_pool_module
 import sqlbuild.rule_engine._helpers.run.rule_threads as rule_threads_module

@@ -1,8 +1,12 @@
+pub(crate) mod configuration;
 pub(crate) mod declaration_files;
 pub(crate) mod declaration_records;
+pub(crate) mod description_inputs;
 pub(crate) mod faults;
+pub(crate) mod guidance;
 pub(crate) mod header_declarations;
 pub(crate) mod header_values;
+pub(crate) mod hook_entries;
 pub(crate) mod key_checks;
 pub(crate) mod locations;
 pub(crate) mod model_file_record;

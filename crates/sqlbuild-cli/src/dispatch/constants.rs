@@ -724,10 +724,7 @@ const DBT_INIT_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const DBT_INIT_ROUTE: Route = routed(
     "run_dbt_init",
-    (
-        "sqlbuild.cli.commands.main.dbt._dbt_init",
-        "run_dbt_init_command",
-    ),
+    ("sqlbuild._native", "run_dbt_init_command"),
     &DBT_INIT_ARGUMENTS,
     REQUEST_SHAPE,
 );
