@@ -6,6 +6,7 @@ pub mod format_completion_line;
 pub mod format_count_noun;
 pub mod format_dbt_interop_plan;
 pub mod format_dbt_interop_plan_json;
+pub mod format_inline_error_lines;
 pub mod format_overflow_line;
 pub mod format_phase_line;
 pub mod format_plan_completion;

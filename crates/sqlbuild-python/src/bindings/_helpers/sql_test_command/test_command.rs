@@ -79,7 +79,7 @@ fn compact_json(payload: &Bound<'_, PyAny>) -> PyResult<String> {
 }
 
 /// The label of one test or result: its name, plus source and values for parameterized cases.
-fn test_label(item: &Bound<'_, PyAny>, name_field: &str) -> PyResult<String> {
+pub(crate) fn test_label(item: &Bound<'_, PyAny>, name_field: &str) -> PyResult<String> {
     let name: String = item.getattr(name_field)?.extract()?;
     let source_path: Bound<'_, PyAny> = item.getattr("source_path")?;
     let values: Vec<Bound<'_, PyAny>> = item

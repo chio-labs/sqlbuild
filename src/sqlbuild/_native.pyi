@@ -1744,6 +1744,13 @@ def write_execution_header(
 ) -> None: ...
 def format_expectation_name(model_name: str) -> str: ...
 def format_expectation_detail(step_result: StepResult) -> str: ...
+def format_build_footer(
+    *,
+    result: BuildExecutionResult,
+    elapsed: float,
+    use_color: bool,
+    python_node_results: tuple[PythonNodeExecutionResult, ...] | None = None,
+) -> str: ...
 def format_build_execution_json(
     *,
     result: BuildExecutionResult,

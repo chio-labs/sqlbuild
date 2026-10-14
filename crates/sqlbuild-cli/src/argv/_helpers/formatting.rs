@@ -136,6 +136,7 @@ fn format_text(formatter: &Formatter, text: &str, indent: i64) -> String {
         &normalize_whitespace(text),
         width as usize,
         (&padding, &padding),
+        true,
     );
     format!("{}\n\n", lines.join("\n"))
 }
@@ -185,7 +186,14 @@ fn format_action(formatter: &Formatter, entry: &HelpEntry, indent: i64) -> Strin
         }
     };
     let lines: Vec<String> = help
-        .map(|help| text_wrap(&normalize_whitespace(help), help_width as usize, ("", "")))
+        .map(|help| {
+            text_wrap(
+                &normalize_whitespace(help),
+                help_width as usize,
+                ("", ""),
+                true,
+            )
+        })
         .unwrap_or_default();
     if let Some((first, rest)) = lines.split_first() {
         text.push_str(&format!("{}{first}\n", " ".repeat(indent_first as usize)));

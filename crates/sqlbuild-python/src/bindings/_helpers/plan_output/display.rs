@@ -44,7 +44,7 @@ fn label_facts(entry: &Bound<'_, PyAny>) -> PyResult<ModelLabelFacts> {
     })
 }
 
-fn optional_facts(entry: &Bound<'_, PyAny>) -> PyResult<Option<ModelLabelFacts>> {
+pub(crate) fn optional_facts(entry: &Bound<'_, PyAny>) -> PyResult<Option<ModelLabelFacts>> {
     if entry.is_none() {
         return Ok(None);
     }
