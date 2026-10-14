@@ -51,14 +51,12 @@ from sqlbuild.lint.models import LintConfig, LintRunResult, LintViolation
 from sqlbuild.lint.types import RelationKeys
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue, select_rules
 from sqlbuild.rule_engine._helpers.engine.config import resolve_rule_ignore_selectors
+from sqlbuild.rule_engine._helpers.engine.custom_payloads import custom_rule_payloads
 from sqlbuild.rule_engine._helpers.engine.hermeticity import verify_custom_rules
-from sqlbuild.rule_engine._helpers.engine.native import (
-    custom_rule_payloads,
-    finalize_native_findings,
-)
 from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
 from sqlbuild.rule_engine._helpers.run.findings import group_unevaluated_findings
 from sqlbuild.rule_engine._helpers.run.memory import release_freed_memory
+from sqlbuild.rule_engine._helpers.run.native_rows import finalize_rules_rows
 from sqlbuild.rule_engine.constants import SQL_RULES_CACHE_FILE, TYPE_PROOF_RULE_CODES
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.main.load_config import load_rules_config
@@ -197,7 +195,7 @@ def finish_rule_run(
 ) -> RulesRunResult:
     """Finalize the combined SQL, built-in and custom findings of one run."""
 
-    finalized: tuple[Finding, ...] = finalize_native_findings(
+    finalized: tuple[Finding, ...] = finalize_rules_rows(
         config=plan.config,
         project_dir=plan.project_dir,
         evaluated_codes=tuple(rule.code for rule in plan.selected),

@@ -5,7 +5,7 @@ use pyo3::prelude::{Bound, PyModule, PyResult};
 use crate::bindings::_helpers::rules::{
     builtin_catalogue, custom_rule_cache, custom_rule_evidence, dsl_headers, evaluation, lint,
     lint_expansion, lint_sql_bodies, lint_text, results, rule_cache, rules_config, run_lint,
-    skills,
+    selection, skills,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -21,6 +21,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     builtin_catalogue::register(module)?;
     rules_config::register(module)?;
     run_lint::register(module)?;
+    selection::register(module)?;
     results::register(module)?;
     skills::register(module)
 }

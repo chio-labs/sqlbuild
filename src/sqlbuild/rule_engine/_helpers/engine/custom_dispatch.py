@@ -8,18 +8,15 @@ from functools import partial
 from pathlib import Path
 
 import sqlbuild._native as _native
+from sqlbuild._native import rule_selected, selected_rule_codes
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
+from sqlbuild.rule_engine._helpers.engine.custom_payloads import custom_rule_payloads
 from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
-from sqlbuild.rule_engine._helpers.engine.native import (
-    custom_rule_payloads,
-    finalize_native_findings,
-    rule_selected,
-    selected_codes,
-)
 from sqlbuild.rule_engine._helpers.run.native_rows import (
     build_rules_request,
     evaluate_rules_request,
+    finalize_rules_rows,
 )
 from sqlbuild.rule_engine.constants import TYPE_PROOF_RULE_CODES
 from sqlbuild.rule_engine.models import (
@@ -113,7 +110,7 @@ def _evaluate_native_rows(
         *custom.findings,
     )
     if not defer_suppressions:
-        findings = finalize_native_findings(
+        findings = finalize_rules_rows(
             config=config,
             project_dir=project_dir,
             evaluated_codes=native.selected_codes,
@@ -175,6 +172,6 @@ def _selected_custom_rules(
     if not custom_payloads:
         return ()
     selected: frozenset[str] = frozenset(
-        selected_codes(config=config, custom_payloads=custom_payloads)
+        selected_rule_codes(config=config, custom_payloads=custom_payloads)
     )
     return tuple(rule for rule in catalogue if rule.custom and rule.code in selected)

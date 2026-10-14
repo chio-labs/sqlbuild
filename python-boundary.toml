@@ -120,6 +120,11 @@ reason = "user-code"
 note = "Submits custom rules to their worker thread beside native built-in rule evaluation."
 
 [[stays]]
+path = "rule_engine/_helpers/engine/custom_payloads.py"
+reason = "user-code"
+note = "Reads user rule functions (source lines, qualified names, import closures) to describe custom rules for native selection."
+
+[[stays]]
 path = "rule_engine/_helpers/engine/custom_rules.py"
 reason = "user-code"
 note = "Dispatches custom rules to the rule-host worker pool and digests the fact views they read."

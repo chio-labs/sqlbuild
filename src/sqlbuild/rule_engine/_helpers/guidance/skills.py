@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
-from sqlbuild.rule_engine._helpers.engine.native import render_native_owned_skill
+from sqlbuild._native import render_owned_skill
 from sqlbuild.rule_engine._helpers.engine.ruleset import resolve_ruleset
 from sqlbuild.rule_engine._helpers.guidance.thresholds import format_threshold_lines
 from sqlbuild.rule_engine.constants import (
@@ -104,7 +104,7 @@ def render_skills(*, config: RulesConfig, project_dir: Path) -> tuple[str, str]:
             body.append(f"- Replace retired `{retired}` with `{replacement}`")
     content: str = "\n".join(body).rstrip() + "\n"
     return (
-        render_native_owned_skill(content=content, input_fingerprint=ruleset.fingerprint),
+        render_owned_skill(content=content, input_fingerprint=ruleset.fingerprint),
         ruleset.fingerprint,
     )
 
