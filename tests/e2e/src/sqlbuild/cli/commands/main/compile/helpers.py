@@ -31,8 +31,8 @@ import pytest
 
 import sqlbuild._native as native_module
 import sqlbuild.adapter.type_system._helpers.type_normalization as type_normalization
-import sqlbuild.cli.compile_reuse._helpers.native_reuse as native_reuse
 import sqlbuild.cli.compile_reuse._helpers.provider_settings as provider_settings
+import sqlbuild.cli.compile_reuse.constants as reuse_constants
 import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
 import sqlbuild.compiler.frontier.main.compiled_code_identity as compiled_code_identity_module
 import sqlbuild.compiler.macro_bridge.classes.macro_bridge as macro_bridge_class
@@ -3397,7 +3397,7 @@ def record_digested_files(*, monkeypatch: pytest.MonkeyPatch) -> list[int]:
 def settle_racy_window(*, monkeypatch: pytest.MonkeyPatch) -> None:
     """Treat files written before a compile starts as settled instead of waiting two seconds."""
 
-    monkeypatch.setattr(native_reuse, "RACY_WINDOW_NS", 0)
+    monkeypatch.setattr(reuse_constants, "RACY_WINDOW_NS", 0)
 
 
 def write_large_file(*, project_dir: Path, relative_path: str, size_bytes: int) -> Path:
@@ -4221,7 +4221,7 @@ def ignore_project_changes(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make compile reuse stop watching the models folder, so a model edit goes unseen."""
 
     monkeypatch.setattr(
-        native_reuse, "EXCLUDED_ROOT_DIRECTORIES", EXCLUDED_ROOT_DIRECTORIES | {"models"}
+        reuse_constants, "EXCLUDED_ROOT_DIRECTORIES", EXCLUDED_ROOT_DIRECTORIES | {"models"}
     )
 
 

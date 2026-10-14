@@ -51,7 +51,7 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode, ScopeIndexLoader
 from sqlbuild.cli.compile.models import CompileAnalysis
-from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt
+from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt, CompileReuseRequest
 from sqlbuild.cli.entry.models import (
     AuthoredTargetWarehouse,
     CommandWarehouseScope,
@@ -1304,6 +1304,7 @@ class NativeReuseAttempt:
     def record(self, record: dict[str, object]) -> tuple[str, int]: ...
 
 def check_compile_reuse(check: dict[str, object]) -> NativeReuseAttempt: ...
+def attempt_compile_reuse(*, request: CompileReuseRequest) -> CompileReuseAttempt: ...
 
 class CompileArtifactWrites:
     @property
