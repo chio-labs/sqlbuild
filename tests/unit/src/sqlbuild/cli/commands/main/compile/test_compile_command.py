@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 import sqlbuild._native as discovery_entry
-from sqlbuild.cli.commands._helpers.runtime import adapters as runtime_adapters
+from sqlbuild.adapter.discovery.main import resolve_adapter as runtime_adapters
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.main.run import run_compile
 from sqlbuild.cli.entry.models import CompileCommandRequest

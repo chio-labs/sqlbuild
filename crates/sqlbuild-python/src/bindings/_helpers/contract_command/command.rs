@@ -19,13 +19,13 @@ use sqlbuild_core::contract_command::models::{
 };
 
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
+use crate::bindings::_helpers::command_runtime::invocation::resolve_adapter_connection_context;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
-const ADAPTER_CONTEXT_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapter_context";
 const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
 const GRAPH_SELECTION_MODULE: &str = "sqlbuild._native";
 const ADOPTION_MODELS: &str = "sqlbuild.compiler.contract_adoption.models";
@@ -397,18 +397,11 @@ fn run_contract_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<
             "C472",
         ));
     }
-    let context: Bound<'_, PyAny> = call_with(
-        &imported(
-            py,
-            ADAPTER_CONTEXT_MODULE,
-            "resolve_adapter_connection_context",
-        )?,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("effective_project_dir", project_dir.clone()),
-            ("selected_target", py.None().into_bound(py)),
-            ("cli_vars", request.getattr("cli_vars")?),
-        ],
+    let context: Bound<'_, PyAny> = resolve_adapter_connection_context(
+        &discovered,
+        &project_dir,
+        (py.None().into_bound(py), request.getattr("cli_vars")?),
+        true,
     )?;
     let selection: Selection<'_> = select_resources(request, &discovered, &context)?;
     let progress: Progress<'_> = progress_for(request)?;

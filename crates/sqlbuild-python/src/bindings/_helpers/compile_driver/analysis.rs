@@ -6,6 +6,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString, PyTuple, PyTupleMethods};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     Status, call_with, imported, keywords, within,
 };
@@ -14,7 +15,6 @@ use crate::bindings::_helpers::rules::rules_config::load_rules_config;
 
 const DISCOVER_MODULE: &str = "sqlbuild._native";
 const REJECT_SELECTORS_MODULE: &str = "sqlbuild._native";
-const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const SELECTED_GRAPH_MODULE: &str = "sqlbuild._native";
@@ -330,13 +330,7 @@ impl<'py> Driver<'_, 'py> {
                 ("local_config", discovered.getattr("local_config")?),
             ],
         )?;
-        call_with(
-            &imported(self.py, ADAPTERS_MODULE, "resolve_adapter")?,
-            &[
-                ("adapter_name", adapter_name),
-                ("project_dir", self.options.project_dir.clone()),
-            ],
-        )
+        resolve_cli_adapter(&adapter_name, &self.options.project_dir)
     }
 
     /// Compile the project graph, starting the early SQL lint once inputs are ready.

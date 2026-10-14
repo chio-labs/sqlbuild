@@ -32,6 +32,7 @@ use sqlbuild_analysis::lineage_command::models::{
 use sqlbuild_core::cli_text::models::CliStyle;
 
 use crate::bindings::_helpers::build_progress::transient_status::maybe_status;
+use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::lineage::lineage_cache::{
     lineage_fingerprint, read_lineage_cache, write_lineage_cache,
 };
@@ -40,7 +41,6 @@ use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_colo
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
-const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
 const GRAPH_SELECTION_MODULE: &str = "sqlbuild._native";
@@ -200,16 +200,7 @@ fn prepare_source<'py>(
                 ],
             )?),
         )?;
-    let adapter: Bound<'py, PyAny> = imported(py, ADAPTERS_MODULE, "resolve_adapter")?.call(
-        (),
-        Some(&keywords(
-            py,
-            &[
-                ("adapter_name", &adapter_name),
-                ("project_dir", project_dir),
-            ],
-        )?),
-    )?;
+    let adapter: Bound<'py, PyAny> = resolve_cli_adapter(&adapter_name, project_dir)?;
     let no_validation: bool = request.getattr("no_sql_validation")?.extract::<bool>()? || !compiled;
     let options: Bound<'py, PyDict> = keywords(
         py,

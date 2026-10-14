@@ -6,10 +6,10 @@ use pyo3::prelude::{
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 use pyo3::wrap_pyfunction;
 
+use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const RULE_MODELS: &str = "sqlbuild.rule_engine.models";
 const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
 const GRAPH_SELECTION_MODULE: &str = "sqlbuild._native";
@@ -176,13 +176,7 @@ fn rule_inputs<'py>(
             ("local_config", discovered.getattr("local_config")?),
         ],
     )?;
-    let adapter: Bound<'py, PyAny> = call_with(
-        &imported(py, ADAPTERS_MODULE, "resolve_adapter")?,
-        &[
-            ("adapter_name", adapter_name),
-            ("project_dir", project_dir.clone()),
-        ],
-    )?;
+    let adapter: Bound<'py, PyAny> = resolve_cli_adapter(&adapter_name, project_dir)?;
     let graph: Bound<'py, PyAny> = call_with(
         &imported(py, NATIVE_MODULE, "build_project_graph")?,
         &[

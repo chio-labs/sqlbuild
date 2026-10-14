@@ -21,10 +21,12 @@ use sqlbuild_core::debug_report::models::{
     DebugReport, DebugRuntime, WarehouseCheck,
 };
 
+use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::command_runtime::connection::project_connection_config;
 use crate::bindings::_helpers::command_runtime::runtime_errors::{
     expected_resolution_error, resolution_message,
 };
+use crate::bindings::_helpers::command_runtime::warehouse_scope::command_warehouse_scope;
 use crate::bindings::_helpers::command_runtime::warehouses::{
     CommandScope, WarehouseInputs, apply_warehouse, command_scope, find_authored, resolve_warehouse,
 };
@@ -34,8 +36,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
-const SCOPE_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.warehouse_scope";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const CONTRACT_TYPES_MODULE: &str = "sqlbuild.spec.contracts.types";
 const DEBUG_OPTIONS: (&[&str], &[&str]) = (
@@ -272,13 +272,7 @@ fn build_report(
             ("local_config", discovered_inputs.getattr("local_config")?),
         ],
     )?;
-    let adapter: Bound<'_, PyAny> = call_with(
-        &imported(py, ADAPTERS_MODULE, "resolve_adapter")?,
-        &[
-            ("adapter_name", adapter_name.clone()),
-            ("project_dir", project_dir_object.clone()),
-        ],
-    )?;
+    let adapter: Bound<'_, PyAny> = resolve_cli_adapter(&adapter_name, &project_dir_object)?;
     let context: DebugContext<'_> = DebugContext {
         project_dir: project_dir_object,
         discovered_inputs,
@@ -286,13 +280,9 @@ fn build_report(
         adapter,
     };
     let command_scope: CommandScope<'_> = command_scope(py)?;
-    let unscoped: Bound<'_, PyAny> = call_with(
-        &imported(py, SCOPE_MODULE, "command_warehouse_scope")?,
-        &[
-            ("command", py.None().into_bound(py)),
-            ("cli_warehouse", py.None().into_bound(py)),
-        ],
-    )?;
+    let none: Bound<'_, PyAny> = py.None().into_bound(py);
+    let unscoped: Bound<'_, PyAny> =
+        Bound::new(py, command_warehouse_scope(&none, &none, None)?)?.into_any();
     let base_connection: Bound<'_, PyAny> = within(&unscoped, |_| {
         project_connection_config(
             &context.discovered_inputs,

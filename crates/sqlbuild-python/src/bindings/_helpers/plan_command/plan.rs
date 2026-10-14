@@ -8,11 +8,11 @@ use pyo3::wrap_pyfunction;
 
 use crate::bindings::_helpers::build_command::support::keyword_relay;
 use crate::bindings::_helpers::cli::progress_text::with_verbose_inspection;
+use crate::bindings::_helpers::command_runtime::invocation::resolve_adapter_connection_context;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const ADAPTER_CONTEXT_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapter_context";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild.cli.commands._helpers.planning.external_refs";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const CONTRACT_MODELS: &str = "sqlbuild.runtime.contracts.models";
@@ -76,18 +76,14 @@ fn resolve_invocation<'py>(request: &Bound<'py, PyAny>) -> PyResult<PlanInvocati
     preview.set_item("as_target", request.getattr("as_target")?)?;
     preview.set_item("command_name", COMMAND_NAME)?;
     imported(py, NATIVE_MODULE, "validate_preview_target")?.call((), Some(&preview))?;
-    let context: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            ADAPTER_CONTEXT_MODULE,
-            "resolve_adapter_connection_context",
-        )?,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("effective_project_dir", project_dir.clone()),
-            ("selected_target", request.getattr("selected_target")?),
-            ("cli_vars", request.getattr("cli_vars")?),
-        ],
+    let context: Bound<'py, PyAny> = resolve_adapter_connection_context(
+        &discovered,
+        &project_dir,
+        (
+            request.getattr("selected_target")?,
+            request.getattr("cli_vars")?,
+        ),
+        true,
     )?;
     let json_output: bool = request.getattr("json_output")?.is_truthy()?;
     let use_color: bool =

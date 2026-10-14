@@ -91,7 +91,7 @@ def test_given_pending_run_when_showing_detail_then_persisted_summary_is_refresh
         lambda **kwargs: "snowflake",
     )
     monkeypatch.setattr(
-        "sqlbuild.cli.commands._helpers.runtime.adapters.resolve_adapter",
+        "sqlbuild.adapter.discovery.main.resolve_adapter.resolve_adapter",
         lambda **kwargs: _RefreshingCostAdapter(),
     )
     monkeypatch.setattr(
@@ -195,7 +195,7 @@ def test_given_useful_partial_when_refresh_degrades_then_persisted_summary_is_pr
         lambda **kwargs: "snowflake",
     )
     monkeypatch.setattr(
-        "sqlbuild.cli.commands._helpers.runtime.adapters.resolve_adapter",
+        "sqlbuild.adapter.discovery.main.resolve_adapter.resolve_adapter",
         lambda **kwargs: _StaticCostAdapter(candidate),
     )
     monkeypatch.setattr(
@@ -278,7 +278,7 @@ def test_given_persisted_ledger_failure_when_refresh_has_no_coverage_then_failur
         lambda **kwargs: "snowflake",
     )
     monkeypatch.setattr(
-        "sqlbuild.cli.commands._helpers.runtime.adapters.resolve_adapter",
+        "sqlbuild.adapter.discovery.main.resolve_adapter.resolve_adapter",
         lambda **kwargs: _StaticCostAdapter(candidate),
     )
     monkeypatch.setattr(

@@ -23,6 +23,7 @@ use crate::bindings::_helpers::clone::clone_execution::{
 };
 use crate::bindings::_helpers::clone::clone_pipeline::{ClonePipeline, prepared_clone_pipeline};
 use crate::bindings::_helpers::clone::clone_progress::{clone_item_text, write_line};
+use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
@@ -32,7 +33,6 @@ const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
 const TARGET_NAME_MODULE: &str = "sqlbuild._native";
 const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild.cli.commands._helpers.planning.external_refs";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
@@ -177,13 +177,7 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
             ("local_config", discovered.getattr("local_config")?),
         ],
     )?;
-    let adapter: Bound<'py, PyAny> = call_with(
-        &imported(py, ADAPTERS_MODULE, "resolve_adapter")?,
-        &[
-            ("adapter_name", adapter_name.clone()),
-            ("project_dir", project_dir.clone()),
-        ],
-    )?;
+    let adapter: Bound<'py, PyAny> = resolve_cli_adapter(&adapter_name, &project_dir)?;
     Ok(Invocation {
         project_dir,
         discovered,

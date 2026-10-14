@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+use crate::bindings::_helpers::command_runtime::warehouse_scope::command_warehouse_scope;
 use crate::bindings::_helpers::diff_report::support::cli_error;
 use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
@@ -21,7 +22,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 const EXCEPTIONS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const ENTRY_MODELS_MODULE: &str = "sqlbuild.cli.entry.models";
 const WAREHOUSES_MODULE: &str = "sqlbuild._native";
-const WAREHOUSE_SCOPE_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.warehouse_scope";
 const LAUNCH_RECORD_MODULE: &str = "sqlbuild.cli.entry.main._withhold_launch_record";
 const PATHLIB_MODULE: &str = "pathlib";
 const COMMENT_PREFIX: &str = "#";
@@ -354,14 +354,15 @@ pub(crate) fn dispatch_command<'py>(
             ],
         )?;
     }
-    let scope: Bound<'py, PyAny> = call_with(
-        &imported(py, WAREHOUSE_SCOPE_MODULE, "command_warehouse_scope")?,
-        &[
-            ("command", args.getattr("command")?),
-            ("cli_warehouse", warehouse),
-            ("cli_vars", args.getattr("vars")?),
-        ],
-    )?;
+    let scope: Bound<'py, PyAny> = Bound::new(
+        py,
+        command_warehouse_scope(
+            &args.getattr("command")?,
+            &warehouse,
+            Some(&args.getattr("vars")?),
+        )?,
+    )?
+    .into_any();
     within(&scope, |_| routed_command(args, handlers.as_ref()))
 }
 

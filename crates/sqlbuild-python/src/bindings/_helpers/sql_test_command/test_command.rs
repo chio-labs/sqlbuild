@@ -24,6 +24,7 @@ use sqlbuild_core::test_command::models::{
 };
 
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
+use crate::bindings::_helpers::command_runtime::invocation::resolve_reported_command_invocation;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
@@ -32,7 +33,6 @@ use crate::bindings::_helpers::result_output::integration_values::json_value;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
-const INVOCATION_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.command_invocation";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild.cli.commands._helpers.planning.external_refs";
 const STATIC_COMMAND_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
@@ -634,19 +634,10 @@ fn complete(
 #[pyo3(signature = (*, request))]
 fn run_test_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let inspect_only: bool = request.getattr("inspect")?.is_truthy()?;
-    let invocation: Bound<'_, PyAny> = call_with(
-        &imported(py, INVOCATION_MODULE, "resolve_reported_command_invocation")?,
-        &[
-            ("request", request.clone()),
-            (
-                "invocation_type",
-                imported(py, COMMAND_MODELS, "TestInvocation")?,
-            ),
-            (
-                "require_connection",
-                PyBool::new(py, !inspect_only).to_owned().into_any(),
-            ),
-        ],
+    let invocation: Bound<'_, PyAny> = resolve_reported_command_invocation(
+        request,
+        &imported(py, COMMAND_MODELS, "TestInvocation")?,
+        !inspect_only,
     )?;
     let pipeline: Bound<'_, PyAny> = compile_tests(request, &invocation)?;
     let stream: Bound<'_, PyAny> = invocation.getattr("progress_stream")?;

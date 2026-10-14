@@ -49,12 +49,13 @@ from sqlbuild.cli.commands.models import (
     SeedCommandRequest,
     TestCommandRequest,
 )
-from sqlbuild.cli.commands.types import CompileLineageMode, ScopeIndexLoader
+from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode, ScopeIndexLoader
 from sqlbuild.cli.compile.models import CompileAnalysis
 from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt
 from sqlbuild.cli.entry.models import (
     AuthoredTargetWarehouse,
     CompileCommandRequest,
+    CommandWarehouseScope,
     CompileProfileFlags,
     ParsedCliInvocation,
     ResolvedWarehouse,
@@ -2688,6 +2689,19 @@ def resolve_target_name(
 def resolve_target_config(
     *, project_config: ProjectConfig, local_config: LocalConfig, target_name: str
 ) -> TargetConfig: ...
+def resolve_adapter(*, adapter_name: str, project_dir: Path | None = None) -> BaseAdapter: ...
+
+class CommandWarehouseScopeInstall:
+    def __enter__(self) -> CommandWarehouseScope: ...
+    def __exit__(self, *exc_info: object) -> bool: ...
+
+def command_warehouse_scope(
+    *,
+    command: CliCommand | str | None,
+    cli_warehouse: str | None,
+    cli_vars: Mapping[str, object] | None = None,
+) -> CommandWarehouseScopeInstall: ...
+def current_command_warehouse_scope() -> CommandWarehouseScope: ...
 def resolve_effective_adapter_name(
     *, project_config: ProjectConfig, local_config: LocalConfig
 ) -> str: ...

@@ -8,10 +8,10 @@ from sqlbuild._native import (
     build_project_graph,
     discover_project_inputs,
     load_rules_config,
+    resolve_adapter,
     run_rules,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.rule_engine.models import RulesRunResult

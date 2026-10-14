@@ -16,6 +16,7 @@ use sqlbuild_core::load_command::main::render_load_plan::render_load_plan;
 use sqlbuild_core::load_command::main::render_load_ready::render_load_ready;
 use sqlbuild_core::load_command::models::{LoadCounts, LoadResultText};
 
+use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::cursor::overrides::{cursor_integer, cursor_timestamp};
 use crate::bindings::_helpers::load::load_progress::{
@@ -33,7 +34,6 @@ const EFFECTIVE_TARGET_MODULE: &str = "sqlbuild._native";
 const EFFECTIVE_RUNTIME_MODULE: &str = "sqlbuild._native";
 const EFFECTIVE_SETTINGS_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const RELATION_LOOKUP_MODULE: &str = "sqlbuild.adapter.relations.main.relation_lookup";
 const CURSOR_OVERRIDES_MODULE: &str =
     "sqlbuild.compiler.planner.main.cursor_window._typed_cursor_overrides";
@@ -284,13 +284,7 @@ fn prepare<'py>(
             ("local_config", discovered.getattr("local_config")?),
         ],
     )?;
-    let adapter: Bound<'py, PyAny> = call_with(
-        &imported(py, ADAPTERS_MODULE, "resolve_adapter")?,
-        &[
-            ("adapter_name", adapter_name.clone()),
-            ("project_dir", invocation.project_dir.clone()),
-        ],
-    )?;
+    let adapter: Bound<'py, PyAny> = resolve_cli_adapter(&adapter_name, &invocation.project_dir)?;
     let connection_config: Bound<'py, PyAny> = call_with(
         &imported(py, NATIVE_MODULE, "resolve_project_connection_config")?,
         &[

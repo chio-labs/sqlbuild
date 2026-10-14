@@ -15,6 +15,7 @@ use sqlbuild_core::cli_text::models::CliStyle;
 use crate::bindings::_helpers::check::check_results::{
     check_result_text, results_json, write_results,
 };
+use crate::bindings::_helpers::command_runtime::invocation::resolve_reported_command_invocation;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::compile_outputs::runtime_target::write_python_check_runtime_target;
 use crate::bindings::_helpers::graph::python_selection::python_node_names;
@@ -22,7 +23,6 @@ use crate::bindings::_helpers::graph::python_selection::python_node_names;
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
-const INVOCATION_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.command_invocation";
 const CHECK_CORE_MODULE: &str = "sqlbuild.cli.commands._helpers.check.core";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild.cli.commands._helpers.planning.external_refs";
 const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
@@ -681,15 +681,10 @@ fn complete<'py>(
 #[pyfunction]
 #[pyo3(signature = (*, request))]
 fn run_check_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
-    let invocation: Bound<'_, PyAny> = call_with(
-        &imported(py, INVOCATION_MODULE, "resolve_reported_command_invocation")?,
-        &[
-            ("request", request.clone()),
-            (
-                "invocation_type",
-                imported(py, COMMAND_MODELS, "CheckInvocation")?,
-            ),
-        ],
+    let invocation: Bound<'_, PyAny> = resolve_reported_command_invocation(
+        request,
+        &imported(py, COMMAND_MODELS, "CheckInvocation")?,
+        true,
     )?;
     let stream: Bound<'_, PyAny> = invocation.getattr("progress_stream")?;
     stream.call_method1("write", ("\n",))?;

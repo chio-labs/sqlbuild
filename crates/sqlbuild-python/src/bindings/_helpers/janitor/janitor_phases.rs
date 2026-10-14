@@ -6,10 +6,10 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods};
 
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
+use crate::bindings::_helpers::command_runtime::invocation::resolve_adapter_connection_context;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const ADAPTER_CONTEXT_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapter_context";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const JANITOR_PLAN_MODULE: &str = "sqlbuild.executor.janitor.main.plan";
 const JANITOR_EXECUTE_MODULE: &str = "sqlbuild.executor.janitor.main.execute";
@@ -54,24 +54,14 @@ pub(crate) fn compile_janitor_project<'py>(
     invocation: &Bound<'py, PyAny>,
 ) -> PyResult<JanitorCompiled<'py>> {
     let py: Python<'py> = invocation.py();
-    let context: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            ADAPTER_CONTEXT_MODULE,
-            "resolve_adapter_connection_context",
-        )?,
-        &[
-            (
-                "discovered_inputs",
-                invocation.getattr("discovered_inputs")?,
-            ),
-            (
-                "effective_project_dir",
-                invocation.getattr("effective_project_dir")?,
-            ),
-            ("selected_target", invocation.getattr("selected_target")?),
-            ("cli_vars", py.None().into_bound(py)),
-        ],
+    let context: Bound<'py, PyAny> = resolve_adapter_connection_context(
+        &invocation.getattr("discovered_inputs")?,
+        &invocation.getattr("effective_project_dir")?,
+        (
+            invocation.getattr("selected_target")?,
+            py.None().into_bound(py),
+        ),
+        true,
     )?;
     let started: Instant = Instant::now();
     let status: Bound<'py, PyAny> = call_with(

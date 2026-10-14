@@ -10,8 +10,8 @@ from unittest.mock import Mock
 import pytest
 
 from sqlbuild import _native as native
+from sqlbuild.adapter.discovery.main import resolve_adapter as adapters_module
 from sqlbuild.cli.commands._helpers.planning import external_refs as external_refs_module
-from sqlbuild.cli.commands._helpers.runtime import adapters as adapters_module
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledSqlScenario
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlScenarioFile

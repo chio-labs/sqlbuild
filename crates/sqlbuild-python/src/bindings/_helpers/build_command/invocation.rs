@@ -9,12 +9,12 @@ use sqlbuild_core::build_command::models::DurationLimit;
 
 use crate::bindings::_helpers::build_command::policies::build_command_error;
 use crate::bindings::_helpers::build_command::support::{boolean, or_none, text};
+use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
-const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const SETTINGS_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
@@ -147,13 +147,7 @@ pub(crate) fn resolve_build_context<'py>(
         ],
     )?
     .extract()?;
-    let adapter: Bound<'py, PyAny> = call_with(
-        &imported(py, ADAPTERS_MODULE, "resolve_adapter")?,
-        &[
-            ("adapter_name", text(py, &adapter_name)),
-            ("project_dir", project_dir.clone()),
-        ],
-    )?;
+    let adapter: Bound<'py, PyAny> = resolve_cli_adapter(&text(py, &adapter_name), &project_dir)?;
     let limits: Bound<'py, PyAny> =
         execution_limits(&discovered, &target_name, (&adapter_name, &adapter))?;
     let connection_config: Bound<'py, PyAny> = call_with(

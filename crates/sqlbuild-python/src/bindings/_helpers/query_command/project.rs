@@ -2,11 +2,11 @@
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 
+use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const RESOLVE_ADAPTER_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 
 /// The project directory, defaulting to the working directory, with its inputs and adapter.
 pub(crate) struct ProjectAdapter<'py> {
@@ -34,13 +34,7 @@ pub(crate) fn project_adapter<'py>(
             ("local_config", discovered.getattr("local_config")?),
         ],
     )?;
-    let adapter: Bound<'py, PyAny> = call_with(
-        &imported(py, RESOLVE_ADAPTER_MODULE, "resolve_adapter")?,
-        &[
-            ("adapter_name", adapter_name),
-            ("project_dir", project_dir.clone()),
-        ],
-    )?;
+    let adapter: Bound<'py, PyAny> = resolve_cli_adapter(&adapter_name, &project_dir)?;
     Ok(ProjectAdapter {
         project_dir,
         discovered,

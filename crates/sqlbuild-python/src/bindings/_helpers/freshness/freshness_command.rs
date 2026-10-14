@@ -14,6 +14,7 @@ use sqlbuild_core::freshness_text::main::freshness_json::freshness_json;
 use sqlbuild_core::freshness_text::main::render_freshness_text::render_freshness_text;
 use sqlbuild_core::freshness_text::models::FreshnessSourceResult;
 
+use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::freshness::freshness_observe::{
     Observer, PreviousState, observe_freshness,
 };
@@ -23,7 +24,6 @@ const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const CONNECTION_MODULE: &str = "sqlbuild._native";
 const GRAPH_SELECTION_MODULE: &str = "sqlbuild._native";
 const UPSTREAM_MODULE: &str = "sqlbuild._native";
@@ -325,16 +325,7 @@ fn run_freshness_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult
                 ],
             )?),
         )?;
-    let adapter: Bound<'_, PyAny> = imported(py, ADAPTERS_MODULE, "resolve_adapter")?.call(
-        (),
-        Some(&keywords(
-            py,
-            &[
-                ("adapter_name", &adapter_name),
-                ("project_dir", &project_dir),
-            ],
-        )?),
-    )?;
+    let adapter: Bound<'_, PyAny> = resolve_cli_adapter(&adapter_name, &project_dir)?;
     let graph: Bound<'_, PyAny> = imported(py, NATIVE_MODULE, "build_project_graph")?.call(
         (),
         Some(&keywords(
