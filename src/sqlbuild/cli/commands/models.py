@@ -46,11 +46,9 @@ if TYPE_CHECKING:
     from sqlbuild.compiler.compile.models import (
         CompilerDiagnostic,
     )
-    from sqlbuild.compiler.compile.types import CompiledProjectView
     from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
     from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
     from sqlbuild.compiler.refactoring.models import RefactorProject
-    from sqlbuild.executor.janitor.models import JanitorPlan
 
 
 @dataclass(frozen=True)
@@ -383,30 +381,6 @@ class JanitorSettings:
     direct_state_history_versions: int
     archive_retention_days: int = 14
     drop_old_name_views: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class JanitorCompileContext:
-    """Compiled project and adapter context for janitor."""
-
-    adapter_name: str
-    adapter: BaseAdapter
-    project: CompiledProjectView
-    connection_config: dict[str, object]
-
-
-@dataclass(frozen=True)
-class JanitorConnectionContext:
-    """Janitor warehouse connection handle."""
-
-    connection: object
-
-
-@dataclass(frozen=True)
-class JanitorPlanningResult:
-    """Built janitor plan."""
-
-    plan: JanitorPlan
 
 
 @dataclass(frozen=True)

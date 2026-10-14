@@ -19,6 +19,10 @@ use sqlbuild_core::janitor_text::main::render_janitor_plan::render_janitor_plan;
 use sqlbuild_core::janitor_text::main::validate_janitor_settings::validate_janitor_settings;
 use sqlbuild_core::janitor_text::models::JanitorPlanText;
 
+use crate::bindings::_helpers::janitor::janitor_phases::{
+    JanitorCompiled, build_janitor_execution_plan, close_janitor_warehouse,
+    compile_janitor_project, connect_janitor_warehouse, execute_janitor_cleanup,
+};
 use crate::bindings::_helpers::janitor::janitor_plan::{janitor_plan_text, janitor_result_counts};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
@@ -28,10 +32,6 @@ const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 const PREVIEW_TARGET_MODULE: &str = "sqlbuild._native";
 const TARGET_NAME_MODULE: &str = "sqlbuild._native";
 const RETENTION_MODULE: &str = "sqlbuild.executor.janitor.main.resolve_retention_days";
-const PLANNING_MODULE: &str = "sqlbuild.cli.commands._helpers.janitor_runtime.planning";
-const EXECUTION_MODULE: &str = "sqlbuild.cli.commands._helpers.janitor_runtime.execution";
-const COMPILATION_MODULE: &str = "sqlbuild.cli.commands._helpers.janitor_runtime.compilation";
-const CONNECTIONS_MODULE: &str = "sqlbuild.cli.commands._helpers.janitor_runtime.connections";
 const COMMAND_NAME: &str = "janitor";
 
 fn imported<'py>(py: Python<'py>, module: &str, name: &str) -> PyResult<Bound<'py, PyAny>> {
@@ -185,25 +185,14 @@ fn clean(
     py: Python<'_>,
     request: &Bound<'_, PyAny>,
     (invocation, settings): (&Bound<'_, PyAny>, &Bound<'_, PyAny>),
-    (compile_context, connection_context): (&Bound<'_, PyAny>, &Bound<'_, PyAny>),
+    (compiled, connection): (&JanitorCompiled<'_>, &Bound<'_, PyAny>),
 ) -> PyResult<i32> {
     let style: CliStyle = CliStyle {
         use_color: invocation.getattr("use_color")?.extract()?,
     };
-    let planning: Bound<'_, PyAny> = imported(py, PLANNING_MODULE, "build_janitor_execution_plan")?
-        .call(
-            (),
-            Some(&keywords(
-                py,
-                &[
-                    ("invocation", invocation),
-                    ("settings", settings),
-                    ("compile_context", compile_context),
-                    ("connection_context", connection_context),
-                ],
-            )?),
-        )?;
-    let plan: JanitorPlanText = janitor_plan_text(&planning.getattr("plan")?)?;
+    let planning: Bound<'_, PyAny> =
+        build_janitor_execution_plan((invocation, settings), compiled, connection)?;
+    let plan: JanitorPlanText = janitor_plan_text(&planning)?;
     write(py, &render_janitor_plan(&plan, style))?;
     let blocked: i32 = i32::from(!plan.blocked_schemas.is_empty());
     let as_target: Option<String> = invocation.getattr("as_target")?.extract()?;
@@ -225,18 +214,7 @@ fn clean(
         write(py, "Janitor cancelled.\n")?;
         return Ok(1);
     }
-    let result: Bound<'_, PyAny> = imported(py, EXECUTION_MODULE, "execute_janitor_cleanup")?
-        .call(
-            (),
-            Some(&keywords(
-                py,
-                &[
-                    ("compile_context", compile_context),
-                    ("connection_context", connection_context),
-                    ("planning_result", &planning),
-                ],
-            )?),
-        )?;
+    let result: Bound<'_, PyAny> = execute_janitor_cleanup(compiled, connection, &planning)?;
     write(
         py,
         &janitor_completion_text(&janitor_result_counts(&result)?, style),
@@ -270,39 +248,15 @@ fn run_janitor_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i
         )?;
         flush(py)?;
     }
-    let compile_context: Bound<'_, PyAny> =
-        imported(py, COMPILATION_MODULE, "compile_janitor_project")?
-            .call((), Some(&keywords(py, &[("invocation", &invocation)])?))?;
-    let connection_context: Bound<'_, PyAny> =
-        imported(py, CONNECTIONS_MODULE, "connect_janitor_warehouse")?.call(
-            (),
-            Some(&keywords(
-                py,
-                &[
-                    ("invocation", &invocation),
-                    ("compile_context", &compile_context),
-                ],
-            )?),
-        )?;
+    let compiled: JanitorCompiled<'_> = compile_janitor_project(&invocation)?;
+    let connection: Bound<'_, PyAny> = connect_janitor_warehouse(&invocation, &compiled)?;
     let outcome: PyResult<i32> = clean(
         py,
         request,
         (&invocation, &settings),
-        (&compile_context, &connection_context),
+        (&compiled, &connection),
     );
-    let closed: PyResult<Bound<'_, PyAny>> =
-        imported(py, CONNECTIONS_MODULE, "close_janitor_warehouse").and_then(|close| {
-            close.call(
-                (),
-                Some(&keywords(
-                    py,
-                    &[
-                        ("compile_context", &compile_context),
-                        ("connection_context", &connection_context),
-                    ],
-                )?),
-            )
-        });
+    let closed: PyResult<()> = close_janitor_warehouse(&compiled, &connection);
     let code: i32 = outcome?;
     closed?;
     Ok(code)
