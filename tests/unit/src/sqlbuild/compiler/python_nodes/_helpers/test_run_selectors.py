@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.python_nodes._helpers.run_selectors import resolve_python_sql_run_selectors
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunSelection
 from tests.unit.src.sqlbuild.compiler.python_nodes._helpers._test_types import (
     PythonSqlSelectorErrorTestCase,
@@ -14,6 +13,7 @@ from tests.unit.src.sqlbuild.compiler.python_nodes._helpers._test_types import (
 from tests.unit.src.sqlbuild.compiler.python_nodes._helpers.helpers import (
     build_orders_project_graph,
     build_orders_python_node_graph,
+    resolve_run_selection,
 )
 
 
@@ -52,7 +52,7 @@ def test_given_run_selectors_when_resolving_then_excludes_python_checks(
     project_graph: ProjectGraph = build_orders_project_graph()
     python_graph: PythonNodeGraph = build_orders_python_node_graph()
 
-    result: PythonSqlRunSelection = resolve_python_sql_run_selectors(
+    result: PythonSqlRunSelection = resolve_run_selection(
         select=test_case.select,
         exclude=test_case.exclude,
         project_graph=project_graph,
@@ -99,7 +99,7 @@ def test_given_run_selector_selects_check_when_resolving_then_raises(
     python_graph: PythonNodeGraph = build_orders_python_node_graph()
 
     with pytest.raises(test_case.expected_error_type, match=test_case.expected_error_fragment):
-        resolve_python_sql_run_selectors(
+        resolve_run_selection(
             select=test_case.select,
             exclude=test_case.exclude,
             project_graph=project_graph,

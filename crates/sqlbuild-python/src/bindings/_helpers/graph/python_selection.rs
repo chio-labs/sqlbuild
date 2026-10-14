@@ -1,0 +1,217 @@
+//! Python node and unified SQL/Python selector resolution, and the Python node graph indexes.
+
+use pyo3::prelude::{
+    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
+use pyo3::types::{PyDict, PyFrozenSet};
+use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_analysis::assembly::project::types::ObjectKey;
+use sqlbuild_analysis::graph::errors::SelectorError;
+use sqlbuild_analysis::python_selection::main::python_node_graph_indexes::python_node_graph_indexes as graph_indexes;
+use sqlbuild_analysis::python_selection::main::resolve_python_node_excludes::resolve_python_node_excludes;
+use sqlbuild_analysis::python_selection::main::resolve_python_node_selectors::resolve_python_node_selectors;
+use sqlbuild_analysis::python_selection::main::resolve_python_sql_run_selection::resolve_python_sql_run_selection as run_selection;
+use sqlbuild_analysis::python_selection::models::{
+    InventoryIndexes, InventoryNode, PythonSelectionGraph, PythonSelectionNode, RunSelection,
+    SqlSelectionGraph,
+};
+
+use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
+
+const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
+
+type NameRows = Vec<(String, Vec<String>)>;
+/// `(name, tags, POSIX relative path, upstream node names)` of one discovered node.
+type InventoryRow = (String, Vec<String>, String, Vec<String>);
+/// `(edges, upstream, downstream, tags, paths)` in Python's dict order.
+type IndexesRow = (
+    Vec<(String, String)>,
+    NameRows,
+    NameRows,
+    NameRows,
+    Vec<(String, String)>,
+);
+
+/// The `PlannerInputError` Python raises for a selector failure.
+fn planner_error(py: Python<'_>, error: SelectorError) -> PyErr {
+    let raised = (|| -> PyResult<Bound<'_, PyAny>> {
+        let keywords: Bound<'_, PyDict> = PyDict::new(py);
+        keywords.set_item("code", error.code)?;
+        keywords.set_item("help", error.help)?;
+        imported(py, PLANNER_EXCEPTIONS_MODULE, "PlannerInputError")?
+            .call((error.message,), Some(&keywords))
+    })();
+    match raised {
+        Ok(instance) => PyErr::from_value(instance),
+        Err(failure) => failure,
+    }
+}
+
+fn strings(values: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+    values.try_iter()?.map(|value| value?.extract()).collect()
+}
+
+/// A `dict[str, Iterable[str]]` as rows in dict order.
+fn name_rows(mapping: &Bound<'_, PyAny>) -> PyResult<NameRows> {
+    let mut rows: NameRows = Vec::new();
+    for item in mapping.call_method0("items")?.try_iter()? {
+        let item: Bound<'_, PyAny> = item?;
+        rows.push((item.get_item(0)?.extract()?, strings(&item.get_item(1)?)?));
+    }
+    Ok(rows)
+}
+
+fn selection_node(node: &Bound<'_, PyAny>) -> PyResult<PythonSelectionNode> {
+    let mut sql_deps: Vec<ObjectKey> = Vec::new();
+    for reference in node.getattr("sql_deps")?.try_iter()? {
+        let reference: Bound<'_, PyAny> = reference?;
+        sql_deps.push((
+            reference.getattr("kind")?.getattr("value")?.extract()?,
+            reference.getattr("name")?.extract()?,
+        ));
+    }
+    Ok(PythonSelectionNode {
+        name: node.getattr("name")?.extract()?,
+        kind: node.getattr("kind")?.getattr("value")?.extract()?,
+        sql_deps,
+    })
+}
+
+/// A `PythonNodeGraph` as the native selection graph.
+fn selection_graph(graph: &Bound<'_, PyAny>) -> PyResult<PythonSelectionGraph> {
+    Ok(PythonSelectionGraph {
+        nodes: graph
+            .getattr("nodes")?
+            .try_iter()?
+            .map(|node| selection_node(&node?))
+            .collect::<PyResult<_>>()?,
+        upstream: name_rows(&graph.getattr("upstream_deps")?)?,
+        downstream: name_rows(&graph.getattr("downstream_deps")?)?,
+        tags: name_rows(&graph.getattr("tag_index")?)?,
+        paths: graph
+            .getattr("path_index")?
+            .call_method0("items")?
+            .try_iter()?
+            .map(|item| item?.extract())
+            .collect::<PyResult<_>>()?,
+    })
+}
+
+/// `(name, loader)` of every source in the compiled project.
+fn project_sources(project_graph: &Bound<'_, PyAny>) -> PyResult<Vec<(String, Option<String>)>> {
+    project_graph
+        .getattr("project")?
+        .getattr("sources")?
+        .try_iter()?
+        .map(|source| {
+            let source: Bound<'_, PyAny> = source?;
+            Ok((
+                source.getattr("name")?.extract()?,
+                source
+                    .getattr("source_entry")?
+                    .getattr("loader")?
+                    .extract()?,
+            ))
+        })
+        .collect()
+}
+
+/// The Python node names `select` minus `exclude` resolve to; every node when unselected.
+pub(crate) fn python_node_names<'py>(
+    graph: &Bound<'py, PyAny>,
+    (select, exclude): (Vec<String>, Vec<String>),
+) -> PyResult<Bound<'py, PyFrozenSet>> {
+    let py: Python<'py> = graph.py();
+    let native: PythonSelectionGraph = selection_graph(graph)?;
+    let names: Vec<String> =
+        compiler_guard(|| Ok(resolve_python_node_selectors(&native, &select, &exclude)))?
+            .map_err(|error| planner_error(py, error))?;
+    PyFrozenSet::new(py, names)
+}
+
+/// The Python node names `select` minus `exclude` resolve to; every node when unselected.
+#[pyfunction]
+#[pyo3(signature = (*, graph, select, exclude))]
+fn resolve_python_node_selection<'py>(
+    graph: &Bound<'py, PyAny>,
+    select: Vec<String>,
+    exclude: Vec<String>,
+) -> PyResult<Bound<'py, PyFrozenSet>> {
+    python_node_names(graph, (select, exclude))
+}
+
+/// The Python node names `sqb check` exclude tokens name, skipping tokens that match nothing.
+#[pyfunction]
+#[pyo3(signature = (*, graph, exclude))]
+fn resolve_python_check_excludes<'py>(
+    graph: &Bound<'py, PyAny>,
+    exclude: Vec<String>,
+) -> PyResult<Bound<'py, PyFrozenSet>> {
+    let py: Python<'py> = graph.py();
+    let native: PythonSelectionGraph = selection_graph(graph)?;
+    let names: Vec<String> =
+        compiler_guard(|| Ok(resolve_python_node_excludes(&native, &exclude)))?
+            .map_err(|error| planner_error(py, error))?;
+    PyFrozenSet::new(py, names)
+}
+
+/// `(sql keys, python node names)` run selectors resolve to across SQL resources and Python nodes.
+#[pyfunction]
+#[pyo3(signature = (*, project_graph, python_graph, select, exclude))]
+fn resolve_python_sql_run_selection(
+    project_graph: &Bound<'_, PyAny>,
+    python_graph: &Bound<'_, PyAny>,
+    select: Vec<String>,
+    exclude: Vec<String>,
+) -> PyResult<(Vec<ObjectKey>, Vec<String>)> {
+    let py: Python<'_> = project_graph.py();
+    let native: Bound<'_, NativeProjectGraph> = project_graph.getattr("native")?.downcast_into()?;
+    let sources: Vec<(String, Option<String>)> = project_sources(project_graph)?;
+    let nodes: PythonSelectionGraph = selection_graph(python_graph)?;
+    let selection: RunSelection = compiler_guard(|| {
+        Ok(run_selection(
+            SqlSelectionGraph {
+                graph: native.get().graph(),
+                sources: &sources,
+            },
+            &nodes,
+            &select,
+            &exclude,
+        ))
+    })?
+    .map_err(|error| planner_error(py, error))?;
+    Ok((selection.sql_keys, selection.python_node_names))
+}
+
+/// The dependency edges, adjacency, tag and path indexes of discovered Python nodes.
+#[pyfunction]
+fn python_node_graph_indexes(nodes: Vec<InventoryRow>) -> PyResult<IndexesRow> {
+    compiler_guard(|| {
+        let nodes: Vec<InventoryNode> = nodes
+            .into_iter()
+            .map(|(name, tags, relative_path, upstream)| InventoryNode {
+                name,
+                tags,
+                relative_path,
+                upstream,
+            })
+            .collect();
+        let InventoryIndexes {
+            edges,
+            upstream,
+            downstream,
+            tags,
+            paths,
+        } = graph_indexes(&nodes);
+        Ok((edges, upstream, downstream, tags, paths))
+    })
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(resolve_python_node_selection, module)?)?;
+    module.add_function(wrap_pyfunction!(resolve_python_check_excludes, module)?)?;
+    module.add_function(wrap_pyfunction!(resolve_python_sql_run_selection, module)?)?;
+    module.add_function(wrap_pyfunction!(python_node_graph_indexes, module)?)
+}

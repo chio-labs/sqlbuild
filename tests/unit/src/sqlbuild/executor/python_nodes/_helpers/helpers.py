@@ -22,7 +22,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredTaskFunction,
 )
-from sqlbuild.compiler.python_nodes._helpers.inventory import build_python_node_graph
+from sqlbuild.compiler.python_nodes._helpers.user_inventory import build_python_node_graph
 from sqlbuild.compiler.python_nodes._helpers.run_lifecycle import (
     build_python_sql_run_lifecycle_plan,
 )

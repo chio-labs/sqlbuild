@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlbuild._native import (
     build_python_relation_targets,
+    resolve_python_check_excludes,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationLookup
@@ -18,8 +19,6 @@ from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.python_nodes.main.selectors import resolve_python_nodes_from_selectors
 from sqlbuild.compiler.python_nodes.models import (
     PythonNodeGraph,
     PythonSqlRunLifecyclePlan,
@@ -38,8 +37,6 @@ from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.python_nodes.types import SqlResourceRefKind
 from sqlbuild.spec.contracts.models import SourceEntry
-
-_IGNORED_EXCLUDE_SELECTOR_ERROR_CODES: frozenset[str] = frozenset({"S007", "S008", "S009"})
 
 
 def record_python_run_state_results(
@@ -203,8 +200,8 @@ def relevant_check_functions(
 ) -> tuple[DiscoveredCheckFunction, ...]:
     """Return non-excluded checks whose Python and SQL dependencies all ran in this build."""
 
-    excluded_names: frozenset[str] = _resolve_python_check_excludes(
-        exclude=exclude, python_graph=python_graph
+    excluded_names: frozenset[str] = resolve_python_check_excludes(
+        graph=python_graph, exclude=exclude
     )
     check_names: set[str] = set()
     for node in python_graph.nodes:
@@ -221,27 +218,6 @@ def relevant_check_functions(
         ):
             check_names.add(node.name)
     return tuple(check for check in discovered_inputs.check_functions if check.name in check_names)
-
-
-def _resolve_python_check_excludes(
-    *, exclude: tuple[str, ...], python_graph: PythonNodeGraph
-) -> frozenset[str]:
-    excluded: set[str] = set()
-    raw_exclude: str
-    for raw_exclude in exclude:
-        token: str
-        for token in raw_exclude.split():
-            try:
-                excluded.update(
-                    resolve_python_nodes_from_selectors(
-                        select=(token,), exclude=(), graph=python_graph
-                    )
-                )
-            except PlannerInputError as error:
-                if error.code in _IGNORED_EXCLUDE_SELECTOR_ERROR_CODES:
-                    continue
-                raise
-    return frozenset(excluded)
 
 
 def _load_result_to_python_result(

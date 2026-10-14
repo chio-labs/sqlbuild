@@ -1,4 +1,4 @@
-"""Inventory helpers for executable Python DAG nodes."""
+"""Python-node inventory over loaded user functions: signatures, providers and dependencies."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Protocol, get_type_hints
 
+from sqlbuild._native import python_node_graph_indexes
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAssetFunction,
     DiscoveredCheckFunction,
@@ -52,18 +53,24 @@ def build_python_node_graph(*, discovered_inputs: DiscoveredProjectInputs) -> Py
         check_functions=discovered_inputs.check_functions,
         providers=discovered_inputs.providers,
     )
-    dependency_edges: tuple[PythonNodeDependencyEdge, ...] = build_python_node_dependency_edges(
-        nodes=nodes
+    edges, upstream, downstream, tags, paths = python_node_graph_indexes(
+        [
+            (node.name, node.tags, node.relative_path.as_posix(), upstream_names)
+            for node, upstream_names in zip(nodes, _upstream_node_names(nodes), strict=True)
+        ]
     )
     return PythonNodeGraph(
         nodes=nodes,
-        dependency_edges=dependency_edges,
-        upstream_deps=build_python_node_upstream_deps(nodes=nodes, edges=dependency_edges),
-        downstream_deps=build_python_node_downstream_deps(nodes=nodes, edges=dependency_edges),
-        tag_index=build_python_node_tag_index(nodes=nodes),
-        path_index=build_python_node_path_index(nodes=nodes),
+        dependency_edges=tuple(
+            PythonNodeDependencyEdge(upstream_name=upstream_name, downstream_name=downstream_name)
+            for upstream_name, downstream_name in edges
+        ),
+        upstream_deps={name: tuple(names) for name, names in upstream},
+        downstream_deps={name: tuple(names) for name, names in downstream},
+        tag_index={tag: frozenset(names) for tag, names in tags},
+        path_index=dict(paths),
         nodes_by_name={node.name: node for node in nodes},
-        nodes_by_typed_selector={_typed_selector(node): node for node in nodes},
+        nodes_by_typed_selector={f"{node.kind.value}:{node.name}": node for node in nodes},
     )
 
 
@@ -96,10 +103,8 @@ def build_python_nodes(
     return tuple(nodes)
 
 
-def build_python_node_dependency_edges(
-    *, nodes: tuple[DiscoveredPythonNode, ...]
-) -> tuple[PythonNodeDependencyEdge, ...]:
-    """Return dependency edges across loaders, tasks, assets, and checks."""
+def _upstream_node_names(nodes: tuple[DiscoveredPythonNode, ...]) -> list[list[str]]:
+    """Each node's Python-node dependencies, resolving live callables to node names."""
 
     node_by_dependency_key: dict[object | tuple[str, str], DiscoveredPythonNode] = {
         node.function: node for node in nodes
@@ -107,9 +112,9 @@ def build_python_node_dependency_edges(
     node: DiscoveredPythonNode
     for node in nodes:
         node_by_dependency_key[("name", node.name)] = node
-
-    edges: list[PythonNodeDependencyEdge] = []
+    upstream_names: list[list[str]] = []
     for node in nodes:
+        names: list[str] = []
         dependency: Callable[..., object] | SqlResourceRef
         for dependency in node.depends_on:
             if isinstance(dependency, SqlResourceRef):
@@ -117,61 +122,10 @@ def build_python_node_dependency_edges(
             upstream_node: DiscoveredPythonNode | None = node_by_dependency_key.get(
                 _python_node_dependency_key(dependency)
             )
-            if upstream_node is None:
-                continue
-            edges.append(
-                PythonNodeDependencyEdge(
-                    upstream_name=upstream_node.name,
-                    downstream_name=node.name,
-                )
-            )
-    return tuple(edges)
-
-
-def build_python_node_upstream_deps(
-    *, nodes: tuple[DiscoveredPythonNode, ...], edges: tuple[PythonNodeDependencyEdge, ...]
-) -> dict[str, tuple[str, ...]]:
-    """Return upstream Python-node dependency names keyed by downstream node name."""
-
-    upstream: dict[str, list[str]] = {node.name: [] for node in nodes}
-    edge: PythonNodeDependencyEdge
-    for edge in edges:
-        upstream.setdefault(edge.downstream_name, []).append(edge.upstream_name)
-        upstream.setdefault(edge.upstream_name, [])
-    return {name: tuple(values) for name, values in upstream.items()}
-
-
-def build_python_node_downstream_deps(
-    *, nodes: tuple[DiscoveredPythonNode, ...], edges: tuple[PythonNodeDependencyEdge, ...]
-) -> dict[str, tuple[str, ...]]:
-    """Return downstream Python-node dependency names keyed by upstream node name."""
-
-    downstream: dict[str, list[str]] = {node.name: [] for node in nodes}
-    edge: PythonNodeDependencyEdge
-    for edge in edges:
-        downstream.setdefault(edge.upstream_name, []).append(edge.downstream_name)
-        downstream.setdefault(edge.downstream_name, [])
-    return {name: tuple(values) for name, values in downstream.items()}
-
-
-def build_python_node_tag_index(
-    *, nodes: tuple[DiscoveredPythonNode, ...]
-) -> dict[str, frozenset[str]]:
-    """Build a tag-to-node-name lookup for tagged Python nodes."""
-
-    index: dict[str, set[str]] = {}
-    node: DiscoveredPythonNode
-    for node in nodes:
-        tag: str
-        for tag in node.tags:
-            index.setdefault(tag, set()).add(node.name)
-    return {tag: frozenset(names) for tag, names in index.items()}
-
-
-def build_python_node_path_index(*, nodes: tuple[DiscoveredPythonNode, ...]) -> dict[str, str]:
-    """Build a node-name-to-folder lookup from discovered Python node relative paths."""
-
-    return {node.name: node.relative_path.parent.as_posix() for node in nodes}
+            if upstream_node is not None:
+                names.append(upstream_node.name)
+        upstream_names.append(names)
+    return upstream_names
 
 
 class _DiscoveredPythonFunction(Protocol):
@@ -397,7 +351,3 @@ def _sql_deps(
     return tuple(
         dependency for dependency in dependencies if isinstance(dependency, SqlResourceRef)
     )
-
-
-def _typed_selector(node: DiscoveredPythonNode) -> str:
-    return f"{node.kind.value}:{node.name}"

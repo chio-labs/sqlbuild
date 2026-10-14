@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import resolve_python_node_selection
 from sqlbuild.compiler.planner.main.selection.selector_parse import parse_project_selector
 from sqlbuild.compiler.planner.models import ParsedSelector
 from sqlbuild.compiler.planner.types import SelectorKind
-from sqlbuild.compiler.python_nodes._helpers.selectors import resolve_python_node_selectors
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from tests.unit.src.sqlbuild.compiler.python_nodes._helpers._test_types import (
     PythonNodeParseSelectorTestCase,
@@ -181,7 +181,7 @@ def test_given_python_node_selectors_when_resolving_then_returns_expected_names(
 ) -> None:
     graph: PythonNodeGraph = build_orders_python_node_graph()
 
-    result: frozenset[str] = resolve_python_node_selectors(
+    result: frozenset[str] = resolve_python_node_selection(
         select=test_case.select,
         exclude=test_case.exclude,
         graph=graph,
@@ -244,7 +244,7 @@ def test_given_invalid_python_node_selector_when_resolving_then_raises_clear_err
     graph: PythonNodeGraph = build_orders_python_node_graph()
 
     with pytest.raises(test_case.expected_error_type, match=test_case.expected_error_fragment):
-        resolve_python_node_selectors(
+        resolve_python_node_selection(
             select=test_case.select,
             exclude=test_case.exclude,
             graph=graph,

@@ -7,11 +7,7 @@ import pytest
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
-from sqlbuild.compiler.python_nodes._helpers.unified_selectors import (
-    resolve_python_sql_selectors,
-    validate_python_sql_boundaries,
-)
-from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlSelection
+from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunSelection
 from sqlbuild.refs import seed
 from tests.unit.src.sqlbuild.compiler.python_nodes._helpers._test_types import (
     PythonSqlSelectorErrorTestCase,
@@ -28,6 +24,7 @@ from tests.unit.src.sqlbuild.compiler.python_nodes._helpers.helpers import (
     build_sql_ref_python_node_graph,
     build_terminal_loader_python_node_graph,
     model_ref,
+    resolve_run_selection,
     source_ref,
 )
 
@@ -113,10 +110,10 @@ from tests.unit.src.sqlbuild.compiler.python_nodes._helpers.helpers import (
             expected_python_node_names=frozenset(),
         ),
         PythonSqlSelectorTestCase(
-            description="selects source and intermediate loader without duplicate source names",
+            description="selects source and intermediate loader as its own source",
             select=("+source:raw_orders +loader:load_events",),
             exclude=(),
-            expected_sql_names=frozenset({"raw_orders"}),
+            expected_sql_names=frozenset({"raw_orders", "load_events"}),
             expected_python_node_names=frozenset({"prepare_orders", "load_events"}),
         ),
         PythonSqlSelectorTestCase(
@@ -135,7 +132,7 @@ def test_given_unified_selectors_when_resolving_then_returns_sql_and_python_sele
     project_graph: ProjectGraph = build_orders_project_graph()
     python_graph: PythonNodeGraph = build_orders_python_node_graph()
 
-    result: PythonSqlSelection = resolve_python_sql_selectors(
+    result: PythonSqlRunSelection = resolve_run_selection(
         select=test_case.select,
         exclude=test_case.exclude,
         project_graph=project_graph,
@@ -180,7 +177,7 @@ def test_given_unknown_unified_selector_when_resolving_then_raises_clear_error(
     python_graph: PythonNodeGraph = build_orders_python_node_graph()
 
     with pytest.raises(test_case.expected_error_type, match=test_case.expected_error_fragment):
-        resolve_python_sql_selectors(
+        resolve_run_selection(
             select=test_case.select,
             exclude=test_case.exclude,
             project_graph=project_graph,
@@ -208,7 +205,7 @@ def test_given_managed_source_loader_glob_when_resolving_then_requires_source_se
     python_graph: PythonNodeGraph = build_terminal_loader_python_node_graph()
 
     with pytest.raises(test_case.expected_error_type, match=test_case.expected_error_fragment):
-        resolve_python_sql_selectors(
+        resolve_run_selection(
             select=test_case.select,
             exclude=test_case.exclude,
             project_graph=project_graph,
@@ -246,7 +243,7 @@ def test_given_managed_source_loader_glob_when_resolving_then_requires_source_se
 def test_given_python_sql_dependency_when_expanding_selectors_then_crosses_the_boundary(
     test_case: PythonSqlSelectorTestCase,
 ) -> None:
-    result: PythonSqlSelection = resolve_python_sql_selectors(
+    result: PythonSqlRunSelection = resolve_run_selection(
         select=test_case.select,
         exclude=test_case.exclude,
         project_graph=build_orders_project_graph(),
@@ -294,12 +291,11 @@ def test_given_python_sql_dependency_when_expanding_selectors_then_crosses_the_b
 def test_given_sibling_python_nodes_when_expanding_both_ways_then_starts_from_the_roots(
     test_case: PythonSqlSelectorTestCase,
 ) -> None:
-    result: PythonSqlSelection = resolve_python_sql_selectors(
+    result: PythonSqlRunSelection = resolve_run_selection(
         select=test_case.select,
         exclude=test_case.exclude,
         project_graph=build_orders_project_graph(),
         python_graph=build_sibling_sql_ref_python_node_graph(),
-        validate_dependencies=False,
     )
 
     assert frozenset(key.name for key in result.sql_keys) == test_case.expected_sql_names
@@ -352,12 +348,11 @@ def test_given_sql_only_selector_when_resolving_unified_then_sql_keys_match_sql_
 ) -> None:
     project_graph: ProjectGraph = build_orders_project_graph()
 
-    result: PythonSqlSelection = resolve_python_sql_selectors(
+    result: PythonSqlRunSelection = resolve_run_selection(
         select=(test_case.selector,),
         exclude=(),
         project_graph=project_graph,
         python_graph=build_sibling_sql_ref_python_node_graph(),
-        validate_dependencies=False,
     )
     sql_only: frozenset[CompiledObjectKey] = resolve_project_selectors(
         select=(test_case.selector,),
@@ -421,7 +416,7 @@ def test_given_invalid_typed_sql_ref_when_resolving_then_raises_clear_error(
     )
 
     with pytest.raises(test_case.expected_error_type, match=test_case.expected_error_fragment):
-        resolve_python_sql_selectors(
+        resolve_run_selection(
             select=test_case.select,
             exclude=test_case.exclude,
             project_graph=project_graph,
@@ -475,7 +470,7 @@ def test_given_invalid_terminal_loader_dependency_when_validating_boundaries_the
     python_graph: PythonNodeGraph = build_python_node_graph_for_case(test_case.python_graph_case)
 
     with pytest.raises(test_case.expected_error_type, match=test_case.expected_error_fragment):
-        resolve_python_sql_selectors(
+        resolve_run_selection(
             select=test_case.select,
             exclude=test_case.exclude,
             project_graph=project_graph,
@@ -507,7 +502,7 @@ def test_given_invalid_sql_model_dependency_when_validating_boundaries_then_rais
     python_graph: PythonNodeGraph = build_python_node_graph_for_case(test_case.python_graph_case)
 
     with pytest.raises(test_case.expected_error_type, match=test_case.expected_error_fragment):
-        resolve_python_sql_selectors(
+        resolve_run_selection(
             select=test_case.select,
             exclude=test_case.exclude,
             project_graph=project_graph,
@@ -537,7 +532,7 @@ def test_given_sql_downstream_task_feeds_loader_when_validating_then_raises(
     python_graph: PythonNodeGraph = build_sql_downstream_task_to_loader_python_node_graph()
 
     with pytest.raises(test_case.expected_error_type, match=test_case.expected_error_fragment):
-        resolve_python_sql_selectors(
+        resolve_run_selection(
             select=test_case.select,
             exclude=test_case.exclude,
             project_graph=project_graph,
@@ -581,5 +576,9 @@ def test_given_intermediate_loader_dependency_when_validating_boundaries_then_it
     project_graph: ProjectGraph = build_orders_project_graph()
     python_graph: PythonNodeGraph = build_python_node_graph_for_case(test_case.python_graph_case)
 
-    validate_python_sql_boundaries(project_graph=project_graph, python_graph=python_graph)
+    result: PythonSqlRunSelection = resolve_run_selection(
+        select=(), exclude=(), project_graph=project_graph, python_graph=python_graph
+    )
+
     assert test_case.expected_error_fragment is None
+    assert result.python_node_names

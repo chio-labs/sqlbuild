@@ -10,6 +10,7 @@ from pathlib import Path
 from types import MappingProxyType, ModuleType
 from typing import Any, cast
 
+from sqlbuild._native import compiled_graph_keys, resolve_python_sql_run_selection
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
@@ -34,8 +35,8 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.python_nodes._helpers.inventory import build_python_node_graph
-from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
+from sqlbuild.compiler.python_nodes._helpers.user_inventory import build_python_node_graph
+from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunSelection
 from sqlbuild.providers import Provider
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.python_nodes.types import PythonCheckSeverity
@@ -569,4 +570,19 @@ def build_model_depends_on_intermediate_loader_project_graph() -> ProjectGraph:
         tag_index=project_graph.tag_index,
         path_index=project_graph.path_index,
         all_keys=project_graph.all_keys,
+    )
+
+
+def resolve_run_selection(
+    *,
+    select: tuple[str, ...],
+    exclude: tuple[str, ...],
+    project_graph: ProjectGraph,
+    python_graph: PythonNodeGraph,
+) -> PythonSqlRunSelection:
+    sql_keys, python_node_names = resolve_python_sql_run_selection(
+        project_graph=project_graph, python_graph=python_graph, select=select, exclude=exclude
+    )
+    return PythonSqlRunSelection(
+        sql_keys=compiled_graph_keys(sql_keys), python_node_names=frozenset(python_node_names)
     )

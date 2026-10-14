@@ -20,6 +20,7 @@ pub mod lineage_command;
 pub mod lineage_graph;
 pub mod manifest;
 pub mod python_plan;
+pub mod python_selection;
 pub mod python_values;
 pub mod query_analysis;
 pub mod relation_names;
