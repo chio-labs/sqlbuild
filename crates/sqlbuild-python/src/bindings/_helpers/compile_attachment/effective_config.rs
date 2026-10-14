@@ -2,13 +2,17 @@
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::pyfunction;
-use pyo3::types::{PyBool, PyDict, PyList, PyString};
+use pyo3::types::{PyDict, PyList};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use sqlbuild_model_config::templates::models::TemplateOptions;
+
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::model_config::template_data::{
+    expanded_effective_vars, expanded_template_data,
+};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
-const TEMPLATING_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.templating";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
 const CONNECTION_LABEL: &str = "effective connection";
 
@@ -31,21 +35,17 @@ pub(crate) fn build_effective_connection<'py>(
             .call1((error.unwrap_or_default(),))?;
         return Err(PyErr::from_value(raised));
     }
-    let falsy = || PyBool::new(py, false).to_owned().into_any();
-    call_with(
-        &imported(py, TEMPLATING_MODULE, "expand_template_data")?,
-        &[
-            ("value", connection),
-            ("variables", effective_vars.clone()),
-            ("context_values", PyDict::new(py).into_any()),
-            (
-                "context_label",
-                PyString::new(py, CONNECTION_LABEL).into_any(),
-            ),
-            ("allow_context", falsy()),
-            ("preserve_context_tokens", falsy()),
-            ("preserve_unknown_context", falsy()),
-        ],
+    expanded_template_data(
+        &connection,
+        (effective_vars.downcast()?, &PyDict::new(py)),
+        (
+            TemplateOptions {
+                allow_context: false,
+                preserve_context_tokens: false,
+                preserve_unknown_context: false,
+            },
+            CONNECTION_LABEL,
+        ),
     )
 }
 
@@ -88,7 +88,7 @@ pub(crate) fn build_effective_vars<'py>(
     let py: Python<'py> = project_config.py();
     let merged: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "effective_config_vars")?
         .call1(((project_config, local_config), target_config, cli_vars))?;
-    imported(py, TEMPLATING_MODULE, "expand_effective_vars")?.call1((merged,))
+    expanded_effective_vars(merged.downcast()?)
 }
 
 /// `build_effective_vars` for a discovered project and target, without CLI vars.

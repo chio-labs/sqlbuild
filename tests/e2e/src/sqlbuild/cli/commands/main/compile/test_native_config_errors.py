@@ -7,7 +7,7 @@ from types import ModuleType
 
 import pytest
 
-import sqlbuild.compiler.compile._helpers.render.context_templates as context_templates
+import sqlbuild._native as _native
 from scripts.compiler_differential.constants import FAILURE_BASE_MART
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     MacroExpandedValidatorErrorTestCase,
@@ -43,7 +43,7 @@ _INCREMENTAL: str = (
     "  materialized incremental,\n  incremental_strategy append,\n  cursor order_id,\n"
     "  cursor_type integer,\n"
 )
-_FALLBACKS: tuple[tuple[ModuleType, str], ...] = ((context_templates, "expand_template_data"),)
+_FALLBACKS: tuple[tuple[ModuleType, str], ...] = ((_native, "expand_template_data"),)
 _PROJECT_FILES: dict[str, str] = {
     "macros/counted.py": _COUNTED_MACRO,
     "models/marts/customer_totals.sql": _COUNTED_MART,

@@ -2573,7 +2573,6 @@ def select_latest_fingerprints(
     node_names: tuple[str, ...],
     filtered_node_types: tuple[str, ...] = (),
 ) -> FingerprintSet: ...
-def lone_surrogate_site(raw_values: dict[str, object], /) -> tuple[str, str, int] | None: ...
 def environment_template_names(values: list[str | None], /) -> list[str]: ...
 def find_python_string_locations(
     *,
@@ -2624,14 +2623,19 @@ def expand_declaration_references(
     consumer: tuple[object | None, bool, str],
     renderers: tuple[object, dict[str, object]],
 ) -> tuple[str, list[tuple[int, int, int, int]], list[Any]]: ...
-def expand_config_templates(
+def expand_template_data(
+    *,
     value: object,
-    sources: tuple[dict[str, object], object, dict[str, str | None]],
-    flags: tuple[bool, bool, bool, str],
-) -> tuple[object, list[tuple[str, str]]]: ...
-def expand_effective_vars(
-    raw_values: dict[str, object], environment: object
-) -> tuple[object, list[tuple[str, str]]]: ...
+    variables: dict[str, object],
+    context_values: dict[str, str | None],
+    context_label: str,
+    allow_context: bool,
+    preserve_context_tokens: bool,
+    preserve_unknown_context: bool,
+) -> object: ...
+def expand_effective_vars(raw_values: dict[str, object]) -> dict[str, object]: ...
+def record_template_reads(reads: Sequence[tuple[str, str]]) -> None: ...
+def resolve_run_id(*, selected_run_id: str | None) -> str: ...
 
 class NativeModelConfigBuilder:
     def __init__(

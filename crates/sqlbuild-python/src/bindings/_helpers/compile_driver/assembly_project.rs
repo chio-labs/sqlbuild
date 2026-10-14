@@ -16,12 +16,11 @@ use crate::bindings::_helpers::compile_driver::assembly_models::{
     binding_rows, compiled_models, project_binding_diagnostics,
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::model_config::template_data::early_model_templates;
 use crate::bindings::_helpers::scopes::scope_errors::report_scope_index_errors;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const SCOPE_USAGES_MODULE: &str = "sqlbuild.compiler.compile.main._scope_index_with_compile_usages";
-const CONTEXT_TEMPLATES_MODULE: &str =
-    "sqlbuild.compiler.compile._helpers.render.context_templates";
 pub(crate) const ADAPTER_NAME_MODULE: &str =
     "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
 const ADAPTER_TYPES_MODULE: &str = "sqlbuild.adapter.contract.types";
@@ -176,24 +175,13 @@ fn effective_target_values<'py>(inputs: &Bound<'py, PyAny>) -> PyResult<Bound<'p
     } else {
         str_or_none(&connection.call_method1("get", ("schema",))?)?
     };
-    call_with(
-        &imported(
-            py,
-            CONTEXT_TEMPLATES_MODULE,
-            "resolve_early_model_templates",
-        )?,
-        &[
-            (
-                "values",
-                keywords(py, &[("database", database), ("schema", schema)])?.into_any(),
-            ),
-            ("effective_vars", inputs.getattr("effective_vars")?),
-            (
-                "effective_target_name",
-                inputs.getattr("effective_target_name")?,
-            ),
-            ("run_id", inputs.getattr("run_id")?),
-        ],
+    early_model_templates(
+        keywords(py, &[("database", database), ("schema", schema)])?.as_any(),
+        &inputs.getattr("effective_vars")?,
+        (
+            &inputs.getattr("effective_target_name")?,
+            &inputs.getattr("run_id")?,
+        ),
     )
 }
 

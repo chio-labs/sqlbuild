@@ -27,7 +27,7 @@ const TARGET_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_target_na
 const TARGET_CONFIG_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_target_config";
 const EFFECTIVE_RUNTIME_MODULE: &str = "sqlbuild.compiler.compile.main.effective_runtime";
 const EFFECTIVE_CONFIG_MODULE: &str = "sqlbuild.compiler.compile.main.effective_config";
-const EXPAND_TEMPLATE_MODULE: &str = "sqlbuild.compiler.compile.main.expand_template_data";
+const EXPAND_TEMPLATE_MODULE: &str = "sqlbuild._native";
 const SETTING_HELP_MODULE: &str = "sqlbuild.errors.setting_help.main.setting_help";
 /// Connection settings that identify the warehouse two targets write to.
 const CONNECTION_IDENTITY_KEYS: [&str; 7] = [

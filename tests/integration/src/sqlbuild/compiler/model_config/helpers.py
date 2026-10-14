@@ -107,7 +107,7 @@ _AUDIT_OPTIONS: tuple[tuple[str, tuple[object, ...]], ...] = (
 )
 
 
-NATIVE_MODEL_CONFIG_ENTRIES: tuple[str, ...] = ("expand_config_templates",)
+NATIVE_MODEL_CONFIG_ENTRIES: tuple[str, ...] = ("expand_template_data",)
 _NATIVE_ENTRIES: dict[str, Callable[..., object]] = {
     name: getattr(_native, name) for name in NATIVE_MODEL_CONFIG_ENTRIES
 }

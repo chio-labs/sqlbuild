@@ -7,13 +7,12 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords, within,
 };
+use crate::bindings::_helpers::model_config::template_data::run_id;
 
 const CALL_STORE_MODULE: &str = "sqlbuild.compiler.compile._helpers.macro_bridge.call_store";
 const ATTACHMENT_MODULE: &str = "sqlbuild._native";
 const DECLARATION_SCOPE_MODULE: &str = "sqlbuild._native";
 const COLLECTOR_MODULE: &str = "sqlbuild.compiler.compile._helpers.diagnostics.collector";
-const CONTEXT_TEMPLATES_MODULE: &str =
-    "sqlbuild.compiler.compile._helpers.render.context_templates";
 const MACROS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.user_macros";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const ATTACH_CHECKS_MODULE: &str = "sqlbuild._native";
@@ -103,10 +102,7 @@ fn compile_inputs<'py>(
     let discovered: Bound<'py, PyAny> = arguments.value("discovered_inputs")?;
     let adapter_context: Bound<'py, PyAny> = arguments.value("adapter_context")?;
     let target: TargetContext<'py> = target_context(arguments, &discovered, &adapter_context)?;
-    let run_id: Bound<'py, PyAny> = call_with(
-        &imported(py, CONTEXT_TEMPLATES_MODULE, "resolve_run_id")?,
-        &[("selected_run_id", arguments.value("run_id")?)],
-    )?;
+    let run_id: Bound<'py, PyAny> = run_id(&arguments.value("run_id")?)?;
     let loaded_macros: Bound<'py, PyAny> = imported(py, MACROS_MODULE, "load_project_macros")?
         .call1((discovered.getattr("macro_files")?,))?;
     let syntax: Bound<'py, PyAny> = adapter_context.getattr("sql_lexical_syntax")?;

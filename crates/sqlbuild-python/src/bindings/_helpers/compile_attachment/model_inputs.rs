@@ -23,7 +23,6 @@ const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
 const VALIDATION_MODULE: &str = "sqlbuild.compiler.compile._helpers.analysis.validation";
 const COLLECTOR_MODULE: &str = "sqlbuild.compiler.compile._helpers.diagnostics.collector";
 const DECLARATIONS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.declarations";
-const TEMPLATING_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.templating";
 const UNICODE_ENVIRONMENT_MODULE: &str = "sqlbuild.compiler.compile.classes.unicode_environment";
 const PROJECT_VARS_MODULE: &str = "sqlbuild._native";
 const MACRO_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.main.active_macro_bridge";
@@ -252,7 +251,7 @@ pub(crate) fn build_model_inputs<'py>(
             ),
             (
                 "record_template_reads",
-                imported(py, TEMPLATING_MODULE, "record_template_reads")?,
+                imported(py, NATIVE_MODULE, "record_template_reads")?,
             ),
             (
                 "visible_declarations",

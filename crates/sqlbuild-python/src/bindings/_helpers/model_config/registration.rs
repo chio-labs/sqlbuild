@@ -3,18 +3,18 @@
 use pyo3::prelude::{Bound, PyModule, PyResult};
 
 use crate::bindings::_helpers::model_config::{
-    column_migrations, config_errors, config_templates, config_values, described_models,
-    header_columns, model_config_builder, model_validator,
+    column_migrations, config_errors, config_values, described_models, header_columns,
+    model_config_builder, model_validator, template_data,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     column_migrations::register(module)?;
     config_errors::register(module)?;
-    config_templates::register(module)?;
     config_values::register(module)?;
     described_models::register(module)?;
     header_columns::register(module)?;
     model_config_builder::register(module)?;
     model_validator::register(module)?;
+    template_data::register(module)?;
     Ok(())
 }

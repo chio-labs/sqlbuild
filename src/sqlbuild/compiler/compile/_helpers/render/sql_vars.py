@@ -6,11 +6,10 @@ from collections.abc import Mapping
 from pathlib import Path
 
 import sqlbuild._native as _native
-from sqlbuild._native import expand_sql_macros, render_project_var_text
+from sqlbuild._native import expand_sql_macros, record_template_reads, render_project_var_text
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     expand_scanned_declaration_references,
 )
-from sqlbuild.compiler.compile._helpers.render.templating import record_template_reads
 from sqlbuild.compiler.compile.classes.unicode_environment import UnicodeEnvironment
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (

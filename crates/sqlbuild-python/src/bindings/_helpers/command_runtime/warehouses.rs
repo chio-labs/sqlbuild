@@ -30,7 +30,7 @@ const TARGET_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_target_na
 const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
 const SESSION_WAREHOUSE_MODULE: &str = "sqlbuild.adapter.discovery.main._session_warehouse_support";
 const EFFECTIVE_RUNTIME_MODULE: &str = "sqlbuild.compiler.compile.main.effective_runtime";
-const EXPAND_TEMPLATE_MODULE: &str = "sqlbuild.compiler.compile.main.expand_template_data";
+const EXPAND_TEMPLATE_MODULE: &str = "sqlbuild._native";
 const RESOLVE_OPTIONS: (&[&str], &[&str]) = (
     &[
         "discovered_inputs",

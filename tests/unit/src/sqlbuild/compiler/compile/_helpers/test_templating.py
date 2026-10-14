@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.render.templating import (
+from sqlbuild._native import (
     expand_effective_vars,
     expand_template_data,
 )

@@ -8,8 +8,8 @@ from sqlbuild._native import (
     build_compile_inputs,
     discover_project_inputs,
     native_model_config_session,
+    record_template_reads,
 )
-from sqlbuild.compiler.compile._helpers.render.templating import record_template_reads
 from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     NativeModelConfigInputs,

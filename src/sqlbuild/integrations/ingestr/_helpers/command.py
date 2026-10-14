@@ -6,7 +6,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from typing import cast
 
-from sqlbuild.compiler.compile.main.expand_template_data import expand_template_data
+from sqlbuild._native import expand_template_data
 from sqlbuild.integrations.ingestr._helpers.destination import build_destination_uri
 from sqlbuild.integrations.ingestr.constants import INGESTR_INTEGRATION_KIND
 from sqlbuild.integrations.ingestr.exceptions import IngestrIntegrationError
