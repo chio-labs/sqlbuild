@@ -23,12 +23,12 @@ from sqlbuild._native import (
     resolve_bounded_cursor_override,
     resolve_cursor_input_roles,
     resolve_effective_microbatch_batch_size,
+    source_binding_diagnostics,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.constants import CURSOR_INPUTS_CONFIG_KEY
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.main._source_bindings import get_source_binding_diagnostics
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
@@ -386,7 +386,7 @@ def build_plan_entries(
             for diagnostic in project.diagnostics
             if diagnostic.is_error and diagnostic.resource_type != CompiledResourceType.SQL_TEST
         ),
-        *get_source_binding_diagnostics(
+        *source_binding_diagnostics(
             project=project,
             columns=relations.source_warehouse_columns,
             profile=adapter.expression_inference_profile(),

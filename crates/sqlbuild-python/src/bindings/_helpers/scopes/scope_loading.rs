@@ -16,6 +16,7 @@ use crate::bindings::_helpers::scopes::scope_cache::{
 };
 use crate::bindings::_helpers::scopes::scope_index::open_native_scope_index;
 use crate::bindings::_helpers::scopes::scope_tolerant::scope_tolerant_index;
+use crate::bindings::_helpers::scopes::scope_validation::scope_index_with_compile_usages;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const CACHE_DIRECTORY_MODULE: &str = "sqlbuild.compiler.frontier.main.compiler_cache_directory";
@@ -27,9 +28,7 @@ const RESOLVE_ADAPTER_MODULE: &str = "sqlbuild.adapter.discovery.main.resolve_ad
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";
 const FRONTIER_TYPES_MODULE: &str = "sqlbuild.compiler.frontier.types";
-const COMPILE_USAGES_MODULE: &str =
-    "sqlbuild.compiler.compile.main._scope_index_with_compile_usages";
-const MACRO_INVENTORY_MODULE: &str = "sqlbuild.compiler.compile.main._static_macro_inventory";
+const MACRO_INVENTORY_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.user_macros";
 
 /// Where the scope index cache file of a project lives: `(directory, file name)`.
 fn cache_location(project_dir: &Bound<'_, PyAny>) -> PyResult<(PathBuf, String)> {
@@ -133,10 +132,7 @@ fn compiled_index<'py>(
             ("python_stage", python_stage),
         ],
     )?;
-    call_with(
-        &imported(py, COMPILE_USAGES_MODULE, "scope_index_with_compile_usages")?,
-        &[("inputs", compile_inputs)],
-    )
+    scope_index_with_compile_usages(&compile_inputs)
 }
 
 /// The partial static index of tolerant discovery, with its faults as diagnostics.

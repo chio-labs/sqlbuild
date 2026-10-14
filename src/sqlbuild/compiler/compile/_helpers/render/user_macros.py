@@ -373,7 +373,7 @@ def _rewrite_absolute_project_imports(
     return ast.Module(body=body, type_ignores=tree.type_ignores)
 
 
-def _inventory_project_macros(
+def inventory_project_macros(
     *, macro_files: tuple[DiscoveredMacroFile, ...]
 ) -> StaticMacroInventory:
     """Validate and inventory project macro exports without executing authored code."""

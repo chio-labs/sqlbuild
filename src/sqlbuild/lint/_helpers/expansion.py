@@ -8,6 +8,7 @@ from pathlib import Path
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    build_sql_expansion_context,
     discover_project_inputs,
     expand_sql_with_spans,
     external_identifiers_for_headers,
@@ -17,7 +18,6 @@ from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.discovery.main.resolve_adapter import resolve_adapter
 from sqlbuild.compiler.compile.constants import MACRO_TOKEN
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.main.sql_expansion_context import build_sql_expansion_context
 from sqlbuild.compiler.compile.models import (
     CompiledSqlExpansion,
     DeclarationScopeBuild,

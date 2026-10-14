@@ -87,7 +87,7 @@ fn diagnostic_row(diagnostic: InaccessibleDiagnostic) -> DiagnosticRow {
 
 /// `model_schema_scope_usages`: each schema's parent and enum `UsageRecord`s; S006s are reported.
 #[pyfunction]
-fn model_schema_scope_usages<'py>(
+pub(crate) fn model_schema_scope_usages<'py>(
     schema_files: &Bound<'py, PyAny>,
     resolver: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {

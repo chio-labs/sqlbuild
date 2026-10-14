@@ -19,7 +19,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const CONTRACT_MODELS: &str = "sqlbuild.spec.contracts.models";
 const DESTINATION_MODULE: &str = "sqlbuild._native";
-const CONNECTION_CONFIG_MODULE: &str = "sqlbuild.compiler.compile.main.effective_config";
+const CONNECTION_CONFIG_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const ADAPTER_TYPES_MODULE: &str = "sqlbuild.adapter.contract.types";
 const LOADER_NODE_KEY: &str = "sqlbuild_loader_node";

@@ -32,7 +32,7 @@ const SCOPE_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.warehouse_sco
 const TARGET_NAME_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const SESSION_WAREHOUSE_MODULE: &str = "sqlbuild.adapter.discovery.main._session_warehouse_support";
-const EFFECTIVE_RUNTIME_MODULE: &str = "sqlbuild.compiler.compile.main.effective_runtime";
+const EFFECTIVE_RUNTIME_MODULE: &str = "sqlbuild._native";
 const RESOLVE_OPTIONS: (&[&str], &[&str]) = (
     &[
         "discovered_inputs",

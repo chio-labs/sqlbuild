@@ -10,10 +10,10 @@ from typing import Any
 
 from sqlbuild._native import (
     apply_command_warehouse,
+    build_effective_connection_config,
     resolve_model_deferral_inputs,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.exceptions import PlannerInputError

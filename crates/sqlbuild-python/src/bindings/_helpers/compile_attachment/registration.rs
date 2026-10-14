@@ -4,10 +4,15 @@ use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult};
 use pyo3::wrap_pyfunction;
 
 use crate::bindings::_helpers::compile_attachment::{
-    cursor_roles, declaration_scope, effective_config, model_config, model_inputs, target,
+    cursor_roles, declaration_scope, effective_config, model_config, model_inputs,
+    sql_expansion_context, target,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(
+        sql_expansion_context::build_sql_expansion_context,
+        module
+    )?)?;
     module.add_function(wrap_pyfunction!(
         effective_config::build_effective_connection,
         module
@@ -18,6 +23,22 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     module.add_function(wrap_pyfunction!(
         effective_config::build_effective_vars,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        effective_config::build_effective_target_config,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        effective_config::build_effective_connection_config,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        effective_config::build_effective_runtime_config,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        effective_config::build_effective_settings_config,
         module
     )?)?;
     module.add_function(wrap_pyfunction!(

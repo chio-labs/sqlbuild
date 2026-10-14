@@ -28,8 +28,8 @@ use crate::bindings::_helpers::model_config::template_data::expanded_template_da
 const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
 const TARGET_NAME_MODULE: &str = "sqlbuild._native";
 const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
-const EFFECTIVE_RUNTIME_MODULE: &str = "sqlbuild.compiler.compile.main.effective_runtime";
-const EFFECTIVE_CONFIG_MODULE: &str = "sqlbuild.compiler.compile.main.effective_config";
+const EFFECTIVE_RUNTIME_MODULE: &str = "sqlbuild._native";
+const EFFECTIVE_CONFIG_MODULE: &str = "sqlbuild._native";
 const SETTING_HELP_MODULE: &str = "sqlbuild.errors.setting_help.main.setting_help";
 /// Connection settings that identify the warehouse two targets write to.
 const CONNECTION_IDENTITY_KEYS: [&str; 7] = [

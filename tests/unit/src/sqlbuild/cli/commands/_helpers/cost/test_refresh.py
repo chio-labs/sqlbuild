@@ -99,7 +99,7 @@ def test_given_pending_run_when_showing_detail_then_persisted_summary_is_refresh
         lambda **kwargs: {"database": "ANALYTICS"},
     )
     monkeypatch.setattr(
-        "sqlbuild.compiler.compile.main._effective_target.build_effective_target_config",
+        "sqlbuild._native.build_effective_target_config",
         lambda **kwargs: SimpleNamespace(database=None),
     )
     request: CostCommandRequest = CostCommandRequest(

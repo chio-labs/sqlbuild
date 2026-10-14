@@ -71,6 +71,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
     CompiledLineageColumnFact,
+    CompiledLineageSourceFact,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
@@ -2298,9 +2299,36 @@ def declared_relations(
 def externally_described_models(
     inputs: DiscoveredProjectInputs, model_schemas: dict[str, ModelSchemaDeclaration]
 ) -> list[Path]: ...
-def resolve_required_columns(
-    query_sql: str, references: list[tuple[str, str]], dialect: str | None
-) -> list[tuple[str, str, str]]: ...
+def analyze_resolved_column_reads(
+    *, query_sql: str, references: Sequence[CompileSqlReference], dialect: str | None
+) -> tuple[CompiledLineageSourceFact, ...]: ...
+def build_effective_target_config(
+    *, discovered_inputs: DiscoveredProjectInputs, selected_target: str | None = None
+) -> TargetConfig | None: ...
+def build_effective_connection_config(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    selected_target: str | None = None,
+    cli_vars: dict[str, object] | None = None,
+) -> dict[str, object]: ...
+def build_effective_runtime_config(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    selected_target: str | None = None,
+    cli_vars: dict[str, object] | None = None,
+) -> tuple[str | None, dict[str, object], str]: ...
+def build_sql_expansion_context(
+    *,
+    project_dir: Path,
+    value_renderer: TypedSqlValueRenderer,
+    cli_vars: dict[str, object] | None = None,
+    discovered_inputs: DiscoveredProjectInputs | None = None,
+    declaration_scope: DeclarationScopeBuild | None = None,
+    static_declaration_scope: DeclarationScopeBuild | None = None,
+) -> SqlExpansionContext: ...
+def build_effective_settings_config(
+    *, discovered_inputs: DiscoveredProjectInputs
+) -> SettingsConfig: ...
 def public_declaration_indexes(
     inputs: DiscoveredProjectInputs,
 ) -> tuple[dict[str, EnumDeclaration], dict[str, ConstantDeclaration]]: ...

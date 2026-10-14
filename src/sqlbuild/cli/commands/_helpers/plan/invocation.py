@@ -6,7 +6,11 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild._native import discover_project_inputs, validate_preview_target
+from sqlbuild._native import (
+    build_effective_settings_config,
+    discover_project_inputs,
+    validate_preview_target,
+)
 from sqlbuild.cli.commands._helpers.runtime.adapter_context import (
     resolve_adapter_connection_context,
 )
@@ -19,7 +23,6 @@ from sqlbuild.cli.progress.main._build_command_progress_reporters import (
     build_command_progress_reporters,
 )
 from sqlbuild.cli.progress.models import CommandProgressReporters
-from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.presentation.main.supports_color import supports_color
 

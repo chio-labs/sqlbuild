@@ -20,7 +20,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 
 const DBT_PROFILE_MODULE: &str = "sqlbuild.integrations.dbt.main.profile.profile_connection";
 const DBT_ERRORS_MODULE: &str = "sqlbuild.integrations.dbt.exceptions";
-const EFFECTIVE_CONFIG_MODULE: &str = "sqlbuild.compiler.compile.main.effective_config";
+const EFFECTIVE_CONFIG_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const TARGET_NAME_MODULE: &str = "sqlbuild._native";
 const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";

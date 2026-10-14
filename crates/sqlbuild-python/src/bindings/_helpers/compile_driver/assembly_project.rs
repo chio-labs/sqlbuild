@@ -18,9 +18,9 @@ use crate::bindings::_helpers::compile_driver::assembly_models::{
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::model_config::template_data::early_model_templates;
 use crate::bindings::_helpers::scopes::scope_errors::report_scope_index_errors;
+use crate::bindings::_helpers::scopes::scope_validation::scope_index_with_compile_usages;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const SCOPE_USAGES_MODULE: &str = "sqlbuild.compiler.compile.main._scope_index_with_compile_usages";
 pub(crate) const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const ADAPTER_TYPES_MODULE: &str = "sqlbuild.adapter.contract.types";
 const SCENARIO_CONFIG_MODULE: &str = "sqlbuild._native";
@@ -103,10 +103,7 @@ pub(crate) fn assembled_project<'py>(
         ],
     )?;
     let resources: Bound<'py, PyAny> = native.getattr("resources")?;
-    let scope_index: Bound<'py, PyAny> = call_with(
-        &imported(py, SCOPE_USAGES_MODULE, "scope_index_with_compile_usages")?,
-        &[("inputs", inputs.clone())],
-    )?;
+    let scope_index: Bound<'py, PyAny> = scope_index_with_compile_usages(inputs)?;
     report_scope_index_errors(&scope_index)?;
     let target_values: Bound<'py, PyAny> = effective_target_values(inputs)?;
     let models: Bound<'py, PyTuple> =

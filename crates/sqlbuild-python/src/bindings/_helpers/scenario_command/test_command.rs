@@ -27,7 +27,7 @@ use crate::bindings::_helpers::scenario_command::setup::{
 };
 use crate::bindings::_helpers::scenario_command::snapshot_sync::{LocalSync, sync_local_snapshots};
 
-const EFFECTIVE_SETTINGS_MODULE: &str = "sqlbuild.compiler.compile.main.effective_settings";
+const EFFECTIVE_SETTINGS_MODULE: &str = "sqlbuild._native";
 const EXECUTOR_RUN_MODULE: &str = "sqlbuild.executor.pipeline.main.run";
 const SCENARIO_MODELS: &str = "sqlbuild.executor.scenario.models";
 const LOCAL_ADAPTER: &str = "duckdb";

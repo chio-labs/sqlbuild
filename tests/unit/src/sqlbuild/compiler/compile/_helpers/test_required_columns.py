@@ -4,9 +4,7 @@ import time
 
 import pytest
 
-from sqlbuild.compiler.compile.main._analyze_columns_and_lineage import (
-    analyze_resolved_column_reads,
-)
+from sqlbuild._native import analyze_resolved_column_reads
 from sqlbuild.compiler.compile.models import CompiledLineageSourceFact, CompileSqlReference
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.references.types import SqlReferenceKind

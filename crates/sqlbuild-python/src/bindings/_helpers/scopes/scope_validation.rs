@@ -15,7 +15,7 @@ use sqlbuild_scopes::scope_index::models::ResourceIdentity;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::scopes::compile_usages::{
-    MergeRows, SourceRow, UsageRow, merged_usage_rows,
+    MergeRows, SourceRow, UsageRow, merged_usage_rows, model_schema_scope_usages,
 };
 use crate::bindings::_helpers::scopes::placement::{QualifiedRow, resource_identity};
 use crate::bindings::_helpers::scopes::scope_objects::{
@@ -28,6 +28,14 @@ const DATACLASSES_MODULE: &str = "dataclasses";
 const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
 const SCOPE_ERRORS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
 const RUNTIME_USAGE: usize = 2;
+/// Compile input groups whose items carry declaration usages, after the model inputs.
+const COMPILE_USAGE_GROUPS: [&str; 5] = [
+    "source_inputs",
+    "sql_function_inputs",
+    "audit_inputs",
+    "test_inputs",
+    "scenario_inputs",
+];
 
 /// `dataclasses.replace(item, **changes)`.
 pub(crate) fn replace<'py>(
@@ -317,6 +325,51 @@ pub(crate) fn scope_relocated_declarations(
         )?);
     }
     Ok(Some(PyTuple::new(py, moved)?.unbind()))
+}
+
+fn usage_records<'py>(records: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    records.try_iter()?.collect()
+}
+
+/// Compile inputs' canonical index with all usage and placement facts.
+pub(crate) fn scope_index_with_compile_usages<'py>(
+    inputs: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = inputs.py();
+    let scope: Bound<'py, PyAny> = inputs.getattr("declaration_scope")?;
+    let resolver: Bound<'py, PyAny> = if scope.is_none() {
+        scope
+    } else {
+        scope.getattr("resolver")?
+    };
+    let schema_files: Bound<'py, PyAny> = inputs
+        .getattr("discovered_inputs")?
+        .getattr("model_schema_files")?;
+    let mut usages: Vec<Bound<'py, PyAny>> = Vec::new();
+    usages.extend(usage_records(
+        model_schema_scope_usages(&schema_files, &resolver)?.as_any(),
+    )?);
+    for model in inputs.getattr("model_inputs")?.try_iter()? {
+        let model: Bound<'py, PyAny> = model?;
+        usages.extend(usage_records(&model.getattr("macro_usages")?)?);
+        usages.extend(usage_records(&model.getattr("declaration_usages")?)?);
+    }
+    for group in COMPILE_USAGE_GROUPS {
+        for item in inputs.getattr(group)?.try_iter()? {
+            usages.extend(usage_records(&item?.getattr("declaration_usages")?)?);
+        }
+    }
+    let enforce_placement: bool = inputs
+        .getattr("project_config")?
+        .getattr("scopes")?
+        .getattr("enforce_placement")?
+        .extract()?;
+    Ok(scope_placement_validated_index(
+        &inputs.getattr("scope_index")?,
+        enforce_placement,
+        Some(PyTuple::new(py, usages)?),
+    )?
+    .into_bound(py))
 }
 
 /// Python's `validate_scope_index`: raise one `ScopeValidationError` for its error diagnostics.
