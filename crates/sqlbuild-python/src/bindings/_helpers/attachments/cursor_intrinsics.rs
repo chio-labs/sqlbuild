@@ -31,7 +31,7 @@ pub(crate) fn reserved_cursor_markers() -> Vec<String> {
 }
 
 /// A `CompileInputError` carrying `message`.
-fn compile_input_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
+pub(crate) fn compile_input_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
         imported(py, COMPILE_ERRORS_MODULE, "CompileInputError")?.call1((message,))?,
     ))

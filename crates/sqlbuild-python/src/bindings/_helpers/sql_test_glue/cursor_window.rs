@@ -2,21 +2,23 @@
 
 use std::cmp::Ordering;
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyString;
 use sqlbuild_cursor::algebra::main::compare::compare;
 use sqlbuild_cursor::algebra::main::floor_to_grain::floor_to_grain;
 use sqlbuild_cursor::algebra::models::{Grain, Scalar};
 
-use crate::bindings::_helpers::attachments::cursor_intrinsics::resolve_cursor_intrinsics;
+use crate::bindings::_helpers::attachments::cursor_intrinsics::{
+    compile_input_error, resolve_cursor_intrinsics,
+};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::cursor::scalars::{parse_value, render_value};
 use crate::bindings::_helpers::model_config::config_values::config_str;
 use crate::bindings::_helpers::sql_test_glue::constants::{
-    COMPILE_EXCEPTIONS, CURSOR_ALGEBRA_EXCEPTIONS, CURSOR_END_KEY, CURSOR_START_KEY,
-    DEFAULT_INTEGER_END, DEFAULT_INTEGER_START, DEFAULT_TIMESTAMP_END, DEFAULT_TIMESTAMP_START,
-    INTEGER_CURSOR_TYPE, PLANNER_TYPES, TIMESTAMP_CURSOR_TYPE,
+    CURSOR_ALGEBRA_EXCEPTIONS, CURSOR_END_KEY, CURSOR_START_KEY, DEFAULT_INTEGER_END,
+    DEFAULT_INTEGER_START, DEFAULT_TIMESTAMP_END, DEFAULT_TIMESTAMP_START, INTEGER_CURSOR_TYPE,
+    PLANNER_TYPES, TIMESTAMP_CURSOR_TYPE,
 };
 
 /// One model's cursor name, type and timestamp grain.
@@ -93,7 +95,7 @@ pub(super) fn declared_window_cursor_models<'py>(
                 "{} declares cursor_start or cursor_end, but no model it evaluates uses __cursor_start() or __cursor_end()",
                 test_label(test)?
             ),
-        ));
+        )?);
     }
     for model in &cursor_models {
         test_window(&model_cursor(model)?, Some(test))?;
@@ -153,7 +155,7 @@ fn test_window<'py>(
                 render_value(&end)?,
                 cursor.name
             ),
-        ));
+        )?);
     }
     Ok((start, end))
 }
@@ -195,7 +197,7 @@ fn bound<'py>(
                     cursor.name,
                     cursor.type_name
                 ),
-            ));
+            )?);
         }
         Err(error) => return Err(error),
     };
@@ -213,7 +215,7 @@ fn bound<'py>(
                     raw.str()?,
                     cursor.name
                 ),
-            ));
+            )?);
         }
     }
     Ok(value)
@@ -265,14 +267,4 @@ fn test_label(test: &Bound<'_, PyAny>) -> PyResult<String> {
         test.getattr("name")?.str()?,
         test.getattr("test_file")?.getattr("relative_path")?.str()?
     ))
-}
-
-/// A `CompileInputError` carrying `message`.
-fn compile_input_error(py: Python<'_>, message: String) -> PyErr {
-    match imported(py, COMPILE_EXCEPTIONS, "CompileInputError")
-        .and_then(|class| class.call1((message,)))
-    {
-        Ok(error) => PyErr::from_value(error),
-        Err(error) => error,
-    }
 }
