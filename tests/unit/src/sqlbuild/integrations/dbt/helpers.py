@@ -13,6 +13,7 @@ from sqlbuild._native import (
     DbtEventStreamUpdate,
     assemble_project,
     build_dbt_combined_graph,
+    build_dbt_ls_argv,
     build_dbt_manifest_index,
     extract_sql_references,
     transitive_closure,
@@ -37,7 +38,6 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
 )
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.integrations.dbt._helpers.cli.runner import build_dbt_ls_argv
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.models import (
     DbtCliConfigOverrides,

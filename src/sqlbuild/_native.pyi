@@ -261,13 +261,18 @@ from sqlbuild.executor.python_nodes.models import (
 from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotCaptureRunResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.integrations.dbt.models import (
+    DbtCliConfigOverrides,
+    DbtCliOptions,
+    DbtInteropParsedArgs,
     DbtInteropPlan,
+    DbtInteropRoutedArgs,
     DbtInteropSelectionResult,
     DbtLsNode,
     DbtManifestIndex,
     DbtManifestModel,
     DbtNodeExecutionResult,
     NormalizedDbtProfileConnection,
+    ResolvedDbtConfig,
     ResolvedDbtProfileOutput,
 )
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
@@ -284,9 +289,11 @@ from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.models import (
+    DbtConfig,
     DefaultsConfig,
     ExecutionLimitsConfig,
     LocalConfig,
+    LocalDbtConfig,
     ProjectConfig,
     ScenarioConfig,
     SchemaAuditInstance,
@@ -1483,6 +1490,41 @@ def resolve_dbt_interop_sqlbuild_selection(
     dbt_anchor_unique_ids_by_term: Mapping[str, Sequence[str]] | None = None,
 ) -> DbtInteropSelectionResult: ...
 def dbt_fqn_selector_term(*, fqn: Sequence[str], fallback: str) -> str: ...
+def resolve_dbt_executable() -> str: ...
+def build_dbt_compile_argv(
+    *, dbt_executable: str, options: DbtCliOptions, full_refresh: bool = False
+) -> tuple[str, ...]: ...
+def build_dbt_deps_argv(*, dbt_executable: str, options: DbtCliOptions) -> tuple[str, ...]: ...
+def build_dbt_debug_argv(
+    *, dbt_executable: str, options: DbtCliOptions, args: Sequence[str] | None = None
+) -> tuple[str, ...]: ...
+def build_dbt_command_argv(
+    *,
+    dbt_executable: str,
+    command: str,
+    options: DbtCliOptions,
+    args: Sequence[str] | None = None,
+) -> tuple[str, ...]: ...
+def build_dbt_ls_argv(
+    *,
+    dbt_executable: str,
+    options: DbtCliOptions,
+    select: Sequence[str] | None = None,
+    exclude: Sequence[str] | None = None,
+    resource_types: Sequence[str] | None = None,
+) -> tuple[str, ...]: ...
+def parse_dbt_ls_json_lines(*, stdout: str) -> tuple[DbtLsNode, ...]: ...
+def route_dbt_interop_args(
+    *, command: DbtInteropCommand | str, parsed: DbtInteropParsedArgs
+) -> DbtInteropRoutedArgs: ...
+def resolve_dbt_config(
+    *,
+    project_root: Path,
+    config: DbtConfig,
+    overrides: DbtCliConfigOverrides,
+    require_project_dir: bool,
+    local_config: LocalDbtConfig | None = None,
+) -> ResolvedDbtConfig: ...
 def resolve_dbt_reference_relation(
     *,
     manifest: DbtManifestIndex | None,

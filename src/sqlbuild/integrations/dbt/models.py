@@ -271,7 +271,6 @@ class DbtLsNode:
     name: str | None = None
     fqn: tuple[str, ...] = field(default_factory=tuple)
     original_file_path: str | None = None
-    payload: dict[str, object] = field(default_factory=dict)
 
     @property
     def selector_term(self) -> str:

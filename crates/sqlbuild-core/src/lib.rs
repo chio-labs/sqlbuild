@@ -11,6 +11,7 @@ pub mod constants;
 pub mod contract_command;
 pub mod cost_command;
 pub mod cost_report;
+pub mod dbt_cli;
 pub mod dbt_command;
 pub mod dbt_events;
 pub mod dbt_graph;

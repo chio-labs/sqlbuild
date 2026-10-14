@@ -1,3 +1,4 @@
+pub(crate) mod cli;
 pub(crate) mod graph;
 pub(crate) mod manifest;
 pub(crate) mod plan;

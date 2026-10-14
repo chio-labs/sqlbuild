@@ -14,9 +14,6 @@ DBT_EXECUTION_DISPLAY_FLAGS: frozenset[str] = frozenset(("--json", "--verbose", 
 DBT_MANIFEST_CONFIG_KEY: str = "config"
 DBT_MANIFEST_MATERIALIZED_KEY: str = "materialized"
 
-DBT_EXECUTABLE_ENV_VAR: str = "DBT_EXECUTABLE"
-DEFAULT_DBT_EXECUTABLE: str = "dbt"
-
 
 DBT_DEFER_FLAG: str = "--defer"
 DBT_EXECUTION_FAIL_STATUSES: frozenset[str] = frozenset({"error", "fail", "failed"})

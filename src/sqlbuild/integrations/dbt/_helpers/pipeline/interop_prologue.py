@@ -14,6 +14,8 @@ from sqlbuild._native import (
     build_dbt_combined_graph,
     discover_project_inputs,
     load_dbt_manifest_index,
+    resolve_dbt_executable,
+    route_dbt_interop_args,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView
@@ -25,8 +27,6 @@ from sqlbuild.integrations.dbt.classes.dbt_compile_reference_resolver import (
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.main.cli._parse_execution_args import parse_dbt_execution_args
-from sqlbuild.integrations.dbt.main.cli._resolve_executable import resolve_dbt_executable
-from sqlbuild.integrations.dbt.main.cli._route_interop_args import route_dbt_interop_args
 from sqlbuild.integrations.dbt.main.config._resolve_plan_options import resolve_dbt_plan_options
 from sqlbuild.integrations.dbt.main.config._resolve_vars_mapping import resolve_dbt_vars_mapping
 from sqlbuild.integrations.dbt.main.manifest._resolve_manifest_path import (

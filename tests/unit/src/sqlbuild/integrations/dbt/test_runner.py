@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.integrations.dbt._helpers.cli.runner import (
+from sqlbuild._native import (
     build_dbt_compile_argv,
     build_dbt_debug_argv,
     build_dbt_deps_argv,

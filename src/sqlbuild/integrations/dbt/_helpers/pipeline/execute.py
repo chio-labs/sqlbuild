@@ -8,7 +8,13 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO, cast
 
-from sqlbuild._native import DbtCombinedGraph, format_summary_footer, render_dbt_node_result
+from sqlbuild._native import (
+    DbtCombinedGraph,
+    build_dbt_command_argv,
+    format_summary_footer,
+    parse_dbt_ls_json_lines,
+    render_dbt_node_result,
+)
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.constants import (
     DBT_DEFER_FLAG,
@@ -19,8 +25,6 @@ from sqlbuild.integrations.dbt.constants import (
     DBT_SELECT_FLAG,
     DBT_UNIQUE_ID_SEPARATOR,
 )
-from sqlbuild.integrations.dbt.main.cli._build_command_argv import build_dbt_command_argv
-from sqlbuild.integrations.dbt.main.cli._parse_ls_json_lines import parse_dbt_ls_json_lines
 from sqlbuild.integrations.dbt.main.runtime._execute_json_event_stream import (
     execute_dbt_json_event_stream,
 )
