@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import time
 
-from sqlbuild._native import plan_column_migrations
+from sqlbuild._native import plan_column_migrations, plan_model_migrations
 from sqlbuild.compiler.planner._helpers.migrations.old_names import plan_old_name_views
-from sqlbuild.compiler.planner._helpers.migrations.planning import plan_model_migrations
 from sqlbuild.compiler.planner._helpers.output.plan_entry import build_planner_relations_context
 from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
     effectively_full_refreshed_model_names,

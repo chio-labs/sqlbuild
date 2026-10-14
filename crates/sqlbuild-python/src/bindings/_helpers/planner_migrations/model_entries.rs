@@ -6,7 +6,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::planner_migrations::column_objects::{
     lower, model, native, replace, text,
 };
-use crate::bindings::_helpers::planner_migrations::constants::{MIGRATION_TYPES, PLANNING};
+use crate::bindings::_helpers::planner_migrations::constants::MIGRATION_TYPES;
 use crate::bindings::_helpers::planner_migrations::model_handover::{
     applies, empty_version, handover,
 };
@@ -284,7 +284,7 @@ pub(super) fn decide<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, P
     let inherited = handover(&item, &fingerprint, &entry.getattr("origin_version_hash")?)?;
     result(
         call_with(
-            &imported(py, PLANNING, "_with_execution")?,
+            &imported(py, "sqlbuild._native", "migration_with_execution")?,
             &[("runtime", runtime), ("model", item), ("entry", entry)],
         )?,
         inherited,

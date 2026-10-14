@@ -4,7 +4,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::planner_migrations::column_objects::{config, model, replace};
-use crate::bindings::_helpers::planner_migrations::constants::PLANNING;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods};
 
@@ -88,7 +87,11 @@ pub(super) fn overlay<'py>(
         .cast_into::<PyDict>()?
         .copy()?;
     let gathered = call_with(
-        &imported(py, PLANNING, "redirected_cursor_snapshots")?,
+        &imported(
+            py,
+            "sqlbuild._native",
+            "migration_redirected_cursor_snapshots",
+        )?,
         &[
             ("runtime", runtime),
             ("scope", args.value("scope")?),

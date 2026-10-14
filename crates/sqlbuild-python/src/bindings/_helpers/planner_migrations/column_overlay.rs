@@ -6,7 +6,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::planner_migrations::column_objects::{
     config, definition_hash, lower, model, native, replace,
 };
-use crate::bindings::_helpers::planner_migrations::constants::PLANNING;
 use crate::bindings::_helpers::planner_migrations::models::ColumnCandidate;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
@@ -161,7 +160,11 @@ pub(super) fn cursors<'py>(
         targets.set_item(name, target)?;
     }
     let redirected = call_with(
-        &imported(py, PLANNING, "redirected_cursor_snapshots")?,
+        &imported(
+            py,
+            "sqlbuild._native",
+            "migration_redirected_cursor_snapshots",
+        )?,
         &[
             ("runtime", args.value("runtime")?),
             ("scope", scope),

@@ -183,7 +183,11 @@ from sqlbuild.compiler.lineage.models import (
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.compiler.migrations.models import MigrationRelation
-from sqlbuild.compiler.migrations.types import OldNameViewEventType
+from sqlbuild.compiler.migrations.types import (
+    MigrationDecision,
+    MigrationPromotion,
+    OldNameViewEventType,
+)
 from sqlbuild.compiler.pipeline.models import (
     ClonePipelineConnection,
     ClonePipelineOptions,
@@ -432,6 +436,7 @@ from sqlbuild.spec.contracts.models import (
 )
 from sqlbuild.spec.contracts.types import (
     MicrobatchLimitAction,
+    MissingMigrationOriginPolicy,
     SourceFreshnessStrategy,
     SourceFreshnessValueKind,
     WarehouseGroup,
@@ -441,6 +446,32 @@ from sqlbuild.sql_values.types import CollectionRendering, StateSqlValueType
 
 BUILD_IDENTITY: str
 STAGE_CAPTURE_OMITTED_ATTRIBUTES: dict[str, frozenset[str]]
+
+def migration_planning_database(*, runtime: PlannerRuntime) -> str | None: ...
+def migration_project_schemas(*, runtime: PlannerRuntime) -> set[str]: ...
+def migration_missing_origin_policy(*, runtime: PlannerRuntime) -> MissingMigrationOriginPolicy: ...
+def migration_require_same_database(
+    *, state: MigrationStateInspection, location: CompiledRelationLocation
+) -> None: ...
+def migration_resolve_origin(
+    *, request: ModelMigrationRequest, runtime: PlannerRuntime, state: MigrationStateInspection
+) -> tuple[CompiledRelationLocation, str | None]: ...
+def migration_promotion(
+    *, runtime: PlannerRuntime, decision: MigrationDecision
+) -> MigrationPromotion: ...
+def migration_with_execution(
+    *, runtime: PlannerRuntime, model: CompiledModelView, entry: ModelMigrationPlanEntry
+) -> ModelMigrationPlanEntry: ...
+def migration_redirected_cursor_snapshots(
+    *,
+    runtime: PlannerRuntime,
+    scope: PlannerScope,
+    existing_relations: dict[str, RelationInfo],
+    target_relations: dict[str, str],
+    overrides: PlannerOverrides,
+    deferral: DeferralInputs,
+    origin_cursor_columns: dict[str, str] | None = None,
+) -> dict[str, ModelCursorSnapshot]: ...
 
 class CompileInputReads:
     """Environment, settings, and run-identity reads observed during one compile."""

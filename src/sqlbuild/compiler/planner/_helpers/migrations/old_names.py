@@ -15,6 +15,12 @@ from sqlbuild._native import (
     old_name_schemas_to_read,
     old_name_view_skip_reason,
 )
+from sqlbuild._native import (
+    migration_planning_database as planning_database,
+)
+from sqlbuild._native import (
+    migration_project_schemas as project_schemas,
+)
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.adapter.contract.types import RelationType
 from sqlbuild.adapter.type_system.main.normalize_relation_type import normalize_relation_type
@@ -30,10 +36,6 @@ from sqlbuild.compiler.migrations.types import (
     MigrationDecision,
     OldNameViewAction,
     OldNameViewStatus,
-)
-from sqlbuild.compiler.planner._helpers.migrations.planning import (
-    planning_database,
-    project_schemas,
 )
 from sqlbuild.compiler.planner.classes.migration_state_inspection import (
     MigrationStateInspection,

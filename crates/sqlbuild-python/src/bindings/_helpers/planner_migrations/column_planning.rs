@@ -4,7 +4,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::planner_migrations::column_objects::{model, replace};
-use crate::bindings::_helpers::planner_migrations::constants::PLANNING;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PySet, PySetMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -45,7 +44,7 @@ fn plan_column_migrations<'py>(
         return model(py, "ColumnMigrationPlanning", &[("snapshot", snapshot)]);
     }
     let database = call_with(
-        &imported(py, PLANNING, "planning_database")?,
+        &imported(py, "sqlbuild._native", "migration_planning_database")?,
         &[("runtime", runtime.clone())],
     )?;
     let state = call_with(
@@ -103,7 +102,7 @@ fn plan_column_migrations<'py>(
         warnings.extend(checked.warnings);
     }
     let policy = call_with(
-        &imported(py, PLANNING, "missing_origin_policy")?,
+        &imported(py, "sqlbuild._native", "migration_missing_origin_policy")?,
         &[("runtime", runtime)],
     )?;
     for entry in &mut entries {

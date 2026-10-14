@@ -17,5 +17,8 @@ mod model_planning;
 mod model_warnings;
 mod models;
 mod old_names;
+mod planning_boundary;
+mod planning_execution;
+mod planning_origin;
 mod projections;
 pub(crate) mod registration;

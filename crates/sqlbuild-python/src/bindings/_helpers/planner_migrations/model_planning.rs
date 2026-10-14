@@ -6,7 +6,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::planner_migrations::column_objects::{
     config, model, native, replace,
 };
-use crate::bindings::_helpers::planner_migrations::constants::{MIGRATION_TYPES, PLANNING};
+use crate::bindings::_helpers::planner_migrations::constants::MIGRATION_TYPES;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{
     PyBool, PyDict, PyDictMethods, PyFrozenSet, PySet, PySetMethods, PyString, PyTuple,
@@ -128,7 +128,7 @@ fn plan_model_migrations<'py>(
     let runtime = args.value("runtime")?;
     let snapshot = args.value("snapshot")?;
     let schemas = call_with(
-        &imported(py, PLANNING, "project_schemas")?,
+        &imported(py, "sqlbuild._native", "migration_project_schemas")?,
         &[("runtime", runtime.clone())],
     )?;
     let state = call_with(
@@ -143,7 +143,7 @@ fn plan_model_migrations<'py>(
             (
                 "database",
                 call_with(
-                    &imported(py, PLANNING, "planning_database")?,
+                    &imported(py, "sqlbuild._native", "migration_planning_database")?,
                     &[("runtime", runtime.clone())],
                 )?,
             ),
@@ -178,7 +178,7 @@ fn discover<'py>(
     let mut declarations: Vec<Bound<'py, PyAny>> = Vec::new();
     for request in declared_requests {
         let resolved = call_with(
-            &imported(py, PLANNING, "_resolve_origin")?,
+            &imported(py, "sqlbuild._native", "migration_resolve_origin")?,
             &[
                 ("request", request.clone()),
                 ("runtime", runtime.clone()),
@@ -228,7 +228,7 @@ fn finish<'py>(
     for request in discovery.getattr("requests")?.try_iter()? {
         let request = request?;
         let origin = call_with(
-            &imported(py, PLANNING, "_resolve_origin")?,
+            &imported(py, "sqlbuild._native", "migration_resolve_origin")?,
             &[
                 ("request", request.clone()),
                 ("runtime", runtime.clone()),
@@ -244,7 +244,7 @@ fn finish<'py>(
         let mut origins: Vec<Bound<'py, PyAny>> = Vec::new();
         for (_, origin, _) in &resolved {
             call_with(
-                &imported(py, PLANNING, "_require_same_database")?,
+                &imported(py, "sqlbuild._native", "migration_require_same_database")?,
                 &[("state", state.clone()), ("location", origin.clone())],
             )?;
             let schema = origin.getattr("schema")?;
@@ -268,7 +268,7 @@ fn finish<'py>(
             project_config.getattr("snapshots")?
         };
         let policy = call_with(
-            &imported(py, PLANNING, "missing_origin_policy")?,
+            &imported(py, "sqlbuild._native", "migration_missing_origin_policy")?,
             &[("runtime", runtime.clone())],
         )?;
         for (request, origin, origin_model) in resolved {
