@@ -16,12 +16,5 @@ DBT_MANIFEST_MATERIALIZED_KEY: str = "materialized"
 
 
 DBT_DEFER_FLAG: str = "--defer"
-DBT_EXECUTION_FAIL_STATUSES: frozenset[str] = frozenset({"error", "fail", "failed"})
-DBT_EXECUTION_SKIP_STATUSES: frozenset[str] = frozenset({"skip", "skipped"})
-DBT_EXECUTION_SUCCESS_STATUSES: frozenset[str] = frozenset(
-    {"ok", "success", "pass", "passed", "warn", "warning"}
-)
-DBT_EXECUTION_WARN_STATUSES: frozenset[str] = frozenset({"warn", "warning"})
 DBT_FULL_REFRESH_FLAG: str = "--full-refresh"
-DBT_SELECT_FLAG: str = "--select"
 DBT_UNIQUE_ID_SEPARATOR: str = "."

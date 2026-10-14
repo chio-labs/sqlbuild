@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from sqlbuild._native import plan_has_executable_work
-from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.integrations.dbt._helpers.pipeline.execute import (
+from sqlbuild._native import (
     build_failed_sqlbuild_model_names,
     build_merged_dbt_execution_argv,
+    plan_has_executable_work,
 )
+from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt._helpers.pipeline.execution_phases import (
     execute_dbt_without_state_tracking,
     resolve_dbt_connection_config,

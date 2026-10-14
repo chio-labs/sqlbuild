@@ -7,16 +7,17 @@ from typing import cast
 
 import pytest
 
-from sqlbuild._native import DbtCombinedGraph, build_dbt_interop_plan
+from sqlbuild._native import (
+    DbtCombinedGraph,
+    build_dbt_interop_plan,
+    build_failed_sqlbuild_model_names,
+    build_merged_dbt_execution_argv,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt._helpers.pipeline import execute as dbt_execute_module
 from sqlbuild.integrations.dbt._helpers.pipeline import execution_phases as phases_module
-from sqlbuild.integrations.dbt._helpers.pipeline.execute import (
-    build_failed_sqlbuild_model_names,
-    build_merged_dbt_execution_argv,
-)
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.main.pipeline import execute as execute_module
 from sqlbuild.integrations.dbt.main.pipeline import plan as plan_module

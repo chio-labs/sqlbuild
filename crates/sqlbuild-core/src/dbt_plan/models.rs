@@ -30,3 +30,12 @@ pub struct DbtReferencedModel {
     pub fqn: Vec<String>,
     pub name: String,
 }
+
+/// One executed dbt node's outcome.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct DbtExecutedNode {
+    pub unique_id: String,
+    pub resource_type: String,
+    pub status: String,
+    pub execution_time: Option<f64>,
+}

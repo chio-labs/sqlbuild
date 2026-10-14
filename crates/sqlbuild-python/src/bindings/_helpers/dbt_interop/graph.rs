@@ -57,6 +57,13 @@ fn stable_edges<'py>(py: Python<'py>, edges: &DbtGraphEdges) -> PyResult<Bound<'
     Ok(result)
 }
 
+impl DbtCombinedGraph {
+    /// The native graph.
+    pub(crate) fn native(&self) -> &CombinedGraph {
+        &self.graph
+    }
+}
+
 #[pymethods]
 impl DbtCombinedGraph {
     /// Every node's stable ID.

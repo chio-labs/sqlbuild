@@ -9,22 +9,12 @@ from pathlib import Path
 from typing import TextIO, cast
 
 from sqlbuild._native import (
-    DbtCombinedGraph,
-    build_dbt_command_argv,
-    format_summary_footer,
+    dbt_execution_ls_argv,
     parse_dbt_ls_json_lines,
     render_dbt_node_result,
 )
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
-from sqlbuild.integrations.dbt.constants import (
-    DBT_DEFER_FLAG,
-    DBT_EXECUTION_FAIL_STATUSES,
-    DBT_EXECUTION_SKIP_STATUSES,
-    DBT_EXECUTION_SUCCESS_STATUSES,
-    DBT_EXECUTION_WARN_STATUSES,
-    DBT_SELECT_FLAG,
-    DBT_UNIQUE_ID_SEPARATOR,
-)
+from sqlbuild.integrations.dbt.constants import DBT_UNIQUE_ID_SEPARATOR
 from sqlbuild.integrations.dbt.main.runtime._execute_json_event_stream import (
     execute_dbt_json_event_stream,
 )
@@ -32,18 +22,14 @@ from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCommandExecutionResult,
     DbtCommandResult,
-    DbtInteropPlan,
     DbtLsNode,
-    DbtManifestIndex,
     DbtNodeExecutionResult,
     DbtNodeMessage,
 )
-from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtSupportedResourceType
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 
 _COMMAND_AND_SUBCOMMAND_ARGUMENT_COUNT: int = 2
-_DBT_LS_EXCLUDED_EXECUTION_FLAGS: frozenset[str] = frozenset({"--full-refresh", "--fail-fast"})
 
 
 def execute_dbt_commands(
@@ -135,100 +121,6 @@ def execute_dbt_commands(
     return DbtCommandExecutionResult(returncode=returncode, node_results=results)
 
 
-def build_merged_dbt_execution_argv(
-    *,
-    command: DbtInteropCommand,
-    options: DbtCliOptions,
-    routed_args: tuple[str, ...],
-    plan: DbtInteropPlan,
-) -> tuple[str, ...] | None:
-    """Merge original dbt selection with dbt models required by SQLBuild work."""
-
-    required_terms: tuple[str, ...] = plan.dbt_required_selector_terms
-    if not plan.dbt_selected_unique_ids and not required_terms:
-        return None
-    merged_args: tuple[str, ...] = _merge_dbt_select_terms(
-        args=_strip_resolved_dbt_options(routed_args),
-        extra_terms=required_terms,
-    )
-    return build_dbt_command_argv(
-        dbt_executable=plan.dbt_command_argv[0],
-        command=command.value,
-        options=options,
-        args=merged_args,
-    )
-
-
-def build_failed_sqlbuild_model_names(
-    *,
-    graph: DbtCombinedGraph,
-    manifest: DbtManifestIndex,
-    node_results: tuple[DbtNodeExecutionResult, ...],
-) -> tuple[str, ...]:
-    """Return SQLBuild models downstream of actual failed or skipped dbt work."""
-
-    failed_unique_ids: set[str] = set()
-    for result in node_results:
-        if result.status.lower() in DBT_EXECUTION_SUCCESS_STATUSES:
-            continue
-        if result.resource_type == DbtSupportedResourceType.MODEL:
-            failed_unique_ids.add(result.unique_id)
-        elif result.resource_type in (
-            DbtSupportedResourceType.TEST,
-            DbtSupportedResourceType.UNIT_TEST,
-        ):
-            failed_unique_ids.update(
-                manifest.validation_depends_on_nodes_by_unique_id.get(result.unique_id, ())
-            )
-    return graph.downstream_sqlbuild_model_names(failed_unique_ids)
-
-
-def render_dbt_execution_summary_footer(
-    *, node_results: tuple[DbtNodeExecutionResult, ...], use_color: bool
-) -> str | None:
-    """Render a PASS/WARN/FAIL/SKIP/TOTAL footer for executed dbt nodes."""
-
-    if not node_results:
-        return None
-    pass_count: int = 0
-    warn_count: int = 0
-    fail_count: int = 0
-    skip_count: int = 0
-    elapsed: float = 0.0
-    for result in node_results:
-        status: str = result.status.lower()
-        if result.execution_time is not None:
-            elapsed += result.execution_time
-        if status in DBT_EXECUTION_WARN_STATUSES:
-            warn_count += 1
-        elif status in DBT_EXECUTION_FAIL_STATUSES:
-            fail_count += 1
-        elif status in DBT_EXECUTION_SKIP_STATUSES:
-            skip_count += 1
-        elif status in DBT_EXECUTION_SUCCESS_STATUSES:
-            pass_count += 1
-    total_count: int = pass_count + warn_count + fail_count + skip_count
-    style: CliStyle = CliStyle(use_color=use_color)
-    if fail_count > 0:
-        status_line: str = style.error("Completed with errors.")
-    elif warn_count > 0:
-        status_line = style.warning("Completed with warnings.")
-    else:
-        status_line = style.success("Completed successfully.")
-    counts_line: str = format_summary_footer(
-        counts=(
-            ("PASS", pass_count),
-            ("WARN", warn_count),
-            ("FAIL", fail_count),
-            ("SKIP", skip_count),
-            ("TOTAL", total_count),
-        ),
-        use_color=use_color,
-        elapsed=f"{elapsed:.2f}s",
-    )
-    return f"{status_line}\n{counts_line}"
-
-
 def _dbt_execution_expected_total(
     *,
     runner: DbtRunner,
@@ -237,14 +129,14 @@ def _dbt_execution_expected_total(
     stream: TextIO,
     use_color: bool,
 ) -> int | None:
-    ls_argv: tuple[str, ...] | None = _dbt_ls_argv_from_execution_argv(argv)
+    ls_argv: list[str] | None = dbt_execution_ls_argv(argv=argv)
     if ls_argv is None:
         return None
     status: TransientStatusReporter = TransientStatusReporter(stream=stream, use_color=use_color)
     status.start("Resolving dbt execution selection...")
     start: float = time.monotonic()
     try:
-        result: DbtCommandResult = runner.invoke(argv=ls_argv, cwd=options.project_dir)
+        result: DbtCommandResult = runner.invoke(argv=tuple(ls_argv), cwd=options.project_dir)
     finally:
         status.complete(
             message=f"Resolved dbt execution selection. ({time.monotonic() - start:.2f}s)"
@@ -252,17 +144,6 @@ def _dbt_execution_expected_total(
     if result.returncode != 0:
         return None
     return len(parse_dbt_ls_json_lines(stdout=result.stdout))
-
-
-def _dbt_ls_argv_from_execution_argv(argv: tuple[str, ...]) -> tuple[str, ...] | None:
-    if len(argv) < _COMMAND_AND_SUBCOMMAND_ARGUMENT_COUNT:
-        return None
-    converted: list[str] = [argv[0], "ls", "--output", "json"]
-    for arg in argv[2:]:
-        if arg in _DBT_LS_EXCLUDED_EXECUTION_FLAGS:
-            continue
-        converted.append(arg)
-    return tuple(converted)
 
 
 def _append_missing_run_results(
@@ -343,44 +224,3 @@ def _messages_from_run_result(raw_result: dict[str, object]) -> tuple[DbtNodeMes
     if isinstance(failures, int) and failures > 0:
         return (DbtNodeMessage(level="error", message=f"{failures} failure(s)"),)
     return ()
-
-
-def _strip_resolved_dbt_options(args: tuple[str, ...]) -> tuple[str, ...]:
-    value_flags: frozenset[str] = frozenset(
-        {"--project-dir", "--profiles-dir", "--target", "--target-path", "--vars", "--state"}
-    )
-    stripped: list[str] = []
-    index: int = 0
-    while index < len(args):
-        arg: str = args[index]
-        if arg in value_flags:
-            index += 2
-            continue
-        if arg == DBT_DEFER_FLAG:
-            index += 1
-            continue
-        stripped.append(arg)
-        index += 1
-    return tuple(stripped)
-
-
-def _merge_dbt_select_terms(
-    *, args: tuple[str, ...], extra_terms: tuple[str, ...]
-) -> tuple[str, ...]:
-    if not extra_terms:
-        return args
-    if DBT_SELECT_FLAG not in args:
-        return (*args, DBT_SELECT_FLAG, *extra_terms)
-    merged: list[str] = []
-    index: int = 0
-    while index < len(args):
-        token: str = args[index]
-        merged.append(token)
-        index += 1
-        if token != DBT_SELECT_FLAG:
-            continue
-        while index < len(args) and not args[index].startswith("--"):
-            merged.append(args[index])
-            index += 1
-        merged.extend(term for term in extra_terms if term not in merged)
-    return tuple(merged)

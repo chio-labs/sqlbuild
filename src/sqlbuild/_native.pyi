@@ -1492,6 +1492,23 @@ def resolve_dbt_interop_sqlbuild_selection(
     dbt_anchor_unique_ids_by_term: Mapping[str, Sequence[str]] | None = None,
 ) -> DbtInteropSelectionResult: ...
 def dbt_fqn_selector_term(*, fqn: Sequence[str], fallback: str) -> str: ...
+def build_merged_dbt_execution_argv(
+    *,
+    command: DbtInteropCommand,
+    options: DbtCliOptions,
+    routed_args: Sequence[str],
+    plan: DbtInteropPlan,
+) -> tuple[str, ...] | None: ...
+def dbt_execution_ls_argv(*, argv: Sequence[str]) -> list[str] | None: ...
+def build_failed_sqlbuild_model_names(
+    *,
+    graph: DbtCombinedGraph,
+    manifest: DbtManifestIndex,
+    node_results: Sequence[DbtNodeExecutionResult],
+) -> tuple[str, ...]: ...
+def render_dbt_execution_summary_footer(
+    *, node_results: Sequence[DbtNodeExecutionResult], use_color: bool
+) -> str | None: ...
 def plan_dbt_interop_command(
     *,
     command: DbtInteropCommand | str,
