@@ -52,6 +52,7 @@ fn register_project_stages(module: &Bound<'_, PyModule>) -> PyResult<()> {
     planner_selection::registration::register(module)?;
     planner_scope::registration::register(module)?;
     planner_strategy::registration::register(module)?;
+    crate::bindings::_helpers::planner_resolution::registration::register(module)?;
     references::registration::register(module)?;
     authored_values::registration::register(module)?;
     auditing::registration::register(module)?;

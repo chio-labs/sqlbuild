@@ -29,6 +29,26 @@ from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
+class ResolutionOverrideAdapter(DuckDbAdapter):
+    """Render an expression source using adapter-owned SQL at every boundary."""
+
+    def render_source_expression_relation(self, *, expression: str) -> str:
+        return '(SELECT 7 AS "OrderId")'
+
+    def render_identifier(self, name: str) -> str:
+        return '"' + name.replace('"', '""') + '"'
+
+    def render_source_expression_cast(
+        self, *, expression: str, target_type: str, alias: str
+    ) -> str:
+        return f"CAST({expression} AS {target_type}) + 1 AS {alias}"
+
+    def render_source_expression_cast_subquery(
+        self, *, source_relation: str, projections: tuple[str, ...]
+    ) -> str:
+        return f"(SELECT {', '.join(projections)} FROM {source_relation})"
+
+
 def build_model(
     *,
     name: str,

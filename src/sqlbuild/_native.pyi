@@ -3242,6 +3242,54 @@ def runtime_project_relations(
     *, relations: Mapping[SqlResourceRef, str], dialect: str | None
 ) -> ProjectRelationIndex: ...
 def render_source_relation(*, entry: SourceEntry, adapter: StrictAdapter | None = None) -> str: ...
+def render_source_read_relation(*, adapter: BaseAdapter, source_entry: SourceEntry) -> str: ...
+def resolve_ref_references(
+    *,
+    query_sql: str,
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
+    cursor_bounds: CursorBounds | None,
+    cursor_filter_inputs: dict[str, str],
+    adapter: BaseAdapter,
+    cursor_type: str | None,
+    lower_bound_inclusive: bool,
+) -> str: ...
+def resolve_source_references(
+    *,
+    query_sql: str,
+    source_map: dict[str, SourceEntry],
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
+    star_exclude_keyword: str,
+    cursor_bounds: CursorBounds | None,
+    cursor_filter_inputs: dict[str, str],
+    adapter: BaseAdapter,
+    cursor_type: str | None,
+    lower_bound_inclusive: bool,
+) -> str: ...
+def resolve_dbt_ref_references(
+    *,
+    query_sql: str,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+) -> str: ...
+def resolve_udf_references(
+    *,
+    query_sql: str,
+    function_locations: dict[str, CompiledRelationLocation],
+    adapter: BaseAdapter,
+) -> str: ...
+def resolve_table_function_references(
+    *,
+    query_sql: str,
+    function_locations: dict[str, CompiledRelationLocation],
+    adapter: BaseAdapter,
+) -> str: ...
+def apply_deferred_locations(
+    *,
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
+    deferred_locations: dict[str, CompiledRelationLocation],
+    selected_keys: frozenset[CompiledObjectKey],
+) -> tuple[dict[str, CompiledRelationLocation], dict[str, CompiledRelationLocation]]: ...
 def substitute_placeholder_defaults(sql: str, placeholders: list[tuple[str, str]], /) -> str: ...
 def fixture_projection_facts(
     sql: str, dialect: str | None, /
