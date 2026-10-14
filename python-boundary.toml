@@ -330,6 +330,41 @@ reason = "user-code"
 note = "Logs compute log capture failures through Python logging during capture."
 
 [[stays]]
+path = "integrations/dbt/_helpers/profile/init.py"
+reason = "user-code"
+note = "Initializes a SQLBuild project from the user's dbt project and runs dbt debug as a subprocess."
+
+[[stays]]
+path = "cli/compile_reuse/_helpers/provider_settings.py"
+reason = "user-code"
+note = "Inspects user provider settings classes for the environment and files they read."
+
+[[stays]]
+path = "cli/compile_reuse/_helpers/runtime_identity.py"
+reason = "user-code"
+note = "Interpreter and invocation facts of the Python host that user code runs in."
+
+[[stays]]
+path = "cli/compile_reuse/_helpers/startup_inputs.py"
+reason = "user-code"
+note = "Interpreter and site-path inputs user modules import from."
+
+[[stays]]
+path = "cli/entry/main/entry.py"
+reason = "public-api"
+note = "The installed sqlbuild-python console entry point."
+
+[[stays]]
+path = "cli/entry/main/launched.py"
+reason = "public-api"
+note = "The Python entry point the native sqb executable hands invocations to."
+
+[[stays]]
+path = "cli/entry/_helpers/streams.py"
+reason = "public-api"
+note = "Reconfigures the Python process's standard streams for the console entry points."
+
+[[stays]]
 path = "compiler/python_nodes/_helpers/identity.py"
 reason = "user-code"
 note = "Identity hashing over live user functions (source and globals)."
