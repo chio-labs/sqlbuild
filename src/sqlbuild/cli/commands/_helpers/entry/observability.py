@@ -14,6 +14,7 @@ from sqlbuild._native import (
     NativeProgressProjector,
     TerminalEventIndex,
     machine_output_mode,
+    supports_color,
     terminal_event_index_scope,
 )
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
@@ -33,7 +34,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredRuntimeExtensions,
 )
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
-from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.runtime.event_exporting.classes.command_scope import EventExporterCommandScope
 from sqlbuild.runtime.event_exporting.classes.dispatcher import EventExporterDispatcher
 from sqlbuild.runtime.event_exporting.constants import (

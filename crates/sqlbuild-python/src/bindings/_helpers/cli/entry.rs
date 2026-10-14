@@ -12,14 +12,15 @@ use sqlbuild_cli::dispatch::main::failure_report::failure_report;
 use sqlbuild_cli::dispatch::main::invocation_policy::invocation_policy;
 use sqlbuild_cli::dispatch::models::{CommandFacts, CommandFailure, InvocationPolicy};
 
+use crate::bindings::_helpers::cli::argv::parse_cli_invocation;
 use crate::bindings::_helpers::cli::dispatch::{command_facts, dispatch_command};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use sqlbuild_core::cli_text::main::format_coded_error::format_coded_error;
 use sqlbuild_core::cli_text::models::CliStyle;
 
 const NO_COLOR_OPTION: &str = "--no-color";
 const EXCEPTIONS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
-const PARSING_MODULE: &str = "sqlbuild.cli.commands._helpers.entry.parsing";
 const COMPUTE_LOGS_MODULE: &str =
     "sqlbuild.cli.commands.main.entrypoint._dispatch_with_compute_logs";
 const OBSERVABILITY_MODULE: &str = "sqlbuild.cli.commands._helpers.entry.observability";
@@ -30,7 +31,6 @@ const EXTERNAL_SCOPE_MODULE: &str =
 const INVOCATION_CONTEXT_MODULE: &str = "sqlbuild.runtime.output_capture.main.invocation_context";
 const OUTPUT_CAPTURE_ERRORS_MODULE: &str = "sqlbuild.runtime.output_capture.exceptions";
 const DIAGNOSTICS_MODULE: &str = "sqlbuild.diagnostics.main.diagnostics_context";
-const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 const TRANSIENT_LINE_MODULE: &str = "sqlbuild.presentation.main.transient_line_coordinator";
 const SKILLS_MODULE: &str = "sqlbuild._native";
 const RULES_ERRORS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
@@ -518,20 +518,8 @@ fn parsed_invocation<'py>(
     identity: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = argv.py();
-    let use_color: bool = !argv.contains(NO_COLOR_OPTION)?
-        && imported(py, COLOR_MODULE, "supports_color")?
-            .call0()?
-            .is_truthy()?;
-    let parsed: Bound<'py, PyAny> = call_with(
-        &imported(py, PARSING_MODULE, "parse_cli_invocation")?,
-        &[
-            ("argv", argv.clone()),
-            (
-                "use_color",
-                PyBool::new(py, use_color).to_owned().into_any(),
-            ),
-        ],
-    )?;
+    let use_color: bool = !argv.contains(NO_COLOR_OPTION)? && stdout_supports_color(py)?;
+    let parsed: Bound<'py, PyAny> = parse_cli_invocation(py, argv.extract()?, use_color)?;
     let args: Bound<'py, PyAny> = parsed.getattr("args")?;
     if args.is_none() {
         let exit_code: Bound<'py, PyAny> = parsed.getattr("exit_code")?;

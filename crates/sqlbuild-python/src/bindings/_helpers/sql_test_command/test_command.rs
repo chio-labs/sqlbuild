@@ -38,7 +38,6 @@ const STATIC_COMMAND_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const TEST_PLAN_MODULE: &str = "sqlbuild.compiler.planner.main.commands._sql_test";
 const PLANNER_ERRORS: &str = "sqlbuild.compiler.planner.exceptions";
-const PROGRESS_MODELS: &str = "sqlbuild.cli.progress.models";
 const EXECUTOR_PIPELINE_MODELS: &str = "sqlbuild.executor.pipeline.models";
 const EXECUTOR_RUN_MODULE: &str = "sqlbuild.executor.pipeline.main.run";
 const RESOURCE_ID_MODULE: &str = "sqlbuild.executor.testing.main._resource_id";
@@ -154,7 +153,7 @@ fn outcome_status(outcome: &Bound<'_, PyAny>) -> PyResult<&'static str> {
 /// Nested `expect` rows of a completed test, one per step.
 fn expectation_rows<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = result.py();
-    let row_class: Bound<'py, PyAny> = imported(py, PROGRESS_MODELS, "NestedProgressChildRow")?;
+    let row_class: Bound<'py, PyAny> = imported(py, COMMAND_MODELS, "NestedProgressChildRow")?;
     let name: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "format_expectation_name")?;
     let detail: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "format_expectation_detail")?;
     let mut rows: Vec<Bound<'py, PyAny>> = Vec::new();

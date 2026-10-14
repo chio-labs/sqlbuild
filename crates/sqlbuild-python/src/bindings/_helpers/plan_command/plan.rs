@@ -7,13 +7,13 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods};
 use pyo3::wrap_pyfunction;
 
 use crate::bindings::_helpers::build_command::support::keyword_relay;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::cli::progress_text::with_verbose_inspection;
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ADAPTER_CONTEXT_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapter_context";
-const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild.cli.commands._helpers.planning.external_refs";
-const VERBOSE_MODULE: &str = "sqlbuild.cli.progress.main.verbose_inspection_output";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const CONTRACT_MODELS: &str = "sqlbuild.runtime.contracts.models";
 const PRESENTATION_MODELS: &str = "sqlbuild.presentation.models";
@@ -90,11 +90,8 @@ fn resolve_invocation<'py>(request: &Bound<'py, PyAny>) -> PyResult<PlanInvocati
         ],
     )?;
     let json_output: bool = request.getattr("json_output")?.is_truthy()?;
-    let use_color: bool = !request.getattr("no_color")?.is_truthy()?
-        && !json_output
-        && imported(py, COLOR_MODULE, "supports_color")?
-            .call0()?
-            .is_truthy()?;
+    let use_color: bool =
+        !request.getattr("no_color")?.is_truthy()? && !json_output && stdout_supports_color(py)?;
     let stream: Bound<'py, PyAny> =
         py.import("sys")?
             .getattr(if json_output { "stderr" } else { "stdout" })?;
@@ -285,12 +282,9 @@ fn run_plan_command(request: &Bound<'_, PyAny>) -> PyResult<i32> {
         invocation.stream.call_method1("write", ("\n",))?;
         invocation.stream.call_method0("flush")?;
     }
-    let verbose: Bound<'_, PyDict> = PyDict::new(py);
-    verbose.set_item("enabled", request.getattr("verbose")?)?;
-    let pipeline: Bound<'_, PyAny> = within(
-        &imported(py, VERBOSE_MODULE, "verbose_inspection_output")?.call((), Some(&verbose))?,
-        |_| compile_pipeline(request, &invocation),
-    )?;
+    let verbose: bool = request.getattr("verbose")?.is_truthy()?;
+    let pipeline: Bound<'_, PyAny> =
+        with_verbose_inspection(py, verbose, || compile_pipeline(request, &invocation))?;
     write_output(request, &invocation, &pipeline)?;
     Ok(0)
 }

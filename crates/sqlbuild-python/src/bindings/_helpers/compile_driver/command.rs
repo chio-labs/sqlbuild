@@ -19,6 +19,7 @@ use crate::bindings::_helpers::compile_driver::phases::{
 use crate::bindings::_helpers::compile_driver::python_calls::{
     Status, call_with, imported, keywords, within,
 };
+use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::rules::results::format_skipped_type_proof_rules;
 
 const REUSE_MODELS_MODULE: &str = "sqlbuild.cli.compile_reuse.models";
@@ -28,7 +29,6 @@ const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const PROFILING_MODULE: &str = "sqlbuild.compiler.profiling.main._collect";
-const SUPPORTS_COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 
 /// What one full compile reports for reuse recording.
 struct CommandOutcome<'py> {
@@ -448,10 +448,8 @@ fn record_output<'py>(
             &format_compile_json(py, Some(keywords(py, &arguments)?))?,
         )
     } else {
-        let use_color: bool = !request.getattr("no_color")?.is_truthy()?
-            && imported(py, SUPPORTS_COLOR_MODULE, "supports_color")?
-                .call0()?
-                .is_truthy()?;
+        let use_color: bool =
+            !request.getattr("no_color")?.is_truthy()? && stdout_supports_color(py)?;
         arguments.push((
             "use_color",
             PyBool::new(py, use_color).to_owned().into_any(),

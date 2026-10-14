@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.cli.commands._helpers.entry.parsing import parse_cli_invocation
+from sqlbuild._native import parse_cli_invocation
 from sqlbuild.cli.commands.types import CompileLineageMode, PlaygroundTemplate
 from sqlbuild.cli.entry.models import (
     ParsedCliInvocation,

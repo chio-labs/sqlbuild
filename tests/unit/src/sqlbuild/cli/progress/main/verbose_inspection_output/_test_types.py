@@ -17,9 +17,8 @@ class VerboseInspectionFormatTestCase:
 
 @dataclass(frozen=True)
 class VerboseInspectionOutputTestCase:
-    """Inspection reads recorded inside and after a verbose output context."""
+    """Inspection reads recorded inside and after a verbose writer sink."""
 
     description: str
-    enabled: bool
     records: tuple[tuple[str, float, int], ...]
     expected_stderr_lines: tuple[str, ...]

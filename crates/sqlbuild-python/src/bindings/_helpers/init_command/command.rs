@@ -15,10 +15,10 @@ use sqlbuild_core::init_command::main::render_init_summary::render_init_summary;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::init_command::scaffold::scaffold_blank_project;
+use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
-const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 const EXISTS_MESSAGE: &str = "sqlbuild_project.toml already exists in this directory";
 
 fn exists_error(py: Python<'_>) -> PyErr {
@@ -56,9 +56,7 @@ fn run_init_command(py: Python<'_>, project_dir: Option<Bound<'_, PyAny>>) -> Py
         &[("project_dir", base_dir)],
     )?;
     let style: CliStyle = CliStyle {
-        use_color: imported(py, COLOR_MODULE, "supports_color")?
-            .call0()?
-            .is_truthy()?,
+        use_color: stdout_supports_color(py)?,
     };
     py.import("sys")?.getattr("stdout")?.call_method1(
         "write",

@@ -5,14 +5,17 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::types::{
     PyBool, PyBoolMethods, PyDict, PyDictMethods, PyInt, PyList, PyListMethods, PyString,
 };
-use pyo3::{pyfunction, wrap_pyfunction};
+use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_cli::argv::main::parse_cli_arguments::parse_cli_arguments as parse_arguments;
 use sqlbuild_cli::argv::models::{ArgvOutcome, ArgvSettings, Stream, TypeFailure, Value};
 use sqlbuild_cli::argv::types::ArgvHost;
 use sqlbuild_core::text::main::python_str_repr::python_str_repr;
 
 use crate::bindings::_helpers::cli::surrogates::{python_text, rust_text, uses_placeholders};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
+const NAMESPACE_MODULE: &str = "sqlbuild.cli.commands.classes.cli_namespace";
+const ENTRY_MODELS_MODULE: &str = "sqlbuild.cli.entry.models";
 const INT_CONVERTER: &str = "int";
 const POSITIVE_INTEGER_CONVERTER: &str = "_positive_integer";
 const VARS_CONVERTER: &str = "parse_cli_vars";
@@ -171,20 +174,17 @@ fn object_of(py: Python<'_>, host: &PythonHost<'_>, value: Value) -> PyResult<Py
     })
 }
 
-/// Parse `argv` onto `defaults` as `sqb` did, printing its output; the attributes or exit status.
-#[pyfunction]
-#[pyo3(signature = (argv, defaults, *, use_color, columns))]
+/// Parse `argv` onto `defaults`, printing help, version and errors; the attributes or exit status.
 fn parse_cli_arguments(
-    argv: Vec<Bound<'_, PyString>>,
+    argv: &[Bound<'_, PyString>],
     defaults: &Bound<'_, PyList>,
-    use_color: bool,
-    columns: i64,
+    settings: ArgvSettings,
 ) -> PyResult<ParsedRows> {
     let py: Python<'_> = defaults.py();
     let mut arguments: Vec<String> = Vec::with_capacity(argv.len());
     let mut plain_placeholders: bool = false;
     let mut surrogates: bool = false;
-    for arg in &argv {
+    for arg in argv {
         let (text, mapped) = rust_text(arg)?;
         surrogates |= mapped;
         plain_placeholders |= !mapped && uses_placeholders(&text);
@@ -205,7 +205,6 @@ fn parse_cli_arguments(
         let (name, object): (String, Bound<'_, PyAny>) = item.extract()?;
         values.push((name, host.value_of(&object)?));
     }
-    let settings: ArgvSettings = ArgvSettings { columns, use_color };
     let outcome: ArgvOutcome = parse_arguments(&arguments, values, settings, &mut host);
     let sys: Bound<'_, PyModule> = py.import("sys")?;
     for (stream, text) in outcome.writes {
@@ -236,7 +235,46 @@ fn parse_cli_arguments(
     }
 }
 
+/// Parse CLI arguments into a `CliNamespace`; help, version and errors print and set the exit code.
+#[pyfunction]
+#[pyo3(signature = (argv, *, use_color))]
+pub(crate) fn parse_cli_invocation<'py>(
+    py: Python<'py>,
+    argv: Vec<Bound<'py, PyString>>,
+    use_color: bool,
+) -> PyResult<Bound<'py, PyAny>> {
+    let args: Bound<'py, PyAny> = imported(py, NAMESPACE_MODULE, "CliNamespace")?.call0()?;
+    let defaults: Bound<'py, PyList> = py
+        .get_type::<PyList>()
+        .call1((args.getattr("__dict__")?.call_method0("items")?,))?
+        .downcast_into::<PyList>()?;
+    let columns: i64 = py
+        .import("shutil")?
+        .call_method0("get_terminal_size")?
+        .getattr("columns")?
+        .extract()?;
+    let settings: ArgvSettings = ArgvSettings { columns, use_color };
+    let (rows, exit_code): ParsedRows = parse_cli_arguments(&argv, &defaults, settings)?;
+    let parsed: Bound<'py, PyAny> = imported(py, ENTRY_MODELS_MODULE, "ParsedCliInvocation")?;
+    let Some(rows) = rows else {
+        return call_with(
+            &parsed,
+            &[
+                ("args", py.None().into_bound(py)),
+                ("exit_code", exit_code.into_bound_py_any(py)?),
+            ],
+        );
+    };
+    for (name, value) in rows {
+        args.setattr(name.as_str(), value)?;
+    }
+    call_with(
+        &parsed,
+        &[("args", args), ("exit_code", py.None().into_bound(py))],
+    )
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(parse_cli_arguments, module)?)?;
+    module.add_function(wrap_pyfunction!(parse_cli_invocation, module)?)?;
     Ok(())
 }

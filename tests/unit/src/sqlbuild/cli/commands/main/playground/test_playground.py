@@ -9,12 +9,12 @@ from sqlbuild._native import maintain_sqlbuild_skills, run_playground_command
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import PlaygroundCommandRequest
 from sqlbuild.cli.output.models import SkillMaintenanceResult
-from sqlbuild.presentation.main import supports_color as playground_completion_output
 from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
     CreatePlaygroundProjectTestCase,
     RunPlaygroundTestCase,
     WrapperPlaygroundSkillsTestCase,
 )
+from tests.unit.src.sqlbuild.presentation.helpers import use_color_terminal
 
 
 @pytest.mark.parametrize(
@@ -399,7 +399,7 @@ def test_given_color_terminal_when_running_playground_command_then_it_styles_key
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(playground_completion_output, "supports_color", lambda: True)
+    use_color_terminal(monkeypatch)
 
     exit_code: int = run_playground_command(
         PlaygroundCommandRequest(

@@ -10,13 +10,12 @@ use sqlbuild_core::build_command::models::DurationLimit;
 use crate::bindings::_helpers::build_command::policies::build_command_error;
 use crate::bindings::_helpers::build_command::support::{boolean, or_none, text};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
 const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
-const REPORTERS_MODULE: &str = "sqlbuild.cli.progress.main._build_command_progress_reporters";
 const SETTINGS_MODULE: &str = "sqlbuild._native";
-const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
 const TARGET_NAME_MODULE: &str = "sqlbuild._native";
@@ -168,20 +167,24 @@ pub(crate) fn resolve_build_context<'py>(
     )?;
     let machine_output: bool = request.getattr("json_output")?.is_truthy()?;
     let debug: bool = request.getattr("debug")?.is_truthy()?;
-    let use_color: bool = !request.getattr("no_color")?.is_truthy()?
-        && !machine_output
-        && imported(py, COLOR_MODULE, "supports_color")?
-            .call0()?
-            .is_truthy()?;
+    let use_color: bool =
+        !request.getattr("no_color")?.is_truthy()? && !machine_output && stdout_supports_color(py)?;
     let stream: Bound<'py, PyAny> = py.import("sys")?.getattr(if debug || machine_output {
         "stderr"
     } else {
         "stdout"
     })?;
-    let reporters: Bound<'py, PyAny> = call_with(
-        &imported(py, REPORTERS_MODULE, "build_command_progress_reporters")?,
+    let connection_progress: Bound<'py, PyAny> = call_with(
+        &imported(py, NATIVE_MODULE, "ConnectionProgressReporter")?,
         &[
             ("adapter_name", text(py, &adapter_name)),
+            ("stream", stream.clone()),
+            ("use_color", boolean(py, use_color)),
+        ],
+    )?;
+    let planning_progress: Bound<'py, PyAny> = call_with(
+        &imported(py, NATIVE_MODULE, "PlanningProgressReporter")?,
+        &[
             ("stream", stream.clone()),
             ("use_color", boolean(py, use_color)),
         ],
@@ -209,8 +212,8 @@ pub(crate) fn resolve_build_context<'py>(
             ("connection_config", connection_config),
             ("use_color", boolean(py, use_color)),
             ("progress_stream", stream.clone()),
-            ("connection_progress", reporters.getattr("connection")?),
-            ("planning_progress", reporters.getattr("planning")?),
+            ("connection_progress", connection_progress),
+            ("planning_progress", planning_progress),
             ("should_load_sources", boolean(py, should_load_sources)),
             ("effective_target_name", target_name),
             ("execution_limits", limits),

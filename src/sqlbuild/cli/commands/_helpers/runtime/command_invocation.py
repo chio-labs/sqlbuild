@@ -8,17 +8,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, TextIO
 
-from sqlbuild._native import discover_project_inputs
+from sqlbuild._native import (
+    ConnectionProgressReporter,
+    PlanningProgressReporter,
+    discover_project_inputs,
+    supports_color,
+)
 from sqlbuild.cli.commands._helpers.runtime.adapter_context import (
     resolve_adapter_connection_context,
 )
 from sqlbuild.cli.commands.models import AdapterConnectionContext
-from sqlbuild.cli.progress.main._build_command_progress_reporters import (
-    build_command_progress_reporters,
-)
-from sqlbuild.cli.progress.models import CommandProgressReporters
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.presentation.main.supports_color import supports_color
 
 
 class _CommandInvocationRequest(Protocol):
@@ -79,11 +79,6 @@ def resolve_reported_command_invocation[InvocationT](
     context: _CommandInvocationContext = _resolve_command_invocation_context(
         request=request, require_connection=require_connection
     )
-    reporters: CommandProgressReporters = build_command_progress_reporters(
-        adapter_name=context.adapter_context.adapter_name,
-        stream=context.progress_stream,
-        use_color=context.use_color,
-    )
     return invocation_type(
         effective_project_dir=context.effective_project_dir,
         discovered_inputs=context.discovered_inputs,
@@ -92,8 +87,14 @@ def resolve_reported_command_invocation[InvocationT](
         connection_config=context.adapter_context.connection_config,
         use_color=context.use_color,
         progress_stream=context.progress_stream,
-        connection_progress=reporters.connection,
-        planning_progress=reporters.planning,
+        connection_progress=ConnectionProgressReporter(
+            adapter_name=context.adapter_context.adapter_name,
+            stream=context.progress_stream,
+            use_color=context.use_color,
+        ),
+        planning_progress=PlanningProgressReporter(
+            stream=context.progress_stream, use_color=context.use_color
+        ),
     )
 
 

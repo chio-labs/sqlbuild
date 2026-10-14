@@ -189,7 +189,6 @@ PROVIDER_MODULE_PARTS: tuple[str, ...] = ("src", "sqlbuild", "providers.py")
 PUBLIC_EXPORT_ASSIGNMENT_TARGETS: tuple[str, ...] = ("__all__",)
 PUBLIC_COLOR_ENTRY_PARTS: frozenset[tuple[str, ...]] = frozenset(
     {
-        ("src", "sqlbuild", "presentation", "main", "supports_color.py"),
         ("src", "sqlbuild", "presentation", "main", "terminal_columns.py"),
     }
 )

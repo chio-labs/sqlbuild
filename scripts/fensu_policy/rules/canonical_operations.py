@@ -30,8 +30,8 @@ from scripts.fensu_policy.constants import (
     code="XSB041",
     family=Family.CUSTOM,
     slug="color-capability-entry",
-    message="color capability imports must use the presentation main entry",
-    remediation="Import supports_color from sqlbuild.presentation.main.supports_color.",
+    message="terminal capability imports must use the presentation main entry",
+    remediation="Import terminal_columns from sqlbuild.presentation.main.terminal_columns.",
 )
 def color_capability_entry(*, module: object, ctx: RuleContext) -> list[Fault]:
     del module

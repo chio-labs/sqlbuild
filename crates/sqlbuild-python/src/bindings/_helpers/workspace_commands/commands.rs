@@ -20,12 +20,12 @@ use sqlbuild_config::workspace::models::{PlaygroundRequest, SkillInstallRequest}
 use sqlbuild_core::cli_text::models::CliStyle;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const SKILLS_DIRECTORY: &str = ".agents/skills/sqlbuild";
 const TEMPLATES_DIRECTORY: &str = "playground_templates";
 const EXCEPTIONS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const OUTPUT_MODELS: &str = "sqlbuild.cli.output.models";
-const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 const SKILLS_OPTIONS: (&[&str], &[&str]) =
     (&["project_dir"], &["global_install", "targets", "force"]);
 const UPDATE_OPTIONS: (&[&str], &[&str]) = (
@@ -198,9 +198,7 @@ fn run_playground_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResul
         py,
         &skill_request(py, playground_project_dir(&target_dir, &template))?,
     )?;
-    let use_color: bool = imported(py, COLOR_MODULE, "supports_color")?
-        .call0()?
-        .is_truthy()?;
+    let use_color: bool = stdout_supports_color(py)?;
     print(
         py,
         &playground_summary(&display_path, &template, CliStyle { use_color }),

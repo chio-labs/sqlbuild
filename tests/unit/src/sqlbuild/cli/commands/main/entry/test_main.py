@@ -52,6 +52,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.entry.helpers import (
     build_json_recording_handler,
     invalid_loader_destination_error,
 )
+from tests.unit.src.sqlbuild.presentation.helpers import use_color_terminal
 
 
 @pytest.mark.parametrize(
@@ -2167,7 +2168,7 @@ def test_given_parser_error_and_color_support_when_running_main_then_it_colorize
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("sqlbuild.presentation.main.supports_color.supports_color", lambda: True)
+    use_color_terminal(monkeypatch)
 
     exit_code: int = main(test_case.argv)
     rendered_stderr: str = capsys.readouterr().err
@@ -2193,7 +2194,7 @@ def test_given_parser_error_and_no_color_when_running_main_then_it_renders_plain
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("sqlbuild.presentation.main.supports_color.supports_color", lambda: True)
+    use_color_terminal(monkeypatch)
 
     exit_code: int = main(test_case.argv)
     rendered_stderr: str = capsys.readouterr().err
@@ -2467,7 +2468,7 @@ def test_given_expected_cli_error_and_color_support_when_running_main_then_it_co
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("sqlbuild.presentation.main.supports_color.supports_color", lambda: True)
+    use_color_terminal(monkeypatch)
 
     def run_query(
         project_dir: Path | None,

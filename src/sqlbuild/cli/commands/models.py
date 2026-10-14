@@ -52,6 +52,16 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
+class NestedProgressChildRow:
+    """One child row rendered below a completed nested progress item."""
+
+    label: str
+    name: str
+    status_text: str
+    detail: str = ""
+
+
+@dataclass(frozen=True)
 class AuditCommandRequest:
     """CLI inputs for one audit command invocation."""
 

@@ -13,6 +13,7 @@ use sqlbuild_scopes::scope_text::main::render_scope_text::render_scope_text;
 use sqlbuild_scopes::scope_text::main::scope_result_failed::scope_result_failed;
 use sqlbuild_scopes::scope_text::models::ScopeTextRequest;
 
+use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
 use crate::bindings::_helpers::scopes::scope_objects::ScopeClasses;
 use crate::bindings::_helpers::scopes::scope_report_objects::read_result;
@@ -25,7 +26,6 @@ const NATIVE_MODULE: &str = "sqlbuild._native";
 const MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
 const TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
-const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 const TARGET_ERROR_CODE: &str = "C960";
 const BARE_USAGE: &str = "bare names work for models, sources, seeds and functions; write macros, \
 enums, constants, tests and audits with their prefix, for example macro:<name>";
@@ -329,10 +329,7 @@ fn use_color(
     if output_stream.is_some() || request.getattr("no_color")?.extract::<bool>()? {
         return Ok(false);
     }
-    py.import(COLOR_MODULE)?
-        .getattr("supports_color")?
-        .call0()?
-        .extract()
+    stdout_supports_color(py)
 }
 
 /// Load offline compiler facts, run one pure query, and present its result.

@@ -18,10 +18,10 @@ use crate::bindings::_helpers::diff_report::command::{
 };
 use crate::bindings::_helpers::diff_report::facts::{diff_facts, json_of};
 use crate::bindings::_helpers::frontier::encoder::emit_error;
+use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use sqlbuild_cli::diff_report::types::PhaseSeconds;
 
 const DEFAULT_MAX_VALUE_LENGTH: usize = 160;
-const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 const TEXT_OPTIONS: (&[&str], &[&str]) = (
     &[
         "result",
@@ -195,10 +195,7 @@ pub(crate) fn publish_diff_output(
     if request.getattr("json_output")?.is_truthy()? {
         return write_stdout(py, &json_text(models, &document)?);
     }
-    let use_color: bool = !request.getattr("no_color")?.is_truthy()?
-        && imported(py, COLOR_MODULE, "supports_color")?
-            .call0()?
-            .is_truthy()?;
+    let use_color: bool = !request.getattr("no_color")?.is_truthy()? && stdout_supports_color(py)?;
     write_stdout(
         py,
         &render_diff_text(

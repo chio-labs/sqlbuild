@@ -31,13 +31,13 @@ use crate::bindings::_helpers::command_runtime::warehouses::{
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, within,
 };
+use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const SCOPE_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.warehouse_scope";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const CONTRACT_TYPES_MODULE: &str = "sqlbuild.spec.contracts.types";
-const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 const DEBUG_OPTIONS: (&[&str], &[&str]) = (
     &[],
     &[
@@ -395,10 +395,7 @@ fn run_debug_command(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyRe
     let text: String = if arguments.flag("json_output")? {
         format_debug_json(&report) + "\n"
     } else {
-        let use_color: bool = !arguments.flag("no_color")?
-            && imported(py, COLOR_MODULE, "supports_color")?
-                .call0()?
-                .is_truthy()?;
+        let use_color: bool = !arguments.flag("no_color")? && stdout_supports_color(py)?;
         format_debug_text(&report, CliStyle { use_color })
     };
     let stdout: Bound<'_, PyAny> = py.import("sys")?.getattr("stdout")?;

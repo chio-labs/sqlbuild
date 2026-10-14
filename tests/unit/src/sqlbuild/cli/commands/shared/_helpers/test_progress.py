@@ -18,7 +18,7 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
-from sqlbuild.cli.progress.models import NestedProgressChildRow
+from sqlbuild.cli.commands.models import NestedProgressChildRow
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.python_nodes.types import SkipMode

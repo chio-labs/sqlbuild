@@ -17,8 +17,8 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlScenarioFile
 from sqlbuild.diagnostics.main import process_resource_reporting as resource_reporting_module
 from sqlbuild.executor.pipeline.main import run as executor_run_module
-from sqlbuild.presentation.main import supports_color as supports_color_module
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
+from tests.unit.src.sqlbuild.presentation.helpers import use_plain_terminal
 
 
 def fail_build_discovery(*, monkeypatch: pytest.MonkeyPatch, error: BaseException) -> Mock:
@@ -57,7 +57,7 @@ def configure_native_scenario_command(
         local_config=LocalConfig(),
     )
     monkeypatch.setattr(sys, "stdout", stream)
-    monkeypatch.setattr(supports_color_module, "supports_color", lambda: False)
+    use_plain_terminal(monkeypatch)
     monkeypatch.setattr(native, "discover_project_inputs", lambda **_: discovered_inputs)
     monkeypatch.setattr(native, "resolve_project_connection_config", lambda **_: {})
     monkeypatch.setattr(native, "run_compile_only_pipeline", compile_project)

@@ -19,17 +19,17 @@ from tests.unit.scripts.fensu_policy.rules._test_types import CustomRuleTestCase
     "test_case",
     [
         CustomRuleTestCase(
-            description="raw color capability import faults",
+            description="raw terminal capability import faults",
             path="src/sqlbuild/example/main/build.py",
             source=(
-                "from sqlbuild.presentation._helpers.terminal_capabilities import supports_color\n"
+                "from sqlbuild.presentation._helpers.terminal_capabilities import terminal_columns\n"
             ),
             expected_fault_count=1,
         ),
         CustomRuleTestCase(
-            description="public color capability import passes",
+            description="public terminal capability import passes",
             path="src/sqlbuild/example/main/build.py",
-            source="from sqlbuild.presentation.main.supports_color import supports_color\n",
+            source="from sqlbuild.presentation.main.terminal_columns import terminal_columns\n",
             expected_fault_count=0,
         ),
     ],

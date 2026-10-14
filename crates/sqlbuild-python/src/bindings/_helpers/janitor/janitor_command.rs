@@ -24,11 +24,11 @@ use crate::bindings::_helpers::janitor::janitor_phases::{
     compile_janitor_project, connect_janitor_warehouse, execute_janitor_cleanup,
 };
 use crate::bindings::_helpers::janitor::janitor_plan::{janitor_plan_text, janitor_result_counts};
+use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
-const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 const PREVIEW_TARGET_MODULE: &str = "sqlbuild._native";
 const TARGET_NAME_MODULE: &str = "sqlbuild._native";
 const RETENTION_MODULE: &str = "sqlbuild.executor.janitor.main.resolve_retention_days";
@@ -104,10 +104,8 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Bou
                 ],
             )?),
         )?;
-    let use_color: bool = !request.getattr("no_color")?.extract::<bool>()?
-        && imported(py, COLOR_MODULE, "supports_color")?
-            .call0()?
-            .extract::<bool>()?;
+    let use_color: bool =
+        !request.getattr("no_color")?.extract::<bool>()? && stdout_supports_color(py)?;
     let options: Bound<'py, PyDict> = keywords(
         py,
         &[

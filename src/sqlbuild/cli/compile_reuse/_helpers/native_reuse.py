@@ -9,7 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import sqlbuild._native as _native
-from sqlbuild._native import NativeReuseAttempt
+from sqlbuild._native import NativeReuseAttempt, supports_color
 from sqlbuild.cli.compile_reuse._helpers.runtime_identity import (
     invocation_identity,
     redirected_output_files,
@@ -51,7 +51,6 @@ from sqlbuild.compiler.compile.constants import (
     COMPILE_CACHE_DISABLE_VALUE,
 )
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
-from sqlbuild.presentation.main.supports_color import supports_color
 
 _LOGGER: logging.Logger = logging.getLogger(REUSE_LOGGER_NAME)
 _OUTCOMES: dict[str, CompileReuseOutcome] = {

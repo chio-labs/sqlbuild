@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import describe_connection_warehouse, resolve_project_connection_config
-from sqlbuild.cli.commands._helpers.entry.parsing import parse_cli_invocation
+from sqlbuild._native import parse_cli_invocation
 from sqlbuild.cli.commands._helpers.runtime.warehouse_scope import command_warehouse_scope
 from sqlbuild.cli.commands.constants import COMMAND_WAREHOUSE_GROUPS
 from sqlbuild.cli.commands.exceptions import CliUserError

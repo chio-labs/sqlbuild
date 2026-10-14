@@ -15,9 +15,9 @@ use crate::bindings::_helpers::build_command::support::{
     boolean, display_text, emit, frozenset, joined, keyword_relay, line_writer, none, text, tuple,
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::cursor::overrides::{cursor_integer, cursor_timestamp};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const PARSING_MODULE: &str = "sqlbuild.cli.commands._helpers.input.parsing";
 const CURSOR_OVERRIDES_MODULE: &str =
     "sqlbuild.compiler.planner.main.cursor_window._typed_cursor_overrides";
 const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
@@ -186,13 +186,11 @@ fn cursors<'py>(
     if !overrides.is_truthy()? {
         overrides = imported(py, PLANNER_MODELS, "CursorOverrides")?.call0()?;
     }
-    let timestamp: Bound<'py, PyAny> = imported(py, PARSING_MODULE, "parse_cursor_timestamp")?;
-    let integer: Bound<'py, PyAny> = imported(py, PARSING_MODULE, "parse_cursor_integer")?;
     Ok([
-        timestamp.call1((overrides.getattr("start_ts")?,))?,
-        timestamp.call1((overrides.getattr("end_ts")?,))?,
-        integer.call1((overrides.getattr("start_int")?,))?,
-        integer.call1((overrides.getattr("end_int")?,))?,
+        cursor_timestamp(&overrides.getattr("start_ts")?)?,
+        cursor_timestamp(&overrides.getattr("end_ts")?)?,
+        cursor_integer(&overrides.getattr("start_int")?)?,
+        cursor_integer(&overrides.getattr("end_int")?)?,
     ])
 }
 

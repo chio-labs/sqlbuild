@@ -17,10 +17,10 @@ use sqlbuild_core::freshness_text::models::FreshnessSourceResult;
 use crate::bindings::_helpers::freshness::freshness_observe::{
     Observer, PreviousState, observe_freshness,
 };
+use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
-const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
@@ -368,10 +368,8 @@ fn run_freshness_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult
         if !json_output_path.is_none() {
             write_json_output(py, &payload, (false, &json_output_path))?;
         }
-        let use_color: bool = !request.getattr("no_color")?.extract::<bool>()?
-            && imported(py, COLOR_MODULE, "supports_color")?
-                .call0()?
-                .extract::<bool>()?;
+        let use_color: bool =
+            !request.getattr("no_color")?.extract::<bool>()? && stdout_supports_color(py)?;
         write(py, &render_freshness_text(&results, CliStyle { use_color }))?;
     }
     Ok(freshness_exit_code(

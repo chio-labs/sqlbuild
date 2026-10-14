@@ -36,6 +36,7 @@ from sqlbuild.cli.commands.models import (
     JanitorCommandRequest,
     LineageCommandRequest,
     LoadCommandRequest,
+    NestedProgressChildRow,
     PlanCommandRequest,
     PlanSafetyGates,
     PlaygroundCommandRequest,
@@ -55,10 +56,10 @@ from sqlbuild.cli.entry.models import (
     AuthoredTargetWarehouse,
     CompileCommandRequest,
     CompileProfileFlags,
+    ParsedCliInvocation,
     ResolvedWarehouse,
 )
 from sqlbuild.cli.output.models import SkillMaintenanceResult, SkillUpdateResult, WrittenTarget
-from sqlbuild.cli.progress.models import NestedProgressChildRow
 from sqlbuild.compiler.auditing.models import (
     AuditGateIdentity,
     MeasurementContract,
@@ -2937,9 +2938,8 @@ class SqlReferenceScanner:
 def scope_expected_model_names(
     texts: list[tuple[str, str]], scenario: bool, syntax: dict[str, object]
 ) -> list[tuple[str | None, list[str]]]: ...
-def parse_cli_arguments(
-    argv: list[str], defaults: list[tuple[str, object]], *, use_color: bool, columns: int
-) -> tuple[list[tuple[str, object]] | None, int | None]: ...
+def supports_color() -> bool: ...
+def parse_cli_invocation(argv: Sequence[str], *, use_color: bool) -> ParsedCliInvocation: ...
 def run_cli(argv: Sequence[str] | None = None, handlers: object | None = None) -> int: ...
 def extract_sql_test_ctes(
     *, sql: str, file_label: str, syntax: SqlLexicalSyntax

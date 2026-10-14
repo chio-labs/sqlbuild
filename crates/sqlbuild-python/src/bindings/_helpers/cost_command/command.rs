@@ -17,9 +17,9 @@ use crate::bindings::_helpers::cost_command::bounds::{parse_bound, parse_since};
 use crate::bindings::_helpers::cost_command::refresh::refresh_pending_cost_run;
 use crate::bindings::_helpers::cost_command::refusal::cost_error;
 use crate::bindings::_helpers::cost_command::sorting::{sort_history, sort_resources};
+use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 
 /// The request fields every cost view reads.
 struct CostRequest<'py> {
@@ -67,9 +67,7 @@ impl<'py> CostRequest<'py> {
         if self.request.getattr("no_color")?.is_truthy()? {
             return Ok(false);
         }
-        imported(self.request.py(), COLOR_MODULE, "supports_color")?
-            .call0()?
-            .is_truthy()
+        stdout_supports_color(self.request.py())
     }
 
     /// Write the JSON file when asked, then the JSON or the rendered text to stdout.
