@@ -4,16 +4,15 @@ use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString, PyTuple};
+use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString};
 use pyo3::{pyclass, pymethods};
 use sqlbuild_core::cli_text::models::CliStyle;
 use sqlbuild_core::load_command::main::render_load_result::render_load_result;
 use sqlbuild_core::load_command::main::render_load_spinner_line::render_load_spinner_line;
 use sqlbuild_core::load_command::models::{LoadResultText, LoadSpinnerRow, LoadStatus};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, within,
-};
+use crate::bindings::_helpers::build_progress::terminal::start_spinner;
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported, within};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const LINES_MODULE: &str = "sqlbuild.presentation.main.transient_line_coordinator";
@@ -177,21 +176,10 @@ impl LoadProgressReporter {
     fn start_spinner(slf: &Bound<'_, Self>) -> PyResult<()> {
         let py: Python<'_> = slf.py();
         slf.get().stop_spinner(py)?;
-        let event: Bound<'_, PyAny> = imported(py, "threading", "Event")?.call0()?;
-        let thread: Bound<'_, PyAny> = call_with(
-            &imported(py, "threading", "Thread")?,
-            &[
-                ("target", slf.getattr("_spin_until_stopped")?),
-                ("args", PyTuple::new(py, [&event])?.into_any()),
-                ("daemon", PyBool::new(py, true).to_owned().into_any()),
-            ],
-        )?;
-        {
-            let mut state = slf.get().state();
-            state.stop_event = Some(event.unbind());
-            state.thread = Some(thread.clone().unbind());
-        }
-        thread.call_method0("start")?;
+        let (event, thread) = start_spinner(slf.as_any())?;
+        let mut state = slf.get().state();
+        state.stop_event = Some(event.unbind());
+        state.thread = Some(thread.unbind());
         Ok(())
     }
 }

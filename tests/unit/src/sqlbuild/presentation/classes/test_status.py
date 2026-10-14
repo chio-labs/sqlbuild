@@ -13,6 +13,7 @@ from tests.unit.src.sqlbuild.presentation.classes._test_types import (
     StatusReporterOutputTestCase,
 )
 from tests.unit.src.sqlbuild.presentation.classes.helpers import (
+    OPEN_NESTED_SPINNER_SCRIPT,
     OPEN_SPINNER_SCRIPT,
     RecordingStream,
     apply_no_progress_env,
@@ -140,6 +141,12 @@ def test_given_status_sequence_when_reporting_then_writes_expected_persistent_li
     (
         StatusReporterExitTestCase(
             description="an open spinner is stopped before the interpreter exits",
+            script=OPEN_SPINNER_SCRIPT,
+            expected_returncode=0,
+        ),
+        StatusReporterExitTestCase(
+            description="an unclosed nested progress spinner is stopped before finalization",
+            script=OPEN_NESTED_SPINNER_SCRIPT,
             expected_returncode=0,
         ),
     ),
@@ -149,7 +156,7 @@ def test_given_open_spinner_when_process_exits_then_exits_cleanly(
     test_case: StatusReporterExitTestCase,
 ) -> None:
     completed: subprocess.CompletedProcess[str] = subprocess.run(
-        (sys.executable, "-c", OPEN_SPINNER_SCRIPT),
+        (sys.executable, "-c", test_case.script),
         capture_output=True,
         text=True,
         check=False,
