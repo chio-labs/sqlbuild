@@ -11,9 +11,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const RULE_MODELS: &str = "sqlbuild.rule_engine.models";
-const REJECT_UNIT_TESTS_MODULE: &str =
-    "sqlbuild.compiler.pipeline.main._reject_unit_test_selectors";
-const GRAPH_SELECTION_MODULE: &str = "sqlbuild.compiler.pipeline.main._project_graph_selection";
+const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
+const GRAPH_SELECTION_MODULE: &str = "sqlbuild._native";
 const LIST_ACTION: &str = "list";
 const SHOW_ACTION: &str = "show";
 const SKILLS_ACTION: &str = "skills";
