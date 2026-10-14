@@ -2883,6 +2883,9 @@ def substitute_placeholder_defaults(sql: str, placeholders: list[tuple[str, str]
 def fixture_projection_facts(
     sql: str, dialect: str | None, /
 ) -> tuple[list[tuple[str, str]], list[str], list[str]]: ...
+def build_python_sql_run_lifecycle(
+    *, selection: PythonSqlRunSelection, python_graph: PythonNodeGraph
+) -> PythonSqlRunLifecyclePlan: ...
 def map_expanded_offset(
     *, offset: int, passes: Sequence[Sequence[ExpansionSpan]]
 ) -> MappedOffset: ...

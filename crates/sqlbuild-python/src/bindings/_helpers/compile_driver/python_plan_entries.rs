@@ -17,7 +17,7 @@ const PIPELINE_MODELS_MODULE: &str = "sqlbuild.compiler.pipeline.models";
 const PLANNER_MODELS_MODULE: &str = "sqlbuild.compiler.planner.models";
 const PLANNER_TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
 const NODE_GRAPH_MODULE: &str = "sqlbuild.compiler.python_nodes.main._graph";
-const RUN_LIFECYCLE_MODULE: &str = "sqlbuild.compiler.python_nodes.main._run_lifecycle";
+const NATIVE_MODULE: &str = "sqlbuild._native";
 const PYTHON_NODE_MODELS_MODULE: &str = "sqlbuild.compiler.python_nodes.models";
 const PYTHON_NODE_TYPES_MODULE: &str = "sqlbuild.compiler.python_nodes.types";
 const REF_TYPES_MODULE: &str = "sqlbuild.python_nodes.types";
@@ -172,7 +172,7 @@ fn build_python_run_plan_outputs<'py>(
         ],
     )?;
     let lifecycle: Bound<'py, PyAny> = call_with(
-        &imported(py, RUN_LIFECYCLE_MODULE, "build_python_sql_run_lifecycle")?,
+        &imported(py, NATIVE_MODULE, "build_python_sql_run_lifecycle")?,
         &[("selection", selection), ("python_graph", graph.clone())],
     )?;
     let entries: Bound<'py, PyTuple> = plan_entries(

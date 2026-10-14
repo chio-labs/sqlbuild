@@ -33,7 +33,6 @@ const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
 const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
 const PYTHON_GRAPH_MODULE: &str = "sqlbuild.compiler.python_nodes.main._graph";
-const PYTHON_LIFECYCLE_MODULE: &str = "sqlbuild.compiler.python_nodes.main._run_lifecycle";
 const PYTHON_NODE_MODELS: &str = "sqlbuild.compiler.python_nodes.models";
 const PYTHON_NODE_TYPES: &str = "sqlbuild.compiler.python_nodes.types";
 const EXECUTOR_MODELS: &str = "sqlbuild.executor.python_nodes.models";
@@ -337,11 +336,7 @@ fn prepare<'py>(
         ],
     )?;
     let lifecycle_plan: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            PYTHON_LIFECYCLE_MODULE,
-            "build_python_sql_run_lifecycle",
-        )?,
+        &imported(py, NATIVE_MODULE, "build_python_sql_run_lifecycle")?,
         &[
             ("selection", selection),
             ("python_graph", python_graph.clone()),

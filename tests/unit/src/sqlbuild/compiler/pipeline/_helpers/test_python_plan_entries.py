@@ -7,12 +7,13 @@ from datetime import datetime
 
 import pytest
 
-from sqlbuild._native import build_python_plan_entries, read_latest_fingerprints
+from sqlbuild._native import (
+    build_python_plan_entries,
+    build_python_sql_run_lifecycle,
+    read_latest_fingerprints,
+)
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
-from sqlbuild.compiler.python_nodes._helpers.run_lifecycle import (
-    build_python_sql_run_lifecycle_plan,
-)
 from sqlbuild.compiler.python_nodes.models import (
     PythonNodeGraph,
     PythonNodeIdentity,
@@ -69,7 +70,7 @@ def test_given_previous_python_identity_when_building_plan_entries_then_sets_sta
     )
 
     entries: tuple[PythonPlanEntry, ...] = build_python_plan_entries(
-        lifecycle_plan=build_python_sql_run_lifecycle_plan(
+        lifecycle_plan=build_python_sql_run_lifecycle(
             selection=PythonSqlRunSelection(
                 sql_keys=frozenset(),
                 python_node_names=frozenset({"prepare_orders"}),
@@ -144,7 +145,7 @@ def test_given_filtered_warehouse_fingerprints_when_planning_python_then_sets_id
         filtered_node_types=("model", "seed", "sql_udf"),
     )
     entries: tuple[PythonPlanEntry, ...] = build_python_plan_entries(
-        lifecycle_plan=build_python_sql_run_lifecycle_plan(
+        lifecycle_plan=build_python_sql_run_lifecycle(
             selection=PythonSqlRunSelection(
                 sql_keys=frozenset(),
                 python_node_names=frozenset({"prepare_orders"}),

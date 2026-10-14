@@ -18,7 +18,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const GRAPH_MODULE: &str = "sqlbuild.compiler.python_nodes.main._graph";
-const RUN_LIFECYCLE_MODULE: &str = "sqlbuild.compiler.python_nodes.main._run_lifecycle";
 const PYTHON_NODE_MODELS: &str = "sqlbuild.compiler.python_nodes.models";
 const LOADER_DAG_MODULE: &str = "sqlbuild.compiler.planner.main.selection._loader_dag";
 const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
@@ -316,7 +315,7 @@ fn lifecycle_plan<'py>(
         ],
     )?;
     let plan: Bound<'py, PyAny> = call_with(
-        &imported(py, RUN_LIFECYCLE_MODULE, "build_python_sql_run_lifecycle")?,
+        &imported(py, NATIVE_MODULE, "build_python_sql_run_lifecycle")?,
         &[("selection", selection), ("python_graph", graph.clone())],
     )?;
     let source_type: Bound<'py, PyAny> =

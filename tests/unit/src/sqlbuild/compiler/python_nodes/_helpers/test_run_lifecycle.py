@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import build_python_sql_run_lifecycle
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.python_nodes._helpers.run_lifecycle import (
-    build_python_sql_run_lifecycle_plan,
-)
 from sqlbuild.compiler.python_nodes.models import (
     PythonNodeGraph,
     PythonSqlRunLifecyclePlan,
@@ -91,7 +89,7 @@ def test_given_run_selection_when_building_lifecycle_plan_then_classifies_phases
 ) -> None:
     graph: PythonNodeGraph = build_python_node_graph_for_case(test_case.python_graph_case)
 
-    result: PythonSqlRunLifecyclePlan = build_python_sql_run_lifecycle_plan(
+    result: PythonSqlRunLifecyclePlan = build_python_sql_run_lifecycle(
         selection=test_case.selection,
         python_graph=graph,
     )
