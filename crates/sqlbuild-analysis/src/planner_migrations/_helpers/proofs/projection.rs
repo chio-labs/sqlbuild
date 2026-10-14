@@ -1,7 +1,7 @@
 //! A named output and its expression proof.
 
-use crate::planner_migrations::_helpers::ast::{canonical, identifier, references};
-use crate::planner_migrations::_helpers::encoding::encode;
+use crate::planner_migrations::_helpers::proofs::ast::{canonical, identifier, references};
+use crate::planner_migrations::_helpers::proofs::encoding::encode;
 use crate::planner_migrations::models::QueryProjection;
 use serde_json::Value;
 use std::collections::BTreeSet;

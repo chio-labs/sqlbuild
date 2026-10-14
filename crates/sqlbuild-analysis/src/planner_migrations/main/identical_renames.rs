@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::planner_migrations::_helpers::removed_and_added::removed_and_added;
+use crate::planner_migrations::_helpers::proofs::removed_and_added::removed_and_added;
 use crate::planner_migrations::models::Projection;
 use crate::planner_migrations::types::RenameProof;
 

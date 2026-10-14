@@ -2,9 +2,9 @@
 
 use crate::planner_changes::main::version_identity_payload::version_identity_payload;
 use crate::planner_changes::models::IdentityPayload;
-use crate::planner_migrations::_helpers::ast::strip_formatting;
-use crate::planner_migrations::_helpers::local_names::{local_names, rewrite, unambiguous};
-use crate::planner_migrations::_helpers::parse::parse;
+use crate::planner_migrations::_helpers::proofs::ast::strip_formatting;
+use crate::planner_migrations::_helpers::proofs::local_names::{local_names, rewrite, unambiguous};
+use crate::planner_migrations::_helpers::proofs::parse::parse;
 use crate::planner_migrations::constants::{EXCLUDED_CONFIG, REF_MARKER};
 use polyglot_sql::{Expression, dialects::Dialect};
 use regex::Regex;

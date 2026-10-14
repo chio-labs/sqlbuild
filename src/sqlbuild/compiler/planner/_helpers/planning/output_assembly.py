@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from sqlbuild._native import build_stale_out_of_selection_warnings
-from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner._helpers.migrations.entry_fingerprints import (
+from sqlbuild._native import (
+    build_stale_out_of_selection_warnings,
     with_migration_fingerprints,
 )
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner._helpers.output.plan_output import build_plan_output
 from sqlbuild.compiler.planner._helpers.planning.retention import plan_retention, plan_table_types
 from sqlbuild.compiler.planner._helpers.warehouse.source_freshness_warnings import (

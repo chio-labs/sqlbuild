@@ -1,6 +1,6 @@
 //! Conservative alias resolution in unchanged and renamed projections.
 
-use crate::planner_migrations::_helpers::ast::identifier;
+use crate::planner_migrations::_helpers::proofs::ast::identifier;
 use crate::planner_migrations::models::QueryShape;
 use serde_json::Value;
 use std::collections::BTreeSet;

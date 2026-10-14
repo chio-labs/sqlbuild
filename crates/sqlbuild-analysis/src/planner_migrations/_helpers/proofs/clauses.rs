@@ -1,6 +1,6 @@
 //! Non-projection clauses and positional references of a SELECT.
 
-use crate::planner_migrations::_helpers::ast::{clause_items, items, references};
+use crate::planner_migrations::_helpers::proofs::ast::{clause_items, items, references};
 use crate::planner_migrations::constants::NUMBER_LITERAL;
 use serde_json::Value;
 use std::collections::BTreeSet;

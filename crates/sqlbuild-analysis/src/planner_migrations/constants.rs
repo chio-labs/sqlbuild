@@ -42,3 +42,7 @@ pub(crate) const EXCLUDED_CONFIG: &[&str] = &[
     "snapshot_full_refresh",
     "snapshot_schema_change",
 ];
+pub(crate) const COLUMN_ADDED: &str = "column_added";
+pub(crate) const COLUMN_TYPE_CHANGED: &str = "column_type_changed";
+pub(crate) const POLICY_DENY: &str = "deny";
+pub(crate) const POLICY_FAIL: &str = "fail";

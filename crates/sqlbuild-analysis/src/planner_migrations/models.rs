@@ -2,6 +2,37 @@
 
 use std::collections::BTreeSet;
 
+/// One origin schema difference used by compatibility policy.
+#[derive(Debug)]
+pub struct CompatibilityFinding {
+    pub kind: String,
+    pub column_name: String,
+    pub expected_type: Option<String>,
+    pub actual_type: Option<String>,
+}
+
+/// Ordered candidates for automatic migration matching.
+#[derive(Debug)]
+pub struct MigrationCandidate {
+    pub name: String,
+    pub fingerprint: String,
+}
+
+/// Rename variants and unique candidate indexes after collision rejection.
+#[derive(Debug)]
+pub struct MigrationMatches {
+    pub variants: Vec<std::collections::BTreeMap<String, String>>,
+    pub matches: Vec<(String, usize)>,
+    pub ambiguous: std::collections::BTreeMap<String, String>,
+}
+
+/// Matches and origin claims from one collision-elimination pass.
+#[derive(Debug)]
+pub struct MigrationMatchPass {
+    pub result: MigrationMatches,
+    pub contested: Vec<(String, Vec<String>)>,
+}
+
 /// A named projection with canonical expression and reference names.
 #[derive(Debug)]
 pub struct Projection {

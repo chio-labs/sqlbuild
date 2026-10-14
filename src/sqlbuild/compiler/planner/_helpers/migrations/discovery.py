@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import json
-from collections import defaultdict
 from typing import Any
 
 from sqlbuild._native import (
     build_function_local_hashes,
     build_model_version_identity_metadata_json,
     get_config_str,
+    match_migration_fingerprints,
+    migration_destination_fingerprints,
+    stored_migration_fingerprint,
 )
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
@@ -29,7 +31,6 @@ from sqlbuild.compiler.planner.classes.migration_fingerprint_cache import (
 from sqlbuild.compiler.planner.classes.migration_state_inspection import (
     MigrationStateInspection,
 )
-from sqlbuild.compiler.planner.constants import MIGRATION_FINGERPRINT_METADATA_KEY
 from sqlbuild.compiler.planner.models import (
     ModelMigrationDeclaration,
     ModelMigrationDiscovery,
@@ -84,7 +85,7 @@ def discover_model_migrations(
     if not triggered:
         return ModelMigrationDiscovery(
             requests=manual_requests,
-            destination_fingerprints=_destination_fingerprints(
+            destination_fingerprints=migration_destination_fingerprints(
                 requests=manual_requests,
                 variants=seed_variants,
                 metadata_jsons=metadata_jsons,
@@ -109,7 +110,7 @@ def discover_model_migrations(
     variants: tuple[dict[str, str], ...]
     matches: dict[str, Fingerprint]
     ambiguous: dict[str, str]
-    variants, matches, ambiguous = _match(
+    variants, matches, ambiguous = match_migration_fingerprints(
         models=models,
         new_names=unbuilt - frozenset(resumed),
         seed_variants=seed_variants,
@@ -127,7 +128,7 @@ def discover_model_migrations(
     return ModelMigrationDiscovery(
         requests=requests,
         warnings=_ambiguity_warnings(models=models, scope=scope, ambiguous=ambiguous),
-        destination_fingerprints=_destination_fingerprints(
+        destination_fingerprints=migration_destination_fingerprints(
             requests=requests,
             variants=variants,
             metadata_jsons=metadata_jsons,
@@ -406,146 +407,6 @@ def _superseded(*, events: tuple[MigrationEvent, ...], location: CompiledRelatio
     return newest is not None and newest.origin.matches(relation)
 
 
-def _match(
-    *,
-    models: tuple[CompiledModelView, ...],
-    new_names: frozenset[str],
-    seed_variants: tuple[dict[str, str], ...],
-    candidates: tuple[Fingerprint, ...],
-    metadata_jsons: dict[str, str],
-    dialect: str | None,
-    fingerprints: MigrationFingerprintCache,
-) -> tuple[tuple[dict[str, str], ...], dict[str, Fingerprint], dict[str, str]]:
-    """Match unbuilt models to candidates under every rename-map variant."""
-
-    if not candidates:
-        return tuple(dict(seed) for seed in seed_variants), {}, {}
-    by_fingerprint: dict[str, list[Fingerprint]] = defaultdict(list)
-    candidate: Fingerprint
-    for candidate in candidates:
-        by_fingerprint[stored_migration_fingerprint(candidate) or ""].append(candidate)
-    blocked: set[str] = set()
-    ambiguous: dict[str, str] = {}
-    for _ in range(len(candidates) + 1):
-        variants: tuple[dict[str, str], ...] = tuple(dict(seed) for seed in seed_variants)
-        matches: dict[str, Fingerprint] = {}
-        claims: dict[str, list[str]] = defaultdict(list)
-        model: CompiledModelView
-        for model in models:
-            if model.name not in new_names:
-                continue
-            options: list[Fingerprint] = _match_options(
-                fingerprints=_variant_fingerprints(
-                    model=model,
-                    metadata_json=metadata_jsons[model.name],
-                    variants=variants,
-                    dialect=dialect,
-                    fingerprints=fingerprints,
-                ),
-                by_fingerprint=by_fingerprint,
-                blocked=blocked,
-            )
-            if len(options) > 1:
-                ambiguous[model.name] = (
-                    "several earlier models "
-                    f"({', '.join(sorted(option.node_name for option in options))})"
-                )
-                continue
-            if len(options) == 1:
-                variant: dict[str, str]
-                for variant in variants:
-                    variant[model.name] = options[0].node_name
-                matches[model.name] = options[0]
-                claims[options[0].node_name].append(model.name)
-        contested: dict[str, list[str]] = {
-            origin: names for origin, names in claims.items() if len(names) > 1
-        }
-        if not contested:
-            return variants, matches, ambiguous
-        blocked.update(contested)
-        ambiguous.update(_contested_details(contested))
-    return tuple(dict(seed) for seed in seed_variants), {}, ambiguous
-
-
-def _variant_fingerprints(
-    *,
-    model: CompiledModelView,
-    metadata_json: str,
-    variants: tuple[dict[str, str], ...],
-    dialect: str | None,
-    fingerprints: MigrationFingerprintCache,
-) -> tuple[str, ...]:
-    """Return the distinct migration fingerprints of one model under each rename map."""
-
-    computed: list[str | None] = [
-        fingerprints.fingerprint(
-            query_sql=model.query_sql,
-            metadata_json=metadata_json,
-            ref_identities=variant,
-            dialect=dialect,
-        )
-        for variant in variants
-    ]
-    return tuple(dict.fromkeys(item for item in computed if item is not None))
-
-
-def _match_options(
-    *,
-    fingerprints: tuple[str, ...],
-    by_fingerprint: dict[str, list[Fingerprint]],
-    blocked: set[str],
-) -> list[Fingerprint]:
-    options: dict[str, Fingerprint] = {}
-    fingerprint: str
-    for fingerprint in fingerprints:
-        options.update(
-            {
-                option.node_name: option
-                for option in by_fingerprint.get(fingerprint, [])
-                if option.node_name not in blocked
-            }
-        )
-    return list(options.values())
-
-
-def _contested_details(contested: dict[str, list[str]]) -> dict[str, str]:
-    """Describe each model that shares its only matching earlier model with others."""
-
-    details: dict[str, str] = {}
-    origin: str
-    names: list[str]
-    for origin, names in contested.items():
-        name: str
-        for name in names:
-            others: list[str] = [f"'{other}'" for other in sorted(names) if other != name]
-            details[name] = f"earlier model '{origin}', which also matches {', '.join(others)}"
-    return details
-
-
-def _destination_fingerprints(
-    *,
-    requests: tuple[ModelMigrationRequest, ...],
-    variants: tuple[dict[str, str], ...],
-    metadata_jsons: dict[str, str],
-    dialect: str | None,
-    fingerprints: MigrationFingerprintCache,
-) -> dict[str, tuple[str, ...]]:
-    destinations: dict[str, tuple[str, ...]] = {}
-    request: ModelMigrationRequest
-    for request in requests:
-        metadata_json: str | None = metadata_jsons.get(request.model.name)
-        if metadata_json is None:
-            continue
-        destinations[request.model.name] = _variant_fingerprints(
-            model=request.model,
-            metadata_json=metadata_json,
-            variants=variants,
-            dialect=dialect,
-            fingerprints=fingerprints,
-        )
-    return destinations
-
-
 def _moves_history(*, model: CompiledModelView, origin: Fingerprint) -> bool:
     return _stores_history(model) and _stored_materialization(origin) in _HISTORY_MATERIALIZATIONS
 
@@ -569,14 +430,6 @@ def _stores_history(model: CompiledModelView) -> bool:
         get_config_str(values=model.config.values, key=_MATERIALIZED_KEY)
         in _HISTORY_MATERIALIZATIONS
     )
-
-
-def stored_migration_fingerprint(fingerprint: Fingerprint) -> str | None:
-    """Return the migration fingerprint recorded in a model fingerprint row, if any."""
-
-    payload: Any = _metadata_payload(fingerprint)
-    value: Any = payload.get(MIGRATION_FINGERPRINT_METADATA_KEY) if payload else None
-    return value if isinstance(value, str) else None
 
 
 def _stored_materialization(fingerprint: Fingerprint) -> str | None:

@@ -6,7 +6,13 @@ import json
 from dataclasses import replace
 from datetime import UTC, datetime
 
-from sqlbuild._native import compute_query_hash, get_config_str, plan_reference_renames
+from sqlbuild._native import (
+    check_migration_compatibility,
+    compute_query_hash,
+    get_config_str,
+    plan_reference_renames,
+    stored_migration_fingerprint,
+)
 from sqlbuild.adapter.contract.models import ColumnInfo, MigrationStagePlan, RelationInfo
 from sqlbuild.adapter.contract.types import BuiltinAdapter, MigrationTransfer
 from sqlbuild.compiler.compile.constants import MIGRATE_FORCE_CONFIG_KEY, MIGRATE_FROM_CONFIG_KEY
@@ -22,13 +28,8 @@ from sqlbuild.compiler.migrations.types import (
     MigrationDiscovery,
     MigrationPromotion,
 )
-from sqlbuild.compiler.planner._helpers.migrations.compatibility import (
-    MigrationCompatibilityResult,
-    check_migration_compatibility,
-)
 from sqlbuild.compiler.planner._helpers.migrations.discovery import (
     discover_model_migrations,
-    stored_migration_fingerprint,
 )
 from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
     effectively_full_refreshed_model_names,
@@ -53,6 +54,7 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     CursorSnapshotScope,
     DeferralInputs,
+    MigrationCompatibilityResult,
     ModelCursorSnapshot,
     ModelMigrationDeclaration,
     ModelMigrationDiscovery,

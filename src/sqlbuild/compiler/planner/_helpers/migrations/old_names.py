@@ -6,10 +6,14 @@ from collections.abc import Iterable
 from datetime import datetime
 
 from sqlbuild._native import (
+    declared_column_aliases,
     get_config_str,
     hard_coded_relation_remedy,
     match_project_relation,
+    old_name_claim_errors,
     old_name_reference_message,
+    old_name_schemas_to_read,
+    old_name_view_skip_reason,
 )
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.adapter.contract.types import RelationType
@@ -55,7 +59,7 @@ from sqlbuild.compiler.references.models import (
 from sqlbuild.cursor_algebra.models import Duration
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.python_nodes.types import SqlResourceRefKind
-from sqlbuild.spec.contracts.models import MigrationsConfig, SchemaColumn
+from sqlbuild.spec.contracts.models import MigrationsConfig
 
 _HISTORY_MATERIALIZATIONS: frozenset[str] = frozenset(
     {MaterializationType.INCREMENTAL, MaterializationType.SNAPSHOT}
@@ -99,7 +103,7 @@ def plan_old_name_views(
         connection=runtime.connection,
         database=planning_database(runtime=runtime),
     )
-    schemas: set[str] = _schemas_to_read(
+    schemas: set[str] = old_name_schemas_to_read(
         snapshot=snapshot,
         needed=_needed_schemas(
             runtime=runtime,
@@ -147,7 +151,7 @@ def plan_old_name_views(
         entries=tuple(entries),
         views=views,
         warnings=(
-            *_claim_errors(
+            *old_name_claim_errors(
                 selected=selected, snapshot=snapshot, views=views, now=runtime.invocation_time
             ),
             *_old_name_reference_errors(runtime=runtime, views=views, entries=tuple(entries)),
@@ -242,24 +246,13 @@ class _OldNamePlanner:
     ) -> str | None:
         """Return why the old name gets no steps; ``origin_tracked`` None means unknown."""
 
-        if retention is None:
-            return "old_name_view false"
-        old: MigrationRelation = migration_relation_for_location(origin)
-        reuser: CompiledModelView | None = next(
-            (
-                model
-                for model in self._models_by_name.values()
-                if migration_relation_for_location(model.destination).matches(old)
-            ),
-            None,
+        return old_name_view_skip_reason(
+            origin=origin,
+            origin_tracked=origin_tracked,
+            retention=retention,
+            models=self._models_by_name.values(),
+            views=self._views,
         )
-        if reuser is not None:
-            return f"name reused by model:{reuser.name}"
-        if any(migration_relation_for_location(view.old).matches(old) for view in self._views):
-            return "old name is a compatibility view"
-        if origin_tracked is False:
-            return "not built by SQLBuild"
-        return None
 
     def _from_history(
         self, *, history: OldNameViewHistory, model: CompiledModelView
@@ -335,21 +328,6 @@ class _OldNamePlanner:
         return declared_column_aliases(model)
 
 
-def declared_column_aliases(model: CompiledModelView) -> tuple[tuple[str, str], ...]:
-    """Return old-to-new column names a table or view model declares with migrate_from."""
-
-    columns: tuple[SchemaColumn, ...] = (
-        model.schema_entry.columns if model.schema_entry is not None else ()
-    )
-    return tuple(
-        sorted(
-            (column.migrate_from.strip(), column.name)
-            for column in columns
-            if column.migrate_from is not None
-        )
-    )
-
-
 def _starts_move(entry: ModelMigrationPlanEntry) -> bool:
     if entry.blocks_build:
         return False
@@ -415,18 +393,6 @@ def _needed_schemas(
     return schemas
 
 
-def _schemas_to_read(*, snapshot: WarehouseSnapshot, needed: set[str]) -> set[str]:
-    """Skip schemas the warehouse snapshot already listed without finding old-name state."""
-
-    listed: frozenset[str] | None = snapshot.listed_state_schemas
-    return {
-        schema
-        for schema in needed
-        if schema.lower() in snapshot.old_name_view_state_schemas
-        or (listed is not None and schema.lower() not in listed)
-    }
-
-
 def _may_claim_view(*, model: CompiledModelView, snapshot: WarehouseSnapshot) -> bool:
     relation: RelationInfo | None = snapshot.existing_relations.get(model.name)
     return relation is not None and _is_view(relation)
@@ -434,42 +400,6 @@ def _may_claim_view(*, model: CompiledModelView, snapshot: WarehouseSnapshot) ->
 
 def _is_view(relation: RelationInfo) -> bool:
     return normalize_relation_type(relation.relation_type) == RelationType.VIEW
-
-
-def _claim_errors(
-    *,
-    selected: Iterable[CompiledModelView],
-    snapshot: WarehouseSnapshot,
-    views: tuple[OldNameView, ...],
-    now: datetime,
-) -> tuple[PlanWarning, ...]:
-    """Refuse a model whose destination is a compatibility view still recorded at that name."""
-
-    errors: list[PlanWarning] = []
-    model: CompiledModelView
-    for model in selected:
-        if not _may_claim_view(model=model, snapshot=snapshot):
-            continue
-        destination: MigrationRelation = migration_relation_for_location(model.destination)
-        view: OldNameView | None = next(
-            (
-                view
-                for view in views
-                if view.destination_model != model.name
-                and migration_relation_for_location(view.old).matches(destination)
-            ),
-            None,
-        )
-        if view is not None:
-            errors.append(
-                PlanWarning(
-                    model_name=model.name,
-                    severity=WarningSeverity.ERROR,
-                    message=claim_message(model_name=model.name, view=view, now=now),
-                    code="M114",
-                )
-            )
-    return tuple(errors)
 
 
 def _old_name_reference_errors(
@@ -539,24 +469,6 @@ def _old_name_relation(*, old: CompiledRelationLocation, model_name: str) -> Pro
         ref=SqlResourceRef(kind=SqlResourceRefKind.MODEL, name=model_name),
         relation=RelationName(name=old.name, schema=old.schema, database=old.database),
         compatibility_for=model_name,
-    )
-
-
-def claim_message(*, model_name: str, view: OldNameView, now: datetime) -> str:
-    """Describe why a model cannot take a name held by a compatibility view."""
-
-    name: str = view.old.qualified_name or view.old.name
-    if view.expires_at is not None and view.expires_at <= now:
-        return (
-            f"model '{model_name}' would replace {name}, a compatibility view for "
-            f"model:{view.destination_model} that expired {view.expires_at:%Y-%m-%d}; run "
-            "`sqb janitor` to drop it first"
-        )
-    until: str = "" if view.expires_at is None else f" until {view.expires_at:%Y-%m-%d}"
-    return (
-        f"model '{model_name}' would replace {name}, a compatibility view for "
-        f"model:{view.destination_model}{until}; drop it early with "
-        f"`sqb janitor --drop-old-name-view {name}`"
     )
 
 

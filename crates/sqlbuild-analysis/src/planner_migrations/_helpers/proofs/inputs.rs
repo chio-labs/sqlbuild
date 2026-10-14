@@ -1,7 +1,9 @@
 //! Resolve only inputs whose columns can be proved from the query shape.
 
-use crate::planner_migrations::_helpers::ast::{clause_items, identifier, identifiers, items};
-use crate::planner_migrations::_helpers::projection::projection;
+use crate::planner_migrations::_helpers::proofs::ast::{
+    clause_items, identifier, identifiers, items,
+};
+use crate::planner_migrations::_helpers::proofs::projection::projection;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 

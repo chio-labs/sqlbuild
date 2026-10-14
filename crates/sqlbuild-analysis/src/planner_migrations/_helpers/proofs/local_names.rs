@@ -1,6 +1,8 @@
 //! CTE and relation-alias identity with conservative scope rejection.
 
-use crate::planner_migrations::_helpers::ast::{identifier, items, matching_fields, opaque_field};
+use crate::planner_migrations::_helpers::proofs::ast::{
+    identifier, items, matching_fields, opaque_field,
+};
 use crate::planner_migrations::constants::{TABLE_KEY, WITH_KEY};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};

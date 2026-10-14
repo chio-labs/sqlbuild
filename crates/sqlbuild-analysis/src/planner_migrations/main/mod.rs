@@ -1,6 +1,13 @@
+pub mod compatibility_findings;
+pub mod declared_column_aliases;
 pub mod identical_renames;
+pub mod match_migrations;
 pub mod migration_fingerprint;
 pub mod migration_ref_names;
+pub mod old_name_claim_message;
+pub mod old_name_schemas;
+pub mod old_name_skip_reason;
 pub mod query_shape;
 pub mod rename_hints;
 pub mod renames_explain_change;
+pub mod stored_migration_fingerprint;

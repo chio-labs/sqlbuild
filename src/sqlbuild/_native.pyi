@@ -195,6 +195,7 @@ from sqlbuild.compiler.pipeline.models import (
     PythonRunPlanOutputs,
     StaticCommandContext,
 )
+from sqlbuild.compiler.planner.classes.migration_fingerprint_cache import MigrationFingerprintCache
 from sqlbuild.compiler.planner.classes.migration_state_inspection import (
     MigrationStateInspection,
 )
@@ -208,8 +209,11 @@ from sqlbuild.compiler.planner.models import (
     DirectModelVersionIdentities,
     FutureCursorSafetyEvidence,
     MaximumStartSafetyEvidence,
+    MigrationCompatibilityResult,
     MissingUpstream,
+    ModelMigrationRequest,
     ModelPlanEntry,
+    OldNameView,
     ParsedSelector,
     PathSelector,
     PlannerChangeResults,
@@ -4300,6 +4304,72 @@ def build_migration_fingerprint(
     *, query_sql: str, metadata_json: str, ref_identities: Mapping[str, str], dialect: str | None
 ) -> str | None: ...
 def migration_fingerprint_ref_names(*, query_sql: str, metadata_json: str) -> frozenset[str]: ...
+def check_migration_compatibility(
+    *,
+    model: CompiledModelView,
+    origin_relation: RelationInfo,
+    origin_columns: tuple[ColumnInfo, ...],
+    sql_analysis_enabled: bool,
+    column_dialect: str | None,
+    snapshots_config: SnapshotsConfig,
+) -> MigrationCompatibilityResult: ...
+def migration_incremental_blocking_findings(
+    *,
+    model: CompiledModelView,
+    findings: tuple[SchemaFinding, ...],
+    dialect: str | None,
+) -> tuple[str, ...]: ...
+def migration_snapshot_blocking_findings(
+    *,
+    model: CompiledModelView,
+    findings: tuple[SchemaFinding, ...],
+    dialect: str | None,
+    snapshots_config: SnapshotsConfig,
+) -> tuple[str, ...]: ...
+def match_migration_fingerprints(
+    *,
+    models: tuple[CompiledModelView, ...],
+    new_names: frozenset[str],
+    seed_variants: tuple[dict[str, str], ...],
+    candidates: tuple[Fingerprint, ...],
+    metadata_jsons: dict[str, str],
+    dialect: str | None,
+    fingerprints: MigrationFingerprintCache,
+) -> tuple[tuple[dict[str, str], ...], dict[str, Fingerprint], dict[str, str]]: ...
+def migration_destination_fingerprints(
+    *,
+    requests: tuple[ModelMigrationRequest, ...],
+    variants: tuple[dict[str, str], ...],
+    metadata_jsons: dict[str, str],
+    dialect: str | None,
+    fingerprints: MigrationFingerprintCache,
+) -> dict[str, tuple[str, ...]]: ...
+def stored_migration_fingerprint(fingerprint: Fingerprint) -> str | None: ...
+def declared_column_aliases(model: CompiledModelView) -> tuple[tuple[str, str], ...]: ...
+def old_name_schemas_to_read(*, snapshot: WarehouseSnapshot, needed: set[str]) -> set[str]: ...
+def old_name_claim_message(*, model_name: str, view: OldNameView, now: datetime) -> str: ...
+def old_name_claim_errors(
+    *,
+    selected: Iterable[CompiledModelView],
+    snapshot: WarehouseSnapshot,
+    views: tuple[OldNameView, ...],
+    now: datetime,
+) -> tuple[PlanWarning, ...]: ...
+def old_name_view_skip_reason(
+    *,
+    origin: CompiledRelationLocation,
+    origin_tracked: bool | None,
+    retention: str | None,
+    models: Iterable[CompiledModelView],
+    views: tuple[OldNameView, ...],
+) -> str | None: ...
+def with_migration_fingerprints(
+    *,
+    entries: tuple[ModelPlanEntry, ...],
+    models_by_name: Mapping[str, CompiledModelView],
+    fingerprints: MigrationFingerprintCache,
+    dialect: str | None,
+) -> tuple[ModelPlanEntry, ...]: ...
 def identical_renames(
     *,
     previous: QueryShape,

@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::planner_migrations::_helpers::removed_and_added::removed_and_added;
+use crate::planner_migrations::_helpers::proofs::removed_and_added::removed_and_added;
 use crate::planner_migrations::models::{Projection, RenameHint};
 
 /// Hints ordered by added projection, preferring identical expressions over shared references.
