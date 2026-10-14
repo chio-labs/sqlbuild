@@ -100,6 +100,16 @@ reason = "public-api"
 note = "A logging.Filter that routes records to destinations."
 
 [[stays]]
+path = "diagnostics/main"
+reason = "public-api"
+note = "Diagnostics entry points built on Python logging: configuration, context, debug and SQL logging."
+
+[[stays]]
+path = "diagnostics/_helpers/process_resources.py"
+reason = "public-api"
+note = "Samples process resources for debug logging through Python's resource module."
+
+[[stays]]
 path = "rule_engine/_helpers/host"
 reason = "user-code"
 note = "Subprocess host that loads and runs user rule modules."
@@ -123,6 +133,106 @@ note = "Runs rule phases and early SQL lint on worker threads with futures and s
 path = "rule_engine/classes/rule_context.py"
 reason = "user-code"
 note = "The context object user rules receive."
+
+[[stays]]
+path = "rule_engine/_helpers/engine/definition.py"
+reason = "user-code"
+note = "The @rule decorator implementation; inspects user rule functions and their signatures."
+
+[[stays]]
+path = "rule_engine/_helpers/engine/hermeticity.py"
+reason = "user-code"
+note = "Statically checks the imports of user rule source files."
+
+[[stays]]
+path = "rule_engine/_helpers/engine/rule_harness.py"
+reason = "user-code"
+note = "Public custom-rule test harness that runs user rules over a real compiled project."
+
+[[stays]]
+path = "rule_engine/_helpers/engine/fact_replay.py"
+reason = "user-code"
+note = "Recomputes the fact-view values a custom rule read, for its cache key."
+
+[[stays]]
+path = "rule_engine/main/define.py"
+reason = "user-code"
+note = "Public @rule decorator entry point."
+
+[[stays]]
+path = "rule_engine/main/evaluate_rule.py"
+reason = "user-code"
+note = "Public custom-rule test harness entry point."
+
+[[stays]]
+path = "rule_engine/main/_evaluate.py"
+reason = "user-code"
+note = "Project evaluation entry used by the public custom-rule test harness."
+
+[[stays]]
+path = "rule_engine/classes/audit_facts.py"
+reason = "user-code"
+note = "Fact view user rules read through RuleContext; the Python API over native data."
+
+[[stays]]
+path = "rule_engine/classes/column_facts.py"
+reason = "user-code"
+note = "Fact view user rules read through RuleContext; the Python API over native data."
+
+[[stays]]
+path = "rule_engine/classes/contract_facts.py"
+reason = "user-code"
+note = "Fact view user rules read through RuleContext; the Python API over native data."
+
+[[stays]]
+path = "rule_engine/classes/declaration_facts.py"
+reason = "user-code"
+note = "Fact view user rules read through RuleContext; the Python API over native data."
+
+[[stays]]
+path = "rule_engine/classes/graph_facts.py"
+reason = "user-code"
+note = "Fact view user rules read through RuleContext; the Python API over native data."
+
+[[stays]]
+path = "rule_engine/classes/model_test_facts.py"
+reason = "user-code"
+note = "Fact view user rules read through RuleContext; the Python API over native data."
+
+[[stays]]
+path = "rule_engine/classes/project_facts.py"
+reason = "user-code"
+note = "Fact view user rules read through RuleContext; the Python API over native data."
+
+[[stays]]
+path = "rule_engine/classes/sql_facts.py"
+reason = "user-code"
+note = "Fact view user rules read through RuleContext; the Python API over native data."
+
+[[stays]]
+path = "rule_engine/classes/project_tree.py"
+reason = "user-code"
+note = "Project-tree fact view user rules read through RuleContext."
+
+[[stays]]
+path = "rule_engine/classes/sql_document.py"
+reason = "user-code"
+note = "Lazy Polyglot SQL document user rules read through RuleContext."
+
+[[stays]]
+path = "rule_engine/classes/fact_reads.py"
+reason = "user-code"
+note = "Records the fact-view reads of one user rule evaluation."
+
+[[stays]]
+path = "rule_engine/classes/fact_digests.py"
+reason = "user-code"
+note = "Digests the fact-view values user rules read, for the custom-rule cache."
+
+[[stays]]
+path = "rule_engine/classes/shared_fact_encoder.py"
+reason = "user-code"
+note = "Encodes the Python fact-view values user rules read, for their digests."
 
 [[stays]]
 path = "runtime/observability"
@@ -238,6 +348,96 @@ note = "Inspects loaded user sink functions."
 path = "compiler/pipeline/_helpers/materializations.py"
 reason = "user-code"
 note = "Imports user materialization modules."
+
+[[stays]]
+path = "compiler/frontier/_helpers/code_identity.py"
+reason = "user-code"
+note = "Fingerprints the loaded Python modules behind cached compiler and rule results."
+
+[[stays]]
+path = "compiler/frontier/main/compiled_code_identity.py"
+reason = "user-code"
+note = "Entry point for the loaded-code identity of cached compiler and rule results."
+
+[[stays]]
+path = "compiler/macro_bridge/main"
+reason = "user-code"
+note = "Macro bridge entry points for the running render stage that executes user macros."
+
+[[stays]]
+path = "compiler/compile/_helpers/macro_bridge/call_store.py"
+reason = "user-code"
+note = "Hands the running macro bridge its user macro call store."
+
+[[stays]]
+path = "compiler/python_nodes/main/identity.py"
+reason = "user-code"
+note = "Identity entry point over live user node functions."
+
+[[stays]]
+path = "compiler/python_nodes/main/_hook_identities.py"
+reason = "user-code"
+note = "Builds identities of loaded user hook functions."
+
+[[stays]]
+path = "compiler/python_nodes/main/_graph.py"
+reason = "user-code"
+note = "Builds the Python node graph from loaded user functions."
+
+[[stays]]
+path = "compiler/python_nodes/main/_run_selection.py"
+reason = "user-code"
+note = "Builds the Python node graph from loaded user functions for run selection."
+
+[[stays]]
+path = "compiler/auditing/main/above.py"
+reason = "public-api"
+note = "Audit bound helper project audit factories call."
+
+[[stays]]
+path = "compiler/auditing/main/below.py"
+reason = "public-api"
+note = "Audit bound helper project audit factories call."
+
+[[stays]]
+path = "compiler/auditing/main/outside.py"
+reason = "public-api"
+note = "Audit bound helper project audit factories call."
+
+[[stays]]
+path = "compiler/auditing/main/audit_factory.py"
+reason = "public-api"
+note = "Decorator that declares project audit factories."
+
+[[stays]]
+path = "compiler/auditing/main/get_audit_factory_definition.py"
+reason = "public-api"
+note = "Reads the declaration attached to a project audit factory."
+
+[[stays]]
+path = "compiler/auditing/main/_builtins.py"
+reason = "public-api"
+note = "Built-in audit factories written against the public audit factory API."
+
+[[stays]]
+path = "compiler/sql_analysis/main/import_polyglot.py"
+reason = "public-api"
+note = "Imports the Polyglot Python package for the Python API."
+
+[[stays]]
+path = "compiler/sql_analysis/main/import_polyglot_sql.py"
+reason = "public-api"
+note = "Imports the Polyglot SQL Python package for the Python API."
+
+[[stays]]
+path = "compiler/sql_analysis/_helpers/polyglot.py"
+reason = "public-api"
+note = "Wraps the Polyglot Python package with complexity guards."
+
+[[stays]]
+path = "compiler/profiling"
+reason = "public-api"
+note = "Compile timing collectors built on Python context managers and clocks."
 
 [[stays]]
 path = "assets.py"
