@@ -233,6 +233,8 @@ from sqlbuild.compiler.planner.models import (
     PlanWarning,
     QueryShape,
     ReferenceRename,
+    RelationFixtureCompletion,
+    RelationFixturePlanningContext,
     SchemaAction,
     SchemaFinding,
     SelectionStalenessGraph,
@@ -247,6 +249,7 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import (
     CursorGrain,
     CursorType,
+    FixtureGroups,
     InputColumns,
     MaterializationType,
     OnSchemaChange,
@@ -2437,6 +2440,25 @@ def scan_fixture_typed_null_candidates(
     project_dir: Path, selected_paths: frozenset[Path] | None = None
 ) -> tuple[frozenset[Path], frozenset[str]]: ...
 def simplify_fixture_null_projections(*, sql: str, relation: FixtureRelationMetadata) -> str: ...
+def is_empty_fixture_query(sql: str) -> bool: ...
+def complete_empty_fixture_sql(
+    *, sql: str, relation: FixtureRelationMetadata | None, adapter: BaseAdapter
+) -> tuple[str, str | None]: ...
+def complete_typed_null_columns(
+    *,
+    sql: str,
+    inference: FixtureColumnInference,
+    expected_types: dict[str, str],
+    adapter: BaseAdapter,
+) -> str: ...
+def model_fixture_metadata(*, model: CompiledModelView) -> FixtureRelationMetadata: ...
+def build_relation_fixture_completion(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    request: tuple[tuple[str, ...], FixtureGroups],
+    planning_context: RelationFixturePlanningContext | None = None,
+) -> RelationFixtureCompletion: ...
 def format_redundant_fixture_nulls(
     *,
     files: dict[Path, str],
