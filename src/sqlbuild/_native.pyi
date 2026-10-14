@@ -241,6 +241,10 @@ from sqlbuild.compiler.planner.models import (
     RelationFixtureCompletion,
     RelationFixtureDiagnostic,
     RelationFixturePlanningContext,
+    ScenarioExecutionPlan,
+    ScenarioGraphPlan,
+    ScenarioRelationMap,
+    ScenarioRelationPlan,
     SchemaAction,
     SchemaFinding,
     SelectionStalenessGraph,
@@ -3895,6 +3899,30 @@ def run_dag_command(
     json_output: bool = False,
     cli_vars: dict[str, object] | None = None,
 ) -> int: ...
+def plan_scenario_graph(
+    *,
+    scenario: CompiledSqlScenario,
+    project: CompiledProjectView,
+    sql_analysis_enabled: bool = True,
+    sql_analysis_dialect: str | None = None,
+) -> tuple[ScenarioGraphPlan, tuple[PlanWarning, ...]]: ...
+def build_scenario_relation_plan(
+    *,
+    project: CompiledProjectView,
+    graph_plan: ScenarioGraphPlan,
+    relation_map: ScenarioRelationMap,
+    render_qualified_name: Callable[..., str | None],
+    database: str | None = None,
+    schema: str | None = None,
+) -> ScenarioRelationPlan: ...
+def build_cli_scenario_plan(
+    *,
+    scenario: CompiledSqlScenario,
+    pipeline_result: CompilePipelineResult,
+    adapter: BaseAdapter,
+    project_name: str,
+    source_lexical_syntax: SqlLexicalSyntax,
+) -> ScenarioExecutionPlan: ...
 def run_scenario_test_command(*, request: ScenarioTestCommandRequest) -> int: ...
 def run_scenario_capture_command(*, request: ScenarioCaptureCommandRequest) -> int: ...
 def sql_analysis_off_guidance(

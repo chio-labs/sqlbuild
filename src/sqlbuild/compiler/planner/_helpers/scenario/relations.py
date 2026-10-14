@@ -45,7 +45,6 @@ from sqlbuild.compiler.planner._helpers.resolve.refs import (
 )
 from sqlbuild.compiler.planner._helpers.resolve.resolve import resolve_function_sql
 from sqlbuild.compiler.planner.constants import (
-    SCENARIO_PLAN_INTERNAL,
     SCENARIO_PLAN_INVALID_FIXTURE,
     SCENARIO_PLAN_MISSING_FIXTURE_SQL,
     SCENARIO_PLAN_MISSING_RELATION_TARGET,
@@ -60,13 +59,11 @@ from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,
     PlanWarning,
     RelationFixtureCompletion,
-    ScenarioArtifactIdentity,
     ScenarioAssertionExpectationPlan,
     ScenarioExecutionPlan,
     ScenarioExpectedExpectationPlan,
     ScenarioFixturePlan,
     ScenarioGraphPlan,
-    ScenarioRelationMap,
     ScenarioRelationPlan,
     SeedPlanEntry,
     WarehouseSnapshot,
@@ -91,121 +88,6 @@ _SOURCE_PATTERN: re.Pattern[str] = re.compile(SOURCE_CALL_PREFIX + _NAME_ARGUMEN
 _DBT_REF_PATTERN: re.Pattern[str] = re.compile(
     DBT_REF_CALL_PREFIX + r'"(?P<first>[^"]+)"(?:\s*,\s*"(?P<second>[^"]+)")?\)'
 )
-
-
-def build_scenario_relation_plan(
-    *,
-    project: CompiledProjectView,
-    graph_plan: ScenarioGraphPlan,
-    relation_map: ScenarioRelationMap,
-    render_qualified_name: Callable[..., str | None],
-    database: str | None = None,
-    schema: str | None = None,
-) -> ScenarioRelationPlan:
-    """Build scenario-scoped relation locations and source entries."""
-
-    artifacts: dict[ScenarioArtifactIdentity, str] = {
-        artifact.identity: artifact.physical_name for artifact in relation_map.artifacts
-    }
-    source_entries: dict[str, SourceEntry] = {
-        source.name: source.source_entry for source in project.sources
-    }
-
-    model_locations: dict[str, CompiledRelationLocation] = {}
-    source_fixture_locations: dict[str, CompiledRelationLocation] = {}
-    ref_fixture_locations: dict[str, CompiledRelationLocation] = {}
-    dbt_ref_fixture_locations: dict[str, CompiledRelationLocation] = {}
-    seed_fixture_locations: dict[str, CompiledRelationLocation] = {}
-    seed_locations: dict[str, CompiledRelationLocation] = {}
-    source_map: dict[str, SourceEntry] = {}
-
-    model_name: str
-    for model_name in graph_plan.model_names:
-        model_locations[model_name] = _target_for_artifact(
-            artifacts=artifacts,
-            kind=ScenarioArtifactKind.MODEL,
-            logical_name=model_name,
-            database=database,
-            schema=schema,
-            render_qualified_name=render_qualified_name,
-        )
-
-    ref_name: str
-    for ref_name in graph_plan.ref_fixture_names:
-        target: CompiledRelationLocation = _target_for_artifact(
-            artifacts=artifacts,
-            kind=ScenarioArtifactKind.REF,
-            logical_name=ref_name,
-            database=database,
-            schema=schema,
-            render_qualified_name=render_qualified_name,
-        )
-        ref_fixture_locations[ref_name] = target
-        model_locations[ref_name] = target
-
-    source_name: str
-    for source_name in graph_plan.source_fixture_names:
-        target = _target_for_artifact(
-            artifacts=artifacts,
-            kind=ScenarioArtifactKind.SOURCE,
-            logical_name=source_name,
-            database=database,
-            schema=schema,
-            render_qualified_name=render_qualified_name,
-        )
-        source_fixture_locations[source_name] = target
-        source_entry: SourceEntry = source_entries[source_name]
-        source_map[source_name] = replace(
-            source_entry,
-            database=target.database,
-            schema=target.schema,
-            table=target.name,
-            expression=None,
-            type_enforcement=False,
-        )
-
-    dbt_ref_name: str
-    for dbt_ref_name in graph_plan.dbt_ref_fixture_names:
-        dbt_ref_fixture_locations[dbt_ref_name] = _target_for_artifact(
-            artifacts=artifacts,
-            kind=ScenarioArtifactKind.DBT_REF,
-            logical_name=dbt_ref_name,
-            database=database,
-            schema=schema,
-            render_qualified_name=render_qualified_name,
-        )
-
-    seed_name: str
-    for seed_name in graph_plan.seed_names:
-        target = _target_for_artifact(
-            artifacts=artifacts,
-            kind=ScenarioArtifactKind.SEED,
-            logical_name=seed_name,
-            database=database,
-            schema=schema,
-            render_qualified_name=render_qualified_name,
-        )
-        seed_locations[seed_name] = target
-
-    for seed_name in graph_plan.seed_fixture_names:
-        seed_fixture_locations[seed_name] = _required_target(
-            targets=seed_locations,
-            name=seed_name,
-            kind=ScenarioArtifactKind.SEED,
-        )
-
-    return ScenarioRelationPlan(
-        scenario_name=graph_plan.name,
-        relation_map=relation_map,
-        model_locations=model_locations,
-        seed_locations=seed_locations,
-        project_source_map=source_entries,
-        source_map=source_map,
-        source_fixture_locations=source_fixture_locations,
-        ref_fixture_locations=ref_fixture_locations,
-        dbt_ref_fixture_locations=dbt_ref_fixture_locations,
-        seed_fixture_locations=seed_fixture_locations,
-    )
 
 
 def resolve_scenario_check_sql(
@@ -860,36 +742,3 @@ def _dbt_ref_fixture_name(match: re.Match[str]) -> str:
     if second is None:
         return first
     return f"{first}__{second}"
-
-
-def _target_for_artifact(
-    *,
-    artifacts: dict[ScenarioArtifactIdentity, str],
-    kind: ScenarioArtifactKind,
-    logical_name: str,
-    database: str | None,
-    schema: str | None,
-    render_qualified_name: Callable[..., str | None],
-) -> CompiledRelationLocation:
-    identity: ScenarioArtifactIdentity = ScenarioArtifactIdentity(
-        kind=kind,
-        logical_name=logical_name,
-    )
-    physical_name: str | None = artifacts.get(identity)
-    if physical_name is None:
-        raise PlannerInputError(
-            f"Scenario relation map is missing {kind.value} artifact '{logical_name}'",
-            code=SCENARIO_PLAN_INTERNAL,
-            help="This is likely a SQLBuild bug. Please file an issue with the scenario name.",
-        )
-    qualified_name: str | None = render_qualified_name(
-        database=database,
-        schema=schema,
-        name=physical_name,
-    )
-    return CompiledRelationLocation(
-        database=database,
-        schema=schema,
-        name=physical_name,
-        qualified_name=qualified_name if qualified_name is not None else physical_name,
-    )

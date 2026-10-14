@@ -23,6 +23,7 @@ pub mod planner_changes;
 pub mod planner_fixtures;
 pub mod planner_identity;
 pub mod planner_migrations;
+pub mod planner_scenario;
 pub mod planner_scope;
 pub mod planner_selection;
 pub mod planner_strategy;
