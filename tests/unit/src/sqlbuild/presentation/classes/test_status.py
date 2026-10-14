@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import io
+import subprocess
+import sys
 
 import pytest
 
@@ -8,13 +10,16 @@ from sqlbuild._native import TransientStatusReporter
 from sqlbuild.presentation.main._progress_spinners_disabled import progress_spinners_disabled
 from tests.unit.src.sqlbuild.presentation.classes._test_types import (
     ProgressSpinnersDisabledTestCase,
+    StatusReporterExitTestCase,
     StatusReporterOutputTestCase,
 )
 from tests.unit.src.sqlbuild.presentation.classes.helpers import (
+    OPEN_SPINNER_SCRIPT,
     RecordingStream,
     apply_no_progress_env,
     drive_status_reporter,
     persistent_lines,
+    without_no_progress_env,
 )
 
 
@@ -179,3 +184,28 @@ def test_given_status_sequence_when_reporting_then_writes_expected_persistent_li
     drive_status_reporter(reporter)
 
     assert persistent_lines(stream.getvalue()) == test_case.expected_persistent_lines
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        StatusReporterExitTestCase(
+            description="an open spinner is stopped before the interpreter exits",
+            expected_returncode=0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_open_spinner_when_process_exits_then_exits_cleanly(
+    test_case: StatusReporterExitTestCase,
+) -> None:
+    completed: subprocess.CompletedProcess[str] = subprocess.run(
+        (sys.executable, "-c", OPEN_SPINNER_SCRIPT),
+        capture_output=True,
+        text=True,
+        check=False,
+        env=without_no_progress_env(),
+        timeout=60,
+    )
+
+    assert completed.returncode == test_case.expected_returncode, completed.stderr

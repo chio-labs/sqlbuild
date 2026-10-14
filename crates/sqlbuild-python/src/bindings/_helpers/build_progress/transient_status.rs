@@ -10,7 +10,7 @@ use sqlbuild_core::progress::main::format_status_spinner_line::format_status_spi
 
 use crate::bindings::_helpers::build_progress::terminal::{
     CLEAR_LINE, HIDE_CURSOR, SHOW_CURSOR, SPINNER_FRAMES, SPINNER_TICK_SECONDS, claim, flush,
-    release, shared_lines, start_spinner, terminal_columns, tty_flag, write,
+    join_spinner, release, shared_lines, start_spinner, terminal_columns, tty_flag, write,
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{imported, within};
 
@@ -25,6 +25,7 @@ struct StatusState {
     drawn: bool,
     frame: usize,
     stop_event: Option<Py<PyAny>>,
+    threads: Vec<Py<PyAny>>,
     exit_hook_registered: bool,
 }
 
@@ -100,9 +101,24 @@ impl TransientStatusReporter {
         write(stream, HIDE_CURSOR)?;
         reporter.state().drawn = true;
         reporter.draw(py)?;
-        let (event, _thread) = start_spinner(slf.as_any())?;
-        reporter.state().stop_event = Some(event.unbind());
+        let (event, thread) = start_spinner(slf.as_any())?;
+        let mut state = reporter.state();
+        state.stop_event = Some(event.unbind());
+        state.threads.push(thread.unbind());
         Ok(())
+    }
+
+    fn close_status(slf: &Bound<'_, Self>) -> PyResult<()> {
+        let py: Python<'_> = slf.py();
+        let reporter: &Self = slf.get();
+        reporter.locked(py, || {
+            release(reporter.lines.bind(py), slf.as_any())?;
+            reporter.exit_status(py)?;
+            let mut state = reporter.state();
+            state.message = None;
+            state.active = false;
+            Ok(())
+        })
     }
 
     fn exit_status(&self, py: Python<'_>) -> PyResult<()> {
@@ -152,7 +168,7 @@ impl TransientStatusReporter {
         let reporter: &Self = slf.get();
         if reporter.enabled {
             return reporter.locked(py, || {
-                Self::close(slf)?;
+                Self::close_status(slf)?;
                 reporter.state().message = Some(message);
                 Self::enter_status(slf)?;
                 claim(
@@ -221,16 +237,12 @@ impl TransientStatusReporter {
     }
 
     fn close(slf: &Bound<'_, Self>) -> PyResult<()> {
-        let py: Python<'_> = slf.py();
-        let reporter: &Self = slf.get();
-        reporter.locked(py, || {
-            release(reporter.lines.bind(py), slf.as_any())?;
-            reporter.exit_status(py)?;
-            let mut state = reporter.state();
-            state.message = None;
-            state.active = false;
-            Ok(())
-        })
+        Self::close_status(slf)?;
+        let threads: Vec<Py<PyAny>> = std::mem::take(&mut slf.get().state().threads);
+        for thread in threads {
+            join_spinner(thread.bind(slf.py()))?;
+        }
+        Ok(())
     }
 
     /// Erase the live status so a persistent line can be written in its place.

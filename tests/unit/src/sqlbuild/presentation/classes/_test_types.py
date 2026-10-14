@@ -53,3 +53,9 @@ class StatusReporterOutputTestCase:
     use_color: bool
     tty: bool
     expected_persistent_lines: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class StatusReporterExitTestCase:
+    description: str
+    expected_returncode: int

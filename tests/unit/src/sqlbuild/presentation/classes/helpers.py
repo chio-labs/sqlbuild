@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import os
 import re
 from collections.abc import Callable
 from types import MappingProxyType
@@ -77,3 +78,23 @@ def persistent_lines(text: str) -> tuple[str, ...]:
 
     without_cursor: str = re.sub(r"\x1b\[\?25[hl]", "", text)
     return tuple(line.rsplit("\x1b[K", 1)[-1] for line in without_cursor.split("\n"))
+
+
+OPEN_SPINNER_SCRIPT: str = (
+    "import io, time\n"
+    "from sqlbuild._native import TransientStatusReporter\n"
+    "class Tty(io.StringIO):\n"
+    "    def isatty(self):\n"
+    "        return True\n"
+    "reporter = TransientStatusReporter(stream=Tty())\n"
+    "reporter.start('Working...')\n"
+    "time.sleep(0.35)\n"
+)
+
+
+def without_no_progress_env() -> dict[str, str]:
+    """The current environment with progress spinners left enabled."""
+
+    environment: dict[str, str] = dict(os.environ)
+    environment.pop("SQLBUILD_NO_PROGRESS", None)
+    return environment
