@@ -888,21 +888,6 @@ def test_given_active_dbt_node_when_dbt_stream_is_silent_then_status_elapsed_upd
     test_case: DbtSilentStatusRefreshTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    status_messages: list[str] = []
-
-    class CapturingStatusReporter:
-        def __init__(self, *args: object, **kwargs: object) -> None:
-            pass
-
-        def start(self, message: str) -> None:
-            status_messages.append(message)
-
-        def update(self, message: str) -> None:
-            status_messages.append(message)
-
-        def close(self) -> None:
-            pass
-
     class TtyStream(io.StringIO):
         def isatty(self) -> bool:
             return True
@@ -934,10 +919,7 @@ def test_given_active_dbt_node_when_dbt_stream_is_silent_then_status_elapsed_upd
         def wait(self) -> int:
             return 0
 
-    monkeypatch.setattr(
-        "sqlbuild.integrations.dbt._helpers.runtime.event_stream.TransientStatusReporter",
-        CapturingStatusReporter,
-    )
+    monkeypatch.setenv("SQLBUILD_NO_PROGRESS", "1")
     monkeypatch.setattr(
         "sqlbuild.integrations.dbt._helpers.runtime.event_stream._DBT_STATUS_REFRESH_SECONDS",
         test_case.refresh_seconds,
@@ -947,18 +929,20 @@ def test_given_active_dbt_node_when_dbt_stream_is_silent_then_status_elapsed_upd
         lambda *args, **kwargs: StubProcess(),
     )
 
+    stream: TtyStream = TtyStream()
     returncode: int
     returncode, _ = execute_dbt_json_event_stream(
         argv=("dbt", "run"),
         cwd=None,
-        stream=TtyStream(),
+        stream=stream,
         use_color=False,
         target_path=None,
     )
+    status_lines: list[str] = stream.getvalue().splitlines()
 
     assert returncode == 0
-    assert test_case.expected_initial_status in status_messages
-    assert test_case.expected_refreshed_status in status_messages
+    assert test_case.expected_initial_status in status_lines
+    assert test_case.expected_refreshed_status in status_lines
 
 
 @pytest.mark.parametrize(

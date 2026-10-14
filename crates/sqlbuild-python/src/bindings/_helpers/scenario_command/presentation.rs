@@ -12,6 +12,7 @@ use sqlbuild_core::scenario_command::main::render_snapshot_sync_result::render_s
 use sqlbuild_core::scenario_command::main::scenario_activity_message::scenario_activity_message;
 use sqlbuild_core::scenario_command::models::ScenarioNamespace;
 
+use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::scenario_command::conversions::{
     capture_row, scenario_result_row, write_local_runtime_target, write_warehouse_runtime_target,
@@ -20,7 +21,6 @@ use crate::bindings::_helpers::scenario_command::setup::{
     NATIVE_MODULE, boolean, flush, stream_isatty, text, write,
 };
 
-const STATUS_REPORTER_MODULE: &str = "sqlbuild.presentation.classes.transient_status_reporter";
 const RUNTIME_CONTRACT_MODELS: &str = "sqlbuild.runtime.contracts.models";
 
 /// How a finished scenario is reported.
@@ -202,19 +202,12 @@ pub(crate) fn begin_section<'py>(
     (header, preamble, activity): (&str, &str, String),
     style: CliStyle,
 ) -> PyResult<SectionStatus<'py>> {
-    let py: Python<'py> = stream.py();
     write(
         stream,
         &format!("\n{}\n\n{preamble}", style.success_strong(header)),
     )?;
     flush(stream)?;
-    let status: Bound<'py, PyAny> = call_with(
-        &imported(py, STATUS_REPORTER_MODULE, "TransientStatusReporter")?,
-        &[
-            ("stream", stream.clone()),
-            ("use_color", boolean(py, style.use_color)),
-        ],
-    )?;
+    let status: Bound<'py, PyAny> = status_reporter(stream, style.use_color)?;
     let status_is_tty: bool = stream_isatty(stream)?;
     if !status_is_tty {
         write(stream, &format!("{activity}\n\n"))?;

@@ -4,6 +4,7 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyMapping, PyString, PyStringMethods, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::compile_command::report::{
     format_compile_json, format_compile_text, json_semantic_notice,
 };
@@ -22,7 +23,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 const REUSE_MODELS_MODULE: &str = "sqlbuild.cli.compile_reuse.models";
 const REUSE_TYPES_MODULE: &str = "sqlbuild.cli.compile_reuse.types";
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const STATUS_REPORTER_MODULE: &str = "sqlbuild.presentation.classes.transient_status_reporter";
 const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
@@ -128,16 +128,7 @@ fn compile_status<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny
         return Ok(none);
     }
     let use_color: bool = !request.getattr("no_color")?.is_truthy()?;
-    call_with(
-        &imported(py, STATUS_REPORTER_MODULE, "TransientStatusReporter")?,
-        &[
-            ("stream", stdout),
-            (
-                "use_color",
-                PyBool::new(py, use_color).to_owned().into_any(),
-            ),
-        ],
-    )
+    status_reporter(&stdout, use_color)
 }
 
 /// Close the status line when one is shown.

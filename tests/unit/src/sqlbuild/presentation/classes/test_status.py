@@ -4,7 +4,7 @@ import io
 
 import pytest
 
-from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild._native import TransientStatusReporter
 from sqlbuild.presentation.main._progress_spinners_disabled import progress_spinners_disabled
 from tests.unit.src.sqlbuild.presentation.classes._test_types import (
     ProgressSpinnersDisabledTestCase,
@@ -116,6 +116,7 @@ def test_given_no_progress_env_when_building_status_on_tty_then_toggles_spinner(
     stream: _TtyStream = _TtyStream()
 
     reporter: TransientStatusReporter = TransientStatusReporter(stream=stream, use_color=False)
+    reporter.start("Working...")
+    reporter.close()
 
-    spinner_enabled: bool = reporter._enabled
-    assert spinner_enabled == (not test_case.expected_disabled)
+    assert ("Working...\n" in stream.getvalue()) == test_case.expected_disabled

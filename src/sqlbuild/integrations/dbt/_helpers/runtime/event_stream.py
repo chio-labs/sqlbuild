@@ -14,11 +14,11 @@ from typing import TextIO
 from sqlbuild._native import (
     DbtEventStream,
     DbtEventStreamUpdate,
+    TransientStatusReporter,
     format_dbt_active_node_status,
 )
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.models import DbtNodeExecutionResult
-from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 _DBT_STATUS_REFRESH_SECONDS: float = 1.0

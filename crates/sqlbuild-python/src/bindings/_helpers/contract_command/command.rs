@@ -18,6 +18,7 @@ use sqlbuild_core::contract_command::models::{
     ContractFindingText, ContractProgress, ContractReport, ContractResourceText,
 };
 
+use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
@@ -27,7 +28,6 @@ const ADAPTER_CONTEXT_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.ada
 const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
 const GRAPH_SELECTION_MODULE: &str = "sqlbuild.compiler.pipeline.main.project_graph_selection";
 const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
-const STATUS_REPORTER_MODULE: &str = "sqlbuild.presentation.classes.transient_status_reporter";
 const ADOPTION_MODELS: &str = "sqlbuild.compiler.contract_adoption.models";
 const WRITE_MODULE: &str = "sqlbuild.compiler.contract_adoption.main._write";
 const GENERATE_ACTION: &str = "generate";
@@ -135,17 +135,7 @@ struct Progress<'py> {
 
 impl<'py> Progress<'py> {
     fn status(&self) -> PyResult<Bound<'py, PyAny>> {
-        let py: Python<'py> = self.stream.py();
-        call_with(
-            &imported(py, STATUS_REPORTER_MODULE, "TransientStatusReporter")?,
-            &[
-                ("stream", self.stream.clone()),
-                (
-                    "use_color",
-                    PyBool::new(py, self.use_color).to_owned().into_any(),
-                ),
-            ],
-        )
+        status_reporter(&self.stream, self.use_color)
     }
 }
 

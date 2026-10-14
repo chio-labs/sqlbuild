@@ -10,13 +10,12 @@ use sqlbuild_core::progress::main::connection_phase_line::connection_phase_line;
 use sqlbuild_core::progress::main::connection_start_message::connection_start_message;
 use sqlbuild_core::progress::main::is_planning_completion_message::is_planning_completion_message;
 
+use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::cli::progress::{
     NativeProgressProjector, current_projector, projector_operation_active, write_persistent,
 };
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 
-const STATUS_REPORTER_MODULE: &str = "sqlbuild.presentation.classes.transient_status_reporter";
-const STATUS_REPORTER_CLASS: &str = "TransientStatusReporter";
 const CONNECTION_OPTIONS: (&[&str], &[&str]) = (
     &["adapter_name", "stream"],
     &[
@@ -133,13 +132,7 @@ impl PlanningProgressReporter {
     #[new]
     #[pyo3(signature = (*, stream, use_color = false))]
     fn new(py: Python<'_>, stream: &Bound<'_, PyAny>, use_color: bool) -> PyResult<Self> {
-        let keywords: Bound<'_, PyDict> = PyDict::new(py);
-        keywords.set_item("stream", stream)?;
-        keywords.set_item("use_color", use_color)?;
-        let status: Bound<'_, PyAny> = py
-            .import(STATUS_REPORTER_MODULE)?
-            .getattr(STATUS_REPORTER_CLASS)?
-            .call((), Some(&keywords))?;
+        let status: Bound<'_, PyAny> = status_reporter(stream, use_color)?;
         Ok(Self {
             status: status.unbind(),
             active: AtomicBool::new(false),

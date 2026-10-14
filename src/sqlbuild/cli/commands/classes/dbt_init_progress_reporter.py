@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import TextIO
 
-from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild._native import TransientStatusReporter
 
 
 class DbtInitProgressReporter:

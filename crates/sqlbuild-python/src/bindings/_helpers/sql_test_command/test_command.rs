@@ -23,6 +23,7 @@ use sqlbuild_core::test_command::models::{
     TestFailure, TestInspectionEntry, TestParameter, TestPlanWarning,
 };
 
+use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
@@ -37,7 +38,6 @@ const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const TEST_PLAN_MODULE: &str = "sqlbuild.compiler.planner.main.commands._sql_test";
 const PLANNER_ERRORS: &str = "sqlbuild.compiler.planner.exceptions";
 const PROGRESS_MODELS: &str = "sqlbuild.cli.progress.models";
-const STATUS_REPORTER_MODULE: &str = "sqlbuild.presentation.classes.transient_status_reporter";
 const EXECUTOR_PIPELINE_MODELS: &str = "sqlbuild.executor.pipeline.models";
 const EXECUTOR_RUN_MODULE: &str = "sqlbuild.executor.pipeline.main.run";
 const RESOURCE_ID_MODULE: &str = "sqlbuild.executor.testing.main._resource_id";
@@ -520,10 +520,7 @@ fn run_tests<'py>(
             ("use_color", use_color.clone()),
         ],
     )?;
-    let preflight: Bound<'py, PyAny> = call_with(
-        &imported(py, STATUS_REPORTER_MODULE, "TransientStatusReporter")?,
-        &[("stream", stream), ("use_color", use_color)],
-    )?;
+    let preflight: Bound<'py, PyAny> = status_reporter(&stream, use_color.is_truthy()?)?;
     let event_writer: Bound<'py, PyAny> =
         imported(py, NATIVE_MODULE, "ExecutionEventWriter")?.call0()?;
     let relay: Bound<'py, TestCallbackRelay> = Bound::new(
