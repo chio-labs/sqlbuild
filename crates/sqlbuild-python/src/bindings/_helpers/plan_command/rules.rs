@@ -10,13 +10,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
-const LOAD_CONFIG_MODULE: &str = "sqlbuild.rule_engine.main.load_config";
-const CATALOGUE_MODULE: &str = "sqlbuild.rule_engine.main._build_catalogue";
-const SKILLS_MODULE: &str = "sqlbuild.rule_engine.main.skills";
-const RENDER_RULE_MODULE: &str = "sqlbuild.rule_engine.main.render_rule";
-const RENDER_RESULT_MODULE: &str = "sqlbuild.rule_engine.main.render_result";
-const SKIPPED_RULES_MODULE: &str = "sqlbuild.rule_engine.main.render_skipped_rules";
-const RUN_RULES_MODULE: &str = "sqlbuild.rule_engine.main.run_rules";
 const RULE_MODELS: &str = "sqlbuild.rule_engine.models";
 const REJECT_UNIT_TESTS_MODULE: &str =
     "sqlbuild.compiler.pipeline.main._reject_unit_test_selectors";
@@ -60,7 +53,7 @@ fn run_skills(
     let py: Python<'_> = request.py();
     let check: bool = request.getattr("skills_check")?.is_truthy()?;
     let fresh: bool = call_with(
-        &imported(py, SKILLS_MODULE, "install_skills")?,
+        &imported(py, NATIVE_MODULE, "install_rules_skills")?,
         &[
             ("config", config.clone()),
             ("project_dir", project_dir.clone()),
@@ -138,7 +131,7 @@ fn show_rule(
         let rule: Bound<'_, PyAny> = rule?;
         if rule.getattr("code")?.extract::<String>()? == selector {
             let text: String = call_with(
-                &imported(py, RENDER_RULE_MODULE, "format_rule")?,
+                &imported(py, NATIVE_MODULE, "format_rule")?,
                 &[("rule", rule), ("config", config.clone())],
             )?
             .extract()?;
@@ -246,7 +239,7 @@ fn run_rule_selection(
     replaced.set_item("ignore", PyTuple::empty(py))?;
     let dialect: Bound<'_, PyAny> = adapter.call_method0("sql_analysis_dialect")?;
     let result: Bound<'_, PyAny> = call_with(
-        &imported(py, RUN_RULES_MODULE, "run_rules")?,
+        &imported(py, NATIVE_MODULE, "run_rules")?,
         &[
             ("graph", graph),
             ("discovered_inputs", discovered),
@@ -274,7 +267,7 @@ fn run_rule_selection(
         ],
     )?;
     let note: Bound<'_, PyAny> = call_with(
-        &imported(py, SKIPPED_RULES_MODULE, "format_skipped_type_proof_rules")?,
+        &imported(py, NATIVE_MODULE, "format_skipped_type_proof_rules")?,
         &[("codes", result.getattr("skipped_type_proof_rules")?)],
     )?;
     if !note.is_none() {
@@ -285,7 +278,7 @@ fn run_rule_selection(
         fields.set_item(field, result.getattr(field)?)?;
     }
     let text: String = call_with(
-        &imported(py, RENDER_RESULT_MODULE, "format_result")?,
+        &imported(py, NATIVE_MODULE, "format_rules_result")?,
         &[
             (
                 "result",
@@ -322,7 +315,7 @@ fn run_rules_command(request: &Bound<'_, PyAny>) -> PyResult<i32> {
     }
     .call_method0("resolve")?;
     let config: Bound<'_, PyAny> = call_with(
-        &imported(py, LOAD_CONFIG_MODULE, "load_rules_config")?,
+        &imported(py, NATIVE_MODULE, "load_rules_config")?,
         &[("project_dir", project_dir.clone())],
     )?;
     let action: String = request.getattr("action")?.extract()?;
@@ -330,7 +323,7 @@ fn run_rules_command(request: &Bound<'_, PyAny>) -> PyResult<i32> {
         return run_skills(request, &config, &project_dir);
     }
     let catalogue: Bound<'_, PyAny> = call_with(
-        &imported(py, CATALOGUE_MODULE, "build_catalogue")?,
+        &imported(py, NATIVE_MODULE, "build_rule_catalogue")?,
         &[
             ("config", config.clone()),
             ("project_dir", project_dir.clone()),
