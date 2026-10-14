@@ -166,24 +166,20 @@ pub(crate) fn declaration_scope_resolver<'py>(
 
 /// The native code of declaration kind `kind`, or the no-kind code.
 fn kind_code(kinds: &[Bound<'_, PyAny>], kind: &Bound<'_, PyAny>) -> u8 {
-    let mut code: u8 = 0;
-    for known in kinds {
+    for (code, known) in (0_u8..).zip(kinds.iter()) {
         if known.is(kind) {
             return code;
         }
-        code += 1;
     }
     NO_DECLARATION_KIND
 }
 
 /// The native kind code of a runtime declaration value, by its class.
 fn value_kind_code(classes: &[Bound<'_, PyAny>], value: &Bound<'_, PyAny>) -> PyResult<u8> {
-    let mut code: u8 = 0;
-    for class in classes {
+    for (code, class) in (0_u8..).zip(classes.iter()) {
         if value.is_instance(class)? {
             return Ok(code);
         }
-        code += 1;
     }
     Ok(NO_DECLARATION_KIND)
 }
