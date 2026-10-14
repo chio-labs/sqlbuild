@@ -6,3 +6,5 @@ mod python_str;
 mod test_types;
 #[path = "tests/test_text.rs"]
 mod text;
+#[path = "tests/test_text_wrap.rs"]
+mod text_wrap;

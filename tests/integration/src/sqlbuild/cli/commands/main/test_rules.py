@@ -937,22 +937,15 @@ def test_given_cold_non_model_sql_finding_when_compiling_then_rules_reuse_early_
         b"SELECT 1\r\n"
     )
     collections: list[frozenset[Path] | None] = []
-    original_collect: Callable[..., dict[Path, str]] = rules_module.collect_project_files
+    original_collect: Callable[..., dict[Path, str]] = rules_module.collect_lint_project_files
 
     def counting_collect(
-        *,
-        project_dir: Path,
-        selected_paths: frozenset[Path] | None,
-        discovered_inputs: DiscoveredProjectInputs | None = None,
+        *, project_dir: Path, selected_paths: frozenset[Path] | None
     ) -> dict[Path, str]:
         collections.append(selected_paths)
-        return original_collect(
-            project_dir=project_dir,
-            selected_paths=selected_paths,
-            discovered_inputs=discovered_inputs,
-        )
+        return original_collect(project_dir=project_dir, selected_paths=selected_paths)
 
-    monkeypatch.setattr(rules_module, "collect_project_files", counting_collect)
+    monkeypatch.setattr(rules_module, "collect_lint_project_files", counting_collect)
 
     cold: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)
     cold_collections: int = len(collections)

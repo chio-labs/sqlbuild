@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import run_lint
 from sqlbuild.compiler.compile.main.expand_sql_with_spans import expand_sql_with_spans
 from sqlbuild.compiler.compile.main.map_expanded_offset import map_expanded_offset
 from sqlbuild.compiler.compile.models import MappedOffset, SqlExpansionContext
@@ -15,7 +16,6 @@ from sqlbuild.lint._helpers import expansion
 from sqlbuild.lint._helpers.expansion import build_lint_expansion_context, prepare_lint_body
 from sqlbuild.lint._helpers.headers import lint_file_role
 from sqlbuild.lint.exceptions import ProjectCompileError
-from sqlbuild.lint.main.run_lint import run_lint
 from sqlbuild.lint.models import LintBody, LintConfig, LintRunResult
 from tests.unit.src.sqlbuild.lint._test_types import (
     ExpandedLintTestCase,

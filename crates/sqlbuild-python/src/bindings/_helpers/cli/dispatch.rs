@@ -1,15 +1,19 @@
 //! `sqb` command dispatch: the native route table applied to a parsed namespace.
 
+use std::path::PathBuf;
+
 use crate::bindings::_helpers::diff_report::support::cli_error;
 use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
+use sqlbuild_cli::diff_report::errors::DiffUserError;
 use sqlbuild_cli::diff_report::main::parse_diff_name_range::parse_diff_name_range;
 use sqlbuild_cli::dispatch::main::command_dispatch::command_dispatch;
 use sqlbuild_cli::dispatch::main::unavailable_handler::unavailable_handler;
 use sqlbuild_cli::dispatch::models::{
     ClassRef, CommandFacts, DiffSide, Dispatch, DispatchFailure, Field, Route, Source,
 };
+use sqlbuild_core::format_command::main::format_path_selectors::format_path_selectors;
 use sqlbuild_core::text::main::python_strip::python_strip;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
@@ -19,7 +23,6 @@ const ENTRY_MODELS_MODULE: &str = "sqlbuild.cli.entry.models";
 const WAREHOUSES_MODULE: &str = "sqlbuild._native";
 const WAREHOUSE_SCOPE_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.warehouse_scope";
 const LAUNCH_RECORD_MODULE: &str = "sqlbuild.cli.entry.main._withhold_launch_record";
-const FORMAT_PATHS_MODULE: &str = "sqlbuild.cli.commands._helpers.lint.positional_paths";
 const PATHLIB_MODULE: &str = "pathlib";
 const COMMENT_PREFIX: &str = "#";
 const UTF8: &str = "utf-8";
@@ -100,15 +103,36 @@ impl<'py> Invocation<'py> {
             }
             Source::DiffName(side) => self.diff_name(side),
             Source::FormatSelect => {
-                let paths: Bound<'py, PyAny> = call_with(
-                    &imported(py, FORMAT_PATHS_MODULE, "format_path_selectors")?,
-                    &[
-                        ("paths", tuple_of(&self.attr("format_paths")?)?),
-                        ("project_dir", self.project_dir.clone()),
-                        ("cwd", path_class(py)?.call_method0("cwd")?),
-                    ],
-                )?;
-                concatenated(&self.select.clone().into_any(), &paths)
+                let raw_paths: Bound<'py, PyAny> = self.attr("format_paths")?;
+                let raw_paths: Vec<String> = if raw_paths.is_none() {
+                    Vec::new()
+                } else {
+                    raw_paths.extract()?
+                };
+                let project_dir: Option<PathBuf> = if self.project_dir.is_none() {
+                    None
+                } else {
+                    Some(self.project_dir.extract()?)
+                };
+                let cwd: PathBuf = path_class(py)?.call_method0("cwd")?.extract()?;
+                let selectors: Vec<String> =
+                    format_path_selectors(&raw_paths, project_dir.as_deref(), &cwd).map_err(
+                        |error| {
+                            cli_error(
+                                py,
+                                "CliUserError",
+                                &DiffUserError {
+                                    message: error.message,
+                                    code: error.code.to_owned(),
+                                    help: error.help,
+                                },
+                            )
+                        },
+                    )?;
+                concatenated(
+                    &self.select.clone().into_any(),
+                    &PyTuple::new(py, selectors)?.into_any(),
+                )
             }
             Source::ScenarioSelect => concatenated(
                 &self.attr("scenario_selector")?,

@@ -1,6 +1,8 @@
 //! `argparse.HelpFormatter`'s help, usage and version text in the Python 3.13 layout.
 
-use crate::argv::_helpers::text_wrap::{normalize_whitespace, wrap};
+use sqlbuild_core::text::main::text_wrap::text_wrap;
+
+use crate::argv::_helpers::text_wrap::normalize_whitespace;
 use crate::argv::constants::{
     INDENT_INCREMENT, MAX_HELP_POSITION, MAXIMUM_BLANK_RUN, MINIMUM_TEXT_WIDTH, USAGE_PREFIX,
     VERSION_PLACEHOLDER,
@@ -130,7 +132,11 @@ fn help_text(help: &HelpText) -> Option<&str> {
 fn format_text(formatter: &Formatter, text: &str, indent: i64) -> String {
     let width: i64 = (formatter.width - indent).max(MINIMUM_TEXT_WIDTH);
     let padding: String = " ".repeat(indent as usize);
-    let lines: Vec<String> = wrap(&normalize_whitespace(text), width as usize, &padding);
+    let lines: Vec<String> = text_wrap(
+        &normalize_whitespace(text),
+        width as usize,
+        (&padding, &padding),
+    );
     format!("{}\n\n", lines.join("\n"))
 }
 
@@ -179,7 +185,7 @@ fn format_action(formatter: &Formatter, entry: &HelpEntry, indent: i64) -> Strin
         }
     };
     let lines: Vec<String> = help
-        .map(|help| wrap(&normalize_whitespace(help), help_width as usize, ""))
+        .map(|help| text_wrap(&normalize_whitespace(help), help_width as usize, ("", "")))
         .unwrap_or_default();
     if let Some((first, rest)) = lines.split_first() {
         text.push_str(&format!("{}{first}\n", " ".repeat(indent_first as usize)));

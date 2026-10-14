@@ -5,8 +5,8 @@ from pathlib import Path
 import duckdb
 import pytest
 
+from sqlbuild._native import run_query_command
 from sqlbuild.cli.commands.exceptions import QueryExecutionError
-from sqlbuild.cli.commands.main.inspection._query import run_query
 from tests.unit.src.sqlbuild.cli.commands.main.inspection.query._test_types import (
     QueryExecutionErrorTestCase,
 )
@@ -38,7 +38,7 @@ def test_given_warehouse_rejects_query_when_running_query_then_raises_cli_error(
     )
 
     with pytest.raises(QueryExecutionError) as raised:
-        run_query(project_dir=tmp_path, sql=test_case.sql)
+        run_query_command(project_dir=tmp_path, sql=test_case.sql)
 
     assert raised.value.code == test_case.expected_code
     assert raised.value.exit_code == test_case.expected_exit_code

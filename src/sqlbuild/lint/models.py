@@ -109,14 +109,6 @@ class PreparedLintFiles:
 
 
 @dataclass(frozen=True)
-class FixtureNullCandidateScan:
-    """Cheaply discovered SQL-test fixtures that may contain removable typed nulls."""
-
-    paths: frozenset[Path] = field(default_factory=frozenset)
-    model_names: frozenset[str] = field(default_factory=frozenset)
-
-
-@dataclass(frozen=True)
 class LintEdit:
     """One deterministic authored-source edit proposed by a lint rule."""
 
@@ -157,15 +149,6 @@ class RuleFixResult:
 
 
 @dataclass(frozen=True)
-class FormatChange:
-    """One deterministic file-formatting change."""
-
-    file_path: Path
-    before: str
-    after: str
-
-
-@dataclass(frozen=True)
 class LintConfig:
     """Resolved lint and format configuration for one run."""
 
@@ -191,8 +174,6 @@ class LintRunResult:
     files_checked: int
     violations: tuple[LintViolation, ...]
     formatted_files: tuple[Path, ...]
-    format_changes: tuple[FormatChange, ...] = ()
-    rule_fixes: tuple[RuleFixResult, ...] = ()
     source_texts: Mapping[Path, str] = field(default_factory=dict, repr=False, compare=False)
     unexpandable: Mapping[Path, str] = field(default_factory=dict)
 

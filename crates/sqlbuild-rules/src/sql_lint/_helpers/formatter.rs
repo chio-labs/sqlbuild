@@ -35,6 +35,23 @@ pub(crate) fn format_batch_json_impl(request_json: &str) -> Result<String, Strin
     serde_json::to_string(&responses?).map_err(|error| error.to_string())
 }
 
+/// Format requests in parallel, in order; a request that fails is declined with its reason.
+pub(crate) fn format_requests(requests: Vec<FormatRequest>) -> Vec<FormatResponse> {
+    requests
+        .into_par_iter()
+        .map(|request| {
+            let original: String = request.sql.clone();
+            format_sql(request).unwrap_or_else(|reason| FormatResponse {
+                version: LINT_API_VERSION,
+                sql: original,
+                changed: false,
+                formatted: false,
+                reason: Some(reason),
+            })
+        })
+        .collect()
+}
+
 fn format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
     let original = request.sql.clone();
     match try_format_sql(request) {

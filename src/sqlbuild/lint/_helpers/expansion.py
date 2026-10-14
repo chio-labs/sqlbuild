@@ -25,20 +25,14 @@ from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.lint._helpers.headers import lint_body_ranges, lint_file_role
-from sqlbuild.lint._helpers.native_sql import check_lint_not_stopped
-from sqlbuild.lint._helpers.sqlbuild_tokens import (
-    neutralize_context_interpolation,
-    neutralize_generic_audit_parameters,
-    neutralize_interpolation,
-    sentinel_spans,
-)
+from sqlbuild.lint.classes.stop_context import LintStopContext
 from sqlbuild.lint.constants import (
     HEADER_KIND_SCENARIO,
     HEADER_KIND_TEST,
     RELATION_IDENTITY_TEMPLATE,
     TEMPLATE_INTERPOLATION_START,
 )
-from sqlbuild.lint.exceptions import ProjectCompileError
+from sqlbuild.lint.exceptions import NativeLintError, ProjectCompileError
 from sqlbuild.lint.models import (
     ExpandedLintFile,
     HeaderSpan,
@@ -59,42 +53,6 @@ _DEPENDENCY_INTRINSIC_PATTERN: re.Pattern[str] = re.compile(
 _KEYED_RELATION_PATTERN: re.Pattern[str] = re.compile(
     r"^__(ref|source|seed)\s*\(\s*['\"]([^'\"]+)['\"]\s*\)$", re.IGNORECASE
 )
-
-_CTE_DEFINITION_PATTERN: re.Pattern[str] = re.compile(
-    r'(?:\bWITH(?:\s+RECURSIVE)?|,)\s*["`\[]?(?P<name>[A-Za-z_][A-Za-z0-9_]*)'
-    r'["`\]]?(?:\s*\([^)]*\))?\s+AS\s*\(',
-    re.IGNORECASE | re.DOTALL,
-)
-_OPAQUE_CTE_PREFIX_PATTERN: re.Pattern[str] = re.compile(
-    r"\b[A-Za-z_][A-Za-z0-9_]*\s+AS\s*\(\s*(?:--[^\n]*\n\s*)?$",
-    re.IGNORECASE,
-)
-
-
-def _externally_referenced_ctes(
-    *,
-    expanded: str,
-    interpolation_sites: tuple[InterpolationSite, ...],
-    pre_expansion_body: str,
-    pre_expansion_sites: tuple[InterpolationSite, ...],
-) -> tuple[str, ...]:
-    names: set[str] = {
-        match.group("name").lower() for match in _CTE_DEFINITION_PATTERN.finditer(expanded)
-    }
-    referenced: set[str] = set()
-    for name in names:
-        for site in interpolation_sites:
-            if re.search(rf"\b{re.escape(name)}\b", site.original_text, re.IGNORECASE) is not None:
-                referenced.add(name)
-                break
-    for site in pre_expansion_sites:
-        prefix: str = pre_expansion_body[: site.neutralized_start]
-        if _OPAQUE_CTE_PREFIX_PATTERN.search(prefix) is None:
-            continue
-        referenced.update(
-            match.group("name").lower() for match in _CTE_DEFINITION_PATTERN.finditer(prefix)
-        )
-    return tuple(sorted(referenced.intersection(names)))
 
 
 def build_lint_expansion_context(
@@ -202,11 +160,13 @@ def expand_lint_body(
     pre_expansion_sites: tuple[InterpolationSite, ...] = ()
     expansion_input: str = authored_body
     if _is_generic_audit_path(role=role):
-        expansion_input, pre_expansion_sites = neutralize_generic_audit_parameters(
-            body=authored_body
+        expansion_input, pre_expansion_sites = _sites(
+            _native.neutralize_lint_audit_parameters(authored_body)
         )
     elif _is_sql_hook_path(role=role):
-        expansion_input, pre_expansion_sites = neutralize_context_interpolation(body=authored_body)
+        expansion_input, pre_expansion_sites = _sites(
+            _native.neutralize_lint_context_interpolation(authored_body)
+        )
     expanded: str
     expansion_passes: tuple[tuple[ExpansionSpan, ...], ...]
     try:
@@ -273,23 +233,14 @@ def prepare_lint_sql_batch(
 def finish_lint_body(
     *, pending: PendingLintBody, prepared: NativePreparedSql | None, dialect: str
 ) -> LintBody:
-    """Build the lint body from one body's native preparation, or the Python fallback."""
+    """Build the lint body from one body's native preparation."""
 
-    expanded: str = pending.expanded
-    neutralized: str
-    sites: tuple[InterpolationSite, ...]
+    del dialect
     if prepared is None:
-        neutralized, sites = neutralize_interpolation(body=expanded, dialect=dialect)
-        externally_referenced_ctes: tuple[str, ...] = _externally_referenced_ctes(
-            expanded=expanded,
-            interpolation_sites=sites,
-            pre_expansion_body=pending.expansion_input,
-            pre_expansion_sites=pending.pre_expansion_sites,
-        )
-    else:
-        neutralized = prepared[0]
-        sites = tuple(InterpolationSite(*site) for site in prepared[1])
-        externally_referenced_ctes = tuple(prepared[2])
+        raise NativeLintError(f"{pending.file_path} could not be prepared for native SQL lint")
+    neutralized: str = prepared[0]
+    sites: tuple[InterpolationSite, ...] = tuple(InterpolationSite(*site) for site in prepared[1])
+    externally_referenced_ctes: tuple[str, ...] = tuple(prepared[2])
     dependency_identifiers: tuple[str, ...] = tuple(
         site.sentinel
         for site in sites
@@ -301,9 +252,9 @@ def finish_lint_body(
         body_end=pending.body_end,
         lint_text=neutralized,
         passes=(
-            sentinel_spans(sites=pending.pre_expansion_sites),
+            _sentinel_spans(sites=pending.pre_expansion_sites),
             *pending.expansion_passes,
-            sentinel_spans(sites=sites),
+            _sentinel_spans(sites=sites),
         ),
         external_identifiers=pending.external_identifiers,
         dependency_identifiers=dependency_identifiers,
@@ -319,6 +270,26 @@ def finish_lint_body(
             for site in sites
             if (match := _KEYED_RELATION_PATTERN.match(site.original_text)) is not None
         ),
+    )
+
+
+def _sites(
+    neutralized: tuple[str, list[tuple[str, int, int, int, int, str]]],
+) -> tuple[str, tuple[InterpolationSite, ...]]:
+    return neutralized[0], tuple(InterpolationSite(*site) for site in neutralized[1])
+
+
+def _sentinel_spans(*, sites: tuple[InterpolationSite, ...]) -> tuple[ExpansionSpan, ...]:
+    """Express sentinel substitutions as expansion spans for offset mapping."""
+
+    return tuple(
+        ExpansionSpan(
+            source_start=site.original_start,
+            source_end=site.original_end,
+            output_start=site.neutralized_start,
+            output_end=site.neutralized_end,
+        )
+        for site in sites
     )
 
 
@@ -348,7 +319,7 @@ def expand_file_bodies(
 ) -> ExpandedLintFile:
     """Expand one file's bodies up to the first body that cannot be expanded."""
 
-    check_lint_not_stopped()
+    LintStopContext.check()
     bodies: list[PendingLintBody] = []
     role: LintFileRole = lint_file_role(
         file_path=file_path, project_dir=project_dir, relative_path=relative_path
@@ -401,7 +372,7 @@ def prepare_expanded_files(
 ) -> PreparedLintFiles:
     """Prepare every expanded body natively at once, then report failures in file order."""
 
-    check_lint_not_stopped()
+    LintStopContext.check()
     pending: list[PendingLintBody] = []
     for expanded in expanded_files:
         pending.extend(expanded.bodies)

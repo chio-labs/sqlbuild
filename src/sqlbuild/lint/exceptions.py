@@ -21,12 +21,6 @@ class NativeLintError(LintError):
     code: str = "L003"
 
 
-class InterpolationRestorationError(LintError):
-    """A formatted SQL body no longer contains exactly one of each sentinel."""
-
-    code: str = "L002"
-
-
 class ProjectCompileError(LintError):
     """The project could not be compiled, so its SQL cannot be linted."""
 

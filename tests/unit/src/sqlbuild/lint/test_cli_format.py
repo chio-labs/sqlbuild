@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -10,7 +9,6 @@ import pytest
 from _pytest.capture import CaptureResult
 
 import sqlbuild._native as native_module
-import sqlbuild.cli.commands._helpers.lint.selection as lint_selection_module
 import sqlbuild.compiler.planner._helpers.sql_tests.fixture_formatting as fixture_formatting_module
 from sqlbuild._native import run_cli as main
 from tests.unit.src.sqlbuild.lint._test_types import (
@@ -476,8 +474,8 @@ def test_given_fixture_only_mode_when_formatting_then_only_fixture_nulls_are_rew
         "__expected__rows AS (select 1 AS id, TRUE AS flag)",
     )
     test_file.write_text(authored, encoding="utf-8")
-    native_format: Mock = Mock(wraps=native_module.format_sql_batch_json)
-    monkeypatch.setattr(native_module, "format_sql_batch_json", native_format)
+    native_format: Mock = Mock(wraps=native_module.format_lint_sql_bodies)
+    monkeypatch.setattr(native_module, "format_lint_sql_bodies", native_format)
 
     exit_code: int = main(["--project-dir", str(tmp_path), "format", *test_case.arguments])
 
@@ -496,7 +494,7 @@ def test_given_fixture_only_mode_when_formatting_then_only_fixture_nulls_are_rew
             selected_file_count=2,
             expected_fixture_parse_count=1,
             expected_native_batch_count=1,
-            expected_native_request_count=1,
+            expected_native_file_count=2,
         )
     ],
     ids=lambda case: case.description,
@@ -552,13 +550,13 @@ def test_given_test_path_selector_when_formatting_then_work_is_bounded_to_select
     unselected_file.parent.mkdir()
     unselected_file.write_text(fixture_sql, encoding="utf-8")
     fixture_parse: Mock = Mock(wraps=fixture_formatting_module.SqlTestCteExtractor.extract)
-    native_format: Mock = Mock(wraps=native_module.format_sql_batch_json)
+    native_format: Mock = Mock(wraps=native_module.format_lint_sql_bodies)
     full_discovery: Mock = Mock(side_effect=AssertionError("full discovery must not run"))
     project_graph: Mock = Mock(side_effect=AssertionError("project graph must not build"))
     monkeypatch.setattr(fixture_formatting_module.SqlTestCteExtractor, "extract", fixture_parse)
-    monkeypatch.setattr(native_module, "format_sql_batch_json", native_format)
-    monkeypatch.setattr(lint_selection_module, "discover_project_inputs", full_discovery)
-    monkeypatch.setattr(lint_selection_module, "build_project_graph", project_graph)
+    monkeypatch.setattr(native_module, "format_lint_sql_bodies", native_format)
+    monkeypatch.setattr(native_module, "discover_project_inputs", full_discovery)
+    monkeypatch.setattr(native_module, "build_project_graph", project_graph)
 
     exit_code: int = main(
         [
@@ -575,9 +573,7 @@ def test_given_test_path_selector_when_formatting_then_work_is_bounded_to_select
     assert f"{test_case.selected_file_count} files checked" in captured.err
     assert fixture_parse.call_count == test_case.expected_fixture_parse_count
     assert native_format.call_count == test_case.expected_native_batch_count
-    native_requests: object = json.loads(native_format.call_args.args[0])
-    assert isinstance(native_requests, list)
-    assert len(native_requests) == test_case.expected_native_request_count
+    assert len(native_format.call_args.args[0]) == test_case.expected_native_file_count
     assert full_discovery.call_count == 0
     assert project_graph.call_count == 0
     assert all(

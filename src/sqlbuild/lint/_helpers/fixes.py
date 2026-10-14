@@ -8,12 +8,11 @@ from collections import Counter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from sqlbuild._native import build_compiled_project
+from sqlbuild._native import build_compiled_project, run_lint
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import CompiledProjectView, TypedSqlValueRenderer
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.lint._helpers.native_format import with_newline_style
 from sqlbuild.lint.constants import (
     LINT_ENGINE_NATIVE,
     SAFE_RULE_FIX_CODES,
@@ -24,11 +23,9 @@ from sqlbuild.lint.exceptions import ProjectCompileError
 from sqlbuild.lint.main.compile_facts import compile_facts
 from sqlbuild.lint.main.compiled_relation_keys import compiled_relation_keys
 from sqlbuild.lint.main.fix_verdict import fix_verdict
-from sqlbuild.lint.main.run_lint import run_lint
 from sqlbuild.lint.models import (
     CompileFacts,
     FixVerdict,
-    FormatChange,
     LintConfig,
     LintEdit,
     LintRunResult,
@@ -293,36 +290,6 @@ class _FixSession:
                 *self._skipped_warnings(),
             ],
         )
-
-
-def persist_changes(
-    *, files: dict[Path, str], updated: dict[Path, str], newlines: dict[Path, str], write: bool
-) -> tuple[FormatChange, ...]:
-    changes: list[FormatChange] = []
-    for path, contents in sorted(updated.items()):
-        after: str = with_newline_style(contents=contents, newline=newlines[path])
-        before: str = with_newline_style(contents=files[path], newline=newlines[path])
-        if after == before:
-            continue
-        changes.append(FormatChange(file_path=path, before=before, after=after))
-        if write:
-            write_atomically(path=path, contents=after)
-    return tuple(changes)
-
-
-def finalize_fix_reports(
-    *, reports: tuple[RuleFixResult, ...], declined_paths: set[Path]
-) -> tuple[RuleFixResult, ...]:
-    return tuple(
-        replace(
-            report,
-            status="refused",
-            reason="Final layout formatting failed; original file retained",
-        )
-        if report.status == _APPLIED and report.file_path in declined_paths
-        else report
-        for report in reports
-    )
 
 
 def write_atomically(*, path: Path, contents: str) -> None:

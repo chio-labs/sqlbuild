@@ -1,0 +1,6 @@
+#[path = "tests/test_format_settings.rs"]
+mod format_settings;
+#[path = "tests/test_lint_text.rs"]
+mod lint_text;
+#[path = "tests/test_types.rs"]
+mod test_types;

@@ -203,7 +203,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_snowflake_comma: "SELECT 'é)ü' ñ a  FROM t",
             expected_compact: "a='é)ü'ñandb",
             expected_snowflake_compact: "a='é)ü'ñandb",
-            expected_lint_site: None,
+            expected_lint_site: Some("@m('é)ü' ñ x)"),
         },
     ];
 

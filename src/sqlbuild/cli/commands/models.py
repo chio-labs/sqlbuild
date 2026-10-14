@@ -44,29 +44,15 @@ if TYPE_CHECKING:
         PlanningProgressReporter,
     )
     from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-    from sqlbuild.cli.commands.classes.build_progress_callbacks import BuildProgressCallbacks
-    from sqlbuild.cli.commands.classes.direct_python_lifecycle_state import (
-        DirectPythonLifecycleState,
-    )
-    from sqlbuild.cli.progress.classes.audit_progress_reporter import AuditProgressReporter
     from sqlbuild.compiler.compile.models import (
-        CompiledSqlScenario,
         CompilerDiagnostic,
     )
     from sqlbuild.compiler.compile.types import CompiledProjectView
     from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-    from sqlbuild.compiler.pipeline.models import (
-        CompilePipelineResult,
-        PythonPlanEntry,
-    )
     from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
     from sqlbuild.compiler.refactoring.models import RefactorProject
-    from sqlbuild.executor.build.models import BuildExecutionResult
     from sqlbuild.executor.janitor.models import JanitorPlan
-    from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
     from sqlbuild.integrations.dbt.models import DbtInitRequest
-    from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
-    from sqlbuild.runtime.contracts.types import NodeStartCallback
 
 
 @dataclass(frozen=True)
@@ -99,31 +85,6 @@ class AuditInvocation:
     progress_stream: TextIO
     connection_progress: ConnectionProgressReporter
     planning_progress: PlanningProgressReporter
-
-
-@dataclass(frozen=True)
-class AuditExecutionPreparation:
-    """Prepared nested progress and execution reporters for audit runs."""
-
-    progress: AuditProgressReporter
-    execution_connection_progress: ConnectionProgressReporter
-    effective_concurrency: int
-    worker_count: int
-
-
-@dataclass(frozen=True)
-class BuildRunContext:
-    """Resolved inputs needed to render one build execution context."""
-
-    command: str
-    project: CompiledProjectView
-    plan: PlanOutput
-    discovered_inputs: DiscoveredProjectInputs
-    python_plan_entries: tuple[PythonPlanEntry, ...]
-    connection_config: dict[str, object]
-    concurrency: int
-    full_refresh: bool
-    selector_files: tuple[SelectorFileSummary, ...]
 
 
 @dataclass(frozen=True)
@@ -164,16 +125,6 @@ class BuildCommandRequest:
     max_microbatches: int | None = None
     selection_diagnostics: bool = False
     selector_files: tuple[SelectorFileSummary, ...] = ()
-
-
-@dataclass(frozen=True)
-class DirectLifecycleCallbacks:
-    """Node progress callbacks and output settings for direct Python lifecycle."""
-
-    on_node_complete: Callable[[object], None]
-    progress_stream: TextIO
-    use_color: bool
-    on_node_start: NodeStartCallback | None = None
 
 
 @dataclass(frozen=True)
@@ -228,41 +179,6 @@ class DeferClonePrephaseOutputContext:
     on_progress: Callable[[str], None] | None = None
     progress_stream: TextIO | None = None
     use_color: bool = False
-
-
-@dataclass(frozen=True)
-class BuildExecutionPreparation:
-    """Prepared callbacks, concurrency, cursors, and python lifecycle for execution."""
-
-    callbacks: BuildProgressCallbacks
-    effective_concurrency: int
-    execution_connection_progress: ConnectionProgressReporter
-    python_lifecycle: DirectPythonLifecycleState
-    start_cursor_ts: datetime | None
-    end_cursor_ts: datetime | None
-    start_cursor_int: int | None
-    end_cursor_int: int | None
-
-
-@dataclass(frozen=True)
-class BuildRunOutcome:
-    """Build pipeline execution result and finalized python node results."""
-
-    result: BuildExecutionResult
-    python_results: tuple[PythonNodeExecutionResult, ...]
-
-
-@dataclass(frozen=True)
-class BuildPhaseTimings:
-    """Final monotonic phase durations for verbose build output."""
-
-    compile_seconds: float | None = None
-    planning_seconds: float | None = None
-    connection_preparation_seconds: float | None = None
-    schema_preparation_seconds: float | None = None
-    execution_seconds: float | None = None
-    cost_collection_seconds: float | None = None
-    total_seconds: float | None = None
 
 
 @dataclass(frozen=True)
@@ -579,35 +495,6 @@ class AdapterConnectionContext:
 
 
 @dataclass(frozen=True)
-class ScenarioRunNamespace:
-    """Effective artifact namespace and its configuration source."""
-
-    value: str | None = None
-    source: str = "unset"
-
-
-@dataclass(frozen=True)
-class ScenarioRunOutputContext:
-    """Progress stream and JSON output settings for one scenario CLI run."""
-
-    progress_stream: TextIO
-    use_color: bool
-    namespace: ScenarioRunNamespace = ScenarioRunNamespace()
-    json_output: bool = False
-    json_output_path: Path | None = None
-
-
-@dataclass(frozen=True)
-class ScenarioRunPresentation:
-    """Live status and timing shared by one scenario test run's progress output."""
-
-    scenario_status: TransientStatusReporter
-    status_is_tty: bool
-    activity: str
-    started: float
-
-
-@dataclass(frozen=True)
 class ScenarioSnapshotLimitInputs:
     """CLI snapshot capture-limit overrides for one scenario run."""
 
@@ -651,24 +538,6 @@ class ScenarioCaptureCommandRequest:
     exclude: tuple[str, ...] = ()
     retain: bool = False
     limit_inputs: ScenarioSnapshotLimitInputs = ScenarioSnapshotLimitInputs()
-
-
-@dataclass(frozen=True)
-class LocalSnapshotSyncInputs:
-    """Resolved project, adapters, and scenarios for a local snapshot sync run."""
-
-    project_dir: Path
-    discovered_inputs: DiscoveredProjectInputs
-    local_pipeline_result: CompilePipelineResult
-    local_scenarios: tuple[CompiledSqlScenario, ...]
-    local_adapter: BaseAdapter
-    project_adapter: BaseAdapter
-    project_adapter_name: str
-    capture_dialect: str
-    project_connection_config: dict[str, object]
-    project_name: str
-    no_sql_validation: bool
-    refresh: bool
 
 
 @dataclass(frozen=True)

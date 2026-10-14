@@ -6,17 +6,25 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class BuildProcessReportTestCase:
     description: str
-    expected_exit_code: int | None = None
-    expected_error_type: type[BaseException] | None = None
+    error_type: type[BaseException]
+    verbose: bool
+    expected_fragments: tuple[str, ...]
+    expected_absent_fragments: tuple[str, ...]
 
 
 @dataclass(frozen=True)
-class BuildPartialTimingOutputTestCase:
+class BuildDurationLimitTestCase:
     description: str
-    error_type: type[BaseException]
-    compile_seconds: float | None
-    planning_seconds: float | None
-    connection_seconds: float | None
-    execution_seconds: float | None
-    expected_fragments: tuple[str, ...]
-    expected_absent_fragments: tuple[str, ...]
+    project_toml: str
+    remediation: str
+    expected_code: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ScenarioCompilePresentationTestCase:
+    description: str
+    tty: bool
+    expected_fragment: str
+    unexpected_fragment: str
+    expected_terminal: str

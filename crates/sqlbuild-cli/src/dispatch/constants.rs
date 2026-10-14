@@ -108,7 +108,7 @@ pub(crate) const SCOPE_ROUTE: Route = routed(
 const DAG_ARGUMENTS: [Field; 4] = [PROJECT_DIR, NO_SQL_VALIDATION, JSON_OUTPUT, CLI_VARS];
 pub(crate) const DAG_ROUTE: Route = routed(
     "run_dag",
-    ("sqlbuild.cli.commands.main.project._dag", "run_dag"),
+    ("sqlbuild._native", "run_dag_command"),
     &DAG_ARGUMENTS,
     CallShape {
         slot_positional: 0,
@@ -190,9 +190,9 @@ const BUILD_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const BUILD_ROUTE: Route = routed(
     "run_build",
-    ("sqlbuild.cli.commands.main.execution._build", "run_build"),
+    ("sqlbuild._native", "run_build_command"),
     &BUILD_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const FRESHNESS_FIELDS: [Field; 12] = [
@@ -286,9 +286,9 @@ const AUDIT_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const AUDIT_ROUTE: Route = routed(
     "run_audit",
-    ("sqlbuild.cli.commands.main.execution._audit", "run_audit"),
+    ("sqlbuild._native", "run_audit_command"),
     &AUDIT_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const LOAD_FIELDS: [Field; 11] = [
@@ -453,7 +453,7 @@ const QUERY_ARGUMENTS: [Field; 6] = [
 ];
 pub(crate) const QUERY_ROUTE: Route = routed(
     "run_query",
-    ("sqlbuild.cli.commands.main.inspection._query", "run_query"),
+    ("sqlbuild._native", "run_query_command"),
     &QUERY_ARGUMENTS,
     CallShape {
         slot_positional: 0,
@@ -480,7 +480,7 @@ const COST_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const COST_ROUTE: Route = routed(
     "run_cost",
-    ("sqlbuild.cli.commands.main.inspection._cost", "run_cost"),
+    ("sqlbuild._native", "run_cost_command"),
     &COST_ARGUMENTS,
     REQUEST_SHAPE,
 );
@@ -571,12 +571,9 @@ pub(crate) const CONTRACT_ROUTE: Route = Route {
     unavailable_code: Some("C470"),
     ..routed(
         "run_contract",
-        (
-            "sqlbuild.cli.commands.main.inspection._contract",
-            "run_contract",
-        ),
+        ("sqlbuild._native", "run_contract_command"),
         &CONTRACT_ARGUMENTS,
-        REQUEST_SHAPE,
+        REQUEST_KEYWORD_SHAPE,
     )
 };
 
@@ -629,7 +626,7 @@ pub(crate) const COMPILE_ROUTE: Route = routed(
 const INIT_ARGUMENTS: [Field; 1] = [PROJECT_DIR];
 pub(crate) const INIT_ROUTE: Route = routed(
     "run_init",
-    ("sqlbuild.cli.commands.main.workspace._init", "run_init"),
+    ("sqlbuild._native", "run_init_command"),
     &INIT_ARGUMENTS,
     REQUEST_SHAPE,
 );
@@ -679,10 +676,7 @@ const FORMAT_ARGUMENTS: [Field; 9] = [
 ];
 pub(crate) const FORMAT_ROUTE: Route = routed(
     "run_format",
-    (
-        "sqlbuild.cli.commands.main.project._format",
-        "run_format_command",
-    ),
+    ("sqlbuild._native", "run_format_command"),
     &FORMAT_ARGUMENTS,
     CallShape {
         slot_positional: 1,
@@ -786,12 +780,9 @@ const SCENARIO_TEST_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const SCENARIO_TEST_ROUTE: Route = routed(
     "run_scenario",
-    (
-        "sqlbuild.cli.commands.main.execution._scenario",
-        "run_scenario",
-    ),
+    ("sqlbuild._native", "run_scenario_test_command"),
     &SCENARIO_TEST_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const SCENARIO_CAPTURE_FIELDS: [Field; 8] = [
@@ -810,10 +801,7 @@ const SCENARIO_CAPTURE_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const SCENARIO_CAPTURE_ROUTE: Route = routed(
     "run_scenario_capture",
-    (
-        "sqlbuild.cli.commands._helpers.scenario_capture.capture",
-        "run_scenario_capture",
-    ),
+    ("sqlbuild._native", "run_scenario_capture_command"),
     &SCENARIO_CAPTURE_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );

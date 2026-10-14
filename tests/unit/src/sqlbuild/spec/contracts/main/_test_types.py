@@ -101,3 +101,19 @@ class FullTargetResolutionTestCase:
     description: str
     project_target: TargetConfig
     expected_target: TargetConfig
+
+
+@dataclass(frozen=True)
+class ScenarioNamespaceConfigTestCase:
+    description: str
+    project: str
+    local: str
+    expected_value: str
+
+
+@dataclass(frozen=True)
+class InvalidScenarioNamespaceConfigTestCase:
+    description: str
+    filename: str
+    value_toml: str
+    expected_error: str = "scenario.run_namespace must be 1–128"

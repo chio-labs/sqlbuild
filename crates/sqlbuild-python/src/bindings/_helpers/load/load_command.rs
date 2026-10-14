@@ -28,14 +28,14 @@ const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild.compiler.pipeline.main.reject_unit_test_selectors";
-const EFFECTIVE_TARGET_MODULE: &str = "sqlbuild.compiler.compile.main.effective_target";
+const EFFECTIVE_TARGET_MODULE: &str = "sqlbuild.compiler.compile.main._effective_target";
 const EFFECTIVE_RUNTIME_MODULE: &str = "sqlbuild.compiler.compile.main.effective_runtime";
 const EFFECTIVE_SETTINGS_MODULE: &str = "sqlbuild.compiler.compile.main.effective_settings";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
 const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const RELATION_LOOKUP_MODULE: &str = "sqlbuild.adapter.relations.main.relation_lookup";
 const CURSOR_OVERRIDES_MODULE: &str =
-    "sqlbuild.compiler.planner.main.cursor_window.typed_cursor_overrides";
+    "sqlbuild.compiler.planner.main.cursor_window._typed_cursor_overrides";
 const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
 const PROVIDER_SESSION_MODULE: &str = "sqlbuild.provider.main.session";
 const PYTHON_NODE_MODELS: &str = "sqlbuild.python_nodes.models";

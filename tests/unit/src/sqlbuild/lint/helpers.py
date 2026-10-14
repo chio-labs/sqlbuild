@@ -1,8 +1,14 @@
 """Project writers shared by lint behavior tests."""
 
 import itertools
+import json
 import re
 from pathlib import Path
+from typing import cast
+
+import pytest
+
+from sqlbuild._native import run_cli
 
 _PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n'
 
@@ -128,3 +134,25 @@ def reserved_keyword_pairs() -> tuple[tuple[str, str], ...]:
     for dialect in _DIALECTS:
         pairs.extend((dialect, keyword) for keyword in sorted(reserved_keywords(dialect)))
     return tuple(pairs)
+
+
+def format_project_json(
+    *, project_dir: Path, capsys: pytest.CaptureFixture[str], arguments: tuple[str, ...] = ()
+) -> dict[str, object]:
+    """Run `sqb format --json` on a project and return its parsed report."""
+
+    _ = run_cli(["--project-dir", str(project_dir), "format", "--json", *arguments])
+    report: dict[str, object] = json.loads(capsys.readouterr().out)
+    return report
+
+
+def violation_reports(report: dict[str, object]) -> list[dict[str, object]]:
+    """Return the violation objects of a format report."""
+
+    return cast(list[dict[str, object]], report["violations"])
+
+
+def formatted_files(report: dict[str, object]) -> list[str]:
+    """Return the changed file paths of a format report."""
+
+    return cast(list[str], report["formatted_files"])

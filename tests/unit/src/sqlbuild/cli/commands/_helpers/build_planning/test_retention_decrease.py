@@ -4,17 +4,16 @@ from io import StringIO
 
 import pytest
 
-from sqlbuild.cli.commands._helpers.build_planning.retention_decrease import (
-    enforce_retention_decrease_policy,
-)
-from sqlbuild.cli.commands.constants import RETENTION_DECREASE_BUILD_HELP
+from sqlbuild._native import enforce_plan_safety_policies
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.planner.types import RetentionDirection
+from sqlbuild.spec.contracts.models import ExecutionLimitsConfig, SnapshotsConfig
 from tests.unit.src.sqlbuild.cli.commands._helpers.build_planning._test_types import (
     RetentionDecreasePolicyTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands._helpers.build_planning.helpers import (
+    build_policy_gates,
     build_retention_entry,
 )
 
@@ -78,12 +77,16 @@ def test_given_unsafe_retention_decrease_when_enforcing_then_raises_user_error(
     test_case: RetentionDecreasePolicyTestCase,
 ) -> None:
     with pytest.raises(CliUserError) as exc_info:
-        enforce_retention_decrease_policy(
+        enforce_plan_safety_policies(
             plan=test_case.plan_output,
-            allow_retention_decrease=test_case.allow_retention_decrease,
-            non_interactive_help=RETENTION_DECREASE_BUILD_HELP,
-            input_stream=_InputStream(test_case.input_text, is_tty=test_case.input_is_tty),
-            output_stream=StringIO(),
+            gates=build_policy_gates(allow_retention_decrease=test_case.allow_retention_decrease),
+            snapshots_config=SnapshotsConfig(),
+            target_name="dev",
+            execution_limits=ExecutionLimitsConfig(),
+            streams=(
+                _InputStream(test_case.input_text, is_tty=test_case.input_is_tty),
+                StringIO(),
+            ),
         )
 
     error: CliUserError = exc_info.value
@@ -136,12 +139,16 @@ def test_given_safe_or_confirmed_retention_change_when_enforcing_then_allows_exe
 ) -> None:
     output_stream: StringIO = StringIO()
 
-    enforce_retention_decrease_policy(
+    enforce_plan_safety_policies(
         plan=test_case.plan_output,
-        allow_retention_decrease=test_case.allow_retention_decrease,
-        non_interactive_help=RETENTION_DECREASE_BUILD_HELP,
-        input_stream=_InputStream(test_case.input_text, is_tty=test_case.input_is_tty),
-        output_stream=output_stream,
+        gates=build_policy_gates(allow_retention_decrease=test_case.allow_retention_decrease),
+        snapshots_config=SnapshotsConfig(),
+        target_name="dev",
+        execution_limits=ExecutionLimitsConfig(),
+        streams=(
+            _InputStream(test_case.input_text, is_tty=test_case.input_is_tty),
+            output_stream,
+        ),
     )
 
     assert output_stream.getvalue() == test_case.expected_output

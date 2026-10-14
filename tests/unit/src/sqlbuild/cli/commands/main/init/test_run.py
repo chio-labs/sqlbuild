@@ -5,7 +5,9 @@ from pathlib import Path
 import pytest
 from _pytest.capture import CaptureResult
 
-import sqlbuild.cli.commands.main.workspace._init as init_module
+import sqlbuild._native as native_module
+import sqlbuild.presentation.main.supports_color as color_module
+from sqlbuild._native import run_init_command
 from tests.unit.src.sqlbuild.cli.commands.main.init._test_types import InitScaffoldTestCase
 
 
@@ -84,10 +86,10 @@ def test_given_empty_directory_when_running_init_then_scaffolds_project_director
 ) -> None:
     project_dir: Path = tmp_path / test_case.project_dir_name
     project_dir.mkdir()
-    monkeypatch.setattr(init_module, "update_sqlbuild_skills", lambda *, project_dir: None)
-    monkeypatch.setattr(init_module, "supports_color", lambda: False)
+    monkeypatch.setattr(native_module, "update_sqlbuild_skills", lambda *, project_dir: None)
+    monkeypatch.setattr(color_module, "supports_color", lambda: False)
 
-    result: int = init_module.run_init(project_dir)
+    result: int = run_init_command(project_dir)
 
     captured: CaptureResult[str] = capsys.readouterr()
     assert result == 0
@@ -128,10 +130,10 @@ def test_given_color_terminal_when_running_init_then_it_styles_heading(
 ) -> None:
     project_dir: Path = tmp_path / test_case.project_dir_name
     project_dir.mkdir()
-    monkeypatch.setattr(init_module, "update_sqlbuild_skills", lambda *, project_dir: None)
-    monkeypatch.setattr(init_module, "supports_color", lambda: True)
+    monkeypatch.setattr(native_module, "update_sqlbuild_skills", lambda *, project_dir: None)
+    monkeypatch.setattr(color_module, "supports_color", lambda: True)
 
-    result: int = init_module.run_init(project_dir)
+    result: int = run_init_command(project_dir)
 
     captured: CaptureResult[str] = capsys.readouterr()
     assert result == 0

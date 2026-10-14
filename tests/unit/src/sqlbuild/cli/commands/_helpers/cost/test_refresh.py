@@ -9,8 +9,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild._native import read_cost_run, write_cost_run
-from sqlbuild.cli.commands._helpers.cost.refresh import refresh_pending_cost_run
+from sqlbuild._native import read_cost_run, refresh_pending_cost_run, write_cost_run
 from sqlbuild.cli.commands.models import CostCommandRequest
 from sqlbuild.cost.constants import LEDGER_PERSISTENCE_FAILURE_LIMITATION_PREFIX
 from sqlbuild.cost.models import CostRunRecord, RunCostSummary
@@ -84,23 +83,23 @@ def test_given_pending_run_when_showing_detail_then_persisted_summary_is_refresh
         record=replace(record, cost=replace(record.cost, status=test_case.initial_status)),
     )
     monkeypatch.setattr(
-        "sqlbuild.cli.commands._helpers.cost.refresh.discover_project_inputs",
+        "sqlbuild._native.discover_project_inputs",
         lambda **kwargs: SimpleNamespace(project_config=object(), local_config=object()),
     )
     monkeypatch.setattr(
-        "sqlbuild.cli.commands._helpers.cost.refresh.resolve_effective_adapter_name",
+        "sqlbuild.spec.contracts.main.resolve_effective_adapter_name.resolve_effective_adapter_name",
         lambda **kwargs: "snowflake",
     )
     monkeypatch.setattr(
-        "sqlbuild.cli.commands._helpers.cost.refresh.resolve_adapter",
+        "sqlbuild.cli.commands._helpers.runtime.adapters.resolve_adapter",
         lambda **kwargs: _RefreshingCostAdapter(),
     )
     monkeypatch.setattr(
-        "sqlbuild.cli.commands._helpers.cost.refresh.resolve_project_connection_config",
+        "sqlbuild._native.resolve_project_connection_config",
         lambda **kwargs: {"database": "ANALYTICS"},
     )
     monkeypatch.setattr(
-        "sqlbuild.cli.commands._helpers.cost.refresh.build_effective_target_config",
+        "sqlbuild.compiler.compile.main._effective_target.build_effective_target_config",
         lambda **kwargs: SimpleNamespace(database=None),
     )
     request: CostCommandRequest = CostCommandRequest(
@@ -188,19 +187,19 @@ def test_given_useful_partial_when_refresh_degrades_then_persisted_summary_is_pr
         query_count=test_case.candidate_query_count,
     )
     monkeypatch.setattr(
-        "sqlbuild.cli.commands._helpers.cost.refresh.discover_project_inputs",
+        "sqlbuild._native.discover_project_inputs",
         lambda **kwargs: SimpleNamespace(project_config=object(), local_config=object()),
     )
     monkeypatch.setattr(
-        "sqlbuild.cli.commands._helpers.cost.refresh.resolve_effective_adapter_name",
+        "sqlbuild.spec.contracts.main.resolve_effective_adapter_name.resolve_effective_adapter_name",
         lambda **kwargs: "snowflake",
     )
     monkeypatch.setattr(
-        "sqlbuild.cli.commands._helpers.cost.refresh.resolve_adapter",
+        "sqlbuild.cli.commands._helpers.runtime.adapters.resolve_adapter",
         lambda **kwargs: _StaticCostAdapter(candidate),
     )
     monkeypatch.setattr(
-        "sqlbuild.cli.commands._helpers.cost.refresh.resolve_project_connection_config",
+        "sqlbuild._native.resolve_project_connection_config",
         lambda **kwargs: {},
     )
     request: CostCommandRequest = CostCommandRequest(
@@ -271,19 +270,19 @@ def test_given_persisted_ledger_failure_when_refresh_has_no_coverage_then_failur
         query_count=test_case.candidate_query_count,
     )
     monkeypatch.setattr(
-        "sqlbuild.cli.commands._helpers.cost.refresh.discover_project_inputs",
+        "sqlbuild._native.discover_project_inputs",
         lambda **kwargs: SimpleNamespace(project_config=object(), local_config=object()),
     )
     monkeypatch.setattr(
-        "sqlbuild.cli.commands._helpers.cost.refresh.resolve_effective_adapter_name",
+        "sqlbuild.spec.contracts.main.resolve_effective_adapter_name.resolve_effective_adapter_name",
         lambda **kwargs: "snowflake",
     )
     monkeypatch.setattr(
-        "sqlbuild.cli.commands._helpers.cost.refresh.resolve_adapter",
+        "sqlbuild.cli.commands._helpers.runtime.adapters.resolve_adapter",
         lambda **kwargs: _StaticCostAdapter(candidate),
     )
     monkeypatch.setattr(
-        "sqlbuild.cli.commands._helpers.cost.refresh.resolve_project_connection_config",
+        "sqlbuild._native.resolve_project_connection_config",
         lambda **kwargs: {},
     )
     request: CostCommandRequest = CostCommandRequest(

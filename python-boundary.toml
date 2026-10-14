@@ -2,7 +2,7 @@
 # migration work that moves to Rust. `remaining_lines` must equal the current count of that work:
 # a PR that moves code lowers it, and adding movable Python fails the check.
 # Native failures must surface as errors; `handled_native_errors` lists the reviewed exceptions.
-remaining_lines = 79435
+remaining_lines = 69877
 
 [[stays]]
 path = "executor"
@@ -287,16 +287,8 @@ location = "compiler/planner/_helpers/sql_tests/fixture_formatting.py::format_re
 note = "A test file that no longer parses is left unformatted, as before; no Python implementation runs."
 
 [[handled_native_errors]]
-location = "lint/_helpers/native_sql.py::_native_responses"
-note = "A native lint failure is reported as a lint error result, not recomputed in Python."
-
-[[handled_native_errors]]
 location = "cli/commands/_helpers/refactor/compile_facts.py::compile_for_refactor"
 note = "Reports the Python stage errors the native compile driver propagates as refactor diagnostics; a native compiler failure is a RuntimeError and is not caught."
-
-[[handled_native_errors]]
-location = "cli/commands/_helpers/cost/refresh.py::refresh_pending_cost_run"
-note = "Best-effort cost refresh keeps its existing catch-all; discovery is now entered through the native driver, and no Python implementation runs instead."
 
 [[handled_native_errors]]
 location = "lint/_helpers/fixes.py::_FixSession._relation_keys"

@@ -9,7 +9,12 @@ from typing import Any, Literal, TextIO, TypedDict, overload
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
-from sqlbuild.adapter.contract.models import ColumnInfo, ExpressionInferenceProfile, RelationInfo
+from sqlbuild.adapter.contract.models import (
+    ColumnInfo,
+    ExpressionInferenceProfile,
+    QueryResult,
+    RelationInfo,
+)
 from sqlbuild.adapter.contract.types import (
     AdapterExecute,
     FrameworkType,
@@ -19,16 +24,23 @@ from sqlbuild.adapter.contract.types import (
 from sqlbuild.adapter.relations.models import InspectionQueryRecord
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.models import (
+    AuditCommandRequest,
+    BuildCommandRequest,
     CheckCommandRequest,
     CloneCommandRequest,
+    ContractCommandRequest,
+    CostCommandRequest,
     DiffCommandRequest,
     FreshnessCommandRequest,
     JanitorCommandRequest,
     LineageCommandRequest,
     LoadCommandRequest,
+    PlanSafetyGates,
     PlaygroundCommandRequest,
     QueryDiffPreparation,
     RefactorCommandRequest,
+    ScenarioCaptureCommandRequest,
+    ScenarioTestCommandRequest,
     ScopeCommandRequest,
     SeedCommandRequest,
     TestCommandRequest,
@@ -89,6 +101,7 @@ from sqlbuild.compiler.compile.models import (
     NativeModelConfigInputs,
     NativeModelConfigSession,
     PythonSqlReferenceReport,
+    SqlExpansionContext,
     SqlReferenceScan,
     StaticMacroExport,
 )
@@ -248,7 +261,7 @@ from sqlbuild.integrations.dbt.models import (
     ResolvedDbtProfileOutput,
 )
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
-from sqlbuild.lint.models import HeaderSpan, LintConfig, LintViolation
+from sqlbuild.lint.models import HeaderSpan, LintBody, LintConfig, LintRunResult, LintViolation
 from sqlbuild.lint.types import RelationKeyRow
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
@@ -261,6 +274,7 @@ from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
+    ExecutionLimitsConfig,
     LocalConfig,
     ProjectConfig,
     ScenarioConfig,
@@ -270,6 +284,7 @@ from sqlbuild.spec.contracts.models import (
     SchemaModelEntry,
     SchemaSeedEntry,
     SettingsConfig,
+    SnapshotsConfig,
     SourceEntry,
     SourceFreshnessAgePolicy,
     SourceLocation,
@@ -1754,6 +1769,33 @@ def prepare_lint_sql_batch(
     requests: list[LintPreparationRequest],
 ) -> list[tuple[bool, tuple[str, list[tuple[str, int, int, int, int, str]], list[str]] | None]]: ...
 def lint_backtick_identifiers(dialect: str) -> bool: ...
+def neutralize_lint_interpolation(
+    body: str, dialect: str, for_formatting: bool = False
+) -> tuple[str, list[tuple[str, int, int, int, int, str]]]: ...
+def neutralize_lint_context_interpolation(
+    body: str,
+) -> tuple[str, list[tuple[str, int, int, int, int, str]]]: ...
+def neutralize_lint_audit_parameters(
+    body: str,
+) -> tuple[str, list[tuple[str, int, int, int, int, str]]]: ...
+def restore_lint_interpolation(
+    fixed: str, sites: list[tuple[str, int, int, int, int, str]]
+) -> tuple[bool, str]: ...
+def lint_interpolation_text_at(body: str, start: int, dialect: str) -> str | None: ...
+def scan_fixture_typed_null_candidates(
+    project_dir: Path, selected_paths: frozenset[Path] | None = None
+) -> tuple[frozenset[Path], frozenset[str]]: ...
+def format_lint_sql_bodies(
+    files: list[tuple[Path, str]], project_dir: Path, config: LintConfig
+) -> tuple[dict[Path, str], list[LintViolation]]: ...
+def lint_native_sql_bodies(
+    bodies: list[LintBody], contents_by_path: dict[Path, str], config: LintConfig
+) -> list[LintViolation]: ...
+def apply_lint_suppressions(
+    violations: list[LintViolation],
+    contents_by_path: dict[Path, str],
+    allow_suppressions: bool,
+) -> list[LintViolation]: ...
 def load_rules_config(*, project_dir: Path) -> RulesConfig: ...
 def selected_codes_json(request_json: str) -> str: ...
 def render_owned_skill(content: str, input_fingerprint: str) -> str: ...
@@ -2877,6 +2919,60 @@ def write_check_results(
 def format_check_json(*, results: tuple[PythonCheckExecutionResult, ...]) -> str: ...
 def run_test_command(*, request: TestCommandRequest) -> int: ...
 def run_seed_command(*, request: SeedCommandRequest) -> int: ...
+def run_build_command(*, request: BuildCommandRequest) -> int: ...
+def enforce_plan_safety_policies(
+    *,
+    plan: PlanOutput,
+    gates: PlanSafetyGates,
+    snapshots_config: SnapshotsConfig,
+    target_name: str | None,
+    execution_limits: ExecutionLimitsConfig,
+    streams: tuple[TextIO, TextIO],
+) -> None: ...
+def enforce_model_execution_limit(
+    *,
+    model_count: int,
+    target_name: str | None,
+    limits: ExecutionLimitsConfig,
+    refusal_note: str,
+) -> None: ...
+def run_audit_command(*, request: AuditCommandRequest) -> int: ...
+def run_contract_command(*, request: ContractCommandRequest) -> int: ...
+def run_init_command(project_dir: Path | None = None) -> int: ...
+def run_cost_command(request: CostCommandRequest) -> int: ...
+def refresh_pending_cost_run(request: CostCommandRequest) -> None: ...
+def parse_cost_since_bound(*, value: str | None) -> datetime | None: ...
+def run_query_command(
+    *,
+    project_dir: Path | None,
+    sql: str | None,
+    query_file: Path | None = None,
+    selected_target: str | None = None,
+    output_format: str = "long",
+    limit: int | None = 20,
+) -> int: ...
+def render_query_result(*, result: QueryResult, output_format: str, limit: int | None) -> str: ...
+def run_dag_command(
+    *,
+    project_dir: Path | None,
+    no_sql_validation: bool = False,
+    json_output: bool = False,
+    cli_vars: dict[str, object] | None = None,
+) -> int: ...
+def run_scenario_test_command(*, request: ScenarioTestCommandRequest) -> int: ...
+def run_scenario_capture_command(*, request: ScenarioCaptureCommandRequest) -> int: ...
+def run_format_command(
+    *,
+    project_dir: Path | None,
+    select: tuple[str, ...] = (),
+    exclude: tuple[str, ...] = (),
+    check: bool = False,
+    diff: bool = False,
+    fixtures_only: bool = False,
+    fix: bool = False,
+    json_output: bool = False,
+    no_color: bool = False,
+) -> int: ...
 def format_parameterized_test_label(
     *,
     name: str,
@@ -3260,6 +3356,22 @@ def sql_body_ranges(
     *, contents: str, headers: tuple[HeaderSpan, ...]
 ) -> tuple[tuple[int, int], ...]: ...
 def measurement_body_ranges(*, contents: str) -> tuple[tuple[int, int], ...]: ...
+def run_lint(
+    *,
+    project_dir: Path,
+    config: LintConfig,
+    value_renderer: TypedSqlValueRenderer | None = None,
+    selected_paths: frozenset[Path] | None = None,
+    discovered_inputs: DiscoveredProjectInputs | None = None,
+    dynamic_output_paths: frozenset[Path] = frozenset(),
+    compiled_expansions: dict[Path, CompiledSqlExpansion] | None = None,
+    expansion_context: SqlExpansionContext | None = None,
+    source_files: dict[Path, str] | None = None,
+    skip_unexpandable: bool = False,
+) -> LintRunResult: ...
+def collect_lint_project_files(
+    *, project_dir: Path, selected_paths: frozenset[Path] | None = None
+) -> dict[Path, str]: ...
 def lint_native_headers(
     *, contents: str, file_path: Path, headers: tuple[HeaderSpan, ...], config: LintConfig
 ) -> tuple[LintViolation, ...]: ...

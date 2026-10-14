@@ -20,8 +20,6 @@ pub(crate) const MAX_HELP_POSITION: i64 = 24;
 pub(crate) const MINIMUM_TEXT_WIDTH: i64 = 11;
 /// `_long_break_matcher` folds longer runs of newlines into this many.
 pub(crate) const MAXIMUM_BLANK_RUN: usize = 2;
-/// `textwrap`'s em-dash is at least this many hyphens.
-pub(crate) const MINIMUM_EM_DASH: usize = 2;
 
 /// `CliNamespace` attributes the post-parse rules read and write.
 pub(crate) const COMMAND_DEST: &str = "command";

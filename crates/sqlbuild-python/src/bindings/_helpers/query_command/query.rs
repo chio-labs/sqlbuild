@@ -1,0 +1,345 @@
+//! `sqb query`: run ad hoc SQL on the project connection and print the rows.
+
+use pyo3::exceptions::PyException;
+use pyo3::prelude::{
+    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
+use pyo3::types::{PyDict, PyDictMethods, PyInt, PyString, PyStringMethods};
+use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_core::json::models::JsonValue;
+use sqlbuild_core::query_command::main::render_query_csv::render_query_csv;
+use sqlbuild_core::query_command::main::render_query_json::render_query_json;
+use sqlbuild_core::query_command::main::render_query_long::render_query_long;
+use sqlbuild_core::query_command::main::render_query_table::render_query_table;
+use sqlbuild_core::query_command::models::QueryDisplay;
+
+use crate::bindings::_helpers::compile_driver::python_calls::{
+    KeywordArguments, call_with, imported,
+};
+use crate::bindings::_helpers::query_command::project::{ProjectAdapter, project_adapter};
+use crate::bindings::_helpers::query_command::query_values::{
+    csv_text, display_text, json_cell, python_json_rows, strict_width,
+};
+
+const NATIVE_MODULE: &str = "sqlbuild._native";
+const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
+const ADAPTER_ERRORS_MODULE: &str = "sqlbuild.adapter.contract.exceptions";
+const LONG_FORMAT: &str = "long";
+const TABLE_FORMAT: &str = "table";
+const JSON_FORMAT: &str = "json";
+const CSV_FORMAT: &str = "csv";
+const STATEMENT_OK: &str = "OK\n";
+const DEFAULT_LIMIT: i64 = 20;
+
+/// A `CliUserError` with its code and optional help.
+fn user_error(py: Python<'_>, message: &str, code: Option<&str>, help: Option<&str>) -> PyErr {
+    let raised = (|| {
+        let options: Bound<'_, PyDict> = PyDict::new(py);
+        if let Some(code) = code {
+            options.set_item("code", code)?;
+        }
+        if let Some(help) = help {
+            options.set_item("help", help)?;
+        }
+        imported(py, ERRORS_MODULE, "CliUserError")?.call((message,), Some(&options))
+    })();
+    match raised {
+        Ok(error) => PyErr::from_value(error),
+        Err(error) => error,
+    }
+}
+
+fn empty_sql(py: Python<'_>) -> PyErr {
+    user_error(py, "query SQL must not be empty", Some("C103"), None)
+}
+
+fn blank(text: &Bound<'_, PyAny>) -> PyResult<bool> {
+    Ok(!text.call_method0("strip")?.is_truthy()?)
+}
+
+/// The SQL text of the file, refusing a missing path, a directory or non-UTF-8 text.
+fn read_query_file<'py>(query_file: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = query_file.py();
+    let shown: String = query_file.str()?.to_string_lossy().into_owned();
+    if !query_file.call_method0("exists")?.is_truthy()? {
+        return Err(user_error(
+            py,
+            &format!("query file does not exist: {shown}"),
+            Some("C105"),
+            None,
+        ));
+    }
+    if !query_file.call_method0("is_file")?.is_truthy()? {
+        return Err(user_error(
+            py,
+            &format!("query file path is not a file: {shown}"),
+            Some("C106"),
+            None,
+        ));
+    }
+    let options: Bound<'py, PyDict> = PyDict::new(py);
+    options.set_item("encoding", "utf-8")?;
+    query_file
+        .call_method("read_text", (), Some(&options))
+        .map_err(|error| {
+            let builtins = py.import("builtins");
+            let readable: bool = builtins.is_ok_and(|builtins| {
+                ["OSError", "UnicodeError"].iter().any(|name| {
+                    builtins
+                        .getattr(*name)
+                        .is_ok_and(|class| error.value(py).is_instance(&class).unwrap_or(false))
+                })
+            });
+            if !readable {
+                return error;
+            }
+            let wrapped: PyErr = user_error(
+                py,
+                &format!("query file could not be read as UTF-8: {shown}"),
+                Some("C107"),
+                None,
+            );
+            wrapped.set_cause(py, Some(error));
+            wrapped
+        })
+}
+
+/// The SQL to run: the positional SQL or the file's text, never both and never blank.
+fn query_sql<'py>(
+    py: Python<'py>,
+    sql: Option<Bound<'py, PyAny>>,
+    query_file: Option<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let sql: Option<Bound<'py, PyAny>> = sql.filter(|value| !value.is_none());
+    let query_file: Option<Bound<'py, PyAny>> = query_file.filter(|value| !value.is_none());
+    let text: Bound<'py, PyAny> = match (sql, query_file) {
+        (Some(_), Some(_)) => {
+            return Err(user_error(
+                py,
+                "query accepts either positional SQL or --file, not both",
+                Some("C104"),
+                None,
+            ));
+        }
+        (None, Some(path)) => read_query_file(&path)?,
+        (Some(sql), None) => sql,
+        (None, None) => {
+            return Err(user_error(
+                py,
+                "query requires SQL",
+                Some("C102"),
+                Some("pass SQL as the query argument or use --file PATH"),
+            ));
+        }
+    };
+    if blank(&text)? {
+        return Err(empty_sql(py));
+    }
+    Ok(text)
+}
+
+/// Connect, run the SQL and close; warehouse failures become `QueryExecutionError`.
+fn run_sql<'py>(
+    project: &ProjectAdapter<'py>,
+    selected_target: Option<Bound<'py, PyAny>>,
+    sql: Bound<'py, PyAny>,
+    limit: Option<i64>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = sql.py();
+    let connection_config: Bound<'py, PyAny> = call_with(
+        &imported(py, NATIVE_MODULE, "resolve_project_connection_config")?,
+        &[
+            ("discovered_inputs", project.discovered.clone()),
+            ("project_dir", project.project_dir.clone()),
+            (
+                "selected_target",
+                selected_target.unwrap_or_else(|| py.None().into_bound(py)),
+            ),
+        ],
+    )?;
+    let connection: Bound<'py, PyAny> = project
+        .adapter
+        .call_method1("connect", (connection_config,))?;
+    let limit_value: Bound<'py, PyAny> = match limit {
+        Some(limit) => PyInt::new(py, limit).into_any(),
+        None => py.None().into_bound(py),
+    };
+    let queried: PyResult<Bound<'py, PyAny>> = call_with(
+        &project.adapter.getattr("query")?,
+        &[
+            ("connection", connection.clone()),
+            ("sql", sql),
+            ("limit", limit_value),
+        ],
+    );
+    let queried: PyResult<Bound<'py, PyAny>> = queried.map_err(|error| {
+        let adapter_error: bool = imported(py, ADAPTER_ERRORS_MODULE, "AdapterUserError")
+            .is_ok_and(|class| error.value(py).is_instance(&class).unwrap_or(false));
+        if adapter_error || !error.is_instance_of::<PyException>(py) {
+            return error;
+        }
+        let value: Bound<'_, PyAny> = error.value(py).clone().into_any();
+        let message: PyResult<Bound<'_, PyAny>> = match value.getattr("message") {
+            Ok(message) => message.str().map(Bound::into_any),
+            Err(_) => value.str().map(Bound::into_any),
+        };
+        let wrapped: PyErr = match message.and_then(|message| {
+            imported(py, ERRORS_MODULE, "QueryExecutionError")?.call1((message,))
+        }) {
+            Ok(raised) => PyErr::from_value(raised),
+            Err(failure) => failure,
+        };
+        wrapped.set_cause(py, Some(error));
+        wrapped
+    });
+    let closed: PyResult<Bound<'py, PyAny>> = project.adapter.call_method1("close", (connection,));
+    let result: Bound<'py, PyAny> = queried?;
+    closed?;
+    Ok(result)
+}
+
+fn rows<'py>(result: &Bound<'py, PyAny>) -> PyResult<Vec<Vec<Bound<'py, PyAny>>>> {
+    result
+        .getattr("rows")?
+        .try_iter()?
+        .map(|row| row?.try_iter()?.collect::<PyResult<Vec<_>>>())
+        .collect()
+}
+
+fn texts(
+    rows: &[Vec<Bound<'_, PyAny>>],
+    convert: fn(&Bound<'_, PyAny>) -> PyResult<String>,
+) -> PyResult<Vec<Vec<String>>> {
+    rows.iter()
+        .map(|row| row.iter().map(convert).collect())
+        .collect()
+}
+
+fn render_json(
+    result: &Bound<'_, PyAny>,
+    columns: &[String],
+    rows: &[Vec<Bound<'_, PyAny>>],
+) -> PyResult<String> {
+    let mut values: Vec<Vec<JsonValue>> = Vec::new();
+    for row in rows {
+        strict_width(columns.len(), row.len())?;
+        let mut cells: Vec<JsonValue> = Vec::new();
+        for value in row {
+            match json_cell(value)? {
+                Some(cell) => cells.push(cell),
+                None => return python_json_rows(result.py(), &result.getattr("columns")?, rows),
+            }
+        }
+        values.push(cells);
+    }
+    match render_query_json(columns, values) {
+        Ok(rendered) => Ok(rendered),
+        Err(_) => python_json_rows(result.py(), &result.getattr("columns")?, rows),
+    }
+}
+
+/// The result in the requested format; a statement without columns prints `OK`.
+fn render(result: &Bound<'_, PyAny>, output_format: &str, limit: Option<i64>) -> PyResult<String> {
+    let py: Python<'_> = result.py();
+    let columns: Vec<String> = result
+        .getattr("columns")?
+        .try_iter()?
+        .map(|column| column?.extract())
+        .collect::<PyResult<_>>()?;
+    if columns.is_empty() {
+        return Ok(STATEMENT_OK.to_owned());
+    }
+    let rows: Vec<Vec<Bound<'_, PyAny>>> = rows(result)?;
+    let display = |strict: bool| -> PyResult<QueryDisplay> {
+        if strict {
+            for row in &rows {
+                strict_width(columns.len(), row.len())?;
+            }
+        }
+        Ok(QueryDisplay {
+            columns: columns.clone(),
+            rows: texts(&rows, display_text)?,
+            truncated: result.getattr("truncated")?.is_truthy()?,
+            limit,
+        })
+    };
+    match output_format {
+        LONG_FORMAT => Ok(render_query_long(&display(true)?)),
+        TABLE_FORMAT => Ok(render_query_table(&display(false)?)),
+        JSON_FORMAT => render_json(result, &columns, &rows),
+        CSV_FORMAT => Ok(render_query_csv(&columns, &texts(&rows, csv_text)?)),
+        _ => Err(user_error(
+            py,
+            &format!("unsupported query output format '{output_format}'"),
+            None,
+            None,
+        )),
+    }
+}
+
+/// Execute ad hoc SQL against the active project connection.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+fn run_query_command(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<i32> {
+    let arguments: KeywordArguments<'_> = KeywordArguments::read(
+        py,
+        "run_query_command",
+        options,
+        (
+            &["project_dir", "sql"],
+            &["query_file", "selected_target", "output_format", "limit"],
+        ),
+    )?;
+    let output_format: String = if arguments.passed("output_format")? {
+        arguments.value("output_format")?.extract()?
+    } else {
+        LONG_FORMAT.to_owned()
+    };
+    let limit: Option<i64> = if arguments.passed("limit")? {
+        arguments.value("limit")?.extract()?
+    } else {
+        Some(DEFAULT_LIMIT)
+    };
+    let sql: Bound<'_, PyAny> = query_sql(
+        py,
+        Some(arguments.value("sql")?),
+        Some(arguments.value("query_file")?),
+    )?;
+    if limit.is_some_and(|limit| limit < 0) {
+        return Err(user_error(
+            py,
+            "query --limit must be greater than or equal to 0",
+            Some("C101"),
+            Some("pass a non-negative integer or use --no-limit"),
+        ));
+    }
+    let project: ProjectAdapter<'_> = project_adapter(py, Some(arguments.value("project_dir")?))?;
+    let result: Bound<'_, PyAny> = run_sql(
+        &project,
+        Some(arguments.value("selected_target")?),
+        sql,
+        limit,
+    )?;
+    let rendered: String = render(&result, &output_format, limit)?;
+    let stdout: Bound<'_, PyAny> = py.import("sys")?.getattr("stdout")?;
+    stdout.call_method1("write", (PyString::new(py, &rendered),))?;
+    stdout.call_method0("flush")?;
+    Ok(0)
+}
+
+/// Render a query result using the requested output format.
+#[pyfunction]
+#[pyo3(signature = (*, result, output_format, limit))]
+fn render_query_result(
+    result: &Bound<'_, PyAny>,
+    output_format: &str,
+    limit: Option<i64>,
+) -> PyResult<String> {
+    render(result, output_format, limit)
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(run_query_command, module)?)?;
+    module.add_function(wrap_pyfunction!(render_query_result, module)?)?;
+    Ok(())
+}
