@@ -19,17 +19,17 @@ from tests.unit.scripts.fensu_policy.rules._test_types import CustomRuleTestCase
     "test_case",
     [
         CustomRuleTestCase(
-            description="raw color capability import faults",
+            description="raw terminal capability import faults",
             path="src/sqlbuild/example/main/build.py",
             source=(
-                "from sqlbuild.presentation._helpers.terminal_capabilities import supports_color\n"
+                "from sqlbuild.presentation._helpers.terminal_capabilities import terminal_columns\n"
             ),
             expected_fault_count=1,
         ),
         CustomRuleTestCase(
-            description="public color capability import passes",
+            description="public terminal capability import passes",
             path="src/sqlbuild/example/main/build.py",
-            source="from sqlbuild.presentation.main.supports_color import supports_color\n",
+            source="from sqlbuild.presentation.main.terminal_columns import terminal_columns\n",
             expected_fault_count=0,
         ),
     ],
@@ -153,8 +153,8 @@ def test_given_dbt_code_when_checking_graph_projection_then_matches_contract(
             expected_fault_count=2,
         ),
         CustomRuleTestCase(
-            description="central selector parsing passes",
-            path="src/sqlbuild/compiler/planner/main/selection/selector_expansion.py",
+            description="selector parsing outside the planner and dbt passes",
+            path="src/sqlbuild/cli/commands/_helpers/selection.py",
             source="result = raw.startswith('+'), raw.lstrip('+')\n",
             expected_fault_count=0,
         ),

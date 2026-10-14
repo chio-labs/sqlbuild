@@ -5,12 +5,13 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from sqlbuild._native import path_nodes, transitive_closure_many
-from sqlbuild.compiler.planner.constants import SELECTOR_KIND_SEPARATOR
-from sqlbuild.compiler.planner.main.selection.selector_parse import parse_project_selector
-from sqlbuild.compiler.planner.main.selection.unit_test_selector_error import (
+from sqlbuild._native import (
+    parse_project_selector,
+    path_nodes,
+    transitive_closure_many,
     unit_test_selector_error,
 )
+from sqlbuild.compiler.planner.constants import SELECTOR_KIND_SEPARATOR
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
 from sqlbuild.compiler.planner.types import SelectorKind
 from sqlbuild.integrations.dagster._helpers.dag import load_sqlbuild_dag

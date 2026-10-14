@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.planner.main.identity._version_identity_config import (
-    build_version_identity_config,
-)
 from tests.unit.src.sqlbuild.compiler.planner.main.identity._test_types import (
     CursorRoleIdentityTestCase,
     VersionIdentityConfigTestCase,
+)
+from tests.unit.src.sqlbuild.compiler.planner.main.identity.helpers import (
+    build_version_identity_config,
 )
 
 

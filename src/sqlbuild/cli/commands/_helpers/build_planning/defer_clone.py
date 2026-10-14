@@ -8,9 +8,11 @@ from typing import Any
 
 from sqlbuild._native import (
     build_compiled_project,
+    build_planner_scope,
     enforce_model_execution_limit,
     resolve_target_config,
     run_clone_pipeline_with_options,
+    split_unit_test_selectors,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.planning.external_refs import (
@@ -35,7 +37,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.unit_test_selection import split_unit_test_selectors
 from sqlbuild.compiler.pipeline.models import (
     ClonePipelineConnection,
     ClonePipelineOptions,
@@ -47,7 +48,6 @@ from sqlbuild.compiler.planner.main.clone.resolve_clone_boundary import (
 from sqlbuild.compiler.planner.main.clone.resolve_skipped_view_chain import (
     resolve_skipped_view_chain,
 )
-from sqlbuild.compiler.planner.main.selection.scope import build_planner_scope
 from sqlbuild.compiler.planner.models import PlannerScope, UnitTestSelectorSplit
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.clone.main.build_destination_transient_models import (

@@ -35,6 +35,11 @@ reason = "Typed SQL values are normalized and state literals rendered natively; 
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
+path = "src/sqlbuild/cli/compile_reuse/__init__.py"
+reason = "Native bindings own the compile reuse check, replay and launch records; this package declares the reuse models and constants and keeps the provider settings, runtime identity and startup inputs the native code reads from the interpreter."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
 path = "src/sqlbuild/cursor_algebra/__init__.py"
 reason = "The native cursor algebra in sqlbuild-cursor owns cursor behavior; this package only declares the cursor value models, sentinels and grain metadata callers import."
 

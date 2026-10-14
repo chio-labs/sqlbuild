@@ -15,7 +15,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.planner._helpers.identity import model_metadata
 from sqlbuild.compiler.planner._helpers.planning import identities as identity_planning
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
@@ -64,20 +63,20 @@ from tests.integration.src.sqlbuild.compiler.planner.main.helpers import (
         PlannerChangeDetectionWorkTestCase(
             description="selection diagnostics disabled",
             selection_diagnostics=False,
-            expected_model_calls={"orders": 1},
+            expected_stale_detection_calls={},
             expected_warning_count=0,
         ),
         PlannerChangeDetectionWorkTestCase(
             description="selection diagnostics enabled",
             selection_diagnostics=True,
-            expected_model_calls={"stg_orders": 1, "orders": 1},
+            expected_stale_detection_calls={"stg_orders": 1},
             expected_warning_count=0,
             expected_identity_builds=2,
         ),
         PlannerChangeDetectionWorkTestCase(
             description="selection diagnostics preserve independent query tracking",
             selection_diagnostics=True,
-            expected_model_calls={"stg_orders": 1, "orders": 2},
+            expected_stale_detection_calls={"stg_orders": 1, "orders": 1},
             expected_warning_count=0,
             query_change_tracking=False,
             expected_identity_builds=2,
@@ -119,8 +118,8 @@ def test_given_selected_model_when_planning_then_each_required_model_is_change_d
             query_change_tracking=test_case.query_change_tracking,
         ),
     )
-    model_detector: Mock = Mock(wraps=model_metadata.declared_columns_hash)
-    monkeypatch.setattr(model_metadata, "declared_columns_hash", model_detector)
+    stale_detector: Mock = Mock(wraps=identity_planning.detect_model_changes_in_scope)
+    monkeypatch.setattr(identity_planning, "detect_model_changes_in_scope", stale_detector)
     identity_builder: Mock = Mock(wraps=identity_planning.build_direct_model_version_identities)
     monkeypatch.setattr(
         identity_planning,
@@ -136,10 +135,10 @@ def test_given_selected_model_when_planning_then_each_required_model_is_change_d
         selection_diagnostics=test_case.selection_diagnostics,
     )
 
-    model_calls: Counter[str] = Counter(
-        call.kwargs["model"].name for call in model_detector.call_args_list
-    )
-    assert dict(model_calls) == test_case.expected_model_calls
+    stale_calls: Counter[str] = Counter()
+    for call in stale_detector.call_args_list:
+        stale_calls.update(key.name for key in call.kwargs["scope"].selected_keys)
+    assert dict(stale_calls) == test_case.expected_stale_detection_calls
     assert identity_builder.call_count == test_case.expected_identity_builds
     assert len(plan.warnings) == test_case.expected_warning_count
 

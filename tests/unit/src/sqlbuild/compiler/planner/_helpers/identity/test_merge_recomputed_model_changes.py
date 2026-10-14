@@ -2,7 +2,7 @@
 
 import pytest
 
-from sqlbuild.compiler.planner._helpers.identity.honest import merge_recomputed_model_changes
+from sqlbuild._native import merge_recomputed_model_changes
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     ChangeDetectionResult,

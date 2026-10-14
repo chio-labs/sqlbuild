@@ -5,7 +5,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlbuild._native import compute_query_hash, write_fingerprint
+from sqlbuild._native import (
+    build_version_identity_metadata_json,
+    compute_query_hash,
+    write_fingerprint,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
@@ -21,15 +25,14 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.main.execution.execution import build_execution_plan
-from sqlbuild.compiler.planner.main.identity._version_identity_metadata import (
-    build_version_identity_metadata_json,
-)
 from sqlbuild.compiler.planner.models import (
     DeferralInputs,
     PlannerOverrides,
     PlannerPolicies,
     PlannerSelection,
     PlanOutput,
+    SelectionStalenessGraph,
+    SelectionStalenessNodeKey,
 )
 from sqlbuild.spec.contracts.models import SchemaColumn, SchemaModelEntry
 
@@ -175,4 +178,23 @@ def create_protected_model_state(*, adapter: DuckDbAdapter, connection: Any) -> 
         ),
         render_qualified_name=adapter.render_qualified_name,
         render_framework_type=adapter.render_framework_type,
+    )
+
+
+def build_chain_staleness_graph(*, depth: int) -> SelectionStalenessGraph:
+    """Build a model chain whose most upstream model changed and only the head runs."""
+
+    keys: list[SelectionStalenessNodeKey] = [
+        SelectionStalenessNodeKey(resource_type="model", name=f"m{index}") for index in range(depth)
+    ]
+    head: str = keys[-1].name
+    return SelectionStalenessGraph(
+        upstream_deps={key: (upstream,) for key, upstream in zip(keys[1:], keys[:-1], strict=True)},
+        selected_model_names=frozenset({head}),
+        run_model_names=frozenset({head}),
+        run_seed_names=frozenset(),
+        run_source_names=frozenset(),
+        changed_model_names=frozenset({"m0"}),
+        changed_seed_names=frozenset(),
+        changed_source_names=frozenset(),
     )

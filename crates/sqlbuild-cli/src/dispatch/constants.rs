@@ -143,9 +143,9 @@ const PLAN_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const PLAN_ROUTE: Route = routed(
     "run_plan",
-    ("sqlbuild.cli.commands.main.project._plan", "run_plan"),
+    ("sqlbuild._native", "run_plan_command"),
     &PLAN_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const BUILD_FIELDS: [Field; 34] = [
@@ -699,12 +699,9 @@ const RULES_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const RULES_ROUTE: Route = routed(
     "run_rules",
-    (
-        "sqlbuild.cli.commands.main.project._rules",
-        "run_rules_command",
-    ),
+    ("sqlbuild._native", "run_rules_command"),
     &RULES_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const DBT_INIT_FIELDS: [Field; 9] = [
@@ -802,3 +799,6 @@ pub(crate) const SCENARIO_CAPTURE_ROUTE: Route = routed(
     &SCENARIO_CAPTURE_ARGUMENTS,
     REQUEST_KEYWORD_SHAPE,
 );
+
+/// The setting a user raises when lifecycle event export runs out of time at exit.
+pub(crate) const SHUTDOWN_TIMEOUT_SETTING: &str = "sinks.lifecycle.shutdown_timeout";

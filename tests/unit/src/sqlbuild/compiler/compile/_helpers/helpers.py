@@ -8,6 +8,7 @@ from typing import cast
 from sqlbuild._native import (
     assemble_project,
     build_compile_inputs,
+    build_execution_upstream_deps,
     build_manifest,
     build_native_declaration_contexts,
     build_scope_lookup,
@@ -62,7 +63,6 @@ from sqlbuild.compiler.lineage.types import (
     ColumnTransformKind,
     InferredNullability,
 )
-from sqlbuild.compiler.planner._helpers.graph.core import build_execution_upstream_deps
 from sqlbuild.compiler.planner._helpers.resolve.refs import resolve_ref_references
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,

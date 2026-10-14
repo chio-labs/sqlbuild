@@ -46,11 +46,19 @@ if TYPE_CHECKING:
     from sqlbuild.compiler.compile.models import (
         CompilerDiagnostic,
     )
-    from sqlbuild.compiler.compile.types import CompiledProjectView
     from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
     from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
     from sqlbuild.compiler.refactoring.models import RefactorProject
-    from sqlbuild.executor.janitor.models import JanitorPlan
+
+
+@dataclass(frozen=True)
+class NestedProgressChildRow:
+    """One child row rendered below a completed nested progress item."""
+
+    label: str
+    name: str
+    status_text: str
+    detail: str = ""
 
 
 @dataclass(frozen=True)
@@ -386,30 +394,6 @@ class JanitorSettings:
 
 
 @dataclass(frozen=True)
-class JanitorCompileContext:
-    """Compiled project and adapter context for janitor."""
-
-    adapter_name: str
-    adapter: BaseAdapter
-    project: CompiledProjectView
-    connection_config: dict[str, object]
-
-
-@dataclass(frozen=True)
-class JanitorConnectionContext:
-    """Janitor warehouse connection handle."""
-
-    connection: object
-
-
-@dataclass(frozen=True)
-class JanitorPlanningResult:
-    """Built janitor plan."""
-
-    plan: JanitorPlan
-
-
-@dataclass(frozen=True)
 class LoadCommandRequest:
     """CLI inputs for one load command invocation."""
 
@@ -449,21 +433,6 @@ class PlanCommandRequest:
     no_cache: bool = False
     max_microbatches: int | None = None
     selection_diagnostics: bool = False
-
-
-@dataclass(frozen=True)
-class PlanInvocation:
-    """Resolved project, adapter, and reporter context for the plan command."""
-
-    effective_project_dir: Path
-    discovered_inputs: DiscoveredProjectInputs
-    adapter: BaseAdapter
-    connection_config: dict[str, object]
-    use_color: bool
-    progress_stream: TextIO
-    connection_progress: ConnectionProgressReporter
-    planning_progress: PlanningProgressReporter
-    should_load_sources: bool
 
 
 @dataclass(frozen=True)

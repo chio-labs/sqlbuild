@@ -13,3 +13,6 @@ pub(crate) const BUILD_IDENTITY_KEY: &str = "build_identity";
 pub(crate) const ENTRIES_KEY: &str = "entries";
 pub(crate) const IDENTITY_KEY: &str = "identity";
 pub(crate) const FINDINGS_KEY: &str = "findings";
+pub(crate) const TARGET_DIRECTORY: &str = "target";
+pub(crate) const RULES_CACHE_DIRECTORY: &str = "rules-cache-native-v1";
+pub(crate) const BULK_DIRECTORY: &str = "bulk";

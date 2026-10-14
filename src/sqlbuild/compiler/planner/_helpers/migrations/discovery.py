@@ -6,7 +6,11 @@ import json
 from collections import defaultdict
 from typing import Any
 
-from sqlbuild._native import get_config_str
+from sqlbuild._native import (
+    build_function_local_hashes,
+    build_model_version_identity_metadata_json,
+    get_config_str,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
@@ -26,12 +30,6 @@ from sqlbuild.compiler.planner.classes.migration_state_inspection import (
     MigrationStateInspection,
 )
 from sqlbuild.compiler.planner.constants import MIGRATION_FINGERPRINT_METADATA_KEY
-from sqlbuild.compiler.planner.main.identity.version_identity_function_hashes import (
-    build_function_local_hashes,
-)
-from sqlbuild.compiler.planner.main.identity.version_identity_model_metadata import (
-    build_model_version_identity_metadata_json,
-)
 from sqlbuild.compiler.planner.models import (
     ModelMigrationDeclaration,
     ModelMigrationDiscovery,

@@ -8,16 +8,17 @@ from functools import partial
 from pathlib import Path
 
 import sqlbuild._native as _native
-from sqlbuild._native import rule_selected, selected_rule_codes
+from sqlbuild._native import (
+    build_rules_request,
+    evaluate_rules_request,
+    finalize_rule_findings_rows,
+    rule_selected,
+    selected_rule_codes,
+)
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
 from sqlbuild.rule_engine._helpers.engine.custom_payloads import custom_rule_payloads
 from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
-from sqlbuild.rule_engine._helpers.run.native_rows import (
-    build_rules_request,
-    evaluate_rules_request,
-    finalize_rules_rows,
-)
 from sqlbuild.rule_engine.constants import TYPE_PROOF_RULE_CODES
 from sqlbuild.rule_engine.models import (
     CustomRulesOutcome,
@@ -110,7 +111,7 @@ def _evaluate_native_rows(
         *custom.findings,
     )
     if not defer_suppressions:
-        findings = finalize_rules_rows(
+        findings = finalize_rule_findings_rows(
             config=config,
             project_dir=project_dir,
             evaluated_codes=native.selected_codes,

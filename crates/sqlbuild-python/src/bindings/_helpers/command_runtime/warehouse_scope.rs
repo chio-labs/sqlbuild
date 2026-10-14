@@ -1,0 +1,117 @@
+//! The active command's warehouse group, `--warehouse` override and CLI vars.
+
+use std::sync::Mutex;
+
+use pyo3::exceptions::PyRuntimeError;
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
+
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+
+const NATIVE_MODULE: &str = "sqlbuild._native";
+const ENTRY_MODELS: &str = "sqlbuild.cli.entry.models";
+const COMMAND_CONSTANTS: &str = "sqlbuild.cli.commands.constants";
+const COMMAND_TYPES: &str = "sqlbuild.cli.commands.types";
+const CONTEXT_ATTRIBUTE: &str = "_command_warehouse_scope_context";
+const CONTEXT_NAME: &str = "sqlbuild_command_warehouse_scope";
+
+fn context_variable(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
+    py.import(NATIVE_MODULE)?.getattr(CONTEXT_ATTRIBUTE)
+}
+
+/// Installs one command's warehouse scope for the duration of a `with` block.
+#[pyclass(module = "sqlbuild._native", frozen)]
+pub(crate) struct CommandWarehouseScopeInstall {
+    scope: Py<PyAny>,
+    token: Mutex<Option<Py<PyAny>>>,
+}
+
+#[pymethods]
+impl CommandWarehouseScopeInstall {
+    fn __enter__(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let token: Bound<'_, PyAny> = context_variable(py)?.call_method1("set", (&self.scope,))?;
+        *self
+            .token
+            .lock()
+            .map_err(|_| PyRuntimeError::new_err("warehouse scope lock is poisoned"))? =
+            Some(token.unbind());
+        Ok(self.scope.clone_ref(py))
+    }
+
+    #[pyo3(signature = (*_exc_info))]
+    fn __exit__(&self, py: Python<'_>, _exc_info: &Bound<'_, PyTuple>) -> PyResult<bool> {
+        let token: Option<Py<PyAny>> = self
+            .token
+            .lock()
+            .map_err(|_| PyRuntimeError::new_err("warehouse scope lock is poisoned"))?
+            .take();
+        if let Some(token) = token {
+            context_variable(py)?.call_method1("reset", (token,))?;
+        }
+        Ok(false)
+    }
+}
+
+/// Install the warehouse group, CLI override, and CLI vars for one command invocation.
+#[pyfunction]
+#[pyo3(signature = (*, command, cli_warehouse, cli_vars = None))]
+pub(crate) fn command_warehouse_scope<'py>(
+    command: &Bound<'py, PyAny>,
+    cli_warehouse: &Bound<'py, PyAny>,
+    cli_vars: Option<&Bound<'py, PyAny>>,
+) -> PyResult<CommandWarehouseScopeInstall> {
+    let py: Python<'py> = command.py();
+    let group: Bound<'py, PyAny> = if command.is_none() {
+        py.None().into_bound(py)
+    } else {
+        imported(py, COMMAND_CONSTANTS, "COMMAND_WAREHOUSE_GROUPS")?.call_method1(
+            "get",
+            (imported(py, COMMAND_TYPES, "CliCommand")?.call1((command,))?,),
+        )?
+    };
+    let vars: Bound<'py, PyAny> = match cli_vars.filter(|cli_vars| !cli_vars.is_none()) {
+        Some(cli_vars) => py.get_type::<PyDict>().call1((cli_vars,))?,
+        None => PyDict::new(py).into_any(),
+    };
+    let scope: Bound<'py, PyAny> = call_with(
+        &imported(py, ENTRY_MODELS, "CommandWarehouseScope")?,
+        &[
+            ("group", group),
+            ("cli_warehouse", cli_warehouse.clone()),
+            ("cli_vars", vars),
+        ],
+    )?;
+    Ok(CommandWarehouseScopeInstall {
+        scope: scope.unbind(),
+        token: Mutex::new(None),
+    })
+}
+
+/// Return the active command's warehouse scope, or an empty one outside the CLI.
+#[pyfunction]
+pub(crate) fn current_command_warehouse_scope(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
+    let scope: Bound<'_, PyAny> = context_variable(py)?.call_method0("get")?;
+    if !scope.is_none() {
+        return Ok(scope);
+    }
+    call_with(
+        &imported(py, ENTRY_MODELS, "CommandWarehouseScope")?,
+        &[("group", py.None().into_bound(py))],
+    )
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    let py: Python<'_> = module.py();
+    let keywords: Bound<'_, PyDict> = PyDict::new(py);
+    keywords.set_item("default", py.None())?;
+    module.add(
+        CONTEXT_ATTRIBUTE,
+        py.import("contextvars")?
+            .getattr("ContextVar")?
+            .call((CONTEXT_NAME,), Some(&keywords))?,
+    )?;
+    module.add_class::<CommandWarehouseScopeInstall>()?;
+    module.add_function(wrap_pyfunction!(command_warehouse_scope, module)?)?;
+    module.add_function(wrap_pyfunction!(current_command_warehouse_scope, module)?)
+}

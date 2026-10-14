@@ -14,17 +14,16 @@ use sqlbuild_core::format_command::main::resolve_lint_paths::resolve_lint_paths;
 use sqlbuild_rules::lint_text::main::scan_fixture_null_candidates::scan_fixture_null_candidates;
 
 use crate::bindings::_helpers::boundary::panics::value_error;
+use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const PLANNER_ERRORS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
 const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
-const UNIT_TEST_SELECTORS_MODULE: &str =
-    "sqlbuild.compiler.pipeline.main.reject_unit_test_selectors";
-const GRAPH_SELECTION_MODULE: &str = "sqlbuild.compiler.pipeline.main.project_graph_selection";
+const UNIT_TEST_SELECTORS_MODULE: &str = "sqlbuild._native";
+const GRAPH_SELECTION_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const RESOLVE_ADAPTER_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const SELECTION_CODE: &str = "S007";
 
 /// The adapter, the selected files when a selector scopes the run, and the discovered inputs.
@@ -84,13 +83,7 @@ fn discovered_adapter<'py>(
             ("local_config", discovered.getattr("local_config")?),
         ],
     )?;
-    call_with(
-        &imported(py, RESOLVE_ADAPTER_MODULE, "resolve_adapter")?,
-        &[
-            ("adapter_name", adapter_name),
-            ("project_dir", project_dir.clone()),
-        ],
-    )
+    resolve_cli_adapter(&adapter_name, project_dir)
 }
 
 fn selectors<'py>(py: Python<'py>, values: &[String]) -> PyResult<Bound<'py, PyAny>> {

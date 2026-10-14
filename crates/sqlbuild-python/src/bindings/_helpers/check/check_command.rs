@@ -15,20 +15,21 @@ use sqlbuild_core::cli_text::models::CliStyle;
 use crate::bindings::_helpers::check::check_results::{
     check_result_text, results_json, write_results,
 };
+use crate::bindings::_helpers::command_runtime::invocation::resolve_reported_command_invocation;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_outputs::runtime_target::write_python_check_runtime_target;
 use crate::bindings::_helpers::graph::python_selection::python_node_names;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
-const INVOCATION_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.command_invocation";
 const CHECK_CORE_MODULE: &str = "sqlbuild.cli.commands._helpers.check.core";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild.cli.commands._helpers.planning.external_refs";
-const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild.compiler.pipeline.main.reject_unit_test_selectors";
+const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
 const STATIC_COMMAND_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const RELATION_PLAN_MODULE: &str = "sqlbuild.compiler.planner.main.commands._relation_plan";
-const SELECTOR_PARSE_MODULE: &str = "sqlbuild.compiler.planner.main.selection.selector_parse";
+const SELECTOR_PARSE_MODULE: &str = "sqlbuild._native";
 const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
 const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
@@ -39,8 +40,6 @@ const EXECUTOR_MODELS: &str = "sqlbuild.executor.python_nodes.models";
 const CHECKS_MODULE: &str = "sqlbuild.executor.python_nodes.main._checks";
 const INGRESS_MODULE: &str = "sqlbuild.executor.python_nodes.main._ingress";
 const PROVIDER_SESSION_MODULE: &str = "sqlbuild.provider.main.session";
-const RUNTIME_TARGET_MODULE: &str =
-    "sqlbuild.cli.target_artifacts.main._write_python_check_runtime_target";
 const GRAPH_OPERATOR_CODE: &str = "C681";
 const GRAPH_OPERATOR_MESSAGE: &str = "sqb check selectors do not support graph operators; \
     select checks directly without '+', '~', or path-between expansion";
@@ -658,21 +657,11 @@ fn complete<'py>(
     stream.call_method1("write", (render_check_summary(&texts, style),))?;
     stream.call_method0("flush")?;
     let tuple: Bound<'py, PyAny> = PyTuple::new(py, results)?.into_any();
-    call_with(
-        &imported(
-            py,
-            RUNTIME_TARGET_MODULE,
-            "write_python_check_runtime_target",
-        )?,
-        &[
-            (
-                "target_dir",
-                invocation
-                    .getattr("effective_project_dir")?
-                    .call_method1("__truediv__", ("target",))?,
-            ),
-            ("results", tuple),
-        ],
+    write_python_check_runtime_target(
+        &invocation
+            .getattr("effective_project_dir")?
+            .call_method1("__truediv__", ("target",))?,
+        &tuple,
     )?;
     call_with(
         &imported(py, NATIVE_MODULE, "write_execution_json_output")?,
@@ -692,15 +681,10 @@ fn complete<'py>(
 #[pyfunction]
 #[pyo3(signature = (*, request))]
 fn run_check_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
-    let invocation: Bound<'_, PyAny> = call_with(
-        &imported(py, INVOCATION_MODULE, "resolve_reported_command_invocation")?,
-        &[
-            ("request", request.clone()),
-            (
-                "invocation_type",
-                imported(py, COMMAND_MODELS, "CheckInvocation")?,
-            ),
-        ],
+    let invocation: Bound<'_, PyAny> = resolve_reported_command_invocation(
+        request,
+        &imported(py, COMMAND_MODELS, "CheckInvocation")?,
+        true,
     )?;
     let stream: Bound<'_, PyAny> = invocation.getattr("progress_stream")?;
     stream.call_method1("write", ("\n",))?;

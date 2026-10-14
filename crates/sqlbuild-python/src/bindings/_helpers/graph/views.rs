@@ -51,7 +51,7 @@ fn lineage_graph_names<'py>(
     Ok(names)
 }
 
-fn edge_dict<'py>(
+pub(crate) fn edge_dict<'py>(
     cache: &KeyCache<'py>,
     edges: &[(ObjectKey, Vec<ObjectKey>)],
 ) -> PyResult<Bound<'py, PyDict>> {
@@ -137,25 +137,47 @@ fn native_graph_from_views(request: Option<&Bound<'_, PyDict>>) -> PyResult<Nati
             ))
         })
     };
+    graph_from_view_mappings(GraphViewMappings {
+        all_keys: &field("all_keys")?,
+        upstream: &field("upstream")?,
+        downstream: &field("downstream")?,
+        tag_index: &field("tag_index")?,
+        path_index: &field("path_index")?,
+    })
+}
+
+/// Python's selector name, edge, tag and path mappings.
+pub(crate) struct GraphViewMappings<'a, 'py> {
+    pub(crate) all_keys: &'a Bound<'py, PyAny>,
+    pub(crate) upstream: &'a Bound<'py, PyAny>,
+    pub(crate) downstream: &'a Bound<'py, PyAny>,
+    pub(crate) tag_index: &'a Bound<'py, PyAny>,
+    pub(crate) path_index: &'a Bound<'py, PyAny>,
+}
+
+/// A native graph over Python's index mappings, keeping their order.
+pub(crate) fn graph_from_view_mappings(
+    mappings: GraphViewMappings<'_, '_>,
+) -> PyResult<NativeProjectGraph> {
     let mut names: Vec<(String, ObjectKey)> = Vec::new();
-    for item in field("all_keys")?.call_method0("items")?.try_iter()? {
+    for item in mappings.all_keys.call_method0("items")?.try_iter()? {
         let (name, key): (String, Bound<'_, PyAny>) = item?.extract()?;
         names.push((name, native_key(&key)?));
     }
     let mut tags: Vec<(String, Vec<ObjectKey>)> = Vec::new();
-    for item in field("tag_index")?.call_method0("items")?.try_iter()? {
+    for item in mappings.tag_index.call_method0("items")?.try_iter()? {
         let (tag, keys): (String, Bound<'_, PyAny>) = item?.extract()?;
         tags.push((tag, native_graph_keys(&keys)?));
     }
     let mut paths: Vec<(ObjectKey, String)> = Vec::new();
-    for item in field("path_index")?.call_method0("items")?.try_iter()? {
+    for item in mappings.path_index.call_method0("items")?.try_iter()? {
         let (key, folder): (Bound<'_, PyAny>, String) = item?.extract()?;
         paths.push((native_key(&key)?, folder));
     }
     graph_from_dicts(GraphIndexes {
         names,
-        upstream: native_edges(&field("upstream")?)?,
-        downstream: native_edges(&field("downstream")?)?,
+        upstream: native_edges(mappings.upstream)?,
+        downstream: native_edges(mappings.downstream)?,
         tags,
         paths,
     })

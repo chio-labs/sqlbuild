@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.planner.main.selection.sqlbuild_model_selectors import (
-    resolve_sqlbuild_model_selector_names,
-)
+from sqlbuild._native import resolve_sqlbuild_model_selector_names
 from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
     SqlbuildModelSelectorNamesTestCase,
 )

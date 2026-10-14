@@ -4,12 +4,16 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use pyo3::exceptions::PyOSError;
+use pyo3::exceptions::{PyOSError, PyTypeError, PyValueError};
 use pyo3::prelude::{
-    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyRef, PyResult, Python,
+    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyBytes, PyBytesMethods, PyDict, PyDictMethods};
-use pyo3::{FromPyObject, pyclass, pyfunction, pymethods, wrap_pyfunction};
+use pyo3::types::{PyDict, PyDictMethods, PyStringMethods, PyTuple};
+use pyo3::{
+    FromPyObject, IntoPyObject, IntoPyObjectExt, pyclass, pyfunction, pymethods, wrap_pyfunction,
+};
+use serde_json::{Value, json};
+use sqlbuild_rules::constants::API_VERSION;
 use sqlbuild_rules::engine::main::build_models::build_models;
 use sqlbuild_rules::engine::main::evaluate_rows::evaluate_rows;
 use sqlbuild_rules::engine::main::finalize_rows::finalize_rows;
@@ -19,26 +23,29 @@ use sqlbuild_rules::models::{
     Declaration, DeclarationMember, EvaluateRequest, Fault, Model, ModelRow, ModelRowsContext,
     RowsEvaluation, RowsRequest, RulesConfig,
 };
+use sqlbuild_rules::rule_cache::main::rules_bulk_cache_path::rules_bulk_cache_path;
 
+use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::boundary::panics::{compiler_guard, value_error};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::compiled_project::records::declaration_rows;
 use crate::bindings::_helpers::compiled_project::values::plain_value;
 use crate::bindings::_helpers::rules::findings::{FindingClasses, finding_fault};
+use crate::bindings::_helpers::rules::selection::rules_error;
 use crate::bindings::_helpers::rules::sql_test_objects::{scenario_fact, sql_test_fact};
 use crate::bindings::types::CompilerDetach;
 
 const LEFT_ARGUMENT: &str = "left";
 const RIGHT_ARGUMENT: &str = "right";
-
-type EvaluationRow<'py> = (
-    Vec<Bound<'py, PyAny>>,
-    Vec<String>,
-    u64,
-    u64,
-    u64,
-    u64,
-    bool,
-);
+const DIALECT_ARGUMENT: &str = "dialect";
+const NATIVE_MODULE: &str = "sqlbuild._native";
+const MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
+const CODE_IDENTITY_MODULE: &str = "sqlbuild.compiler.frontier.main.compiled_code_identity";
+const TYPES_EQUAL_MODULE: &str = "sqlbuild.adapter.type_system.main.types_equal";
+const DATACLASSES_MODULE: &str = "dataclasses";
+const NATIVE_RULES_CACHE_FILE: &str = "native.json";
+const NATIVE_RULES_MEMO_FILE: &str = "native-response.json";
 
 /// Name, relative path, members, value, value type and rendering of one declaration.
 #[derive(FromPyObject)]
@@ -52,10 +59,7 @@ struct DeclarationRowPy<'py>(
 );
 
 /// The request's project facts, which models, tests and scenarios are built beside.
-#[derive(FromPyObject)]
-#[pyo3(from_item_all)]
-struct ProjectRowsPy<'py> {
-    header_json: Bound<'py, PyBytes>,
+struct ProjectRows<'py> {
     memo: Option<(String, String)>,
     sql_analysis_enabled: bool,
     include_type_proof: bool,
@@ -64,6 +68,7 @@ struct ProjectRowsPy<'py> {
     public_constants: Vec<DeclarationRowPy<'py>>,
     initial_findings: Vec<Bound<'py, PyAny>>,
     types_equal: Bound<'py, PyAny>,
+    dialect: Bound<'py, PyAny>,
 }
 
 /// A natively built rules request held until it is evaluated once.
@@ -91,16 +96,97 @@ impl NativeRulesRequest {
     }
 }
 
+/// Build the built-in rules request natively from the compiled project's rows.
 #[pyfunction]
-fn build_rules_request<'py>(
-    mut project: ProjectRowsPy<'py>,
-    models: (PyRef<'py, NativeCompiledProject>, Vec<String>),
-    sql_tests: Vec<Bound<'py, PyAny>>,
-    scenarios: Vec<Bound<'py, PyAny>>,
-) -> PyResult<NativeRulesRequest> {
+#[pyo3(signature = (**options))]
+fn build_rules_request(options: Option<&Bound<'_, PyDict>>) -> PyResult<NativeRulesRequest> {
+    let request = Request::new("build_rules_request", options)?;
+    let py: Python<'_> = request.py();
+    as_rules_error(py, built_request(&request))
+}
+
+fn built_request(options: &Request<'_, '_>) -> PyResult<NativeRulesRequest> {
+    let py: Python<'_> = options.py();
+    let project: Bound<'_, PyAny> = options.get("project")?;
+    let config: Bound<'_, PyAny> = options.get("config")?;
+    let project_dir: Bound<'_, PyAny> = options.get("project_dir")?;
+    let dialect: Bound<'_, PyAny> = options.get("dialect")?;
+    let resolved: Bound<'_, PyAny> = project_dir.call_method0("resolve")?;
+    let resolved_path: PathBuf = resolved.extract()?;
+    let header: Value = json!({
+        "version": API_VERSION,
+        "project_dir": resolved.str()?.to_str()?,
+        "dialect": dialect.extract::<String>()?,
+        "config": config_value(&config)?,
+        "scope_index": plain_value(&call_with(
+            &imported(py, NATIVE_MODULE, "scope_metadata_projection")?,
+            &[("index", project.getattr("scope_index")?)],
+        )?)?,
+        "defer_suppressions": true,
+        "custom_rules": plain_value(&options.get("custom_payloads")?)?,
+        "rules_cache_path": path_text(py, rules_bulk_cache_path(&resolved_path, NATIVE_RULES_CACHE_FILE))?,
+    });
+    let (public_enums, public_constants) = declaration_rows(
+        PyTuple::new(py, mapping_values(&project.getattr("public_enums")?)?)?.as_any(),
+        PyTuple::new(py, mapping_values(&project.getattr("public_constants")?)?)?.as_any(),
+    )?;
+    let enabled: bool = config.getattr("cache")?.getattr("enabled")?.is_truthy()?;
+    let memo: Option<(String, String)> = if enabled {
+        let unresolved: PathBuf = project_dir.extract()?;
+        Some((
+            imported(py, CODE_IDENTITY_MODULE, "compiled_code_identity")?
+                .call0()?
+                .extract()?,
+            path_text(
+                py,
+                rules_bulk_cache_path(&unresolved, NATIVE_RULES_MEMO_FILE),
+            )?,
+        ))
+    } else {
+        None
+    };
+    let mut attached_audit_targets: Vec<String> = Vec::new();
+    for audit in project.getattr("audits")?.try_iter()? {
+        let target: Bound<'_, PyAny> = audit?.getattr("attached_target_name")?;
+        if !target.is_none() {
+            attached_audit_targets.push(target.extract()?);
+        }
+    }
+    let mut rows = ProjectRows {
+        memo,
+        sql_analysis_enabled: project
+            .getattr("settings")?
+            .getattr("sql_analysis")?
+            .is_truthy()?,
+        include_type_proof: options.get("include_type_proof")?.is_truthy()?,
+        attached_audit_targets,
+        public_enums: public_enums.extract()?,
+        public_constants: public_constants.extract()?,
+        initial_findings: options
+            .get("initial_findings")?
+            .try_iter()?
+            .collect::<PyResult<_>>()?,
+        types_equal: imported(py, TYPES_EQUAL_MODULE, "types_equal")?,
+        dialect,
+    };
+    let facts: Bound<'_, NativeCompiledProject> =
+        imported(py, NATIVE_MODULE, "compiled_project_facts")?
+            .call1((&project,))?
+            .downcast_into()?;
+    let mut names: Vec<String> = Vec::new();
+    for model in project.getattr("models")?.try_iter()? {
+        names.push(model?.getattr("name")?.extract()?);
+    }
+    let sql_tests: Vec<Bound<'_, PyAny>> = project
+        .getattr("sql_tests")?
+        .try_iter()?
+        .collect::<PyResult<_>>()?;
+    let scenarios: Vec<Bound<'_, PyAny>> = project
+        .getattr("sql_scenarios")?
+        .try_iter()?
+        .collect::<PyResult<_>>()?;
     compiler_guard(|| {
-        let mut request: EvaluateRequest =
-            serde_json::from_slice(project.header_json.as_bytes()).map_err(value_error)?;
+        let mut request: EvaluateRequest = serde_json::from_value(header).map_err(value_error)?;
         request.sql_tests = sql_tests
             .iter()
             .map(sql_test_fact)
@@ -109,17 +195,17 @@ fn build_rules_request<'py>(
             .iter()
             .map(scenario_fact)
             .collect::<PyResult<_>>()?;
-        request.public_enums = declarations(std::mem::take(&mut project.public_enums))?;
-        request.public_constants = declarations(std::mem::take(&mut project.public_constants))?;
-        request.initial_findings = project
+        request.public_enums = declarations(std::mem::take(&mut rows.public_enums))?;
+        request.public_constants = declarations(std::mem::take(&mut rows.public_constants))?;
+        request.initial_findings = rows
             .initial_findings
             .iter()
             .map(finding_fault)
             .collect::<PyResult<_>>()?;
-        let rows: Vec<ModelRow> =
-            project_model_rows(models.0.facts(), &models.1).map_err(value_error)?;
-        request.models = built_models(&project, &request, rows)?;
-        let memo: Option<(String, PathBuf)> = project
+        let model_rows: Vec<ModelRow> =
+            project_model_rows(facts.borrow().facts(), &names).map_err(value_error)?;
+        request.models = built_models(&rows, &request, model_rows)?;
+        let memo: Option<(String, PathBuf)> = rows
             .memo
             .take()
             .map(|(identity, path)| (identity, PathBuf::from(path)));
@@ -129,11 +215,19 @@ fn build_rules_request<'py>(
     })
 }
 
+/// Answer the request from the response memo or evaluate it, decoding findings natively.
 #[pyfunction]
 fn evaluate_rules_request<'py>(
     py: Python<'py>,
     request: &Bound<'py, NativeRulesRequest>,
-) -> PyResult<EvaluationRow<'py>> {
+) -> PyResult<Bound<'py, PyAny>> {
+    as_rules_error(py, evaluated(py, request))
+}
+
+fn evaluated<'py>(
+    py: Python<'py>,
+    request: &Bound<'py, NativeRulesRequest>,
+) -> PyResult<Bound<'py, PyAny>> {
     let request: RowsRequest = request
         .borrow()
         .request
@@ -149,44 +243,63 @@ fn evaluate_rules_request<'py>(
             RowsError::Io(error) => PyOSError::new_err(error.to_string()),
         })?;
     let classes = FindingClasses::new(py)?;
-    Ok((
-        evaluation
-            .faults
-            .into_iter()
-            .map(|fault| classes.finding_of_fault(fault, false))
-            .collect::<PyResult<_>>()?,
-        evaluation.selected_codes,
-        evaluation.evaluated_models,
-        evaluation.cache_hits,
-        evaluation.cache_misses,
-        evaluation.built_in_ms,
-        evaluation.reused,
-    ))
+    let findings: Vec<Bound<'py, PyAny>> = evaluation
+        .faults
+        .into_iter()
+        .map(|fault| classes.finding_of_fault(fault, false))
+        .collect::<PyResult<_>>()?;
+    call_with(
+        &imported(py, MODELS_MODULE, "NativeRulesEvaluation")?,
+        &[
+            ("findings", PyTuple::new(py, findings)?.into_any()),
+            (
+                "selected_codes",
+                PyTuple::new(py, evaluation.selected_codes)?.into_any(),
+            ),
+            (
+                "evaluated_models",
+                evaluation.evaluated_models.into_bound_py_any(py)?,
+            ),
+            ("cache_hits", evaluation.cache_hits.into_bound_py_any(py)?),
+            (
+                "cache_misses",
+                evaluation.cache_misses.into_bound_py_any(py)?,
+            ),
+            ("built_in_ms", evaluation.built_in_ms.into_bound_py_any(py)?),
+            ("reused", evaluation.reused.into_bound_py_any(py)?),
+        ],
+    )
 }
 
-/// The findings one finalisation applies the exception policy to.
-#[derive(FromPyObject)]
-#[pyo3(from_item_all)]
-struct FinalizeRowsPy<'py> {
-    project_dir: String,
-    config_json: Bound<'py, PyBytes>,
+/// Apply the exception policy natively, keeping each original finding's fixable mark.
+#[pyfunction]
+#[pyo3(signature = (*, config, project_dir, evaluated_codes, findings))]
+pub(crate) fn finalize_rule_findings_rows<'py>(
+    config: &Bound<'py, PyAny>,
+    project_dir: &Bound<'py, PyAny>,
     evaluated_codes: Vec<String>,
     findings: Vec<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let py: Python<'py> = config.py();
+    as_rules_error(
+        py,
+        finalized(config, project_dir, (evaluated_codes, findings)),
+    )
 }
 
-#[pyfunction]
-fn finalize_rule_findings_rows<'py>(
-    py: Python<'py>,
-    request: FinalizeRowsPy<'py>,
-) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    let config: RulesConfig = serde_json::from_slice(request.config_json.as_bytes())
+fn finalized<'py>(
+    config: &Bound<'py, PyAny>,
+    project_dir: &Bound<'py, PyAny>,
+    (evaluated_codes, findings): (Vec<String>, Vec<Bound<'py, PyAny>>),
+) -> PyResult<Bound<'py, PyTuple>> {
+    let py: Python<'py> = config.py();
+    let config: RulesConfig = serde_json::from_value(config_value(config)?)
         .map_err(|error| value_error(format!("invalid findings request: {error}")))?;
-    let FinalizeRowsPy {
-        project_dir,
-        evaluated_codes,
-        findings,
-        ..
-    } = request;
+    let project_dir: String = project_dir
+        .call_method0("resolve")?
+        .str()?
+        .to_str()?
+        .to_owned();
     let mut fixable: HashSet<(String, String, u64, u64, String)> = HashSet::new();
     let mut faults: Vec<Fault> = Vec::with_capacity(findings.len());
     for finding in &findings {
@@ -200,31 +313,63 @@ fn finalize_rule_findings_rows<'py>(
         .compiler_detach(|| finalize_rows(project_dir, config, &evaluated_codes, faults))
         .map_err(value_error)?;
     let classes = FindingClasses::new(py)?;
-    finalized
+    let rows: Vec<Bound<'py, PyAny>> = finalized
         .into_iter()
         .map(|fault| {
             let is_fixable: bool = fixable.contains(&fault_identity(&fault));
             classes.finding_of_fault(fault, is_fixable)
         })
-        .collect()
+        .collect::<PyResult<_>>()?;
+    PyTuple::new(py, rows)
 }
 
-/// `left=` and `right=`: the callback is `types_equal`, whose arguments are keyword-only.
-fn type_arguments<'py>(py: Python<'py>, left: &str, right: &str) -> PyResult<Bound<'py, PyDict>> {
-    let arguments: Bound<'py, PyDict> = PyDict::new(py);
+/// `asdict(config)` as orjson with `default=str` encodes it.
+fn config_value(config: &Bound<'_, PyAny>) -> PyResult<Value> {
+    plain_value(&imported(config.py(), DATACLASSES_MODULE, "asdict")?.call1((config,))?)
+}
+
+/// `str(path)` of the Python path built from `path`.
+fn path_text(py: Python<'_>, path: PathBuf) -> PyResult<String> {
+    Ok(path.into_pyobject(py)?.str()?.to_str()?.to_owned())
+}
+
+fn mapping_values<'py>(mapping: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    mapping.call_method0("values")?.try_iter()?.collect()
+}
+
+/// Value and type errors of the request as `RulesError`, as the rules API reports them.
+fn as_rules_error<T>(py: Python<'_>, result: PyResult<T>) -> PyResult<T> {
+    result.map_err(|error| {
+        if error.is_instance_of::<PyValueError>(py) || error.is_instance_of::<PyTypeError>(py) {
+            let message: String = error.value(py).to_string();
+            rules_error(py, &message, Some(error))
+        } else {
+            error
+        }
+    })
+}
+
+/// `left=`, `right=` and `dialect=`: `types_equal` takes keyword-only arguments.
+fn type_arguments<'py>(
+    dialect: &Bound<'py, PyAny>,
+    left: &str,
+    right: &str,
+) -> PyResult<Bound<'py, PyDict>> {
+    let arguments: Bound<'py, PyDict> = PyDict::new(dialect.py());
     arguments.set_item(LEFT_ARGUMENT, left)?;
     arguments.set_item(RIGHT_ARGUMENT, right)?;
+    arguments.set_item(DIALECT_ARGUMENT, dialect)?;
     Ok(arguments)
 }
 
 fn built_models(
-    project: &ProjectRowsPy<'_>,
+    project: &ProjectRows<'_>,
     request: &EvaluateRequest,
     rows: Vec<ModelRow>,
 ) -> PyResult<Vec<Model>> {
     let mut python_error: Option<PyErr> = None;
     let fallback = |left: &str, right: &str| -> Result<bool, String> {
-        match type_arguments(project.types_equal.py(), left, right)
+        match type_arguments(&project.dialect, left, right)
             .and_then(|arguments| project.types_equal.call((), Some(&arguments)))
             .and_then(|equal| equal.extract::<bool>())
         {
@@ -286,7 +431,6 @@ fn fault_identity(fault: &Fault) -> (String, String, u64, u64, String) {
     )
 }
 
-/// A plain Python value as the rules request's JSON value, as orjson with `default=str` encodes it.
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeRulesRequest>()?;
     module.add_function(wrap_pyfunction!(build_rules_request, module)?)?;

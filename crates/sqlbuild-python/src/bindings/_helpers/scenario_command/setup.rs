@@ -20,19 +20,19 @@ use sqlbuild_core::scenario_command::models::{
     SnapshotLimitInputs, SnapshotLimits, SqlAnalysisCommand,
 };
 
+use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 use crate::bindings::_helpers::discovery::guidance::sql_analysis_guidance;
+use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 pub(crate) const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
-const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild.compiler.pipeline.main.reject_unit_test_selectors";
+const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const SCENARIO_CONFIG_MODULE: &str = "sqlbuild._native";
-const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild.cli.commands._helpers.planning.external_refs";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
-const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 const SCENARIO_MODELS: &str = "sqlbuild.executor.scenario.models";
 const METADATA_MODULE: &str = "importlib.metadata";
 const DISTRIBUTION_NAME: &str = "sqlbuild";
@@ -208,13 +208,7 @@ pub(crate) fn resolve_adapter<'py>(
     adapter_name: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project.discovered.py();
-    call_with(
-        &imported(py, ADAPTERS_MODULE, "resolve_adapter")?,
-        &[
-            ("adapter_name", text(py, adapter_name)),
-            ("project_dir", project.project_dir.clone()),
-        ],
-    )
+    resolve_cli_adapter(&text(py, adapter_name), &project.project_dir)
 }
 
 /// The adapter's SQL analysis dialect, which snapshots require.
@@ -242,10 +236,8 @@ pub(crate) fn project_connection_config<'py>(
 
 /// `not no_color and supports_color()`.
 pub(crate) fn style(request: &Bound<'_, PyAny>) -> PyResult<CliStyle> {
-    let use_color: bool = !request.getattr("no_color")?.is_truthy()?
-        && imported(request.py(), COLOR_MODULE, "supports_color")?
-            .call0()?
-            .is_truthy()?;
+    let use_color: bool =
+        !request.getattr("no_color")?.is_truthy()? && stdout_supports_color(request.py())?;
     Ok(CliStyle { use_color })
 }
 

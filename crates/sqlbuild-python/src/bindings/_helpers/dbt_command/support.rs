@@ -5,8 +5,7 @@ use pyo3::types::PyBool;
 
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
-
-const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
+use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 /// `sys.stdout` or `sys.stderr`, looked up when written.
 pub(crate) fn stream<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
@@ -15,9 +14,7 @@ pub(crate) fn stream<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, Py
 
 /// `supports_color()`.
 pub(crate) fn color_enabled(py: Python<'_>) -> PyResult<bool> {
-    imported(py, COLOR_MODULE, "supports_color")?
-        .call0()?
-        .is_truthy()
+    stdout_supports_color(py)
 }
 
 pub(crate) fn flag(py: Python<'_>, value: bool) -> Bound<'_, PyAny> {

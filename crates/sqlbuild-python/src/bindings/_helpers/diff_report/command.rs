@@ -30,7 +30,7 @@ use crate::bindings::_helpers::discovery::configuration::discover_project_config
 use crate::bindings::_helpers::frontier::encoder::emit_error;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild.compiler.pipeline.main.reject_unit_test_selectors";
+const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
 const TARGET_NAME_MODULE: &str = "sqlbuild._native";
 const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
 const CONTRACT_CONSTANTS_MODULE: &str = "sqlbuild.spec.contracts.constants";

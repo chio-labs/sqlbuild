@@ -13,3 +13,4 @@ pub(crate) const FIX_AVAILABLE_NOTE: &str =
     "Fix available: `sqb format --fix` applies it after compiler verification";
 pub(crate) const JSON_INDENT: usize = 2;
 pub(crate) const CURRENT_DIRECTORY: &str = ".";
+pub(crate) const UNEVALUATED_CODE: &str = "rules-unevaluated";

@@ -2,15 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey
-from sqlbuild.compiler.planner._helpers.graph.core import (
+from sqlbuild._native import (
     build_downstream_deps,
     build_execution_edge_origins,
     build_execution_upstream_deps,
-    expand_downstream,
-    expand_upstream,
     topologically_order_keys,
+    transitive_closure,
 )
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     BuildDownstreamDepsTestCase,
     BuildUpstreamDepsTestCase,
@@ -296,8 +295,8 @@ def test_given_audit_scope_deps_when_building_edge_origins_then_names_the_audit(
 def test_given_key_when_expanding_upstream_then_returns_expected_keys(
     test_case: ExpandUpstreamTestCase,
 ) -> None:
-    result: frozenset[CompiledObjectKey] = expand_upstream(
-        key=test_case.key, upstream=test_case.upstream
+    result: frozenset[CompiledObjectKey] = transitive_closure(
+        start=test_case.key, edges=test_case.upstream
     )
 
     assert result == test_case.expected_keys
@@ -331,8 +330,8 @@ def test_given_key_when_expanding_upstream_then_returns_expected_keys(
 def test_given_key_when_expanding_downstream_then_returns_expected_keys(
     test_case: ExpandDownstreamTestCase,
 ) -> None:
-    result: frozenset[CompiledObjectKey] = expand_downstream(
-        key=test_case.key, downstream=test_case.downstream
+    result: frozenset[CompiledObjectKey] = transitive_closure(
+        start=test_case.key, edges=test_case.downstream
     )
 
     assert result == test_case.expected_keys

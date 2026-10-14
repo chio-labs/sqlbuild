@@ -14,11 +14,11 @@ use sqlbuild_core::seed_command::main::render_seed_row::render_seed_row;
 use sqlbuild_core::seed_command::main::seed_exit_code::seed_exit_code;
 use sqlbuild_core::seed_command::models::SeedRow;
 
+use crate::bindings::_helpers::command_runtime::invocation::resolve_command_invocation;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
-const INVOCATION_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.command_invocation";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild.cli.commands._helpers.planning.external_refs";
 const STATIC_COMMAND_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
@@ -421,16 +421,8 @@ fn load_seeds<'py>(
 #[pyfunction]
 #[pyo3(signature = (*, request))]
 fn run_seed_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
-    let invocation: Bound<'_, PyAny> = call_with(
-        &imported(py, INVOCATION_MODULE, "resolve_command_invocation")?,
-        &[
-            ("request", request.clone()),
-            (
-                "invocation_type",
-                imported(py, COMMAND_MODELS, "SeedInvocation")?,
-            ),
-        ],
-    )?;
+    let invocation: Bound<'_, PyAny> =
+        resolve_command_invocation(request, &imported(py, COMMAND_MODELS, "SeedInvocation")?)?;
     let pipeline: Bound<'_, PyAny> = compile_seeds(request, &invocation)?;
     let requested: Bound<'_, PyAny> = request.getattr("concurrency")?;
     let concurrency: i64 = if requested.is_none() {

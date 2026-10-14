@@ -25,9 +25,9 @@ use crate::bindings::_helpers::format_command::report::lint_report;
 use crate::bindings::_helpers::format_command::run::{FormatOutcome, FormatRequest, run_format};
 use crate::bindings::_helpers::format_command::selection::{LintInputs, resolve_lint_inputs};
 use crate::bindings::_helpers::frontier::encoder::emit_error;
+use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 const SQL_ANALYSIS_SETTING_KEY: &str = "sql_analysis";
 const DEFAULT_DIALECT: &str = "generic";
 const START_MESSAGE: &str = "Formatting SQL  START";
@@ -285,10 +285,7 @@ fn run_format_command<'py>(py: Python<'py>, options: Option<Bound<'py, PyDict>>)
     } else {
         raw_project_dir
     };
-    let use_color: bool = !arguments.flag("no_color")?
-        && imported(py, COLOR_MODULE, "supports_color")?
-            .call0()?
-            .is_truthy()?;
+    let use_color: bool = !arguments.flag("no_color")? && stdout_supports_color(py)?;
     let flags: FormatFlags = FormatFlags {
         check: arguments.flag("check")?,
         diff: arguments.flag("diff")?,

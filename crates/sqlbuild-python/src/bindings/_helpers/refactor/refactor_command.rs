@@ -35,13 +35,13 @@ use sqlbuild_refactor::refactoring::types::Originals;
 use crate::bindings::_helpers::boundary::panics::{NativeCompilerError, compiler_guard};
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::lineage::lineage_index::lineage_key;
+use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::refactor::refactor_facts::{
     declaration_placement, model_facts, refactor_facts,
 };
 
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const REFACTOR_ERRORS_MODULE: &str = "sqlbuild.compiler.refactoring.exceptions";
-const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 const COMPILE_MODULE: &str = "sqlbuild.cli.commands._helpers.refactor.compile_facts";
 const STAGING_PREFIX: &str = "sqb-refactor-";
 const MOVE_COMMAND: &str = "mv";
@@ -417,10 +417,8 @@ fn run_refactor_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<
         _ => py.import("pathlib")?.getattr("Path")?.call_method0("cwd")?,
     };
     let json_output: bool = request.getattr("json_output")?.extract()?;
-    let use_color: bool = !request.getattr("no_color")?.extract::<bool>()?
-        && imported(py, COLOR_MODULE, "supports_color")?
-            .call0()?
-            .extract::<bool>()?;
+    let use_color: bool =
+        !request.getattr("no_color")?.extract::<bool>()? && stdout_supports_color(py)?;
     let command: Command<'_> = Command {
         request: request.clone(),
         project_dir: project_dir.call_method0("resolve")?.extract()?,

@@ -1,1 +1,0 @@
-"""CLI progress rendering."""

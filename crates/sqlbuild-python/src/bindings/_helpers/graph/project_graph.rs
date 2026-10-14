@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult};
-use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
+use pyo3::{pyclass, pymethods};
 use sqlbuild_analysis::assembly::project::types::ObjectKey;
 use sqlbuild_analysis::graph::errors::SelectorError;
 use sqlbuild_analysis::graph::main::build_project_graph::build_project_graph;
@@ -12,19 +12,14 @@ use sqlbuild_analysis::graph::main::edge_keys::edge_keys;
 use sqlbuild_analysis::graph::main::graph_from_indexes::graph_from_indexes;
 use sqlbuild_analysis::graph::main::match_selector::match_selector;
 use sqlbuild_analysis::graph::main::model_layer_count::model_layer_count;
-use sqlbuild_analysis::graph::main::parse_selector::parse_selector;
 use sqlbuild_analysis::graph::main::resolve_selector_tokens::resolve_selector_tokens;
 use sqlbuild_analysis::graph::main::resolve_selectors::resolve_selectors;
-use sqlbuild_analysis::graph::main::selector_name_help::selector_name_help;
 use sqlbuild_analysis::graph::main::unique_id_edges::unique_id_edges;
 use sqlbuild_analysis::graph::models::{
-    BuildResources, EdgeDirection, GraphIndexes, GraphResource, ParsedSelector, ProjectGraph,
+    BuildResources, EdgeDirection, GraphIndexes, GraphResource, ProjectGraph,
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
-
-const KIND_SELECTOR: &str = "kind";
-const PATH_SELECTOR: &str = "path";
 
 /// `(key, deps, tags, model folder)`.
 pub(crate) type ResourceRow = (ObjectKey, Vec<ObjectKey>, Vec<String>, Option<String>);
@@ -43,8 +38,6 @@ type UniqueIdMap = Vec<(String, Vec<String>)>;
 type FailureRow = (&'static str, String, Option<String>);
 /// The keys, or the `PlannerInputError` Python raises instead.
 type KeysOutcome = (Option<Vec<ObjectKey>>, Option<FailureRow>);
-/// `("kind", kind, value, upstream, downstream)` or `("path", start, end, upstream, downstream)`.
-type ParsedRow = (&'static str, String, String, bool, bool);
 
 /// A project graph: lineage edges, tag, path and name indexes, and selector resolution.
 #[pyclass(module = "sqlbuild._native", frozen)]
@@ -226,40 +219,6 @@ impl NativeProjectGraph {
     }
 }
 
-/// One selector token parsed, or the `PlannerInputError` Python raises.
-#[pyfunction]
-fn parse_project_selector(raw: &str) -> (Option<ParsedRow>, Option<FailureRow>) {
-    match parse_selector(raw) {
-        Ok(ParsedSelector::Kind {
-            kind,
-            value,
-            upstream,
-            downstream,
-        }) => (
-            Some((KIND_SELECTOR, kind, value, upstream, downstream)),
-            None,
-        ),
-        Ok(ParsedSelector::Path {
-            start,
-            end,
-            upstream,
-            downstream,
-        }) => (
-            Some((PATH_SELECTOR, start, end, upstream, downstream)),
-            None,
-        ),
-        Err(error) => (None, Some(failure(error))),
-    }
-}
-
-/// The "did you mean" help for an unknown selector name, if any.
-#[pyfunction]
-fn project_selector_name_help(value: &str, candidates: Vec<String>) -> Option<String> {
-    selector_name_help(value, candidates.iter().map(String::as_str).collect())
-}
-
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_class::<NativeProjectGraph>()?;
-    module.add_function(wrap_pyfunction!(parse_project_selector, module)?)?;
-    module.add_function(wrap_pyfunction!(project_selector_name_help, module)?)
+    module.add_class::<NativeProjectGraph>()
 }

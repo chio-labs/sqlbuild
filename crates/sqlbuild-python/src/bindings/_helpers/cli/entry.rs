@@ -12,15 +12,18 @@ use sqlbuild_cli::dispatch::main::failure_report::failure_report;
 use sqlbuild_cli::dispatch::main::invocation_policy::invocation_policy;
 use sqlbuild_cli::dispatch::models::{CommandFacts, CommandFailure, InvocationPolicy};
 
+use crate::bindings::_helpers::cli::argv::parse_cli_invocation;
 use crate::bindings::_helpers::cli::dispatch::{command_facts, dispatch_command};
+use crate::bindings::_helpers::cli::observability::cli_observability_scope;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use sqlbuild_core::cli_text::main::format_coded_error::format_coded_error;
+use sqlbuild_core::cli_text::models::CliStyle;
 
 const NO_COLOR_OPTION: &str = "--no-color";
 const EXCEPTIONS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
-const PARSING_MODULE: &str = "sqlbuild.cli.commands._helpers.entry.parsing";
 const COMPUTE_LOGS_MODULE: &str =
     "sqlbuild.cli.commands.main.entrypoint._dispatch_with_compute_logs";
-const OBSERVABILITY_MODULE: &str = "sqlbuild.cli.commands._helpers.entry.observability";
 const LIFECYCLE_EVENT_MODULE: &str = "sqlbuild.runtime.observability.main.create_lifecycle_event";
 const INVOCATION_SCOPE_MODULE: &str = "sqlbuild.runtime.observability.main.invocation_scope";
 const EXTERNAL_SCOPE_MODULE: &str =
@@ -28,8 +31,6 @@ const EXTERNAL_SCOPE_MODULE: &str =
 const INVOCATION_CONTEXT_MODULE: &str = "sqlbuild.runtime.output_capture.main.invocation_context";
 const OUTPUT_CAPTURE_ERRORS_MODULE: &str = "sqlbuild.runtime.output_capture.exceptions";
 const DIAGNOSTICS_MODULE: &str = "sqlbuild.diagnostics.main.diagnostics_context";
-const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
-const CODED_ERROR_MODULE: &str = "sqlbuild.presentation.main.coded_error_text";
 const TRANSIENT_LINE_MODULE: &str = "sqlbuild.presentation.main.transient_line_coordinator";
 const SKILLS_MODULE: &str = "sqlbuild._native";
 const RULES_ERRORS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
@@ -142,19 +143,27 @@ fn print_expected_error(
 ) -> PyResult<()> {
     let py: Python<'_> = invocation.py();
     let (code, message, help) = error_parts(error, fallback_code)?;
-    let text: Bound<'_, PyAny> = call_with(
-        &imported(py, CODED_ERROR_MODULE, "format_coded_error")?,
-        &[
-            ("code", code),
-            ("message", message),
-            ("help", help),
-            (
-                "use_color",
-                PyBool::new(py, invocation.use_color).to_owned().into_any(),
-            ),
-        ],
-    )?;
-    print_object(&text.add("\n")?, Some("stderr"), None)
+    let help: Option<String> = if help.is_none() {
+        None
+    } else {
+        Some(help.str()?.extract()?)
+    };
+    let text: String = format_coded_error(
+        (
+            &code.extract::<String>()?,
+            &message.extract::<String>()?,
+            help.as_deref(),
+        ),
+        true,
+        CliStyle {
+            use_color: invocation.use_color,
+        },
+    );
+    print_object(
+        &PyString::new(py, &format!("{text}\n")).into_any(),
+        Some("stderr"),
+        None,
+    )
 }
 
 /// The compile JSON error document `sqb compile --json` prints for a failure.
@@ -408,13 +417,14 @@ fn observed_dispatch<'py>(
             .unwrap_or(u64::MAX)
             .into_bound_py_any(py)
     };
-    let scope: Bound<'py, PyAny> = call_with(
-        &imported(py, OBSERVABILITY_MODULE, "cli_observability_scope")?,
-        &[
-            ("args", invocation.args.clone()),
-            ("project_dir", invocation.project_dir()?),
-        ],
-    )?;
+    let scope: Bound<'py, PyAny> = Bound::new(
+        py,
+        cli_observability_scope(
+            invocation.args.clone().unbind(),
+            invocation.project_dir()?.unbind(),
+        ),
+    )?
+    .into_any();
     within(&scope, |dispatcher| {
         let publish = |event: Bound<'py, PyAny>| -> PyResult<()> {
             dispatcher.call_method1("publish_lifecycle", (event,))?;
@@ -509,20 +519,8 @@ fn parsed_invocation<'py>(
     identity: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = argv.py();
-    let use_color: bool = !argv.contains(NO_COLOR_OPTION)?
-        && imported(py, COLOR_MODULE, "supports_color")?
-            .call0()?
-            .is_truthy()?;
-    let parsed: Bound<'py, PyAny> = call_with(
-        &imported(py, PARSING_MODULE, "parse_cli_invocation")?,
-        &[
-            ("argv", argv.clone()),
-            (
-                "use_color",
-                PyBool::new(py, use_color).to_owned().into_any(),
-            ),
-        ],
-    )?;
+    let use_color: bool = !argv.contains(NO_COLOR_OPTION)? && stdout_supports_color(py)?;
+    let parsed: Bound<'py, PyAny> = parse_cli_invocation(py, argv.extract()?, use_color)?;
     let args: Bound<'py, PyAny> = parsed.getattr("args")?;
     if args.is_none() {
         let exit_code: Bound<'py, PyAny> = parsed.getattr("exit_code")?;

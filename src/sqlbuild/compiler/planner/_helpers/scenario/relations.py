@@ -7,8 +7,11 @@ from collections.abc import Callable
 from dataclasses import replace
 
 from sqlbuild._native import (
+    build_compiled_function_fingerprint_sql,
+    build_execution_upstream_deps,
     compiled_model_record,
     render_source_relation,
+    topologically_order_keys,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo
@@ -34,13 +37,6 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.planner._helpers.fixtures.completion import (
     build_relation_fixture_completion,
-)
-from sqlbuild.compiler.planner._helpers.graph.core import (
-    build_execution_upstream_deps,
-    topologically_order_keys,
-)
-from sqlbuild.compiler.planner._helpers.identity.functions import (
-    build_compiled_function_fingerprint_sql,
 )
 from sqlbuild.compiler.planner._helpers.output.plan_entry import extract_seed_columns, plan_model
 from sqlbuild.compiler.planner._helpers.resolve.refs import (

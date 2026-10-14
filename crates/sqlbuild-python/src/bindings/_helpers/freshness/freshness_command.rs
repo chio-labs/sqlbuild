@@ -14,19 +14,19 @@ use sqlbuild_core::freshness_text::main::freshness_json::freshness_json;
 use sqlbuild_core::freshness_text::main::render_freshness_text::render_freshness_text;
 use sqlbuild_core::freshness_text::models::FreshnessSourceResult;
 
+use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::freshness::freshness_observe::{
     Observer, PreviousState, observe_freshness,
 };
+use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
-const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
-const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild.compiler.pipeline.main.reject_unit_test_selectors";
+const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const CONNECTION_MODULE: &str = "sqlbuild._native";
-const GRAPH_SELECTION_MODULE: &str = "sqlbuild.compiler.pipeline.main.project_graph_selection";
-const UPSTREAM_MODULE: &str = "sqlbuild.compiler.planner.main.selection._upstream";
+const GRAPH_SELECTION_MODULE: &str = "sqlbuild._native";
+const UPSTREAM_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const RELATION_LOOKUP_MODULE: &str = "sqlbuild.adapter.relations.main.relation_lookup";
 const STATE_READ_MODULE: &str = "sqlbuild.compiler.source_freshness.main.read";
@@ -325,16 +325,7 @@ fn run_freshness_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult
                 ],
             )?),
         )?;
-    let adapter: Bound<'_, PyAny> = imported(py, ADAPTERS_MODULE, "resolve_adapter")?.call(
-        (),
-        Some(&keywords(
-            py,
-            &[
-                ("adapter_name", &adapter_name),
-                ("project_dir", &project_dir),
-            ],
-        )?),
-    )?;
+    let adapter: Bound<'_, PyAny> = resolve_cli_adapter(&adapter_name, &project_dir)?;
     let graph: Bound<'_, PyAny> = imported(py, NATIVE_MODULE, "build_project_graph")?.call(
         (),
         Some(&keywords(
@@ -368,10 +359,8 @@ fn run_freshness_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult
         if !json_output_path.is_none() {
             write_json_output(py, &payload, (false, &json_output_path))?;
         }
-        let use_color: bool = !request.getattr("no_color")?.extract::<bool>()?
-            && imported(py, COLOR_MODULE, "supports_color")?
-                .call0()?
-                .extract::<bool>()?;
+        let use_color: bool =
+            !request.getattr("no_color")?.extract::<bool>()? && stdout_supports_color(py)?;
         write(py, &render_freshness_text(&results, CliStyle { use_color }))?;
     }
     Ok(freshness_exit_code(

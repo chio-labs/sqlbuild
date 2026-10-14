@@ -115,9 +115,7 @@ fn rule<'py>(
 }
 
 /// Every built-in rule as a `Rule` whose `check` is the given placeholder.
-#[pyfunction]
-#[pyo3(signature = (*, check))]
-fn builtin_rules<'py>(
+pub(crate) fn builtin_rules<'py>(
     py: Python<'py>,
     check: Bound<'py, PyAny>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
@@ -137,7 +135,6 @@ fn selected_sql_rule_codes(select: Vec<String>, ignore: Vec<String>) -> PyResult
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(builtin_rules, module)?)?;
     module.add_function(wrap_pyfunction!(selected_sql_rule_codes, module)?)?;
     Ok(())
 }

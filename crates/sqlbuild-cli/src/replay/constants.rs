@@ -6,3 +6,5 @@ pub const LAUNCH_RECORD_FORMAT: i64 = 1;
 pub const LAUNCH_RECORD_DIRECTORY: [&str; 3] = ["target", "cache", "launcher-v1"];
 pub const LAUNCH_RECORD_SUFFIX: &str = ".json";
 pub const OUTPUT_FAILURE_EXIT_CODE: i64 = 1;
+/// How many launch records one project keeps; older ones are pruned after each write.
+pub const LAUNCH_RECORD_LIMIT: usize = 32;

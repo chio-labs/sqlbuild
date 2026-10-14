@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import load_rules_config
 from sqlbuild.rule_engine.exceptions import RulesConfigError, RulesError
-from sqlbuild.rule_engine.main.load_config import load_rules_config
 from sqlbuild.rule_engine.models import LayoutConfig, RulesConfig, SqlTestRulesConfig
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (
     AllowExceptionsConfigTestCase,

@@ -69,7 +69,7 @@ fn transitive_closure<'py>(
 }
 
 /// Reversed edges: every source key first, then each new target in first-seen order.
-fn inverted<'py>(edges: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+pub(crate) fn inverted<'py>(edges: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = edges.py();
     let inverted: Bound<'py, PyDict> = PyDict::new(py);
     for key in edges.try_iter()? {

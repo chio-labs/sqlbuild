@@ -57,7 +57,7 @@ class BuildExecutionPlanTestCase:
 class PlannerChangeDetectionWorkTestCase:
     description: str
     selection_diagnostics: bool
-    expected_model_calls: dict[str, int]
+    expected_stale_detection_calls: dict[str, int]
     expected_warning_count: int
     query_change_tracking: bool = True
     expected_identity_builds: int = 1

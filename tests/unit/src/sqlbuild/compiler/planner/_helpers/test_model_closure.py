@@ -2,11 +2,9 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import build_downstream_model_name_closure
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner._helpers.graph.model_closure import (
-    build_downstream_model_name_closure,
-)
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import ModelClosureTestCase
 
 SOURCE_ORDERS: CompiledObjectKey = CompiledObjectKey(

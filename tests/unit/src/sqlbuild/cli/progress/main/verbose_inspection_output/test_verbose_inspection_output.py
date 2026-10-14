@@ -6,9 +6,9 @@ import pytest
 from _pytest.capture import CaptureResult
 
 from sqlbuild._native import VerboseInspectionWriter
+from sqlbuild.adapter.relations.main.inspection_query_sink import inspection_query_sink
 from sqlbuild.adapter.relations.main.record_inspection_query import record_inspection_query
 from sqlbuild.adapter.relations.models import InspectionQueryRecord
-from sqlbuild.cli.progress.main.verbose_inspection_output import verbose_inspection_output
 from tests.unit.src.sqlbuild.cli.progress.main.verbose_inspection_output._test_types import (
     VerboseInspectionFormatTestCase,
     VerboseInspectionOutputTestCase,
@@ -74,8 +74,7 @@ def test_given_inspection_record_when_formatting_then_renders_one_bounded_line(
     "test_case",
     [
         VerboseInspectionOutputTestCase(
-            description="enabled output writes each read and a total to stderr",
-            enabled=True,
+            description="sink writes each read and the total to stderr",
             records=(("SELECT 1", 0.5, 3), ("SELECT 2", 0.25, 0)),
             expected_stderr_lines=(
                 "  inspect   0.50s  3 rows  SELECT 1",
@@ -84,18 +83,18 @@ def test_given_inspection_record_when_formatting_then_renders_one_bounded_line(
             ),
         ),
         VerboseInspectionOutputTestCase(
-            description="disabled output writes nothing",
-            enabled=False,
-            records=(("SELECT 1", 0.5, 3),),
+            description="no reads write no total",
+            records=(),
             expected_stderr_lines=(),
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_verbose_setting_when_recording_reads_then_writes_only_inside_context_to_stderr(
+def test_given_writer_sink_when_recording_reads_then_writes_only_inside_sink_to_stderr(
     test_case: VerboseInspectionOutputTestCase, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    with verbose_inspection_output(enabled=test_case.enabled):
+    writer: VerboseInspectionWriter = VerboseInspectionWriter()
+    with inspection_query_sink(writer.write):
         for sql, elapsed, rows in test_case.records:
             record_inspection_query(
                 record=InspectionQueryRecord(sql=sql, elapsed_seconds=elapsed, row_count=rows)
@@ -103,6 +102,7 @@ def test_given_verbose_setting_when_recording_reads_then_writes_only_inside_cont
     record_inspection_query(
         record=InspectionQueryRecord(sql="SELECT 3", elapsed_seconds=0.1, row_count=0)
     )
+    writer.write_total()
 
     captured: CaptureResult[str] = capsys.readouterr()
     assert captured.out == ""

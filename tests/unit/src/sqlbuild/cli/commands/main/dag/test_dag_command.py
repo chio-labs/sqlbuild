@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import run_dag_command
-from sqlbuild.cli.commands._helpers.runtime import adapters as adapter_resolution
+from sqlbuild.adapter.discovery.main import resolve_adapter as adapter_resolution
 from tests.unit.src.sqlbuild.cli.commands.main.dag._test_types import (
     DagCommandTestCase,
     PythonDagCommandTestCase,

@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.planner._helpers.identity.honest import (
-    merge_recomputed_model_changes,
-    with_honest_model_write_hashes,
-)
+from sqlbuild._native import merge_recomputed_model_changes, with_honest_model_write_hashes
 from sqlbuild.compiler.planner.models import (
     PlannerChangeReconciliation,
     PlannerChangeResults,

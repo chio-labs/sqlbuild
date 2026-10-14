@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.compile_reuse.main._attempt_compile_reuse import attempt_compile_reuse
+from sqlbuild._native import attempt_compile_reuse
 from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt, CompileReuseRequest
 from sqlbuild.cli.compile_reuse.types import CompileReuseOutcome
 from sqlbuild.cli.entry.models import CompileCommandRequest, CompileProfileFlags

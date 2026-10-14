@@ -243,7 +243,10 @@ fn rules_error(py: Python<'_>, class: &str, message: String, help: Option<String
 /// The project's validated rules configuration as `RulesConfig`.
 #[pyfunction]
 #[pyo3(signature = (*, project_dir))]
-fn load_rules_config(py: Python<'_>, project_dir: PathBuf) -> PyResult<Py<PyAny>> {
+pub(crate) fn load_rules_config(py: Python<'_>, project_dir: PathBuf) -> PyResult<Py<PyAny>> {
+    let project_dir: PathBuf = project_dir
+        .canonicalize()
+        .or_else(|_| std::path::absolute(&project_dir))?;
     let config: RulesConfig = compiler_guard(|| Ok(load_config(&project_dir)))?
         .map_err(|message| rules_error(py, "RulesError", message, None))?;
     if let Some(error) = forbidden_exceptions(&config) {
@@ -257,7 +260,21 @@ fn load_rules_config(py: Python<'_>, project_dir: PathBuf) -> PyResult<Py<PyAny>
     Ok(config_object(py, &config)?.unbind())
 }
 
+/// The project's rules configuration, or `None` when it is invalid and the rules phase reports it.
+#[pyfunction]
+#[pyo3(signature = (*, project_dir))]
+fn valid_rules_config(py: Python<'_>, project_dir: PathBuf) -> PyResult<Option<Py<PyAny>>> {
+    match load_rules_config(py, project_dir) {
+        Ok(config) => Ok(Some(config)),
+        Err(error) if error.is_instance(py, &py.import(ERRORS_MODULE)?.getattr("RulesError")?) => {
+            Ok(None)
+        }
+        Err(error) => Err(error),
+    }
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(load_rules_config, module)?)?;
+    module.add_function(wrap_pyfunction!(valid_rules_config, module)?)?;
     Ok(())
 }

@@ -12,6 +12,7 @@ use sqlbuild_cli::diff_report::main::read_only_query_problem::read_only_query_pr
 use sqlbuild_cli::diff_report::models::QueryShapeFacts;
 use sqlbuild_cli::diff_report::types::PhaseSeconds;
 
+use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::diff_report::support::{
     call, cli_error, error_text, none, object, progress_line,
@@ -19,7 +20,6 @@ use crate::bindings::_helpers::diff_report::support::{
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const NAMESPACE_MODULE: &str = "sqlbuild._native";
 const RUNTIME_MODULE: &str = "sqlbuild._native";
 const POLYGLOT_MODULE: &str = "sqlbuild.compiler.sql_analysis.main.import_polyglot_sql";
@@ -61,10 +61,7 @@ pub(crate) fn project_adapter<'py>(
             ("local_config", &discovered.getattr("local_config")?),
         ],
     )?;
-    let adapter: Bound<'py, PyAny> = call(
-        &imported(py, ADAPTERS_MODULE, "resolve_adapter")?,
-        &[("adapter_name", &name), ("project_dir", project_dir)],
-    )?;
+    let adapter: Bound<'py, PyAny> = resolve_cli_adapter(&name, project_dir)?;
     Ok((name.extract()?, adapter))
 }
 

@@ -24,24 +24,23 @@ use sqlbuild_core::test_command::models::{
 };
 
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
+use crate::bindings::_helpers::command_runtime::invocation::resolve_reported_command_invocation;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::compile_outputs::runtime_target::write_test_runtime_target;
 use crate::bindings::_helpers::result_output::integration_values::json_value;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
-const INVOCATION_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.command_invocation";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild.cli.commands._helpers.planning.external_refs";
 const STATIC_COMMAND_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const TEST_PLAN_MODULE: &str = "sqlbuild.compiler.planner.main.commands._sql_test";
 const PLANNER_ERRORS: &str = "sqlbuild.compiler.planner.exceptions";
-const PROGRESS_MODELS: &str = "sqlbuild.cli.progress.models";
 const EXECUTOR_PIPELINE_MODELS: &str = "sqlbuild.executor.pipeline.models";
 const EXECUTOR_RUN_MODULE: &str = "sqlbuild.executor.pipeline.main.run";
 const RESOURCE_ID_MODULE: &str = "sqlbuild.executor.testing.main._resource_id";
-const RUNTIME_TARGET_MODULE: &str = "sqlbuild.cli.target_artifacts.main._write_test_runtime_target";
 const DECIMAL_KIND: &str = "decimal";
 const PASS_OUTCOME: &str = "pass";
 const EXPECT_LABEL: &str = "expect";
@@ -154,7 +153,7 @@ fn outcome_status(outcome: &Bound<'_, PyAny>) -> PyResult<&'static str> {
 /// Nested `expect` rows of a completed test, one per step.
 fn expectation_rows<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = result.py();
-    let row_class: Bound<'py, PyAny> = imported(py, PROGRESS_MODELS, "NestedProgressChildRow")?;
+    let row_class: Bound<'py, PyAny> = imported(py, COMMAND_MODELS, "NestedProgressChildRow")?;
     let name: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "format_expectation_name")?;
     let detail: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "format_expectation_detail")?;
     let mut rows: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -635,19 +634,10 @@ fn complete(
 #[pyo3(signature = (*, request))]
 fn run_test_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let inspect_only: bool = request.getattr("inspect")?.is_truthy()?;
-    let invocation: Bound<'_, PyAny> = call_with(
-        &imported(py, INVOCATION_MODULE, "resolve_reported_command_invocation")?,
-        &[
-            ("request", request.clone()),
-            (
-                "invocation_type",
-                imported(py, COMMAND_MODELS, "TestInvocation")?,
-            ),
-            (
-                "require_connection",
-                PyBool::new(py, !inspect_only).to_owned().into_any(),
-            ),
-        ],
+    let invocation: Bound<'_, PyAny> = resolve_reported_command_invocation(
+        request,
+        &imported(py, COMMAND_MODELS, "TestInvocation")?,
+        !inspect_only,
     )?;
     let pipeline: Bound<'_, PyAny> = compile_tests(request, &invocation)?;
     let stream: Bound<'_, PyAny> = invocation.getattr("progress_stream")?;
@@ -673,19 +663,15 @@ fn run_test_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32>
     header.set_item("use_color", invocation.getattr("use_color")?)?;
     imported(py, NATIVE_MODULE, "write_execution_header")?.call((), Some(&header))?;
     let results: Vec<Bound<'_, PyAny>> = run_tests(&invocation, &pipeline, concurrency)?;
-    call_with(
-        &imported(py, RUNTIME_TARGET_MODULE, "write_test_runtime_target")?,
-        &[
-            (
-                "target_dir",
-                invocation
-                    .getattr("effective_project_dir")?
-                    .call_method1("__truediv__", ("target",))?,
-            ),
-            ("adapter", invocation.getattr("adapter")?),
-            ("plan_output", pipeline.getattr("plan_output")?),
-            ("results", PyTuple::new(py, &results)?.into_any()),
-        ],
+    write_test_runtime_target(
+        (
+            &invocation
+                .getattr("effective_project_dir")?
+                .call_method1("__truediv__", ("target",))?,
+            &invocation.getattr("adapter")?,
+        ),
+        &pipeline.getattr("plan_output")?,
+        &PyTuple::new(py, &results)?.into_any(),
     )?;
     complete(request, &invocation, &results)
 }

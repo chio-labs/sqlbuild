@@ -13,9 +13,6 @@ from sqlbuild._native import (
     resolve_target_config,
 )
 from sqlbuild.cli.commands.main.dbt.dbt_sqlbuild_work import execute_dbt_sqlbuild_work
-from sqlbuild.cli.commands.main.execution.connection_progress import (
-    build_connection_progress_reporter,
-)
 from sqlbuild.cli.commands.models import DbtSqlbuildWorkContext
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import PlanOutput
@@ -145,7 +142,7 @@ def resolve_sqlbuild_execution_plan_output(
         return None
     invocation.output_stream.write("\n")
     invocation.output_stream.flush()
-    connection_progress: ConnectionProgressReporter = build_connection_progress_reporter(
+    connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
         adapter_name=compiled.adapter_name,
         stream=invocation.output_stream,
         blank_line_after_complete=True,

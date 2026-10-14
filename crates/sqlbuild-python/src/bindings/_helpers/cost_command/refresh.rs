@@ -9,12 +9,12 @@ use sqlbuild_core::cost_command::constants::{
 use sqlbuild_core::cost_command::main::accepts_cost_refresh::accepts_cost_refresh;
 use sqlbuild_core::cost_command::models::CostCoverage;
 
+use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const EFFECTIVE_TARGET_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const RESOLVE_ADAPTER_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const COST_TYPES: &str = "sqlbuild.cost.types";
 
 fn coverage(summary: &Bound<'_, PyAny>) -> PyResult<CostCoverage> {
@@ -120,13 +120,7 @@ fn refresh(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<()> {
             ("local_config", discovered.getattr("local_config")?),
         ],
     )?;
-    let adapter: Bound<'_, PyAny> = call_with(
-        &imported(py, RESOLVE_ADAPTER_MODULE, "resolve_adapter")?,
-        &[
-            ("adapter_name", adapter_name),
-            ("project_dir", project_dir.clone()),
-        ],
-    )?;
+    let adapter: Bound<'_, PyAny> = resolve_cli_adapter(&adapter_name, &project_dir)?;
     if !adapter.is_instance(&imported(py, COST_TYPES, "CostAwareAdapter")?)? {
         return Ok(());
     }

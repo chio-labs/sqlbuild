@@ -1,13 +1,17 @@
 //! Terminal width, the shared transient line coordinator and spinner threads of progress reporters.
 
-use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
+use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
 const COLUMNS_MODULE: &str = "sqlbuild.presentation.main.terminal_columns";
 const LINES_MODULE: &str = "sqlbuild.presentation.main.transient_line_coordinator";
 const SPINNER_JOIN_SECONDS: f64 = 0.2;
+const EXIT_JOIN_SECONDS: f64 = 1.0;
+const SPINNER_THREAD_NAME: &str = "sqlbuild-progress-spinner";
+const STOP_EVENT_ATTRIBUTE: &str = "_sqlbuild_stop_event";
 pub(crate) const SPINNER_TICK_SECONDS: f64 = 0.1;
 pub(crate) const CLEAR_LINE: &str = "\r\u{1b}[K";
 pub(crate) const HIDE_CURSOR: &str = "\u{1b}[?25l";
@@ -89,6 +93,32 @@ pub(crate) fn flush(stream: &Bound<'_, PyAny>) -> PyResult<()> {
     Ok(())
 }
 
+/// Stop and join live spinners at exit: finalization ending one inside its native wait aborts.
+#[pyfunction]
+fn stop_progress_spinners(py: Python<'_>) -> PyResult<()> {
+    let mut spinners: Vec<Bound<'_, PyAny>> = Vec::new();
+    for thread in imported(py, "threading", "enumerate")?
+        .call0()?
+        .try_iter()?
+    {
+        let thread: Bound<'_, PyAny> = thread?;
+        if thread.getattr("name")?.eq(SPINNER_THREAD_NAME)?
+            && thread.hasattr(STOP_EVENT_ATTRIBUTE)?
+        {
+            thread.getattr(STOP_EVENT_ATTRIBUTE)?.call_method0("set")?;
+            spinners.push(thread);
+        }
+    }
+    for thread in spinners {
+        if thread.call_method0("is_alive")?.is_truthy()? {
+            let options: Bound<'_, PyDict> = PyDict::new(py);
+            options.set_item("timeout", EXIT_JOIN_SECONDS)?;
+            thread.call_method("join", (), Some(&options))?;
+        }
+    }
+    Ok(())
+}
+
 /// Start a daemon thread running `owner._spin_until_stopped(event)`; return the event and thread.
 pub(crate) fn start_spinner<'py>(
     owner: &Bound<'py, PyAny>,
@@ -101,8 +131,10 @@ pub(crate) fn start_spinner<'py>(
             ("target", owner.getattr("_spin_until_stopped")?),
             ("args", PyTuple::new(py, [&event])?.into_any()),
             ("daemon", PyBool::new(py, true).to_owned().into_any()),
+            ("name", SPINNER_THREAD_NAME.into_bound_py_any(py)?),
         ],
     )?;
+    thread.setattr(STOP_EVENT_ATTRIBUTE, &event)?;
     thread.call_method0("start")?;
     Ok((event, thread))
 }
@@ -114,5 +146,13 @@ pub(crate) fn join_spinner(thread: &Bound<'_, PyAny>) -> PyResult<()> {
         options.set_item("timeout", SPINNER_JOIN_SECONDS)?;
         thread.call_method("join", (), Some(&options))?;
     }
+    Ok(())
+}
+
+/// Add `stop_progress_spinners` and run it at exit, before finalization ends daemon threads.
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    let hook = wrap_pyfunction!(stop_progress_spinners, module)?;
+    module.add_function(hook.clone())?;
+    imported(module.py(), "atexit", "register")?.call1((hook,))?;
     Ok(())
 }

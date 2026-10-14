@@ -19,6 +19,7 @@ from sqlbuild._native import (
     run_audit_command,
     run_build_command,
     run_load_command,
+    run_plan_command,
     run_scenario_test_command,
     run_test_command,
     select_load_entries,
@@ -26,7 +27,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.main.project._plan import run_plan
 from sqlbuild.cli.commands.models import (
     AuditCommandRequest,
     BuildCommandRequest,
@@ -1065,8 +1065,8 @@ def test_given_plan_source_deferral_override_when_planning_then_succeeds(
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_plan(
-        PlanCommandRequest(
+    exit_code: int = run_plan_command(
+        request=PlanCommandRequest(
             project_dir=tmp_path,
             no_color=True,
             select=test_case.select,
@@ -1280,8 +1280,8 @@ def test_given_invalid_managed_source_target_config_when_planning_then_errors(
     write_repo_files(tmp_path, test_case.project_files)
 
     with pytest.raises(PlannerInputError) as exc_info:
-        run_plan(
-            PlanCommandRequest(
+        run_plan_command(
+            request=PlanCommandRequest(
                 project_dir=tmp_path,
                 no_color=True,
                 select=test_case.select,
@@ -1722,8 +1722,8 @@ def test_given_plan_load_controls_when_running_plan_then_formats_source_load_sec
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_plan(
-        PlanCommandRequest(
+    exit_code: int = run_plan_command(
+        request=PlanCommandRequest(
             project_dir=tmp_path,
             no_color=True,
             select=("stg_orders",),
@@ -1795,8 +1795,8 @@ def test_given_plan_json_output_when_source_auto_loads_then_includes_source_load
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_plan(
-        PlanCommandRequest(
+    exit_code: int = run_plan_command(
+        request=PlanCommandRequest(
             project_dir=tmp_path,
             no_color=True,
             json_output=True,

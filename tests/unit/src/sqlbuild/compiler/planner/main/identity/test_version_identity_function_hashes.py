@@ -4,15 +4,13 @@ from dataclasses import replace
 
 import pytest
 
+from sqlbuild._native import build_function_local_hashes
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledObjectKey,
     FunctionReturnColumn,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.main.identity.version_identity_function_hashes import (
-    build_function_local_hashes,
-)
 from sqlbuild.compiler.planner.models import DirectModelVersionIdentities
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import build_compiled_function
 from tests.unit.src.sqlbuild.compiler.planner.main.identity._test_types import (

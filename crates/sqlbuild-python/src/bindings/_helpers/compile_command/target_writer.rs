@@ -27,6 +27,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::compile_outputs::artifacts::{
     publish_staged_artifacts, remove_stale_artifacts,
 };
+use crate::bindings::_helpers::compile_outputs::runtime_target::{
+    compiled_sql_test_path, planned_sql_test_path,
+};
 
 const COMPILED_DIR: &str = "compiled";
 const MODELS_DIR: &str = "models";
@@ -43,8 +46,6 @@ const PUBLISHED_STAGING_CHANGED: &str = "changed";
 const PUBLISHED_TREE: &str = "tree";
 const OUTPUT_MODELS_MODULE: &str = "sqlbuild.cli.output.models";
 const CLI_EXCEPTIONS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
-const COMPILED_TEST_PATH_MODULE: &str = "sqlbuild.cli.paths.main._compiled_sql_test_output_path";
-const TEST_PATH_MODULE: &str = "sqlbuild.cli.paths.main._sql_test_output_path";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
 const MODEL_CHAIN_MODULE: &str = "sqlbuild.compiler.planner.main.execution.sql_test_model_chain";
@@ -269,7 +270,7 @@ fn write_planned_target<'py>(
         let entry: Bound<'py, PyAny> = entry?;
         let path: Bound<'py, PyAny> = compiled
             .div(TESTS_DIR)?
-            .div(imported(py, TEST_PATH_MODULE, "sql_test_output_path")?.call1((&entry,))?)?;
+            .div(planned_sql_test_path(&entry)?)?;
         let comparison_sql: String = timed(py, "comparison_render_ms", || {
             call_with(
                 &imported(py, COMPARISON_SQL_MODULE, "build_sql_test_comparison_sql")?,
@@ -537,16 +538,9 @@ fn write_static_tests<'py>(
     let mut test_paths: Vec<Bound<'py, PyAny>> = Vec::new();
     for ((test, _, _), artifact) in zipped(planned)? {
         let artifact: &Bound<'py, PyAny> = artifact.bind(py);
-        let path: Bound<'py, PyAny> = tests_root.div(call_with(
-            &imported(
-                py,
-                COMPILED_TEST_PATH_MODULE,
-                "compiled_sql_test_output_path",
-            )?,
-            &[
-                ("test", test.bind(py).clone()),
-                ("model_names", artifact.getattr("model_names")?),
-            ],
+        let path: Bound<'py, PyAny> = tests_root.div(compiled_sql_test_path(
+            test.bind(py),
+            &artifact.getattr("model_names")?,
         )?)?;
         batch.queue_sql(&path, &artifact.getattr("sql")?.extract::<String>()?)?;
         managed.push(path.clone());

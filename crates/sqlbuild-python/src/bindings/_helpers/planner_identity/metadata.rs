@@ -1,0 +1,512 @@
+//! Version identity metadata JSON and hashes of models, functions and seeds, byte-identical to the recorded fingerprints.
+
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyTuple};
+use pyo3::{pyfunction, wrap_pyfunction};
+
+use sqlbuild_analysis::planner_identity::constants::{
+    CONTRACT_CONFIG_KEY, CURSOR_INPUTS_CONFIG_KEY, ENFORCED_CONTRACT_POLICY,
+    MODEL_CUSTOM_CONFIG_KEY, MODEL_PLACEHOLDERS_CONFIG_KEY, MODEL_POST_HOOKS_CONFIG_KEY,
+    MODEL_PRE_HOOKS_CONFIG_KEY, SQL_HOOK_IDENTITY_FIELDS, TABLE_FN_RESOURCE, UDF_RESOURCE,
+    VERSION_IDENTITY_CONFIG_KEYS,
+};
+use sqlbuild_analysis::planner_identity::main::function_fingerprint_sql::function_fingerprint_sql;
+use sqlbuild_analysis::planner_identity::main::stable_identity_hash::stable_identity_hash;
+use sqlbuild_analysis::planner_identity::models::FunctionFingerprintFields;
+
+use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords, within};
+use crate::bindings::_helpers::discovery::hook_entries::hook_entries;
+use crate::bindings::_helpers::planner_identity::hashing::function_definition_hash;
+use crate::bindings::_helpers::planner_identity::json_values::{COMPACT, SPACED, sorted_dumps};
+
+const LOCAL_FUNCTION_HASHES_KEY: &str = "local_function_hashes";
+const DATACLASSES_MODULE: &str = "dataclasses";
+const CSV_MODULE: &str = "csv";
+const BUILTINS_MODULE: &str = "builtins";
+const DEFAULT_SEED_ENCODING: &str = "utf-8-sig";
+/// CSV settings passed to `csv.reader` when set.
+const SEED_DIALECT_OPTIONS: [&str; 5] = [
+    "delimiter",
+    "quotechar",
+    "doublequote",
+    "escapechar",
+    "skipinitialspace",
+];
+
+/// The config entries that affect a model's produced version identity.
+fn version_identity_config<'py>(config_values: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+    let identity: Bound<'py, PyDict> = PyDict::new(config_values.py());
+    for key in std::iter::once(CURSOR_INPUTS_CONFIG_KEY).chain(VERSION_IDENTITY_CONFIG_KEYS) {
+        if config_values.contains(key)? {
+            identity.set_item(key, config_values.get_item(key)?)?;
+        }
+    }
+    Ok(identity)
+}
+
+/// `value or {}`.
+fn or_empty<'py>(value: Option<Bound<'py, PyAny>>, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    match value {
+        Some(value) if value.is_truthy()? => Ok(value),
+        _ => Ok(PyDict::new(py).into_any()),
+    }
+}
+
+/// Deterministic metadata JSON for model version identity.
+pub(crate) fn version_identity_metadata_json(
+    model_name: &Bound<'_, PyAny>,
+    config_values: &Bound<'_, PyAny>,
+    (local_function_hashes, execution_signature): (
+        Option<Bound<'_, PyAny>>,
+        Option<Bound<'_, PyAny>>,
+    ),
+) -> PyResult<String> {
+    let py: Python<'_> = model_name.py();
+    let payload: Bound<'_, PyDict> = PyDict::new(py);
+    payload.set_item("config", version_identity_config(config_values)?)?;
+    payload.set_item("execution_signature", or_empty(execution_signature, py)?)?;
+    payload.set_item(
+        LOCAL_FUNCTION_HASHES_KEY,
+        or_empty(local_function_hashes, py)?,
+    )?;
+    payload.set_item("model_name", model_name)?;
+    sorted_dumps(payload.as_any(), COMPACT, true)
+}
+
+/// Deterministic non-query model fingerprint metadata JSON.
+pub(crate) fn model_version_identity_metadata_json<'py>(
+    model: &Bound<'py, PyAny>,
+    function_local_hashes: Option<&Bound<'py, PyAny>>,
+    hook_version_hashes: Option<&Bound<'py, PyAny>>,
+) -> PyResult<String> {
+    let py: Python<'py> = model.py();
+    let local_function_hashes: Bound<'py, PyDict> = PyDict::new(py);
+    if let Some(function_hashes) = function_local_hashes.filter(|hashes| !hashes.is_none()) {
+        for upstream_key in model.getattr("deps")?.try_iter()? {
+            let upstream_key: Bound<'py, PyAny> = upstream_key?;
+            let kind: String = upstream_key.getattr("resource_type")?.str()?.extract()?;
+            if kind != UDF_RESOURCE && kind != TABLE_FN_RESOURCE {
+                continue;
+            }
+            let name: Bound<'py, PyAny> = upstream_key.getattr("name")?;
+            let upstream_hash: Bound<'py, PyAny> = function_hashes.call_method1("get", (&name,))?;
+            if !upstream_hash.is_none() {
+                local_function_hashes.set_item(name, upstream_hash)?;
+            }
+        }
+    }
+    let config_values: Bound<'py, PyAny> = model.getattr("config")?.getattr("values")?;
+    let signature: Bound<'py, PyDict> =
+        execution_signature(model, &config_values, hook_version_hashes)?;
+    version_identity_metadata_json(
+        &model.getattr("name")?,
+        &config_values,
+        (
+            Some(local_function_hashes.into_any()),
+            Some(signature.into_any()),
+        ),
+    )
+}
+
+fn execution_signature<'py>(
+    model: &Bound<'py, PyAny>,
+    config_values: &Bound<'py, PyAny>,
+    hook_version_hashes: Option<&Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let py: Python<'py> = model.py();
+    let signature: Bound<'py, PyDict> = PyDict::new(py);
+    if let Some(contract) = contract_output_signature(model, config_values)? {
+        signature.set_item("contract", contract)?;
+    }
+    for (config_key, signature_key) in [
+        (MODEL_CUSTOM_CONFIG_KEY, "custom_config"),
+        (MODEL_PLACEHOLDERS_CONFIG_KEY, "custom_placeholders"),
+    ] {
+        if config_values.contains(config_key)? {
+            signature.set_item(signature_key, config_values.get_item(config_key)?)?;
+        }
+    }
+    let python_hook_fields: Bound<'py, PyDict> = PyDict::new(py);
+    if let Some(hashes) = hook_version_hashes.filter(|hashes| !hashes.is_none()) {
+        for item in hashes.call_method0("items")?.try_iter()? {
+            let (name, version_hash): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
+            let fields: Bound<'py, PyDict> = PyDict::new(py);
+            fields.set_item("version_hash", version_hash)?;
+            python_hook_fields.set_item(name, fields)?;
+        }
+    }
+    let sql_fields: Vec<String> = SQL_HOOK_IDENTITY_FIELDS
+        .iter()
+        .map(|field| (*field).to_owned())
+        .collect();
+    for config_key in [MODEL_PRE_HOOKS_CONFIG_KEY, MODEL_POST_HOOKS_CONFIG_KEY] {
+        if config_values.contains(config_key)? {
+            signature.set_item(
+                config_key,
+                hook_entries(
+                    &config_values.get_item(config_key)?,
+                    &sql_fields,
+                    Some(&python_hook_fields),
+                )?,
+            )?;
+        }
+    }
+    Ok(signature)
+}
+
+/// Required model output metadata that participates in execution identity.
+fn contract_output_signature<'py>(
+    model: &Bound<'py, PyAny>,
+    config_values: &Bound<'py, PyAny>,
+) -> PyResult<Option<Bound<'py, PyDict>>> {
+    let py: Python<'py> = model.py();
+    let schema_entry: Bound<'py, PyAny> = model.getattr("schema_entry")?;
+    if schema_entry.is_none() {
+        return Ok(None);
+    }
+    let columns: Bound<'py, PyAny> = schema_entry.getattr("columns")?;
+    let families: Bound<'py, PyAny> = schema_entry.getattr("dynamic_columns")?;
+    if !(columns.is_truthy()? || families.is_truthy()?) {
+        return Ok(None);
+    }
+    let enforced: bool = config_values
+        .call_method1("get", (CONTRACT_CONFIG_KEY,))?
+        .eq(ENFORCED_CONTRACT_POLICY)?;
+    if !enforced && schema_entry.getattr("model_schema")?.is_none() {
+        return Ok(None);
+    }
+    let enum_columns: Bound<'py, PyAny> = model.getattr("enum_columns")?;
+    let rendered: Bound<'py, PyList> = PyList::empty(py);
+    for column in columns.try_iter()? {
+        let column: Bound<'py, PyAny> = column?;
+        let entry: Bound<'py, PyDict> = column_signature(&column)?;
+        let declaration: Bound<'py, PyAny> =
+            enum_columns.call_method1("get", (column.getattr("name")?,))?;
+        if !declaration.is_none() {
+            let members: Bound<'py, PyList> = PyList::empty(py);
+            for member in declaration.getattr("members")?.try_iter()? {
+                let member: Bound<'py, PyAny> = member?;
+                let rendered_member: Bound<'py, PyDict> = PyDict::new(py);
+                rendered_member.set_item("name", member.getattr("name")?)?;
+                rendered_member.set_item("value", member.getattr("value")?)?;
+                members.append(rendered_member)?;
+            }
+            let enum_entry: Bound<'py, PyDict> = PyDict::new(py);
+            enum_entry.set_item("name", declaration.getattr("name")?)?;
+            enum_entry.set_item("members", members)?;
+            entry.set_item("enum", enum_entry)?;
+        }
+        rendered.append(entry)?;
+    }
+    let signature: Bound<'py, PyDict> = PyDict::new(py);
+    signature.set_item("enforced", enforced)?;
+    signature.set_item("columns", rendered)?;
+    if families.is_truthy()? {
+        signature.set_item("dynamic_columns", family_signatures(&families)?)?;
+    }
+    Ok(Some(signature))
+}
+
+fn column_signature<'py>(column: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+    let entry: Bound<'py, PyDict> = PyDict::new(column.py());
+    for field in ["name", "type", "nullable"] {
+        entry.set_item(field, column.getattr(field)?)?;
+    }
+    Ok(entry)
+}
+
+fn family_signatures<'py>(families: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
+    let rendered: Bound<'py, PyList> = PyList::empty(families.py());
+    for family in families.try_iter()? {
+        let family: Bound<'py, PyAny> = family?;
+        let entry: Bound<'py, PyDict> = PyDict::new(families.py());
+        for field in [
+            "name",
+            "pivot_column",
+            "value_column",
+            "aggregate",
+            "type",
+            "name_pattern",
+        ] {
+            entry.set_item(field, family.getattr(field)?)?;
+        }
+        rendered.append(entry)?;
+    }
+    Ok(rendered)
+}
+
+/// The hash of a model's own declared columns, column families and contract setting.
+pub(crate) fn model_declared_columns_hash(model: &Bound<'_, PyAny>) -> PyResult<String> {
+    let py: Python<'_> = model.py();
+    let schema_entry: Bound<'_, PyAny> = model.getattr("schema_entry")?;
+    let payload: Bound<'_, PyDict> = PyDict::new(py);
+    payload.set_item(
+        "contract",
+        model
+            .getattr("config")?
+            .getattr("values")?
+            .call_method1("get", (CONTRACT_CONFIG_KEY,))?,
+    )?;
+    let columns: Bound<'_, PyList> = PyList::empty(py);
+    let mut families: Bound<'_, PyList> = PyList::empty(py);
+    let mut type_enforcement: Bound<'_, PyAny> = py.None().into_bound(py);
+    if !schema_entry.is_none() {
+        for column in schema_entry.getattr("columns")?.try_iter()? {
+            columns.append(column_signature(&column?)?)?;
+        }
+        families = family_signatures(&schema_entry.getattr("dynamic_columns")?)?;
+        type_enforcement = schema_entry.getattr("type_enforcement")?;
+    }
+    payload.set_item("columns", columns)?;
+    payload.set_item("dynamic_columns", families)?;
+    payload.set_item("type_enforcement", type_enforcement)?;
+    Ok(stable_identity_hash(&sorted_dumps(
+        payload.as_any(),
+        COMPACT,
+        true,
+    )?))
+}
+
+/// Local-only semantic hashes of functions by name; SQL bodies ignore layout and comments.
+pub(crate) fn function_local_hashes<'py>(
+    functions: &Bound<'py, PyAny>,
+    dialect: Option<&str>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let py: Python<'py> = functions.py();
+    let hashes: Bound<'py, PyDict> = PyDict::new(py);
+    for function in functions.try_iter()? {
+        let function: Bound<'py, PyAny> = function?;
+        let name: String = function.getattr("name")?.extract()?;
+        let language: Bound<'py, PyAny> = function.getattr("language")?.getattr("value")?;
+        let body_hash: String = function_definition_hash(
+            py,
+            &name,
+            (
+                &function.getattr("body_sql")?.extract::<String>()?,
+                &language.extract::<String>()?,
+                dialect,
+            ),
+        )?;
+        let payload: Bound<'py, PyDict> = PyDict::new(py);
+        payload.set_item(
+            "arguments",
+            name_type_pairs(&function.getattr("arguments")?)?,
+        )?;
+        payload.set_item("returns", function.getattr("returns")?)?;
+        payload.set_item(
+            "return_columns",
+            name_type_pairs(&function.getattr("return_columns")?)?,
+        )?;
+        payload.set_item("body_sql", body_hash)?;
+        payload.set_item("language", language)?;
+        for field in ["runtime_version", "entry_point", "packages"] {
+            payload.set_item(field, function.getattr(field)?)?;
+        }
+        hashes.set_item(
+            name,
+            stable_identity_hash(&sorted_dumps(payload.as_any(), SPACED, true)?),
+        )?;
+    }
+    Ok(hashes)
+}
+
+fn name_type_pairs<'py>(items: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
+    let pairs: Bound<'py, PyList> = PyList::empty(items.py());
+    for item in items.try_iter()? {
+        let item: Bound<'py, PyAny> = item?;
+        pairs.append(PyTuple::new(
+            items.py(),
+            [item.getattr("name")?, item.getattr("type")?],
+        )?)?;
+    }
+    Ok(pairs)
+}
+
+/// `f"{value or ''}"` of an optional attribute.
+fn text_or_empty(owner: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
+    let value: Bound<'_, PyAny> = match owner.getattr(name) {
+        Ok(value) => value,
+        Err(_) => return Ok(String::new()),
+    };
+    if value.is_truthy()? {
+        value.str()?.extract()
+    } else {
+        Ok(String::new())
+    }
+}
+
+fn rendered_pairs(items: &Bound<'_, PyAny>) -> PyResult<Vec<(String, String)>> {
+    items
+        .try_iter()?
+        .map(|item| {
+            let item: Bound<'_, PyAny> = item?;
+            Ok((text_or_empty(&item, "name")?, text_or_empty(&item, "type")?))
+        })
+        .collect()
+}
+
+/// Stable function definition text used for change fingerprints.
+pub(crate) fn compiled_function_fingerprint_sql(function: &Bound<'_, PyAny>) -> PyResult<String> {
+    Ok(function_fingerprint_sql(&FunctionFingerprintFields {
+        language: function.getattr("language")?.str()?.extract()?,
+        arguments: rendered_pairs(&function.getattr("arguments")?)?,
+        returns: function.getattr("returns")?.str()?.extract()?,
+        return_columns: rendered_pairs(&function.getattr("return_columns")?)?,
+        runtime_version: text_or_empty(function, "runtime_version")?,
+        entry_point: text_or_empty(function, "entry_point")?,
+        packages: function
+            .getattr("packages")?
+            .try_iter()?
+            .map(|package| package?.extract::<String>())
+            .collect::<PyResult<_>>()?,
+        body_sql: function.getattr("body_sql")?.extract()?,
+    }))
+}
+
+/// `(identity_hash, metadata_json)` of one compiled seed from its content and load-affecting config.
+pub(crate) fn seed_identity(seed: &Bound<'_, PyAny>) -> PyResult<(String, String)> {
+    let py: Python<'_> = seed.py();
+    let schema_entry: Bound<'_, PyAny> = seed.getattr("schema_entry")?;
+    let csv_settings: Bound<'_, PyAny> = schema_entry.getattr("csv_settings")?;
+    let columns: Bound<'_, PyList> = PyList::empty(py);
+    for column in schema_entry.getattr("columns")?.try_iter()? {
+        columns.append(column_signature(&column?)?)?;
+    }
+    let rows: Bound<'_, PyAny> = if seed.getattr("external")?.is_truthy()? {
+        PyList::empty(py).into_any()
+    } else {
+        seed_rows(
+            &seed.getattr("seed_file")?.getattr("file_path")?,
+            &csv_settings,
+        )?
+    };
+    let payload: Bound<'_, PyDict> = PyDict::new(py);
+    payload.set_item("name", seed.getattr("name")?)?;
+    payload.set_item(
+        "csv_settings",
+        imported(py, DATACLASSES_MODULE, "asdict")?.call1((&csv_settings,))?,
+    )?;
+    payload.set_item("columns", columns)?;
+    payload.set_item("rows", rows)?;
+    let metadata_json: String = sorted_dumps(payload.as_any(), COMPACT, false)?;
+    Ok((stable_identity_hash(&metadata_json), metadata_json))
+}
+
+/// Every row of the seed file as the standard library CSV reader yields it.
+fn seed_rows<'py>(
+    file_path: &Bound<'py, PyAny>,
+    csv_settings: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = file_path.py();
+    let encoding: Bound<'py, PyAny> = match csv_settings.getattr("encoding")? {
+        value if value.is_truthy()? => value,
+        _ => PyString::new(py, DEFAULT_SEED_ENCODING).into_any(),
+    };
+    let options: Bound<'py, PyDict> = PyDict::new(py);
+    for option in SEED_DIALECT_OPTIONS {
+        let value: Bound<'py, PyAny> = csv_settings.getattr(option)?;
+        if !value.is_none() {
+            options.set_item(option, value)?;
+        }
+    }
+    let handle: Bound<'py, PyAny> = imported(py, BUILTINS_MODULE, "open")?.call(
+        (file_path, "r"),
+        Some(&keywords(
+            py,
+            &[
+                ("encoding", encoding),
+                ("newline", PyString::new(py, "").into_any()),
+            ],
+        )?),
+    )?;
+    within(&handle, |entered| {
+        let rows: Bound<'py, PyList> = PyList::empty(py);
+        let reader: Bound<'py, PyAny> =
+            imported(py, CSV_MODULE, "reader")?.call((entered,), Some(&options))?;
+        for row in reader.try_iter()? {
+            rows.append(PyList::new(
+                py,
+                row?.try_iter()?.collect::<PyResult<Vec<_>>>()?,
+            )?)?;
+        }
+        Ok(rows.into_any())
+    })
+}
+
+/// Deterministic metadata JSON for model version identity.
+#[pyfunction]
+#[pyo3(signature = (*, model_name, config_values, local_function_hashes = None, execution_signature = None))]
+fn build_version_identity_metadata_json<'py>(
+    model_name: &Bound<'py, PyAny>,
+    config_values: &Bound<'py, PyAny>,
+    local_function_hashes: Option<Bound<'py, PyAny>>,
+    execution_signature: Option<Bound<'py, PyAny>>,
+) -> PyResult<String> {
+    version_identity_metadata_json(
+        model_name,
+        config_values,
+        (local_function_hashes, execution_signature),
+    )
+}
+
+/// Deterministic non-query model fingerprint metadata JSON.
+#[pyfunction]
+#[pyo3(signature = (*, model, function_local_hashes = None, hook_version_hashes = None))]
+fn build_model_version_identity_metadata_json<'py>(
+    model: &Bound<'py, PyAny>,
+    function_local_hashes: Option<Bound<'py, PyAny>>,
+    hook_version_hashes: Option<Bound<'py, PyAny>>,
+) -> PyResult<String> {
+    model_version_identity_metadata_json(
+        model,
+        function_local_hashes.as_ref(),
+        hook_version_hashes.as_ref(),
+    )
+}
+
+/// Hash the model's own declared columns, column families and contract setting.
+#[pyfunction]
+#[pyo3(signature = (*, model))]
+fn declared_columns_hash(model: &Bound<'_, PyAny>) -> PyResult<String> {
+    model_declared_columns_hash(model)
+}
+
+/// Local-only semantic hashes of functions by name.
+#[pyfunction]
+#[pyo3(signature = (*, functions, dialect))]
+fn build_function_local_hashes<'py>(
+    functions: &Bound<'py, PyAny>,
+    dialect: Option<&str>,
+) -> PyResult<Bound<'py, PyDict>> {
+    function_local_hashes(functions, dialect)
+}
+
+/// Stable function definition text used for change fingerprints.
+#[pyfunction]
+fn build_compiled_function_fingerprint_sql(function: &Bound<'_, PyAny>) -> PyResult<String> {
+    compiled_function_fingerprint_sql(function)
+}
+
+/// `(identity_hash, metadata_json)` for one compiled seed.
+#[pyfunction]
+fn build_seed_identity(seed: &Bound<'_, PyAny>) -> PyResult<(String, String)> {
+    seed_identity(seed)
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(
+        build_version_identity_metadata_json,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        build_model_version_identity_metadata_json,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(declared_columns_hash, module)?)?;
+    module.add_function(wrap_pyfunction!(build_function_local_hashes, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        build_compiled_function_fingerprint_sql,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(build_seed_identity, module)?)
+}

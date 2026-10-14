@@ -13,8 +13,9 @@ import pytest
 import sqlbuild._native as native_module
 from sqlbuild._native import PreparedCompileArtifacts
 from sqlbuild._native import run_cli as main
-from sqlbuild.cli.compile_reuse._helpers import native_reuse as native_reuse_module
+from sqlbuild.cli.compile_reuse import constants as reuse_constants_module
 from sqlbuild.cli.compile_reuse._helpers import provider_settings as provider_settings_module
+from sqlbuild.cli.compile_reuse._helpers import runtime_identity as runtime_identity_module
 from sqlbuild.cli.compile_reuse._helpers.runtime_identity import runtime_identity
 from sqlbuild.cli.compile_reuse.constants import (
     NATIVE_REUSE_DIRECTORY_NAME,
@@ -109,7 +110,7 @@ def prepare_output_compiles(*, monkeypatch: pytest.MonkeyPatch, reuse_disabled: 
 
     monkeypatch.setenv(REUSE_DISABLE_ENV_VAR, reuse_disabled)
     monkeypatch.setattr(native_module, "PreparedCompileArtifacts", _StagingEveryProject)
-    monkeypatch.setattr(native_reuse_module, "RACY_WINDOW_NS", 0)
+    monkeypatch.setattr(reuse_constants_module, "RACY_WINDOW_NS", 0)
 
 
 def main_compile_json(*, project_dir: Path) -> int:
@@ -210,7 +211,7 @@ def change_runtime(project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def changed() -> dict[str, str]:
         return {**runtime_identity(), "python": "3.0.0 (simulated)"}
 
-    monkeypatch.setattr(native_reuse_module, "runtime_identity", changed)
+    monkeypatch.setattr(runtime_identity_module, "runtime_identity", changed)
 
 
 def change_native_build(project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:

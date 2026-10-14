@@ -16,23 +16,24 @@ use sqlbuild_core::load_command::main::render_load_plan::render_load_plan;
 use sqlbuild_core::load_command::main::render_load_ready::render_load_ready;
 use sqlbuild_core::load_command::models::{LoadCounts, LoadResultText};
 
+use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::cursor::overrides::{cursor_integer, cursor_timestamp};
 use crate::bindings::_helpers::load::load_progress::{
     LoadCallbackRelay, LoadProgressReporter, load_result_text,
 };
 use crate::bindings::_helpers::load::load_selection::{
     LoadProject, LoaderDefaults, loader_defaults,
 };
+use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
-const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
-const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild.compiler.pipeline.main.reject_unit_test_selectors";
+const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
 const EFFECTIVE_TARGET_MODULE: &str = "sqlbuild._native";
 const EFFECTIVE_RUNTIME_MODULE: &str = "sqlbuild._native";
 const EFFECTIVE_SETTINGS_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const RELATION_LOOKUP_MODULE: &str = "sqlbuild.adapter.relations.main.relation_lookup";
 const CURSOR_OVERRIDES_MODULE: &str =
     "sqlbuild.compiler.planner.main.cursor_window._typed_cursor_overrides";
@@ -40,7 +41,6 @@ const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
 const PROVIDER_SESSION_MODULE: &str = "sqlbuild.provider.main.session";
 const PYTHON_NODE_MODELS: &str = "sqlbuild.python_nodes.models";
 const PYTHON_NODE_TYPES: &str = "sqlbuild.python_nodes.types";
-const CURSOR_PARSING_MODULE: &str = "sqlbuild.cli.commands._helpers.input.parsing";
 const LOAD_MODELS: &str = "sqlbuild.executor.load.models";
 const LOAD_RUN_MODULE: &str = "sqlbuild.executor.load.main.run";
 const LOADER_NODE_KEY: &str = "sqlbuild_loader_node";
@@ -126,9 +126,7 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
     let machine_output: bool = request.getattr("json_output")?.extract()?;
     let use_color: bool = !request.getattr("no_color")?.extract::<bool>()?
         && !machine_output
-        && imported(py, COLOR_MODULE, "supports_color")?
-            .call0()?
-            .extract::<bool>()?;
+        && stdout_supports_color(py)?;
     let stream: Bound<'py, PyAny> =
         py.import("sys")?
             .getattr(if machine_output { "stderr" } else { "stdout" })?;
@@ -286,13 +284,7 @@ fn prepare<'py>(
             ("local_config", discovered.getattr("local_config")?),
         ],
     )?;
-    let adapter: Bound<'py, PyAny> = call_with(
-        &imported(py, ADAPTERS_MODULE, "resolve_adapter")?,
-        &[
-            ("adapter_name", adapter_name.clone()),
-            ("project_dir", invocation.project_dir.clone()),
-        ],
-    )?;
+    let adapter: Bound<'py, PyAny> = resolve_cli_adapter(&adapter_name, &invocation.project_dir)?;
     let connection_config: Bound<'py, PyAny> = call_with(
         &imported(py, NATIVE_MODULE, "resolve_project_connection_config")?,
         &[
@@ -356,13 +348,6 @@ fn prepare<'py>(
     })
 }
 
-fn cursor<'py>(
-    overrides: &Bound<'py, PyAny>,
-    (field, parser): (&str, &str),
-) -> PyResult<Bound<'py, PyAny>> {
-    imported(overrides.py(), CURSOR_PARSING_MODULE, parser)?.call1((overrides.getattr(field)?,))
-}
-
 /// The executor's runtime parameters for this load.
 fn runtime_params<'py>(
     request: &Bound<'py, PyAny>,
@@ -387,19 +372,19 @@ fn runtime_params<'py>(
             ("is_reload", request.getattr("reload")?),
             (
                 "start_cursor_ts",
-                cursor(overrides, ("start_ts", "parse_cursor_timestamp"))?,
+                cursor_timestamp(&overrides.getattr("start_ts")?)?,
             ),
             (
                 "end_cursor_ts",
-                cursor(overrides, ("end_ts", "parse_cursor_timestamp"))?,
+                cursor_timestamp(&overrides.getattr("end_ts")?)?,
             ),
             (
                 "start_cursor_int",
-                cursor(overrides, ("start_int", "parse_cursor_integer"))?,
+                cursor_integer(&overrides.getattr("start_int")?)?,
             ),
             (
                 "end_cursor_int",
-                cursor(overrides, ("end_int", "parse_cursor_integer"))?,
+                cursor_integer(&overrides.getattr("end_int")?)?,
             ),
             (
                 "use_color",

@@ -2,7 +2,7 @@
 # migration work that moves to Rust. `remaining_lines` must equal the current count of that work:
 # a PR that moves code lowers it, and adding movable Python fails the check.
 # Native failures must surface as errors; `handled_native_errors` lists the reviewed exceptions.
-remaining_lines = 51236
+remaining_lines = 42632
 
 [[stays]]
 path = "executor"
@@ -123,6 +123,11 @@ note = "Submits custom rules to their worker thread beside native built-in rule 
 path = "rule_engine/_helpers/engine/custom_payloads.py"
 reason = "user-code"
 note = "Reads user rule functions (source lines, qualified names, import closures) to describe custom rules for native selection."
+
+[[stays]]
+path = "rule_engine/_helpers/engine/_custom_catalogue.py"
+reason = "user-code"
+note = "Imports the project's custom rule modules and collects their @rule functions for the native catalogue."
 
 [[stays]]
 path = "rule_engine/_helpers/engine/custom_rules.py"
@@ -298,6 +303,71 @@ note = "Runs the dbt subprocess over the user's dbt project and drives its progr
 path = "integrations/dbt/main/runtime/_execute_json_event_stream.py"
 reason = "user-code"
 note = "Entry point of the dbt subprocess runner."
+
+[[stays]]
+path = "integrations/dbt/classes/dbt_runner.py"
+reason = "user-code"
+note = "Runs dbt compile, deps, debug and ls as subprocesses over the user's dbt project."
+
+[[stays]]
+path = "integrations/dbt/_helpers/profile/load.py"
+reason = "user-code"
+note = "Loads the user's dbt_project.yml and profiles.yml with PyYAML."
+
+[[stays]]
+path = "integrations/dbt/_helpers/profile/render.py"
+reason = "user-code"
+note = "Renders the selected dbt profile output with Jinja, env_var and var as dbt does."
+
+[[stays]]
+path = "cli/commands/main/entrypoint/_dispatch_with_compute_logs.py"
+reason = "user-code"
+note = "Captures the command's stdout, stderr and logging into the local compute log around user code."
+
+[[stays]]
+path = "cli/commands/main/entrypoint/_dispatch_with_output_capture.py"
+reason = "user-code"
+note = "Tees the command's Python output streams to configured output capture sinks."
+
+[[stays]]
+path = "cli/commands/_helpers/entry/compute_log_diagnostics.py"
+reason = "user-code"
+note = "Logs compute log capture failures through Python logging during capture."
+
+[[stays]]
+path = "integrations/dbt/_helpers/profile/init.py"
+reason = "user-code"
+note = "Initializes a SQLBuild project from the user's dbt project and runs dbt debug as a subprocess."
+
+[[stays]]
+path = "cli/compile_reuse/_helpers/provider_settings.py"
+reason = "user-code"
+note = "Inspects user provider settings classes for the environment and files they read."
+
+[[stays]]
+path = "cli/compile_reuse/_helpers/runtime_identity.py"
+reason = "user-code"
+note = "Interpreter and invocation facts of the Python host that user code runs in."
+
+[[stays]]
+path = "cli/compile_reuse/_helpers/startup_inputs.py"
+reason = "user-code"
+note = "Interpreter and site-path inputs user modules import from."
+
+[[stays]]
+path = "cli/entry/main/entry.py"
+reason = "public-api"
+note = "The installed sqlbuild-python console entry point."
+
+[[stays]]
+path = "cli/entry/main/launched.py"
+reason = "public-api"
+note = "The Python entry point the native sqb executable hands invocations to."
+
+[[stays]]
+path = "cli/entry/_helpers/streams.py"
+reason = "public-api"
+note = "Reconfigures the Python process's standard streams for the console entry points."
 
 [[stays]]
 path = "compiler/python_nodes/_helpers/identity.py"

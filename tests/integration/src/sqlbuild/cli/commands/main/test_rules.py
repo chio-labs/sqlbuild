@@ -15,14 +15,13 @@ import sqlbuild._native as native_module
 import sqlbuild.compiler.compile._helpers.render.user_macros as macros_module
 import sqlbuild.rule_engine._helpers.host.custom_host_pool as custom_host_pool_module
 import sqlbuild.rule_engine._helpers.run.rule_threads as rule_threads_module
-import sqlbuild.rule_engine._helpers.run.rules as rules_module
+from sqlbuild._native import rules_bulk_cache_path
 from sqlbuild._native import run_cli as main
 from sqlbuild.compiler.compile.models import DeclarationScopeBuild, LoadedMacro
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile, DiscoveredProjectInputs
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.lint.classes.stop_context import LintStopContext
 from sqlbuild.lint.models import LintRunResult
-from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     CustomHostSplitIntegrationTestCase,
     CustomRuleCacheSequenceTestCase,
@@ -713,7 +712,7 @@ def test_given_sql_rule_cache_from_another_native_build_when_compiling_then_rule
 
     cold_exit: int = main(command)
     cold: dict[str, object] = json.loads(capsys.readouterr().out)
-    cache_path: Path = rules_module._sql_rule_cache_path(tmp_path)
+    cache_path: Path = rules_bulk_cache_path(project_dir=tmp_path, file_name="sql.json")
     stored: dict[str, object] = json.loads(cache_path.read_text(encoding="utf-8"))
     stored["build_identity"] = f"{stored['build_identity']}-rebuilt"
     cache_path.write_text(json.dumps(stored), encoding="utf-8")
@@ -931,7 +930,7 @@ def test_given_cold_non_model_sql_finding_when_compiling_then_rules_reuse_early_
         b"SELECT 1\r\n"
     )
     collections: list[frozenset[Path] | None] = []
-    original_collect: Callable[..., dict[Path, str]] = rules_module.collect_lint_project_files
+    original_collect: Callable[..., dict[Path, str]] = native_module.collect_lint_project_files
 
     def counting_collect(
         *, project_dir: Path, selected_paths: frozenset[Path] | None
@@ -939,7 +938,7 @@ def test_given_cold_non_model_sql_finding_when_compiling_then_rules_reuse_early_
         collections.append(selected_paths)
         return original_collect(project_dir=project_dir, selected_paths=selected_paths)
 
-    monkeypatch.setattr(rules_module, "collect_lint_project_files", counting_collect)
+    monkeypatch.setattr(native_module, "collect_lint_project_files", counting_collect)
 
     cold: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)
     cold_collections: int = len(collections)
@@ -994,7 +993,7 @@ def test_given_previous_build_rule_cache_when_compiling_then_lint_overlaps_with_
     previous_findings: tuple[tuple[str, str, int | None, int | None], ...] = compile_findings(
         project_dir=tmp_path, capsys=capsys
     )
-    cache_path: Path = rules_module._sql_rule_cache_path(tmp_path)
+    cache_path: Path = rules_bulk_cache_path(project_dir=tmp_path, file_name="sql.json")
     stored: dict[str, object] = json.loads(cache_path.read_text(encoding="utf-8"))
     stored["build_identity"] = "previous-build"
     cache_path.write_text(json.dumps(stored), encoding="utf-8")

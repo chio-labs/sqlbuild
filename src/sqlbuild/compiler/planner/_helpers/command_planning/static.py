@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from sqlbuild._native import get_materialization_type
+from sqlbuild._native import (
+    build_compiled_function_fingerprint_sql,
+    build_seed_identity,
+    get_materialization_type,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner._helpers.identity.functions import (
-    build_compiled_function_fingerprint_sql,
-)
-from sqlbuild.compiler.planner._helpers.identity.seed import build_seed_identity
 from sqlbuild.compiler.planner._helpers.output.plan_entry import (
     build_planner_relations_context,
     extract_seed_columns,

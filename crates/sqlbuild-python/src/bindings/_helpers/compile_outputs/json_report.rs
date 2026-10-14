@@ -104,6 +104,19 @@ pub(crate) fn indented_json(value: &Bound<'_, PyAny>) -> PyResult<String> {
     )
 }
 
+/// `json.dumps(value)`, raising what `json.dumps` raises.
+pub(crate) fn plain_json(value: &Bound<'_, PyAny>) -> PyResult<String> {
+    let mut conversion: Conversion = Conversion::default();
+    let converted: JsonValue = conversion.json_value(value)?;
+    if let Some(error) = conversion.stdlib_error {
+        return Err(error);
+    }
+    emitted(
+        &converted,
+        &JsonDialect::Stdlib(StdlibJsonOptions::new(None)),
+    )
+}
+
 /// `json.dumps(value, ensure_ascii=True, separators=(",", ":"), sort_keys=True)`.
 pub(crate) fn compact_sorted_json(value: &Bound<'_, PyAny>) -> PyResult<String> {
     let mut conversion: Conversion = Conversion::default();

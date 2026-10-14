@@ -8,15 +8,14 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString};
 use pyo3::{IntoPyObjectExt, pyclass, pyfunction, pymethods, wrap_pyfunction};
 
+use crate::bindings::_helpers::compile_command::reuse_attempt::{reuse_rules, write_launch_record};
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
 use crate::bindings::_helpers::compile_outputs::reuse::artifact_digest;
 
 const REUSE_CONSTANTS_MODULE: &str = "sqlbuild.cli.compile_reuse.constants";
-const NATIVE_REUSE_MODULE: &str = "sqlbuild.cli.compile_reuse._helpers.native_reuse";
 const PROVIDER_SETTINGS_MODULE: &str = "sqlbuild.cli.compile_reuse._helpers.provider_settings";
-const LAUNCH_RECORDS_MODULE: &str = "sqlbuild.cli.compile_reuse._helpers.launch_records";
 const MACRO_STORE_PATHS_MODULE: &str =
     "sqlbuild.compiler.macro_bridge.main._macro_store_module_paths";
 const MISS_OUTCOME: &str = "miss";
@@ -466,10 +465,7 @@ fn record<'py>(facts: &CompileFacts<'py>) -> PyResult<bool> {
             ),
             ("dag_path", dag_path),
             ("json_output", facts.json_output.clone()),
-            (
-                "rules",
-                imported(py, NATIVE_REUSE_MODULE, "reuse_rules")?.call0()?,
-            ),
+            ("rules", reuse_rules(py, true)?.into_any()),
         ],
     )?;
     let (outcome, digested): (String, Bound<'_, PyAny>) =
@@ -562,10 +558,7 @@ pub(crate) fn write_reusable_compile(
         Err(error) => return Err(error),
     };
     if stored {
-        let _ = call_with(
-            &imported(py, LAUNCH_RECORDS_MODULE, "write_launch_record")?,
-            &[("attempt", attempt)],
-        )?;
+        write_launch_record(&attempt)?;
     }
     Ok(())
 }

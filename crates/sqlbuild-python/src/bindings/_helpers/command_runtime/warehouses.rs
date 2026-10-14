@@ -21,6 +21,7 @@ use sqlbuild_model_config::templates::models::TemplateOptions;
 use crate::bindings::_helpers::command_runtime::runtime_errors::{
     expected_resolution_error, raised,
 };
+use crate::bindings::_helpers::command_runtime::warehouse_scope::current_command_warehouse_scope;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
@@ -28,7 +29,6 @@ use crate::bindings::_helpers::discovery::configuration::discover_project_config
 use crate::bindings::_helpers::model_config::template_data::expanded_template_data;
 
 const ENTRY_MODELS: &str = "sqlbuild.cli.entry.models";
-const SCOPE_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.warehouse_scope";
 const TARGET_NAME_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const SESSION_WAREHOUSE_MODULE: &str = "sqlbuild.adapter.discovery.main._session_warehouse_support";
@@ -86,8 +86,7 @@ fn optional_text(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
 }
 
 pub(crate) fn command_scope(py: Python<'_>) -> PyResult<CommandScope<'_>> {
-    let scope: Bound<'_, PyAny> =
-        imported(py, SCOPE_MODULE, "current_command_warehouse_scope")?.call0()?;
+    let scope: Bound<'_, PyAny> = current_command_warehouse_scope(py)?;
     Ok(CommandScope {
         group: scope.getattr("group")?,
         cli_warehouse: optional_text(&scope.getattr("cli_warehouse")?)?,

@@ -16,7 +16,9 @@ use sqlbuild_core::progress::models::{ExpectationStep, InspectionRecord};
 use sqlbuild_core::progress::types::DifferenceSample;
 
 use crate::bindings::_helpers::cli::progress::write_persistent;
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported, within};
+
+const INSPECTION_SINK_MODULE: &str = "sqlbuild.adapter.relations.main.inspection_query_sink";
 
 const HEADER_OPTIONS: (&[&str], &[&str]) = (
     &["stream", "command", "target", "concurrency", "use_color"],
@@ -159,6 +161,24 @@ impl VerboseInspectionWriter {
     fn format_record(record: &Bound<'_, PyAny>) -> PyResult<String> {
         Ok(format_inspection_record(&inspection_record(record)?))
     }
+}
+
+/// Run `body`, writing each inspection read and then a total to stderr while `enabled`.
+pub(crate) fn with_verbose_inspection<'py, T>(
+    py: Python<'py>,
+    enabled: bool,
+    body: impl FnOnce() -> PyResult<T>,
+) -> PyResult<T> {
+    if !enabled {
+        return body();
+    }
+    let writer: Bound<'py, VerboseInspectionWriter> =
+        Bound::new(py, VerboseInspectionWriter::new())?;
+    let sink: Bound<'py, PyAny> = imported(py, INSPECTION_SINK_MODULE, "inspection_query_sink")?
+        .call1((writer.getattr("write")?,))?;
+    let value: T = within(&sink, |_| body())?;
+    writer.get().write_total(py)?;
+    Ok(value)
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

@@ -7,13 +7,13 @@ import sys
 import pytest
 
 from sqlbuild._native import TransientStatusReporter
-from sqlbuild.presentation.main._progress_spinners_disabled import progress_spinners_disabled
 from tests.unit.src.sqlbuild.presentation.classes._test_types import (
     ProgressSpinnersDisabledTestCase,
     StatusReporterExitTestCase,
     StatusReporterOutputTestCase,
 )
 from tests.unit.src.sqlbuild.presentation.classes.helpers import (
+    OPEN_NESTED_SPINNER_SCRIPT,
     OPEN_SPINNER_SCRIPT,
     RecordingStream,
     apply_no_progress_env,
@@ -26,56 +26,6 @@ from tests.unit.src.sqlbuild.presentation.classes.helpers import (
 class _TtyStream(io.StringIO):
     def isatty(self) -> bool:
         return True
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    (
-        ProgressSpinnersDisabledTestCase(
-            description="unset env keeps spinners enabled",
-            env_value=None,
-            expected_disabled=False,
-        ),
-        ProgressSpinnersDisabledTestCase(
-            description="truthy '1' disables spinners",
-            env_value="1",
-            expected_disabled=True,
-        ),
-        ProgressSpinnersDisabledTestCase(
-            description="truthy 'true' is case-insensitive and trimmed",
-            env_value="  TRUE  ",
-            expected_disabled=True,
-        ),
-        ProgressSpinnersDisabledTestCase(
-            description="truthy 'on' disables spinners",
-            env_value="on",
-            expected_disabled=True,
-        ),
-        ProgressSpinnersDisabledTestCase(
-            description="falsey '0' keeps spinners enabled",
-            env_value="0",
-            expected_disabled=False,
-        ),
-        ProgressSpinnersDisabledTestCase(
-            description="arbitrary value keeps spinners enabled",
-            env_value="maybe",
-            expected_disabled=False,
-        ),
-        ProgressSpinnersDisabledTestCase(
-            description="empty value keeps spinners enabled",
-            env_value="",
-            expected_disabled=False,
-        ),
-    ),
-    ids=lambda case: case.description,
-)
-def test_given_no_progress_env_when_checking_then_reports_expected_disabled_state(
-    test_case: ProgressSpinnersDisabledTestCase,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    apply_no_progress_env(monkeypatch=monkeypatch, env_value=test_case.env_value)
-
-    assert progress_spinners_disabled() == test_case.expected_disabled
 
 
 @pytest.mark.parametrize(
@@ -191,6 +141,12 @@ def test_given_status_sequence_when_reporting_then_writes_expected_persistent_li
     (
         StatusReporterExitTestCase(
             description="an open spinner is stopped before the interpreter exits",
+            script=OPEN_SPINNER_SCRIPT,
+            expected_returncode=0,
+        ),
+        StatusReporterExitTestCase(
+            description="an unclosed nested progress spinner is stopped before finalization",
+            script=OPEN_NESTED_SPINNER_SCRIPT,
             expected_returncode=0,
         ),
     ),
@@ -200,7 +156,7 @@ def test_given_open_spinner_when_process_exits_then_exits_cleanly(
     test_case: StatusReporterExitTestCase,
 ) -> None:
     completed: subprocess.CompletedProcess[str] = subprocess.run(
-        (sys.executable, "-c", OPEN_SPINNER_SCRIPT),
+        (sys.executable, "-c", test_case.script),
         capture_output=True,
         text=True,
         check=False,

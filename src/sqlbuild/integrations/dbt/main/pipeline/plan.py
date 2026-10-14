@@ -7,9 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TextIO
 
-from sqlbuild.cli.commands.main.execution.connection_progress import (
-    build_connection_progress_reporter,
-)
+from sqlbuild._native import ConnectionProgressReporter
 from sqlbuild.integrations.dbt._helpers.pipeline.interop_prologue import (
     compile_dbt_interop_project,
     load_compiled_dbt_manifest,
@@ -75,7 +73,7 @@ def plan_dbt_interop_from_project(
         on_progress=on_progress,
     )
     connection_progress: Any | None = (
-        build_connection_progress_reporter(
+        ConnectionProgressReporter(
             adapter_name=compiled.adapter_name,
             stream=progress_stream,
             use_color=use_color,

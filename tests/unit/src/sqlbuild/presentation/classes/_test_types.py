@@ -58,4 +58,5 @@ class StatusReporterOutputTestCase:
 @dataclass(frozen=True)
 class StatusReporterExitTestCase:
     description: str
+    script: str
     expected_returncode: int

@@ -27,15 +27,15 @@ use crate::bindings::_helpers::planner_changes::renames::origin_names;
 use crate::bindings::_helpers::planner_changes::results::{
     MODELS_MODULE, backfill_result, change_kind, planner_enum, replay_policy_error, schema_findings,
 };
+use crate::bindings::_helpers::planner_identity::hashing::{
+    function_definition_hash, model_query_hash,
+};
+use crate::bindings::_helpers::planner_identity::metadata::{
+    compiled_function_fingerprint_sql, function_local_hashes, model_declared_columns_hash,
+    model_version_identity_metadata_json,
+};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const MODEL_METADATA_MODULE: &str = "sqlbuild.compiler.planner._helpers.identity.model_metadata";
-const VERSION_METADATA_MODULE: &str =
-    "sqlbuild.compiler.planner.main.identity.version_identity_model_metadata";
-const FUNCTION_HASHES_MODULE: &str =
-    "sqlbuild.compiler.planner.main.identity.version_identity_function_hashes";
-const HASHING_MODULE: &str = "sqlbuild.compiler.planner._helpers.identity.hashing";
-const FUNCTIONS_MODULE: &str = "sqlbuild.compiler.planner._helpers.identity.functions";
 const HOOK_IDENTITIES_MODULE: &str = "sqlbuild.compiler.python_nodes.main._hook_identities";
 const TYPES_EQUAL_MODULE: &str = "sqlbuild.adapter.type_system.main.types_equal";
 const DYNAMIC_FAMILIES_MODULE: &str = "sqlbuild._native";
@@ -46,12 +46,12 @@ const CHANGES_LOGGER: &str = "sqlbuild.planner.changes";
 const REPLAY_CONFIG_KEY: &str = "replay_on_change";
 
 /// Inputs shared by every model of one detection pass.
-struct ModelPass<'py> {
-    snapshot: Bound<'py, PyAny>,
-    query_change_tracking: bool,
-    full_refresh: bool,
-    function_local_hashes: Bound<'py, PyAny>,
-    hook_version_hashes: Bound<'py, PyAny>,
+pub(crate) struct ModelPass<'py> {
+    pub(crate) snapshot: Bound<'py, PyAny>,
+    pub(crate) query_change_tracking: bool,
+    pub(crate) full_refresh: bool,
+    pub(crate) function_local_hashes: Bound<'py, PyAny>,
+    pub(crate) hook_version_hashes: Bound<'py, PyAny>,
 }
 
 /// Selected model and function changes.
@@ -87,47 +87,47 @@ fn detect_changes<'py>(
     )?;
     let functions: Bound<'py, PyDict> = PyDict::new(py);
     let result_class: Bound<'py, PyAny> = imported(py, MODELS_MODULE, "FunctionChangeResult")?;
-    let fingerprint_sql_of: Bound<'py, PyAny> = imported(
-        py,
-        FUNCTIONS_MODULE,
-        "build_compiled_function_fingerprint_sql",
-    )?;
-    let detect_function: Bound<'py, PyAny> =
-        imported(py, FUNCTIONS_MODULE, "detect_function_change")?;
     let selected: Bound<'py, PyAny> = scope.getattr("selected_keys")?;
+    let recorded: Bound<'py, PyAny> = snapshot.getattr("fingerprints")?.getattr("functions")?;
+    let query_change_tracking: bool = project
+        .getattr("settings")?
+        .getattr("query_change_tracking")?
+        .is_truthy()?;
+    let dialect: Option<String> = snapshot.getattr("column_dialect")?.extract()?;
     for function in project.getattr("functions")?.try_iter()? {
         let function: Bound<'py, PyAny> = function?;
         let name: Bound<'py, PyAny> = function.getattr("name")?;
-        let fingerprint_sql: Bound<'py, PyAny> = fingerprint_sql_of.call1((&function,))?;
-        let mut arguments: Vec<(&str, Bound<'py, PyAny>)> =
-            vec![("fingerprint_sql", fingerprint_sql.clone())];
+        let fingerprint_sql: String = compiled_function_fingerprint_sql(&function)?;
+        let mut arguments: Vec<(&str, Bound<'py, PyAny>)> = vec![(
+            "fingerprint_sql",
+            PyString::new(py, &fingerprint_sql).into_any(),
+        )];
         if selected.contains(function.getattr("key")?)? {
-            let reason: Bound<'py, PyAny> = call_with(
-                &detect_function,
-                &[
-                    ("function", function.clone()),
-                    ("fingerprint_sql", fingerprint_sql),
-                    (
-                        "fingerprint",
-                        snapshot
-                            .getattr("fingerprints")?
-                            .getattr("functions")?
-                            .call_method1("get", (&name,))?,
-                    ),
-                    (
-                        "query_change_tracking",
-                        project
-                            .getattr("settings")?
-                            .getattr("query_change_tracking")?,
-                    ),
-                    (
-                        "full_refresh",
-                        full_refresh.into_pyobject(py)?.to_owned().into_any(),
-                    ),
-                    ("dialect", snapshot.getattr("column_dialect")?),
-                ],
-            )?;
-            arguments.push(("reason", reason));
+            let reason: &str = if full_refresh {
+                "full_refresh"
+            } else {
+                let fingerprint: Bound<'py, PyAny> = recorded.call_method1("get", (&name,))?;
+                if fingerprint.is_none() {
+                    "first_run"
+                } else if query_change_tracking
+                    && function_definition_hash(
+                        py,
+                        &name.extract::<String>()?,
+                        (
+                            &fingerprint_sql,
+                            &function.getattr("language")?.str()?.extract::<String>()?,
+                            dialect.as_deref(),
+                        ),
+                    )? != fingerprint
+                        .getattr("definition_hash")?
+                        .extract::<String>()?
+                {
+                    "query_changed"
+                } else {
+                    "no_change"
+                }
+            };
+            arguments.push(("reason", planner_enum(py, "PlanReason", reason)?));
         }
         functions.set_item(name, call_with(&result_class, &arguments)?)?;
     }
@@ -231,13 +231,14 @@ fn scope_model_changes<'py>(
             .getattr("query_change_tracking")?
             .extract()?,
     };
-    let function_local_hashes: Bound<'py, PyAny> = call_with(
-        &imported(py, FUNCTION_HASHES_MODULE, "build_function_local_hashes")?,
-        &[
-            ("functions", project.getattr("functions")?),
-            ("dialect", project.getattr("sql_analysis_dialect")?),
-        ],
-    )?;
+    let function_local_hashes: Bound<'py, PyAny> = function_local_hashes(
+        &project.getattr("functions")?,
+        project
+            .getattr("sql_analysis_dialect")?
+            .extract::<Option<String>>()?
+            .as_deref(),
+    )?
+    .into_any();
     let hook_version_hashes: Bound<'py, PyDict> = PyDict::new(py);
     let identities: Bound<'py, PyAny> =
         imported(py, HOOK_IDENTITIES_MODULE, "build_hook_identities")?
@@ -288,7 +289,7 @@ fn lookup(mapping: &Bound<'_, PyAny>, name: &Bound<'_, PyAny>) -> PyResult<Optio
     mapping.call_method1("get", (name,))?.extract()
 }
 
-fn model_change<'py>(
+pub(crate) fn model_change<'py>(
     pass: &ModelPass<'py>,
     model: &Bound<'py, PyAny>,
     (expected_version_hash, expected_metadata_json): (Option<String>, Option<String>),
@@ -296,26 +297,14 @@ fn model_change<'py>(
     let py: Python<'py> = model.py();
     let snapshot: &Bound<'py, PyAny> = &pass.snapshot;
     let model_name: Bound<'py, PyAny> = model.getattr("name")?;
-    let columns_hash: String = call_with(
-        &imported(py, MODEL_METADATA_MODULE, "declared_columns_hash")?,
-        &[("model", model.clone())],
-    )?
-    .extract()?;
+    let columns_hash: String = model_declared_columns_hash(model)?;
     let base_metadata: String = match expected_metadata_json.filter(|text| !text.is_empty()) {
         Some(text) => text,
-        None => call_with(
-            &imported(
-                py,
-                VERSION_METADATA_MODULE,
-                "build_model_version_identity_metadata_json",
-            )?,
-            &[
-                ("model", model.clone()),
-                ("function_local_hashes", pass.function_local_hashes.clone()),
-                ("hook_version_hashes", pass.hook_version_hashes.clone()),
-            ],
-        )?
-        .extract()?,
+        None => model_version_identity_metadata_json(
+            model,
+            Some(&pass.function_local_hashes),
+            Some(&pass.hook_version_hashes),
+        )?,
     };
     let metadata_json: String = with_declared_columns_hash(&base_metadata, &columns_hash);
     let mut result = ChangeResult::new(
@@ -343,17 +332,14 @@ fn model_change<'py>(
     let recorded: Option<Recorded> = recorded_fingerprint(&fingerprint)?;
     let dialect: Bound<'py, PyAny> = snapshot.getattr("column_dialect")?;
     let compiled_query_hash: Option<String> = if pass.query_change_tracking && recorded.is_some() {
-        Some(
-            call_with(
-                &imported(py, HASHING_MODULE, "model_definition_hash")?,
-                &[
-                    ("model_name", model_name.clone()),
-                    ("query_sql", model.getattr("query_sql")?),
-                    ("dialect", dialect.clone()),
-                ],
-            )?
-            .extract()?,
-        )
+        Some(model_query_hash(
+            py,
+            &model_name.extract::<String>()?,
+            (
+                &model.getattr("query_sql")?.extract::<String>()?,
+                dialect.extract::<Option<String>>()?.as_deref(),
+            ),
+        )?)
     } else {
         None
     };

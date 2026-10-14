@@ -80,6 +80,14 @@ def persistent_lines(text: str) -> tuple[str, ...]:
     return tuple(line.rsplit("\x1b[K", 1)[-1] for line in without_cursor.split("\n"))
 
 
+SLOW_FINALIZATION_SCRIPT: str = (
+    "class SlowFinalizer:\n"
+    "    def __init__(self):\n"
+    "        self.cycle = self\n"
+    "    def __del__(self):\n"
+    "        time.sleep(0.5)\n"
+    "SlowFinalizer()\n"
+)
 OPEN_SPINNER_SCRIPT: str = (
     "import io, time\n"
     "from sqlbuild._native import TransientStatusReporter\n"
@@ -89,7 +97,18 @@ OPEN_SPINNER_SCRIPT: str = (
     "reporter = TransientStatusReporter(stream=Tty())\n"
     "reporter.start('Working...')\n"
     "time.sleep(0.35)\n"
-)
+) + SLOW_FINALIZATION_SCRIPT
+OPEN_NESTED_SPINNER_SCRIPT: str = (
+    "import io, time\n"
+    "from sqlbuild._native import NestedCommandProgressCallbacks\n"
+    "class Tty(io.StringIO):\n"
+    "    def isatty(self):\n"
+    "        return True\n"
+    "reporter = NestedCommandProgressCallbacks(\n"
+    "    total=1, label='audits', stream=Tty(), use_color=False\n"
+    ")\n"
+    "reporter.on_item_start(group_name='orders', item_name='not_null')\n"
+) + SLOW_FINALIZATION_SCRIPT
 
 
 def without_no_progress_env() -> dict[str, str]:

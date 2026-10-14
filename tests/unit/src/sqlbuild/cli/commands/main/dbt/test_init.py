@@ -7,7 +7,6 @@ from _pytest.capture import CaptureResult
 
 import sqlbuild._native as dbt_init_module
 import sqlbuild.integrations.dbt.main.profile.profile_init as dbt_profile_init
-import sqlbuild.presentation.main.supports_color as color_support
 from sqlbuild.cli.commands.models import DbtInitCommandRequest
 from sqlbuild.integrations.dbt.exceptions import DbtProfileError
 from sqlbuild.integrations.dbt.models import DbtInitRequest, DbtInitResult
@@ -16,6 +15,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtInitProjectDirDefaultTestCase,
     DbtInitValidationOrderTestCase,
 )
+from tests.unit.src.sqlbuild.presentation.helpers import use_color_terminal
 
 
 @pytest.mark.parametrize(
@@ -173,7 +173,7 @@ def test_given_dbt_init_dry_run_when_running_then_outputs_preview_document(
             dry_run=False,
             expected_fragments=(),
             expected_color_fragments=(
-                "\033[2mInspecting dbt project and profile...\033[0m",
+                "\033[32m⠋\033[0m Inspecting dbt project and profile...",
                 "\033[34m\033[1mSQLBuild project created\033[0m",
                 "\033[1mSetup summary\033[0m:",
                 "\033[34mProject",
@@ -209,7 +209,7 @@ def test_given_color_terminal_when_running_dbt_init_then_it_styles_output(
             toml='name = "analytics"\n',
         )
 
-    monkeypatch.setattr(color_support, "supports_color", lambda: True)
+    use_color_terminal(monkeypatch)
     monkeypatch.setattr(dbt_profile_init, "run_dbt_profile_init", run_dbt_profile_init)
     monkeypatch.setattr(
         dbt_profile_init,

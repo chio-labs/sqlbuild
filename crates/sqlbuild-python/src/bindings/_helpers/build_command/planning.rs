@@ -8,13 +8,13 @@ use crate::bindings::_helpers::build_command::policies::{enforce_plan_policies, 
 use crate::bindings::_helpers::build_command::support::{
     boolean, emit, joined, keyword_relay, none,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::cli::progress_text::with_verbose_inspection;
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const CONSTANTS_MODULE: &str = "sqlbuild.cli.commands.constants";
 const DEFER_CLONE_MODULE: &str = "sqlbuild.cli.commands._helpers.build_planning.defer_clone";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild.cli.commands._helpers.planning.external_refs";
-const VERBOSE_INSPECTION_MODULE: &str = "sqlbuild.cli.progress.main.verbose_inspection_output";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const RUNTIME_CONTRACT_MODELS: &str = "sqlbuild.runtime.contracts.models";
 const CONNECTION_TIMING: [&str; 2] = ["connection_count", "elapsed_seconds"];
@@ -119,11 +119,8 @@ pub(crate) fn compile_build_plan<'py>(context: &BuildContext<'py>) -> PyResult<B
             ),
         ],
     )?;
-    let manager: Bound<'py, PyAny> = call_with(
-        &imported(py, VERBOSE_INSPECTION_MODULE, "verbose_inspection_output")?,
-        &[("enabled", context.request.getattr("verbose")?)],
-    )?;
-    within(&manager, |_| {
+    let verbose: bool = context.request.getattr("verbose")?.is_truthy()?;
+    with_verbose_inspection(py, verbose, || {
         call_with(
             &imported(py, NATIVE_MODULE, "run_compile_pipeline")?,
             &[

@@ -11,7 +11,6 @@ from scripts.fensu_policy._helpers.canonical_operations import (
 from scripts.fensu_policy.constants import (
     ALLOWED_DBT_REF_SCAN_PATHS,
     ALLOWED_MACRO_LOAD_PATHS,
-    ALLOWED_SELECTOR_PARSE_PATH,
     ALLOWED_SOURCE_FRESHNESS_INSERT_PREFIXES,
     DBT_INTEGRATION_PATH_PREFIX,
     GRAPH_KEY_CLASS_NAMES,
@@ -31,8 +30,8 @@ from scripts.fensu_policy.constants import (
     code="XSB041",
     family=Family.CUSTOM,
     slug="color-capability-entry",
-    message="color capability imports must use the presentation main entry",
-    remediation="Import supports_color from sqlbuild.presentation.main.supports_color.",
+    message="terminal capability imports must use the presentation main entry",
+    remediation="Import terminal_columns from sqlbuild.presentation.main.terminal_columns.",
 )
 def color_capability_entry(*, module: object, ctx: RuleContext) -> list[Fault]:
     del module
@@ -97,15 +96,12 @@ def dbt_graph_projection(*, module: object, ctx: RuleContext) -> list[Fault]:
     family=Family.CUSTOM,
     slug="selector-marker-parsing",
     message="selector + markers must be parsed by split_selector_expansion",
-    remediation="Use compiler.planner.main.selection.selector_expansion.split_selector_expansion.",
+    remediation="Use sqlbuild._native.split_selector_expansion.",
 )
 def selector_marker_parsing(*, module: object, ctx: RuleContext) -> list[Fault]:
     del module
     path: str = "/".join(ctx.repo_relative_parts())
-    if (
-        not (DBT_INTEGRATION_PATH_PREFIX in path or PLANNER_PATH_PREFIX in path)
-        or path == ALLOWED_SELECTOR_PARSE_PATH
-    ):
+    if not (DBT_INTEGRATION_PATH_PREFIX in path or PLANNER_PATH_PREFIX in path):
         return []
     return [
         ctx.fault_at(location=call.location)

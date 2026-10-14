@@ -6,9 +6,9 @@ import pytest
 from _pytest.capture import CaptureResult
 
 import sqlbuild._native as native_module
-import sqlbuild.presentation.main.supports_color as color_module
 from sqlbuild._native import run_init_command
 from tests.unit.src.sqlbuild.cli.commands.main.init._test_types import InitScaffoldTestCase
+from tests.unit.src.sqlbuild.presentation.helpers import use_color_terminal, use_plain_terminal
 
 
 @pytest.mark.parametrize(
@@ -87,7 +87,7 @@ def test_given_empty_directory_when_running_init_then_scaffolds_project_director
     project_dir: Path = tmp_path / test_case.project_dir_name
     project_dir.mkdir()
     monkeypatch.setattr(native_module, "update_sqlbuild_skills", lambda *, project_dir: None)
-    monkeypatch.setattr(color_module, "supports_color", lambda: False)
+    use_plain_terminal(monkeypatch)
 
     result: int = run_init_command(project_dir)
 
@@ -131,7 +131,7 @@ def test_given_color_terminal_when_running_init_then_it_styles_heading(
     project_dir: Path = tmp_path / test_case.project_dir_name
     project_dir.mkdir()
     monkeypatch.setattr(native_module, "update_sqlbuild_skills", lambda *, project_dir: None)
-    monkeypatch.setattr(color_module, "supports_color", lambda: True)
+    use_color_terminal(monkeypatch)
 
     result: int = run_init_command(project_dir)
 

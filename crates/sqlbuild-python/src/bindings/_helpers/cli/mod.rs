@@ -1,6 +1,7 @@
 pub(crate) mod argv;
 pub(crate) mod dispatch;
 pub(crate) mod entry;
+pub(crate) mod observability;
 pub(crate) mod progress;
 pub(crate) mod progress_reporters;
 pub(crate) mod progress_text;

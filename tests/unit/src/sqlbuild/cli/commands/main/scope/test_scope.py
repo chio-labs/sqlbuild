@@ -7,13 +7,14 @@ from io import StringIO
 
 import pytest
 
+from sqlbuild import _native as native
 from sqlbuild._native import run_scope_command
-from sqlbuild.cli.commands._helpers.runtime import adapter_context
+from sqlbuild.adapter.discovery.main import resolve_adapter as adapter_registry
 from sqlbuild.cli.commands.models import ScopeCommandRequest
 from sqlbuild.compiler.scopes.models import ScopeCompleteness, ScopeIndex
-from sqlbuild.presentation.main import supports_color as color_support
 from tests.unit.src.sqlbuild.cli.commands.main.scope._test_types import ScopeCommandCase
 from tests.unit.src.sqlbuild.compiler.scopes.helpers import report_scope_lookup
+from tests.unit.src.sqlbuild.presentation.helpers import use_color_terminal
 
 
 @pytest.mark.parametrize(
@@ -25,7 +26,8 @@ def test_given_offline_index_loader_when_running_then_connection_runtime_is_not_
     def fail(**_kwargs: object) -> None:
         pytest.fail("scope must not resolve adapters or warehouse credentials")
 
-    monkeypatch.setattr(adapter_context, "resolve_adapter_connection_context", fail)
+    monkeypatch.setattr(adapter_registry, "resolve_adapter", fail)
+    monkeypatch.setattr(native, "resolve_project_connection_config", fail)
     exit_code: int = run_scope_command(
         request=ScopeCommandRequest(target="model:orders", json_output=True),
         load_scope_index=lambda **_kwargs: report_scope_lookup().index,
@@ -99,7 +101,7 @@ def test_given_no_color_flag_when_rendering_text_to_color_terminal_then_output_i
     capsys: pytest.CaptureFixture[str],
     test_case: ScopeCommandCase,
 ) -> None:
-    monkeypatch.setattr(color_support, "supports_color", lambda: True)
+    use_color_terminal(monkeypatch)
     index: ScopeIndex = report_scope_lookup().index
     outputs: list[str] = []
     for no_color in (False, True):

@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.rule_engine.main.render_result import format_result
+from sqlbuild._native import format_rules_result as format_result
 from sqlbuild.rule_engine.models import Finding, RulesResult
 from tests.unit.src.sqlbuild.rule_engine.main.render_result._test_types import (
     RenderResultParityTestCase,

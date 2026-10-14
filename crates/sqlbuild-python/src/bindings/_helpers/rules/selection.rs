@@ -19,7 +19,7 @@ const BUILTINS_MODULE: &str = "builtins";
 /// The selected built-in and custom rule codes; invalid configuration raises `RulesError`.
 #[pyfunction]
 #[pyo3(signature = (*, config, custom_payloads))]
-fn selected_rule_codes(
+pub(crate) fn selected_rule_codes(
     config: &Bound<'_, PyAny>,
     custom_payloads: &Bound<'_, PyAny>,
 ) -> PyResult<Vec<String>> {

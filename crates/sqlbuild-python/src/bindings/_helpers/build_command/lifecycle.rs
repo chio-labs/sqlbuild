@@ -19,7 +19,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const GRAPH_MODULE: &str = "sqlbuild.compiler.python_nodes.main._graph";
 const PYTHON_NODE_MODELS: &str = "sqlbuild.compiler.python_nodes.models";
-const LOADER_DAG_MODULE: &str = "sqlbuild.compiler.planner.main.selection._loader_dag";
+const LOADER_DAG_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
 const INGRESS_MODULE: &str = "sqlbuild.executor.python_nodes.main._ingress";

@@ -6,13 +6,16 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString, PyTuple, PyTupleMethods};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     Status, call_with, imported, keywords, within,
 };
+use crate::bindings::_helpers::rules::early_sql_lint::EarlySqlLint;
+use crate::bindings::_helpers::rules::results::rules_progress;
+use crate::bindings::_helpers::rules::rules_config::load_rules_config;
 
 const DISCOVER_MODULE: &str = "sqlbuild._native";
-const REJECT_SELECTORS_MODULE: &str = "sqlbuild.compiler.pipeline.main.reject_unit_test_selectors";
-const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
+const REJECT_SELECTORS_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const SELECTED_GRAPH_MODULE: &str = "sqlbuild._native";
@@ -24,13 +27,10 @@ const FAST_COLUMN_LINEAGE: &str = "FAST";
 
 const CONTRACTS_MODULE: &str = "sqlbuild._native";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.compiler.contracts.models";
-const SELECTION_MODULE: &str = "sqlbuild.compiler.pipeline.main.project_graph_selection";
-const RULES_CONFIG_MODULE: &str = "sqlbuild.rule_engine.main.load_config";
-const RULES_PROGRESS_MODULE: &str = "sqlbuild.rule_engine.main.render_rules_progress";
-const RUN_RULES_MODULE: &str = "sqlbuild.rule_engine.main.run_rules";
+const SELECTION_MODULE: &str = "sqlbuild._native";
+const RULE_THREADS_MODULE: &str = "sqlbuild.rule_engine._helpers.run.rule_threads";
 const RULE_MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
 const RULE_CONSTANTS_MODULE: &str = "sqlbuild.rule_engine.constants";
-const EARLY_LINT_MODULE: &str = "sqlbuild.rule_engine.classes.early_sql_lint";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const CLI_COMPILE_MODELS_MODULE: &str = "sqlbuild.cli.compile.models";
@@ -141,11 +141,7 @@ pub(crate) fn analyze<'py>(
     let selection: &Bound<'py, PyAny> = &options.analysis_selection;
     let enabled: bool = !(selection.getattr("select")?.is_truthy()?
         || selection.getattr("exclude")?.is_truthy()?);
-    let early_lint_class: Bound<'py, PyAny> = imported(py, EARLY_LINT_MODULE, "EarlySqlLint")?;
-    let manager: Bound<'py, PyAny> = call_with(
-        &early_lint_class,
-        &[("enabled", PyBool::new(py, enabled).to_owned().into_any())],
-    )?;
+    let manager: Bound<'py, PyAny> = Bound::new(py, EarlySqlLint::new(py, enabled)?)?.into_any();
     within(&manager, |early_lint| analyzed(py, &options, early_lint))
 }
 
@@ -330,13 +326,7 @@ impl<'py> Driver<'_, 'py> {
                 ("local_config", discovered.getattr("local_config")?),
             ],
         )?;
-        call_with(
-            &imported(self.py, ADAPTERS_MODULE, "resolve_adapter")?,
-            &[
-                ("adapter_name", adapter_name),
-                ("project_dir", self.options.project_dir.clone()),
-            ],
-        )
+        resolve_cli_adapter(&adapter_name, &self.options.project_dir)
     }
 
     /// Compile the project graph, starting the early SQL lint once inputs are ready.
@@ -474,10 +464,8 @@ impl<'py> Driver<'_, 'py> {
         let py: Python<'py> = self.py;
         let options: &AnalysisOptions<'py> = self.options;
         let project_dir: &Bound<'py, PyAny> = &options.project_dir;
-        let rules_config: Bound<'py, PyAny> = call_with(
-            &imported(py, RULES_CONFIG_MODULE, "load_rules_config")?,
-            &[("project_dir", project_dir.clone())],
-        )?;
+        let rules_config: Bound<'py, PyAny> =
+            load_rules_config(py, project_dir.extract()?)?.into_bound(py);
         if !options.prepared_artifacts.is_none() && !any_error(core_diagnostics.as_any())? {
             let target_dir: Bound<'py, PyAny> =
                 project_dir.call_method1("__truediv__", (TARGET_DIRECTORY,))?;
@@ -505,7 +493,7 @@ impl<'py> Driver<'_, 'py> {
             py.None().into_bound(py)
         };
         let result: Bound<'py, PyAny> = call_with(
-            &imported(py, RUN_RULES_MODULE, "run_rules")?,
+            &imported(py, RULE_THREADS_MODULE, "evaluate_rules")?,
             &[
                 ("graph", graph.clone()),
                 ("discovered_inputs", discovered.clone()),
@@ -522,17 +510,7 @@ impl<'py> Driver<'_, 'py> {
             ],
         )?;
         let ended: f64 = monotonic.call0()?.extract()?;
-        let progress: String = call_with(
-            &imported(py, RULES_PROGRESS_MODULE, "format_rules_progress")?,
-            &[
-                (
-                    "elapsed_seconds",
-                    (ended - started).into_pyobject(py)?.into_any(),
-                ),
-                ("result", result.clone()),
-            ],
-        )?
-        .extract()?;
+        let progress: String = rules_progress(ended - started, &result, false)?;
         self.status.complete(&progress)?;
         Ok(result)
     }

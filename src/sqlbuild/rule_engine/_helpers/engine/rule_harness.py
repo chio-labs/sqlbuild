@@ -6,7 +6,7 @@ import inspect
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from sqlbuild._native import build_compiled_project, discover_project_inputs
+from sqlbuild._native import build_compiled_project, discover_project_inputs, load_rules_config
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -17,7 +17,6 @@ from sqlbuild.rule_engine._helpers.engine.definition import (
 from sqlbuild.rule_engine.constants import MIN_CUSTOM_RULE_TEST_CASES
 from sqlbuild.rule_engine.exceptions import RuleAssertionError, RuleUsageError
 from sqlbuild.rule_engine.main._evaluate import evaluate
-from sqlbuild.rule_engine.main.load_config import load_rules_config
 from sqlbuild.rule_engine.models import (
     Rule,
     RuleCase,

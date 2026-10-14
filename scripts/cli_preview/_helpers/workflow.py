@@ -13,7 +13,7 @@ from types import FrameType
 
 from scripts.cli_preview.exceptions import PreviewSetupError
 from scripts.cli_preview.models import PreviewScene
-from sqlbuild.presentation.main.supports_color import supports_color
+from sqlbuild._native import supports_color
 
 _PAYMENTS_MODEL_PATH: Path = Path("models/staging/stg_payments.sql")
 _QUERY_MARKER: str = "  amount_cents,\n"

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
-from sqlbuild.compiler.planner._helpers.identity.hashing import (
-    function_definition_hash,
-    model_definition_hash,
-)
+from sqlbuild._native import build_function_local_hashes, model_definition_hash
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import build_compiled_function
 from tests.unit.src.sqlbuild.compiler.planner._helpers.identity._test_types import (
     DefinitionHashFailureTestCase,
 )
@@ -45,10 +45,10 @@ def test_given_untokenizable_sql_function_when_hashing_then_planning_error_names
     test_case: DefinitionHashFailureTestCase,
 ) -> None:
     with pytest.raises(PlannerInputError, match=test_case.expected_message) as raised:
-        _ = function_definition_hash(
-            function_name="is_open",
-            fingerprint_sql=_UNTOKENIZABLE_SQL,
-            language="sql",
+        _ = build_function_local_hashes(
+            functions=(
+                replace(build_compiled_function(body_sql=_UNTOKENIZABLE_SQL), name="is_open"),
+            ),
             dialect="duckdb",
         )
 

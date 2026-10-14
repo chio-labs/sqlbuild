@@ -42,7 +42,6 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.rule_engine._helpers.run import native_rows as native_rows_module
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SourceColumnEntry
 from sqlbuild.sql_values.types import CollectionRendering
 from tests.integration.src.sqlbuild.compiler.graph.helpers import write_files
@@ -67,10 +66,7 @@ TYPE_PROOF_FILES: dict[str, str] = {
 }
 
 
-_FACTS_CONSUMERS: tuple[ModuleType, ...] = (
-    native_rows_module,
-    _native,
-)
+_FACTS_CONSUMERS: tuple[ModuleType, ...] = (_native,)
 
 
 def forbid_hand_built_projects(*, monkeypatch: pytest.MonkeyPatch) -> None:

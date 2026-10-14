@@ -36,27 +36,31 @@ from sqlbuild.cli.commands.models import (
     JanitorCommandRequest,
     LineageCommandRequest,
     LoadCommandRequest,
+    NestedProgressChildRow,
+    PlanCommandRequest,
     PlanSafetyGates,
     PlaygroundCommandRequest,
     QueryDiffPreparation,
     RefactorCommandRequest,
+    RulesCommandRequest,
     ScenarioCaptureCommandRequest,
     ScenarioTestCommandRequest,
     ScopeCommandRequest,
     SeedCommandRequest,
     TestCommandRequest,
 )
-from sqlbuild.cli.commands.types import CompileLineageMode, ScopeIndexLoader
+from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode, ScopeIndexLoader
 from sqlbuild.cli.compile.models import CompileAnalysis
-from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt
+from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt, CompileReuseRequest
 from sqlbuild.cli.entry.models import (
     AuthoredTargetWarehouse,
+    CommandWarehouseScope,
     CompileCommandRequest,
     CompileProfileFlags,
+    ParsedCliInvocation,
     ResolvedWarehouse,
 )
 from sqlbuild.cli.output.models import SkillMaintenanceResult, SkillUpdateResult, WrittenTarget
-from sqlbuild.cli.progress.models import NestedProgressChildRow
 from sqlbuild.compiler.auditing.models import (
     AuditGateIdentity,
     MeasurementContract,
@@ -193,14 +197,19 @@ from sqlbuild.compiler.pipeline.models import (
 from sqlbuild.compiler.planner.classes.migration_state_inspection import (
     MigrationStateInspection,
 )
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     ChangeDetectionResult,
     CursorBounds,
     DeferralInputs,
+    DirectModelVersionIdentities,
     FutureCursorSafetyEvidence,
     MaximumStartSafetyEvidence,
+    MissingUpstream,
     ModelPlanEntry,
+    ParsedSelector,
+    PathSelector,
     PlannerChangeResults,
     PlannerResolvedActions,
     PlannerRuntime,
@@ -210,7 +219,13 @@ from sqlbuild.compiler.planner.models import (
     ReferenceRename,
     SchemaAction,
     SchemaFinding,
+    SelectionStalenessGraph,
+    SelectionStalenessWarning,
+    SelectorExpansion,
+    SourceLoadPlanEntry,
     SqlTestPlanEntry,
+    SqlTestSelection,
+    UnitTestSelectorSplit,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import (
@@ -257,7 +272,11 @@ from sqlbuild.compiler.scopes.models import (
     VisibilityResolution,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, JsonValue, ScopeQueryTarget
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessIdentity, SourceFreshnessRecord
+from sqlbuild.compiler.source_freshness.models import (
+    DirectSourceFreshnessPlanningResult,
+    SourceFreshnessIdentity,
+    SourceFreshnessRecord,
+)
 from sqlbuild.compiler.source_freshness.types import (
     SourceFreshnessAgeStatus,
     SourceFreshnessComparableRecord,
@@ -322,10 +341,21 @@ from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.presentation.types import CompletionState
 from sqlbuild.python_nodes.models import SqlResourceRef
-from sqlbuild.rule_engine.models import Finding, Rule, RulesConfig, RulesResult
-from sqlbuild.rule_engine.types import RuleCheck
+from sqlbuild.rule_engine.models import (
+    Finding,
+    NativeRulesEvaluation,
+    PreparedSqlLint,
+    Rule,
+    RuleRunPlan,
+    RulesConfig,
+    RulesResult,
+    RulesRunResult,
+    SqlExpansionReuse,
+    SqlRulesEvaluation,
+)
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
+from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.models import (
     DbtConfig,
@@ -384,7 +414,6 @@ class LintPreparationRequest(TypedDict):
     dialect: str
 
 def analyze_column_references_json(request_json: str) -> str: ...
-def builtin_rules(*, check: RuleCheck) -> list[Rule]: ...
 def selected_sql_rule_codes(*, select: list[str], ignore: list[str]) -> list[str]: ...
 
 class NativeRulesRequest:
@@ -393,14 +422,16 @@ class NativeRulesRequest:
     def sql_facts_json(self) -> str: ...
 
 def build_rules_request(
-    project: dict[str, object],
-    models: tuple[NativeCompiledProject, list[str]],
-    sql_tests: list[CompiledSqlTest],
-    scenarios: list[CompiledSqlScenario],
+    *,
+    project: CompiledProjectView,
+    config: RulesConfig,
+    project_dir: Path,
+    dialect: str,
+    initial_findings: tuple[Finding, ...],
+    custom_payloads: list[dict[str, object]],
+    include_type_proof: bool,
 ) -> NativeRulesRequest: ...
-def evaluate_rules_request(
-    request: NativeRulesRequest,
-) -> tuple[list[Finding], list[str], int, int, int, int, bool]: ...
+def evaluate_rules_request(request: NativeRulesRequest) -> NativeRulesEvaluation: ...
 def emit_orjson_report(report: object) -> str: ...
 def emit_json_report(report: object) -> str: ...
 
@@ -1203,10 +1234,68 @@ class NativeProjectGraph:
         self, selected: list[_GraphKey], include: tuple[bool, bool, bool]
     ) -> list[_GraphKey]: ...
 
-def parse_project_selector(
-    raw: str,
-) -> tuple[tuple[str, str, str, bool, bool] | None, _SelectorFailure | None]: ...
-def project_selector_name_help(value: str, candidates: list[str]) -> str | None: ...
+def parse_project_selector(raw: str) -> ParsedSelector | PathSelector: ...
+def resolve_graph_selection(
+    *, graph: NativeProjectGraph, select: Sequence[str], exclude: Sequence[str]
+) -> frozenset[CompiledObjectKey]: ...
+def select_project_graph(
+    *, graph: ProjectGraph, select: Sequence[str], exclude: Sequence[str]
+) -> frozenset[CompiledObjectKey]: ...
+def resolve_project_selectors(
+    *,
+    select: Sequence[str],
+    exclude: Sequence[str],
+    all_keys: Mapping[str, CompiledObjectKey],
+    upstream_deps: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    downstream_deps: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    tag_index: Mapping[str, Iterable[CompiledObjectKey]],
+    path_index: Mapping[CompiledObjectKey, str],
+) -> frozenset[CompiledObjectKey]: ...
+def resolve_project_selector_tokens(
+    *,
+    selectors: Sequence[str],
+    all_keys: Mapping[str, CompiledObjectKey],
+    upstream_deps: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    downstream_deps: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    tag_index: Mapping[str, Iterable[CompiledObjectKey]],
+    path_index: Mapping[CompiledObjectKey, str],
+) -> frozenset[CompiledObjectKey]: ...
+def match_project_selector(
+    *,
+    parsed: ParsedSelector,
+    all_keys: Mapping[str, CompiledObjectKey],
+    tag_index: Mapping[str, Iterable[CompiledObjectKey]],
+    path_index: Mapping[CompiledObjectKey, str],
+) -> frozenset[CompiledObjectKey]: ...
+def expand_project_upstream_keys(
+    *,
+    key: CompiledObjectKey,
+    upstream_deps: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+) -> frozenset[CompiledObjectKey]: ...
+def unit_test_selector_error(*, selector: str) -> PlannerInputError: ...
+def split_project_unit_test_selectors(
+    *,
+    select: Sequence[str],
+    exclude: Sequence[str],
+    discovered_inputs: DiscoveredProjectInputs,
+    accepts_unit_tests: bool,
+) -> UnitTestSelectorSplit: ...
+def split_unit_test_selectors(
+    *,
+    select: Sequence[str],
+    exclude: Sequence[str],
+    discovered_inputs: DiscoveredProjectInputs,
+) -> UnitTestSelectorSplit: ...
+def reject_unit_test_selectors(
+    *,
+    select: Sequence[str],
+    exclude: Sequence[str],
+    discovered_inputs: DiscoveredProjectInputs,
+) -> UnitTestSelectorSplit: ...
+def split_selector_expansion(raw: str) -> SelectorExpansion: ...
+def resolve_sqlbuild_model_selector_names(
+    *, project: CompiledProjectView, term: str
+) -> tuple[tuple[str, ...], str | None]: ...
 
 class NativeReuseAttempt:
     def outcome(self) -> str: ...
@@ -1220,6 +1309,7 @@ class NativeReuseAttempt:
     def record(self, record: dict[str, object]) -> tuple[str, int]: ...
 
 def check_compile_reuse(check: dict[str, object]) -> NativeReuseAttempt: ...
+def attempt_compile_reuse(*, request: CompileReuseRequest) -> CompileReuseAttempt: ...
 
 class CompileArtifactWrites:
     @property
@@ -1724,6 +1814,12 @@ def execute_query_diff(
     *, request: DiffCommandRequest, preparation: QueryDiffPreparation
 ) -> DiffExecutionResult: ...
 def machine_output_mode(args: CliNamespace, /) -> bool: ...
+
+class CliObservabilityScope:
+    def __enter__(self) -> EventDispatcher: ...
+    def __exit__(self, *exc_info: object) -> bool: ...
+
+def cli_observability_scope(*, args: CliNamespace, project_dir: Path) -> CliObservabilityScope: ...
 def current_native_progress_projector() -> NativeProgressProjector | None: ...
 
 class ConnectionProgressReporter:
@@ -1950,7 +2046,13 @@ class PreparedCompileArtifacts:
     ) -> WrittenTarget | None: ...
     def planning_diagnostics(self) -> tuple[CompilerDiagnostic, ...] | None: ...
 
-def finalize_rule_findings_rows(request: dict[str, object]) -> list[Finding]: ...
+def finalize_rule_findings_rows(
+    *,
+    config: RulesConfig,
+    project_dir: Path,
+    evaluated_codes: Sequence[str],
+    findings: Sequence[Finding],
+) -> tuple[Finding, ...]: ...
 def run_custom_host_json(spec_json: str) -> str: ...
 def format_sql_json(request_json: str) -> str: ...
 def format_sql_batch_json(request_json: str) -> str: ...
@@ -1992,12 +2094,26 @@ def apply_lint_suppressions(
     allow_suppressions: bool,
 ) -> list[LintViolation]: ...
 def load_rules_config(*, project_dir: Path) -> RulesConfig: ...
+def valid_rules_config(*, project_dir: Path) -> RulesConfig | None: ...
 def selected_rule_codes(
     *, config: RulesConfig, custom_payloads: list[dict[str, object]]
 ) -> list[str]: ...
 def rule_selected(*, config: RulesConfig, code: str) -> bool: ...
-def render_owned_skill(*, content: str, input_fingerprint: str) -> str: ...
-def skill_freshness(*, content: str | None, input_fingerprint: str) -> str: ...
+def build_rule_catalogue(
+    *, config: RulesConfig, project_dir: Path, include_custom: bool | None = None
+) -> tuple[Rule, ...]: ...
+def select_catalogue_rules(
+    *,
+    catalogue: tuple[Rule, ...],
+    config: RulesConfig,
+    project_dir: Path,
+    custom_payloads: list[dict[str, object]] | None = None,
+) -> tuple[Rule, ...]: ...
+def resolve_rule_ignore_selectors(
+    *, config: RulesConfig, project: CompiledProjectView
+) -> RulesConfig: ...
+def format_rule(*, rule: Rule, config: RulesConfig | None = None) -> str: ...
+def install_rules_skills(*, config: RulesConfig, project_dir: Path, check: bool) -> bool: ...
 def match_model_headers(contents: list[str]) -> list[tuple[int, int, int] | None]: ...
 def parse_model_headers(
     headers: list[str],
@@ -2585,6 +2701,19 @@ def resolve_target_name(
 def resolve_target_config(
     *, project_config: ProjectConfig, local_config: LocalConfig, target_name: str
 ) -> TargetConfig: ...
+def resolve_adapter(*, adapter_name: str, project_dir: Path | None = None) -> BaseAdapter: ...
+
+class CommandWarehouseScopeInstall:
+    def __enter__(self) -> CommandWarehouseScope: ...
+    def __exit__(self, *exc_info: object) -> bool: ...
+
+def command_warehouse_scope(
+    *,
+    command: CliCommand | str | None,
+    cli_warehouse: str | None,
+    cli_vars: Mapping[str, object] | None = None,
+) -> CommandWarehouseScopeInstall: ...
+def current_command_warehouse_scope() -> CommandWarehouseScope: ...
 def resolve_effective_adapter_name(
     *, project_config: ProjectConfig, local_config: LocalConfig
 ) -> str: ...
@@ -2842,9 +2971,8 @@ class SqlReferenceScanner:
 def scope_expected_model_names(
     texts: list[tuple[str, str]], scenario: bool, syntax: dict[str, object]
 ) -> list[tuple[str | None, list[str]]]: ...
-def parse_cli_arguments(
-    argv: list[str], defaults: list[tuple[str, object]], *, use_color: bool, columns: int
-) -> tuple[list[tuple[str, object]] | None, int | None]: ...
+def supports_color() -> bool: ...
+def parse_cli_invocation(argv: Sequence[str], *, use_color: bool) -> ParsedCliInvocation: ...
 def run_cli(argv: Sequence[str] | None = None, handlers: object | None = None) -> int: ...
 def extract_sql_test_ctes(
     *, sql: str, file_label: str, syntax: SqlLexicalSyntax
@@ -3366,6 +3494,12 @@ def resolve_loader_defaults(
     target_config: TargetConfig | None = None,
     cli_vars: dict[str, object] | None = None,
 ) -> tuple[str | None, str | None]: ...
+def write_runtime_target(
+    *, target_dir: Path, plan_output: PlanOutput, result: BuildExecutionResult
+) -> None: ...
+def run_plan_command(*, request: PlanCommandRequest) -> int: ...
+def run_rules_command(*, request: RulesCommandRequest) -> int: ...
+def stop_progress_spinners() -> None: ...
 
 class TransientStatusReporter:
     def __init__(
@@ -3788,6 +3922,62 @@ def custom_rule_test_evidence(
     *, rule: Rule, project_dir: Path
 ) -> list[tuple[str, int, int, str]]: ...
 def format_rules_result(*, result: RulesResult, json_output: bool) -> str: ...
+def format_skipped_type_proof_rules(*, codes: tuple[str, ...]) -> str | None: ...
+def finish_rule_run(
+    *, plan: RuleRunPlan, sql_result: SqlRulesEvaluation, result: RulesResult
+) -> RulesRunResult: ...
+def run_rules(
+    *,
+    graph: ProjectGraph,
+    discovered_inputs: DiscoveredProjectInputs,
+    config: RulesConfig,
+    project_dir: Path,
+    dialect: str,
+    selected_keys: frozenset[CompiledObjectKey] | None = None,
+    prepared_sql: PreparedSqlLint | None = None,
+    expansion_reuse: SqlExpansionReuse | None = None,
+    no_sql_analysis: bool = False,
+) -> RulesRunResult: ...
+def rules_bulk_cache_path(*, project_dir: Path, file_name: str) -> Path: ...
+def plan_rule_run(
+    *,
+    graph: ProjectGraph,
+    config: RulesConfig,
+    project_dir: Path,
+    selected_keys: frozenset[CompiledObjectKey] | None,
+    no_sql_analysis: bool,
+) -> RuleRunPlan: ...
+def run_planned_sql_rules(
+    *,
+    plan: RuleRunPlan,
+    graph: ProjectGraph,
+    discovered_inputs: DiscoveredProjectInputs,
+    dialect: str,
+    prepared_sql: PreparedSqlLint | None,
+    expansion_reuse: SqlExpansionReuse | None,
+) -> SqlRulesEvaluation: ...
+def sql_lint_preparation(
+    *, inputs: CompileInputsView, dialect: str
+) -> tuple[Path, tuple[str, ...], LintConfig] | None: ...
+def early_lint_expansions(
+    model_inputs: tuple[ModelInput, ...],
+) -> dict[Path, CompiledSqlExpansion]: ...
+
+class EarlySqlLint:
+    """Own speculative SQL checks for one compilation invocation."""
+
+    def __init__(self, *, enabled: bool) -> None: ...
+    @property
+    def enabled(self) -> bool: ...
+    @property
+    def preparation(self) -> PreparedSqlLint | None: ...
+    @property
+    def expansion_reuse(self) -> SqlExpansionReuse | None: ...
+    def __enter__(self) -> EarlySqlLint: ...
+    def __exit__(self, *exception: object) -> None: ...
+    def start(self, *, inputs: CompileInputsView, dialect: str) -> None: ...
+    def stop(self) -> int: ...
+
 def with_duplicate_literal_hints(
     *, findings: tuple[Finding, ...], project_dir: Path
 ) -> tuple[Finding, ...]: ...
@@ -3989,6 +4179,92 @@ def origin_reference_names(
 ) -> dict[str, str] | None: ...
 def with_declared_columns_hash(*, metadata_json: str, declared_columns_hash: str) -> str: ...
 def without_declared_columns_hash(metadata_json: str) -> str: ...
+def model_definition_hash(*, model_name: str, query_sql: str, dialect: str | None) -> str: ...
+def build_version_identity_metadata_json(
+    *,
+    model_name: str,
+    config_values: Mapping[str, object],
+    local_function_hashes: Mapping[str, str] | None = None,
+    execution_signature: Mapping[str, object] | None = None,
+) -> str: ...
+def build_model_version_identity_metadata_json(
+    *,
+    model: CompiledModelView,
+    function_local_hashes: Mapping[str, str] | None = None,
+    hook_version_hashes: Mapping[str, str] | None = None,
+) -> str: ...
+def declared_columns_hash(*, model: CompiledModelView) -> str: ...
+def build_function_local_hashes(
+    *, functions: Iterable[CompiledFunctionView], dialect: str | None
+) -> dict[str, str]: ...
+def build_compiled_function_fingerprint_sql(function: CompiledFunctionView) -> str: ...
+def build_seed_identity(seed: CompiledSeedView) -> tuple[str, str]: ...
+def build_direct_model_version_identities(
+    *,
+    functions: Iterable[CompiledFunctionView],
+    scope: PlannerScope,
+    dialect: str | None,
+    seeds: Iterable[CompiledSeedView] = (),
+    source_version_hashes: Mapping[str, str] | None = None,
+    hook_functions: Iterable[DiscoveredHookFunction] = (),
+) -> DirectModelVersionIdentities: ...
+def with_honest_model_write_hashes(
+    *,
+    scope: PlannerScope,
+    snapshot: WarehouseSnapshot,
+    changes: PlannerChangeResults,
+    version_identities: DirectModelVersionIdentities,
+    available_model_hashes: Mapping[str, str] | None = None,
+) -> PlannerChangeResults: ...
+def merge_recomputed_model_changes(
+    *, resolved_actions: PlannerResolvedActions, changes: PlannerChangeResults
+) -> PlannerResolvedActions: ...
+def build_stale_out_of_selection_warnings(
+    *,
+    original_scope: PlannerScope,
+    execution_scope: PlannerScope,
+    changes: PlannerChangeResults,
+    snapshot: WarehouseSnapshot,
+    version_identities: DirectModelVersionIdentities,
+    source_freshness: DirectSourceFreshnessPlanningResult | None,
+    include_sources: bool = True,
+    model_changes_complete: bool = False,
+) -> tuple[PlanWarning, ...]: ...
+def classify_selection_staleness_warnings(
+    graph: SelectionStalenessGraph,
+) -> tuple[SelectionStalenessWarning, ...]: ...
+def build_execution_upstream_deps(
+    project: CompiledProjectView,
+) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]: ...
+def build_execution_edge_origins(
+    project: CompiledProjectView,
+) -> dict[tuple[CompiledObjectKey, CompiledObjectKey], str]: ...
+def build_downstream_deps(
+    upstream: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]: ...
+def topologically_order_keys(
+    *,
+    upstream: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    injected_edge_origins: Mapping[tuple[CompiledObjectKey, CompiledObjectKey], str] | None = None,
+) -> tuple[CompiledObjectKey, ...]: ...
+def build_downstream_model_name_closure(
+    *,
+    start_keys: Iterable[CompiledObjectKey],
+    downstream_deps: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+) -> frozenset[str]: ...
+def check_buildability(
+    *,
+    selected_keys: Set[CompiledObjectKey],
+    upstream_deps: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    snapshot: WarehouseSnapshot,
+    deferred_relations: Mapping[str, RelationInfo] | None = None,
+    satisfied_keys: Set[CompiledObjectKey] | None = None,
+) -> tuple[MissingUpstream, ...]: ...
+def missing_upstream_message(
+    *,
+    missing: tuple[MissingUpstream, ...],
+    edge_origins: Mapping[tuple[CompiledObjectKey, CompiledObjectKey], str],
+) -> str: ...
 def model_resource_type(entry: ModelPlanEntry | None) -> str: ...
 def model_execution_annotation(entry: ModelPlanEntry | None) -> str: ...
 def materialization_type_display(resource_kind: ExecutionResourceKind) -> str: ...
@@ -3998,3 +4274,61 @@ def resolve_effective_microbatch_batch_size(*, batch_size: str, effective_grain:
 def aligned_timestamp_bounds(
     *, start: DateValue | TimestampValue, end: DateValue | TimestampValue
 ) -> tuple[datetime, datetime]: ...
+def build_planner_scope(
+    *,
+    project: CompiledProjectView,
+    select: tuple[str, ...] = (),
+    exclude: tuple[str, ...] = (),
+    auto_load_sources: bool = False,
+    selected_keys: frozenset[CompiledObjectKey] | None = None,
+    python_read_source_names: frozenset[str] = frozenset(),
+    sql_test_selection: SqlTestSelection | None = None,
+) -> PlannerScope: ...
+def managed_source_upstream_keys(
+    *,
+    selected_keys: frozenset[CompiledObjectKey],
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    project: CompiledProjectView,
+) -> frozenset[CompiledObjectKey]: ...
+def expand_selected_loader_dependencies(
+    *,
+    project: CompiledProjectView,
+    selected_keys: frozenset[CompiledObjectKey],
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    executable_dependency_source_keys: frozenset[CompiledObjectKey] = frozenset(),
+) -> tuple[
+    frozenset[CompiledObjectKey], dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
+]: ...
+def upstream_loader_dependency_names(
+    *,
+    loader_function: DiscoveredLoaderFunction,
+    loader_functions: tuple[DiscoveredLoaderFunction, ...],
+) -> tuple[str, ...]: ...
+def loader_to_source_entry(
+    *,
+    project: CompiledProjectView,
+    loader: DiscoveredLoaderFunction,
+) -> SourceEntry: ...
+def build_intermediate_source_map(
+    *,
+    project: CompiledProjectView,
+    selected_keys: frozenset[CompiledObjectKey],
+) -> dict[str, SourceEntry]: ...
+def build_upstream_intermediate_source_map(
+    *,
+    project: CompiledProjectView,
+    selected_keys: frozenset[CompiledObjectKey],
+) -> dict[str, SourceEntry]: ...
+def build_source_load_map(
+    *,
+    project: CompiledProjectView,
+    selected_keys: frozenset[CompiledObjectKey],
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] | None = None,
+) -> dict[str, SourceEntry]: ...
+def build_source_load_entries(
+    *,
+    execution_order: tuple[CompiledObjectKey, ...],
+    selected_keys: frozenset[CompiledObjectKey],
+    source_map: dict[str, SourceEntry],
+    is_reload: bool,
+) -> tuple[SourceLoadPlanEntry, ...]: ...

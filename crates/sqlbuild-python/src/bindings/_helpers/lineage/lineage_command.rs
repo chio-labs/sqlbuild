@@ -31,23 +31,23 @@ use sqlbuild_analysis::lineage_command::models::{
 };
 use sqlbuild_core::cli_text::models::CliStyle;
 
+use crate::bindings::_helpers::build_progress::transient_status::maybe_status;
+use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::lineage::lineage_cache::{
     lineage_fingerprint, read_lineage_cache, write_lineage_cache,
 };
 use crate::bindings::_helpers::lineage::lineage_index::{graph_index, index_views, lineage_keys};
+use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
-const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
-const STATUS_MODULE: &str = "sqlbuild.presentation.main._maybe_status";
-const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild.compiler.pipeline.main.reject_unit_test_selectors";
-const GRAPH_SELECTION_MODULE: &str = "sqlbuild.compiler.pipeline.main.project_graph_selection";
-const SELECTION_MODULE: &str = "sqlbuild.compiler.planner.main.selection.selection";
-const SELECTOR_TOKENS_MODULE: &str = "sqlbuild.compiler.planner.main.selection._selector_tokens";
-const SELECTOR_PARSE_MODULE: &str = "sqlbuild.compiler.planner.main.selection.selector_parse";
-const SELECTOR_MATCH_MODULE: &str = "sqlbuild.compiler.planner.main.selection._selector_match";
+const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
+const GRAPH_SELECTION_MODULE: &str = "sqlbuild._native";
+const SELECTION_MODULE: &str = "sqlbuild._native";
+const SELECTOR_TOKENS_MODULE: &str = "sqlbuild._native";
+const SELECTOR_PARSE_MODULE: &str = "sqlbuild._native";
+const SELECTOR_MATCH_MODULE: &str = "sqlbuild._native";
 const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
 const PLANNER_EXCEPTIONS: &str = "sqlbuild.compiler.planner.exceptions";
 const UNKNOWN_SELECTOR_ERROR_CODE: &str = "S007";
@@ -200,16 +200,7 @@ fn prepare_source<'py>(
                 ],
             )?),
         )?;
-    let adapter: Bound<'py, PyAny> = imported(py, ADAPTERS_MODULE, "resolve_adapter")?.call(
-        (),
-        Some(&keywords(
-            py,
-            &[
-                ("adapter_name", &adapter_name),
-                ("project_dir", project_dir),
-            ],
-        )?),
-    )?;
+    let adapter: Bound<'py, PyAny> = resolve_cli_adapter(&adapter_name, project_dir)?;
     let no_validation: bool = request.getattr("no_sql_validation")?.extract::<bool>()? || !compiled;
     let options: Bound<'py, PyDict> = keywords(
         py,
@@ -384,7 +375,7 @@ fn traced_edges(
     Ok(result)
 }
 
-/// `with maybe_status(...)` around building column lineage.
+/// Build column lineage under a stderr spinner for large rich-mode requests.
 fn column_lineage<'py>(
     py: Python<'py>,
     (graph, mode): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
@@ -392,26 +383,19 @@ fn column_lineage<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let count: usize = candidates.model_names.len();
     let rich: bool = mode.str()?.extract::<String>()? == RICH_MODE;
-    let options: Bound<'py, PyDict> = PyDict::new(py);
-    options.set_item(
-        "message",
-        format!("Analyzing column lineage for {count} models..."),
-    )?;
-    options.set_item("enabled", rich && count >= RICH_STATUS_MODEL_THRESHOLD)?;
-    let status: Bound<'py, PyAny> =
-        imported(py, STATUS_MODULE, "maybe_status")?.call((), Some(&options))?;
-    status.call_method0("__enter__")?;
-    let built: PyResult<Bound<'py, PyAny>> =
-        imported(py, NATIVE_MODULE, "build_project_column_lineage").and_then(|build| {
-            build.call1((
+    let message: String = format!("Analyzing column lineage for {count} models...");
+    maybe_status(
+        py,
+        (&message, rich && count >= RICH_STATUS_MODEL_THRESHOLD),
+        || {
+            imported(py, NATIVE_MODULE, "build_project_column_lineage")?.call1((
                 graph.getattr("project")?,
                 py.None(),
                 mode,
                 PyFrozenSet::new(py, &candidates.model_names)?,
             ))
-        });
-    status.call_method1("__exit__", (py.None(), py.None(), py.None()))?;
-    built
+        },
+    )
 }
 
 /// The column trace of a `model.column` target, or `None` when the target is not a model column.
@@ -693,9 +677,7 @@ fn run_lineage_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i
         None
     };
     let style: CliStyle = CliStyle {
-        use_color: imported(py, COLOR_MODULE, "supports_color")?
-            .call0()?
-            .extract()?,
+        use_color: stdout_supports_color(py)?,
     };
     let rendered: LineageRendering =
         rendering(py, request, (&source, &project_dir), (depth, style))?;
