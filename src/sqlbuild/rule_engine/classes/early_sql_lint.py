@@ -8,7 +8,7 @@ from threading import Event
 from types import TracebackType
 
 from sqlbuild.compiler.compile.types import CompileInputsView
-from sqlbuild.rule_engine.main._prepare_sql_rules import prepare_sql_rules
+from sqlbuild.rule_engine._helpers.run.rule_threads import prepare_sql_rules
 from sqlbuild.rule_engine.models import PreparedSqlLint, SqlExpansionReuse
 
 

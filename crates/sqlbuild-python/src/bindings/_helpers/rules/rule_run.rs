@@ -1,0 +1,172 @@
+//! The finished result of one rules run, the bulk cache locations and freed-memory release.
+
+use std::collections::BTreeSet;
+use std::path::PathBuf;
+
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::{PyDict, PyTuple};
+use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
+use sqlbuild_rules::rule_cache::main::rules_bulk_cache_path::rules_bulk_cache_path as bulk_cache_path;
+use sqlbuild_rules::rule_results::main::group_unevaluated::group_unevaluated;
+use sqlbuild_rules::rule_results::models::RuleFinding;
+
+use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::rules::results::rule_finding;
+
+const RULE_THREADS_MODULE: &str = "sqlbuild.rule_engine._helpers.run.rule_threads";
+const NATIVE_ROWS_MODULE: &str = "sqlbuild.rule_engine._helpers.run.native_rows";
+const MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
+const PATHLIB_MODULE: &str = "pathlib";
+const CTYPES_MODULE: &str = "ctypes";
+
+fn integer(object: &Bound<'_, PyAny>, field: &str) -> PyResult<i64> {
+    object.getattr(field)?.extract()
+}
+
+fn python_finding<'py>(py: Python<'py>, finding: RuleFinding) -> PyResult<Bound<'py, PyAny>> {
+    call_with(
+        &imported(py, MODELS_MODULE, "Finding")?,
+        &[
+            ("code", finding.code.into_bound_py_any(py)?),
+            (
+                "path",
+                imported(py, PATHLIB_MODULE, "Path")?.call1((finding.path,))?,
+            ),
+            ("line", finding.line.into_bound_py_any(py)?),
+            ("column", finding.column.into_bound_py_any(py)?),
+            ("message", finding.message.into_bound_py_any(py)?),
+            ("remediation", finding.remediation.into_bound_py_any(py)?),
+            ("unevaluated", finding.unevaluated.into_bound_py_any(py)?),
+            (
+                "affected_rules",
+                PyTuple::new(py, finding.affected_rules)?.into_any(),
+            ),
+            ("fixable", finding.fixable.into_bound_py_any(py)?),
+        ],
+    )
+}
+
+/// Finalize the combined SQL, built-in and custom findings of one planned rules run.
+#[pyfunction]
+#[pyo3(signature = (*, plan, sql_result, result))]
+fn finish_rule_run<'py>(
+    plan: &Bound<'py, PyAny>,
+    sql_result: &Bound<'py, PyAny>,
+    result: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = plan.py();
+    let mut evaluated_codes: Vec<Bound<'py, PyAny>> = Vec::new();
+    for rule in plan.getattr("selected")?.try_iter()? {
+        evaluated_codes.push(rule?.getattr("code")?);
+    }
+    let mut combined: Vec<Bound<'py, PyAny>> = Vec::new();
+    for findings in [sql_result.getattr("findings")?, result.getattr("findings")?] {
+        combined.extend(findings.try_iter()?.collect::<PyResult<Vec<_>>>()?);
+    }
+    let finalized: Vec<RuleFinding> = call_with(
+        &imported(py, NATIVE_ROWS_MODULE, "finalize_rules_rows")?,
+        &[
+            ("config", plan.getattr("config")?),
+            ("project_dir", plan.getattr("project_dir")?),
+            (
+                "evaluated_codes",
+                PyTuple::new(py, evaluated_codes)?.into_any(),
+            ),
+            ("findings", PyTuple::new(py, combined)?.into_any()),
+        ],
+    )?
+    .try_iter()?
+    .map(|finding| rule_finding(&finding?))
+    .collect::<PyResult<_>>()?;
+    let grouped: Vec<RuleFinding> = compiler_guard(|| Ok(group_unevaluated(finalized)))?;
+    let unevaluated: BTreeSet<String> = grouped
+        .iter()
+        .filter(|finding| finding.unevaluated)
+        .map(|finding| finding.path.clone())
+        .collect();
+    let mut unevaluated_models: i64 = 0;
+    for model in plan.getattr("project")?.getattr("models")?.try_iter()? {
+        let path: String = model?
+            .getattr("relative_path")?
+            .call_method0("as_posix")?
+            .extract()?;
+        unevaluated_models += i64::from(unevaluated.contains(&path));
+    }
+    let findings: Vec<Bound<'py, PyAny>> = grouped
+        .into_iter()
+        .map(|finding| python_finding(py, finding))
+        .collect::<PyResult<_>>()?;
+    let total = |field: &str| -> PyResult<Bound<'py, PyAny>> {
+        (integer(result, field)? + integer(sql_result, field)?).into_bound_py_any(py)
+    };
+    call_with(
+        &imported(py, MODELS_MODULE, "RulesRunResult")?,
+        &[
+            ("findings", PyTuple::new(py, findings)?.into_any()),
+            (
+                "evaluated_models",
+                (integer(result, "evaluated_models")? - unevaluated_models)
+                    .max(0)
+                    .into_bound_py_any(py)?,
+            ),
+            (
+                "unevaluated_resources",
+                unevaluated.len().into_bound_py_any(py)?,
+            ),
+            (
+                "built_in_ms",
+                (integer(sql_result, "sql_ms")? + integer(result, "built_in_ms")?)
+                    .into_bound_py_any(py)?,
+            ),
+            ("custom_ms", result.getattr("custom_ms")?),
+            ("custom_cpu_ms", result.getattr("custom_cpu_ms")?),
+            ("cache_hits", total("cache_hits")?),
+            ("cache_misses", total("cache_misses")?),
+            (
+                "skipped_type_proof_rules",
+                plan.getattr("skipped_type_proof_rules")?,
+            ),
+        ],
+    )
+}
+
+/// Run the selected built-in, SQL and custom rules; custom rules run on their worker threads.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+pub(crate) fn run_rules<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    imported(py, RULE_THREADS_MODULE, "evaluate_rules")?.call((), options.as_ref())
+}
+
+/// One bulk Rules cache file owned by the native compiler engine.
+#[pyfunction]
+#[pyo3(signature = (*, project_dir, file_name))]
+fn rules_bulk_cache_path(project_dir: PathBuf, file_name: &str) -> PathBuf {
+    bulk_cache_path(&project_dir, file_name)
+}
+
+/// Hand freed glibc heap pages back to the OS; a no-op elsewhere or without `malloc_trim`.
+#[pyfunction]
+fn release_freed_memory(py: Python<'_>) -> PyResult<()> {
+    if !cfg!(target_os = "linux") {
+        return Ok(());
+    }
+    let trim = || -> PyResult<()> {
+        let process: Bound<'_, PyAny> = imported(py, CTYPES_MODULE, "CDLL")?.call1((py.None(),))?;
+        let _ = process.getattr("malloc_trim")?.call1((0,))?;
+        Ok(())
+    };
+    let _ = trim();
+    Ok(())
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(finish_rule_run, module)?)?;
+    module.add_function(wrap_pyfunction!(run_rules, module)?)?;
+    module.add_function(wrap_pyfunction!(rules_bulk_cache_path, module)?)?;
+    module.add_function(wrap_pyfunction!(release_freed_memory, module)?)?;
+    Ok(())
+}

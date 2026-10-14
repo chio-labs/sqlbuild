@@ -17,13 +17,16 @@ from sqlbuild._native import (
     load_sql_rule_cache,
     lookup_sql_rule_cache,
     project_with,
+    release_freed_memory,
     resolve_rule_ignore_selectors,
+    rules_bulk_cache_path,
     run_lint,
     select_catalogue_rules,
     selected_sql_rule_codes,
     sql_file_rule_key,
     sql_model_rule_keys,
     sql_rule_lint_key,
+    valid_rules_config,
     with_duplicate_literal_hints,
     write_sql_rule_cache,
 )
@@ -54,13 +57,7 @@ from sqlbuild.lint.models import LintConfig, LintRunResult, LintViolation
 from sqlbuild.lint.types import RelationKeys
 from sqlbuild.rule_engine._helpers.engine.custom_payloads import custom_rule_payloads
 from sqlbuild.rule_engine._helpers.engine.hermeticity import verify_custom_rules
-from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
-from sqlbuild.rule_engine._helpers.run.findings import group_unevaluated_findings
-from sqlbuild.rule_engine._helpers.run.memory import release_freed_memory
-from sqlbuild.rule_engine._helpers.run.native_rows import finalize_rules_rows
 from sqlbuild.rule_engine.constants import SQL_RULES_CACHE_FILE, TYPE_PROOF_RULE_CODES
-from sqlbuild.rule_engine.exceptions import RulesError
-from sqlbuild.rule_engine.main.load_config import load_rules_config
 from sqlbuild.rule_engine.models import (
     Finding,
     PreparedSqlLint,
@@ -68,8 +65,6 @@ from sqlbuild.rule_engine.models import (
     Rule,
     RuleRunPlan,
     RulesConfig,
-    RulesResult,
-    RulesRunResult,
     SqlExpansionReuse,
     SqlRulesEvaluation,
 )
@@ -191,43 +186,6 @@ def run_planned_sql_rules(
     return replace(sql_result, sql_ms=round((time.monotonic() - sql_started) * 1000))
 
 
-def finish_rule_run(
-    *, plan: RuleRunPlan, sql_result: SqlRulesEvaluation, result: RulesResult
-) -> RulesRunResult:
-    """Finalize the combined SQL, built-in and custom findings of one run."""
-
-    finalized: tuple[Finding, ...] = finalize_rules_rows(
-        config=plan.config,
-        project_dir=plan.project_dir,
-        evaluated_codes=tuple(rule.code for rule in plan.selected),
-        findings=(*sql_result.findings, *result.findings),
-    )
-    findings: tuple[Finding, ...] = tuple(
-        sorted(
-            group_unevaluated_findings(finalized),
-            key=lambda item: (item.path.as_posix(), item.line, item.column, item.code),
-        )
-    )
-    return RulesRunResult(
-        findings=findings,
-        evaluated_models=max(
-            0,
-            result.evaluated_models
-            - len(
-                {item.path for item in findings if item.unevaluated}
-                & {model.relative_path for model in plan.project.models}
-            ),
-        ),
-        unevaluated_resources=len({item.path for item in findings if item.unevaluated}),
-        built_in_ms=sql_result.sql_ms + result.built_in_ms,
-        custom_ms=result.custom_ms,
-        custom_cpu_ms=result.custom_cpu_ms,
-        cache_hits=result.cache_hits + sql_result.cache_hits,
-        cache_misses=result.cache_misses + sql_result.cache_misses,
-        skipped_type_proof_rules=plan.skipped_type_proof_rules,
-    )
-
-
 def _prepare_sql_rule_inputs(
     *,
     rules: tuple[Rule, ...],
@@ -274,11 +232,12 @@ def sql_lint_preparation(
     project_dir: Path | None = inputs.discovered_inputs.project_dir
     if project_dir is None or any(diagnostic.is_error for diagnostic in inputs.diagnostics):
         return None
-    try:
-        config: RulesConfig = load_rules_config(project_dir=project_dir)
-    except RulesError:
-        return None
-    if not config.select or (config.cache.enabled and _read_sql_rule_cache(project_dir)):
+    config: RulesConfig | None = valid_rules_config(project_dir=project_dir)
+    if (
+        config is None
+        or not config.select
+        or (config.cache.enabled and _read_sql_rule_cache(project_dir))
+    ):
         return None
     codes: tuple[str, ...] = _selected_sql_codes(config)
     if not codes:

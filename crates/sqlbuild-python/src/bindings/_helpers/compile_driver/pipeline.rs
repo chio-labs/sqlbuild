@@ -12,6 +12,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
 use crate::bindings::_helpers::frontier::stage_capture::write_plan_capture;
+use crate::bindings::_helpers::rules::results::{format_rules_result, rules_progress};
+use crate::bindings::_helpers::rules::rules_config::load_rules_config;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const EFFECTIVE_CONFIG_MODULE: &str = "sqlbuild._native";
@@ -21,10 +23,7 @@ const ANALYSIS_SELECTION_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS_MODULE: &str = "sqlbuild.compiler.pipeline.models";
 const TIMING_TRACKER_MODULE: &str = "sqlbuild.diagnostics.classes.build_phase_timing_tracker";
 const RULE_EXCEPTIONS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
-const RULES_CONFIG_MODULE: &str = "sqlbuild.rule_engine.main.load_config";
-const RULES_PROGRESS_MODULE: &str = "sqlbuild.rule_engine.main.render_rules_progress";
-const RULES_RESULT_MODULE: &str = "sqlbuild.rule_engine.main.render_result";
-const RUN_RULES_MODULE: &str = "sqlbuild.rule_engine.main.run_rules";
+const RULE_THREADS_MODULE: &str = "sqlbuild.rule_engine._helpers.run.rule_threads";
 const RULE_MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
 const OPEN_CONNECTION_MODULE: &str = "sqlbuild.runtime.contracts.main.open_connection";
 const RUNTIME_MODELS_MODULE: &str = "sqlbuild.runtime.contracts.models";
@@ -259,10 +258,8 @@ fn run_rules_gate<'py>(
             rules_error.call1(("compiler rules require a resolved project directory",))?,
         ));
     }
-    let mut config: Bound<'py, PyAny> = call_with(
-        &imported(py, RULES_CONFIG_MODULE, "load_rules_config")?,
-        &[("project_dir", project_dir.clone())],
-    )?;
+    let mut config: Bound<'py, PyAny> =
+        load_rules_config(py, project_dir.extract()?)?.into_bound(py);
     if options.getattr("no_cache")?.is_truthy()? {
         let cache: Bound<'py, PyAny> = call_with(
             &imported(py, RULE_MODELS_MODULE, "RulesCacheConfig")?,
@@ -292,7 +289,7 @@ fn run_rules_gate<'py>(
         ],
     )?;
     let result: Bound<'py, PyAny> = call_with(
-        &imported(py, RUN_RULES_MODULE, "run_rules")?,
+        &imported(py, RULE_THREADS_MODULE, "evaluate_rules")?,
         &[
             ("graph", graph.clone()),
             ("discovered_inputs", discovered.clone()),
@@ -305,17 +302,7 @@ fn run_rules_gate<'py>(
     )?;
     if !on_progress.is_none() {
         let elapsed: f64 = monotonic(py)? - started;
-        let message: Bound<'py, PyAny> = call_with(
-            &imported(py, RULES_PROGRESS_MODULE, "format_rules_progress")?,
-            &[
-                ("elapsed_seconds", elapsed.into_pyobject(py)?.into_any()),
-                ("result", result.clone()),
-                (
-                    "note_skipped_rules",
-                    true.into_pyobject(py)?.to_owned().into_any(),
-                ),
-            ],
-        )?;
+        let message: String = rules_progress(elapsed, &result, true)?;
         on_progress.call1((message,))?;
     }
     let findings: Bound<'py, PyAny> = result.getattr("findings")?;
@@ -335,19 +322,9 @@ fn run_rules_gate<'py>(
             ("cache_misses", result.getattr("cache_misses")?),
         ],
     )?;
-    let rendered: Bound<'py, PyAny> = call_with(
-        &imported(py, RULES_RESULT_MODULE, "format_result")?,
-        &[
-            ("result", summary),
-            (
-                "json_output",
-                false.into_pyobject(py)?.to_owned().into_any(),
-            ),
-        ],
-    )?;
+    let rendered: String = format_rules_result(&summary, false)?;
     Err(PyErr::from_value(rules_error.call1((format!(
-        "configured compiler rules failed:\n{}",
-        rendered.str()?
+        "configured compiler rules failed:\n{rendered}"
     ),))?))
 }
 

@@ -15,6 +15,7 @@ pub(crate) mod relation_keys;
 pub(crate) mod results;
 pub(crate) mod rows;
 pub(crate) mod rule_cache;
+pub(crate) mod rule_run;
 pub(crate) mod rules_config;
 pub(crate) mod run_lint;
 pub(crate) mod selection;

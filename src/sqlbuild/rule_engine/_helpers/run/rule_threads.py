@@ -7,7 +7,7 @@ from contextvars import Token
 from pathlib import Path
 from threading import Event
 
-from sqlbuild._native import build_lint_expansion_context, run_lint
+from sqlbuild._native import build_lint_expansion_context, finish_rule_run, run_lint
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledSqlExpansion,
@@ -22,7 +22,6 @@ from sqlbuild.lint.models import LintConfig, LintRunResult
 from sqlbuild.rule_engine._helpers.engine.custom_dispatch import evaluate_native, start_custom_rules
 from sqlbuild.rule_engine._helpers.run.rules import (
     early_lint_expansions,
-    finish_rule_run,
     plan_rule_run,
     run_planned_sql_rules,
     sql_lint_preparation,

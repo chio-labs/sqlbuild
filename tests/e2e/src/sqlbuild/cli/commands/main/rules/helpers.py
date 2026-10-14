@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts.rules_benchmark._helpers.custom_rules import write_custom_rules
-from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
+from sqlbuild._native import rules_bulk_cache_path
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import replace_project_text
 
 __all__ = ("write_custom_rules",)

@@ -7,8 +7,7 @@ from pathlib import Path
 from scripts.cold_compile_performance._helpers.dense_project import dense_model_name
 from scripts.cold_compile_performance._helpers.varied_project import write_varied_compile_project
 from scripts.cold_compile_performance.exceptions import CompileBenchmarkFixtureError
-from sqlbuild._native import build_rule_catalogue, select_catalogue_rules
-from sqlbuild.rule_engine.main.load_config import load_rules_config
+from sqlbuild._native import build_rule_catalogue, load_rules_config, select_catalogue_rules
 from sqlbuild.rule_engine.models import Rule, RulesConfig
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import VariedCompileCacheTestCase
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (

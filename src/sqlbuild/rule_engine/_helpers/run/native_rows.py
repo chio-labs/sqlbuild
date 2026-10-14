@@ -9,11 +9,15 @@ from pathlib import Path
 import orjson
 
 import sqlbuild._native as _native
-from sqlbuild._native import compiled_project_facts, declaration_rows, scope_metadata_projection
+from sqlbuild._native import (
+    compiled_project_facts,
+    declaration_rows,
+    rules_bulk_cache_path,
+    scope_metadata_projection,
+)
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
-from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
 from sqlbuild.rule_engine.constants import (
     NATIVE_RULES_CACHE_FILE,
     NATIVE_RULES_MEMO_FILE,

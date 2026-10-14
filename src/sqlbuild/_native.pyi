@@ -332,7 +332,17 @@ from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.presentation.types import CompletionState
 from sqlbuild.python_nodes.models import SqlResourceRef
-from sqlbuild.rule_engine.models import Finding, Rule, RulesConfig, RulesResult
+from sqlbuild.rule_engine.models import (
+    Finding,
+    PreparedSqlLint,
+    Rule,
+    RuleRunPlan,
+    RulesConfig,
+    RulesResult,
+    RulesRunResult,
+    SqlExpansionReuse,
+    SqlRulesEvaluation,
+)
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.runtime.observability.models import LifecycleEvent
@@ -2000,6 +2010,7 @@ def apply_lint_suppressions(
     allow_suppressions: bool,
 ) -> list[LintViolation]: ...
 def load_rules_config(*, project_dir: Path) -> RulesConfig: ...
+def valid_rules_config(*, project_dir: Path) -> RulesConfig | None: ...
 def selected_rule_codes(
     *, config: RulesConfig, custom_payloads: list[dict[str, object]]
 ) -> list[str]: ...
@@ -3814,6 +3825,24 @@ def custom_rule_test_evidence(
     *, rule: Rule, project_dir: Path
 ) -> list[tuple[str, int, int, str]]: ...
 def format_rules_result(*, result: RulesResult, json_output: bool) -> str: ...
+def format_skipped_type_proof_rules(*, codes: tuple[str, ...]) -> str | None: ...
+def finish_rule_run(
+    *, plan: RuleRunPlan, sql_result: SqlRulesEvaluation, result: RulesResult
+) -> RulesRunResult: ...
+def run_rules(
+    *,
+    graph: ProjectGraph,
+    discovered_inputs: DiscoveredProjectInputs,
+    config: RulesConfig,
+    project_dir: Path,
+    dialect: str,
+    selected_keys: frozenset[CompiledObjectKey] | None = None,
+    prepared_sql: PreparedSqlLint | None = None,
+    expansion_reuse: SqlExpansionReuse | None = None,
+    no_sql_analysis: bool = False,
+) -> RulesRunResult: ...
+def rules_bulk_cache_path(*, project_dir: Path, file_name: str) -> Path: ...
+def release_freed_memory() -> None: ...
 def with_duplicate_literal_hints(
     *, findings: tuple[Finding, ...], project_dir: Path
 ) -> tuple[Finding, ...]: ...

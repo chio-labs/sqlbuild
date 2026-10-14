@@ -9,6 +9,8 @@ use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::compile_driver::python_calls::{
     Status, call_with, imported, keywords, within,
 };
+use crate::bindings::_helpers::rules::results::rules_progress;
+use crate::bindings::_helpers::rules::rules_config::load_rules_config;
 
 const DISCOVER_MODULE: &str = "sqlbuild._native";
 const REJECT_SELECTORS_MODULE: &str = "sqlbuild.compiler.pipeline.main._reject_unit_test_selectors";
@@ -25,9 +27,7 @@ const FAST_COLUMN_LINEAGE: &str = "FAST";
 const CONTRACTS_MODULE: &str = "sqlbuild._native";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.compiler.contracts.models";
 const SELECTION_MODULE: &str = "sqlbuild.compiler.pipeline.main._project_graph_selection";
-const RULES_CONFIG_MODULE: &str = "sqlbuild.rule_engine.main.load_config";
-const RULES_PROGRESS_MODULE: &str = "sqlbuild.rule_engine.main.render_rules_progress";
-const RUN_RULES_MODULE: &str = "sqlbuild.rule_engine.main.run_rules";
+const RULE_THREADS_MODULE: &str = "sqlbuild.rule_engine._helpers.run.rule_threads";
 const RULE_MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
 const RULE_CONSTANTS_MODULE: &str = "sqlbuild.rule_engine.constants";
 const EARLY_LINT_MODULE: &str = "sqlbuild.rule_engine.classes.early_sql_lint";
@@ -474,10 +474,8 @@ impl<'py> Driver<'_, 'py> {
         let py: Python<'py> = self.py;
         let options: &AnalysisOptions<'py> = self.options;
         let project_dir: &Bound<'py, PyAny> = &options.project_dir;
-        let rules_config: Bound<'py, PyAny> = call_with(
-            &imported(py, RULES_CONFIG_MODULE, "load_rules_config")?,
-            &[("project_dir", project_dir.clone())],
-        )?;
+        let rules_config: Bound<'py, PyAny> =
+            load_rules_config(py, project_dir.extract()?)?.into_bound(py);
         if !options.prepared_artifacts.is_none() && !any_error(core_diagnostics.as_any())? {
             let target_dir: Bound<'py, PyAny> =
                 project_dir.call_method1("__truediv__", (TARGET_DIRECTORY,))?;
@@ -505,7 +503,7 @@ impl<'py> Driver<'_, 'py> {
             py.None().into_bound(py)
         };
         let result: Bound<'py, PyAny> = call_with(
-            &imported(py, RUN_RULES_MODULE, "run_rules")?,
+            &imported(py, RULE_THREADS_MODULE, "evaluate_rules")?,
             &[
                 ("graph", graph.clone()),
                 ("discovered_inputs", discovered.clone()),
@@ -522,17 +520,7 @@ impl<'py> Driver<'_, 'py> {
             ],
         )?;
         let ended: f64 = monotonic.call0()?.extract()?;
-        let progress: String = call_with(
-            &imported(py, RULES_PROGRESS_MODULE, "format_rules_progress")?,
-            &[
-                (
-                    "elapsed_seconds",
-                    (ended - started).into_pyobject(py)?.into_any(),
-                ),
-                ("result", result.clone()),
-            ],
-        )?
-        .extract()?;
+        let progress: String = rules_progress(ended - started, &result, false)?;
         self.status.complete(&progress)?;
         Ok(result)
     }

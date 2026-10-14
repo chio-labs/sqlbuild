@@ -4,8 +4,8 @@ use pyo3::prelude::{Bound, PyModule, PyResult};
 
 use crate::bindings::_helpers::rules::{
     builtin_catalogue, catalogue, custom_rule_cache, custom_rule_evidence, dsl_headers, evaluation,
-    guidance, lint, lint_expansion, lint_sql_bodies, lint_text, results, rule_cache, rules_config,
-    run_lint, selection,
+    guidance, lint, lint_expansion, lint_sql_bodies, lint_text, results, rule_cache, rule_run,
+    rules_config, run_lint, selection,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -17,6 +17,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     dsl_headers::register(module)?;
     custom_rule_evidence::register(module)?;
     rule_cache::register(module)?;
+    rule_run::register(module)?;
     custom_rule_cache::register(module)?;
     builtin_catalogue::register(module)?;
     catalogue::register(module)?;

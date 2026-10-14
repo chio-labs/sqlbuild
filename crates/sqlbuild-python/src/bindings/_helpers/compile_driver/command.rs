@@ -1,7 +1,7 @@
 //! The `sqb compile` command: analysis, output phases, reuse recording and printed output.
 
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyBool, PyDict, PyDictMethods, PyMapping, PyString, PyStringMethods, PyTuple};
+use pyo3::types::{PyBool, PyDict, PyDictMethods, PyMapping, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
@@ -19,6 +19,7 @@ use crate::bindings::_helpers::compile_driver::phases::{
 use crate::bindings::_helpers::compile_driver::python_calls::{
     Status, call_with, imported, keywords, within,
 };
+use crate::bindings::_helpers::rules::results::format_skipped_type_proof_rules;
 
 const REUSE_MODELS_MODULE: &str = "sqlbuild.cli.compile_reuse.models";
 const REUSE_TYPES_MODULE: &str = "sqlbuild.cli.compile_reuse.types";
@@ -27,7 +28,6 @@ const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const PROFILING_MODULE: &str = "sqlbuild.compiler.profiling.main._collect";
-const SKIPPED_RULES_MODULE: &str = "sqlbuild.rule_engine.main.render_skipped_rules";
 const SUPPORTS_COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 
 /// What one full compile reports for reuse recording.
@@ -297,15 +297,10 @@ fn compiled_with_status<'py>(
         }
     }
     close_status(status)?;
-    let skipped_note: Bound<'py, PyAny> = call_with(
-        &imported(py, SKIPPED_RULES_MODULE, "format_skipped_type_proof_rules")?,
-        &[("codes", analysis.getattr("skipped_type_proof_rules")?)],
-    )?;
-    if !skipped_note.is_none() {
-        output.call_method1(
-            "print_stderr_line",
-            (format!("note: {}", skipped_note.str()?.to_cow()?),),
-        )?;
+    if let Some(skipped_note) =
+        format_skipped_type_proof_rules(analysis.getattr("skipped_type_proof_rules")?.extract()?)
+    {
+        output.call_method1("print_stderr_line", (format!("note: {skipped_note}"),))?;
     }
     let dag_artifact_path: Bound<'py, PyAny> =
         if rules_failed || request.getattr("dag_path")?.is_none() {

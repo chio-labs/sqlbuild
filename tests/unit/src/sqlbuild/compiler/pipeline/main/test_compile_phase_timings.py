@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -15,8 +16,8 @@ from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePip
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTimingTracker
 from sqlbuild.diagnostics.models import PartialBuildPhaseTimings
-from sqlbuild.rule_engine.main import load_config, run_rules
-from sqlbuild.rule_engine.models import RulesConfig, RulesRunResult
+from sqlbuild.rule_engine._helpers.run import rule_threads
+from sqlbuild.rule_engine.models import RulesRunResult
 from sqlbuild.runtime.contracts.main import open_connection
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from tests.unit.src.sqlbuild.compiler.pipeline.main._test_types import PipelinePhaseTimingTestCase
@@ -50,6 +51,7 @@ from tests.unit.src.sqlbuild.compiler.pipeline.main._test_types import PipelineP
 def test_given_slow_planning_connection_when_compiling_then_direct_phases_are_disjoint(
     test_case: PipelinePhaseTimingTestCase,
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     monotonic: Mock = Mock(side_effect=test_case.clock_values)
     project: CompiledProjectView = CompiledProject(
@@ -66,11 +68,11 @@ def test_given_slow_planning_connection_when_compiling_then_direct_phases_are_di
     monkeypatch.setattr(_native, "build_compiled_project", Mock(return_value=project))
     monkeypatch.setattr(open_connection, "open_connection_with_hooks", Mock(return_value=object()))
     monkeypatch.setattr(plan_result, "build_pipeline_result", Mock(return_value=pipeline_result))
-    monkeypatch.setattr(load_config, "load_rules_config", Mock(return_value=RulesConfig()))
+    (tmp_path / "sqlbuild_project.toml").write_text('name = "timing"\n', encoding="utf-8")
     monkeypatch.setattr(_native, "resolve_configured_rule_selection", Mock(return_value=None))
     monkeypatch.setattr(
-        run_rules,
-        "run_rules",
+        rule_threads,
+        "evaluate_rules",
         Mock(
             return_value=RulesRunResult(findings=(), evaluated_models=0, built_in_ms=0, custom_ms=0)
         ),
@@ -84,7 +86,7 @@ def test_given_slow_planning_connection_when_compiling_then_direct_phases_are_di
 
     with tracker.scope():
         result: CompilePipelineResult = _native.run_compile_pipeline(
-            discovered_inputs=Mock(),
+            discovered_inputs=Mock(project_dir=tmp_path),
             adapter=adapter,
             options=CompilePipelineOptions(connection_config={}),
             hooks=progress_hooks[test_case.report_progress],
