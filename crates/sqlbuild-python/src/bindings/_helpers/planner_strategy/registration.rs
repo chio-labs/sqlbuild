@@ -1,6 +1,7 @@
 //! Register the planner strategy.
 
 use pyo3::prelude::{Bound, PyModule, PyResult};
+use pyo3::{prelude::PyModuleMethods, wrap_pyfunction};
 
 use crate::bindings::_helpers::planner_strategy::{
     audits, cursor_types, fixture_completion, fixture_metadata, fixture_sql, lineage, microbatches,
@@ -8,6 +9,15 @@ use crate::bindings::_helpers::planner_strategy::{
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(super::audit_entries::plan_audit, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        super::audit_entries::audit_is_selected,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        super::audit_entries::build_selected_audit_entries,
+        module
+    )?)?;
     audits::register(module)?;
     cursor_types::register(module)?;
     fixture_completion::register(module)?;

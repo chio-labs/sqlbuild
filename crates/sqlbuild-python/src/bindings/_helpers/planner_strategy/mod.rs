@@ -1,4 +1,6 @@
+pub(crate) mod audit_entries;
 pub(crate) mod audits;
+pub(crate) mod constants;
 pub(crate) mod cursor_types;
 pub(crate) mod fixture_completion;
 pub(crate) mod fixture_context;

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from sqlbuild._native import (
     build_relation_fixture_context,
+    build_selected_audit_entries,
     build_source_load_entries,
-    project_lineage_views,
     upstream_loader_dependency_names,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -14,7 +14,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledSqlTest,
 )
 from sqlbuild.compiler.compile.types import (
-    CompiledAuditView,
     CompiledFunctionView,
     CompiledProjectView,
 )
@@ -26,10 +25,7 @@ from sqlbuild.compiler.discovery.models import (
     PythonHookEntry,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.graph.models import LineageGraphViews
-from sqlbuild.compiler.planner._helpers.output.audit_entry import plan_audit
 from sqlbuild.compiler.planner._helpers.output.plan_entry import (
-    audit_is_selected,
     build_model_materializations,
     extract_seed_columns,
     scope_overlaps,
@@ -416,46 +412,6 @@ def plan_function(
         previous_query_sql=previous_query_sql,
         reason=reason,
     )
-
-
-def build_selected_audit_entries(
-    *,
-    project: CompiledProjectView,
-    adapter: BaseAdapter,
-    scope: PlannerScope,
-    relations: PlannerRelationsContext,
-    model_materializations: dict[str, str],
-) -> list[AuditPlanEntry]:
-    entries: list[AuditPlanEntry] = []
-    selected_audits: tuple[CompiledAuditView, ...] = tuple(
-        audit
-        for audit in project.audits
-        if audit_is_selected(audit=audit, selected_keys=scope.selected_keys)
-    )
-    if not selected_audits:
-        return entries
-    lineage: LineageGraphViews = project_lineage_views(project)
-    lineage_upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
-        lineage.upstream_deps
-    )
-    lineage_downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
-        lineage.downstream_deps
-    )
-    audit: CompiledAuditView
-    for audit in selected_audits:
-        entries.append(
-            plan_audit(
-                audit=audit,
-                model_locations=relations.model_locations,
-                seed_locations=relations.seed_locations,
-                source_map=relations.source_read_map,
-                adapter=adapter,
-                lineage_upstream_deps=lineage_upstream_deps,
-                lineage_downstream_deps=lineage_downstream_deps,
-                model_materializations=model_materializations,
-            )
-        )
-    return entries
 
 
 def plan_selected_sql_tests(

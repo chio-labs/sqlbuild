@@ -8,6 +8,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlbuild._native import (
+    audit_is_selected,
     build_model_warnings,
     build_source_load_map,
     cap_microbatch_bounds,
@@ -49,7 +50,6 @@ from sqlbuild.compiler.compile.models import (
     CursorInputRoles,
 )
 from sqlbuild.compiler.compile.types import (
-    AttachedAuditTargetKind,
     CompiledAuditView,
     CompiledFunctionView,
     CompiledModelView,
@@ -1846,22 +1846,6 @@ def scope_overlaps(
         if dep in selected_keys:
             return True
     return False
-
-
-def audit_is_selected(
-    *,
-    audit: CompiledAuditView,
-    selected_keys: frozenset[CompiledObjectKey],
-) -> bool:
-    """Return whether an audit belongs to the selected logical target scope."""
-
-    if audit.attached_target_kind is not None and audit.attached_target_name is not None:
-        target_key: CompiledObjectKey = CompiledObjectKey(
-            resource_type=AttachedAuditTargetKind(audit.attached_target_kind).resource_type,
-            name=audit.attached_target_name,
-        )
-        return target_key in selected_keys
-    return scope_overlaps(scope_deps=audit.scope_deps, selected_keys=selected_keys)
 
 
 def _selected_audit_relation_keys(

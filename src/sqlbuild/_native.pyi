@@ -240,6 +240,7 @@ from sqlbuild.compiler.planner.models import (
     PathSelector,
     PlannerChangeResults,
     PlannerOverrides,
+    PlannerRelationsContext,
     PlannerResolvedActions,
     PlannerRuntime,
     PlannerScope,
@@ -4889,6 +4890,28 @@ def build_model_warnings(
     on_schema_change: OnSchemaChange | None,
     type_enforcement: bool,
 ) -> tuple[PlanWarning, ...]: ...
+def plan_audit(
+    *,
+    audit: CompiledAuditView,
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
+    source_map: dict[str, SourceEntry],
+    adapter: BaseAdapter,
+    lineage_upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    lineage_downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    model_materializations: dict[str, str],
+) -> AuditPlanEntry: ...
+def audit_is_selected(
+    *, audit: CompiledAuditView, selected_keys: frozenset[CompiledObjectKey]
+) -> bool: ...
+def build_selected_audit_entries(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    scope: PlannerScope,
+    relations: PlannerRelationsContext,
+    model_materializations: dict[str, str],
+) -> list[AuditPlanEntry]: ...
 def resolve_attachment_kind(
     *,
     audit: CompiledAuditView,
