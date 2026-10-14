@@ -8,7 +8,7 @@ SHELL := /bin/bash
 	test-e2e-cold-compile-performance test-e2e-cache-compile-performance \
 	test-e2e-dense-compile-performance test-e2e-varied-cache-performance \
 	compiler-differential compiler-differential-dense \
-	compiler-baselines
+	compiler-baselines planner-differential
 
 format:
 	uv run ruff format .
@@ -145,6 +145,7 @@ E2E_DUCKDB_CLI_PATHS := \
 	tests/e2e/scripts/cli_preview \
 	tests/e2e/scripts/compile_performance_ratio \
 	tests/e2e/scripts/compiler_differential \
+	tests/e2e/scripts/planner_differential \
 	tests/e2e/scripts/release_performance \
 	tests/e2e/src/sqlbuild/cli/commands/main/adapters \
 	tests/e2e/src/sqlbuild/cli/commands/main/audit \
@@ -325,6 +326,17 @@ compiler-differential-dense:
 	env PYTHONUNBUFFERED=1 uv run python -m scripts.run_compiler_differential \
 		--corpus dense --dense-models $(COMPILER_DIFFERENTIAL_DENSE_MODELS) \
 		--jobs $(COMPILER_DIFFERENTIAL_JOBS) $(COMPILER_DIFFERENTIAL_ARGS)
+
+# Stateful planner differential (see scripts/planner_differential/README.md): record a
+# baseline on the tree before a planner change, then check the changed tree against it.
+PLANNER_DIFFERENTIAL_MODE ?= check
+PLANNER_DIFFERENTIAL_JOBS ?= 2
+PLANNER_DIFFERENTIAL_SEEDS ?= 6
+PLANNER_DIFFERENTIAL_ARGS ?=
+planner-differential:
+	env PYTHONUNBUFFERED=1 uv run python -m scripts.run_planner_differential \
+		$(PLANNER_DIFFERENTIAL_MODE) --jobs $(PLANNER_DIFFERENTIAL_JOBS) \
+		--seeds $(PLANNER_DIFFERENTIAL_SEEDS) $(PLANNER_DIFFERENTIAL_ARGS)
 
 
 skills:

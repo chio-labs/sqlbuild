@@ -11,6 +11,7 @@ use crate::bindings::_helpers::compile_driver::pipeline_entries::{
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
+use crate::bindings::_helpers::frontier::stage_capture::write_plan_capture;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const EFFECTIVE_CONFIG_MODULE: &str = "sqlbuild.compiler.compile.main.effective_config";
@@ -390,6 +391,7 @@ fn planned<'py>(
         tracker.setattr("planning_seconds", planning_seconds)?;
     }
     let result: Bound<'py, PyAny> = result?;
+    write_plan_capture(&result.getattr("plan_output")?)?;
     imported(py, "dataclasses", "replace")?.call(
         (result,),
         Some(&keywords(
