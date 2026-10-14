@@ -52,7 +52,7 @@ fn texts(values: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     values.try_iter()?.map(|value| value?.extract()).collect()
 }
 
-fn option_values(options: &Bound<'_, PyAny>) -> PyResult<DbtCliOptionValues> {
+pub(crate) fn option_values(options: &Bound<'_, PyAny>) -> PyResult<DbtCliOptionValues> {
     Ok(DbtCliOptionValues {
         project_dir: attribute_text(options, "project_dir")?,
         profiles_dir: attribute_text(options, "profiles_dir")?,
@@ -236,7 +236,7 @@ fn parse_dbt_ls_json_lines<'py>(py: Python<'py>, stdout: &str) -> PyResult<Bound
     PyTuple::new(py, nodes)
 }
 
-fn raised(py: Python<'_>, class_name: &str, error: DbtCliError) -> PyErr {
+pub(crate) fn raised(py: Python<'_>, class_name: &str, error: DbtCliError) -> PyErr {
     let created = || -> PyResult<PyErr> {
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
         if let Some(code) = error.code {

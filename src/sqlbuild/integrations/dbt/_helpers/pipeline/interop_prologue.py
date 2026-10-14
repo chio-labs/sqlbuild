@@ -14,6 +14,7 @@ from sqlbuild._native import (
     build_dbt_combined_graph,
     discover_project_inputs,
     load_dbt_manifest_index,
+    plan_dbt_interop_command,
     resolve_dbt_executable,
     route_dbt_interop_args,
 )
@@ -32,7 +33,6 @@ from sqlbuild.integrations.dbt.main.config._resolve_vars_mapping import resolve_
 from sqlbuild.integrations.dbt.main.manifest._resolve_manifest_path import (
     resolve_dbt_manifest_path,
 )
-from sqlbuild.integrations.dbt.main.planning._plan_interop_command import plan_dbt_interop_command
 from sqlbuild.integrations.dbt.main.runtime._report_progress import report_progress
 from sqlbuild.integrations.dbt.main.runtime._resolve_interop_adapter import (
     resolve_dbt_interop_adapter,

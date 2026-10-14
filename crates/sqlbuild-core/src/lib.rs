@@ -15,6 +15,7 @@ pub mod dbt_cli;
 pub mod dbt_command;
 pub mod dbt_events;
 pub mod dbt_graph;
+pub mod dbt_plan;
 pub mod debug_report;
 pub mod format_command;
 pub mod freshness_text;

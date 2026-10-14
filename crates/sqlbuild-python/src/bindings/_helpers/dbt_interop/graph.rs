@@ -91,7 +91,7 @@ impl DbtCombinedGraph {
     }
 }
 
-fn texts(values: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+pub(crate) fn texts(values: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     values.try_iter()?.map(|value| value?.extract()).collect()
 }
 
@@ -173,10 +173,24 @@ fn build_dbt_combined_graph<'py>(
     })
 }
 
-struct PlannerResolver<'py> {
+pub(crate) struct PlannerResolver<'py> {
     project: Bound<'py, PyAny>,
     split: Bound<'py, PyAny>,
     resolve: Bound<'py, PyAny>,
+}
+
+/// The planner's selector parsing and SQLBuild model selector resolution over `project`.
+pub(crate) fn planner_resolver(project: Bound<'_, PyAny>) -> PyResult<PlannerResolver<'_>> {
+    let py: Python<'_> = project.py();
+    Ok(PlannerResolver {
+        split: imported(py, SELECTOR_EXPANSION_MODULE, "split_selector_expansion")?,
+        resolve: imported(
+            py,
+            MODEL_SELECTORS_MODULE,
+            "resolve_sqlbuild_model_selector_names",
+        )?,
+        project,
+    })
 }
 
 impl DbtSelectorResolver for PlannerResolver<'_> {
@@ -283,7 +297,7 @@ fn selection_result<'py>(py: Python<'py>, selection: DbtSelection) -> PyResult<B
 /// Resolve selected SQLBuild models and required dbt nodes from `sqb dbt` selectors.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn resolve_dbt_interop_sqlbuild_selection<'py>(
+pub(crate) fn resolve_dbt_interop_sqlbuild_selection<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -311,15 +325,7 @@ fn resolve_dbt_interop_sqlbuild_selection<'py>(
         manifest_models: manifest_models.as_deref(),
     };
     let graph: Bound<'py, DbtCombinedGraph> = arguments.value("graph")?.cast_into()?;
-    let resolver: PlannerResolver<'py> = PlannerResolver {
-        project: arguments.value("project")?,
-        split: imported(py, SELECTOR_EXPANSION_MODULE, "split_selector_expansion")?,
-        resolve: imported(
-            py,
-            MODEL_SELECTORS_MODULE,
-            "resolve_sqlbuild_model_selector_names",
-        )?,
-    };
+    let resolver: PlannerResolver<'py> = planner_resolver(arguments.value("project")?)?;
     let selection: DbtSelection = resolve_dbt_selection(&resolver, &graph.get().graph, &request)
         .map_err(|error| selection_error(py, error))?;
     selection_result(py, selection)

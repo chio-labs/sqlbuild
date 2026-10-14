@@ -130,7 +130,7 @@ fn skip_reason<'py>(py: Python<'py>, has_work: bool, member: &str) -> PyResult<B
 /// Build a display-ready selection plan without dbt model state.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn build_dbt_interop_plan<'py>(
+pub(crate) fn build_dbt_interop_plan<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

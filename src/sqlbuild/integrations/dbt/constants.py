@@ -23,6 +23,5 @@ DBT_EXECUTION_SUCCESS_STATUSES: frozenset[str] = frozenset(
 )
 DBT_EXECUTION_WARN_STATUSES: frozenset[str] = frozenset({"warn", "warning"})
 DBT_FULL_REFRESH_FLAG: str = "--full-refresh"
-DBT_PATH_SELECTOR_SEPARATOR: str = "~"
 DBT_SELECT_FLAG: str = "--select"
 DBT_UNIQUE_ID_SEPARATOR: str = "."

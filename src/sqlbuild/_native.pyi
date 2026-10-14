@@ -260,9 +260,11 @@ from sqlbuild.executor.python_nodes.models import (
 )
 from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotCaptureRunResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.models import (
     DbtCliConfigOverrides,
     DbtCliOptions,
+    DbtInteropCommandArgs,
     DbtInteropParsedArgs,
     DbtInteropPlan,
     DbtInteropRoutedArgs,
@@ -1490,6 +1492,16 @@ def resolve_dbt_interop_sqlbuild_selection(
     dbt_anchor_unique_ids_by_term: Mapping[str, Sequence[str]] | None = None,
 ) -> DbtInteropSelectionResult: ...
 def dbt_fqn_selector_term(*, fqn: Sequence[str], fallback: str) -> str: ...
+def plan_dbt_interop_command(
+    *,
+    command: DbtInteropCommand | str,
+    project: CompiledProjectView,
+    manifest: DbtManifestIndex,
+    graph: DbtCombinedGraph,
+    dbt_runner: DbtRunner,
+    dbt_options: DbtCliOptions,
+    command_args: DbtInteropCommandArgs,
+) -> DbtInteropPlan: ...
 def resolve_dbt_executable() -> str: ...
 def build_dbt_compile_argv(
     *, dbt_executable: str, options: DbtCliOptions, full_refresh: bool = False
