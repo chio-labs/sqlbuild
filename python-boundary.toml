@@ -2,7 +2,7 @@
 # migration work that moves to Rust. `remaining_lines` must equal the current count of that work:
 # a PR that moves code lowers it, and adding movable Python fails the check.
 # Native failures must surface as errors; `handled_native_errors` lists the reviewed exceptions.
-remaining_lines = 56777
+remaining_lines = 53504
 
 [[stays]]
 path = "executor"
@@ -303,6 +303,16 @@ note = "Identity hashing over live user functions (source and globals)."
 path = "compiler/macro_bridge/_helpers/store_environment.py"
 reason = "user-code"
 note = "Fingerprints the Python interpreter and installed packages that project macros import from; the macro call store cache key."
+
+[[stays]]
+path = "rule_engine/classes/runtime_guard.py"
+reason = "user-code"
+note = "Guards custom-rule execution against side effects in user rule code."
+
+[[stays]]
+path = "rule_engine/classes/module_state_monitor.py"
+reason = "user-code"
+note = "Watches user rule modules for state changes between custom-rule runs."
 
 [[stays]]
 path = "compiler/compile/_helpers/render/user_macros.py"
