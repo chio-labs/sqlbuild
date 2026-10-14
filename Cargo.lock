@@ -1319,6 +1319,7 @@ dependencies = [
  "sqlbuild-analysis",
  "sqlbuild-attachments",
  "sqlbuild-core",
+ "sqlbuild-scopes",
  "sqlbuild-sqltext",
  "sqlparser",
  "stacker",

@@ -79,3 +79,10 @@ pub(crate) struct FixtureFormattingTestCase {
     pub columns: Vec<(String, Option<String>, Option<bool>)>,
     pub expected_sql: &'static str,
 }
+/// Authored block formatting across fixture roles and ambiguous replacements.
+pub(super) struct FixtureBlockTestCase {
+    pub description: &'static str,
+    pub sql: &'static str,
+    pub model_mode: bool,
+    pub expected_sql: Option<&'static str>,
+}

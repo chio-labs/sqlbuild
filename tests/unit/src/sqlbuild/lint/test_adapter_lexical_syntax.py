@@ -34,23 +34,22 @@ class _CustomSyntaxDuckDbAdapter(DuckDbAdapter):
 def test_given_passed_syntax_when_formatting_fixture_nulls_then_scanner_uses_it(
     test_case: PassedAdapterSyntaxTestCase,
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     test_file: Path = write_fixture_format_project(
-        tmp_path=tmp_path, fixture_sql="SELECT 1 AS id, CAST(NULL AS BOOLEAN) AS flag"
+        tmp_path=tmp_path,
+        fixture_sql="SELECT\n  1 AS id,\n  CAST(NULL AS BOOLEAN) AS flag\nWHERE TRUE\n  # ) custom comment\n",
     )
     inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    extract: Mock = Mock(wraps=fixture_formatting_module.SqlTestCteExtractor.extract)
-    monkeypatch.setattr(fixture_formatting_module.SqlTestCteExtractor, "extract", extract)
 
-    _ = fixture_formatting_module.format_redundant_fixture_nulls(
+    updated: dict[Path, str] = fixture_formatting_module.format_redundant_fixture_nulls(
         files={test_file.resolve(): test_file.read_text(encoding="utf-8")},
         project_dir=tmp_path,
         discovered_inputs=inputs,
         sql_lexical_syntax=test_case.expected_syntax,
     )
 
-    assert extract.call_args.kwargs["syntax"] is test_case.expected_syntax
+    assert "CAST(NULL AS BOOLEAN)" not in updated[test_file.resolve()]
+    assert "# ) custom comment" in updated[test_file.resolve()]
 
 
 @pytest.mark.parametrize(

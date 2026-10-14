@@ -1,5 +1,72 @@
+use crate::lint_text::main::format_fixture_blocks::format_fixture_blocks;
 use crate::lint_text::main::simplify_fixture_nulls::simplify_fixture_nulls;
+use crate::lint_text::models::{FixtureFormatBlock, FixtureFormatRelation};
+use crate::lint_text::tests::test_types::FixtureBlockTestCase;
 use crate::lint_text::tests::test_types::FixtureFormattingTestCase;
+use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
+use std::collections::HashMap;
+
+#[test]
+fn given_authored_blocks_when_formatting_then_only_unique_model_fixtures_change()
+-> Result<(), regex::Error> {
+    let relations = HashMap::from([(
+        "__ref__orders".to_owned(),
+        FixtureFormatRelation {
+            columns: vec![("id".into(), Some("INTEGER".into()), Some(true))],
+        },
+    )]);
+    let test_cases = [
+        FixtureBlockTestCase {
+            description: "unique fixture body changes",
+            sql: "WITH __ref__orders AS (SELECT CAST(NULL AS INTEGER) AS id WHERE FALSE) SELECT 1",
+            model_mode: true,
+            expected_sql: Some("WITH __ref__orders AS (SELECT * FROM __empty_fixture()) SELECT 1"),
+        },
+        FixtureBlockTestCase {
+            description: "ambiguous duplicate bodies are retained",
+            sql: "WITH __ref__orders AS (SELECT CAST(NULL AS INTEGER) AS id WHERE FALSE), other AS (SELECT CAST(NULL AS INTEGER) AS id WHERE FALSE) SELECT 1",
+            model_mode: true,
+            expected_sql: None,
+        },
+        FixtureBlockTestCase {
+            description: "expected output is not an input fixture",
+            sql: "WITH __expected__orders AS (SELECT CAST(NULL AS INTEGER) AS id WHERE FALSE) SELECT 1",
+            model_mode: true,
+            expected_sql: None,
+        },
+        FixtureBlockTestCase {
+            description: "macro-bearing blocks are retained",
+            sql: "WITH __ref__orders AS (SELECT CAST(NULL AS INTEGER) AS id WHERE FALSE) SELECT @value()",
+            model_mode: true,
+            expected_sql: None,
+        },
+        FixtureBlockTestCase {
+            description: "non-model blocks are retained",
+            sql: "WITH __ref__orders AS (SELECT CAST(NULL AS INTEGER) AS id WHERE FALSE) SELECT 1",
+            model_mode: false,
+            expected_sql: None,
+        },
+    ];
+    for test_case in test_cases {
+        let blocks = [FixtureFormatBlock {
+            sql_body: test_case.sql.into(),
+            model_mode: test_case.model_mode,
+        }];
+        assert_eq!(
+            format_fixture_blocks(
+                (test_case.sql, "test_orders.sql"),
+                &blocks,
+                &relations,
+                &LexicalSyntax::default()
+            )?
+            .as_deref(),
+            test_case.expected_sql,
+            "{}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
 
 #[test]
 fn given_authoritative_columns_when_simplifying_then_preserves_schema_order()

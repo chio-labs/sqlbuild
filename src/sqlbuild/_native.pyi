@@ -2359,6 +2359,13 @@ def scan_fixture_typed_null_candidates(
     project_dir: Path, selected_paths: frozenset[Path] | None = None
 ) -> tuple[frozenset[Path], frozenset[str]]: ...
 def simplify_fixture_null_projections(*, sql: str, relation: FixtureRelationMetadata) -> str: ...
+def format_redundant_fixture_nulls(
+    *,
+    files: dict[Path, str],
+    project_dir: Path,
+    discovered_inputs: DiscoveredProjectInputs,
+    sql_lexical_syntax: SqlLexicalSyntax,
+) -> dict[Path, str]: ...
 def format_lint_sql_bodies(
     files: list[tuple[Path, str]], project_dir: Path, config: LintConfig
 ) -> tuple[dict[Path, str], list[LintViolation]]: ...
