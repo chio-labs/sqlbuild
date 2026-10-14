@@ -14,6 +14,7 @@ from unittest.mock import Mock
 import sqlbuild._native as _native
 from sqlbuild._native import (
     build_downstream_deps,
+    build_scenario_relation_map,
     compiled_model_record,
     compute_query_hash,
     detect_changes,
@@ -66,7 +67,6 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.planner._helpers.scenario.artifacts import build_scenario_relation_map
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     ChangeDetectionResult,

@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.planner._helpers.scenario.artifact_names import (
-    parse_scenario_artifact_physical_name,
-)
-from sqlbuild.compiler.planner._helpers.scenario.artifacts import (
+from sqlbuild._native import (
     build_scenario_artifact_name,
     build_scenario_hash_index,
     build_scenario_relation_map,
     compute_scenario_hash_prefix,
+    parse_scenario_artifact_physical_name,
 )
 from sqlbuild.compiler.planner.constants import (
     SCENARIO_PLAN_HASH_COLLISION,

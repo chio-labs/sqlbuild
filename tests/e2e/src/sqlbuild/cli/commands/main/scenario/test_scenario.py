@@ -23,6 +23,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     assert_local_duckdb_state,
     assert_runtime_artifact_contains,
     build_partial_fixture_scenario_project_files,
+    build_scenario_dependency_chain_project_files,
     build_scenario_project_files,
     build_scenario_python_hooks_project_files,
     list_scenario_relation_names,
@@ -84,6 +85,15 @@ def test_given_unclosed_scenario_comment_when_running_cli_then_error_names_scena
             expected_artifact_fragments=(
                 'CAST(NULL AS VARCHAR) AS "status"',
                 "__sqlbuild_partial_fixture",
+            ),
+        ),
+        ScenarioPartialFixtureE2ETestCase(
+            description="three-model dependency chain preserves helper fixtures and final checks",
+            repo_files=build_scenario_dependency_chain_project_files(),
+            expected_stdout_fragment="PASS=1  FAIL=0  TOTAL=1",
+            expected_artifact_fragments=(
+                'CAST(NULL AS VARCHAR) AS "status"',
+                "WITH helper AS (SELECT 1 AS order_id)",
             ),
         ),
     ),

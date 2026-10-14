@@ -233,6 +233,7 @@ from sqlbuild.compiler.planner.models import (
     ModelPlanContext,
     ModelPlanEntry,
     OldNameView,
+    ParsedScenarioArtifactName,
     ParsedSelector,
     PathSelector,
     PlannerChangeResults,
@@ -247,12 +248,15 @@ from sqlbuild.compiler.planner.models import (
     RelationFixtureCompletion,
     RelationFixtureDiagnostic,
     RelationFixturePlanningContext,
+    ScenarioArtifactIdentity,
     ScenarioExecutionPlan,
+    ScenarioFixturePlan,
     ScenarioGraphPlan,
     ScenarioRelationMap,
     ScenarioRelationPlan,
     SchemaAction,
     SchemaFinding,
+    SeedPlanEntry,
     SelectionStalenessGraph,
     SelectionStalenessWarning,
     SelectorExpansion,
@@ -3957,6 +3961,74 @@ def build_cli_scenario_plan(
     source_lexical_syntax: SqlLexicalSyntax,
 ) -> ScenarioExecutionPlan: ...
 def run_scenario_test_command(*, request: ScenarioTestCommandRequest) -> int: ...
+def compute_scenario_hash_prefix(
+    *,
+    project_name: str,
+    scenario_name: str,
+    run_namespace: str | None = None,
+    prefix_length: int = 12,
+) -> str: ...
+def build_scenario_hash_index(
+    *,
+    project_name: str,
+    scenarios: tuple[CompiledSqlScenario, ...],
+    run_namespace: str | None = None,
+    prefix_length: int = 12,
+) -> dict[str, str]: ...
+def build_scenario_artifact_name(
+    *, hash_prefix: str, kind: str, logical_name: str, identifier_limit: int = 63
+) -> str: ...
+def build_scenario_artifact_physical_name(
+    *, hash_prefix: str, kind: str, logical_name: str, identifier_limit: int
+) -> str: ...
+def fit_scenario_artifact_logical_name(
+    *, logical_name: str, fixed_prefix: str, identifier_limit: int
+) -> str: ...
+def parse_scenario_artifact_physical_name(name: str) -> ParsedScenarioArtifactName | None: ...
+def is_scenario_artifact_physical_name(name: str) -> bool: ...
+def build_scenario_relation_map(
+    *,
+    scenario_name: str,
+    hash_prefix: str,
+    artifacts: tuple[ScenarioArtifactIdentity, ...],
+    identifier_limit: int = 63,
+    normalize_identifier: Callable[[str], str] | None = None,
+) -> ScenarioRelationMap: ...
+def resolve_scenario_check_sql(
+    *,
+    sql: str,
+    relation_plan: ScenarioRelationPlan,
+    adapter: BaseAdapter,
+    source_label: str,
+    source_lexical_syntax: SqlLexicalSyntax,
+) -> str: ...
+def build_scenario_fixture_plans(
+    *,
+    scenario: CompiledSqlScenario,
+    graph_plan: ScenarioGraphPlan,
+    relation_plan: ScenarioRelationPlan,
+    adapter: BaseAdapter,
+    source_lexical_syntax: SqlLexicalSyntax,
+    fixture_sql_overrides: dict[tuple[CompiledResourceType, str], str] | None = None,
+) -> tuple[ScenarioFixturePlan, ...]: ...
+def build_scenario_seed_entries(
+    *,
+    project: CompiledProjectView,
+    graph_plan: ScenarioGraphPlan,
+    relation_plan: ScenarioRelationPlan,
+) -> tuple[SeedPlanEntry, ...]: ...
+def build_scenario_execution_plan(
+    *,
+    scenario: CompiledSqlScenario,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    graph_plan: ScenarioGraphPlan,
+    relation_plan: ScenarioRelationPlan,
+    source_lexical_syntax: SqlLexicalSyntax,
+    snapshot: WarehouseSnapshot | None = None,
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]] | None = None,
+    sql_analysis_enabled: bool = True,
+) -> tuple[ScenarioExecutionPlan, tuple[PlanWarning, ...]]: ...
 def run_scenario_capture_command(*, request: ScenarioCaptureCommandRequest) -> int: ...
 def sql_analysis_off_guidance(
     *, discovered_inputs: DiscoveredProjectInputs, purpose: str

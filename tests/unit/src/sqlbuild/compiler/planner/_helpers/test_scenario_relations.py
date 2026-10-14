@@ -7,8 +7,11 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    build_scenario_execution_plan,
+    build_scenario_fixture_plans,
     build_scenario_relation_plan,
     project_with,
+    resolve_scenario_check_sql,
 )
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
@@ -22,11 +25,6 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
-from sqlbuild.compiler.planner._helpers.scenario.relations import (
-    build_scenario_execution_plan,
-    build_scenario_fixture_plans,
-    resolve_scenario_check_sql,
-)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     ScenarioExecutionPlan,

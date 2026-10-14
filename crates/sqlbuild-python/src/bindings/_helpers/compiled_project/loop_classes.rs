@@ -365,7 +365,10 @@ fn input_view_classes<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
 }
 
 /// `{item.<attribute>: item for item in items}`.
-fn by_attribute<'py>(items: &Bound<'py, PyAny>, attribute: &str) -> PyResult<Bound<'py, PyDict>> {
+pub(crate) fn by_attribute<'py>(
+    items: &Bound<'py, PyAny>,
+    attribute: &str,
+) -> PyResult<Bound<'py, PyDict>> {
     let keyed: Bound<'py, PyDict> = PyDict::new(items.py());
     for item in items.try_iter()? {
         let item: Bound<'py, PyAny> = item?;
