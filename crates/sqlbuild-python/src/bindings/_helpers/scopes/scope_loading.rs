@@ -14,6 +14,7 @@ use crate::bindings::_helpers::discovery::scope_snapshot::discover_scope_snapsho
 use crate::bindings::_helpers::scopes::scope_cache::{
     project_fingerprint, read_scope_index_cache, write_scope_index_cache,
 };
+use crate::bindings::_helpers::scopes::scope_index::open_native_scope_index;
 use crate::bindings::_helpers::scopes::scope_tolerant::scope_tolerant_index;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
@@ -150,8 +151,16 @@ fn tolerant_index<'py>(
         &imported(py, MACRO_INVENTORY_MODULE, "inventory_project_macros")?,
         &[("macro_files", discovered.getattr("macro_files")?)],
     )?;
-    let native: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "open_native_scope_index")?
-        .call1((&discovered, PyDict::new(py), inventory.getattr("exports")?))?;
+    let native: Bound<'py, PyAny> = Bound::new(
+        py,
+        open_native_scope_index(
+            py,
+            &discovered,
+            &PyDict::new(py).into_any(),
+            Some(inventory.getattr("exports")?),
+        )?,
+    )?
+    .into_any();
     let scan_store: Bound<'py, PyTuple> = PyTuple::new(
         py,
         [

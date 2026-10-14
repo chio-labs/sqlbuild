@@ -17,6 +17,8 @@ from sqlbuild._native import (
     build_declaration_scope,
     discover_project_inputs,
     resolve_declaration_context,
+    resolve_scope_declaration_visibility,
+    resolve_scope_path_visibility,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
@@ -33,15 +35,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     EnumDeclaration,
 )
-from sqlbuild.compiler.scopes.main import _open_native_scope_index as open_index_module
-from sqlbuild.compiler.scopes.main._declaration_lexical_path import declaration_lexical_path
-from sqlbuild.compiler.scopes.main._open_native_scope_index import open_native_scope_index
-from sqlbuild.compiler.scopes.main._resolve_scope_declaration_visibility import (
-    resolve_scope_declaration_visibility,
-)
-from sqlbuild.compiler.scopes.main._resolve_scope_path_visibility import (
-    resolve_scope_path_visibility,
-)
+from sqlbuild.compiler.scopes.constants import CURRENT_PATH_COMPONENT, DECLARATION_LEXICAL_STEM
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
@@ -310,32 +304,6 @@ def scope_command_index(*, project_dir: Path) -> ScopeIndex:
     """Return the offline `sqb scope` index."""
 
     return _native.load_or_build_scope_index(project_dir=project_dir, no_cache=True)
-
-
-def native_scope_attempts(
-    *, project_dir: Path, monkeypatch: pytest.MonkeyPatch
-) -> tuple[int, ScopeOutcome]:
-    """Build the declaration scope; count how often the native index was opened."""
-
-    discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
-    macros: dict[str, LoadedMacro] = load_project_macros(discovered.macro_files)
-    attempts: list[None] = []
-
-    def counted(
-        *, discovered_inputs: DiscoveredProjectInputs, loaded_macros: Mapping[str, LoadedMacro]
-    ) -> _native.NativeScopeIndex:
-        attempts.append(None)
-        return open_native_scope_index(
-            discovered_inputs=discovered_inputs, loaded_macros=loaded_macros
-        )
-
-    monkeypatch.setattr(open_index_module, "open_native_scope_index", counted)
-    outcome: ScopeOutcome = _scope_outcome(
-        discovered=discovered,
-        macros=macros,
-        syntax=DuckDbAdapter().sql_lexical_syntax,
-    )
-    return len(attempts), outcome
 
 
 def _scope_outcome(
@@ -769,7 +737,9 @@ def _path_visibility(
     _ = resolution
     lexical_path: Path = next(
         map(
-            lambda record: Path(declaration_lexical_path(record=record)),
+            lambda record: (
+                Path(record.owning_path or CURRENT_PATH_COMPONENT) / DECLARATION_LEXICAL_STEM
+            ),
             filter(
                 lambda record: (
                     record.path == target_path.as_posix() and record.scope is not ScopeKind.PRIVATE

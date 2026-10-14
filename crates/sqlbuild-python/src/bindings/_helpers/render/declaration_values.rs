@@ -7,12 +7,12 @@ use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyInt, PyList, PyString, P
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
 
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const SCOPE_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
 const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
-const SCOPE_LOOKUP_MODULE: &str = "sqlbuild.compiler.scopes.main.build_scope_lookup";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 const SCOPE_ERRORS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
@@ -133,10 +133,7 @@ pub(crate) fn declaration_scope_resolver<'py>(
     let py: Python<'py> = discovered.py();
     let declarations: Bound<'py, PyDict> = runtime_declarations(discovered, loaded_macros)?;
     let lookup: Bound<'py, PyAny> = if lookup.is_none() {
-        call_with(
-            &imported(py, SCOPE_LOOKUP_MODULE, "build_scope_lookup")?,
-            &[("index", scope_index.clone())],
-        )?
+        build_scope_lookup(py, scope_index)?.into_bound(py)
     } else {
         lookup.clone()
     };

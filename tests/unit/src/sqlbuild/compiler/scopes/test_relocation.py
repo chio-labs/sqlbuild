@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.scopes.main.relocate_declarations_for_move import (
+from sqlbuild._native import (
     relocate_declarations_for_move,
 )
 from sqlbuild.compiler.scopes.models import (

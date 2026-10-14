@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.compiler.scopes.main.scope_metadata import scope_metadata_projection
+from sqlbuild._native import scope_metadata_projection
 from sqlbuild.compiler.scopes.models import DeclarationRecord, ScopeCompleteness, ScopeIndex
 from tests.unit.src.sqlbuild.compiler.scopes.helpers import scope_index
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import ScopePayloadTestCase

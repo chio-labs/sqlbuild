@@ -6,6 +6,9 @@ use pyo3::types::PyTuple;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::render::declaration_values::declaration_scope_resolver;
+use crate::bindings::_helpers::scopes::scope_index::open_native_scope_index;
+use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
+use crate::bindings::_helpers::scopes::scope_validation::validate_scope_index;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const SCAN_CACHE_MODULE: &str = "sqlbuild.compiler.compile.classes.sql_test_scan_cache";
@@ -13,8 +16,6 @@ const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const SCOPE_ERRORS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
-const OPEN_INDEX_MODULE: &str = "sqlbuild.compiler.scopes.main._open_native_scope_index";
-const VALIDATE_INDEX_MODULE: &str = "sqlbuild.compiler.scopes.main._validate_scope_index";
 
 fn compile_error(py: Python<'_>, message: Bound<'_, PyAny>) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
@@ -66,17 +67,12 @@ pub(crate) fn build_declaration_scope<'py>(
         &scenario_files,
         sql_lexical_syntax.getattr("native_mapping")?,
     ))?;
-    let native: Bound<'py, PyAny> = call_with(
-        &imported(py, OPEN_INDEX_MODULE, "open_native_scope_index")?,
-        &[
-            ("discovered_inputs", discovered_inputs.clone()),
-            ("loaded_macros", loaded_macros.clone()),
-        ],
-    )?;
-    let validated: PyResult<Bound<'py, PyAny>> = call_with(
-        &imported(py, VALIDATE_INDEX_MODULE, "validate_scope_index")?,
-        &[("index", native.getattr("index")?)],
-    );
+    let native: Bound<'py, PyAny> = Bound::new(
+        py,
+        open_native_scope_index(py, discovered_inputs, loaded_macros, None)?,
+    )?
+    .into_any();
+    let validated: Result<(), PyErr> = validate_scope_index(&native.getattr("index")?);
     if let Err(error) = validated {
         if !error.is_instance(
             py,
@@ -120,8 +116,7 @@ pub(crate) fn build_declaration_scope<'py>(
         }
     }
     let index: Bound<'py, PyAny> = native.call_method0("index_with_relationships")?;
-    let lookup: Bound<'py, PyAny> =
-        imported(py, NATIVE_MODULE, "build_scope_lookup")?.call1((&index,))?;
+    let lookup: Bound<'py, PyAny> = build_scope_lookup(py, &index)?.into_bound(py);
     scope_build(
         discovered_inputs,
         loaded_macros,

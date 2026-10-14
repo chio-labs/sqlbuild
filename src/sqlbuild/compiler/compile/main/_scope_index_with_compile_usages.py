@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile.types import CompileInputsView
-from sqlbuild.compiler.scopes.main._get_placement_validated_scope_index import (
+from sqlbuild._native import (
     get_placement_validated_scope_index,
 )
+from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.scopes.models import ScopeIndex, UsageRecord
 
 

@@ -9,13 +9,15 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.compiler.scopes.main.browse_scope_folders import browse_scope_folders
-from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
-from sqlbuild.compiler.scopes.main.explain_scope_declaration import explain_scope_declaration
-from sqlbuild.compiler.scopes.main.list_scope_declarations import list_scope_declarations
-from sqlbuild.compiler.scopes.main.preview_scope_move import preview_scope_move
-from sqlbuild.compiler.scopes.main.query_scope_report import query_scope_report
-from sqlbuild.compiler.scopes.main.serialize_scope_report import serialize_scope_report
+from sqlbuild._native import (
+    browse_scope_folders,
+    build_scope_lookup,
+    explain_scope_declaration,
+    list_scope_declarations,
+    preview_scope_move,
+    query_scope_report,
+    serialize_scope_report,
+)
 from sqlbuild.compiler.scopes.models import (
     OwnershipRoot,
     ResourceRecord,

@@ -5,7 +5,7 @@ from contextlib import AbstractContextManager
 from contextvars import Token
 from datetime import date, datetime
 from pathlib import Path, PurePath
-from typing import Any, Literal, TextIO, TypedDict, overload
+from typing import Any, TextIO, TypedDict
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
@@ -2419,64 +2419,76 @@ class NativeScopeIndex:
     def index_with_relationships(self) -> ScopeIndex: ...
 
 def open_native_scope_index(
+    *,
     discovered_inputs: DiscoveredProjectInputs,
     loaded_macros: Mapping[str, LoadedMacro],
-    static_macros: tuple[StaticMacroExport, ...],
-    /,
+    static_macros: tuple[StaticMacroExport, ...] = (),
 ) -> NativeScopeIndex: ...
-def scope_placement_validated_index(
-    index: ScopeIndex,
-    enforce_placement: bool,
-    compile_usages: tuple[UsageRecord, ...] | None,
+def build_scope_index(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    loaded_macros: Mapping[str, LoadedMacro] | None = None,
+    static_macros: tuple[StaticMacroExport, ...] = (),
 ) -> ScopeIndex: ...
-def scope_relocated_declarations(
-    index: ScopeIndex, resource: ResourceIdentity, destination: str
+def get_placement_validated_scope_index(
+    *,
+    index: ScopeIndex,
+    enforce_placement: bool = True,
+    compile_usages: tuple[UsageRecord, ...] | None = None,
+) -> ScopeIndex: ...
+def relocate_declarations_for_move(
+    *, index: ScopeIndex, resource: ResourceIdentity, destination: str
 ) -> tuple[DeclarationRecord, ...] | None: ...
+def validate_scope_index(*, index: ScopeIndex) -> None: ...
 
 class NativeScopeLookup: ...
 
-def scope_query_target(lookup: ScopeLookup, target: ScopeQueryTarget, /) -> ScopeTargetQuery: ...
-@overload
-def scope_resolve_visibility(
-    lookup: ScopeLookup, target: ScopeQueryTarget, with_reasons: Literal[True], /
+def query_scope_target(*, lookup: ScopeLookup, target: ScopeQueryTarget) -> ScopeTargetQuery: ...
+def resolve_scope_visibility(
+    *, lookup: ScopeLookup, target: ResourceIdentity | str | PurePath
 ) -> VisibilityResolution: ...
-@overload
-def scope_resolve_visibility(
-    lookup: ScopeLookup, target: ScopeQueryTarget, with_reasons: Literal[False], /
+def resolve_scope_declaration_visibility(
+    *, lookup: ScopeLookup, target: ResourceIdentity | str | PurePath
 ) -> DeclarationVisibility: ...
-def scope_resolve_path_visibility(
-    lookup: ScopeLookup, path: str | PurePath, /
+def resolve_scope_path_visibility(
+    *, lookup: ScopeLookup, path: str | PurePath
 ) -> tuple[tuple[DeclarationRecord, ...], tuple[DeclarationRecord, ...]]: ...
-def build_scope_lookup(index: ScopeIndex) -> ScopeLookup: ...
-def scope_report(
+def build_scope_lookup(*, index: ScopeIndex) -> ScopeLookup: ...
+def query_scope_report(
+    *,
     lookup: ScopeLookup,
-    request: tuple[ScopeQueryTarget | None, str | PurePath | None, bool, ScopeReportFilters | None],
-    /,
+    target: str | PurePath | ResourceIdentity | DeclarationIdentity | None = None,
+    at: str | PurePath | None = None,
+    directory: bool = False,
+    filters: ScopeReportFilters | None = None,
 ) -> ScopeReport: ...
-def scope_explain(
+def explain_scope_declaration(
+    *,
     lookup: ScopeLookup,
-    request: tuple[
-        str | DeclarationIdentity,
-        str | PurePath | ResourceIdentity | None,
-        str | PurePath | None,
-        bool,
-    ],
-    /,
+    declaration: str | DeclarationIdentity,
+    target: str | PurePath | ResourceIdentity | None = None,
+    at: str | PurePath | None = None,
+    directory: bool = False,
 ) -> tuple[DeclarationExplanation, tuple[ScopeDiagnostic, ...]]: ...
-def scope_browse(
+def browse_scope_folders(
+    *,
     lookup: ScopeLookup,
-    request: tuple[str, str | PurePath | ResourceIdentity | None, bool],
-    /,
+    folder: str = ".",
+    target: str | PurePath | ResourceIdentity | None = None,
+    target_is_prospective: bool = False,
 ) -> ScopeBrowseResult: ...
-def scope_list(
+def list_scope_declarations(
+    *,
     lookup: ScopeLookup,
-    request: tuple[str, ScopeReportFilters | None, str | PurePath | ResourceIdentity | None, bool],
-    /,
+    folder: str,
+    filters: ScopeReportFilters | None = None,
+    target: str | PurePath | ResourceIdentity | None = None,
+    target_is_prospective: bool = False,
 ) -> ScopeListResult: ...
-def scope_move_preview(
-    lookup: ScopeLookup, resource: str | ResourceIdentity, destination: str | PurePath
+def preview_scope_move(
+    *, lookup: ScopeLookup, resource: str | ResourceIdentity, destination: str | PurePath
 ) -> tuple[MovePreview | None, tuple[ScopeDiagnostic, ...]]: ...
-def serialize_scope_report(report: ScopeReport | ScopeBrowseResult | ScopeListResult) -> str: ...
+def serialize_scope_report(*, report: ScopeReport | ScopeBrowseResult | ScopeListResult) -> str: ...
 def run_scope_command(
     *,
     request: ScopeCommandRequest,
@@ -2489,7 +2501,7 @@ def render_scope_result(
     request: ScopeCommandRequest,
     use_color: bool = False,
 ) -> str: ...
-def scope_metadata_projection(index: ScopeIndex) -> dict[str, JsonValue]: ...
+def scope_metadata_projection(*, index: ScopeIndex) -> dict[str, JsonValue]: ...
 def effective_config_target_name(
     project_config: object, local_config: object, selected: str | None, /
 ) -> tuple[str | None, str | None]: ...
@@ -2660,7 +2672,7 @@ def validate_local_sql_analysis(project_dir: Path, flags: tuple[bool, bool, bool
 def sql_test_cte_span(
     contents: str, sql_body: str, cte_name: str, call: str | None, /
 ) -> tuple[int, int, int, int]: ...
-def scope_normalize_path(path: str, /) -> tuple[str | None, str | None]: ...
+def normalize_scope_path(*, path: str | PurePath) -> str: ...
 def scope_index_fingerprint(*, project_dir: Path) -> str | None: ...
 def load_or_build_scope_index(*, project_dir: Path, no_cache: bool = False) -> ScopeIndex: ...
 def model_schema_scope_usages(

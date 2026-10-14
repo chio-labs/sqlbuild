@@ -1,6 +1,8 @@
 //! Compile usage merging, placement validation and move relocation over a Python `ScopeIndex`.
 
-use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{
+    Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_scopes::placement::main::diagnostic_order::diagnostic_order;
@@ -23,6 +25,8 @@ use crate::bindings::_helpers::scopes::scope_objects::{
 use crate::bindings::types::CompilerDetach;
 
 const DATACLASSES_MODULE: &str = "dataclasses";
+const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
+const SCOPE_ERRORS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
 const RUNTIME_USAGE: usize = 2;
 
 /// `dataclasses.replace(item, **changes)`.
@@ -249,8 +253,11 @@ fn placement_validated_index<'py>(
 
 /// Complete usage and placement diagnostics, merging any collected compile usages first.
 #[pyfunction]
-#[pyo3(signature = (index, enforce_placement, compile_usages))]
-fn scope_placement_validated_index(
+#[pyo3(
+    name = "get_placement_validated_scope_index",
+    signature = (*, index, enforce_placement = true, compile_usages = None)
+)]
+pub(crate) fn scope_placement_validated_index(
     index: &Bound<'_, PyAny>,
     enforce_placement: bool,
     compile_usages: Option<Bound<'_, PyTuple>>,
@@ -264,7 +271,11 @@ fn scope_placement_validated_index(
 
 /// Declarations whose placement changes when `resource` moves, or `None` if unsettled.
 #[pyfunction]
-fn scope_relocated_declarations(
+#[pyo3(
+    name = "relocate_declarations_for_move",
+    signature = (*, index, resource, destination)
+)]
+pub(crate) fn scope_relocated_declarations(
     py: Python<'_>,
     index: &Bound<'_, PyAny>,
     resource: &Bound<'_, PyAny>,
@@ -308,7 +319,34 @@ fn scope_relocated_declarations(
     Ok(Some(PyTuple::new(py, moved)?.unbind()))
 }
 
+/// Python's `validate_scope_index`: raise one `ScopeValidationError` for its error diagnostics.
+#[pyfunction]
+#[pyo3(signature = (*, index))]
+pub(crate) fn validate_scope_index(index: &Bound<'_, PyAny>) -> Result<(), PyErr> {
+    let py: Python<'_> = index.py();
+    let error: Bound<'_, PyAny> = py
+        .import(SCOPE_TYPES_MODULE)?
+        .getattr("DiagnosticSeverity")?
+        .getattr("ERROR")?;
+    let mut errors: Vec<Bound<'_, PyAny>> = Vec::new();
+    for item in index.getattr("diagnostics")?.try_iter()? {
+        let item: Bound<'_, PyAny> = item?;
+        if item.getattr("severity")?.is(&error) {
+            errors.push(item);
+        }
+    }
+    if errors.is_empty() {
+        return Ok(());
+    }
+    Err(PyErr::from_value(
+        py.import(SCOPE_ERRORS_MODULE)?
+            .getattr("ScopeValidationError")?
+            .call1((PyTuple::new(py, errors)?,))?,
+    ))
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(validate_scope_index, module)?)?;
     module.add_function(wrap_pyfunction!(scope_placement_validated_index, module)?)?;
     module.add_function(wrap_pyfunction!(scope_relocated_declarations, module)?)?;
     Ok(())

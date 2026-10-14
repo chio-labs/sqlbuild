@@ -8,8 +8,7 @@ from typing import Any, cast
 
 import pytest
 
-from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
-from sqlbuild.compiler.scopes.main.scope_metadata import scope_metadata_projection
+from sqlbuild._native import build_scope_lookup, scope_metadata_projection
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,

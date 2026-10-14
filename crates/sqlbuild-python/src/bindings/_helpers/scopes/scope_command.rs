@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::cli_text::models::CliStyle;
 use sqlbuild_scopes::scope_report::models::ScopeResult;
@@ -13,8 +13,13 @@ use sqlbuild_scopes::scope_text::main::render_scope_text::render_scope_text;
 use sqlbuild_scopes::scope_text::main::scope_result_failed::scope_result_failed;
 use sqlbuild_scopes::scope_text::models::ScopeTextRequest;
 
+use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
 use crate::bindings::_helpers::scopes::scope_objects::ScopeClasses;
 use crate::bindings::_helpers::scopes::scope_report_objects::read_result;
+use crate::bindings::_helpers::scopes::scope_reports::{
+    scope_browse, scope_explain, scope_list, scope_move_preview, scope_report,
+    serialize_scope_report,
+};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
@@ -218,40 +223,74 @@ fn merged<'py>(
     replaced(report, &changes)
 }
 
+/// `value` as an optional Python string.
+fn optional_text<'py>(py: Python<'py>, value: &Option<String>) -> Option<Bound<'py, PyAny>> {
+    value
+        .as_deref()
+        .map(|text| PyString::new(py, text).into_any())
+}
+
 /// Run the query `request` selects over `lookup`.
 fn query_result<'py>(
     py: Python<'py>,
     lookup: &Bound<'py, PyAny>,
     (request, target): (&Bound<'py, PyAny>, Option<String>),
 ) -> PyResult<Bound<'py, PyAny>> {
-    let native: Bound<'_, PyModule> = py.import(NATIVE_MODULE)?;
     let at: Option<String> = request.getattr("at")?.extract()?;
     let prospective: bool = at.is_some();
     let browse: Option<String> = request.getattr("browse")?.extract()?;
     if let Some(folder) = browse {
-        return native
-            .getattr("scope_browse")?
-            .call1((lookup, (folder, &target, prospective)));
+        return Ok(scope_browse(
+            py,
+            lookup,
+            (folder, optional_text(py, &target), prospective),
+        )?
+        .into_bound(py));
     }
     let filters: Bound<'_, PyAny> = report_filters(py, request)?;
     let list_path: Option<String> = request.getattr("list_path")?.extract()?;
     if let Some(folder) = list_path {
-        return native
-            .getattr("scope_list")?
-            .call1((lookup, (folder, &filters, &target, prospective)));
+        return Ok(scope_list(
+            py,
+            lookup,
+            (
+                folder,
+                Some(filters),
+                optional_text(py, &target),
+                prospective,
+            ),
+        )?
+        .into_bound(py));
     }
     let directory: bool = at
         .as_deref()
         .is_some_and(|at| at.ends_with('/') || at.ends_with('\\'));
-    let mut report: Bound<'_, PyAny> = native
-        .getattr("scope_report")?
-        .call1((lookup, (&target, &at, directory, &filters)))?;
+    let mut report: Bound<'_, PyAny> = scope_report(
+        py,
+        lookup,
+        (
+            optional_text(py, &target),
+            optional_text(py, &at),
+            directory,
+            Some(filters),
+        ),
+    )?
+    .into_bound(py);
     let explain: Option<String> = request.getattr("explain")?.extract()?;
     if let Some(declaration) = explain {
-        let (explanation, diagnostics): (Bound<'_, PyAny>, Bound<'_, PyAny>) = native
-            .getattr("scope_explain")?
-            .call1((lookup, (declaration, &target, &at, directory)))?
-            .extract()?;
+        let (explanation, diagnostics): (Bound<'_, PyAny>, Bound<'_, PyAny>) = scope_explain(
+            py,
+            lookup,
+            (
+                PyString::new(py, &declaration).into_any(),
+                optional_text(py, &target),
+                optional_text(py, &at),
+                directory,
+            ),
+        )
+        .map(|(explanation, diagnostics)| {
+            (explanation.into_bound(py), diagnostics.into_bound(py))
+        })?;
         let complete: bool = explanation.getattr("complete")?.extract()?;
         report = merged(
             &report,
@@ -261,10 +300,21 @@ fn query_result<'py>(
     }
     let as_path: Option<String> = request.getattr("as_path")?.extract()?;
     if let Some(destination) = as_path {
-        let (preview, diagnostics): (Bound<'_, PyAny>, Bound<'_, PyAny>) = native
-            .getattr("scope_move_preview")?
-            .call1((lookup, target.clone().unwrap_or_default(), destination))?
-            .extract()?;
+        let (preview, diagnostics): (Bound<'_, PyAny>, Bound<'_, PyAny>) = scope_move_preview(
+            py,
+            lookup,
+            &PyString::new(py, &target.clone().unwrap_or_default()).into_any(),
+            &PyString::new(py, &destination).into_any(),
+        )
+        .map(|(preview, diagnostics)| {
+            (
+                preview.map_or_else(
+                    || py.None().into_bound(py),
+                    |preview| preview.into_bound(py),
+                ),
+                diagnostics.into_bound(py),
+            )
+        })?;
         let complete: bool = !preview.is_none() && preview.getattr("complete")?.extract()?;
         report = merged(&report, ("move_preview", preview), (diagnostics, complete))?;
     }
@@ -311,17 +361,14 @@ fn run_scope_command(
         ],
     )?;
     let index: Bound<'_, PyAny> = loader.call((), Some(&options))?;
-    let lookup: Bound<'_, PyAny> = native.getattr("build_scope_lookup")?.call1((index,))?;
+    let lookup: Bound<'_, PyAny> = build_scope_lookup(py, &index)?.into_bound(py);
     let target: Option<String> =
         qualify_target(py, &lookup, request.getattr("target")?.extract()?)?;
     let result: Bound<'_, PyAny> = query_result(py, &lookup, (request, target.clone()))?;
     let classes: ScopeClasses<'_> = ScopeClasses::new(py)?;
     let (output, native_result): (String, ScopeResult) =
         if request.getattr("json_output")?.extract()? {
-            let output: String = native
-                .getattr("serialize_scope_report")?
-                .call1((&result,))?
-                .extract()?;
+            let output: String = serialize_scope_report(py, &result)?;
             (output, read_result(&classes, &result)?)
         } else {
             let native_result: ScopeResult = read_result(&classes, &result)?;

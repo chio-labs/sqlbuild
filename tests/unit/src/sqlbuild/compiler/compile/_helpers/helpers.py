@@ -9,6 +9,7 @@ from sqlbuild._native import (
     assemble_project,
     build_compile_inputs,
     build_native_declaration_contexts,
+    build_scope_lookup,
     discover_project_inputs,
     expand_sql_macros,
     infer_native_query_columns,
@@ -63,7 +64,6 @@ from sqlbuild.compiler.lineage.types import (
 from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.planner._helpers.graph.core import build_execution_upstream_deps
 from sqlbuild.compiler.planner._helpers.resolve.refs import resolve_ref_references
-from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,

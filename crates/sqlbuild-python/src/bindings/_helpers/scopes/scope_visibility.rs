@@ -92,6 +92,7 @@ fn target_query<'py>(
 
 /// `query_target`: the `ScopeTargetQuery` of `target`; invalid text raises the scope error.
 #[pyfunction]
+#[pyo3(name = "query_scope_target", signature = (*, lookup, target))]
 fn scope_query_target(
     py: Python<'_>,
     lookup: &Bound<'_, PyAny>,
@@ -112,9 +113,30 @@ fn resolved(
     Ok(rows)
 }
 
-/// Every visible fact of each matched resource, and its inaccessible declarations.
+/// Python's `resolve_scope_visibility`: visible facts and inaccessible reasons per target.
 #[pyfunction]
-fn scope_resolve_visibility(
+#[pyo3(signature = (*, lookup, target))]
+fn resolve_scope_visibility(
+    py: Python<'_>,
+    lookup: &Bound<'_, PyAny>,
+    target: &Bound<'_, PyAny>,
+) -> PyResult<PyObject> {
+    resolved_visibility(py, lookup, target, true)
+}
+
+/// Python's `resolve_scope_declaration_visibility`: visible facts and inaccessible identities.
+#[pyfunction]
+#[pyo3(signature = (*, lookup, target))]
+fn resolve_scope_declaration_visibility(
+    py: Python<'_>,
+    lookup: &Bound<'_, PyAny>,
+    target: &Bound<'_, PyAny>,
+) -> PyResult<PyObject> {
+    resolved_visibility(py, lookup, target, false)
+}
+
+/// Every visible fact of each matched resource, and its inaccessible declarations.
+fn resolved_visibility(
     py: Python<'_>,
     lookup: &Bound<'_, PyAny>,
     target: &Bound<'_, PyAny>,
@@ -177,6 +199,7 @@ fn scope_resolve_visibility(
 
 /// Visible and inaccessible declarations for an authored path, including declaration files.
 #[pyfunction]
+#[pyo3(name = "resolve_scope_path_visibility", signature = (*, lookup, path))]
 fn scope_resolve_path_visibility(
     py: Python<'_>,
     lookup: &Bound<'_, PyAny>,
@@ -233,7 +256,11 @@ fn scope_resolve_path_visibility(
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(scope_query_target, module)?)?;
-    module.add_function(wrap_pyfunction!(scope_resolve_visibility, module)?)?;
+    module.add_function(wrap_pyfunction!(resolve_scope_visibility, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        resolve_scope_declaration_visibility,
+        module
+    )?)?;
     module.add_function(wrap_pyfunction!(scope_resolve_path_visibility, module)?)?;
     Ok(())
 }

@@ -1,1 +1,0 @@
-"""Internal compiler scope helpers."""
