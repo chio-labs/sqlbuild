@@ -207,7 +207,9 @@ from sqlbuild.compiler.planner.models import (
     ColumnMigrationPlanning,
     ColumnRenameHint,
     CursorBounds,
+    CursorInputEvidence,
     CursorOverridePair,
+    CursorOverrides,
     DeferralInputs,
     DirectModelVersionIdentities,
     EmptyCursorInputDecision,
@@ -402,6 +404,7 @@ from sqlbuild.spec.contracts.models import (
     DbtConfig,
     DefaultsConfig,
     ExecutionLimitsConfig,
+    FutureCursorsConfig,
     LoaderDestinationParts,
     LocalConfig,
     LocalDbtConfig,
@@ -4261,6 +4264,34 @@ def cursor_render(*, value: CursorScalar) -> str: ...
 def cursor_sentinel_to_token(*, sentinel: Bound) -> str: ...
 def cursor_sentinel_from_token(*, token: str) -> BoundSentinel | None: ...
 def cursor_compare(*, left: CursorScalar, right: CursorScalar) -> int: ...
+def type_cursor_overrides(
+    *, cursor_overrides: CursorOverrides | None, selected_models: Iterable[CompiledModelView]
+) -> CursorOverrides | None: ...
+def maximum_allowed_start(
+    *, discovered_value: str, cursor_grain: str | None, invocation_time: datetime, max_ahead: str
+) -> str: ...
+def apply_maximum_start_policy(
+    *,
+    bounds: CursorBounds,
+    snapshot: ModelCursorSnapshot,
+    cursor_type: str | None,
+    cursor_grain: str | None,
+    cursor_start: CursorScalar | str | None,
+    lookback: Duration | str | None,
+    backfill_duration: Duration | str | None,
+    policy: MaximumStartPolicyInputs,
+    has_start_override: bool,
+) -> CursorBounds: ...
+def resolve_future_cursor_safety(
+    *,
+    bounds: CursorBounds,
+    cursor_type: str | None,
+    cursor_grain: str | None,
+    config: FutureCursorsConfig | None,
+    invocation_time: datetime | None,
+    has_complete_override: bool,
+    input_evidence: tuple[CursorInputEvidence, ...] = (),
+) -> CursorBounds: ...
 def cursor_sort_key(*, raw: object, cursor_type: str) -> datetime | int: ...
 def cursor_max_bound[T](*, values: tuple[T, ...] | list[T], cursor_type: str) -> T: ...
 def cursor_min_bound[T](*, values: tuple[T, ...] | list[T], cursor_type: str) -> T: ...

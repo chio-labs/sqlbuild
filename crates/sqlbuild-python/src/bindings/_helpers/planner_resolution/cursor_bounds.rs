@@ -16,9 +16,9 @@ use sqlbuild_cursor::planner::main::replay_start::replay_start;
 use sqlbuild_cursor::planner::models::{CursorKind, CursorSnapshot, ReplayPolicy};
 
 const MODELS: &str = "sqlbuild.compiler.planner.models";
-const MAXIMUM_START: &str = "sqlbuild.compiler.planner._helpers.resolve.maximum_start";
+const MAXIMUM_START: &str = "sqlbuild._native";
 
-fn optional_scalar<'py>(
+pub(super) fn optional_scalar<'py>(
     session: &CursorSession<'py>,
     value: &Bound<'py, PyAny>,
 ) -> PyResult<Option<Scalar>> {
@@ -29,7 +29,7 @@ fn optional_scalar<'py>(
     }
 }
 
-fn scalars<'py>(
+pub(super) fn scalars<'py>(
     session: &CursorSession<'py>,
     object: &Bound<'py, PyAny>,
     field: &str,
@@ -65,7 +65,7 @@ fn read_snapshot<'py>(
     })
 }
 
-fn duration(value: &Bound<'_, PyAny>) -> PyResult<Option<DurationSpan>> {
+pub(super) fn duration(value: &Bound<'_, PyAny>) -> PyResult<Option<DurationSpan>> {
     if value.is_none() {
         return Ok(None);
     }
@@ -153,7 +153,7 @@ fn apply_typed_cursor_replay_policy<'py>(
     session.python_scalar(&result)
 }
 
-fn required_scalar<'py>(
+pub(super) fn required_scalar<'py>(
     session: &CursorSession<'py>,
     raw: &Bound<'py, PyAny>,
     cursor_type: &Bound<'py, PyAny>,
