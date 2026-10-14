@@ -12,6 +12,7 @@ from sqlbuild._native import (
     enforce_plan_safety_policies,
     format_build_footer,
     format_execution_header,
+    write_runtime_target,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.constants import (
@@ -22,7 +23,6 @@ from sqlbuild.cli.commands.constants import (
     TABLE_TYPE_DOWNGRADE_DBT_HELP,
 )
 from sqlbuild.cli.commands.models import DbtSqlbuildWorkContext, PlanSafetyGates
-from sqlbuild.cli.target_artifacts.main._write_runtime_target import write_runtime_target
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.planner.models import (
     PlanOutput,

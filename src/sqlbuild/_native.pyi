@@ -3366,6 +3366,9 @@ def resolve_loader_defaults(
     target_config: TargetConfig | None = None,
     cli_vars: dict[str, object] | None = None,
 ) -> tuple[str | None, str | None]: ...
+def write_runtime_target(
+    *, target_dir: Path, plan_output: PlanOutput, result: BuildExecutionResult
+) -> None: ...
 
 class TransientStatusReporter:
     def __init__(

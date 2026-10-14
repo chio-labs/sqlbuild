@@ -16,6 +16,7 @@ use crate::bindings::_helpers::check::check_results::{
     check_result_text, results_json, write_results,
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_outputs::runtime_target::write_python_check_runtime_target;
 use crate::bindings::_helpers::graph::python_selection::python_node_names;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
@@ -39,8 +40,6 @@ const EXECUTOR_MODELS: &str = "sqlbuild.executor.python_nodes.models";
 const CHECKS_MODULE: &str = "sqlbuild.executor.python_nodes.main._checks";
 const INGRESS_MODULE: &str = "sqlbuild.executor.python_nodes.main._ingress";
 const PROVIDER_SESSION_MODULE: &str = "sqlbuild.provider.main.session";
-const RUNTIME_TARGET_MODULE: &str =
-    "sqlbuild.cli.target_artifacts.main._write_python_check_runtime_target";
 const GRAPH_OPERATOR_CODE: &str = "C681";
 const GRAPH_OPERATOR_MESSAGE: &str = "sqb check selectors do not support graph operators; \
     select checks directly without '+', '~', or path-between expansion";
@@ -658,21 +657,11 @@ fn complete<'py>(
     stream.call_method1("write", (render_check_summary(&texts, style),))?;
     stream.call_method0("flush")?;
     let tuple: Bound<'py, PyAny> = PyTuple::new(py, results)?.into_any();
-    call_with(
-        &imported(
-            py,
-            RUNTIME_TARGET_MODULE,
-            "write_python_check_runtime_target",
-        )?,
-        &[
-            (
-                "target_dir",
-                invocation
-                    .getattr("effective_project_dir")?
-                    .call_method1("__truediv__", ("target",))?,
-            ),
-            ("results", tuple),
-        ],
+    write_python_check_runtime_target(
+        &invocation
+            .getattr("effective_project_dir")?
+            .call_method1("__truediv__", ("target",))?,
+        &tuple,
     )?;
     call_with(
         &imported(py, NATIVE_MODULE, "write_execution_json_output")?,

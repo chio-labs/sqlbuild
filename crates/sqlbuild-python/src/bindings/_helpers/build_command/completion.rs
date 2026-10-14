@@ -18,6 +18,9 @@ use crate::bindings::_helpers::build_command::support::{
     boolean, emit, joined, none, text, utc_now,
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_outputs::runtime_target::{
+    write_python_check_runtime_target, write_runtime_target,
+};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
@@ -25,9 +28,6 @@ const COST_COLLECTION_MODULE: &str = "sqlbuild.cli.commands._helpers.cost.collec
 const COST_TYPES: &str = "sqlbuild.cost.types";
 const BUILD_MODELS: &str = "sqlbuild.executor.build.models";
 const BUILD_TYPES: &str = "sqlbuild.executor.build.types";
-const RUNTIME_TARGET_MODULE: &str = "sqlbuild.cli.target_artifacts.main._write_runtime_target";
-const CHECK_TARGET_MODULE: &str =
-    "sqlbuild.cli.target_artifacts.main._write_python_check_runtime_target";
 const SUCCESS_STATUS: &str = "success";
 const PENDING_MESSAGE: &str = "Build cost collection has not completed.";
 const INTERRUPTED_MESSAGE: &str = "Build was interrupted before cost collection completed.";
@@ -326,21 +326,8 @@ pub(crate) fn complete_direct_build<'py>(
     let exit_code: i32 = build_exit_code(succeeded, (python_failed, checks_failed));
     let target_dir: Bound<'py, PyAny> =
         joined(&context.get("effective_project_dir")?, &["target"])?;
-    call_with(
-        &imported(py, RUNTIME_TARGET_MODULE, "write_runtime_target")?,
-        &[
-            ("target_dir", target_dir.clone()),
-            ("plan_output", plan.clone()),
-            ("result", result.clone()),
-        ],
-    )?;
-    call_with(
-        &imported(py, CHECK_TARGET_MODULE, "write_python_check_runtime_target")?,
-        &[
-            ("target_dir", target_dir),
-            ("results", check_results.clone()),
-        ],
-    )?;
+    write_runtime_target(&target_dir, &plan, result)?;
+    write_python_check_runtime_target(&target_dir, check_results)?;
     let cost_started: Instant = Instant::now();
     let record: PyResult<Bound<'py, PyAny>> = finalize_build_cost(
         context,
