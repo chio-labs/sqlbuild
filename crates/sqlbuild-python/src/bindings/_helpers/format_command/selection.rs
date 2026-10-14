@@ -20,8 +20,8 @@ const NATIVE_MODULE: &str = "sqlbuild._native";
 const PLANNER_ERRORS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
 const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 const UNIT_TEST_SELECTORS_MODULE: &str =
-    "sqlbuild.compiler.pipeline.main.reject_unit_test_selectors";
-const GRAPH_SELECTION_MODULE: &str = "sqlbuild.compiler.pipeline.main.project_graph_selection";
+    "sqlbuild.compiler.pipeline.main._reject_unit_test_selectors";
+const GRAPH_SELECTION_MODULE: &str = "sqlbuild.compiler.pipeline.main._project_graph_selection";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const RESOLVE_ADAPTER_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";

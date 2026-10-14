@@ -27,7 +27,8 @@ use crate::bindings::_helpers::load::load_selection::{
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
-const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild.compiler.pipeline.main.reject_unit_test_selectors";
+const REJECT_UNIT_TESTS_MODULE: &str =
+    "sqlbuild.compiler.pipeline.main._reject_unit_test_selectors";
 const EFFECTIVE_TARGET_MODULE: &str = "sqlbuild._native";
 const EFFECTIVE_RUNTIME_MODULE: &str = "sqlbuild._native";
 const EFFECTIVE_SETTINGS_MODULE: &str = "sqlbuild._native";

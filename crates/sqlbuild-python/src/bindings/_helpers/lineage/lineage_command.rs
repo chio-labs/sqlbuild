@@ -42,8 +42,9 @@ const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild.compiler.pipeline.main.reject_unit_test_selectors";
-const GRAPH_SELECTION_MODULE: &str = "sqlbuild.compiler.pipeline.main.project_graph_selection";
+const REJECT_UNIT_TESTS_MODULE: &str =
+    "sqlbuild.compiler.pipeline.main._reject_unit_test_selectors";
+const GRAPH_SELECTION_MODULE: &str = "sqlbuild.compiler.pipeline.main._project_graph_selection";
 const SELECTION_MODULE: &str = "sqlbuild.compiler.planner.main.selection.selection";
 const SELECTOR_TOKENS_MODULE: &str = "sqlbuild.compiler.planner.main.selection._selector_tokens";
 const SELECTOR_PARSE_MODULE: &str = "sqlbuild.compiler.planner.main.selection.selector_parse";

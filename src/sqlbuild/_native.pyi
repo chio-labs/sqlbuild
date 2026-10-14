@@ -36,10 +36,12 @@ from sqlbuild.cli.commands.models import (
     JanitorCommandRequest,
     LineageCommandRequest,
     LoadCommandRequest,
+    PlanCommandRequest,
     PlanSafetyGates,
     PlaygroundCommandRequest,
     QueryDiffPreparation,
     RefactorCommandRequest,
+    RulesCommandRequest,
     ScenarioCaptureCommandRequest,
     ScenarioTestCommandRequest,
     ScopeCommandRequest,
@@ -3377,6 +3379,8 @@ def resolve_loader_defaults(
 def write_runtime_target(
     *, target_dir: Path, plan_output: PlanOutput, result: BuildExecutionResult
 ) -> None: ...
+def run_plan_command(*, request: PlanCommandRequest) -> int: ...
+def run_rules_command(*, request: RulesCommandRequest) -> int: ...
 
 class TransientStatusReporter:
     def __init__(

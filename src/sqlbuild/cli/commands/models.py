@@ -426,21 +426,6 @@ class PlanCommandRequest:
 
 
 @dataclass(frozen=True)
-class PlanInvocation:
-    """Resolved project, adapter, and reporter context for the plan command."""
-
-    effective_project_dir: Path
-    discovered_inputs: DiscoveredProjectInputs
-    adapter: BaseAdapter
-    connection_config: dict[str, object]
-    use_color: bool
-    progress_stream: TextIO
-    connection_progress: ConnectionProgressReporter
-    planning_progress: PlanningProgressReporter
-    should_load_sources: bool
-
-
-@dataclass(frozen=True)
 class PlaygroundCommandRequest:
     """CLI inputs for one playground command invocation."""
 

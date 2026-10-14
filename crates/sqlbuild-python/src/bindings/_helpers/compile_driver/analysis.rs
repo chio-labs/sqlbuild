@@ -11,7 +11,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 
 const DISCOVER_MODULE: &str = "sqlbuild._native";
-const REJECT_SELECTORS_MODULE: &str = "sqlbuild.compiler.pipeline.main.reject_unit_test_selectors";
+const REJECT_SELECTORS_MODULE: &str = "sqlbuild.compiler.pipeline.main._reject_unit_test_selectors";
 const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
@@ -24,7 +24,7 @@ const FAST_COLUMN_LINEAGE: &str = "FAST";
 
 const CONTRACTS_MODULE: &str = "sqlbuild._native";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.compiler.contracts.models";
-const SELECTION_MODULE: &str = "sqlbuild.compiler.pipeline.main.project_graph_selection";
+const SELECTION_MODULE: &str = "sqlbuild.compiler.pipeline.main._project_graph_selection";
 const RULES_CONFIG_MODULE: &str = "sqlbuild.rule_engine.main.load_config";
 const RULES_PROGRESS_MODULE: &str = "sqlbuild.rule_engine.main.render_rules_progress";
 const RUN_RULES_MODULE: &str = "sqlbuild.rule_engine.main.run_rules";
