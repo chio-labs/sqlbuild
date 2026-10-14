@@ -234,6 +234,7 @@ from sqlbuild.compiler.planner.models import (
     ModelPlanContext,
     ModelPlanEntry,
     OldNameView,
+    OldNameViewPlanEntry,
     OldNameViewPlanning,
     ParsedScenarioArtifactName,
     ParsedSelector,
@@ -5140,3 +5141,7 @@ def build_source_load_entries(
     source_map: dict[str, SourceEntry],
     is_reload: bool,
 ) -> tuple[SourceLoadPlanEntry, ...]: ...
+def format_model_migrations(
+    *, lines: list[str], plan: PlanOutput, display_options: DisplayOptions
+) -> list[str]: ...
+def old_name_rows(*, entry: OldNameViewPlanEntry, style: CliStyle) -> list[str]: ...
