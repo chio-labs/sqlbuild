@@ -9,8 +9,10 @@ from sqlbuild.compiler.planner.models import (
     SelectionStalenessWarning,
 )
 from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
+    DeepChainStalenessTestCase,
     SelectionStalenessClassifierTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.planner.main.helpers import build_chain_staleness_graph
 
 MODEL_A: SelectionStalenessNodeKey = SelectionStalenessNodeKey(resource_type="model", name="a")
 MODEL_B: SelectionStalenessNodeKey = SelectionStalenessNodeKey(resource_type="model", name="b")
@@ -481,3 +483,26 @@ def test_given_graph_when_classifying_then_reports_expected_warnings(
     )
 
     assert warnings == test_case.expected_warnings
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DeepChainStalenessTestCase(
+            description="one hundred thousand chained models with a changed root",
+            depth=100_000,
+            expected_trigger_count=99_999,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_deep_chain_when_classifying_then_walks_without_exhausting_the_stack(
+    test_case: DeepChainStalenessTestCase,
+) -> None:
+    warnings: tuple[SelectionStalenessWarning, ...] = classify_selection_staleness_warnings(
+        build_chain_staleness_graph(depth=test_case.depth)
+    )
+
+    assert sum(len(warning.trigger_names) for warning in warnings) == (
+        test_case.expected_trigger_count
+    )

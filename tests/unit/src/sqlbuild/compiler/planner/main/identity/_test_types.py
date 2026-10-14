@@ -55,3 +55,10 @@ class PersistedIdentityTestCase:
     description: str
     build: Callable[[Path], object]
     expected_identity: object
+
+
+@dataclass(frozen=True)
+class DeepChainIdentityTestCase:
+    description: str
+    depth: int
+    expected_hash_count: int

@@ -1,4 +1,4 @@
-//! Memoized identity resolution over one dependency graph, each node once.
+//! Memoized identity resolution over one dependency graph, each node once, with an explicit stack.
 
 use std::collections::{HashMap, HashSet};
 
@@ -11,6 +11,21 @@ use crate::planner_identity::types::IdentityHashes;
 enum Mode {
     Expected,
     Write,
+}
+
+/// A node whose upstream hashes are being resolved.
+struct Frame<'a> {
+    key: &'a GraphKey,
+    node: &'a IdentityNode,
+    local_hash: &'a str,
+    next_upstream: usize,
+    upstream_hashes: Vec<String>,
+}
+
+/// What entering a node yields: its hash already, or a frame to resolve.
+enum Entered<'a> {
+    Resolved(Option<String>),
+    Pending(Frame<'a>),
 }
 
 /// Expected or selected-write identity resolution state.
@@ -49,69 +64,91 @@ impl<'a> IdentityResolver<'a> {
     }
 
     /// A node's expected hash, composed from its upstream expected hashes.
-    pub(crate) fn resolve_expected(&mut self, key: &GraphKey) -> Option<String> {
-        if let Some(position) = self.positions.get(key) {
-            return self.hashes[*position].1.clone();
-        }
-        let nodes: &'a HashMap<GraphKey, IdentityNode> = self.nodes;
-        let Some((node, local_hash)) = nodes
-            .get(key)
-            .and_then(|node| node.local_hash.as_deref().map(|local| (node, local)))
-        else {
-            self.record(key, None);
-            return None;
-        };
-        if self.visiting.contains(key) {
-            self.record(key, Some(local_hash.to_owned()));
-            return Some(local_hash.to_owned());
-        }
-        let composed: String = self.compose(key, (node, local_hash), Mode::Expected);
-        self.record(key, Some(composed.clone()));
-        Some(composed)
+    pub(crate) fn resolve_expected(&mut self, key: &'a GraphKey) -> Option<String> {
+        self.resolve(key, Mode::Expected)
     }
 
     /// A selected node's hash recomputed from upstream write hashes; other nodes keep theirs.
-    pub(crate) fn resolve_write(&mut self, key: &GraphKey) -> Option<String> {
-        if !self.selected.is_some_and(|selected| selected.contains(key)) {
-            return self.recorded(key);
+    pub(crate) fn resolve_write(&mut self, key: &'a GraphKey) -> Option<String> {
+        self.resolve(key, Mode::Write)
+    }
+
+    fn resolve(&mut self, root: &'a GraphKey, mode: Mode) -> Option<String> {
+        let mut stack: Vec<Frame<'a>> = match self.enter(root, mode) {
+            Entered::Resolved(hash) => return hash,
+            Entered::Pending(frame) => vec![frame],
+        };
+        while let Some(frame) = stack.last_mut() {
+            if let Some(upstream_key) = frame.node.upstream_keys.get(frame.next_upstream) {
+                frame.next_upstream += 1;
+                match self.enter(upstream_key, mode) {
+                    Entered::Resolved(hash) => frame.upstream_hashes.extend(hash),
+                    Entered::Pending(upstream_frame) => stack.push(upstream_frame),
+                }
+                continue;
+            }
+            let Some(finished) = stack.pop() else {
+                break;
+            };
+            let composed: String = self.finish(&finished, mode);
+            match stack.last_mut() {
+                Some(parent) => parent.upstream_hashes.push(composed),
+                None => return Some(composed),
+            }
         }
-        if let Some(hash) = self.resolved_selected.get(key) {
-            return Some(hash.clone());
+        None
+    }
+
+    fn enter(&mut self, key: &'a GraphKey, mode: Mode) -> Entered<'a> {
+        if let Mode::Write = mode {
+            if !self.selected.is_some_and(|selected| selected.contains(key)) {
+                return Entered::Resolved(self.recorded(key));
+            }
+            if let Some(hash) = self.resolved_selected.get(key) {
+                return Entered::Resolved(Some(hash.clone()));
+            }
+        } else if let Some(position) = self.positions.get(key) {
+            return Entered::Resolved(self.hashes[*position].1.clone());
         }
         let nodes: &'a HashMap<GraphKey, IdentityNode> = self.nodes;
         let Some((node, local_hash)) = nodes
             .get(key)
             .and_then(|node| node.local_hash.as_deref().map(|local| (node, local)))
         else {
-            return self.recorded(key);
+            return Entered::Resolved(match mode {
+                Mode::Expected => {
+                    self.record(key, None);
+                    None
+                }
+                Mode::Write => self.recorded(key),
+            });
         };
         if self.visiting.contains(key) {
-            return Some(local_hash.to_owned());
+            if let Mode::Expected = mode {
+                self.record(key, Some(local_hash.to_owned()));
+            }
+            return Entered::Resolved(Some(local_hash.to_owned()));
         }
-        let composed: String = self.compose(key, (node, local_hash), Mode::Write);
-        self.record(key, Some(composed.clone()));
-        self.resolved_selected.insert(key.clone(), composed.clone());
-        Some(composed)
+        self.visiting.insert(key.clone());
+        Entered::Pending(Frame {
+            key,
+            node,
+            local_hash,
+            next_upstream: 0,
+            upstream_hashes: Vec::new(),
+        })
     }
 
-    fn compose(
-        &mut self,
-        key: &GraphKey,
-        (node, local_hash): (&IdentityNode, &str),
-        mode: Mode,
-    ) -> String {
-        self.visiting.insert(key.clone());
-        let mut upstream_hashes: Vec<String> = Vec::new();
-        for upstream_key in &node.upstream_keys {
-            let upstream_hash: Option<String> = match mode {
-                Mode::Expected => self.resolve_expected(upstream_key),
-                Mode::Write => self.resolve_write(upstream_key),
-            };
-            upstream_hashes.extend(upstream_hash);
+    fn finish(&mut self, frame: &Frame<'a>, mode: Mode) -> String {
+        self.visiting.remove(frame.key);
+        let upstream: Vec<&str> = frame.upstream_hashes.iter().map(String::as_str).collect();
+        let composed: String = compose_graph_identity(frame.local_hash, &upstream);
+        self.record(frame.key, Some(composed.clone()));
+        if let Mode::Write = mode {
+            self.resolved_selected
+                .insert(frame.key.clone(), composed.clone());
         }
-        self.visiting.remove(key);
-        let upstream: Vec<&str> = upstream_hashes.iter().map(String::as_str).collect();
-        compose_graph_identity(local_hash, &upstream)
+        composed
     }
 
     fn recorded(&self, key: &GraphKey) -> Option<String> {

@@ -181,3 +181,10 @@ class ProtectedRebuildBlockedTestCase:
     description: str
     external_blocked_model_names: tuple[str, ...]
     expected_action: str
+
+
+@dataclass(frozen=True)
+class DeepChainStalenessTestCase:
+    description: str
+    depth: int
+    expected_trigger_count: int

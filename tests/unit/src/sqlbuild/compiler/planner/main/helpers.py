@@ -31,6 +31,8 @@ from sqlbuild.compiler.planner.models import (
     PlannerPolicies,
     PlannerSelection,
     PlanOutput,
+    SelectionStalenessGraph,
+    SelectionStalenessNodeKey,
 )
 from sqlbuild.spec.contracts.models import SchemaColumn, SchemaModelEntry
 
@@ -176,4 +178,23 @@ def create_protected_model_state(*, adapter: DuckDbAdapter, connection: Any) -> 
         ),
         render_qualified_name=adapter.render_qualified_name,
         render_framework_type=adapter.render_framework_type,
+    )
+
+
+def build_chain_staleness_graph(*, depth: int) -> SelectionStalenessGraph:
+    """Build a model chain whose most upstream model changed and only the head runs."""
+
+    keys: list[SelectionStalenessNodeKey] = [
+        SelectionStalenessNodeKey(resource_type="model", name=f"m{index}") for index in range(depth)
+    ]
+    head: str = keys[-1].name
+    return SelectionStalenessGraph(
+        upstream_deps={key: (upstream,) for key, upstream in zip(keys[1:], keys[:-1], strict=True)},
+        selected_model_names=frozenset({head}),
+        run_model_names=frozenset({head}),
+        run_seed_names=frozenset(),
+        run_source_names=frozenset(),
+        changed_model_names=frozenset({"m0"}),
+        changed_seed_names=frozenset(),
+        changed_source_names=frozenset(),
     )

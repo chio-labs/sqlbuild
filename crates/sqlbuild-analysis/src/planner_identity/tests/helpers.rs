@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use crate::planner_identity::_helpers::compose_graph_identity::compose_graph_identity;
 use crate::planner_identity::models::{GraphKey, IdentityGraph, IdentityNode, StalenessGraph};
 
 pub(super) fn key(kind: &str, name: &str) -> GraphKey {
@@ -85,5 +86,62 @@ pub(super) fn ladder_identity_graph(layer_count: usize) -> IdentityGraph {
         }
         previous = current;
     }
+    graph
+}
+
+/// A chain where each model reads the previous one, resolved from its most downstream model.
+pub(super) fn chain_identity_graph(depth: usize) -> IdentityGraph {
+    let mut graph = IdentityGraph::default();
+    for index in 0..depth {
+        let upstream_keys: Vec<GraphKey> = index
+            .checked_sub(1)
+            .map(|upstream| model(&format!("m{upstream}")))
+            .into_iter()
+            .collect();
+        graph.nodes.insert(
+            model(&format!("m{index}")),
+            IdentityNode {
+                upstream_keys,
+                local_hash: Some(format!("local_m{index}")),
+            },
+        );
+    }
+    graph.execution_order = (0..depth)
+        .rev()
+        .map(|index| model(&format!("m{index}")))
+        .collect();
+    graph
+}
+
+/// The most downstream hash of `chain_identity_graph`, composed one link at a time.
+pub(super) fn chain_head_hash(depth: usize) -> Option<String> {
+    let mut hash: Option<String> = None;
+    for index in 0..depth {
+        let upstream: Vec<&str> = hash.iter().map(String::as_str).collect();
+        hash = Some(compose_graph_identity(
+            &format!("local_m{index}"),
+            &upstream,
+        ));
+    }
+    hash
+}
+
+/// The staleness graph of a model chain whose most upstream model changed outside the run set.
+pub(super) fn chain_staleness_graph(depth: usize) -> StalenessGraph {
+    let head: String = format!("m{}", depth - 1);
+    let mut graph = StalenessGraph {
+        upstream_deps: (1..depth)
+            .map(|index| {
+                (
+                    model(&format!("m{index}")),
+                    vec![model(&format!("m{}", index - 1))],
+                )
+            })
+            .collect(),
+        selected_model_names: vec![head.clone()],
+        ..StalenessGraph::default()
+    };
+    graph.changed.models = names(&["m0"]);
+    graph.run.models = HashSet::from([head]);
     graph
 }

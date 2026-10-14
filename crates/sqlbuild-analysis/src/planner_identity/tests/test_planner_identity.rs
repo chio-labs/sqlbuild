@@ -16,13 +16,15 @@ use crate::planner_identity::models::{
     StalenessNames,
 };
 use crate::planner_identity::tests::helpers::{
-    cyclic_identity_graph, identity_graph, key, ladder_identity_graph, model, names,
-    staleness_graph, texts,
+    chain_head_hash, chain_identity_graph, chain_staleness_graph, cyclic_identity_graph,
+    identity_graph, key, ladder_identity_graph, model, names, staleness_graph, texts,
 };
 use crate::planner_identity::tests::test_types::{
-    BuildabilityTestCase, FunctionSqlTestCase, HashTestCase, IdentityGraphSizeTestCase,
-    IdentityGraphTestCase, OrderTestCase, StalenessTestCase, WarningTextTestCase,
+    BuildabilityTestCase, DeepChainTestCase, FunctionSqlTestCase, HashTestCase,
+    IdentityGraphSizeTestCase, IdentityGraphTestCase, OrderTestCase, StalenessTestCase,
+    WarningTextTestCase,
 };
+use crate::planner_identity::types::IdentityHashes;
 
 #[test]
 fn given_persisted_identity_inputs_when_hashing_then_matches_pinned_python_hashes() {
@@ -166,6 +168,62 @@ fn given_dense_ladder_when_resolving_write_hashes_then_resolves_each_node_once()
         assert_eq!(
             graph_write_identity_hashes(&graph, &selected, Vec::new()).len(),
             test_case.expected_hash_count,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_deep_chain_when_walking_graph_then_does_not_overflow_the_stack() {
+    let test_cases = [DeepChainTestCase {
+        description: "one hundred thousand chained models",
+        depth: 100_000,
+        expected_hash_count: 100_000,
+        expected_trigger_count: 99_999,
+    }];
+    for test_case in test_cases {
+        let graph = chain_identity_graph(test_case.depth);
+        let head: GraphKey = model(&format!("m{}", test_case.depth - 1));
+        let expected: IdentityHashes = expected_graph_identity_hashes(&graph);
+        assert_eq!(
+            expected.len(),
+            test_case.expected_hash_count,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            expected.last().map(|(_, hash)| hash.clone()),
+            Some(chain_head_hash(test_case.depth)),
+            "{}",
+            test_case.description
+        );
+        let selected: HashSet<GraphKey> = graph.nodes.keys().cloned().collect();
+        let written: Vec<(GraphKey, String)> =
+            graph_write_identity_hashes(&graph, &selected, Vec::new());
+        assert_eq!(
+            written.len(),
+            test_case.expected_hash_count,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            written
+                .iter()
+                .find(|(key, _)| *key == head)
+                .map(|(_, hash)| hash.clone()),
+            chain_head_hash(test_case.depth),
+            "{}",
+            test_case.description
+        );
+        let warnings: Vec<StaleWarning> =
+            classify_selection_staleness(&chain_staleness_graph(test_case.depth));
+        assert_eq!(
+            warnings
+                .iter()
+                .map(|warning| warning.trigger_names.len())
+                .sum::<usize>(),
+            test_case.expected_trigger_count,
             "{}",
             test_case.description
         );

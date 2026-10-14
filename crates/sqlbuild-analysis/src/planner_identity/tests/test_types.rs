@@ -61,3 +61,10 @@ pub(super) struct FunctionSqlTestCase {
     pub(super) fields: FunctionFingerprintFields,
     pub(super) expected_sql: &'static str,
 }
+
+pub(super) struct DeepChainTestCase {
+    pub(super) description: &'static str,
+    pub(super) depth: usize,
+    pub(super) expected_hash_count: usize,
+    pub(super) expected_trigger_count: usize,
+}

@@ -171,3 +171,27 @@ def build_identity_seed(directory: Path) -> SimpleNamespace:
             columns=(SchemaColumn(name="id", type="int"),),
         ),
     )
+
+
+def build_chain_graph_identities(*, depth: int) -> DirectModelVersionIdentities:
+    """Build identities of a model chain resolved from its most downstream model."""
+
+    keys: list[CompiledObjectKey] = [
+        CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=f"m{index}")
+        for index in range(depth)
+    ]
+    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {
+        key: tuple(keys[index - 1 : index]) for index, key in enumerate(keys)
+    }
+    scope: PlannerScope = PlannerScope(
+        upstream_deps=upstream,
+        downstream_deps={},
+        all_keys={key.name: key for key in keys},
+        models_by_name={
+            key.name: _build_model(key=key, query_sql="SELECT 1 AS id", deps=upstream[key])
+            for key in keys
+        },
+        selected_keys=frozenset(keys),
+        execution_order=tuple(reversed(keys)),
+    )
+    return build_direct_model_version_identities(functions=(), scope=scope, dialect=None)
