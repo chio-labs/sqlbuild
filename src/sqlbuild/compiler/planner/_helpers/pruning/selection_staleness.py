@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import detect_model_changes
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.fingerprints.models import Fingerprint
@@ -9,7 +10,6 @@ from sqlbuild.compiler.planner._helpers.pruning.selection_classifier import (
     classify_selection_staleness_warnings,
     format_stale_upstream_warning_message,
 )
-from sqlbuild.compiler.planner.main.changes._model_changes import detect_model_changes
 from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     DirectModelVersionIdentities,

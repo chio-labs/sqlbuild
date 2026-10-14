@@ -180,17 +180,28 @@ from sqlbuild.compiler.pipeline.models import (
     PythonRunPlanOutputs,
     StaticCommandContext,
 )
+from sqlbuild.compiler.planner.classes.migration_state_inspection import (
+    MigrationStateInspection,
+)
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
+    ChangeDetectionResult,
     CursorBounds,
     DeferralInputs,
     FutureCursorSafetyEvidence,
     MaximumStartSafetyEvidence,
     ModelPlanEntry,
+    PlannerChangeResults,
+    PlannerResolvedActions,
+    PlannerRuntime,
+    PlannerScope,
     PlanOutput,
+    ReferenceRename,
+    SchemaFinding,
     SqlTestPlanEntry,
+    WarehouseSnapshot,
 )
-from sqlbuild.compiler.planner.types import CursorGrain
+from sqlbuild.compiler.planner.types import CursorGrain, MaterializationType, PlanAction
 from sqlbuild.compiler.project_assembly.models import NativeProjectResources
 from sqlbuild.compiler.python_nodes.models import (
     PythonNodeGraph,
@@ -3749,6 +3760,71 @@ def cursor_bound_display(
     *, value: str, cursor_type: str | None, cursor_grain: str | None
 ) -> str: ...
 def model_materialization_label(entry: ModelPlanEntry) -> str: ...
+def detect_changes(
+    *,
+    project: CompiledProjectView,
+    scope: PlannerScope,
+    snapshot: WarehouseSnapshot,
+    full_refresh: bool,
+    expected_version_hashes: dict[str, str] | None = None,
+    expected_metadata_jsons: dict[str, str] | None = None,
+) -> PlannerChangeResults: ...
+def detect_model_changes_in_scope(
+    *,
+    project: CompiledProjectView,
+    scope: PlannerScope,
+    snapshot: WarehouseSnapshot,
+    query_change_tracking: bool | None = None,
+    expected_version_hashes: dict[str, str] | None = None,
+    expected_metadata_jsons: dict[str, str] | None = None,
+) -> dict[str, ChangeDetectionResult]: ...
+def detect_model_changes(
+    *,
+    model: CompiledModelView,
+    snapshot: WarehouseSnapshot,
+    sql_analysis_enabled: bool,
+    query_change_tracking: bool,
+    full_refresh: bool,
+    function_local_hashes: dict[str, str] | None = None,
+    hook_version_hashes: dict[str, str] | None = None,
+    expected_version_hash: str | None = None,
+    expected_metadata_json: str | None = None,
+) -> ChangeDetectionResult: ...
+def resolve_model_actions(
+    *, scope: PlannerScope, changes: PlannerChangeResults
+) -> PlannerResolvedActions: ...
+def plan_reference_renames(
+    *,
+    runtime: PlannerRuntime,
+    scope: PlannerScope,
+    snapshot: WarehouseSnapshot,
+    state: MigrationStateInspection,
+    schemas: set[str],
+    planned: dict[str, str],
+) -> tuple[ReferenceRename, ...]: ...
+def replaces_incremental_relation(
+    *, materialization_type: MaterializationType, action: PlanAction
+) -> bool: ...
+def version_identity_metadata_payload(metadata_json: str | None) -> Any: ...
+def detect_schema_changes(
+    *,
+    yml_columns: tuple[ColumnInfo, ...],
+    inferred_columns: tuple[InferredColumn, ...] | None,
+    warehouse_columns: tuple[ColumnInfo, ...],
+    type_enforcement: bool,
+    inferred_schema_complete: bool,
+    dynamic_columns: tuple[SchemaDynamicColumnFamily, ...] | None = None,
+    dialect: str | None = None,
+) -> tuple[SchemaFinding, ...]: ...
+def origin_reference_names(
+    *,
+    query_sql: str,
+    recorded: Fingerprint,
+    renames: tuple[ReferenceRename, ...],
+    dialect: str | None,
+) -> dict[str, str] | None: ...
+def with_declared_columns_hash(*, metadata_json: str, declared_columns_hash: str) -> str: ...
+def without_declared_columns_hash(metadata_json: str) -> str: ...
 def model_resource_type(entry: ModelPlanEntry | None) -> str: ...
 def model_execution_annotation(entry: ModelPlanEntry | None) -> str: ...
 def materialization_type_display(resource_kind: ExecutionResourceKind) -> str: ...

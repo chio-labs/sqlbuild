@@ -11,7 +11,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, cast
 
-from sqlbuild.compiler.planner._helpers.changes.metadata import without_declared_columns_hash
+from sqlbuild._native import without_declared_columns_hash
 from sqlbuild.compiler.planner._helpers.migrations.fingerprint import (
     build_migration_fingerprint,
     migration_fingerprint_ref_names,

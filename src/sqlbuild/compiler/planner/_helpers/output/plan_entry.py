@@ -11,6 +11,7 @@ from sqlbuild._native import cursor_parse as parse
 from sqlbuild._native import cursor_render as render
 from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
 from sqlbuild._native import (
+    detect_model_changes,
     get_config_bool,
     get_config_cursor_bound,
     get_config_int,
@@ -18,6 +19,7 @@ from sqlbuild._native import (
     get_config_string_tuple,
     microbatch_guidance,
     render_source_relation,
+    replaces_incremental_relation,
     resolve_bounded_cursor_override,
     resolve_cursor_input_roles,
     resolve_effective_microbatch_batch_size,
@@ -96,10 +98,6 @@ from sqlbuild.compiler.planner._helpers.warehouse.source_deferral import (
 )
 from sqlbuild.compiler.planner.constants import MICROBATCH_CONCURRENCY_MESSAGE
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.changes._model_changes import detect_model_changes
-from sqlbuild.compiler.planner.main.changes.relation_replacement import (
-    replaces_incremental_relation,
-)
 from sqlbuild.compiler.planner.main.execution.future_cursor_safety import apply_future_cursor_safety
 from sqlbuild.compiler.planner.main.execution.future_cursor_warning import future_cursor_cap_warning
 from sqlbuild.compiler.planner.main.execution.maximum_start_warning import maximum_start_cap_warning

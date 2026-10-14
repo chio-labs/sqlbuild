@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from sqlbuild._native import replaces_incremental_relation
 from sqlbuild.adapter.relations.main.cached_relation_exists import cached_relation_exists
-from sqlbuild.compiler.planner.main.changes.relation_replacement import (
-    replaces_incremental_relation,
-)
 from sqlbuild.compiler.planner.main.cursor_window.empty_cursor_window import empty_cursor_window
 from sqlbuild.compiler.planner.main.execution.future_cursor_warning import (
     future_cursor_cap_warning,
