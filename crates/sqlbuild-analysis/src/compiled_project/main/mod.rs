@@ -5,6 +5,7 @@ pub mod declaration_error_message;
 pub mod enum_member_literal;
 pub mod header_metadata_keys;
 pub mod located_scan_error;
+pub mod map_expanded_offset;
 pub mod merge_call_site_references;
 pub mod model_facts;
 pub mod opt_out_position;

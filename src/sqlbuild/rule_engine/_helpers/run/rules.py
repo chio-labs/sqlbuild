@@ -8,7 +8,10 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 from sqlbuild._native import (
+    build_lint_expansion_context,
     collect_lint_project_files,
+    compiled_relation_keys,
+    declared_relation_keys,
     encode_sql_rule_findings,
     load_sql_rule_cache,
     lookup_sql_rule_cache,
@@ -44,21 +47,16 @@ from sqlbuild.lint.constants import (
     SAFE_RULE_FIX_CODES,
 )
 from sqlbuild.lint.exceptions import NativeLintError
-from sqlbuild.lint.main.build_expansion_context import build_expansion_context
-from sqlbuild.lint.main.compiled_relation_keys import compiled_relation_keys
-from sqlbuild.lint.main.declared_relation_keys import declared_relation_keys
 from sqlbuild.lint.models import LintConfig, LintRunResult, LintViolation
 from sqlbuild.lint.types import RelationKeys
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue, select_rules
 from sqlbuild.rule_engine._helpers.engine.config import resolve_rule_ignore_selectors
+from sqlbuild.rule_engine._helpers.engine.custom_payloads import custom_rule_payloads
 from sqlbuild.rule_engine._helpers.engine.hermeticity import verify_custom_rules
-from sqlbuild.rule_engine._helpers.engine.native import (
-    custom_rule_payloads,
-    finalize_native_findings,
-)
 from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
 from sqlbuild.rule_engine._helpers.run.findings import group_unevaluated_findings
 from sqlbuild.rule_engine._helpers.run.memory import release_freed_memory
+from sqlbuild.rule_engine._helpers.run.native_rows import finalize_rules_rows
 from sqlbuild.rule_engine.constants import SQL_RULES_CACHE_FILE, TYPE_PROOF_RULE_CODES
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.main.load_config import load_rules_config
@@ -197,7 +195,7 @@ def finish_rule_run(
 ) -> RulesRunResult:
     """Finalize the combined SQL, built-in and custom findings of one run."""
 
-    finalized: tuple[Finding, ...] = finalize_native_findings(
+    finalized: tuple[Finding, ...] = finalize_rules_rows(
         config=plan.config,
         project_dir=plan.project_dir,
         evaluated_codes=tuple(rule.code for rule in plan.selected),
@@ -577,7 +575,7 @@ def _lint_expansion_context(
         if expansion_reuse is not None and expansion_reuse.discovered_inputs is discovered_inputs
         else None
     )
-    return build_expansion_context(
+    return build_lint_expansion_context(
         project_dir=project_dir,
         discovered_inputs=discovered_inputs,
         declaration_scope=declaration_scope,

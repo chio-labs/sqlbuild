@@ -3,7 +3,7 @@
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyBool, PyDict, PyDictMethods, PyMapping, PyString};
+use pyo3::types::{PyDict, PyDictMethods, PyMapping, PyString};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_config::command_connection::constants::{
     CLI_WAREHOUSE_SOURCE, CONNECTION_DEFAULT_WAREHOUSE_SOURCE, CONNECTION_WAREHOUSE_KEY,
@@ -16,6 +16,8 @@ use sqlbuild_config::command_connection::main::unsupported_cli_warehouse::unsupp
 use sqlbuild_config::command_connection::models::AuthoredWarehouse;
 use sqlbuild_core::text::main::python_strip::python_strip;
 
+use sqlbuild_model_config::templates::models::TemplateOptions;
+
 use crate::bindings::_helpers::command_runtime::runtime_errors::{
     expected_resolution_error, raised,
 };
@@ -23,14 +25,14 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::discovery::configuration::discover_project_configuration;
+use crate::bindings::_helpers::model_config::template_data::expanded_template_data;
 
 const ENTRY_MODELS: &str = "sqlbuild.cli.entry.models";
 const SCOPE_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.warehouse_scope";
-const TARGET_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_target_name";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
+const TARGET_NAME_MODULE: &str = "sqlbuild._native";
+const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const SESSION_WAREHOUSE_MODULE: &str = "sqlbuild.adapter.discovery.main._session_warehouse_support";
-const EFFECTIVE_RUNTIME_MODULE: &str = "sqlbuild.compiler.compile.main.effective_runtime";
-const EXPAND_TEMPLATE_MODULE: &str = "sqlbuild.compiler.compile.main.expand_template_data";
+const EFFECTIVE_RUNTIME_MODULE: &str = "sqlbuild._native";
 const RESOLVE_OPTIONS: (&[&str], &[&str]) = (
     &[
         "discovered_inputs",
@@ -182,32 +184,17 @@ fn expand_authored(
             ("cli_vars", cli_vars.clone()),
         ],
     )?;
-    let expanded: Bound<'_, PyAny> = call_with(
-        &imported(py, EXPAND_TEMPLATE_MODULE, "expand_template_data")?,
-        &[
-            (
-                "value",
-                PyString::new(py, &found.authored.warehouse).into_any(),
-            ),
-            ("variables", runtime.get_item(1)?),
-            ("context_values", PyDict::new(py).into_any()),
-            (
-                "context_label",
-                PyString::new(py, &found.authored.context_label()).into_any(),
-            ),
-            (
-                "allow_context",
-                PyBool::new(py, false).to_owned().into_any(),
-            ),
-            (
-                "preserve_context_tokens",
-                PyBool::new(py, false).to_owned().into_any(),
-            ),
-            (
-                "preserve_unknown_context",
-                PyBool::new(py, false).to_owned().into_any(),
-            ),
-        ],
+    let expanded: Bound<'_, PyAny> = expanded_template_data(
+        PyString::new(py, &found.authored.warehouse).as_any(),
+        (runtime.get_item(1)?.downcast()?, &PyDict::new(py)),
+        (
+            TemplateOptions {
+                allow_context: false,
+                preserve_context_tokens: false,
+                preserve_unknown_context: false,
+            },
+            &found.authored.context_label(),
+        ),
     )?;
     let warehouse: String = expanded.str()?.extract()?;
     check_expanded_warehouse(&found.authored, &warehouse).map_err(|error| raised(py, error))?;

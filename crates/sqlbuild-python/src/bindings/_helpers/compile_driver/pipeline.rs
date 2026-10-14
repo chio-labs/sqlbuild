@@ -11,12 +11,13 @@ use crate::bindings::_helpers::compile_driver::pipeline_entries::{
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
+use crate::bindings::_helpers::frontier::stage_capture::write_plan_capture;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const EFFECTIVE_CONFIG_MODULE: &str = "sqlbuild.compiler.compile.main.effective_config";
+const EFFECTIVE_CONFIG_MODULE: &str = "sqlbuild._native";
 const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const ANALYSIS_SELECTION_MODULE: &str = "sqlbuild.compiler.pipeline._helpers.analysis_selection";
+const ANALYSIS_SELECTION_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS_MODULE: &str = "sqlbuild.compiler.pipeline.models";
 const TIMING_TRACKER_MODULE: &str = "sqlbuild.diagnostics.classes.build_phase_timing_tracker";
 const RULE_EXCEPTIONS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
@@ -390,6 +391,7 @@ fn planned<'py>(
         tracker.setattr("planning_seconds", planning_seconds)?;
     }
     let result: Bound<'py, PyAny> = result?;
+    write_plan_capture(&result.getattr("plan_output")?)?;
     imported(py, "dataclasses", "replace")?.call(
         (result,),
         Some(&keywords(

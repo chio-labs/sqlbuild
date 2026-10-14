@@ -14,7 +14,7 @@ const OPEN_KINDS: [&str; 3] = [SOURCE_KIND, "ref", "dbt_ref"];
 
 /// Partial-check reasons by model name; empty when SQL analysis is off.
 #[pyfunction]
-fn semantic_coverage<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+pub(crate) fn semantic_coverage<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = project.py();
     let reasons: Bound<'py, PyDict> = PyDict::new(py);
     if !project

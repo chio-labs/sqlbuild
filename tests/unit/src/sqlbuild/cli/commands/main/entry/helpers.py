@@ -6,12 +6,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol, cast
 
-from sqlbuild._native import NativeProgressProjector
+from sqlbuild._native import NativeProgressProjector, loader_destination_parts
 from sqlbuild.cli.entry.models import (
     CliEntrypointHandlers,
 )
 from sqlbuild.spec.contracts.exceptions import SpecConfigError
-from sqlbuild.spec.contracts.main.loader_destination_parts import loader_destination_parts
 
 
 class JsonOutputRequest(Protocol):

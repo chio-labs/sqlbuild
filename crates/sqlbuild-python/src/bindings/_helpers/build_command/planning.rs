@@ -17,7 +17,6 @@ const EXTERNAL_REFS_MODULE: &str = "sqlbuild.cli.commands._helpers.planning.exte
 const VERBOSE_INSPECTION_MODULE: &str = "sqlbuild.cli.progress.main.verbose_inspection_output";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const RUNTIME_CONTRACT_MODELS: &str = "sqlbuild.runtime.contracts.models";
-const MANIFEST_MODULE: &str = "sqlbuild.compiler.manifest.main.build";
 const CONNECTION_TIMING: [&str; 2] = ["connection_count", "elapsed_seconds"];
 
 /// Clone out-of-selection boundaries from the defer-clone origin before planning.
@@ -212,7 +211,7 @@ pub(crate) fn write_compile_target(
     let plan: Bound<'_, PyAny> = pipeline.getattr("plan_output")?;
     let manifest: Bound<'_, PyAny> = if context.request_flag("manifest")? {
         call_with(
-            &imported(py, MANIFEST_MODULE, "build_manifest")?,
+            &imported(py, NATIVE_MODULE, "build_manifest")?,
             &[
                 ("project", pipeline.getattr("project")?),
                 ("plan_output", plan.clone()),

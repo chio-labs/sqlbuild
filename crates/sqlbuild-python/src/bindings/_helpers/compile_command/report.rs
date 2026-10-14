@@ -19,8 +19,8 @@ use crate::bindings::_helpers::compile_outputs::json_report::{
     emit_json_report, emit_orjson_report,
 };
 use crate::bindings::_helpers::discovery::hook_entries::hook_entries;
+use crate::bindings::_helpers::semantic_shapes::coverage::semantic_coverage;
 
-const SEMANTIC_COVERAGE_MODULE: &str = "sqlbuild.compiler.compile.main._semantic_coverage";
 const DISCOVERY_CONSTANTS_MODULE: &str = "sqlbuild.compiler.discovery.constants";
 const HOOK_IDENTITIES_MODULE: &str = "sqlbuild.compiler.python_nodes.main._hook_identities";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
@@ -163,10 +163,7 @@ impl<'py> ReportInputs<'py> {
         if !self.sql_validation_enabled {
             return Ok(PyDict::new(py));
         }
-        let reasons: Bound<'py, PyDict> =
-            imported(py, SEMANTIC_COVERAGE_MODULE, "get_semantic_coverage")?
-                .call1((&self.project,))?
-                .downcast_into()?;
+        let reasons: Bound<'py, PyDict> = semantic_coverage(&self.project)?;
         let Some(names) = self.selected_names(MODEL_TYPE)? else {
             return Ok(reasons);
         };

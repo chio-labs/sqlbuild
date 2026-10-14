@@ -23,6 +23,7 @@ use sqlbuild_core::test_command::models::{
     TestFailure, TestInspectionEntry, TestParameter, TestPlanWarning,
 };
 
+use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
@@ -32,17 +33,14 @@ const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
 const INVOCATION_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.command_invocation";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild.cli.commands._helpers.planning.external_refs";
-const STATIC_COMMAND_MODULE: &str = "sqlbuild.compiler.pipeline.main._static_command";
+const STATIC_COMMAND_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const TEST_PLAN_MODULE: &str = "sqlbuild.compiler.planner.main.commands._sql_test";
 const PLANNER_ERRORS: &str = "sqlbuild.compiler.planner.exceptions";
-const NESTED_PROGRESS_MODULE: &str =
-    "sqlbuild.cli.progress.classes.nested_command_progress_callbacks";
 const PROGRESS_MODELS: &str = "sqlbuild.cli.progress.models";
-const STATUS_REPORTER_MODULE: &str = "sqlbuild.presentation.classes.transient_status_reporter";
 const EXECUTOR_PIPELINE_MODELS: &str = "sqlbuild.executor.pipeline.models";
 const EXECUTOR_RUN_MODULE: &str = "sqlbuild.executor.pipeline.main.run";
-const RESOURCE_ID_MODULE: &str = "sqlbuild.executor.testing.main.resource_id";
+const RESOURCE_ID_MODULE: &str = "sqlbuild.executor.testing.main._resource_id";
 const RUNTIME_TARGET_MODULE: &str = "sqlbuild.cli.target_artifacts.main._write_test_runtime_target";
 const DECIMAL_KIND: &str = "decimal";
 const PASS_OUTCOME: &str = "pass";
@@ -79,7 +77,7 @@ fn compact_json(payload: &Bound<'_, PyAny>) -> PyResult<String> {
 }
 
 /// The label of one test or result: its name, plus source and values for parameterized cases.
-fn test_label(item: &Bound<'_, PyAny>, name_field: &str) -> PyResult<String> {
+pub(crate) fn test_label(item: &Bound<'_, PyAny>, name_field: &str) -> PyResult<String> {
     let name: String = item.getattr(name_field)?.extract()?;
     let source_path: Bound<'_, PyAny> = item.getattr("source_path")?;
     let values: Vec<Bound<'_, PyAny>> = item
@@ -486,7 +484,7 @@ fn run_tests<'py>(
     }
     let worker_count: i64 = concurrency.min(i64::try_from(test_count).unwrap_or(i64::MAX));
     let progress: Bound<'py, PyAny> = call_with(
-        &imported(py, NESTED_PROGRESS_MODULE, "NestedCommandProgressCallbacks")?,
+        &imported(py, NATIVE_MODULE, "NestedCommandProgressCallbacks")?,
         &[
             ("total", PyInt::new(py, test_count).into_any()),
             ("label", text(py, "test")),
@@ -522,10 +520,7 @@ fn run_tests<'py>(
             ("use_color", use_color.clone()),
         ],
     )?;
-    let preflight: Bound<'py, PyAny> = call_with(
-        &imported(py, STATUS_REPORTER_MODULE, "TransientStatusReporter")?,
-        &[("stream", stream), ("use_color", use_color)],
-    )?;
+    let preflight: Bound<'py, PyAny> = status_reporter(&stream, use_color.is_truthy()?)?;
     let event_writer: Bound<'py, PyAny> =
         imported(py, NATIVE_MODULE, "ExecutionEventWriter")?.call0()?;
     let relay: Bound<'py, TestCallbackRelay> = Bound::new(

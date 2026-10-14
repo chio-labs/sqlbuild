@@ -14,6 +14,8 @@ use crate::bindings::_helpers::frontier::encoder::{CaptureEncoder, emit_error};
 
 const CAPTURE_DIR_ENV_VAR: &str = "SQLBUILD_COMPILER_STAGE_CAPTURE_DIR";
 const CAPTURE_SUFFIX: &str = ".json";
+const PLAN_CAPTURE_DIR_ENV_VAR: &str = "SQLBUILD_PLANNER_CAPTURE_DIR";
+const PLAN_CAPTURE_NAME: &str = "plan_output";
 const FRONTIER_CONSTANTS_MODULE: &str = "sqlbuild.compiler.frontier.constants";
 
 /// The capture document of `value`, or the shared nodes written before encoding failed.
@@ -55,6 +57,36 @@ pub(crate) fn write_stage_capture(
             "__truediv__",
             (format!("{number:03}-{stage_name}{CAPTURE_SUFFIX}"),),
         )?;
+    write_capture_file(&path, value)
+}
+
+/// Write the planner's `PlanOutput` when SQLBUILD_PLANNER_CAPTURE_DIR names a directory.
+pub(crate) fn write_plan_capture(plan_output: &Bound<'_, PyAny>) -> PyResult<()> {
+    let py: Python<'_> = plan_output.py();
+    let directory: Bound<'_, PyAny> =
+        imported(py, "os", "environ")?.call_method1("get", (PLAN_CAPTURE_DIR_ENV_VAR,))?;
+    if !directory.is_truthy()? {
+        return Ok(());
+    }
+    let number: u64 = imported(py, "builtins", "next")?
+        .call1((imported(
+            py,
+            FRONTIER_CONSTANTS_MODULE,
+            "STAGE_CAPTURE_SEQUENCE",
+        )?,))?
+        .extract()?;
+    let path: Bound<'_, PyAny> = imported(py, "pathlib", "Path")?
+        .call1((directory,))?
+        .call_method1(
+            "__truediv__",
+            (format!("{number:03}-{PLAN_CAPTURE_NAME}{CAPTURE_SUFFIX}"),),
+        )?;
+    write_capture_file(&path, plan_output)
+}
+
+/// Write the capture document of `value` to `path`, creating its directory.
+fn write_capture_file(path: &Bound<'_, PyAny>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+    let py: Python<'_> = path.py();
     call_with(
         &path.getattr("parent")?.getattr("mkdir")?,
         &[

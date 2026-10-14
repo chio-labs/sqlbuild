@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.scopes.exceptions import ScopeValidationError
-from sqlbuild.compiler.scopes.main._get_placement_validated_scope_index import (
+from sqlbuild._native import (
     get_placement_validated_scope_index,
+    validate_scope_index,
 )
-from sqlbuild.compiler.scopes.main._validate_scope_index import validate_scope_index
+from sqlbuild.compiler.scopes.exceptions import ScopeValidationError
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,

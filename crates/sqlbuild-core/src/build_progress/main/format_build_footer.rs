@@ -1,0 +1,57 @@
+//! The completion line, warnings, failures and skipped rollup printed after a build.
+
+use crate::build_progress::_helpers::footer::{
+    FooterCounts, count_results, failure_details, python_failure_details, skipped_rollup,
+    warning_details,
+};
+use crate::build_progress::constants::FAILED;
+use crate::build_progress::models::{BuildResultText, PythonNodeText};
+use crate::cli_text::main::format_completion_line::format_completion_line;
+use crate::cli_text::main::format_summary_footer::format_summary_footer;
+use crate::cli_text::models::{CliStyle, CompletionState, SummaryCount};
+
+fn count(label: &str, value: i64) -> SummaryCount {
+    SummaryCount {
+        label: label.to_owned(),
+        value,
+    }
+}
+
+/// The build footer for `result` and the Python node results run alongside it.
+#[must_use]
+pub fn format_build_footer(
+    result: &BuildResultText,
+    python: &[PythonNodeText],
+    elapsed: f64,
+    style: CliStyle,
+) -> String {
+    let counts: FooterCounts = count_results(result, python);
+    let insufficient: i64 = result.insufficient_count;
+    let total: i64 = counts.pass + counts.warn + counts.fail + counts.skip;
+    let summary: String = format_summary_footer(
+        style,
+        &[
+            count("PASS", counts.pass),
+            count("WARN", counts.warn),
+            count("FAIL", counts.fail),
+            count("INSUFFICIENT", insufficient),
+            count("SKIP", counts.skip),
+            count("TOTAL", total + insufficient),
+        ],
+        Some(&format!("{elapsed:.2}s")),
+    );
+    let python_failed: bool = python.iter().any(|node| node.status == FAILED);
+    let (state, label) = if result.failed || python_failed {
+        (CompletionState::Fail, "Completed with errors")
+    } else if result.warning_count > 0 || counts.warn > 0 {
+        (CompletionState::Warn, "Completed with warnings")
+    } else {
+        (CompletionState::Ok, "Completed successfully")
+    };
+    let mut lines: Vec<String> = warning_details(result, python, style);
+    lines.push(format_completion_line(style, state, label, Some(&summary)));
+    lines.extend(failure_details(result, style));
+    lines.extend(python_failure_details(python, style));
+    lines.extend(skipped_rollup(result, python, style));
+    lines.join("\n")
+}

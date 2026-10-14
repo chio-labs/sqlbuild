@@ -6,12 +6,15 @@ from typing import Any
 
 import pytest
 
-from sqlbuild._native import build_compiled_project, discover_project_inputs
+import sqlbuild.compiler.sql_analysis.models as sql_analysis_models
+from sqlbuild._native import (
+    build_compiled_project,
+    discover_project_inputs,
+    source_binding_diagnostics,
+)
 from sqlbuild._native import run_cli as main
 from sqlbuild.adapter.contract.models import ColumnInfo, ExpressionInferenceProfile
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
-from sqlbuild.compiler.compile._helpers.analysis import binding_requests
-from sqlbuild.compiler.compile.main._source_bindings import get_source_binding_diagnostics
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompilerDiagnostic
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
@@ -123,19 +126,19 @@ def test_given_catalog_when_rebinding_physical_shapes_then_does_not_reuse_stale_
     profile: ExpressionInferenceProfile = ExpressionInferenceProfile(
         sql_analysis_dialect="snowflake"
     )
-    missing: tuple[CompilerDiagnostic, ...] = get_source_binding_diagnostics(
+    missing: tuple[CompilerDiagnostic, ...] = source_binding_diagnostics(
         project=project,
         columns={"orders": (ColumnInfo("customer", "VARCHAR"),)},
         profile=profile,
         selected_keys=keys,
     )
-    present: tuple[CompilerDiagnostic, ...] = get_source_binding_diagnostics(
+    present: tuple[CompilerDiagnostic, ...] = source_binding_diagnostics(
         project=project,
         columns={"orders": (ColumnInfo("OrderId", "INTEGER"),)},
         profile=profile,
         selected_keys=keys,
     )
-    repeated: tuple[CompilerDiagnostic, ...] = get_source_binding_diagnostics(
+    repeated: tuple[CompilerDiagnostic, ...] = source_binding_diagnostics(
         project=project,
         columns={"orders": (ColumnInfo("customer", "VARCHAR"),)},
         profile=profile,
@@ -177,7 +180,7 @@ def test_given_sql_when_case_policy_enabled_then_fused_validation_is_reused(
     def repeated_binding(**kwargs: Any) -> None:
         raise AssertionError("already validated SQL was normalized and bound again")
 
-    monkeypatch.setattr(binding_requests, "get_complete_schema_binding_request", repeated_binding)
+    monkeypatch.setattr(sql_analysis_models, "SqlSchemaValidationRequest", repeated_binding)
     assert (
         main(
             [

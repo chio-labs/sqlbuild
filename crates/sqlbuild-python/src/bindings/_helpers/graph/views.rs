@@ -164,7 +164,7 @@ fn native_graph_from_views(request: Option<&Bound<'_, PyDict>>) -> PyResult<Nati
 /// A native graph holding these edges in their order, with no selector indexes.
 #[pyfunction]
 #[pyo3(signature = (*, upstream, downstream))]
-fn native_graph_from_edges(
+pub(crate) fn native_graph_from_edges(
     upstream: &Bound<'_, PyAny>,
     downstream: &Bound<'_, PyAny>,
 ) -> PyResult<NativeProjectGraph> {

@@ -87,3 +87,5 @@ pub(crate) const COUNT_HEADER_OPENING: &str = " (";
 pub(crate) const COUNT_HEADER_CLOSING: &str = ")";
 pub(crate) const DBT_NO_MATCH_WARNING: &str = "No dbt or SQLBuild resources matched the selection.";
 pub(crate) const DBT_RESOURCE_FALLBACK_TYPE: &str = "resource";
+/// An inline error wraps to at most this many lines before it is truncated.
+pub(crate) const MAX_INLINE_ERROR_LINES: usize = 2;

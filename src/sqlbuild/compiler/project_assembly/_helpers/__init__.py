@@ -1,1 +1,0 @@
-"""Native project assembly helpers."""

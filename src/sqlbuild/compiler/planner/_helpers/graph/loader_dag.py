@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import loader_destination_parts
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.spec.contracts.main.loader_destination_parts import loader_destination_parts
 from sqlbuild.spec.contracts.models import LoaderDestinationParts, SourceEntry
 
 

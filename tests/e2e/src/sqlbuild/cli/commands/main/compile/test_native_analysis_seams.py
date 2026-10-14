@@ -30,7 +30,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
             description="models_contracts_lineage_and_sql_tests",
             expected_native_returns={
                 "assemble_native_project_resources": [ANY],
-                "infer_native_expression_source_shapes": [ANY],
+                "infer_native_expression_source_shapes": [ANY, ANY, ANY, ANY],
                 "analyze_native_model_sql": [ANY],
                 "assemble_native_sql_tests": [ANY],
                 "complete_semantic_project": [ANY],

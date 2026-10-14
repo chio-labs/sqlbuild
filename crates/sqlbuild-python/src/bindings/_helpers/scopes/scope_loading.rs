@@ -14,22 +14,21 @@ use crate::bindings::_helpers::discovery::scope_snapshot::discover_scope_snapsho
 use crate::bindings::_helpers::scopes::scope_cache::{
     project_fingerprint, read_scope_index_cache, write_scope_index_cache,
 };
+use crate::bindings::_helpers::scopes::scope_index::open_native_scope_index;
 use crate::bindings::_helpers::scopes::scope_tolerant::scope_tolerant_index;
+use crate::bindings::_helpers::scopes::scope_validation::scope_index_with_compile_usages;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const CACHE_DIRECTORY_MODULE: &str = "sqlbuild.compiler.frontier.main.compiler_cache_directory";
 const SCOPE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.scopes.constants";
 const SQL_ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.sql_analysis.models";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
-const COLLECTION_RENDERING_MODULE: &str =
-    "sqlbuild.spec.contracts.main.resolve_effective_collection_rendering";
+const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
+const COLLECTION_RENDERING_MODULE: &str = "sqlbuild._native";
 const RESOLVE_ADAPTER_MODULE: &str = "sqlbuild.adapter.discovery.main.resolve_adapter";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";
 const FRONTIER_TYPES_MODULE: &str = "sqlbuild.compiler.frontier.types";
-const COMPILE_USAGES_MODULE: &str =
-    "sqlbuild.compiler.compile.main._scope_index_with_compile_usages";
-const MACRO_INVENTORY_MODULE: &str = "sqlbuild.compiler.compile.main._static_macro_inventory";
+const MACRO_INVENTORY_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.user_macros";
 
 /// Where the scope index cache file of a project lives: `(directory, file name)`.
 fn cache_location(project_dir: &Bound<'_, PyAny>) -> PyResult<(PathBuf, String)> {
@@ -133,10 +132,7 @@ fn compiled_index<'py>(
             ("python_stage", python_stage),
         ],
     )?;
-    call_with(
-        &imported(py, COMPILE_USAGES_MODULE, "scope_index_with_compile_usages")?,
-        &[("inputs", compile_inputs)],
-    )
+    scope_index_with_compile_usages(&compile_inputs)
 }
 
 /// The partial static index of tolerant discovery, with its faults as diagnostics.
@@ -151,8 +147,16 @@ fn tolerant_index<'py>(
         &imported(py, MACRO_INVENTORY_MODULE, "inventory_project_macros")?,
         &[("macro_files", discovered.getattr("macro_files")?)],
     )?;
-    let native: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "open_native_scope_index")?
-        .call1((&discovered, PyDict::new(py), inventory.getattr("exports")?))?;
+    let native: Bound<'py, PyAny> = Bound::new(
+        py,
+        open_native_scope_index(
+            py,
+            &discovered,
+            &PyDict::new(py).into_any(),
+            Some(inventory.getattr("exports")?),
+        )?,
+    )?
+    .into_any();
     let scan_store: Bound<'py, PyTuple> = PyTuple::new(
         py,
         [

@@ -2,14 +2,18 @@
 
 use std::collections::HashMap;
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use sqlbuild_refactor::refactoring::models::{
     AuthoredFile, DeclarationPlacement, DependencyFacts, DestinationFacts, DiscoveredFile,
     ExpansionFacts, ExpansionSpan, LocationFacts, ManualLocation, ModelFacts, PlacedDeclaration,
     RefactorFacts, RefactorOperation, RefactorRequest, RelocatedDeclaration, ResourceColumnsFacts,
     SchemaColumnFacts, SqlFileRole,
 };
+
+use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
+use crate::bindings::_helpers::scopes::scope_reports::scope_move_preview;
+use crate::bindings::_helpers::scopes::scope_validation::scope_relocated_declarations;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const CONFIG_MODULE: &str = "sqlbuild._native";
@@ -317,11 +321,14 @@ pub(crate) fn declaration_placement(
         .getattr("graph")?
         .getattr("project")?
         .getattr("scope_index")?;
-    let lookup: Bound<'_, PyAny> = native(py, "build_scope_lookup")?.call1((&index,))?;
-    let (preview, diagnostics): (Bound<'_, PyAny>, Bound<'_, PyAny>) =
-        native(py, "scope_move_preview")?
-            .call1((lookup, format!("{MODEL_KIND_PREFIX}{model}"), destination))?
-            .extract()?;
+    let lookup: Bound<'_, PyAny> = build_scope_lookup(py, &index)?.into_bound(py);
+    let (preview, diagnostics) = scope_move_preview(
+        py,
+        &lookup,
+        &PyString::new(py, &format!("{MODEL_KIND_PREFIX}{model}")).into_any(),
+        &PyString::new(py, destination).into_any(),
+    )?;
+    let diagnostics: Bound<'_, PyAny> = diagnostics.into_bound(py);
     let relocated: Option<Vec<RelocatedDeclaration>> = if preview.is_none() {
         None
     } else {
@@ -337,11 +344,10 @@ pub(crate) fn declaration_placement(
             .import(SCOPE_MODELS)?
             .getattr("ResourceIdentity")?
             .call((), Some(&options))?;
-        let records: Bound<'_, PyAny> =
-            native(py, "scope_relocated_declarations")?.call1((&index, resource, destination))?;
-        if records.is_none() {
-            None
-        } else {
+        let records: Option<Py<PyTuple>> =
+            scope_relocated_declarations(py, &index, &resource, destination)?;
+        if let Some(records) = records {
+            let records: Bound<'_, PyAny> = records.into_bound(py).into_any();
             let sort: Bound<'_, PyDict> = PyDict::new(py);
             sort.set_item(
                 "key",
@@ -363,6 +369,8 @@ pub(crate) fn declaration_placement(
                 });
             }
             Some(relocated)
+        } else {
+            None
         }
     };
     let mut declarations: Vec<PlacedDeclaration> = Vec::new();

@@ -269,7 +269,8 @@ pub(crate) fn scope_path_error(py: Python<'_>, message: String) -> PyResult<PyEr
 
 /// Python's `build_scope_lookup`: the canonical index, its mappings and the native lookup.
 #[pyfunction]
-fn build_scope_lookup(py: Python<'_>, index: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+#[pyo3(signature = (*, index))]
+pub(crate) fn build_scope_lookup(py: Python<'_>, index: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     let records: ReportRecords = report_records(&read_index(index)?);
     let built = py
         .compiler_detach(|| Ok(report_lookup(&records)))
@@ -347,18 +348,17 @@ fn build_scope_lookup(py: Python<'_>, index: &Bound<'_, PyAny>) -> PyResult<Py<P
         .unbind())
 }
 
-/// Python's scope `normalize_path`, else the `InvalidScopePathError` message.
+/// The canonical project-relative POSIX path; absolute or escaping paths raise.
 #[pyfunction]
-fn scope_normalize_path(path: &str) -> (Option<String>, Option<String>) {
-    match normalize_scope_path(path) {
-        Ok(normalized) => (Some(normalized), None),
-        Err(failure) => (
-            None,
-            Some(path_message(&RejectedPath {
-                failure,
-                path: path.to_owned(),
-            })),
-        ),
+#[pyo3(name = "normalize_scope_path", signature = (*, path))]
+fn scope_normalize_path(py: Python<'_>, path: &Bound<'_, PyAny>) -> PyResult<String> {
+    let path: String = path.str()?.extract()?;
+    match normalize_scope_path(&path) {
+        Ok(normalized) => Ok(normalized),
+        Err(failure) => Err(scope_path_error(
+            py,
+            path_message(&RejectedPath { failure, path }),
+        )?),
     }
 }
 

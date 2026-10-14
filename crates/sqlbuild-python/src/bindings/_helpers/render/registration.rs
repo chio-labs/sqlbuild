@@ -3,12 +3,13 @@
 use pyo3::prelude::{Bound, PyModule, PyResult};
 
 use crate::bindings::_helpers::render::{
-    declaration_expansion, declaration_indexes, macro_arguments, macro_calls, macro_expansion,
-    macro_expansion_result, macro_modules,
+    authored_sql, declaration_indexes, declaration_values, macro_arguments, macro_calls,
+    macro_expansion, macro_expansion_result, macro_modules,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    declaration_expansion::register(module)?;
+    authored_sql::register(module)?;
+    declaration_values::register(module)?;
     declaration_indexes::register(module)?;
     macro_arguments::register(module)?;
     macro_calls::register(module)?;

@@ -21,6 +21,7 @@ from sqlbuild._native import (
     expand_sql_macros,
     mask_capture_noise,
     render_stage_capture,
+    resolve_effective_collection_rendering,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
@@ -37,9 +38,6 @@ from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 from sqlbuild.compiler.macro_bridge.constants import ACTIVE_MACRO_BRIDGE
 from sqlbuild.compiler.scopes.models import ResourceIdentity
 from sqlbuild.compiler.scopes.types import ResourceKind
-from sqlbuild.spec.contracts.main.resolve_effective_collection_rendering import (
-    resolve_effective_collection_rendering,
-)
 
 MACRO_CALL_LOG_ENV_VAR: str = "SQLBUILD_TEST_MACRO_CALL_LOG"
 _RUN_ID_PATTERN: re.Pattern[str] = re.compile(r'"run_id": "[^"]*"')

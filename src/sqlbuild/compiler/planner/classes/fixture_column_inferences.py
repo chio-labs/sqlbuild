@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import infer_fixture_column_facts
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile.main._infer_fixture_columns import infer_fixture_column_facts
 from sqlbuild.compiler.compile.models import FixtureColumnInference
 
 

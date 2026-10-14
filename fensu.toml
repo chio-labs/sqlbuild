@@ -30,8 +30,18 @@ reason = "The TYPE_CHECKING block contains annotation-only imports, avoiding exe
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
+path = "src/sqlbuild/sql_values/constants.py"
+reason = "Typed SQL values are normalized and state literals rendered natively; the namespace package keeps the value models, types, limits and errors the native bindings build and raise."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
 path = "src/sqlbuild/cursor_algebra/__init__.py"
 reason = "The native cursor algebra in sqlbuild-cursor owns cursor behavior; this package only declares the cursor value models, sentinels and grain metadata callers import."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/spec/contracts/__init__.py"
+reason = "Native bindings own configuration resolution; this package only declares the configuration models, constants and errors callers import."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
@@ -85,8 +95,28 @@ reason = "Fingerprint hashing and storage run natively; the package keeps the st
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
+path = "src/sqlbuild/compiler/compile/__init__.py"
+reason = "Compilation runs natively; the package keeps the compile models, views, constants, errors, the diagnostic collector and the user-macro and Python-resource glue the native compiler calls back into."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/compiler/references/__init__.py"
+reason = "SQL references are scanned natively; the package keeps the reference models, kinds and the reference-call patterns the Python planner still matches."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/compiler/resource_names/__init__.py"
+reason = "Resource identities are validated natively; the package keeps the error class the native check raises."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
 path = "src/sqlbuild/compiler/refactoring/__init__.py"
 reason = "Refactorings run natively; the package keeps the compiled-project input, manual-location model and error classes the native command reads and raises."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/compiler/scopes/__init__.py"
+reason = "Declaration scopes are built, queried and validated natively; the package keeps the index, lookup and report models and the errors the native bindings raise."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"

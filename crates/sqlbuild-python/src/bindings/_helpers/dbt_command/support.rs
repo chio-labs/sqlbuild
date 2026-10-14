@@ -3,10 +3,10 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyBool;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 
 const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
-const STATUS_REPORTER_MODULE: &str = "sqlbuild.presentation.classes.transient_status_reporter";
 
 /// `sys.stdout` or `sys.stderr`, looked up when written.
 pub(crate) fn stream<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
@@ -45,12 +45,5 @@ pub(crate) fn status<'py>(
     stream: &Bound<'py, PyAny>,
     use_color: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = stream.py();
-    call_with(
-        &imported(py, STATUS_REPORTER_MODULE, "TransientStatusReporter")?,
-        &[
-            ("stream", stream.clone()),
-            ("use_color", flag(py, use_color)),
-        ],
-    )
+    status_reporter(stream, use_color)
 }

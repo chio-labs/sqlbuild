@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
+from sqlbuild._native import resolve_cursor_intrinsics
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
 from sqlbuild.compiler.planner.models import CursorBounds
 
 

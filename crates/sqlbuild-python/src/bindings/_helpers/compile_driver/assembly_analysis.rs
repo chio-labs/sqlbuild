@@ -13,8 +13,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ADAPTER_MODELS_MODULE: &str = "sqlbuild.adapter.contract.models";
-pub(crate) const NATIVE_STAGES_MODULE: &str =
-    "sqlbuild.compiler.compile._helpers.native_stages.assembly";
 const ANALYSIS_CACHE_MODULE: &str = "sqlbuild.compiler.compile._helpers.analysis.cache";
 pub(crate) const ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.analysis_session.models";
 const PROFILING_MODULE: &str = "sqlbuild.compiler.profiling.main._record";
@@ -274,7 +272,7 @@ fn record_expression_shapes<'py>(
         }
     }
     let shapes: Vec<Bound<'py, PyAny>> = call_with(
-        &imported(py, NATIVE_STAGES_MODULE, "expression_source_shapes")?,
+        &imported(py, NATIVE_MODULE, "infer_native_expression_source_shapes")?,
         &[
             ("expressions", PyTuple::new(py, expressions)?.into_any()),
             ("profile", context.profile.clone()),
@@ -386,7 +384,10 @@ fn model_analyses<'py>(
                     ),
                 ],
             )?;
-            imported(py, NATIVE_STAGES_MODULE, "analyze_model_sql")?.call1((analysis_request,))
+            call_with(
+                &imported(py, NATIVE_MODULE, "analyze_native_model_sql")?,
+                &[("request", analysis_request)],
+            )
         })
     })
 }

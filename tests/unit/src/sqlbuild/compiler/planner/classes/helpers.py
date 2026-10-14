@@ -11,8 +11,8 @@ import pytest
 
 import sqlbuild.compiler.planner.classes.fixture_column_inferences as fixture_inferences
 import sqlbuild.compiler.planner.classes.migration_fingerprint_cache as fingerprint_cache
+from sqlbuild._native import infer_fixture_column_facts
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile.main._infer_fixture_columns import infer_fixture_column_facts
 from sqlbuild.compiler.compile.models import FixtureColumnInference
 from sqlbuild.compiler.planner._helpers.migrations.fingerprint import build_migration_fingerprint
 

@@ -60,7 +60,6 @@ class PlannerChangeDetectionWorkTestCase:
     expected_model_calls: dict[str, int]
     expected_warning_count: int
     query_change_tracking: bool = True
-    expected_query_tracking_calls: dict[tuple[str, bool], int] = field(default_factory=dict)
     expected_identity_builds: int = 1
 
 

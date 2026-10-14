@@ -4,10 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.render.spans import (
-    map_output_offset,
-    map_through_passes,
-)
+from sqlbuild._native import map_expanded_offset
 from sqlbuild.compiler.compile.models import ExpansionSpan, MappedOffset
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     MapOutputOffsetTestCase,
@@ -76,7 +73,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
 def test_given_rendered_offset_when_mapping_one_pass_then_source_offset_matches(
     test_case: MapOutputOffsetTestCase,
 ) -> None:
-    resolved: MappedOffset = map_output_offset(offset=test_case.offset, spans=test_case.spans)
+    resolved: MappedOffset = map_expanded_offset(offset=test_case.offset, passes=(test_case.spans,))
     assert resolved.offset == test_case.expected_offset
     assert resolved.generated == test_case.expected_generated
 
@@ -137,6 +134,6 @@ def test_given_rendered_offset_when_mapping_one_pass_then_source_offset_matches(
 def test_given_rendered_offset_when_mapping_all_passes_then_authored_offset_matches(
     test_case: MapThroughPassesTestCase,
 ) -> None:
-    resolved: MappedOffset = map_through_passes(offset=test_case.offset, passes=test_case.passes)
+    resolved: MappedOffset = map_expanded_offset(offset=test_case.offset, passes=test_case.passes)
     assert resolved.offset == test_case.expected_offset
     assert resolved.generated == test_case.expected_generated

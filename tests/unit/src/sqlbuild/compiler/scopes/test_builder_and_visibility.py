@@ -6,6 +6,14 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import (
+    build_scope_index,
+    build_scope_lookup,
+    normalize_sql_value,
+    query_scope_target,
+    resolve_scope_visibility,
+    validate_scope_index,
+)
 from sqlbuild.compiler.compile.models import LoadedMacro
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
@@ -24,11 +32,6 @@ from sqlbuild.compiler.discovery.models import (
     EnumMember,
 )
 from sqlbuild.compiler.scopes.exceptions import ScopeValidationError
-from sqlbuild.compiler.scopes.main._build_scope_index import build_scope_index
-from sqlbuild.compiler.scopes.main._query_scope_target import query_scope_target
-from sqlbuild.compiler.scopes.main._resolve_scope_visibility import resolve_scope_visibility
-from sqlbuild.compiler.scopes.main._validate_scope_index import validate_scope_index
-from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
@@ -49,7 +52,6 @@ from sqlbuild.compiler.scopes.types import (
     VisibilityReason,
 )
 from sqlbuild.spec.contracts.models import SourceEntry
-from sqlbuild.sql_values.main.normalize import normalize_sql_value
 from tests.unit.src.sqlbuild.compiler.scopes._test_types import (
     ExpectedBooleanCase,
     ResourceExpectation,

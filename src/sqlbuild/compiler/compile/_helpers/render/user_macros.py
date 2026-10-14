@@ -16,6 +16,7 @@ from types import MappingProxyType, ModuleType
 from typing import cast
 
 import sqlbuild._native as _native
+from sqlbuild._native import validate_resource_identity
 from sqlbuild.compiler.compile.exceptions import (
     CompileInputError,
     MacroDeclarationLookupError,
@@ -32,9 +33,6 @@ from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredMacroFile,
     EnumDeclaration,
-)
-from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
-    validate_resource_identity,
 )
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
@@ -373,7 +371,7 @@ def _rewrite_absolute_project_imports(
     return ast.Module(body=body, type_ignores=tree.type_ignores)
 
 
-def _inventory_project_macros(
+def inventory_project_macros(
     *, macro_files: tuple[DiscoveredMacroFile, ...]
 ) -> StaticMacroInventory:
     """Validate and inventory project macro exports without executing authored code."""

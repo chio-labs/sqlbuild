@@ -45,3 +45,17 @@ class TransientLineCoordinatorTestCase:
     description: str
     persistent_stream_is_tty: bool
     expected_events: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class StatusReporterOutputTestCase:
+    description: str
+    use_color: bool
+    tty: bool
+    expected_persistent_lines: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class StatusReporterExitTestCase:
+    description: str
+    expected_returncode: int

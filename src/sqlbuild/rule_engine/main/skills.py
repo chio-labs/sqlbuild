@@ -9,7 +9,7 @@ from tempfile import gettempdir
 
 from filelock import FileLock
 
-from sqlbuild.rule_engine._helpers.engine.native import native_skill_freshness
+from sqlbuild._native import skill_freshness
 from sqlbuild.rule_engine._helpers.guidance.skill_installation import install_rendered_skills
 from sqlbuild.rule_engine._helpers.guidance.skills import render_skills
 from sqlbuild.rule_engine.constants import (
@@ -28,7 +28,7 @@ def install_skills(*, config: RulesConfig, project_dir: Path, check: bool) -> bo
     targets: tuple[Path, ...] = tuple(project_dir / value for value in RULES_SKILL_PATHS)
     if check:
         return all(
-            native_skill_freshness(
+            skill_freshness(
                 content=path.read_text(encoding="utf-8") if path.is_file() else None,
                 input_fingerprint=input_fingerprint,
             )

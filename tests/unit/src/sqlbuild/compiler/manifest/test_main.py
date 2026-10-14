@@ -9,6 +9,7 @@ import pytest
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    build_manifest,
     project_with,
 )
 from sqlbuild.compiler.compile.models import (
@@ -22,7 +23,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledSourceView,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredSqlHookFile, SqlHookEntry
-from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ChainStep, PlanOutput, SqlTestPlanEntry
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,

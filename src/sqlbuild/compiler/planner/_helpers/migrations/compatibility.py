@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from sqlbuild._native import get_config_str
+from sqlbuild._native import detect_model_changes, get_config_str
 from sqlbuild.adapter.contract.models import ColumnInfo, NormalizedType, RelationInfo
 from sqlbuild.adapter.contract.types import TypeFamily
 from sqlbuild.adapter.type_system.main.normalize_type import normalize_type
 from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.migrations.types import MigrationCompatibility
-from sqlbuild.compiler.planner._helpers.changes.detect import detect_model_changes
 from sqlbuild.compiler.planner.constants import VIEW_RELATION_TYPE_MARKER
 from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,

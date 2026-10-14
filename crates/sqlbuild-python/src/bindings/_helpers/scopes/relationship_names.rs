@@ -1,6 +1,9 @@
 //! Expected-model relationship names and top-level CTEs of SQL tests and scenarios, scanned natively.
 
-use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{
+    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
+use pyo3::types::{PyDict, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_scopes::relationship_names::main::expected_model_names::expected_model_names;
 use sqlbuild_scopes::relationship_names::main::top_level_ctes::scan_top_level_ctes;
@@ -12,6 +15,9 @@ use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 use crate::bindings::types::CompilerDetach;
+
+const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 
 /// One scan's error, or its values.
 type Scanned<T> = (Option<String>, Vec<T>);
@@ -72,7 +78,54 @@ fn scope_test_ctes(
         .collect())
 }
 
+/// One SQL test body's raw top-level CTEs; a scan failure raises `CompileInputError`.
+#[pyfunction]
+#[pyo3(signature = (*, sql, file_label, syntax))]
+fn extract_sql_test_ctes<'py>(
+    py: Python<'py>,
+    sql: &str,
+    file_label: &str,
+    syntax: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let syntax: LexicalSyntax = syntax
+        .getattr("native_mapping")?
+        .extract::<LexicalSyntaxInput>()?
+        .into();
+    let outcome: TopLevelCtes = py
+        .compiler_detach(|| {
+            Ok(scan_top_level_ctes(
+                sql,
+                file_label,
+                RelationshipSource::Test,
+                &syntax,
+            ))
+        })
+        .map_err(compiler_error)?;
+    let ctes: Vec<(String, String)> = match outcome {
+        TopLevelCtes::Scanned(ctes) => ctes,
+        TopLevelCtes::Failed(message) => {
+            let error: Bound<'py, PyAny> = py
+                .import(COMPILE_ERRORS_MODULE)?
+                .getattr("CompileInputError")?
+                .call1((message,))?;
+            return Err(PyErr::from_value(error));
+        }
+    };
+    let cte_class: Bound<'py, PyAny> = py
+        .import(COMPILE_MODELS_MODULE)?
+        .getattr("CompileSqlTestCte")?;
+    let mut built: Vec<Bound<'py, PyAny>> = Vec::with_capacity(ctes.len());
+    for (name, body) in ctes {
+        let arguments: Bound<'py, PyDict> = PyDict::new(py);
+        arguments.set_item("name", name)?;
+        arguments.set_item("sql_body", body)?;
+        built.push(cte_class.call((), Some(&arguments))?);
+    }
+    PyTuple::new(py, built)
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(extract_sql_test_ctes, module)?)?;
     module.add_function(wrap_pyfunction!(scope_expected_model_names, module)?)?;
     module.add_function(wrap_pyfunction!(scope_test_ctes, module)?)?;
     Ok(())

@@ -14,11 +14,10 @@ from typing import Any, cast
 import pytest
 
 import sqlbuild._native as native_module
-import sqlbuild.compiler.compile._helpers.diagnostics.recovery as semantic_recovery
-import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stage_assembly
 from sqlbuild._native import (
     analyze_native_model_sql,
     build_compile_inputs,
+    cursor_intrinsics_analysis_sql,
     discover_project_inputs,
     infer_native_expression_source_shapes,
     model_placeholders,
@@ -38,9 +37,6 @@ from sqlbuild.compiler.analysis_session.models import (
 )
 from sqlbuild.compiler.analysis_session.types import ProofRow
 from sqlbuild.compiler.compile._helpers.analysis.cache import build_analysis_cache_context
-from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
-    cursor_intrinsics_analysis_sql,
-)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
@@ -420,7 +416,7 @@ def native_pivot_proofs(*, monkeypatch: pytest.MonkeyPatch) -> NativePivotProofs
 
     recorded_proofs: NativePivotProofs = NativePivotProofs()
     native_proofs: Callable[..., tuple[ProofRow | None, ...]] = (
-        native_stage_assembly.prove_native_dynamic_contracts
+        native_module.prove_native_dynamic_contracts
     )
 
     def recorded(**keywords: Any) -> tuple[ProofRow | None, ...]:
@@ -430,7 +426,7 @@ def native_pivot_proofs(*, monkeypatch: pytest.MonkeyPatch) -> NativePivotProofs
         recorded_proofs.session_proofs += proven * (keywords["session"] is not None)
         return proofs
 
-    monkeypatch.setattr(native_stage_assembly, "prove_native_dynamic_contracts", recorded)
+    monkeypatch.setattr(native_module, "prove_native_dynamic_contracts", recorded)
     return recorded_proofs
 
 
@@ -589,7 +585,7 @@ def analyse_natively(
     `runs.golden` gathers the entries the Python oracle recorded for the same seam calls.
     """
 
-    original_analysis: Callable[..., NativeModelAnalyses] = native_stage_assembly.analyze_model_sql
+    original_analysis: Callable[..., NativeModelAnalyses] = analyze_native_model_sql
 
     def analysed_three_ways(request: NativeModelAnalysisRequest) -> NativeModelAnalyses:
         profile: ExpressionInferenceProfile = request.inference_profile
@@ -609,7 +605,9 @@ def analyse_natively(
             cached_views.append(
                 (_analysis_views(_projected(cached, request, runs)), _catalog_view(catalog))
             )
-        native: NativeModelAnalyses = original_analysis(replace(request, analysis_cache=None))
+        native: NativeModelAnalyses = original_analysis(
+            request=replace(request, analysis_cache=None)
+        )
         session: Any = native.session
         analyses: dict[str, ModelSqlAnalysis] = _projected(native, request, runs)
         uncached_view: object = (_analysis_views(analyses), _catalog_view(profile.binding_catalog))
@@ -636,18 +634,24 @@ def analyse_natively(
         runs.golden.append(golden_entry("shapes", (native, catalog.expression_shapes)))
         return native
 
-    completed: Callable[..., CompiledProjectView] = semantic_recovery.complete_semantic_diagnostics
+    completed: Callable[..., CompiledProjectView] = native_module.complete_semantic_project
 
     def recorded_proofs(*, project: CompiledProjectView, **keywords: Any) -> CompiledProjectView:
         runs.golden.extend(
             golden_entry("proof", model.dynamic_column_contract) for model in project.models
         )
-        return completed(project=project, **keywords)
+        with monkeypatch.context() as completing:
+            completing.setattr(
+                native_module,
+                "infer_native_expression_source_shapes",
+                infer_native_expression_source_shapes,
+            )
+            return completed(project=project, **keywords)
 
     with monkeypatch.context() as patch:
-        patch.setattr(semantic_recovery, "complete_semantic_diagnostics", recorded_proofs)
-        patch.setattr(native_stage_assembly, "analyze_model_sql", analysed_three_ways)
-        patch.setattr(native_stage_assembly, "expression_source_shapes", recorded_shapes)
+        patch.setattr(native_module, "complete_semantic_project", recorded_proofs)
+        patch.setattr(native_module, "analyze_native_model_sql", analysed_three_ways)
+        patch.setattr(native_module, "infer_native_expression_source_shapes", recorded_shapes)
         with suppress(CompileInputError):
             _ = native_module.assemble_project(
                 inputs=inputs,
@@ -693,7 +697,7 @@ def analysis_request(
         monkeypatch.context() as patch,
         suppress(CompileInputError, native_module.NativeCompilerError),
     ):
-        patch.setattr(native_stage_assembly, "analyze_model_sql", captured)
+        patch.setattr(native_module, "analyze_native_model_sql", captured)
         _ = native_module.assemble_project(
             inputs=inputs,
             inference_profile=inference_profile,

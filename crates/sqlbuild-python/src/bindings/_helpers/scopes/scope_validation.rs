@@ -1,6 +1,8 @@
 //! Compile usage merging, placement validation and move relocation over a Python `ScopeIndex`.
 
-use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{
+    Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_scopes::placement::main::diagnostic_order::diagnostic_order;
@@ -13,7 +15,7 @@ use sqlbuild_scopes::scope_index::models::ResourceIdentity;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::scopes::compile_usages::{
-    MergeRows, SourceRow, UsageRow, merged_usage_rows,
+    MergeRows, SourceRow, UsageRow, merged_usage_rows, model_schema_scope_usages,
 };
 use crate::bindings::_helpers::scopes::placement::{QualifiedRow, resource_identity};
 use crate::bindings::_helpers::scopes::scope_objects::{
@@ -23,7 +25,17 @@ use crate::bindings::_helpers::scopes::scope_objects::{
 use crate::bindings::types::CompilerDetach;
 
 const DATACLASSES_MODULE: &str = "dataclasses";
+const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
+const SCOPE_ERRORS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
 const RUNTIME_USAGE: usize = 2;
+/// Compile input groups whose items carry declaration usages, after the model inputs.
+const COMPILE_USAGE_GROUPS: [&str; 5] = [
+    "source_inputs",
+    "sql_function_inputs",
+    "audit_inputs",
+    "test_inputs",
+    "scenario_inputs",
+];
 
 /// `dataclasses.replace(item, **changes)`.
 pub(crate) fn replace<'py>(
@@ -249,8 +261,11 @@ fn placement_validated_index<'py>(
 
 /// Complete usage and placement diagnostics, merging any collected compile usages first.
 #[pyfunction]
-#[pyo3(signature = (index, enforce_placement, compile_usages))]
-fn scope_placement_validated_index(
+#[pyo3(
+    name = "get_placement_validated_scope_index",
+    signature = (*, index, enforce_placement = true, compile_usages = None)
+)]
+pub(crate) fn scope_placement_validated_index(
     index: &Bound<'_, PyAny>,
     enforce_placement: bool,
     compile_usages: Option<Bound<'_, PyTuple>>,
@@ -264,7 +279,11 @@ fn scope_placement_validated_index(
 
 /// Declarations whose placement changes when `resource` moves, or `None` if unsettled.
 #[pyfunction]
-fn scope_relocated_declarations(
+#[pyo3(
+    name = "relocate_declarations_for_move",
+    signature = (*, index, resource, destination)
+)]
+pub(crate) fn scope_relocated_declarations(
     py: Python<'_>,
     index: &Bound<'_, PyAny>,
     resource: &Bound<'_, PyAny>,
@@ -308,7 +327,79 @@ fn scope_relocated_declarations(
     Ok(Some(PyTuple::new(py, moved)?.unbind()))
 }
 
+fn usage_records<'py>(records: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    records.try_iter()?.collect()
+}
+
+/// Compile inputs' canonical index with all usage and placement facts.
+pub(crate) fn scope_index_with_compile_usages<'py>(
+    inputs: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = inputs.py();
+    let scope: Bound<'py, PyAny> = inputs.getattr("declaration_scope")?;
+    let resolver: Bound<'py, PyAny> = if scope.is_none() {
+        scope
+    } else {
+        scope.getattr("resolver")?
+    };
+    let schema_files: Bound<'py, PyAny> = inputs
+        .getattr("discovered_inputs")?
+        .getattr("model_schema_files")?;
+    let mut usages: Vec<Bound<'py, PyAny>> = Vec::new();
+    usages.extend(usage_records(
+        model_schema_scope_usages(&schema_files, &resolver)?.as_any(),
+    )?);
+    for model in inputs.getattr("model_inputs")?.try_iter()? {
+        let model: Bound<'py, PyAny> = model?;
+        usages.extend(usage_records(&model.getattr("macro_usages")?)?);
+        usages.extend(usage_records(&model.getattr("declaration_usages")?)?);
+    }
+    for group in COMPILE_USAGE_GROUPS {
+        for item in inputs.getattr(group)?.try_iter()? {
+            usages.extend(usage_records(&item?.getattr("declaration_usages")?)?);
+        }
+    }
+    let enforce_placement: bool = inputs
+        .getattr("project_config")?
+        .getattr("scopes")?
+        .getattr("enforce_placement")?
+        .extract()?;
+    Ok(scope_placement_validated_index(
+        &inputs.getattr("scope_index")?,
+        enforce_placement,
+        Some(PyTuple::new(py, usages)?),
+    )?
+    .into_bound(py))
+}
+
+/// Python's `validate_scope_index`: raise one `ScopeValidationError` for its error diagnostics.
+#[pyfunction]
+#[pyo3(signature = (*, index))]
+pub(crate) fn validate_scope_index(index: &Bound<'_, PyAny>) -> Result<(), PyErr> {
+    let py: Python<'_> = index.py();
+    let error: Bound<'_, PyAny> = py
+        .import(SCOPE_TYPES_MODULE)?
+        .getattr("DiagnosticSeverity")?
+        .getattr("ERROR")?;
+    let mut errors: Vec<Bound<'_, PyAny>> = Vec::new();
+    for item in index.getattr("diagnostics")?.try_iter()? {
+        let item: Bound<'_, PyAny> = item?;
+        if item.getattr("severity")?.is(&error) {
+            errors.push(item);
+        }
+    }
+    if errors.is_empty() {
+        return Ok(());
+    }
+    Err(PyErr::from_value(
+        py.import(SCOPE_ERRORS_MODULE)?
+            .getattr("ScopeValidationError")?
+            .call1((PyTuple::new(py, errors)?,))?,
+    ))
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(validate_scope_index, module)?)?;
     module.add_function(wrap_pyfunction!(scope_placement_validated_index, module)?)?;
     module.add_function(wrap_pyfunction!(scope_relocated_declarations, module)?)?;
     Ok(())

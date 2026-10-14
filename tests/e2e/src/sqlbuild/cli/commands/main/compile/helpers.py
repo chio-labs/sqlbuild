@@ -33,10 +33,7 @@ import sqlbuild._native as native_module
 import sqlbuild.adapter.type_system._helpers.type_normalization as type_normalization
 import sqlbuild.cli.compile_reuse._helpers.native_reuse as native_reuse
 import sqlbuild.cli.compile_reuse._helpers.provider_settings as provider_settings
-import sqlbuild.compiler.compile._helpers.diagnostics.recovery as diagnostic_recovery
 import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
-import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stages
-import sqlbuild.compiler.compile._helpers.native_stages.sql_tests as native_sql_test_stage
 import sqlbuild.compiler.frontier.main.compiled_code_identity as compiled_code_identity_module
 import sqlbuild.compiler.macro_bridge.classes.macro_bridge as macro_bridge_class
 from scripts.cold_compile_performance.main.read_compile_measurement import read_compile_measurement
@@ -4811,11 +4808,11 @@ def full_macro_call_runs(
 
 
 _ANALYSIS_SEAMS: tuple[tuple[ModuleType, str], ...] = (
-    (native_stages, "assemble_native_project_resources"),
-    (native_stages, "infer_native_expression_source_shapes"),
-    (native_stages, "analyze_native_model_sql"),
-    (native_sql_test_stage, "assemble_native_sql_tests"),
-    (diagnostic_recovery, "complete_semantic_project"),
+    (native_module, "assemble_native_project_resources"),
+    (native_module, "infer_native_expression_source_shapes"),
+    (native_module, "analyze_native_model_sql"),
+    (native_module, "assemble_native_sql_tests"),
+    (native_module, "complete_semantic_project"),
     (native_module, "evaluate_model_contracts"),
     (native_module, "promotion_conflict_diagnostics"),
     (native_module, "build_project_column_lineage"),

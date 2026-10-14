@@ -47,3 +47,16 @@ pub(crate) const AUDIT_TARGET_KIND_ENUM: &str = "AttachedAuditTargetKind";
 pub(crate) const ENVIRONMENT_READ_PREFIX: &str = "ENV:";
 /// Characters that end an `ENV:` name besides Python whitespace.
 pub(crate) const ENVIRONMENT_NAME_TERMINATORS: [char; 6] = ['(', ')', ',', '\'', '"', '}'];
+/// The MODEL header opt-out help of SQL the parser rejects.
+pub(crate) const MODEL_OPT_OUT_HELP: &str = "if this SQL is valid for your warehouse, skip SQL \
+    analysis for this model, add this to the MODEL header:\n            MODEL (\n              \
+    sql_analysis false,\n              ...\n            );\n          and please report the SQL \
+    so the parser can support it";
+/// The report-only help of rejected SQL that no model header owns.
+pub(crate) const REPORT_ONLY_HELP: &str =
+    "if this SQL is valid for your warehouse, please report it so the parser can support it";
+/// The project-wide and single-run opt-out helps, each after its own help label.
+pub(crate) const PROJECT_AND_RUN_OPT_OUT_HELP: &str = "\n  = help: SQL analysis is on for this \
+    project; to turn it off for every model, set this in sqlbuild_project.toml:\n            \
+    [settings]\n            sql_analysis = false\n  = help: to skip SQL analysis for one run, \
+    use `--no-sql-analysis`";

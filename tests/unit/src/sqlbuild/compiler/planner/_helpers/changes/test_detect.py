@@ -5,17 +5,18 @@ from datetime import datetime
 
 import pytest
 
-from sqlbuild._native import compute_query_hash
+from sqlbuild._native import (
+    build_model_warnings,
+    compute_query_hash,
+    detect_changes,
+    detect_model_changes,
+    get_materialization_type,
+    resolve_model_plan_action,
+)
 from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner._helpers.changes.detect import detect_changes, detect_model_changes
-from sqlbuild.compiler.planner._helpers.output.strategy import (
-    build_model_warnings,
-    get_materialization_type,
-    resolve_model_plan_action,
-)
 from sqlbuild.compiler.planner.constants import RECORDED_RELATION_MISSING_WARNING_CODE
 from sqlbuild.compiler.planner.main.identity._version_identity_metadata import (
     build_version_identity_metadata_json,

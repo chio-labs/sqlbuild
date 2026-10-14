@@ -12,13 +12,11 @@ from tests.integration.src.sqlbuild.compiler.scopes._test_types import (
     GeneratedScopeParityTestCase,
     ScopeCommandParityTestCase,
     ScopeEngineParityTestCase,
-    ScopeEngineTierTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.scopes.helpers import (
     SCOPED_PROJECT,
     ScopeOutcome,
     generated_scope_files,
-    native_scope_attempts,
     scope_command_index,
     scope_outcome,
     write_project,
@@ -196,25 +194,6 @@ def test_given_scoped_project_when_scope_command_builds_index_then_grants_are_ke
     index: ScopeIndex = scope_command_index(project_dir=tmp_path)
 
     assert len(index.grants) >= test_case.expected_minimum_grants, test_case.description
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        ScopeEngineTierTestCase(
-            description="native declaration scopes", expected_native_attempts=1
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_scoped_project_when_building_scope_then_the_native_index_is_built_once(
-    test_case: ScopeEngineTierTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    write_project(project_dir=tmp_path, files=SCOPED_PROJECT)
-
-    attempts, outcome = native_scope_attempts(project_dir=tmp_path, monkeypatch=monkeypatch)
-
-    assert (attempts, outcome.kind) == (test_case.expected_native_attempts, "ok")
 
 
 if __name__ == "__main__":

@@ -10,12 +10,12 @@ from importlib.machinery import ModuleSpec
 from pathlib import Path
 from types import ModuleType
 
-from sqlbuild._native import builtin_rules
+from sqlbuild._native import builtin_rules, selected_rule_codes
+from sqlbuild.rule_engine._helpers.engine.custom_payloads import custom_rule_payloads
 from sqlbuild.rule_engine._helpers.engine.definition import (
     resolve_rule_signature,
     rule_from_value,
 )
-from sqlbuild.rule_engine._helpers.engine.native import native_selected_codes
 from sqlbuild.rule_engine.constants import (
     INIT_MODULE_NAME,
     RULE_DECORATOR_TOKEN,
@@ -77,11 +77,13 @@ def select_rules(
     """Resolve the active catalogue through the native Fensu rules owner."""
 
     by_code: dict[str, Rule] = {rule.code: rule for rule in catalogue}
-    codes: tuple[str, ...] = native_selected_codes(
+    codes: list[str] = selected_rule_codes(
         config=config,
-        catalogue=catalogue,
-        project_dir=project_dir,
-        custom_payloads=custom_payloads,
+        custom_payloads=(
+            custom_rule_payloads(catalogue=catalogue, project_dir=project_dir)
+            if custom_payloads is None
+            else custom_payloads
+        ),
     )
     try:
         return tuple(by_code[code] for code in codes)

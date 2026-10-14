@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
-from sqlbuild.compiler.planner._helpers.changes.metadata import (
-    recorded_declared_columns_hash,
+from sqlbuild._native import (
     version_identity_metadata_payload,
     with_declared_columns_hash,
     without_declared_columns_hash,
@@ -38,7 +39,7 @@ _METADATA_JSON: str = '{"config":{"materialized":"table"}}'
 def test_given_fingerprint_metadata_when_reading_declared_columns_hash_then_tolerates_absence(
     test_case: DeclaredColumnsMetadataTestCase,
 ) -> None:
-    assert recorded_declared_columns_hash(test_case.metadata_json) == (
+    assert json.loads(test_case.metadata_json).get("declared_columns_hash") == (
         test_case.expected_recorded_hash
     )
     assert version_identity_metadata_payload(test_case.metadata_json) == (

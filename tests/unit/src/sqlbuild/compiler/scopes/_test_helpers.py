@@ -8,13 +8,13 @@ from collections.abc import Callable
 from itertools import compress
 from pathlib import PurePath
 
-from sqlbuild.compiler.scopes._helpers.paths import normalize_path
-from sqlbuild.compiler.scopes.main._query_scope_target import query_scope_target
-from sqlbuild.compiler.scopes.main._resolve_scope_declaration_visibility import (
+from sqlbuild._native import (
+    build_scope_lookup,
+    normalize_scope_path,
+    query_scope_target,
     resolve_scope_declaration_visibility,
+    resolve_scope_visibility,
 )
-from sqlbuild.compiler.scopes.main._resolve_scope_visibility import resolve_scope_visibility
-from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
@@ -156,7 +156,7 @@ def _targets(lookup: ScopeLookup) -> list[ResourceIdentity | str]:
 
 
 def _parent(path: str) -> str:
-    return posixpath.dirname(normalize_path(path=path)) or "."
+    return posixpath.dirname(normalize_scope_path(path=path)) or "."
 
 
 def _is_descendant(*, path: str, ancestor: str) -> bool:
@@ -166,7 +166,7 @@ def _is_descendant(*, path: str, ancestor: str) -> bool:
 def _reference_reason(
     *, resource: ResourceRecord, declaration: DeclarationRecord
 ) -> VisibilityReason | None:
-    owner: str = normalize_path(path=declaration.owning_path or ".")
+    owner: str = normalize_scope_path(path=declaration.owning_path or ".")
     parent: str = _parent(resource.path)
     visible: dict[ScopeKind, bool] = {
         ScopeKind.GLOBAL: True,
@@ -180,7 +180,7 @@ def _reference_reason(
 def _reference_inaccessible_reason(
     *, resource: ResourceRecord, declaration: DeclarationRecord
 ) -> InaccessibleReason:
-    owner: str = normalize_path(path=declaration.owning_path or ".")
+    owner: str = normalize_scope_path(path=declaration.owning_path or ".")
     candidates: tuple[tuple[bool, InaccessibleReason], ...] = (
         (declaration.scope is ScopeKind.PRIVATE, InaccessibleReason.PRIVATE_OWNER),
         (declaration.scope is ScopeKind.LOCAL, InaccessibleReason.LOCAL_BOUNDARY),

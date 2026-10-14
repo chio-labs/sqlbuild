@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from sqlbuild._native import render_state_sql_literal
 from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.adapter.state_sql.main.render_state_table_create_sql import (
     render_state_table_create_sql,
@@ -29,7 +30,6 @@ from sqlbuild.executor.janitor_events.constants import (
     JANITOR_EVENTS_TABLE_NAME,
 )
 from sqlbuild.executor.janitor_events.models import JanitorEventRecord
-from sqlbuild.sql_values.main.render_state_literal import render_state_sql_literal
 
 
 def build_qualified_table_name(

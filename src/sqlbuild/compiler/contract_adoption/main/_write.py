@@ -11,6 +11,7 @@ from sqlbuild._native import (
     edit_contract_model,
     edit_contract_source,
     remaining_contract_findings,
+    write_atomically,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
@@ -28,7 +29,6 @@ from sqlbuild.compiler.contract_adoption.models import (
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.lint.main.write_atomically import write_atomically
 
 
 def write_contracts(

@@ -35,14 +35,6 @@ class SqlValueBehaviorTestCase:
 
 
 @dataclass(frozen=True)
-class RenderedSqlValueLimitTestCase:
-    description: str
-    rendered_sql: str
-    max_size: int
-    expected_size: int
-
-
-@dataclass(frozen=True)
 class StateLiteralGoldenTestCase:
     description: str
     expected_literals: dict[str, str]

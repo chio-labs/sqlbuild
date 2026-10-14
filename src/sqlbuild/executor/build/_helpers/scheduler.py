@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 
-from sqlbuild._native import assert_no_unresolved_sql_markers
+from sqlbuild._native import (
+    assert_no_unresolved_sql_markers,
+    replaces_incremental_relation,
+    resolve_cursor_intrinsics,
+)
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.adapter.contract.types import TablePromotionMode
-from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
-from sqlbuild.compiler.planner.main.changes.relation_replacement import (
-    replaces_incremental_relation,
-)
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import (
     IncrementalMode,

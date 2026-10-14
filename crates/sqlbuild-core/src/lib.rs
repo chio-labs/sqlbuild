@@ -4,6 +4,7 @@
 
 pub mod audit_command;
 pub mod build_command;
+pub mod build_progress;
 pub mod check_command;
 pub mod cli_text;
 pub mod clone_text;
@@ -25,6 +26,7 @@ pub mod janitor_text;
 pub mod json;
 pub mod load_command;
 pub mod models;
+pub mod nested_progress;
 pub mod panics;
 pub mod plan_display;
 pub mod posix_path;

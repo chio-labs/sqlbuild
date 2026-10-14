@@ -63,7 +63,7 @@ fn difference_samples(samples: &Bound<'_, PyAny>) -> PyResult<Vec<DifferenceSamp
     Ok(rows)
 }
 
-fn expectation_step(step: &Bound<'_, PyAny>) -> PyResult<ExpectationStep> {
+pub(crate) fn expectation_step(step: &Bound<'_, PyAny>) -> PyResult<ExpectationStep> {
     let mut column_differences: Vec<(String, String, String)> = Vec::new();
     for difference in step.getattr("column_differences")?.try_iter()? {
         let difference: Bound<'_, PyAny> = difference?;

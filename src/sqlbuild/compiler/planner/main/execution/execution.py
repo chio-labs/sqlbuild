@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
 
+from sqlbuild._native import detect_changes, resolve_model_actions
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.relations.main.open_inspection_catalog import open_inspection_catalog
 from sqlbuild.compiler.compile.types import (
@@ -14,8 +15,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.planner._helpers.changes.actions import resolve_model_actions
-from sqlbuild.compiler.planner._helpers.changes.detect import detect_changes
 from sqlbuild.compiler.planner._helpers.planning.buildability import (
     check_selected_scope_buildability,
 )

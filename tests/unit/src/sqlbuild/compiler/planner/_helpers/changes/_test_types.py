@@ -62,14 +62,6 @@ class DetectFunctionCallerChangeTestCase:
 
 
 @dataclass(frozen=True)
-class DetectQueryChangeTestCase:
-    description: str
-    compiled_query_hash: str
-    fingerprint_query_hash: str
-    expected_changed: bool
-
-
-@dataclass(frozen=True)
 class DetectSchemaChangesTestCase:
     description: str
     yml_columns: tuple[ColumnInfo, ...]
@@ -80,20 +72,6 @@ class DetectSchemaChangesTestCase:
     inferred_schema_complete: bool = True
     dynamic_columns: tuple[SchemaDynamicColumnFamily, ...] = ()
     dialect: str | None = None
-
-
-@dataclass(frozen=True)
-class ResolveBackfillTestCase:
-    description: str
-    raw_value: str | None
-    expected_result: BackfillResult
-
-
-@dataclass(frozen=True)
-class ResolveBackfillErrorTestCase:
-    description: str
-    raw_value: str
-    expected_error_fragment: str
 
 
 @dataclass(frozen=True)

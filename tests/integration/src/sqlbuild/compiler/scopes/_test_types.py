@@ -35,14 +35,6 @@ class ScopeCommandParityTestCase:
 
 
 @dataclass(frozen=True)
-class ScopeEngineTierTestCase:
-    """How often building the declaration scope opens the native index."""
-
-    description: str
-    expected_native_attempts: int
-
-
-@dataclass(frozen=True)
 class ExpectedNameScanTestCase:
     """Seeded SQL test bodies whose relationship scans match Python's recorded golden."""
 

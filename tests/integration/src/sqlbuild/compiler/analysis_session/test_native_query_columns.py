@@ -12,7 +12,6 @@ from pathlib import Path
 import pytest
 
 import sqlbuild._native as native_module
-import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stage_assembly
 from sqlbuild._native import infer_native_query_columns
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeModelAnalyses
@@ -130,9 +129,9 @@ def test_given_session_without_model_analysis_when_assembling_then_raises_native
     test_case: MissingSessionAnalysisTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        native_stage_assembly,
-        "analyze_model_sql",
-        lambda _request: NativeModelAnalyses(positions={}, succeeded=frozenset(), session=None),
+        native_module,
+        "analyze_native_model_sql",
+        lambda request: NativeModelAnalyses(positions={}, succeeded=frozenset(), session=None),
     )
 
     with pytest.raises(native_module.NativeCompilerError) as raised:

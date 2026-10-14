@@ -7,15 +7,16 @@ from dataclasses import replace
 from sqlbuild._native import (
     ConnectionProgressReporter,
     apply_command_warehouse,
+    build_effective_connection_config,
     render_dbt_execution_summary_footer,
     render_dbt_interop_plan,
+    resolve_target_config,
 )
 from sqlbuild.cli.commands.main.dbt.dbt_sqlbuild_work import execute_dbt_sqlbuild_work
 from sqlbuild.cli.commands.main.execution.connection_progress import (
     build_connection_progress_reporter,
 )
 from sqlbuild.cli.commands.models import DbtSqlbuildWorkContext
-from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt._helpers.pipeline.execute import execute_dbt_commands
@@ -36,7 +37,6 @@ from sqlbuild.integrations.dbt.models import (
 )
 from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.runtime.contracts.models import ConnectionHooks
-from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.models import ExecutionLimitsConfig
 
 

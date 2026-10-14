@@ -31,7 +31,7 @@ from sqlbuild.executor.pipeline.models import TestPipelineCallbacks
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.testing.constants import SQL_TEST_EXECUTION_ERROR_CODE
 from sqlbuild.executor.testing.main._execute import execute_sql_test
-from sqlbuild.executor.testing.main.resource_id import sql_test_resource_id
+from sqlbuild.executor.testing.main._resource_id import sql_test_resource_id
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle

@@ -67,6 +67,7 @@ fn help_lines(remediation: &str, style: CliStyle) -> Vec<String> {
         remediation,
         REPORT_LINE_WIDTH,
         (HELP_PREFIX, HELP_CONTINUATION),
+        true,
     );
     let Some((first, rest)) = wrapped.split_first() else {
         return Vec::new();

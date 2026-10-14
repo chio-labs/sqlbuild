@@ -25,7 +25,7 @@ const INVOCATION_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.command_
 const CHECK_CORE_MODULE: &str = "sqlbuild.cli.commands._helpers.check.core";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild.cli.commands._helpers.planning.external_refs";
 const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild.compiler.pipeline.main.reject_unit_test_selectors";
-const STATIC_COMMAND_MODULE: &str = "sqlbuild.compiler.pipeline.main._static_command";
+const STATIC_COMMAND_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const RELATION_PLAN_MODULE: &str = "sqlbuild.compiler.planner.main.commands._relation_plan";
 const SELECTOR_PARSE_MODULE: &str = "sqlbuild.compiler.planner.main.selection.selector_parse";
@@ -33,7 +33,6 @@ const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
 const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
 const PYTHON_GRAPH_MODULE: &str = "sqlbuild.compiler.python_nodes.main._graph";
-const PYTHON_LIFECYCLE_MODULE: &str = "sqlbuild.compiler.python_nodes.main._run_lifecycle";
 const PYTHON_NODE_MODELS: &str = "sqlbuild.compiler.python_nodes.models";
 const PYTHON_NODE_TYPES: &str = "sqlbuild.compiler.python_nodes.types";
 const EXECUTOR_MODELS: &str = "sqlbuild.executor.python_nodes.models";
@@ -337,11 +336,7 @@ fn prepare<'py>(
         ],
     )?;
     let lifecycle_plan: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            PYTHON_LIFECYCLE_MODULE,
-            "build_python_sql_run_lifecycle",
-        )?,
+        &imported(py, NATIVE_MODULE, "build_python_sql_run_lifecycle")?,
         &[
             ("selection", selection),
             ("python_graph", python_graph.clone()),

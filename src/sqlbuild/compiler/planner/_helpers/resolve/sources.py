@@ -18,13 +18,10 @@ from sqlbuild.compiler.planner.constants import (
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.compiler.planner.types import ContractPolicy
-from sqlbuild.compiler.references.main._quoted_reference_call_pattern import (
-    quoted_reference_call_pattern,
-)
-from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.compiler.references.constants import SOURCE_PATTERN
 from sqlbuild.spec.contracts.models import SourceColumnEntry, SourceEntry
 
-_SOURCE_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SOURCE)
+_SOURCE_PATTERN: re.Pattern[str] = SOURCE_PATTERN
 _DERIVED_TABLE_ALIAS_KEYWORDS: frozenset[str] = frozenset(
     {
         "APPLY",

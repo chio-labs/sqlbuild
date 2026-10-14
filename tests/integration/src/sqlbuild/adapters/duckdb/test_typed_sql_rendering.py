@@ -3,8 +3,8 @@ from decimal import Decimal
 import duckdb
 import pytest
 
+from sqlbuild._native import normalize_sql_value
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.sql_values.main.normalize import normalize_sql_value
 from tests.integration.src.sqlbuild.adapters.duckdb._test_types import (
     TypedSqlRenderingExecutionTestCase,
 )

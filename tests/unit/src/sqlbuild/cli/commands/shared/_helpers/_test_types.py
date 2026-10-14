@@ -1,32 +1,10 @@
 from dataclasses import dataclass, field
 
-from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
-
-
-@dataclass(frozen=True)
-class TruncateNameTestCase:
-    description: str
-    name: str
-    width: int
-    expected_result: str
-
-
-@dataclass(frozen=True)
-class AuditAggregationTestCase:
-    description: str
-    audit_results: tuple[AuditExecutionResult, ...]
-    expected_entry_count: int
-    expected_labels: tuple[str, ...]
-    expected_outcomes: tuple[AuditOutcome, ...]
-    expected_batch_totals: tuple[int, ...]
-    expected_batch_passes: tuple[int, ...]
-    expected_reused: tuple[bool, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

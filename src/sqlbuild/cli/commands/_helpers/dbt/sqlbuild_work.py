@@ -7,15 +7,13 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild._native import (
+    BuildProgressCallbacks,
     ConnectionProgressReporter,
     enforce_plan_safety_policies,
+    format_build_footer,
     format_execution_header,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.classes.build_progress_callbacks import (
-    BuildProgressCallbacks,
-    format_build_footer,
-)
 from sqlbuild.cli.commands.constants import (
     EXECUTION_LIMIT_DBT_NOTE,
     MISSING_ORIGIN_DBT_HELP,

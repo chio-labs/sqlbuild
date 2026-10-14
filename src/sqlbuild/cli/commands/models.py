@@ -29,7 +29,6 @@ from sqlbuild.cli.output.models import (  # noqa: F401
     SkillUpdateResult,
     WrittenTarget,
 )
-from sqlbuild.cli.progress.models import AuditDisplayEntry, ExecutionCounts  # noqa: F401
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.cost.types import CostStatus
 from sqlbuild.spec.contracts.models import (

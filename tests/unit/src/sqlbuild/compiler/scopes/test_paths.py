@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.scopes._helpers.paths import normalize_path
+from sqlbuild._native import normalize_scope_path
 from sqlbuild.compiler.scopes.exceptions import InvalidScopePathError
 from tests.unit.src.sqlbuild.compiler.scopes._test_types import PathNormalizationCase
 
@@ -33,7 +33,7 @@ from tests.unit.src.sqlbuild.compiler.scopes._test_types import PathNormalizatio
 def test_given_posix_or_windows_path_when_normalizing_then_returns_canonical_posix_path(
     test_case: PathNormalizationCase,
 ) -> None:
-    assert normalize_path(path=test_case.path) == test_case.expected_path
+    assert normalize_scope_path(path=test_case.path) == test_case.expected_path
 
 
 @pytest.mark.parametrize(
@@ -49,7 +49,7 @@ def test_given_path_outside_project_when_normalizing_then_rejects_it(
     test_case: PathNormalizationCase,
 ) -> None:
     with pytest.raises(InvalidScopePathError, match=test_case.expected_path):
-        normalize_path(path=test_case.path)
+        normalize_scope_path(path=test_case.path)
 
 
 if __name__ == "__main__":

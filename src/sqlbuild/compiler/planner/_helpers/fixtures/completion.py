@@ -8,10 +8,8 @@ from collections.abc import Mapping, Sequence
 from functools import lru_cache
 from typing import Any
 
+from sqlbuild._native import analyze_resolved_column_reads
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.main._analyze_columns_and_lineage import (
-    analyze_resolved_column_reads,
-)
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,

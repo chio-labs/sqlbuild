@@ -18,10 +18,10 @@ use crate::bindings::_helpers::diff_report::support::{
 };
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
+const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
-const NAMESPACE_MODULE: &str = "sqlbuild.compiler.compile.main._effective_target_namespace";
-const RUNTIME_MODULE: &str = "sqlbuild.compiler.compile.main.effective_runtime";
+const NAMESPACE_MODULE: &str = "sqlbuild._native";
+const RUNTIME_MODULE: &str = "sqlbuild._native";
 const POLYGLOT_MODULE: &str = "sqlbuild.compiler.sql_analysis.main.import_polyglot_sql";
 const COMMAND_MODELS_MODULE: &str = "sqlbuild.cli.commands.models";
 const LIFECYCLE_MODULE: &str = "sqlbuild.executor.diff.classes.query_artifact_lifecycle";

@@ -7,6 +7,7 @@ use pyo3::prelude::{
 };
 use pyo3::types::{PyDict, PyList, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_analysis::assembly::project::main::sql_analysis_opt_out_help::sql_analysis_opt_out_help;
 use sqlbuild_analysis::assembly::project::models::{SyntaxCheck, SyntaxMode};
 
 use crate::bindings::_helpers::project_assembly::resources::syntax_error_message;
@@ -16,8 +17,6 @@ const SQL_HOOK_ENTRY: &str = "SqlHookEntry";
 const PYTHON_HOOK_ENTRY: &str = "PythonHookEntry";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const COMPILE_INPUT_ERROR: &str = "CompileInputError";
-const VALIDATION_MODULE: &str = "sqlbuild.compiler.compile._helpers.analysis.validation";
-const OPT_OUT_HELP: &str = "sql_analysis_opt_out_help";
 const GENERIC_DIALECT: &str = "generic";
 
 /// `(placeholder defaults, dialect)` a statement parses with.
@@ -43,14 +42,8 @@ struct HookSite<'a, 'py> {
 /// `CompileInputError(message, help=sql_analysis_opt_out_help(model_owned=True))`.
 fn syntax_error(py: Python<'_>, message: String) -> PyErr {
     let raised = || -> PyResult<PyErr> {
-        let help_arguments: Bound<'_, PyDict> = PyDict::new(py);
-        help_arguments.set_item("model_owned", true)?;
-        let help: Bound<'_, PyAny> = py
-            .import(VALIDATION_MODULE)?
-            .getattr(OPT_OUT_HELP)?
-            .call((), Some(&help_arguments))?;
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
-        keywords.set_item("help", help)?;
+        keywords.set_item("help", sql_analysis_opt_out_help(true))?;
         let error: Bound<'_, PyAny> = py
             .import(COMPILE_ERRORS_MODULE)?
             .getattr(COMPILE_INPUT_ERROR)?
@@ -248,7 +241,15 @@ pub(crate) fn hook_sql_statements(value: Bound<'_, PyAny>) -> PyResult<Vec<Strin
     hook_statements(&value, &sql_hook_entry)
 }
 
+/// Help for SQL the parser rejects; only model-owned SQL offers the MODEL header entry.
+#[pyfunction]
+#[pyo3(name = "sql_analysis_opt_out_help", signature = (*, model_owned = true))]
+fn opt_out_help(model_owned: bool) -> String {
+    sql_analysis_opt_out_help(model_owned)
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(opt_out_help, module)?)?;
     module.add_function(wrap_pyfunction!(validate_hook_sql_syntax, module)?)?;
     module.add_function(wrap_pyfunction!(validate_sql_syntax, module)?)?;
     module.add_function(wrap_pyfunction!(hook_sql_statements, module)?)

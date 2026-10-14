@@ -7,22 +7,17 @@ from dataclasses import replace
 from pathlib import Path
 
 import sqlbuild._native as _native
-from sqlbuild._native import discover_project_inputs, external_identifiers_for_headers
-from sqlbuild.adapter.contract.exceptions import AdapterUserError
-from sqlbuild.adapter.discovery.main.resolve_adapter import resolve_adapter
+from sqlbuild._native import (
+    expand_sql_with_spans,
+    external_identifiers_for_headers,
+)
 from sqlbuild.compiler.compile.constants import MACRO_TOKEN
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.main.expand_sql_with_spans import expand_sql_with_spans
-from sqlbuild.compiler.compile.main.sql_expansion_context import build_sql_expansion_context
 from sqlbuild.compiler.compile.models import (
     CompiledSqlExpansion,
-    DeclarationScopeBuild,
     ExpansionSpan,
     SqlExpansionContext,
 )
-from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
-from sqlbuild.compiler.discovery.exceptions import DiscoveryError
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.lint._helpers.headers import lint_body_ranges, lint_file_role
 from sqlbuild.lint.classes.stop_context import LintStopContext
@@ -43,9 +38,6 @@ from sqlbuild.lint.models import (
     PreparedLintFiles,
 )
 from sqlbuild.lint.types import NativePreparedSql
-from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
-    resolve_effective_adapter_name,
-)
 
 _DEPENDENCY_INTRINSIC_PATTERN: re.Pattern[str] = re.compile(
     r"^__(?:ref|source)\s*\(", re.IGNORECASE
@@ -53,57 +45,6 @@ _DEPENDENCY_INTRINSIC_PATTERN: re.Pattern[str] = re.compile(
 _KEYED_RELATION_PATTERN: re.Pattern[str] = re.compile(
     r"^__(ref|source|seed)\s*\(\s*['\"]([^'\"]+)['\"]\s*\)$", re.IGNORECASE
 )
-
-
-def build_lint_expansion_context(
-    *,
-    project_dir: Path,
-    value_renderer: TypedSqlValueRenderer | None = None,
-    discovered_inputs: DiscoveredProjectInputs | None = None,
-    declaration_scope: DeclarationScopeBuild | None = None,
-    static_declaration_scope: DeclarationScopeBuild | None = None,
-) -> SqlExpansionContext:
-    """Build the expansion context, reporting compile failures as lint failures."""
-
-    try:
-        effective_discovered_inputs: DiscoveredProjectInputs = (
-            discovered_inputs
-            if discovered_inputs is not None
-            else discover_project_inputs(
-                project_dir=project_dir,
-                sql_analysis_enabled_override=False,
-                extract_output_column_locations=False,
-            )
-        )
-        effective_renderer: TypedSqlValueRenderer = value_renderer or _resolve_value_renderer(
-            project_dir=project_dir,
-            discovered_inputs=effective_discovered_inputs,
-        )
-        return build_sql_expansion_context(
-            project_dir=project_dir,
-            discovered_inputs=effective_discovered_inputs,
-            value_renderer=effective_renderer,
-            declaration_scope=declaration_scope,
-            static_declaration_scope=static_declaration_scope,
-        )
-    except (AdapterUserError, CompileInputError, DiscoveryError) as error:
-        raise ProjectCompileError(
-            "compiler-integrated Rules check the SQL your project actually produces, "
-            "so the project must "
-            f"compile first: {error}"
-        ) from error
-
-
-def _resolve_value_renderer(
-    *, project_dir: Path, discovered_inputs: DiscoveredProjectInputs
-) -> TypedSqlValueRenderer:
-    return resolve_adapter(
-        adapter_name=resolve_effective_adapter_name(
-            project_config=discovered_inputs.project_config,
-            local_config=discovered_inputs.local_config,
-        ),
-        project_dir=project_dir,
-    )
 
 
 def prepare_lint_body(

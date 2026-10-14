@@ -27,26 +27,25 @@ from sqlbuild.compiler.planner.constants import (
     SQL_IDENTIFIER_LEADING_CHARACTERS,
 )
 from sqlbuild.compiler.planner.models import CursorBounds
-from sqlbuild.compiler.references.main._quoted_reference_call_pattern import (
-    quoted_reference_call_pattern,
+from sqlbuild.compiler.references.constants import (
+    DBT_REF_CALL_PREFIX,
+    REF_PATTERN,
+    SEED_PATTERN,
+    TABLE_FUNCTION_PATTERN,
+    UDF_PATTERN,
 )
-from sqlbuild.compiler.references.main._reference_call_prefix_pattern_text import (
-    reference_call_prefix_pattern_text,
-)
-from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
-_REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.REF)
-_SEED_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SEED)
+_REF_PATTERN: re.Pattern[str] = REF_PATTERN
+_SEED_PATTERN: re.Pattern[str] = SEED_PATTERN
 _DBT_REF_PATTERN: re.Pattern[str] = re.compile(
-    rf'{reference_call_prefix_pattern_text(SqlReferenceKind.DBT_REF)}\s*"([^"]+)"\s*'
+    rf'{DBT_REF_CALL_PREFIX}\s*"([^"]+)"\s*'
     r'(?:,\s*"([^"]+)"\s*)?\)',
     re.IGNORECASE,
 )
-_UDF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.UDF)
-_TABLE_FUNCTION_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(
-    SqlReferenceKind.TABLE_FUNCTION
-)
+_UDF_PATTERN: re.Pattern[str] = UDF_PATTERN
+_TABLE_FUNCTION_PATTERN: re.Pattern[str] = TABLE_FUNCTION_PATTERN
 _REFERENCE_SCAN_CONTEXT: str = "SQL reference resolution"
 _CLAUSE_KEYWORDS: frozenset[str] = frozenset(
     {

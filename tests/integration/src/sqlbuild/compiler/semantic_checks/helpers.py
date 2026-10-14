@@ -13,14 +13,10 @@ from typing import Any, cast
 import pytest
 
 import sqlbuild._native as native_module
-import sqlbuild.compiler.compile._helpers.diagnostics.recovery as semantic_recovery
 from sqlbuild._native import build_project_graph, discover_project_inputs, project_with
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.analysis_session.types import DiagnosticRow
-from sqlbuild.compiler.compile._helpers.diagnostics.recovery import (
-    complete_semantic_diagnostics,
-)
 from sqlbuild.compiler.compile.models import CompilerDiagnostic
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
@@ -84,13 +80,13 @@ type _Template = Callable[[random.Random, str, tuple[str, ...]], tuple[str, tupl
 
 @dataclass(frozen=True)
 class SemanticInputs:
-    """The arguments the Python compile passed to `complete_semantic_diagnostics`."""
+    """The arguments the compile passed to `complete_semantic_project`."""
 
     project: CompiledProjectView
     profile: ExpressionInferenceProfile
     binding_results: dict[str, list[DiagnosticRow]]
     resource_sql_analysis: bool
-    native_session: Any | None = None
+    session: Any | None = None
 
 
 def _typo(rng: random.Random, column: str) -> str:
@@ -196,12 +192,14 @@ def captured_semantic_inputs(
         _ = path.write_text(contents, encoding="utf-8")
     captured: list[SemanticInputs] = []
 
+    complete: Callable[..., CompiledProjectView] = native_module.complete_semantic_project
+
     def capture(**arguments: Any) -> CompiledProjectView:
         captured.append(SemanticInputs(**arguments))
-        return complete_semantic_diagnostics(**arguments)
+        return complete(**arguments)
 
     with monkeypatch.context() as patch:
-        patch.setattr(semantic_recovery, "complete_semantic_diagnostics", capture)
+        patch.setattr(native_module, "complete_semantic_project", capture)
         _ = build_project_graph(
             discovered_inputs=discover_project_inputs(project_dir=project_dir),
             adapter=DuckDbAdapter(),
@@ -243,7 +241,7 @@ def native_completion(inputs: SemanticInputs) -> CompiledProjectView:
         profile=inputs.profile,
         binding_results=inputs.binding_results,
         resource_sql_analysis=inputs.resource_sql_analysis,
-        session=inputs.native_session,
+        session=inputs.session,
     )
 
 
@@ -271,13 +269,13 @@ def proven_output_count(project: CompiledProjectView) -> int:
 def without_session(inputs: SemanticInputs) -> SemanticInputs:
     """The same stage inputs with every model's output names and lineage in the payload."""
 
-    return replace(inputs, native_session=None)
+    return replace(inputs, session=None)
 
 
 def session_fact_models(inputs: SemanticInputs) -> frozenset[str]:
     """Models whose output names and lineage the finished session supplies to the stage."""
 
-    kept: frozenset[str] = frozenset(getattr(inputs.native_session, "fact_models", ()))
+    kept: frozenset[str] = frozenset(getattr(inputs.session, "fact_models", ()))
     proven: frozenset[str] = frozenset(
         model.name for model in filter(_output_proven, inputs.project.models)
     )

@@ -5,11 +5,9 @@ use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_sqltext::compiler::main::placeholder_defaults::placeholder_defaults;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_sql;
 use crate::bindings::_helpers::project_assembly::syntax_validation::hook_sql_statements;
 
-const CURSOR_INTRINSICS_MODULE: &str =
-    "sqlbuild.compiler.compile._helpers.render.cursor_intrinsics";
 const HOOK_NAMES: [&str; 2] = ["pre_hooks", "post_hooks"];
 
 fn config_value<'py>(model_input: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
@@ -46,17 +44,15 @@ pub(crate) fn model_placeholders<'py>(
 /// The model query with cursor intrinsics replaced by typed literals for static analysis.
 fn analysis_sql<'py>(model_input: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = model_input.py();
-    call_with(
-        &imported(
+    Ok(PyString::new(
+        py,
+        &analysis_cursor_sql(
             py,
-            CURSOR_INTRINSICS_MODULE,
-            "cursor_intrinsics_analysis_sql",
+            &model_input.getattr("query_sql")?.extract::<String>()?,
+            &config_value(model_input, "cursor_type")?,
         )?,
-        &[
-            ("sql", model_input.getattr("query_sql")?),
-            ("cursor_type", config_value(model_input, "cursor_type")?),
-        ],
     )
+    .into_any())
 }
 
 fn syntax_checks<'py>(

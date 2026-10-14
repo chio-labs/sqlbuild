@@ -285,7 +285,7 @@ def test_given_compiles_when_completing_from_the_session_then_matches_payload_an
     session_models: int = sum(len(selected) for selected in selections)
     model_count: int = sum(len(inputs.project.models) for inputs in captured)
 
-    assert all(inputs.native_session is not None for inputs in captured)
+    assert all(inputs.session is not None for inputs in captured)
     assert (
         golden_differences(
             read_golden(golden_name("semantic_session", test_case.description)), golden

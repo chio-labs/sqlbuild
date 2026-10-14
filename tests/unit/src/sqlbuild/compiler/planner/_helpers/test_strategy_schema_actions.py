@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.planner._helpers.output.strategy import resolve_schema_actions
+from sqlbuild._native import resolve_schema_actions
 from sqlbuild.compiler.planner.models import SchemaAction, SchemaFinding
 from sqlbuild.compiler.planner.types import (
     OnSchemaChange,

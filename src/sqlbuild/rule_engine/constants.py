@@ -76,7 +76,6 @@ SKILL_MISSING: str = "missing"
 SKILL_STALE: str = "stale"
 REPLACEABLE_SKILL_STATES: frozenset[str] = frozenset({SKILL_FRESH, SKILL_MISSING, SKILL_STALE})
 
-AST_SELECT_KIND: str = "select"
 AST_CTE_KIND: str = "cte"
 CONTRACT_ENFORCED: str = "enforced"
 TYPE_PROOF_RULE_CODES: frozenset[str] = frozenset({"SQBRCONTRACT105"})
@@ -86,7 +85,6 @@ DATE_TYPE: str = "DATE"
 TIMESTAMP_TYPE: str = "TIMESTAMP"
 
 
-NAMED_CTE_TUPLE_SIZE: int = 2
 TARGET_DIRECTORY_NAME: str = "target"
 RULE_DECORATOR_TOKEN: str = "@rule"
 INIT_MODULE_NAME: str = "__init__"

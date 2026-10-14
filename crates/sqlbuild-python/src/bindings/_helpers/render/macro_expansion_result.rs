@@ -9,6 +9,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
+use crate::bindings::_helpers::render::declaration_values::resolved_declaration_context;
 use crate::bindings::_helpers::render::macro_call_rows::span_row;
 use crate::bindings::_helpers::render::macro_expansion::{
     ExpansionOutput, NativeMacroExpansion, expanded,
@@ -24,7 +25,6 @@ const REF_MODELS_MODULE: &str = "sqlbuild.python_nodes.models";
 const REF_TYPES_MODULE: &str = "sqlbuild.python_nodes.types";
 const MACRO_ARGUMENTS_MODULE: &str =
     "sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments";
-const DECLARATIONS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.declarations";
 const USER_MACROS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.user_macros";
 const ACTIVE_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.main.active_macro_bridge";
 const BRIDGE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.macro_bridge.constants";
@@ -204,13 +204,9 @@ fn expansion_result<'py>(request: ExpansionRequest<'py>) -> PyResult<Bound<'py, 
     let declarations: Bound<'py, PyAny> = match (request.declarations, request.declaration_resolver)
     {
         (Some(declarations), _) => declarations,
-        (None, Some(resolver)) => call_with(
-            &imported(py, DECLARATIONS_MODULE, "resolve_declaration_context")?,
-            &[
-                ("resolver", resolver),
-                ("file_path", request.file_path.clone()),
-            ],
-        )?,
+        (None, Some(resolver)) => {
+            resolved_declaration_context(&resolver, &request.file_path, None)?
+        }
         (None, None) => py.None().into_bound(py),
     };
     let expansion: NativeMacroExpansion = NativeMacroExpansion::new(

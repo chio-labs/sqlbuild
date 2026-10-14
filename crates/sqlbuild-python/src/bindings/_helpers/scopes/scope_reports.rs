@@ -4,6 +4,7 @@ use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
+use pyo3::types::PyDict;
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::json::models::JsonValue;
 use sqlbuild_scopes::scope_report::main::browse_scope_folders::browse_scope_folders;
@@ -19,6 +20,7 @@ use sqlbuild_scopes::scope_report::models::{
     ScopeResult,
 };
 
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::scopes::scope_lookup::{
     NativeScopeLookup, identity_message, path_message,
 };
@@ -35,21 +37,21 @@ use crate::bindings::_helpers::scopes::scope_report_objects::{
 type PyObject = Py<PyAny>;
 
 /// Target, location, whether it is a directory, and the filters.
-type ReportArguments<'py> = (
+pub(crate) type ReportArguments<'py> = (
     Option<Bound<'py, PyAny>>,
     Option<Bound<'py, PyAny>>,
     bool,
     Option<Bound<'py, PyAny>>,
 );
 /// Declaration, target, location and whether it is a directory.
-type ExplainArguments<'py> = (
+pub(crate) type ExplainArguments<'py> = (
     Bound<'py, PyAny>,
     Option<Bound<'py, PyAny>>,
     Option<Bound<'py, PyAny>>,
     bool,
 );
 /// Folder, filters, target and whether the target is prospective.
-type ListArguments<'py> = (
+pub(crate) type ListArguments<'py> = (
     String,
     Option<Bound<'py, PyAny>>,
     Option<Bound<'py, PyAny>>,
@@ -57,6 +59,7 @@ type ListArguments<'py> = (
 );
 
 const EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
+const CURRENT_FOLDER: &str = ".";
 
 /// One lookup's native lookup and every declaration's values in input order.
 struct LookupReports {
@@ -141,8 +144,7 @@ fn raised(diagnostics: Vec<DiagnosticFacts>) -> Vec<ReportDiagnostic> {
 }
 
 /// `query_scope_report`: one existing target or prospective path; invalid paths raise.
-#[pyfunction]
-fn scope_report(
+pub(crate) fn scope_report(
     py: Python<'_>,
     lookup: &Bound<'_, PyAny>,
     request: ReportArguments<'_>,
@@ -171,8 +173,7 @@ fn scope_report(
 }
 
 /// `explain_scope_declaration`: one qualified declaration in an optional context.
-#[pyfunction]
-fn scope_explain(
+pub(crate) fn scope_explain(
     py: Python<'_>,
     lookup: &Bound<'_, PyAny>,
     request: ExplainArguments<'_>,
@@ -218,8 +219,7 @@ fn folder_request(
 }
 
 /// `browse_scope_folders`: the direct child declaration-definition folders of `folder`.
-#[pyfunction]
-fn scope_browse(
+pub(crate) fn scope_browse(
     py: Python<'_>,
     lookup: &Bound<'_, PyAny>,
     request: (String, Option<Bound<'_, PyAny>>, bool),
@@ -234,8 +234,7 @@ fn scope_browse(
 }
 
 /// `list_scope_declarations`: declarations recursively beneath one definition folder.
-#[pyfunction]
-fn scope_list(
+pub(crate) fn scope_list(
     py: Python<'_>,
     lookup: &Bound<'_, PyAny>,
     request: ListArguments<'_>,
@@ -257,7 +256,8 @@ fn scope_list(
 
 /// `preview_scope_move`: visibility deltas of a resource move, without mutating the lookup.
 #[pyfunction]
-fn scope_move_preview(
+#[pyo3(name = "preview_scope_move", signature = (*, lookup, resource, destination))]
+pub(crate) fn scope_move_preview(
     py: Python<'_>,
     lookup: &Bound<'_, PyAny>,
     resource: &Bound<'_, PyAny>,
@@ -295,7 +295,11 @@ fn serialized(classes: &ScopeClasses<'_>, result: &Bound<'_, PyAny>) -> PyResult
 
 /// `serialize_scope_report`: deterministic schema-version-two ASCII JSON of one result.
 #[pyfunction]
-fn serialize_scope_report(py: Python<'_>, report: &Bound<'_, PyAny>) -> PyResult<String> {
+#[pyo3(signature = (*, report))]
+pub(crate) fn serialize_scope_report(
+    py: Python<'_>,
+    report: &Bound<'_, PyAny>,
+) -> PyResult<String> {
     let classes: ScopeClasses<'_> = ScopeClasses::new(py)?;
     match serialized(&classes, report) {
         Err(error) if error.is_instance_of::<PyValueError>(py) => {
@@ -310,18 +314,131 @@ fn serialize_scope_report(py: Python<'_>, report: &Bound<'_, PyAny>) -> PyResult
 
 /// `scope_metadata_projection` of one `ScopeIndex`, as the dictionary Python builds.
 #[pyfunction]
-#[pyo3(name = "scope_metadata_projection")]
+#[pyo3(name = "scope_metadata_projection", signature = (*, index))]
 fn metadata_projection(py: Python<'_>, index: &Bound<'_, PyAny>) -> PyResult<PyObject> {
     let index: ProjectionIndex = projection_index(read_index(index)?);
     let projection: JsonValue = scope_metadata_projection(&index);
     json_to_python(py, projection, false)
 }
 
+fn optional<'py>(
+    arguments: &KeywordArguments<'py>,
+    name: &str,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    Ok(Some(arguments.value(name)?).filter(|value| !value.is_none()))
+}
+
+/// Python's `query_scope_report`.
+#[pyfunction]
+#[pyo3(name = "query_scope_report", signature = (**options))]
+fn query_scope_report_binding<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<PyObject> {
+    let arguments: KeywordArguments<'py> = KeywordArguments::read(
+        py,
+        "query_scope_report",
+        options,
+        (&["lookup"], &["target", "at", "directory", "filters"]),
+    )?;
+    scope_report(
+        py,
+        &arguments.value("lookup")?,
+        (
+            optional(&arguments, "target")?,
+            optional(&arguments, "at")?,
+            arguments.flag("directory")?,
+            optional(&arguments, "filters")?,
+        ),
+    )
+}
+
+/// Python's `explain_scope_declaration`.
+#[pyfunction]
+#[pyo3(name = "explain_scope_declaration", signature = (**options))]
+fn explain_scope_declaration_binding<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<(PyObject, PyObject)> {
+    let arguments: KeywordArguments<'py> = KeywordArguments::read(
+        py,
+        "explain_scope_declaration",
+        options,
+        (&["lookup", "declaration"], &["target", "at", "directory"]),
+    )?;
+    scope_explain(
+        py,
+        &arguments.value("lookup")?,
+        (
+            arguments.value("declaration")?,
+            optional(&arguments, "target")?,
+            optional(&arguments, "at")?,
+            arguments.flag("directory")?,
+        ),
+    )
+}
+
+/// Python's `browse_scope_folders`.
+#[pyfunction]
+#[pyo3(name = "browse_scope_folders", signature = (**options))]
+fn browse_scope_folders_binding<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<PyObject> {
+    let arguments: KeywordArguments<'py> = KeywordArguments::read(
+        py,
+        "browse_scope_folders",
+        options,
+        (&["lookup"], &["folder", "target", "target_is_prospective"]),
+    )?;
+    let folder: String = match optional(&arguments, "folder")? {
+        Some(folder) => folder.extract()?,
+        None => CURRENT_FOLDER.to_owned(),
+    };
+    scope_browse(
+        py,
+        &arguments.value("lookup")?,
+        (
+            folder,
+            optional(&arguments, "target")?,
+            arguments.flag("target_is_prospective")?,
+        ),
+    )
+}
+
+/// Python's `list_scope_declarations`.
+#[pyfunction]
+#[pyo3(name = "list_scope_declarations", signature = (**options))]
+fn list_scope_declarations_binding<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<PyObject> {
+    let arguments: KeywordArguments<'py> = KeywordArguments::read(
+        py,
+        "list_scope_declarations",
+        options,
+        (
+            &["lookup", "folder"],
+            &["filters", "target", "target_is_prospective"],
+        ),
+    )?;
+    scope_list(
+        py,
+        &arguments.value("lookup")?,
+        (
+            arguments.value("folder")?.extract()?,
+            optional(&arguments, "filters")?,
+            optional(&arguments, "target")?,
+            arguments.flag("target_is_prospective")?,
+        ),
+    )
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(scope_report, module)?)?;
-    module.add_function(wrap_pyfunction!(scope_explain, module)?)?;
-    module.add_function(wrap_pyfunction!(scope_browse, module)?)?;
-    module.add_function(wrap_pyfunction!(scope_list, module)?)?;
+    module.add_function(wrap_pyfunction!(query_scope_report_binding, module)?)?;
+    module.add_function(wrap_pyfunction!(explain_scope_declaration_binding, module)?)?;
+    module.add_function(wrap_pyfunction!(browse_scope_folders_binding, module)?)?;
+    module.add_function(wrap_pyfunction!(list_scope_declarations_binding, module)?)?;
     module.add_function(wrap_pyfunction!(scope_move_preview, module)?)?;
     module.add_function(wrap_pyfunction!(serialize_scope_report, module)?)?;
     module.add_function(wrap_pyfunction!(metadata_projection, module)?)?;

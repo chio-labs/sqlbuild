@@ -12,8 +12,8 @@ use crate::bindings::_helpers::compile_command::target_writer::{
 use crate::bindings::_helpers::compile_driver::python_calls::{Status, call_with, imported};
 use crate::bindings::_helpers::dag_artifact::artifact::build_dag_json;
 
-const MANIFEST_MODULE: &str = "sqlbuild.compiler.manifest.main._build_graph_manifest";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
+const NATIVE_MODULE: &str = "sqlbuild._native";
+const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const PYTHON_NODES_MODULE: &str = "sqlbuild.compiler.python_nodes.main._graph";
 const OUTPUT_MODELS_MODULE: &str = "sqlbuild.cli.output.models";
 const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
@@ -68,7 +68,7 @@ pub(crate) fn manifest_payload<'py>(
         ],
     )?;
     let payload: Bound<'py, PyAny> = call_with(
-        &imported(py, MANIFEST_MODULE, "build_graph_manifest")?,
+        &imported(py, NATIVE_MODULE, "build_manifest")?,
         &[
             ("project", graph.getattr("project")?),
             ("plan_output", py.None().into_bound(py)),

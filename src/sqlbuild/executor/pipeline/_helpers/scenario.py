@@ -18,6 +18,7 @@ from typing import Any, ClassVar, Protocol
 from sqlbuild._native import (
     NativeProgressProjector,
     current_native_progress_projector,
+    scenario_local_type_overrides_for_dialect,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.types import TablePromotionMode
@@ -63,9 +64,6 @@ from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
     ResourceAttemptLifecycle,
-)
-from sqlbuild.spec.contracts.main.scenario_local_type_overrides_for_dialect import (
-    scenario_local_type_overrides_for_dialect,
 )
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")

@@ -79,26 +79,21 @@ from sqlbuild.compiler.planner.types import (
     FixtureKey,
     ScenarioArtifactKind,
 )
-from sqlbuild.compiler.references.main._reference_call_prefix_pattern_text import (
-    reference_call_prefix_pattern_text,
+from sqlbuild.compiler.references.constants import (
+    DBT_REF_CALL_PREFIX,
+    REF_CALL_PREFIX,
+    SEED_CALL_PREFIX,
+    SOURCE_CALL_PREFIX,
 )
-from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import SourceEntry
 
 _NAME_ARGUMENT_PATTERN_TEXT: str = r'"(?P<name>[^"]+)"\)'
-_REF_PATTERN: re.Pattern[str] = re.compile(
-    reference_call_prefix_pattern_text(SqlReferenceKind.REF) + _NAME_ARGUMENT_PATTERN_TEXT
-)
-_SEED_PATTERN: re.Pattern[str] = re.compile(
-    reference_call_prefix_pattern_text(SqlReferenceKind.SEED) + _NAME_ARGUMENT_PATTERN_TEXT
-)
-_SOURCE_PATTERN: re.Pattern[str] = re.compile(
-    reference_call_prefix_pattern_text(SqlReferenceKind.SOURCE) + _NAME_ARGUMENT_PATTERN_TEXT
-)
+_REF_PATTERN: re.Pattern[str] = re.compile(REF_CALL_PREFIX + _NAME_ARGUMENT_PATTERN_TEXT)
+_SEED_PATTERN: re.Pattern[str] = re.compile(SEED_CALL_PREFIX + _NAME_ARGUMENT_PATTERN_TEXT)
+_SOURCE_PATTERN: re.Pattern[str] = re.compile(SOURCE_CALL_PREFIX + _NAME_ARGUMENT_PATTERN_TEXT)
 _DBT_REF_PATTERN: re.Pattern[str] = re.compile(
-    reference_call_prefix_pattern_text(SqlReferenceKind.DBT_REF)
-    + r'"(?P<first>[^"]+)"(?:\s*,\s*"(?P<second>[^"]+)")?\)'
+    DBT_REF_CALL_PREFIX + r'"(?P<first>[^"]+)"(?:\s*,\s*"(?P<second>[^"]+)")?\)'
 )
 
 

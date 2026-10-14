@@ -8,7 +8,7 @@ from unittest.mock import Mock
 
 import pytest
 
-import sqlbuild.compiler.compile.main.sql_expansion_context as expansion_context_module
+import sqlbuild._native as native_module
 import sqlbuild.compiler.planner._helpers.sql_tests.fixture_formatting as fixture_formatting_module
 from sqlbuild._native import discover_project_inputs
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
@@ -64,10 +64,10 @@ def test_given_value_renderer_when_building_expansion_context_then_scope_uses_it
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _ = write_fixture_format_project(tmp_path=tmp_path, fixture_sql="SELECT 1 AS id, TRUE AS flag")
-    build_scope: Mock = Mock(wraps=expansion_context_module.build_declaration_scope)
-    monkeypatch.setattr(expansion_context_module, "build_declaration_scope", build_scope)
+    build_scope: Mock = Mock(wraps=native_module.build_declaration_scope)
+    monkeypatch.setattr(native_module, "build_declaration_scope", build_scope)
 
-    _ = expansion_context_module.build_sql_expansion_context(
+    _ = native_module.build_sql_expansion_context(
         project_dir=tmp_path, value_renderer=_CustomSyntaxDuckDbAdapter()
     )
 

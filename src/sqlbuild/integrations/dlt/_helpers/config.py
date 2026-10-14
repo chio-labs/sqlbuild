@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import cast
 
-from sqlbuild.compiler.compile.main.expand_template_data import expand_template_data
+from sqlbuild._native import expand_template_data
 from sqlbuild.integrations.dlt.models import DltResourceConfig, DltSourceConfig
 
 

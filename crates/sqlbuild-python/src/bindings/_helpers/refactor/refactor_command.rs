@@ -33,6 +33,7 @@ use sqlbuild_refactor::refactoring::models::{
 use sqlbuild_refactor::refactoring::types::Originals;
 
 use crate::bindings::_helpers::boundary::panics::{NativeCompilerError, compiler_guard};
+use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::lineage::lineage_index::lineage_key;
 use crate::bindings::_helpers::refactor::refactor_facts::{
     declaration_placement, model_facts, refactor_facts,
@@ -41,7 +42,6 @@ use crate::bindings::_helpers::refactor::refactor_facts::{
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const REFACTOR_ERRORS_MODULE: &str = "sqlbuild.compiler.refactoring.exceptions";
 const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
-const STATUS_MODULE: &str = "sqlbuild.presentation.classes.transient_status_reporter";
 const COMPILE_MODULE: &str = "sqlbuild.cli.commands._helpers.refactor.compile_facts";
 const STAGING_PREFIX: &str = "sqb-refactor-";
 const MOVE_COMMAND: &str = "mv";
@@ -430,12 +430,8 @@ fn run_refactor_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<
     let stream: Bound<'_, PyAny> =
         py.import("sys")?
             .getattr(if json_output { "stderr" } else { "stdout" })?;
-    let options: Bound<'_, PyDict> = PyDict::new(py);
-    options.set_item("stream", stream)?;
-    options.set_item("use_color", use_color)?;
     let status: Status<'_> = Status {
-        reporter: imported(py, STATUS_MODULE, "TransientStatusReporter")?
-            .call((), Some(&options))?,
+        reporter: status_reporter(&stream, use_color)?,
     };
     let result: PyResult<Option<Outcome>> = compiler_guard(|| run(py, &command, &status));
     status.close()?;

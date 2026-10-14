@@ -9,20 +9,22 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 
-from sqlbuild._native import cursor_compare as compare
-from sqlbuild._native import cursor_exclusive_to_inclusive as exclusive_to_inclusive
-from sqlbuild._native import cursor_observed_partition as observed_partition
-from sqlbuild._native import cursor_parse as parse
-from sqlbuild._native import cursor_render as render
 from sqlbuild._native import (
+    classify_cursor_sql_type,
     get_config_cursor_bound,
     get_config_str,
     read_latest_fingerprints,
     render_source_relation,
     resolve_cursor_input_roles,
+    resolve_lineage_reference,
     select_latest_fingerprints,
     transitive_closure_many,
 )
+from sqlbuild._native import cursor_compare as compare
+from sqlbuild._native import cursor_exclusive_to_inclusive as exclusive_to_inclusive
+from sqlbuild._native import cursor_observed_partition as observed_partition
+from sqlbuild._native import cursor_parse as parse
+from sqlbuild._native import cursor_render as render
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapter.contract.types import AdapterExecute
@@ -66,7 +68,6 @@ from sqlbuild.compiler.planner._helpers.graph.core import (
 from sqlbuild.compiler.planner._helpers.graph.loader_dag import (
     build_upstream_intermediate_source_map,
 )
-from sqlbuild.compiler.planner._helpers.output.cursor_type_check import classify_cursor_sql_type
 from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
     effectively_full_refreshed_model_names,
 )
@@ -75,7 +76,6 @@ from sqlbuild.compiler.planner._helpers.resolve.cursor import (
     resolve_effective_timestamp_grain,
 )
 from sqlbuild.compiler.planner._helpers.resolve.cursor_policies import resolve_start_cursor_config
-from sqlbuild.compiler.planner._helpers.resolve.lineage import resolve_lineage_reference
 from sqlbuild.compiler.planner._helpers.resolve.maximum_start import maximum_allowed_start
 from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
 from sqlbuild.compiler.planner.exceptions import PlannerInputError

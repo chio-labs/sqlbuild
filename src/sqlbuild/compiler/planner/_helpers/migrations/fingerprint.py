@@ -8,8 +8,8 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+from sqlbuild._native import version_identity_metadata_payload
 from sqlbuild.compiler.compile.constants import CURSOR_INPUTS_CONFIG_KEY
-from sqlbuild.compiler.planner._helpers.changes.metadata import version_identity_metadata_payload
 from sqlbuild.compiler.planner.constants import (
     MIGRATION_FINGERPRINT_EXCLUDED_CONFIG_KEYS,
     MIGRATION_LOCAL_NAME_PREFIX,

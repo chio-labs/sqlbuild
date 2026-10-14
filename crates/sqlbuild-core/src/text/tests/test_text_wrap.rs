@@ -33,7 +33,7 @@ fn given_prose_when_wrapping_then_lines_match_python_textwrap() {
 
     for test_case in test_cases {
         assert_eq!(
-            text_wrap(test_case.text, test_case.width, test_case.indents),
+            text_wrap(test_case.text, test_case.width, test_case.indents, true),
             test_case.expected_lines,
             "{}",
             test_case.description

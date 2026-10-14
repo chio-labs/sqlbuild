@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TextIO, cast
 
 from sqlbuild._native import (
+    TransientStatusReporter,
     dbt_execution_ls_argv,
     parse_dbt_ls_json_lines,
     render_dbt_node_result,
@@ -27,7 +28,6 @@ from sqlbuild.integrations.dbt.models import (
     DbtNodeMessage,
 )
 from sqlbuild.presentation.classes.cli_style import CliStyle
-from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 
 _COMMAND_AND_SUBCOMMAND_ARGUMENT_COUNT: int = 2
 

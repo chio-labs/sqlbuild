@@ -8,11 +8,14 @@ from unittest.mock import Mock
 import pytest
 
 import sqlbuild._native as native
-from sqlbuild._native import build_compiled_project, discover_project_inputs
+from sqlbuild._native import (
+    build_compiled_project,
+    discover_project_inputs,
+    source_binding_diagnostics,
+)
 from sqlbuild._native import run_cli as main
 from sqlbuild.adapter.contract.models import ColumnInfo, ExpressionInferenceProfile
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
-from sqlbuild.compiler.compile.main._source_bindings import get_source_binding_diagnostics
 from sqlbuild.compiler.compile.models import CompilerDiagnostic
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
@@ -99,7 +102,7 @@ def test_given_effective_target_when_binding_quotes_then_honours_session_setting
         adapter=SnowflakeAdapter(),
         selected_target="selected",
     )
-    physical: tuple[CompilerDiagnostic, ...] = get_source_binding_diagnostics(
+    physical: tuple[CompilerDiagnostic, ...] = source_binding_diagnostics(
         project=project,
         columns={"orders": (ColumnInfo(name="customer", type="VARCHAR"),)},
         profile=ExpressionInferenceProfile(sql_analysis_dialect="snowflake"),

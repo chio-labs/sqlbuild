@@ -5,14 +5,12 @@ from typing import cast
 
 import pytest
 
+from sqlbuild._native import normalize_sql_value
 from sqlbuild.sql_values.exceptions import SqlValueValidationError
-from sqlbuild.sql_values.main.normalize import normalize_sql_value
-from sqlbuild.sql_values.main.validate_rendered_size import validate_rendered_sql_value_size
 from sqlbuild.sql_values.models import AuthoredSqlSet, SqlValue, SqlValueLimits
 from tests.unit.src.sqlbuild.sql_values._test_types import (
     NormalizeSqlValueErrorTestCase,
     NormalizeSqlValueTestCase,
-    RenderedSqlValueLimitTestCase,
     SqlValueBehaviorTestCase,
     SqlValueLimitTestCase,
 )
@@ -147,32 +145,6 @@ def test_given_safety_limit_is_exceeded_when_normalizing_then_rejects_value(
             raw_value=test_case.raw_value,
             context="constant 'limited'",
             limits=test_case.limits,
-        )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        RenderedSqlValueLimitTestCase(
-            description="multibyte rendered SQL uses UTF-8 byte length",
-            rendered_sql="é",
-            max_size=1,
-            expected_size=2,
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_rendered_sql_exceeds_limit_when_validating_then_counts_utf8_bytes(
-    test_case: RenderedSqlValueLimitTestCase,
-) -> None:
-    with pytest.raises(
-        SqlValueValidationError,
-        match=rf"rendered value is {test_case.expected_size} bytes",
-    ):
-        validate_rendered_sql_value_size(
-            rendered_sql=test_case.rendered_sql,
-            context="constant 'limited'",
-            max_size=test_case.max_size,
         )
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.main._infer_fixture_columns import infer_fixture_column_facts
+from sqlbuild._native import infer_fixture_column_facts
 from sqlbuild.compiler.compile.models import FixtureColumnInference
 from sqlbuild.compiler.planner.classes.fixture_column_inferences import FixtureColumnInferences
 from tests.unit.src.sqlbuild.compiler.planner.classes._test_types import (

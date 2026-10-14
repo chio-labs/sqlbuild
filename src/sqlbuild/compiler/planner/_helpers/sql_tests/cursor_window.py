@@ -8,10 +8,9 @@ from sqlbuild._native import cursor_compare as compare
 from sqlbuild._native import cursor_floor_to_grain as floor_to_grain
 from sqlbuild._native import cursor_parse as parse
 from sqlbuild._native import cursor_render as render
-from sqlbuild._native import get_config_str
+from sqlbuild._native import get_config_str, resolve_cursor_intrinsics
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
 from sqlbuild.compiler.compile.models import CompiledSqlTest
 from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.planner._helpers.resolve.cursor_intrinsics import (

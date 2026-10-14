@@ -6,8 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.render.spans import map_through_passes
-from sqlbuild.compiler.compile._helpers.render.sql_vars import expand_authored_sql_with_spans
+from sqlbuild._native import expand_authored_sql_with_spans, map_expanded_offset
 from sqlbuild.compiler.compile.models import ExpansionSpan, LoadedMacro, MacroContext, MappedOffset
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import ExpandWithSpansTestCase
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
@@ -98,7 +97,7 @@ def test_given_expanded_offset_when_mapping_then_authored_position_matches(
         collection_rendering=DUCKDB_COMPILE_ADAPTER_CONTEXT.collection_rendering,
     )
     assert expanded_sql == test_case.expected_expanded_sql
-    resolved: MappedOffset = map_through_passes(
+    resolved: MappedOffset = map_expanded_offset(
         offset=test_case.probe_expanded_offset, passes=passes
     )
     assert resolved.offset == test_case.expected_authored_offset

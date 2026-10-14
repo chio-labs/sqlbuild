@@ -3,12 +3,12 @@
 use std::cell::RefCell;
 
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
-use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyResult, Python};
 use pyo3::types::{
     PyBool, PyBoolMethods, PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyStringMethods,
     PyTuple, PyTupleMethods,
 };
-use pyo3::{FromPyObject, IntoPyObject, PyErr, pyfunction, wrap_pyfunction};
+use pyo3::{FromPyObject, PyErr};
 use sqlbuild_model_config::errors::ConfigError;
 use sqlbuild_model_config::templates::errors::TemplateError;
 use sqlbuild_model_config::templates::main::expand_template_string::expand_template_string;
@@ -20,6 +20,7 @@ use sqlbuild_model_config::templates::models::{
 use sqlbuild_model_config::templates::types::TemplateHost;
 
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
+use crate::bindings::_helpers::model_config::errors::NativeConfigError;
 
 const TEMPLATE_OPEN_TOKEN: &str = "${";
 const ENVIRONMENT_READ: &str = "env";
@@ -155,10 +156,6 @@ pub(crate) struct TemplateSources<'py>(
     pub(crate) Bound<'py, PyDict>,
 );
 
-/// `allow_context`, `preserve_context_tokens`, `preserve_unknown_context` and the context label.
-#[derive(FromPyObject)]
-struct TemplateFlags(bool, bool, bool, String);
-
 /// A template error, or a Python error raised while reading values or building containers.
 pub(crate) enum Stop {
     Failure(TemplateError),
@@ -268,31 +265,28 @@ impl<'py> TemplateHost for PythonHost<'py> {
     }
 }
 
-/// Return `(value, reads)` as `expand_template_data` would, or `(error, reads)`.
-#[pyfunction]
-fn expand_config_templates<'py>(
+/// The expanded value, or the native error expansion stopped at, and the reads in order.
+pub(crate) type TemplateOutcome<'py> = (
+    Result<Bound<'py, PyAny>, Py<NativeConfigError>>,
+    Vec<(&'static str, String)>,
+);
+
+/// `value` with every template expanded under `options`, or the error, with its reads.
+pub(crate) fn expand_config_templates<'py>(
     py: Python<'py>,
-    value: Bound<'py, PyAny>,
+    value: &Bound<'py, PyAny>,
     sources: TemplateSources<'py>,
-    flags: TemplateFlags,
-) -> PyResult<Py<PyAny>> {
-    let TemplateFlags(allow_context, preserve_context_tokens, preserve_unknown_context, label) =
-        flags;
-    let options = TemplateOptions {
-        allow_context,
-        preserve_context_tokens,
-        preserve_unknown_context,
-    };
-    let host = PythonHost::new(py, sources, &label);
-    let result = expanded(&host, &value, options);
-    outcome(py, host, result, &label)
+    (options, label): (TemplateOptions, &str),
+) -> PyResult<TemplateOutcome<'py>> {
+    let host = PythonHost::new(py, sources, label);
+    let result = expanded(&host, value, options);
+    outcome(py, host, result, label)
 }
 
 /// The first `(var name, value path, UTF-8 byte offset)` of a lone surrogate in raw vars.
-#[pyfunction]
-fn lone_surrogate_site(
-    raw_values: Bound<'_, PyDict>,
-) -> PyResult<Option<(Bound<'_, PyString>, String, usize)>> {
+pub(crate) fn lone_surrogate_site<'py>(
+    raw_values: &Bound<'py, PyDict>,
+) -> PyResult<Option<(Bound<'py, PyString>, String, usize)>> {
     for (key, value) in raw_values.iter() {
         if let Some((path, offset)) = surrogate_path(&value, VALUE_PATH.to_owned())? {
             return Ok(Some((key.str()?, path, offset)));
@@ -348,13 +342,12 @@ fn first_surrogate_offset(text: &Bound<'_, PyString>) -> PyResult<Option<usize>>
     Ok(None)
 }
 
-/// Return `(resolved vars, reads)` as `expand_effective_vars` would, or `(error, reads)`.
-#[pyfunction]
-fn expand_effective_vars<'py>(
+/// The resolved effective vars, or the native error resolution stopped at, with the reads.
+pub(crate) fn resolve_effective_vars<'py>(
     py: Python<'py>,
-    raw_values: Bound<'py, PyDict>,
+    raw_values: &Bound<'py, PyDict>,
     environment: Bound<'py, PyAny>,
-) -> PyResult<Py<PyAny>> {
+) -> PyResult<TemplateOutcome<'py>> {
     let mut host = PythonHost::new(
         py,
         TemplateSources(raw_values.clone(), environment, PyDict::new(py)),
@@ -381,18 +374,13 @@ fn outcome<'py>(
     host: PythonHost<'py>,
     result: Result<Bound<'py, PyAny>, Stop>,
     label: &str,
-) -> PyResult<Py<PyAny>> {
+) -> PyResult<TemplateOutcome<'py>> {
     let value = match result {
-        Ok(value) => value,
-        Err(Stop::Failure(error)) => native_config_error(py, template_error(&error, label))?
-            .into_pyobject(py)?
-            .into_any(),
+        Ok(value) => Ok(value),
+        Err(Stop::Failure(error)) => Err(native_config_error(py, template_error(&error, label))?),
         Err(Stop::Python(error)) => return Err(error),
     };
-    Ok((value, host.into_reads())
-        .into_pyobject(py)?
-        .into_any()
-        .unbind())
+    Ok((value, host.into_reads()))
 }
 
 /// Expand every template in `value` and the containers inside it.
@@ -442,11 +430,4 @@ pub(crate) fn expanded<'py>(
             .map_err(Stop::Python);
     }
     Ok(value.clone())
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(expand_config_templates, module)?)?;
-    module.add_function(wrap_pyfunction!(expand_effective_vars, module)?)?;
-    module.add_function(wrap_pyfunction!(lone_surrogate_site, module)?)?;
-    Ok(())
 }

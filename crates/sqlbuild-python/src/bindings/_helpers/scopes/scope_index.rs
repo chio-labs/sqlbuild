@@ -897,12 +897,18 @@ impl NativeScopeIndex {
 
 /// Python's `open_native_scope_index`: the natively built index of discovered inputs.
 #[pyfunction]
-fn open_native_scope_index(
+#[pyo3(signature = (*, discovered_inputs, loaded_macros, static_macros = None))]
+pub(crate) fn open_native_scope_index(
     py: Python<'_>,
     discovered_inputs: &Bound<'_, PyAny>,
     loaded_macros: &Bound<'_, PyAny>,
-    static_macros: &Bound<'_, PyAny>,
+    static_macros: Option<Bound<'_, PyAny>>,
 ) -> PyResult<NativeScopeIndex> {
+    let static_macros: Bound<'_, PyAny> = match static_macros {
+        Some(static_macros) => static_macros,
+        None => PyTuple::empty(py).into_any(),
+    };
+    let static_macros: &Bound<'_, PyAny> = &static_macros;
     let mut walk: Walk<'_> = Walk::new(py)?;
     walk.add_models(discovered_inputs)?;
     walk.add_resources(discovered_inputs)?;
@@ -922,8 +928,30 @@ fn open_native_scope_index(
     materialise(walk, native)
 }
 
+/// Python's `build_scope_index`: the natively built, partially valid index of discovered inputs.
+#[pyfunction]
+#[pyo3(
+    name = "build_scope_index",
+    signature = (*, discovered_inputs, loaded_macros = None, static_macros = None)
+)]
+fn build_scope_index_binding(
+    py: Python<'_>,
+    discovered_inputs: &Bound<'_, PyAny>,
+    loaded_macros: Option<Bound<'_, PyAny>>,
+    static_macros: Option<Bound<'_, PyAny>>,
+) -> PyResult<Py<PyAny>> {
+    let loaded_macros: Bound<'_, PyAny> = match loaded_macros {
+        Some(loaded_macros) if !loaded_macros.is_none() => loaded_macros,
+        _ => PyDict::new(py).into_any(),
+    };
+    let native: NativeScopeIndex =
+        open_native_scope_index(py, discovered_inputs, &loaded_macros, static_macros)?;
+    Ok(native.index.clone_ref(py))
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeScopeIndex>()?;
     module.add_function(wrap_pyfunction!(open_native_scope_index, module)?)?;
+    module.add_function(wrap_pyfunction!(build_scope_index_binding, module)?)?;
     Ok(())
 }

@@ -17,10 +17,9 @@ const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
 const INVOCATION_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.command_invocation";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild.cli.commands._helpers.planning.external_refs";
-const STATIC_COMMAND_MODULE: &str = "sqlbuild.compiler.pipeline.main._static_command";
+const STATIC_COMMAND_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const AUDIT_PLAN_MODULE: &str = "sqlbuild.compiler.planner.main.commands._audit";
-const PROGRESS_REPORTER_MODULE: &str = "sqlbuild.cli.progress.classes.audit_progress_reporter";
 const COST_CONTEXT_MODULE: &str = "sqlbuild.cost.classes.cost_context";
 const EXECUTOR_RUN_MODULE: &str = "sqlbuild.executor.pipeline.main.run";
 const PROJECTION_MODULE: &str = "sqlbuild.executor.auditing.main._current_audit_result_projection";
@@ -196,7 +195,7 @@ fn prepare_run<'py>(
     let stream: Bound<'py, PyAny> = invocation.getattr("progress_stream")?;
     let use_color: Bound<'py, PyAny> = invocation.getattr("use_color")?;
     let progress: Bound<'py, PyAny> = call_with(
-        &imported(py, PROGRESS_REPORTER_MODULE, "AuditProgressReporter")?,
+        &imported(py, NATIVE_MODULE, "AuditProgressReporter")?,
         &[
             ("entries", entries.clone()),
             ("worker_limit", PyInt::new(py, worker_count).into_any()),

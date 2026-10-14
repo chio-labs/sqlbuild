@@ -11,6 +11,7 @@ from itertools import chain, repeat
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
+from sqlbuild._native import build_python_sql_run_lifecycle
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.assets import AssetContext, asset
@@ -21,9 +22,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredLoaderFunction,
     DiscoveredProjectInputs,
     DiscoveredTaskFunction,
-)
-from sqlbuild.compiler.python_nodes._helpers.run_lifecycle import (
-    build_python_sql_run_lifecycle_plan,
 )
 from sqlbuild.compiler.python_nodes._helpers.user_inventory import build_python_node_graph
 from sqlbuild.compiler.python_nodes.models import (
@@ -423,7 +421,7 @@ def assert_base_context_fields(context: BasePythonNodeContext) -> None:
 def build_lifecycle_plan_for_selected_python_names(
     *, graph: PythonNodeGraph, selected_names: frozenset[str]
 ) -> PythonSqlRunLifecyclePlan:
-    return build_python_sql_run_lifecycle_plan(
+    return build_python_sql_run_lifecycle(
         selection=PythonSqlRunSelection(sql_keys=frozenset(), python_node_names=selected_names),
         python_graph=graph,
     )

@@ -1,3 +1,4 @@
+pub(crate) mod fixture_columns;
 pub(crate) mod model_analyses;
 pub(crate) mod nullability_rules;
 pub(crate) mod oracle;

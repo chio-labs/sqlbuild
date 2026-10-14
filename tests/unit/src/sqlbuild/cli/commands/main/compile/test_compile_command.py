@@ -19,7 +19,6 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.main.execution import (
     _plan_compiled_sql_test_artifacts as plan_artifacts_module,
 )
-from sqlbuild.presentation.classes import transient_status_reporter
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileColumnContractModeTestCase,
     CompileCommandTestCase,
@@ -32,6 +31,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
 )
 from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
     NoConnectDuckDbAdapter,
+    TtyStdout,
     prepare_python_compile_project,
     prepare_rule_gated_compile_project,
     prepare_static_compile_project,
@@ -101,38 +101,9 @@ def test_given_tty_stdout_when_running_compile_then_it_persists_phase_timings(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project_dir: Path = prepare_static_compile_project(tmp_path)
-    started_messages: list[str] = []
-    completed_messages: list[str] = []
-
-    class FakeStdout:
-        def isatty(self) -> bool:
-            return True
-
-        def write(self, text: str) -> int:
-            return len(text)
-
-        def flush(self) -> None:
-            return None
-
-    class FakeStatusReporter:
-        def __init__(self, **kwargs: object) -> None:
-            del kwargs
-
-        def start(self, message: str) -> None:
-            started_messages.append(message)
-
-        def update(self, message: str) -> None:
-            started_messages.append(message)
-
-        def complete(self, message: str, *, blank_line_after: bool = False) -> None:
-            del blank_line_after
-            completed_messages.append(message)
-
-        def close(self) -> None:
-            return None
-
-    monkeypatch.setattr(sys, "stdout", FakeStdout())
-    monkeypatch.setattr(transient_status_reporter, "TransientStatusReporter", FakeStatusReporter)
+    stdout: TtyStdout = TtyStdout()
+    monkeypatch.setenv("SQLBUILD_NO_PROGRESS", "1")
+    monkeypatch.setattr(sys, "stdout", stdout)
     monkeypatch.setattr(
         runtime_adapters,
         "resolve_adapter",
@@ -140,21 +111,22 @@ def test_given_tty_stdout_when_running_compile_then_it_persists_phase_timings(
     )
 
     exit_code: int = run_compile(
-        CompileCommandRequest(project_dir=project_dir, no_sql_validation=True)
+        CompileCommandRequest(project_dir=project_dir, no_sql_validation=True, no_color=True)
     )
+    rendered_stdout: str = stdout.getvalue()
 
     assert exit_code == test_case.expected_exit_code
-    assert started_messages == [
+    for message in (
         "Discovering project...",
         "Compiling project graph...",
         "Analyzing column lineage...",
         "Validating model contracts...",
         "Evaluating built-in and custom rules...",
         "Writing compiled artifacts...",
-    ]
-    assert len(completed_messages) == len(test_case.expected_stdout_fragments)
-    for index, fragment in enumerate(test_case.expected_stdout_fragments):
-        assert completed_messages[index].startswith(f"{fragment} (")
+    ):
+        assert f"{message}\n" in rendered_stdout
+    for fragment in test_case.expected_stdout_fragments:
+        assert f"\n{fragment} (" in rendered_stdout
 
 
 @pytest.mark.parametrize(

@@ -22,9 +22,9 @@ from sqlbuild._native import cursor_parse as parse
 from sqlbuild._native import cursor_render as render
 from sqlbuild._native import cursor_sentinel_from_token as sentinel_from_token
 from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
+from sqlbuild._native import resolve_cursor_intrinsics
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.relations.main.cached_relation_exists import cached_relation_exists
-from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
 from sqlbuild.compiler.planner.main.cursor_window.cursor_window_override_flags import (
     cursor_window_override_flags,

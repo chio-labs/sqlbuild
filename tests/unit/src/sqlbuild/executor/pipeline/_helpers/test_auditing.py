@@ -18,9 +18,9 @@ from unittest.mock import DEFAULT, Mock
 
 import pytest
 
+from sqlbuild._native import AuditProgressReporter
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.cli.progress.classes.audit_progress_reporter import AuditProgressReporter
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditOutcome,

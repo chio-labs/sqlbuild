@@ -7,15 +7,15 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
+from sqlbuild._native import (
+    build_scope_lookup,
+    get_placement_validated_scope_index,
+)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSqlModelFile,
     EnumDeclaration,
 )
-from sqlbuild.compiler.scopes.main._get_placement_validated_scope_index import (
-    get_placement_validated_scope_index,
-)
-from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.models import (
     ConstantMetadata,
     DeclarationIdentity,

@@ -52,12 +52,10 @@ fn duration_span(duration: &Bound<'_, PyAny>) -> PyResult<DurationSpan> {
     })
 }
 
-/// `moment` moved forward (`direction` 1) or back (`direction` -1) by `duration`.
-#[pyfunction]
-#[pyo3(signature = (*, moment, duration, direction))]
-fn shift_by_cursor_duration<'py>(
+/// `moment` (a `date` or `datetime`) moved by `span` in `direction`, keeping its type and `tzinfo`.
+pub(crate) fn shifted_moment<'py>(
     moment: &Bound<'py, PyAny>,
-    duration: &Bound<'py, PyAny>,
+    span: &DurationSpan,
     direction: i64,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = moment.py();
@@ -71,11 +69,7 @@ fn shift_by_cursor_duration<'py>(
     } else {
         Moment::Date(civil_date(moment)?)
     };
-    let shifted: Moment = session.checked(shift_by_duration(
-        typed,
-        &duration_span(duration)?,
-        direction,
-    ))?;
+    let shifted: Moment = session.checked(shift_by_duration(typed, span, direction))?;
     match shifted {
         Moment::Timestamp { local, fold } => replaced(moment, &local, fold),
         Moment::Date(date) => call_with(
@@ -87,6 +81,17 @@ fn shift_by_cursor_duration<'py>(
             ],
         ),
     }
+}
+
+/// `moment` moved forward (`direction` 1) or back (`direction` -1) by `duration`.
+#[pyfunction]
+#[pyo3(signature = (*, moment, duration, direction))]
+fn shift_by_cursor_duration<'py>(
+    moment: &Bound<'py, PyAny>,
+    duration: &Bound<'py, PyAny>,
+    direction: i64,
+) -> PyResult<Bound<'py, PyAny>> {
+    shifted_moment(moment, &duration_span(duration)?, direction)
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

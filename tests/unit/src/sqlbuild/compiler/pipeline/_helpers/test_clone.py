@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import run_clone_pipeline_with_options
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline._helpers.clone import prepare_clone_pipeline
 from sqlbuild.compiler.pipeline.models import (
     ClonePipelineConnection,
     ClonePipelineOptions,
@@ -54,7 +54,7 @@ def test_given_clone_target_without_schema_when_compiling_then_fails_before_plan
         ValueError,
         match=f"Named target '{test_case.expected_target_name}' must explicitly set schema",
     ):
-        prepare_clone_pipeline(
+        run_clone_pipeline_with_options(
             discovered_inputs=discovered_inputs,
             adapter=PostgresAdapter(),
             origin_target_name="prod",
@@ -97,7 +97,7 @@ def test_given_clone_targets_when_compiling_then_all_projects_use_destination_co
         local_config=LocalConfig(),
     )
 
-    result: ClonePipelineResult = prepare_clone_pipeline(
+    result: ClonePipelineResult = run_clone_pipeline_with_options(
         discovered_inputs=discovered_inputs,
         adapter=PostgresAdapter(),
         origin_target_name="prod",

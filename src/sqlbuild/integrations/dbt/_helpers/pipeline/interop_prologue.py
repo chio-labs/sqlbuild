@@ -16,6 +16,7 @@ from sqlbuild._native import (
     load_dbt_manifest_index,
     plan_dbt_interop_command,
     resolve_dbt_executable,
+    resolve_effective_adapter_name,
     route_dbt_interop_args,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -50,9 +51,6 @@ from sqlbuild.integrations.dbt.models import (
     DbtManifestIndex,
 )
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
-from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
-    resolve_effective_adapter_name,
-)
 
 
 def resolve_dbt_execution_invocation(

@@ -25,7 +25,6 @@ from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
-from sqlbuild.compiler.project_assembly.types import ProjectRequestRow
 from sqlbuild.sql_values.types import CollectionRendering
 
 _PYTHON_RESOURCE_FUNCTIONS: tuple[str, ...] = ("validate_sql_syntax", "validate_hook_sql_syntax")
@@ -242,20 +241,6 @@ def python_resource_calls(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
         for name in _PYTHON_RESOURCE_FUNCTIONS
     ]
     return calls
-
-
-def record_assembly_requests(*, monkeypatch: pytest.MonkeyPatch) -> list[ProjectRequestRow]:
-    """Record every request the native project assembly receives."""
-
-    requests: list[ProjectRequestRow] = []
-    original: Callable[..., Any] = _native.assemble_project_resource_facts
-
-    def recording(request: ProjectRequestRow) -> Any:
-        requests.append(request)
-        return original(request)
-
-    monkeypatch.setattr(_native, "assemble_project_resource_facts", recording)
-    return requests
 
 
 def _write(*, path: Path, contents: str) -> int:

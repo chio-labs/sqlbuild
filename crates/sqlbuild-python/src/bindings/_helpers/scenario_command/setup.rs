@@ -26,9 +26,8 @@ use crate::bindings::_helpers::discovery::guidance::sql_analysis_guidance;
 pub(crate) const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild.compiler.pipeline.main.reject_unit_test_selectors";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
-const SCENARIO_CONFIG_MODULE: &str =
-    "sqlbuild.spec.contracts.main.resolve_effective_scenario_config";
+const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
+const SCENARIO_CONFIG_MODULE: &str = "sqlbuild._native";
 const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild.cli.commands._helpers.planning.external_refs";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";

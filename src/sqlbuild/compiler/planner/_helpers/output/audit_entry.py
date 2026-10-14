@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from sqlbuild._native import assert_no_unresolved_sql_markers, render_audit_sql
+from sqlbuild._native import (
+    assert_no_unresolved_sql_markers,
+    reads_outside_target_lineage,
+    render_audit_sql,
+    resolve_attachment_kind,
+    resolve_effective_run_scope,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
@@ -14,11 +20,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledAuditView
-from sqlbuild.compiler.planner._helpers.output.audit_scheduling import (
-    reads_outside_target_lineage,
-    resolve_attachment_kind,
-    resolve_effective_run_scope,
-)
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.spec.contracts.models import SourceEntry
 

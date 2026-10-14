@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import time
 
+from sqlbuild._native import TransientStatusReporter
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import (
     JanitorCompileContext,
@@ -15,7 +16,6 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.executor.janitor.main.plan import build_janitor_plan
 from sqlbuild.executor.janitor.models import JanitorDirectModeSettings, JanitorPlan
-from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 

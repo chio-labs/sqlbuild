@@ -8,14 +8,13 @@ use crate::bindings::_helpers::compile_attachment::effective_config::project_var
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::model_config::template_data::{early_model_templates, run_id};
 
-const TARGET_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_target_name";
-const TARGET_CONFIG_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_target_config";
+const TARGET_NAME_MODULE: &str = "sqlbuild._native";
+const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
 const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";
 const FRONTIER_CONSTANTS_MODULE: &str = "sqlbuild.compiler.frontier.constants";
 const CACHE_DIRECTORY_MODULE: &str = "sqlbuild.compiler.frontier.main.compiler_cache_directory";
-const CONTEXT_TEMPLATES_MODULE: &str =
-    "sqlbuild.compiler.compile._helpers.render.context_templates";
 const DATABASE_KEY: &str = "database";
 const SCHEMA_KEY: &str = "schema";
 
@@ -217,24 +216,10 @@ pub(crate) fn build_effective_target_namespace<'py>(
         SCHEMA_KEY,
         first_truthy([target_value(SCHEMA_KEY)?, connection_schema, default_schema])?,
     )?;
-    let run_id: Bound<'py, PyAny> = call_with(
-        &imported(py, CONTEXT_TEMPLATES_MODULE, "resolve_run_id")?,
-        &[("selected_run_id", py.None().into_bound(py))],
-    )?;
-    let resolved: Bound<'py, PyDict> = call_with(
-        &imported(
-            py,
-            CONTEXT_TEMPLATES_MODULE,
-            "resolve_early_model_templates",
-        )?,
-        &[
-            ("values", values.into_any()),
-            ("effective_vars", effective_vars),
-            ("effective_target_name", target_name.clone()),
-            ("run_id", run_id),
-        ],
-    )?
-    .downcast_into()?;
+    let run_id: Bound<'py, PyAny> = run_id(&py.None().into_bound(py))?;
+    let resolved: Bound<'py, PyDict> =
+        early_model_templates(values.as_any(), &effective_vars, (&target_name, &run_id))?
+            .downcast_into()?;
     PyTuple::new(
         py,
         [

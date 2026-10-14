@@ -10,7 +10,6 @@ import pytest
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.pipeline._helpers import analysis_selection
 from sqlbuild.compiler.pipeline.main import _plan_result as plan_result
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
 from sqlbuild.compiler.planner.models import PlanOutput
@@ -68,9 +67,7 @@ def test_given_slow_planning_connection_when_compiling_then_direct_phases_are_di
     monkeypatch.setattr(open_connection, "open_connection_with_hooks", Mock(return_value=object()))
     monkeypatch.setattr(plan_result, "build_pipeline_result", Mock(return_value=pipeline_result))
     monkeypatch.setattr(load_config, "load_rules_config", Mock(return_value=RulesConfig()))
-    monkeypatch.setattr(
-        analysis_selection, "resolve_configured_rule_selection", Mock(return_value=None)
-    )
+    monkeypatch.setattr(_native, "resolve_configured_rule_selection", Mock(return_value=None))
     monkeypatch.setattr(
         run_rules,
         "run_rules",

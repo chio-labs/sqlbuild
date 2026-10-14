@@ -15,6 +15,7 @@ use sqlbuild_core::format_command::models::LintReport;
 use sqlbuild_rules::lint_text::main::scan_fixture_null_candidates::scan_fixture_null_candidates;
 
 use crate::bindings::_helpers::boundary::panics::value_error;
+use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
@@ -26,7 +27,6 @@ use crate::bindings::_helpers::format_command::selection::{LintInputs, resolve_l
 use crate::bindings::_helpers::frontier::encoder::emit_error;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const STATUS_MODULE: &str = "sqlbuild.presentation.classes.transient_status_reporter";
 const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 const SQL_ANALYSIS_SETTING_KEY: &str = "sql_analysis";
 const DEFAULT_DIALECT: &str = "generic";
@@ -166,11 +166,8 @@ fn render_diff(py: Python<'_>, changes: &[FormatChange<'_>]) -> PyResult<()> {
     Ok(())
 }
 
-fn status_reporter<'py>(py: Python<'py>, use_color: bool) -> PyResult<Bound<'py, PyAny>> {
-    let options: Bound<'py, PyDict> = PyDict::new(py);
-    options.set_item("stream", py.import("sys")?.getattr("stderr")?)?;
-    options.set_item("use_color", use_color)?;
-    imported(py, STATUS_MODULE, "TransientStatusReporter")?.call((), Some(&options))
+fn stderr_status<'py>(py: Python<'py>, use_color: bool) -> PyResult<Bound<'py, PyAny>> {
+    status_reporter(&py.import("sys")?.getattr("stderr")?, use_color)
 }
 
 fn format_with_status<'py>(
@@ -179,7 +176,7 @@ fn format_with_status<'py>(
     use_color: bool,
 ) -> PyResult<(FormatOutcome<'py>, Bound<'py, PyAny>, f64)> {
     let started: Instant = Instant::now();
-    let status: Bound<'py, PyAny> = status_reporter(py, use_color)?;
+    let status: Bound<'py, PyAny> = stderr_status(py, use_color)?;
     status.call_method1("start", (START_MESSAGE,))?;
     match run_format(request) {
         Ok(outcome) => Ok((outcome, status, started.elapsed().as_secs_f64())),

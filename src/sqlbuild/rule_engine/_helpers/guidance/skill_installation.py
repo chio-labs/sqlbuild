@@ -7,7 +7,7 @@ from pathlib import Path
 from stat import S_IMODE
 from tempfile import NamedTemporaryFile
 
-from sqlbuild.rule_engine._helpers.engine.native import native_skill_freshness
+from sqlbuild._native import skill_freshness
 from sqlbuild.rule_engine.constants import REPLACEABLE_SKILL_STATES
 from sqlbuild.rule_engine.exceptions import RulesError
 
@@ -18,7 +18,7 @@ def install_rendered_skills(
     """Validate and atomically replace all generated skill targets."""
 
     freshness: tuple[str, ...] = tuple(
-        native_skill_freshness(
+        skill_freshness(
             content=path.read_text(encoding="utf-8") if path.is_file() else None,
             input_fingerprint=input_fingerprint,
         )

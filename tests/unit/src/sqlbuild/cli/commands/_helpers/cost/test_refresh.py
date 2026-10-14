@@ -87,7 +87,7 @@ def test_given_pending_run_when_showing_detail_then_persisted_summary_is_refresh
         lambda **kwargs: SimpleNamespace(project_config=object(), local_config=object()),
     )
     monkeypatch.setattr(
-        "sqlbuild.spec.contracts.main.resolve_effective_adapter_name.resolve_effective_adapter_name",
+        "sqlbuild._native.resolve_effective_adapter_name",
         lambda **kwargs: "snowflake",
     )
     monkeypatch.setattr(
@@ -99,7 +99,7 @@ def test_given_pending_run_when_showing_detail_then_persisted_summary_is_refresh
         lambda **kwargs: {"database": "ANALYTICS"},
     )
     monkeypatch.setattr(
-        "sqlbuild.compiler.compile.main._effective_target.build_effective_target_config",
+        "sqlbuild._native.build_effective_target_config",
         lambda **kwargs: SimpleNamespace(database=None),
     )
     request: CostCommandRequest = CostCommandRequest(
@@ -191,7 +191,7 @@ def test_given_useful_partial_when_refresh_degrades_then_persisted_summary_is_pr
         lambda **kwargs: SimpleNamespace(project_config=object(), local_config=object()),
     )
     monkeypatch.setattr(
-        "sqlbuild.spec.contracts.main.resolve_effective_adapter_name.resolve_effective_adapter_name",
+        "sqlbuild._native.resolve_effective_adapter_name",
         lambda **kwargs: "snowflake",
     )
     monkeypatch.setattr(
@@ -274,7 +274,7 @@ def test_given_persisted_ledger_failure_when_refresh_has_no_coverage_then_failur
         lambda **kwargs: SimpleNamespace(project_config=object(), local_config=object()),
     )
     monkeypatch.setattr(
-        "sqlbuild.spec.contracts.main.resolve_effective_adapter_name.resolve_effective_adapter_name",
+        "sqlbuild._native.resolve_effective_adapter_name",
         lambda **kwargs: "snowflake",
     )
     monkeypatch.setattr(

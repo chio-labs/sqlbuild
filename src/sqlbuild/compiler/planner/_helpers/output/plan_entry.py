@@ -7,26 +7,39 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlbuild._native import cursor_parse as parse
-from sqlbuild._native import cursor_render as render
-from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
 from sqlbuild._native import (
+    build_model_warnings,
+    cap_microbatch_bounds,
+    check_cursor_type_consistency,
+    count_microbatches,
+    detect_model_changes,
     get_config_bool,
     get_config_cursor_bound,
     get_config_int,
     get_config_str,
     get_config_string_tuple,
+    get_materialization_type,
     microbatch_guidance,
+    microbatch_limit_warning,
     render_source_relation,
+    replaces_incremental_relation,
     resolve_bounded_cursor_override,
     resolve_cursor_input_roles,
     resolve_effective_microbatch_batch_size,
+    resolve_lineage_reference,
+    resolve_microbatch_limit_config,
+    resolve_model_plan_action,
+    resolve_schema_actions,
+    source_binding_diagnostics,
+    validate_capped_watermark_inputs,
 )
+from sqlbuild._native import cursor_parse as parse
+from sqlbuild._native import cursor_render as render
+from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.constants import CURSOR_INPUTS_CONFIG_KEY
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.main._source_bindings import get_source_binding_diagnostics
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
@@ -45,20 +58,6 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.graph.source_load_nodes import build_source_load_map
-from sqlbuild.compiler.planner._helpers.output.cursor_type_check import (
-    check_cursor_type_consistency,
-)
-from sqlbuild.compiler.planner._helpers.output.microbatch_bounds import (
-    cap_microbatch_bounds,
-    validate_capped_watermark_inputs,
-)
-from sqlbuild.compiler.planner._helpers.output.microbatch_count import count_microbatches
-from sqlbuild.compiler.planner._helpers.output.strategy import (
-    build_model_warnings,
-    get_materialization_type,
-    resolve_model_plan_action,
-    resolve_schema_actions,
-)
 from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
     check_full_rebuild_allowed,
     describe_full_rebuild_cause,
@@ -75,7 +74,6 @@ from sqlbuild.compiler.planner._helpers.resolve.cursor_policies import (
     resolve_future_cursor_config,
     resolve_start_cursor_config,
 )
-from sqlbuild.compiler.planner._helpers.resolve.lineage import resolve_lineage_reference
 from sqlbuild.compiler.planner._helpers.resolve.refs import (
     apply_deferred_locations,
     build_function_locations,
@@ -96,17 +94,9 @@ from sqlbuild.compiler.planner._helpers.warehouse.source_deferral import (
 )
 from sqlbuild.compiler.planner.constants import MICROBATCH_CONCURRENCY_MESSAGE
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.changes._model_changes import detect_model_changes
-from sqlbuild.compiler.planner.main.changes.relation_replacement import (
-    replaces_incremental_relation,
-)
 from sqlbuild.compiler.planner.main.execution.future_cursor_safety import apply_future_cursor_safety
 from sqlbuild.compiler.planner.main.execution.future_cursor_warning import future_cursor_cap_warning
 from sqlbuild.compiler.planner.main.execution.maximum_start_warning import maximum_start_cap_warning
-from sqlbuild.compiler.planner.main.execution.microbatch_limit import (
-    _resolve_microbatch_limit_config,
-    microbatch_limit_warning,
-)
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     ChangeDetectionResult,
@@ -388,7 +378,7 @@ def build_plan_entries(
             for diagnostic in project.diagnostics
             if diagnostic.is_error and diagnostic.resource_type != CompiledResourceType.SQL_TEST
         ),
-        *get_source_binding_diagnostics(
+        *source_binding_diagnostics(
             project=project,
             columns=relations.source_warehouse_columns,
             profile=adapter.expression_inference_profile(),
@@ -930,8 +920,8 @@ def plan_model_from_change(
             values=model.config.values, key="unaccounted_partition_policy"
         ),
         microbatch_range=microbatch_range,
-        microbatch_limit=_resolve_microbatch_limit_config(values=model.config.values)[0],
-        declared_microbatch_limit_action=_resolve_microbatch_limit_config(
+        microbatch_limit=resolve_microbatch_limit_config(values=model.config.values)[0],
+        declared_microbatch_limit_action=resolve_microbatch_limit_config(
             values=model.config.values
         )[1],
         start_cursor_override=start_cursor_override,

@@ -9,7 +9,12 @@ from typing import cast
 
 import pytest
 
-from sqlbuild._native import assemble_project, build_compile_inputs, discover_project_inputs
+from sqlbuild._native import (
+    assemble_project,
+    build_compile_inputs,
+    discover_project_inputs,
+    scope_metadata_projection,
+)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView, ModelInput
 from sqlbuild.compiler.discovery.models import (
@@ -17,7 +22,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSourceFile,
     SqlHookEntry,
 )
-from sqlbuild.compiler.scopes.main.scope_metadata import scope_metadata_projection
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     ResourceIdentity,

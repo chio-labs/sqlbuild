@@ -291,7 +291,7 @@ def test_given_freshness_code_when_checking_sql_ownership_then_matches_contract(
         ),
         CustomRuleTestCase(
             description="compile input macro load passes",
-            path="src/sqlbuild/compiler/compile/main/sql_expansion_context.py",
+            path="src/sqlbuild/compiler/compile/_helpers/render/user_macros.py",
             source="loaded = load_project_macros(())\n",
             expected_fault_count=0,
         ),

@@ -1,3 +1,4 @@
+use crate::cli_text::models::CliStyle;
 use crate::progress::models::{ProgressEvent, ProgressSettings};
 use crate::terminal_events::models::TerminalRequest;
 
@@ -39,4 +40,12 @@ pub(super) struct OutputModeTestCase {
     pub(super) description: &'static str,
     pub(super) facts: crate::progress::models::OutputModeFacts,
     pub(super) expected_machine_output: bool,
+}
+
+pub(super) struct StatusSpinnerLineTestCase {
+    pub(super) description: &'static str,
+    pub(super) message: &'static str,
+    pub(super) columns: usize,
+    pub(super) style: CliStyle,
+    pub(super) expected_line: &'static str,
 }

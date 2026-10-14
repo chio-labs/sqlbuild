@@ -32,10 +32,19 @@ fn munge_whitespace(text: &str) -> Vec<char> {
     munged
 }
 
-/// `textwrap.wrap(text, width, initial_indent=..., subsequent_indent=...)`.
-pub(crate) fn wrap(text: &str, width: usize, (initial, subsequent): (&str, &str)) -> Vec<String> {
+/// `textwrap.wrap(text, width, initial_indent=..., subsequent_indent=..., break_on_hyphens=...)`.
+pub(crate) fn wrap(
+    text: &str,
+    width: usize,
+    (initial, subsequent): (&str, &str),
+    break_on_hyphens: bool,
+) -> Vec<String> {
     let characters: Vec<char> = munge_whitespace(text);
-    let mut chunks: Vec<Vec<char>> = split_chunks(&characters);
+    let mut chunks: Vec<Vec<char>> = if break_on_hyphens {
+        split_chunks(&characters)
+    } else {
+        split_whitespace_chunks(&characters)
+    };
     chunks.reverse();
     let mut lines: Vec<String> = Vec::new();
     while !chunks.is_empty() {
@@ -59,7 +68,12 @@ pub(crate) fn wrap(text: &str, width: usize, (initial, subsequent): (&str, &str)
             }
         }
         if let Some(chunk) = chunks.pop_if(|chunk| chunk.len() as i64 > available) {
-            let (head, rest) = split_long_word(chunk, line.is_empty(), length, available);
+            let (head, rest) = split_long_word(
+                chunk,
+                (line.is_empty(), break_on_hyphens),
+                length,
+                available,
+            );
             line.extend(head);
             chunks.extend(rest);
         }
@@ -77,7 +91,7 @@ pub(crate) fn wrap(text: &str, width: usize, (initial, subsequent): (&str, &str)
 /// `_handle_long_word`: the part of a too-long chunk the line takes, and what stays queued.
 fn split_long_word(
     mut chunk: Vec<char>,
-    line_is_empty: bool,
+    (line_is_empty, break_on_hyphens): (bool, bool),
     length: usize,
     width: i64,
 ) -> (Option<Vec<char>>, Option<Vec<char>>) {
@@ -91,7 +105,8 @@ fn split_long_word(
     }
     let space_left: usize = space_left as usize;
     let mut end: usize = space_left.min(chunk.len());
-    if chunk.len() > space_left
+    if break_on_hyphens
+        && chunk.len() > space_left
         && let Some(hyphen) = chunk[..space_left]
             .iter()
             .rposition(|character| *character == '-')
@@ -132,6 +147,22 @@ fn split_chunks(text: &[char]) -> Vec<Vec<char>> {
         let end: usize = chunk_end(text, start);
         chunks.push(text[start..end].to_vec());
         start = end;
+    }
+    chunks
+}
+
+/// `TextWrapper.wordsep_simple_re.split`: whitespace runs and the words between them.
+fn split_whitespace_chunks(text: &[char]) -> Vec<Vec<char>> {
+    let mut chunks: Vec<Vec<char>> = Vec::new();
+    let mut start: usize = 0;
+    while start < text.len() {
+        let space: bool = is_space(text[start]);
+        let length: usize = text[start..]
+            .iter()
+            .take_while(|character| is_space(**character) == space)
+            .count();
+        chunks.push(text[start..start + length].to_vec());
+        start += length;
     }
     chunks
 }

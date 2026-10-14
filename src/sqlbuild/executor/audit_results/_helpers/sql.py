@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 
+from sqlbuild._native import render_state_sql_literal
 from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.adapter.state_sql.main.render_state_table_create_sql import (
     render_state_table_create_sql,
@@ -54,7 +55,6 @@ from sqlbuild.executor.audit_results.constants import (
     COLUMN_VIOLATION_COUNT,
 )
 from sqlbuild.executor.audit_results.models import AuditResultRecord
-from sqlbuild.sql_values.main.render_state_literal import render_state_sql_literal
 
 _REQUIRED_COLUMNS: frozenset[str] = frozenset(
     {

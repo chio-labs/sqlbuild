@@ -97,7 +97,7 @@ def test_given_template_or_macro_column_metadata_when_attaching_then_loop_expand
         ModelConfigTierTestCase(
             description="native model config",
             expected_native_calls={
-                "expand_config_templates": 0,
+                "expand_template_data": 0,
             },
         ),
     ],

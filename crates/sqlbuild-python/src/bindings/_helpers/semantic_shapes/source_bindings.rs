@@ -9,6 +9,10 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::analysis::binding_catalog::{
     self, CASE_SENSITIVE_BINDING_DIALECTS, NATIVE_DIALECT_ALIASES, schema_validations,
 };
+use crate::bindings::_helpers::analysis::schema_request::{
+    SchemaRequestParts, schema_validation_request,
+};
+use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_sql;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::semantic_shapes::declarations::{declared_types, function_names};
 use crate::bindings::_helpers::semantic_shapes::shapes::{
@@ -21,10 +25,6 @@ const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const BINDING_UNKNOWN_TABLE_INTERNAL_CODE: &str = "B000";
-const BINDING_REQUESTS_MODULE: &str =
-    "sqlbuild.compiler.compile._helpers.analysis.binding_requests";
-const CURSOR_INTRINSICS_MODULE: &str =
-    "sqlbuild.compiler.compile._helpers.render.cursor_intrinsics";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const GRAPHLIB_MODULE: &str = "graphlib";
 const REF_KIND: &str = "ref";
@@ -267,45 +267,30 @@ fn validated_diagnostics<'py>(
     let known_functions: Object<'py> = PyTuple::new(py, function_names(&functions)?)?.into_any();
     let known_types: Object<'py> =
         PyTuple::new(py, declared_types(&functions, shapes.as_any())?)?.into_any();
-    let request_builder: Object<'py> = py
-        .import(BINDING_REQUESTS_MODULE)?
-        .getattr("get_complete_schema_binding_request")?;
-    let cursor_sql: Object<'py> = py
-        .import(CURSOR_INTRINSICS_MODULE)?
-        .getattr("cursor_intrinsics_analysis_sql")?;
-    let ignores: Object<'py> = ignores_quoted_case(project, dialect)?;
+    let ignores: bool =
+        binding_catalog::ignores_quoted_case(&project.getattr("effective_connection")?, dialect)?;
     let mut requests: Vec<Object<'py>> = Vec::with_capacity(models.len());
     for model in models {
-        let query_sql: Object<'py> = call(
-            &cursor_sql,
-            &[
-                ("sql", model.getattr("query_sql")?),
-                (
-                    "cursor_type",
-                    model
-                        .getattr("config")?
-                        .getattr("values")?
-                        .call_method1("get", ("cursor_type",))?,
-                ),
-            ],
+        let query_sql: String = analysis_cursor_sql(
+            py,
+            &model.getattr("query_sql")?.extract::<String>()?,
+            &model
+                .getattr("config")?
+                .getattr("values")?
+                .call_method1("get", ("cursor_type",))?,
         )?;
-        let request: Object<'py> = call(
-            &request_builder,
-            &[
-                ("known_functions", known_functions.clone()),
-                ("known_types", known_types.clone()),
-                ("query_sql", query_sql),
-                ("placeholders", placeholders(model)?),
-                ("dialect", dialect.clone()),
-                ("binding_schema", model_inputs(model, shapes)?.into_any()),
-            ],
-        )?;
-        requests.push(replaced(
-            &request,
-            &[
-                ("catalog", catalog.clone()),
-                ("quoted_identifiers_ignore_case", ignores.clone()),
-            ],
+        requests.push(schema_validation_request(
+            py,
+            SchemaRequestParts {
+                query_sql,
+                placeholders: placeholders(model)?,
+                dialect: dialect.clone(),
+                schema: model_inputs(model, shapes)?.into_any(),
+                known_functions: known_functions.clone(),
+                known_types: known_types.clone(),
+                catalog: catalog.clone(),
+                quoted_identifiers_ignore_case: ignores,
+            },
         )?);
     }
     let results: Object<'py> =

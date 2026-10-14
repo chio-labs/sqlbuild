@@ -180,7 +180,7 @@ fn message<'py>(
 
 /// `resolve_target_name`: the effective target, `None`, or the unknown-target message.
 #[pyfunction]
-fn effective_config_target_name<'py>(
+pub(crate) fn effective_config_target_name<'py>(
     py: Python<'py>,
     project_config: &Bound<'py, PyAny>,
     local_config: &Bound<'py, PyAny>,
@@ -202,7 +202,7 @@ fn effective_config_target_name<'py>(
 
 /// `resolve_target_config`: each merged `TargetConfig` field, or the ambiguous-connection message.
 #[pyfunction]
-fn effective_config_target_fields<'py>(
+pub(crate) fn effective_config_target_fields<'py>(
     py: Python<'py>,
     configs: (Bound<'py, PyAny>, Bound<'py, PyAny>),
     target_name: &Bound<'py, PyAny>,

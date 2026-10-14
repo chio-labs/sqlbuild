@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
-from sqlbuild.compiler.scopes.main.preview_scope_move import preview_scope_move
-from sqlbuild.compiler.scopes.main.query_scope_report import query_scope_report
+from sqlbuild._native import build_scope_lookup, preview_scope_move, query_scope_report
 from sqlbuild.compiler.scopes.models import (
     OwnershipRoot,
     ResourceIdentity,

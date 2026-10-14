@@ -34,7 +34,8 @@ fn given_help_text_when_wrapping_then_lines_match_python_textwrap() {
             text_wrap(
                 &normalize_whitespace(test_case.text),
                 test_case.width,
-                (test_case.indent, test_case.indent)
+                (test_case.indent, test_case.indent),
+                true
             ),
             test_case.expected_lines,
             "{}",

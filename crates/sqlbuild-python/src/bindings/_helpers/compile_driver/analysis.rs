@@ -13,7 +13,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 const DISCOVER_MODULE: &str = "sqlbuild._native";
 const REJECT_SELECTORS_MODULE: &str = "sqlbuild.compiler.pipeline.main.reject_unit_test_selectors";
 const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
+const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const SELECTED_GRAPH_MODULE: &str = "sqlbuild._native";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";

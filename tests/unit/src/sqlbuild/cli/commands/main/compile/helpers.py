@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -61,6 +62,13 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_t
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.helpers import (
     build_test_and_project,
 )
+
+
+class TtyStdout(io.StringIO):
+    """A captured stdout that reports a terminal."""
+
+    def isatty(self) -> bool:
+        return True
 
 
 class NoConnectDuckDbAdapter(DuckDbAdapter):
