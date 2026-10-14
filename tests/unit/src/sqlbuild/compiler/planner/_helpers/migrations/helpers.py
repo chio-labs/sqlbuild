@@ -51,6 +51,11 @@ def input_lookup(relations: dict[tuple[str, str], frozenset[str]]) -> InputColum
     return lambda kind, name: relations.get((kind, name))
 
 
+def unavailable_input_columns(kind: str, name: str) -> frozenset[str] | None:
+    """Represent an input inspection failure encountered during a rename proof."""
+    raise RuntimeError(f"cannot inspect {kind} {name}")
+
+
 def old_name_entry(
     *,
     action: str,

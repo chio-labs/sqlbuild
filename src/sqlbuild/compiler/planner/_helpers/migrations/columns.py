@@ -5,7 +5,12 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 
-from sqlbuild._native import get_config_str, model_definition_hash
+from sqlbuild._native import (
+    get_config_str,
+    identical_renames,
+    model_definition_hash,
+    rename_hints,
+)
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
@@ -16,10 +21,6 @@ from sqlbuild.compiler.migrations.main._newest_column_event import (
 from sqlbuild.compiler.migrations.main.relation_for_location import migration_relation_for_location
 from sqlbuild.compiler.migrations.models import ColumnMigrationEvent
 from sqlbuild.compiler.migrations.types import ColumnMigrationDecision, MigrationDiscovery
-from sqlbuild.compiler.planner._helpers.migrations.column_renames import (
-    identical_renames,
-    rename_hints,
-)
 from sqlbuild.compiler.planner._helpers.migrations.planning import (
     missing_origin_policy,
     planning_database,

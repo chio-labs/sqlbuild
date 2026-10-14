@@ -47,6 +47,7 @@ pub(crate) mod plan_command;
 pub(crate) mod plan_output;
 pub(crate) mod planner_changes;
 pub(crate) mod planner_identity;
+pub(crate) mod planner_migrations;
 pub(crate) mod planner_scope;
 pub(crate) mod planner_selection;
 pub(crate) mod planner_strategy;

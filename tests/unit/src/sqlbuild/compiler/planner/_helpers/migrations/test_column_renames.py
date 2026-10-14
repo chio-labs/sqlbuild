@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.planner._helpers.migrations.column_renames import (
+from sqlbuild._native import (
     identical_renames,
     rename_hints,
 )
@@ -17,11 +17,13 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations._test_types im
     IdenticalRenameTestCase,
     RenameExplainsChangeTestCase,
     RenameHintTestCase,
+    RenameLookupFailureTestCase,
     UnreadableQueryShapeTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations.helpers import (
     input_lookup,
     query_shape,
+    unavailable_input_columns,
 )
 
 _ORDERS: str = 'FROM __source("raw_orders")'
@@ -35,6 +37,12 @@ _ORDERS: str = 'FROM __source("raw_orders")'
             previous_sql=f"SELECT order_id, amount {_ORDERS}",
             current_sql=f"SELECT order_id, amount AS revenue {_ORDERS}",
             expected_renames=(("amount", "revenue"),),
+        ),
+        IdenticalRenameTestCase(
+            description="quoted Unicode names and numeric expressions retain projection order",
+            previous_sql='SELECT 12345678901234567890 AS "Öld", NULL AS missing',
+            current_sql='SELECT NULL AS absent, 12345678901234567890 AS "Néw"',
+            expected_renames=(("missing", "absent"), ("Öld", "Néw")),
         ),
         IdenticalRenameTestCase(
             description="formatting, comments, and keyword case are ignored",
@@ -381,6 +389,29 @@ def test_given_query_without_readable_output_names_when_parsing_then_returns_non
         parse_query_shape(query_sql=test_case.query_sql, dialect="duckdb")
         is test_case.expected_shape
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RenameLookupFailureTestCase(
+            description="input inspection fails",
+            expected_error="cannot inspect __source raw_orders",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_input_lookup_failure_when_proving_rename_then_propagates_error(
+    test_case: RenameLookupFailureTestCase,
+) -> None:
+    with pytest.raises(RuntimeError, match=test_case.expected_error):
+        identical_renames(
+            previous=query_shape(f"SELECT amount {_ORDERS} ORDER BY amount"),
+            current=query_shape(f"SELECT amount AS revenue {_ORDERS} ORDER BY revenue"),
+            excluded=frozenset(),
+            declared={},
+            input_columns=unavailable_input_columns,
+        )
 
 
 if __name__ == "__main__":

@@ -201,6 +201,7 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     ChangeDetectionResult,
+    ColumnRenameHint,
     CursorBounds,
     DeferralInputs,
     DirectModelVersionIdentities,
@@ -216,6 +217,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerScope,
     PlanOutput,
     PlanWarning,
+    QueryShape,
     ReferenceRename,
     SchemaAction,
     SchemaFinding,
@@ -231,6 +233,7 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import (
     CursorGrain,
     CursorType,
+    InputColumns,
     MaterializationType,
     OnSchemaChange,
     PlanAction,
@@ -4060,6 +4063,22 @@ def detect_model_changes_in_scope(
     expected_version_hashes: dict[str, str] | None = None,
     expected_metadata_jsons: dict[str, str] | None = None,
 ) -> dict[str, ChangeDetectionResult]: ...
+def identical_renames(
+    *,
+    previous: QueryShape,
+    current: QueryShape,
+    excluded: frozenset[str],
+    declared: Mapping[str, str],
+    input_columns: InputColumns,
+) -> tuple[tuple[str, str], ...]: ...
+def rename_hints(
+    *,
+    model_name: str,
+    previous: QueryShape,
+    current: QueryShape,
+    excluded: frozenset[str],
+    live_columns: frozenset[str],
+) -> tuple[ColumnRenameHint, ...]: ...
 def detect_model_changes(
     *,
     model: CompiledModelView,
