@@ -103,6 +103,26 @@ def prepare_dbt_interop_project(*, tmp_path: Path) -> Path:
     return root_dir / "sqlbuild_project"
 
 
+def write_dbt_interop_manifest(*, project_dir: Path) -> None:
+    """Parse the interop fixture's dbt project so SQLBuild can resolve its dbt refs."""
+
+    dbt_project_dir: Path = project_dir.parent / "dbt_project"
+    subprocess.run(
+        (
+            dbt_executable(),
+            "parse",
+            "--project-dir",
+            str(dbt_project_dir),
+            "--profiles-dir",
+            str(project_dir.parent / "profiles"),
+        ),
+        cwd=dbt_project_dir,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+
+
 def write_sqlbuild_defer_target_models(*, project_dir: Path) -> None:
     """Configure native SQLBuild target deferral inside a dbt interop fixture."""
 

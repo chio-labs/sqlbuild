@@ -19,6 +19,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     load_json_stdout,
     prepare_dbt_interop_project,
     skip_unless_dbt_is_runnable,
+    write_dbt_interop_manifest,
     write_sqlbuild_defer_target_models,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
@@ -373,6 +374,7 @@ def test_given_native_defer_to_when_running_dbt_interop_then_reads_deferred_targ
     skip_unless_dbt_is_runnable()
     project_dir: Path = prepare_dbt_interop_project(tmp_path=tmp_path)
     write_sqlbuild_defer_target_models(project_dir=project_dir)
+    write_dbt_interop_manifest(project_dir=project_dir)
     local_config_path: Path = project_dir / "sqlbuild_local.toml"
     local_config_path.write_text('target = "prod"\n', encoding="utf-8")
     setup_result: subprocess.CompletedProcess[str] = run_sqb(
