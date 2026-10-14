@@ -1,0 +1,166 @@
+//! Preserve event and declared-origin precedence at the inspection boundary.
+
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::planner_migrations::column_objects::config;
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
+use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
+
+pub(super) fn identity(item: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let materialized = config(item, "materialized")?;
+    Ok(materialized.eq("table")? || materialized.eq("view")?)
+}
+
+pub(super) fn history(item: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let materialized = config(item, "materialized")?;
+    Ok(materialized.eq("incremental")? || materialized.eq("snapshot")?)
+}
+
+pub(super) fn newest<'py>(
+    events: &Bound<'py, PyAny>,
+    location: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let relation = imported(
+        location.py(),
+        "sqlbuild.compiler.migrations.main.relation_for_location",
+        "migration_relation_for_location",
+    )?
+    .call1((location,))?;
+    call_with(
+        &imported(
+            location.py(),
+            "sqlbuild.compiler.migrations.main._newest_event",
+            "newest_migration_event_mentioning",
+        )?,
+        &[("events", events.clone()), ("relation", relation)],
+    )
+}
+
+pub(super) fn relation<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    imported(
+        location.py(),
+        "sqlbuild.compiler.migrations.main.relation_for_location",
+        "migration_relation_for_location",
+    )?
+    .call1((location,))
+}
+
+pub(super) fn declared<'py>(
+    declarations: &Bound<'py, PyAny>,
+    state: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let result = PyDict::new(state.py());
+    for item in declarations.try_iter()? {
+        let item = item?;
+        let fingerprint = call_with(
+            &state.getattr("model_fingerprint")?,
+            &[
+                ("location", item.getattr("origin_location")?),
+                ("model_name", item.getattr("origin_model")?),
+            ],
+        )?;
+        let explicit = item.getattr("origin_model")?;
+        let origin = if explicit.is_truthy()? {
+            explicit
+        } else if !fingerprint.is_none() {
+            fingerprint.getattr("node_name")?
+        } else {
+            state.py().None().into_bound(state.py())
+        };
+        if !origin.is_none() {
+            result.set_item(item.getattr("model_name")?, origin)?;
+        }
+    }
+    Ok(result)
+}
+
+pub(super) fn renames<'py>(
+    runtime: &Bound<'py, PyAny>,
+    names: &Bound<'py, PyDict>,
+    state: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let py = runtime.py();
+    let target = runtime
+        .getattr("project")?
+        .getattr("effective_target_name")?;
+    let ordered = PyList::empty(py);
+    let events: Vec<Bound<'py, PyAny>> = state
+        .getattr("events")?
+        .try_iter()?
+        .collect::<PyResult<_>>()?;
+    for (index, event) in events.iter().enumerate() {
+        ordered.append((
+            event.getattr("created_at")?,
+            event.getattr("event_id")?,
+            index,
+        ))?;
+    }
+    ordered.call_method0("sort")?;
+    let latest = PyDict::new(py);
+    for item in ordered.iter() {
+        let index: usize = item.get_item(2)?.extract()?;
+        let event = &events[index];
+        let event_target = event.getattr("target_name")?;
+        if event_target.is_none() || event_target.eq(&target)? {
+            latest.set_item(event.getattr("destination_model")?, event)?;
+        }
+    }
+    let result = PyDict::new(py);
+    for (name, event) in latest.iter() {
+        let origin = event.getattr("origin_model")?;
+        if names.contains(&name)? && !origin.is_none() && !names.contains(&origin)? {
+            result.set_item(name, origin)?;
+        }
+    }
+    Ok(result)
+}
+
+pub(super) fn resumed<'py>(
+    runtime: &Bound<'py, PyAny>,
+    models: &[Bound<'py, PyAny>],
+    unbuilt: &Bound<'py, PyDict>,
+    state: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let result = PyDict::new(runtime.py());
+    let target = runtime
+        .getattr("project")?
+        .getattr("effective_target_name")?;
+    let events = state.getattr("events")?;
+    for item in models {
+        let name = item.getattr("name")?;
+        if !unbuilt.contains(&name)? || !(history(item)? || identity(item)?) {
+            continue;
+        }
+        let destination = item.getattr("destination")?;
+        let event = newest(&events, &destination)?;
+        if event.is_none() {
+            continue;
+        }
+        let event_target = event.getattr("target_name")?;
+        if event
+            .getattr("destination")?
+            .call_method1("matches", (relation(&destination)?,))?
+            .is_truthy()?
+            && (event_target.is_none() || event_target.eq(&target)?)
+            && event.getattr("decision")?.eq("renamed")? == identity(item)?
+        {
+            result.set_item(name, event)?;
+        }
+    }
+    Ok(result)
+}
+
+pub(super) fn key<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
+    let schema = location.getattr("schema")?;
+    let schema = if schema.is_truthy()? {
+        schema
+    } else {
+        pyo3::types::PyString::new(location.py(), "").into_any()
+    };
+    PyTuple::new(
+        location.py(),
+        [
+            schema.call_method0("lower")?,
+            location.getattr("name")?.call_method0("lower")?,
+        ],
+    )
+}

@@ -196,11 +196,7 @@ fn discover<'py>(
         )?);
     }
     call_with(
-        &imported(
-            py,
-            "sqlbuild.compiler.planner._helpers.migrations.discovery",
-            "discover_model_migrations",
-        )?,
+        &imported(py, "sqlbuild._native", "discover_model_migrations")?,
         &[
             ("runtime", runtime.clone()),
             ("scope", scope.clone()),

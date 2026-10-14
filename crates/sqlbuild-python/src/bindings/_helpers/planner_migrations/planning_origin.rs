@@ -5,7 +5,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PySet, PySetMethods, PyTuple};
 use pyo3::{PyErr, pyfunction, wrap_pyfunction};
 
-fn location<'py>(
+pub(super) fn location<'py>(
     runtime: &Bound<'py, PyAny>,
     fields: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
