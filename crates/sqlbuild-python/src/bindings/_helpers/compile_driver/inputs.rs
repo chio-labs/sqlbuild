@@ -14,7 +14,7 @@ const DECLARATION_SCOPE_MODULE: &str = "sqlbuild._native";
 const COLLECTOR_MODULE: &str = "sqlbuild.compiler.compile._helpers.diagnostics.collector";
 const CONTEXT_TEMPLATES_MODULE: &str =
     "sqlbuild.compiler.compile._helpers.render.context_templates";
-const MACROS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.macros";
+const MACROS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.user_macros";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const ATTACH_CHECKS_MODULE: &str = "sqlbuild._native";
 const ATTACH_RESOURCES_MODULE: &str = "sqlbuild._native";

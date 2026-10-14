@@ -9,7 +9,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const DECLARATIONS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.declarations";
-const MACROS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.macros";
+const NATIVE_MODULE: &str = "sqlbuild._native";
 const CURSOR_INTRINSICS_MODULE: &str =
     "sqlbuild.compiler.compile._helpers.render.cursor_intrinsics";
 /// The `CompiledSqlScenario` fields copied from its input, in Python's keyword order.
@@ -73,7 +73,7 @@ pub(crate) fn test_model_query_overrides<'py>(
             ("lookup", lookup),
         ],
     )?;
-    let expand: Bound<'py, PyAny> = imported(py, MACROS_MODULE, "expand_sql_macros")?;
+    let expand: Bound<'py, PyAny> = py.import(NATIVE_MODULE)?.getattr("expand_sql_macros")?;
     let intrinsics: Bound<'py, PyAny> = imported(
         py,
         CURSOR_INTRINSICS_MODULE,
@@ -100,7 +100,8 @@ pub(crate) fn test_model_query_overrides<'py>(
                 ("macro_context", macro_context.clone()),
                 ("declaration_resolver", declaration_resolver.clone()),
             ],
-        )?;
+        )?
+        .getattr("sql")?;
         let query: Bound<'py, PyAny> = call_with(
             &intrinsics,
             &[

@@ -4,8 +4,8 @@ from collections.abc import Callable
 
 import pytest
 
+from sqlbuild.compiler.macro_bridge.classes.macro_bridge import run_with_macro_bridge
 from sqlbuild.compiler.macro_bridge.main.active_macro_bridge import active_macro_bridge
-from sqlbuild.compiler.macro_bridge.main.run_with_macro_bridge import run_with_macro_bridge
 from tests.unit.src.sqlbuild.compiler.macro_bridge.main._test_types import (
     MacroBridgeFailureTestCase,
     MacroBridgeSuccessTestCase,

@@ -1,4 +1,4 @@
-"""Compile-time expansion helpers for authored project SQL macros."""
+"""Project macro modules loaded and run as user code, and the context user macros read."""
 
 from __future__ import annotations
 
@@ -10,35 +10,20 @@ import sys
 import threading
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, replace
-from functools import cache, partial
+from functools import partial
 from pathlib import Path
 from types import MappingProxyType, ModuleType
 from typing import cast
 
 import sqlbuild._native as _native
-from sqlbuild._native import explicit_references_help
-from sqlbuild.compiler.compile._helpers.diagnostics.collector import report_compile_diagnostic
-from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments import (
-    call_site_sql_references,
-    typed_reference_kinds,
-)
-from sqlbuild.compiler.compile.constants import (
-    DECLARATION_REFERENCE_NAMES,
-    MACRO_TOKEN,
-)
 from sqlbuild.compiler.compile.exceptions import (
     CompileInputError,
-    MacroArgumentError,
     MacroDeclarationLookupError,
 )
 from sqlbuild.compiler.compile.models import (
-    CompilerDiagnostic,
     DeclarationResolutionContext,
-    DeclarationScopeResolver,
-    ExpansionSpan,
     LoadedMacro,
     MacroContext,
-    MacroExpansionResult,
     StaticMacroExport,
     StaticMacroFault,
     StaticMacroInventory,
@@ -48,24 +33,14 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredMacroFile,
     EnumDeclaration,
 )
-from sqlbuild.compiler.macro_bridge.constants import (
-    GENERATED_REFERENCE_MARKERS,
-)
-from sqlbuild.compiler.macro_bridge.main.active_macro_bridge import active_macro_bridge
 from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
     validate_resource_identity,
 )
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
-    ResourceIdentity,
-    UsageRecord,
 )
-from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, UsageKind
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.python_nodes.models import RELATION_RENDERER, SqlResourceRef
-from sqlbuild.python_nodes.types import SqlResourceRefKind
-from sqlbuild.spec.contracts.models import SourceLocation
+from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
 
@@ -398,157 +373,6 @@ def _rewrite_absolute_project_imports(
     return ast.Module(body=body, type_ignores=tree.type_ignores)
 
 
-def expand_sql_macros(
-    *,
-    sql: str,
-    file_path: Path,
-    loaded_macros: dict[str, LoadedMacro],
-    macro_overrides: dict[str, str] | None = None,
-    macro_context: MacroContext,
-    declaration_resolver: DeclarationScopeResolver | None = None,
-    consumer: ResourceIdentity | DeclarationIdentity | None = None,
-) -> str:
-    """Expand authored Python macros in one executable SQL string."""
-
-    expanded_sql: str
-    expanded_sql, _spans = expand_sql_macros_with_spans(
-        sql=sql,
-        file_path=file_path,
-        loaded_macros=loaded_macros,
-        macro_overrides=macro_overrides,
-        macro_context=macro_context,
-        declaration_resolver=declaration_resolver,
-        consumer=consumer,
-    )
-    return expanded_sql
-
-
-def expand_sql_macros_with_spans(
-    *,
-    sql: str,
-    file_path: Path,
-    loaded_macros: dict[str, LoadedMacro],
-    macro_overrides: dict[str, str] | None = None,
-    macro_context: MacroContext,
-    declaration_resolver: DeclarationScopeResolver | None = None,
-    consumer: ResourceIdentity | DeclarationIdentity | None = None,
-) -> tuple[str, tuple[ExpansionSpan, ...]]:
-    """Expand authored Python macros, returning the span of every substitution."""
-
-    result: MacroExpansionResult = expand_sql_macros_result(
-        sql=sql,
-        file_path=file_path,
-        loaded_macros=loaded_macros,
-        macro_overrides=macro_overrides,
-        macro_context=macro_context,
-        declaration_resolver=declaration_resolver,
-        consumer=consumer,
-    )
-    return result.sql, result.spans
-
-
-def expand_sql_macros_result(
-    *,
-    sql: str,
-    file_path: Path,
-    loaded_macros: dict[str, LoadedMacro],
-    macro_overrides: dict[str, str] | None = None,
-    macro_context: MacroContext,
-    declaration_resolver: DeclarationScopeResolver | None = None,
-    declarations: DeclarationResolutionContext | None = None,
-    consumer: ResourceIdentity | DeclarationIdentity | None = None,
-) -> MacroExpansionResult:
-    """Expand macros and retain deterministic resolved dependency facts."""
-
-    if MACRO_TOKEN not in sql:
-        return MacroExpansionResult(sql=sql)
-    if declarations is None and declaration_resolver is not None:
-        from sqlbuild.compiler.compile._helpers.render.declarations import (
-            resolve_declaration_context,
-        )
-
-        declarations = resolve_declaration_context(
-            resolver=declaration_resolver, file_path=file_path
-        )
-    expansion: _native.NativeMacroExpansion = _native.NativeMacroExpansion(
-        file_path,
-        (
-            loaded_macros,
-            {} if macro_overrides is None else macro_overrides,
-            macro_context,
-            declarations,
-            consumer,
-        ),
-        macro_context._enforce_explicit_references,
-        macro_expansion_classes(),
-    )
-    expanded_sql, spans, argument_references, dependencies, usages = expansion.expand(
-        sql, active_macro_bridge()
-    )
-    return MacroExpansionResult(
-        sql=expanded_sql,
-        spans=tuple(
-            ExpansionSpan(
-                source_start=source_start,
-                source_end=source_end,
-                output_start=output_start,
-                output_end=output_end,
-            )
-            for source_start, source_end, output_start, output_end in spans
-        ),
-        argument_references=call_site_sql_references(
-            tuple(
-                SqlResourceRef(kind=SqlResourceRefKind(kind), name=name)
-                for kind, name in argument_references
-            )
-        ),
-        dependencies=tuple(dict.fromkeys(dependencies)),
-        usages=tuple(dict.fromkeys(usages)),
-    )
-
-
-@cache
-def macro_expansion_classes() -> dict[str, object]:
-    """The classes, enums and helpers the native expansion builds facts and errors from."""
-
-    from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
-
-    return {
-        "compile_error": CompileInputError,
-        "macro_argument_error": MacroArgumentError,
-        "mismatch_error": NativeStageMismatchError,
-        "declaration_identity": DeclarationIdentity,
-        "declaration_kind": DeclarationKind,
-        "macro_kind": DeclarationKind.MACRO,
-        "usage_record": UsageRecord,
-        "runtime_usage": UsageKind.RUNTIME,
-        "resource_identity": ResourceIdentity,
-        "model_kind": ResourceKind.MODEL,
-        "resource_ref": SqlResourceRef,
-        "ref_kinds": typed_reference_kinds(),
-        "ref_functions": {
-            kind.value: function for function, kind in typed_reference_kinds().items()
-        },
-        "store_tokens": {
-            "macro_token": _native.macro_store_token,
-            "context_token": _native.context_store_token,
-        },
-        "relation_renderer": RELATION_RENDERER,
-        "invocation_context": macro_invocation_context,
-        "generated": {
-            "compiler_diagnostic": CompilerDiagnostic,
-            "report_diagnostic": report_compile_diagnostic,
-            "source_location": SourceLocation,
-            "resource_identity": ResourceIdentity,
-            "generic_syntax": SqlLexicalSyntax().native_mapping,
-            "generated_help": explicit_references_help(allowed="macro-generated references"),
-            "all_markers": list(GENERATED_REFERENCE_MARKERS),
-        },
-        "int_type": int,
-        "float_type": float,
-    }
-
-
 def _inventory_project_macros(
     *, macro_files: tuple[DiscoveredMacroFile, ...]
 ) -> StaticMacroInventory:
@@ -560,27 +384,6 @@ def _inventory_project_macros(
         trees=tuple(_parse_macro_module(macro_file=macro_file) for macro_file in macro_files),
     )
     return inventory
-
-
-def find_macro_call_names(sql: str) -> tuple[str, ...]:
-    """Return unique authored macro call names in encounter order."""
-
-    return tuple(
-        name
-        for name in _native_macro_call_names(sql=sql, nested=False)
-        if name not in DECLARATION_REFERENCE_NAMES
-    )
-
-
-def _native_macro_call_names(*, sql: str, nested: bool) -> tuple[str, ...]:
-    """Every call name Python's scan finds, declaration calls included."""
-
-    names: list[str] | None
-    message: str | None
-    names, message = _native.macro_call_names(sql, nested)
-    if names is None:
-        raise CompileInputError(message or "")
-    return tuple(names)
 
 
 def macro_invocation_context(

@@ -16,7 +16,7 @@ const RECORD_ANALYSES_MODULE: &str = "sqlbuild._native";
 const EXPLICIT_REFERENCES_MODULE: &str =
     "sqlbuild.compiler.compile._helpers.explicit_references.checks";
 const ACTIVE_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.main.active_macro_bridge";
-const RUN_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.main.run_with_macro_bridge";
+const RUN_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.classes.macro_bridge";
 
 const OPTIONAL: [&str; 5] = [
     "inference_profile",

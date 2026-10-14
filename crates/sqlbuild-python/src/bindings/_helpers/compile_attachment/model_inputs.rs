@@ -9,6 +9,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::compiled_project::loop_classes::model_loop_classes;
+use crate::bindings::_helpers::render::macro_expansion_result::macro_expansion_classes;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
@@ -22,7 +23,6 @@ const VALIDATION_MODULE: &str = "sqlbuild.compiler.compile._helpers.analysis.val
 const COLLECTOR_MODULE: &str = "sqlbuild.compiler.compile._helpers.diagnostics.collector";
 const CURSOR_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.cursor_intrinsics";
 const DECLARATIONS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.declarations";
-const MACROS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.macros";
 const TEMPLATING_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.templating";
 const UNICODE_ENVIRONMENT_MODULE: &str = "sqlbuild.compiler.compile.classes.unicode_environment";
 const PROJECT_VARS_MODULE: &str = "sqlbuild._native";
@@ -108,10 +108,7 @@ fn macro_inputs<'py>(context: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>
                 "macro_argument_error",
                 imported(py, COMPILE_ERRORS_MODULE, "MacroArgumentError")?,
             ),
-            (
-                "expansion",
-                imported(py, MACROS_MODULE, "macro_expansion_classes")?.call0()?,
-            ),
+            ("expansion", macro_expansion_classes(py)?.into_any()),
             (
                 "generic_syntax",
                 imported(py, SQL_ANALYSIS_MODELS_MODULE, "SqlLexicalSyntax")?

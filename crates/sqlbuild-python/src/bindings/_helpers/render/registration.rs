@@ -4,7 +4,7 @@ use pyo3::prelude::{Bound, PyModule, PyResult};
 
 use crate::bindings::_helpers::render::{
     declaration_expansion, declaration_indexes, macro_arguments, macro_calls, macro_expansion,
-    macro_modules,
+    macro_expansion_result, macro_modules,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -13,6 +13,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     macro_arguments::register(module)?;
     macro_calls::register(module)?;
     macro_expansion::register(module)?;
+    macro_expansion_result::register(module)?;
     macro_modules::register(module)?;
     Ok(())
 }

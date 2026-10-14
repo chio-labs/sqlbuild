@@ -1,9 +1,11 @@
-"""Per-compile state of the native macro bridge: call-site scans, call classes and the memo."""
+"""The native macro bridge over loaded user modules, and the render stage run through it."""
 
 from __future__ import annotations
 
 import logging
 import sys
+from collections.abc import Callable
+from contextvars import Token
 from pathlib import Path
 
 import sqlbuild._native as _native
@@ -17,7 +19,11 @@ from sqlbuild.compiler.macro_bridge._helpers.store_environment import (
     project_fingerprint,
     store_environment,
 )
-from sqlbuild.compiler.macro_bridge.constants import MACRO_CALL_STORE_FILE_NAME
+from sqlbuild.compiler.macro_bridge.constants import (
+    ACTIVE_MACRO_BRIDGE,
+    MACRO_CALL_STORE_FILE_NAME,
+    STORE_MODULE_PATHS,
+)
 from sqlbuild.compiler.macro_bridge.models import (
     ModuleSources,
 )
@@ -135,3 +141,28 @@ class MacroBridge:
         """Calls found in the store and calls recorded into it."""
 
         return self.memo.store_stats()
+
+
+def run_with_macro_bridge[T](*, stage: Callable[[], T]) -> T:
+    """Run `stage` once with the bridge; its errors are the Python stage's, raised as they occur."""
+
+    bridge: MacroBridge = MacroBridge()
+    token: Token[object | None] = ACTIVE_MACRO_BRIDGE.set(bridge)
+    try:
+        result: T = stage()
+    finally:
+        ACTIVE_MACRO_BRIDGE.reset(token)
+    bridge.save_store()
+    STORE_MODULE_PATHS.update(bridge.store_module_paths())
+    hits, misses, recorded = bridge.stats()
+    store_hits, store_records = bridge.store_stats()
+    logging.getLogger(__name__).debug(
+        "Native macro bridge: %d memo hits, %d store hits, %d misses, %d recorded calls, "
+        "%d stored calls",
+        hits,
+        store_hits,
+        misses,
+        recorded,
+        store_records,
+    )
+    return result

@@ -276,7 +276,7 @@ def test_given_freshness_code_when_checking_sql_ownership_then_matches_contract(
             path="src/sqlbuild/example/main/build.py",
             source=dedent(
                 """
-                from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
+                from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
 
                 loaded = load_project_macros(())
                 """

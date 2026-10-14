@@ -98,6 +98,7 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
     LoadedMacro,
     MacroContext,
+    MacroExpansionResult,
     ModelInputBuildContext,
     NativeModelConfigInputs,
     NativeModelConfigSession,
@@ -2650,7 +2651,18 @@ def substitute_placeholder_defaults(sql: str, placeholders: list[tuple[str, str]
 def fixture_projection_facts(
     sql: str, dialect: str | None, /
 ) -> tuple[list[tuple[str, str]], list[str], list[str]]: ...
-def macro_call_names(sql: str, nested: bool, /) -> tuple[list[str] | None, str | None]: ...
+def find_macro_call_names(sql: str, /) -> tuple[str, ...]: ...
+def expand_sql_macros(
+    *,
+    sql: str,
+    file_path: Path,
+    loaded_macros: dict[str, LoadedMacro],
+    macro_context: MacroContext,
+    macro_overrides: dict[str, str] | None = None,
+    declaration_resolver: DeclarationScopeResolver | None = None,
+    declarations: DeclarationResolutionContext | None = None,
+    consumer: ResourceIdentity | DeclarationIdentity | None = None,
+) -> MacroExpansionResult: ...
 def inventory_macro_modules(
     sources: list[
         tuple[str, str, list[str], list[str] | None, list[str] | None, str, str, str | None]

@@ -10,7 +10,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::frontier::stage_capture::write_stage_capture;
 
 const FRONTIER_TYPES_MODULE: &str = "sqlbuild.compiler.frontier.types";
-const RUN_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.main.run_with_macro_bridge";
+const RUN_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.classes.macro_bridge";
 
 /// Produce the frontier object for `until`, capturing it on request.
 #[pyfunction]

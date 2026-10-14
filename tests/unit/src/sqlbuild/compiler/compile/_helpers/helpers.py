@@ -9,6 +9,7 @@ from sqlbuild._native import (
     assemble_project,
     build_compile_inputs,
     discover_project_inputs,
+    expand_sql_macros,
     infer_native_query_columns,
     project_lineage_views,
 )
@@ -23,10 +24,7 @@ from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeQ
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import (
     collect_compile_diagnostics,
 )
-from sqlbuild.compiler.compile._helpers.render.macros import (
-    expand_sql_macros,
-    load_project_macros,
-)
+from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompiledDirectLogicSqlTestPayload,
@@ -325,7 +323,7 @@ def expand_typed_macro_sql(
             _enforce_explicit_references=enforce_explicit,
         ),
         consumer=ResourceIdentity(kind=ResourceKind.MODEL, name="order_summary"),
-    )
+    ).sql
 
 
 def resolve_model_references_for_adapter(*, sql: str, adapter_name: str) -> str:
