@@ -44,6 +44,9 @@ type FunctionRow = (String, String, Vec<String>, Vec<ReferenceRow>);
 /// `(references, attached (kind, name))`.
 type AuditRow = (Vec<ReferenceRow>, Option<(String, String)>);
 
+/// The request's named variables and the Python exceptions opaque ones raise, by index.
+type RequestVariables<'py> = (Vec<(String, Variable)>, Vec<Bound<'py, PyAny>>);
+
 /// How one opaque variable renders as text, or the Python exception rendering it raises.
 enum Render<'py> {
     Text(String),
@@ -91,9 +94,7 @@ fn opaque_render<'py>(value: &Bound<'py, PyAny>) -> PyResult<Render<'py>> {
 }
 
 /// Each effective var as the native request reads it, and the exceptions opaque ones raise.
-fn variables<'py>(
-    effective_vars: &Bound<'py, PyAny>,
-) -> PyResult<(Vec<(String, Variable)>, Vec<Bound<'py, PyAny>>)> {
+fn variables<'py>(effective_vars: &Bound<'py, PyAny>) -> PyResult<RequestVariables<'py>> {
     let mut rows: Vec<(String, Variable)> = Vec::new();
     let mut held: Vec<Bound<'py, PyAny>> = Vec::new();
     for item in effective_vars.call_method0("items")?.try_iter()? {
@@ -152,7 +153,7 @@ fn tags(value: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     }
     value
         .try_iter()?
-        .map(|item| Ok(item?.str()?.extract::<String>()?))
+        .map(|item| item?.str()?.extract::<String>())
         .collect()
 }
 
