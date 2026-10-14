@@ -50,7 +50,6 @@ DESCRIPTION_EXEMPT_INPUTS: dict[str, str] = {
     "command_output_sinks": "runtime command outputs, not graph resources",
     "native_session": "native parse state kept for later stages, not a project input",
 }
-SQL_ANALYSIS_OPT_OUT_ENTRY: str = "sql_analysis false"
 HOOK_DIRECTORY_NAME: str = "hooks"
 MODEL_DIRECTORY_NAME: str = "models"
 NOT_NULL_AUDIT_NAME: str = "not_null"

@@ -9,7 +9,6 @@ from typing import Any
 import pytest
 
 import sqlbuild._native as native_module
-import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stage_assembly
 from sqlbuild._native import (
     build_compile_inputs,
     build_compiled_project,
@@ -218,13 +217,12 @@ def traced_shape_batches(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ...
     """Record each shape request's expressions the binding catalog's shape cache misses."""
 
     batches: list[tuple[str, ...]] = []
-    for module in (native_stage_assembly, native_module):
-        original: Callable[..., Any] = module.infer_native_expression_source_shapes
-        monkeypatch.setattr(
-            module,
-            "infer_native_expression_source_shapes",
-            functools.partial(_traced_shapes, original=original, batches=batches),
-        )
+    original: Callable[..., Any] = native_module.infer_native_expression_source_shapes
+    monkeypatch.setattr(
+        native_module,
+        "infer_native_expression_source_shapes",
+        functools.partial(_traced_shapes, original=original, batches=batches),
+    )
     return batches
 
 

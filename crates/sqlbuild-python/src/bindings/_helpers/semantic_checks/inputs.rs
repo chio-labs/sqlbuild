@@ -1,17 +1,18 @@
 //! Compile-owned inputs of the semantic completion stage: shapes, requests and SQL test columns.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyRef, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyTuple};
 
 use crate::bindings::_helpers::analysis::binding_catalog::ignores_quoted_case;
+use crate::bindings::_helpers::analysis::schema_request::{
+    SchemaRequestParts, schema_validation_request,
+};
+use crate::bindings::_helpers::semantic_checks::resource_sql::resource_sql_diagnostics_of;
 use crate::bindings::_helpers::semantic_shapes::declarations::{declared_types, function_names};
+use crate::bindings::models::ProjectCatalog;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.analysis_session.models";
-const BINDING_REQUESTS_MODULE: &str =
-    "sqlbuild.compiler.compile._helpers.analysis.binding_requests";
-const RESOURCE_SQL_MODULE: &str = "sqlbuild.compiler.compile._helpers.diagnostics.resource_sql";
-const DATACLASSES_MODULE: &str = "dataclasses";
 
 /// The column names a metadata config value lists: a name, or the names of a list or tuple.
 pub(crate) fn column_names(value: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
@@ -106,30 +107,20 @@ pub(crate) fn revalidation_request<'py>(
         };
         schema.set_item(name, shape)?;
     }
-    let arguments: Bound<'py, PyDict> = PyDict::new(py);
-    arguments.set_item("query_sql", model.getattr("query_sql")?)?;
-    arguments.set_item("placeholders", py.None())?;
-    arguments.set_item("dialect", &dialect)?;
-    arguments.set_item(
-        "known_functions",
-        PyTuple::new(py, function_names(&functions)?)?,
-    )?;
-    arguments.set_item(
-        "known_types",
-        PyTuple::new(py, declared_types(&functions, shapes.as_any())?)?,
-    )?;
-    arguments.set_item("binding_schema", schema)?;
-    let request: Bound<'py, PyAny> = py
-        .import(BINDING_REQUESTS_MODULE)?
-        .getattr("get_complete_schema_binding_request")?
-        .call((), Some(&arguments))?;
     let ignores: bool = ignores_quoted_case(&project.getattr("effective_connection")?, &dialect)?;
-    let replaced: Bound<'py, PyDict> = PyDict::new(py);
-    replaced.set_item("catalog", project.getattr("binding_catalog")?)?;
-    replaced.set_item("quoted_identifiers_ignore_case", ignores)?;
-    py.import(DATACLASSES_MODULE)?
-        .getattr("replace")?
-        .call((request,), Some(&replaced))
+    schema_validation_request(
+        py,
+        SchemaRequestParts {
+            query_sql: model.getattr("query_sql")?.extract()?,
+            placeholders: py.None().into_bound(py),
+            known_functions: PyTuple::new(py, function_names(&functions)?)?.into_any(),
+            known_types: PyTuple::new(py, declared_types(&functions, shapes.as_any())?)?.into_any(),
+            dialect,
+            schema: schema.into_any(),
+            catalog: project.getattr("binding_catalog")?,
+            quoted_identifiers_ignore_case: ignores,
+        },
+    )
 }
 
 /// The compile-time SQL checks of audits, SQL tests and SQL hooks.
@@ -138,12 +129,12 @@ pub(crate) fn resource_sql_diagnostics<'py>(
     shapes: &Bound<'py, PyAny>,
     profile: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = project.py();
-    let arguments: Bound<'py, PyDict> = PyDict::new(py);
-    arguments.set_item("project", project)?;
-    arguments.set_item("shapes", shapes)?;
-    arguments.set_item("profile", profile)?;
-    py.import(RESOURCE_SQL_MODULE)?
-        .getattr("get_resource_sql_diagnostics")?
-        .call((), Some(&arguments))
+    let native: Bound<'py, PyAny> = project.getattr("binding_catalog")?.getattr("native")?;
+    Ok(resource_sql_diagnostics_of(
+        native.extract::<PyRef<'py, ProjectCatalog>>()?,
+        project,
+        shapes.cast::<PyDict>()?,
+        profile,
+    )?
+    .into_any())
 }

@@ -12,9 +12,9 @@ from typing import cast
 
 import pytest
 
+import sqlbuild._native as native_module
 from sqlbuild._native import build_project_graph, discover_project_inputs
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile._helpers.native_stages import sql_tests as sql_test_stage
 from sqlbuild.compiler.compile.models import (
     CompiledSqlTest,
 )
@@ -463,9 +463,7 @@ def record_native_assemblies(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]
     """
 
     answers: Counter[str] = Counter()
-    seam: Callable[..., tuple[NativeSqlTestAssembly, ...]] = (
-        sql_test_stage.assemble_native_sql_tests
-    )
+    seam: Callable[..., tuple[NativeSqlTestAssembly, ...]] = native_module.assemble_native_sql_tests
 
     def counted_assemblies(*, inputs: CompileInputsView) -> tuple[NativeSqlTestAssembly, ...]:
         assemblies: tuple[NativeSqlTestAssembly, ...] = seam(inputs=inputs)
@@ -480,7 +478,7 @@ def record_native_assemblies(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]
         )
         return assemblies
 
-    monkeypatch.setattr(sql_test_stage, "assemble_native_sql_tests", counted_assemblies)
+    monkeypatch.setattr(native_module, "assemble_native_sql_tests", counted_assemblies)
     return answers
 
 

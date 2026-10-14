@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+import sqlbuild.compiler.sql_analysis.models as sql_analysis_models
 from sqlbuild._native import (
     build_compiled_project,
     discover_project_inputs,
@@ -14,7 +15,6 @@ from sqlbuild._native import (
 from sqlbuild._native import run_cli as main
 from sqlbuild.adapter.contract.models import ColumnInfo, ExpressionInferenceProfile
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
-from sqlbuild.compiler.compile._helpers.analysis import binding_requests
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompilerDiagnostic
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
@@ -180,7 +180,7 @@ def test_given_sql_when_case_policy_enabled_then_fused_validation_is_reused(
     def repeated_binding(**kwargs: Any) -> None:
         raise AssertionError("already validated SQL was normalized and bound again")
 
-    monkeypatch.setattr(binding_requests, "get_complete_schema_binding_request", repeated_binding)
+    monkeypatch.setattr(sql_analysis_models, "SqlSchemaValidationRequest", repeated_binding)
     assert (
         main(
             [

@@ -2,12 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import infer_native_query_columns
+from sqlbuild._native import infer_native_query_columns, substitute_placeholder_defaults
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeQueryColumns
-from sqlbuild.compiler.compile._helpers.analysis.reference_names import (
-    substitute_placeholder_defaults,
-)
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
@@ -944,7 +941,7 @@ def test_given_sql_with_placeholders_when_substituting_then_returns_expected(
     test_case: SubstitutePlaceholderDefaultsTestCase,
 ) -> None:
     result: str = substitute_placeholder_defaults(
-        query_sql=test_case.query_sql, placeholders=test_case.placeholders
+        test_case.query_sql, list(test_case.placeholders.items())
     )
 
     assert result == test_case.expected_sql

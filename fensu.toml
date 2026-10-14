@@ -90,6 +90,11 @@ reason = "Fingerprint hashing and storage run natively; the package keeps the st
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
+path = "src/sqlbuild/compiler/compile/__init__.py"
+reason = "Compilation runs natively; the package keeps the compile models, views, constants, errors, the diagnostic collector and the user-macro and Python-resource glue the native compiler calls back into."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
 path = "src/sqlbuild/compiler/refactoring/__init__.py"
 reason = "Refactorings run natively; the package keeps the compiled-project input, manual-location model and error classes the native command reads and raises."
 

@@ -3,6 +3,7 @@
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::{PyCFunction, PyDict, PyDictMethods, PyFrozenSet, PyList, PyString, PyTuple};
+use sqlbuild_analysis::assembly::project::main::sql_analysis_opt_out_help::sql_analysis_opt_out_help;
 
 use crate::bindings::_helpers::attachments::cursor_intrinsics::reserved_cursor_markers;
 use crate::bindings::_helpers::compile_attachment::model_config::native_model_config_session;
@@ -21,7 +22,6 @@ const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 const DISCOVERY_CONSTANTS_MODULE: &str = "sqlbuild.compiler.discovery.constants";
 const SCOPE_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
 const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
-const VALIDATION_MODULE: &str = "sqlbuild.compiler.compile._helpers.analysis.validation";
 const COLLECTOR_MODULE: &str = "sqlbuild.compiler.compile._helpers.diagnostics.collector";
 const UNICODE_ENVIRONMENT_MODULE: &str = "sqlbuild.compiler.compile.classes.unicode_environment";
 const PROJECT_VARS_MODULE: &str = "sqlbuild._native";
@@ -42,11 +42,9 @@ fn dict<'py>(
     Ok(built)
 }
 
-/// `sql_analysis_opt_out_help(model_owned=...)`.
-fn opt_out_help<'py>(py: Python<'py>, model_owned: bool) -> PyResult<Bound<'py, PyAny>> {
-    let keywords: Bound<'py, PyDict> = PyDict::new(py);
-    keywords.set_item("model_owned", model_owned)?;
-    imported(py, VALIDATION_MODULE, "sql_analysis_opt_out_help")?.call((), Some(&keywords))
+/// The parser opt-out help as a Python string.
+fn opt_out_help(py: Python<'_>, model_owned: bool) -> PyResult<Bound<'_, PyAny>> {
+    Ok(PyString::new(py, &sql_analysis_opt_out_help(model_owned)).into_any())
 }
 
 /// The host the loop calls back into: `constant_text(*, declaration, file_path)`.

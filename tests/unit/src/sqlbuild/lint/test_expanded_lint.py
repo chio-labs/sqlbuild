@@ -7,8 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import expand_sql_with_spans, run_lint
-from sqlbuild.compiler.compile.main.map_expanded_offset import map_expanded_offset
+from sqlbuild._native import expand_sql_with_spans, map_expanded_offset, run_lint
 from sqlbuild.compiler.compile.models import MappedOffset, SqlExpansionContext
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.lint._helpers import expansion

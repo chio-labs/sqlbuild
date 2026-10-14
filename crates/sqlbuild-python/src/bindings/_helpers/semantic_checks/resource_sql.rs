@@ -36,7 +36,7 @@ struct DiagnosticClasses<'py> {
 
 /// Bind the project's audit, SQL test and SQL hook bodies on `catalog` against `shapes`.
 #[pyfunction]
-fn resource_sql_diagnostics_of<'py>(
+pub(crate) fn resource_sql_diagnostics_of<'py>(
     catalog: PyRef<'_, ProjectCatalog>,
     project: &Bound<'py, PyAny>,
     shapes: &Bound<'py, PyDict>,

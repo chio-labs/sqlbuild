@@ -243,7 +243,7 @@ fn or_empty<'py>(
     }
 }
 
-fn query_column_rows(
+pub(crate) fn query_column_rows(
     queries: &Bound<'_, PyAny>,
     profile: &Bound<'_, PyAny>,
     (types, nullability): (&Bound<'_, PyAny>, &Bound<'_, PyAny>),

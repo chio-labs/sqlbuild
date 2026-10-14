@@ -94,6 +94,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlFunctionInput,
     CompileSqlReference,
     CompileSqlScenarioInput,
+    CompileSqlTestCte,
     CompileSqlTestInput,
     CursorInputRoles,
     DeclarationResolutionContext,
@@ -101,12 +102,14 @@ from sqlbuild.compiler.compile.models import (
     DeclarationScopeResolver,
     DynamicColumnContractProof,
     ExpansionSpan,
+    FixtureColumnInference,
     FunctionArgument,
     FunctionReturnColumn,
     InferredColumn,
     LoadedMacro,
     MacroContext,
     MacroExpansionResult,
+    MappedOffset,
     ModelInputBuildContext,
     NativeModelConfigInputs,
     NativeModelConfigSession,
@@ -2823,6 +2826,9 @@ def parse_cli_arguments(
     argv: list[str], defaults: list[tuple[str, object]], *, use_color: bool, columns: int
 ) -> tuple[list[tuple[str, object]] | None, int | None]: ...
 def run_cli(argv: Sequence[str] | None = None, handlers: object | None = None) -> int: ...
+def extract_sql_test_ctes(
+    *, sql: str, file_label: str, syntax: SqlLexicalSyntax
+) -> tuple[CompileSqlTestCte, ...]: ...
 def scope_test_ctes(
     texts: list[tuple[str, str]], syntax: dict[str, object]
 ) -> list[tuple[str | None, list[tuple[str, str]]]]: ...
@@ -2860,6 +2866,12 @@ def substitute_placeholder_defaults(sql: str, placeholders: list[tuple[str, str]
 def fixture_projection_facts(
     sql: str, dialect: str | None, /
 ) -> tuple[list[tuple[str, str]], list[str], list[str]]: ...
+def map_expanded_offset(
+    *, offset: int, passes: Sequence[Sequence[ExpansionSpan]]
+) -> MappedOffset: ...
+def infer_fixture_column_facts(
+    *, query_sql: str, inference_profile: ExpressionInferenceProfile
+) -> FixtureColumnInference | None: ...
 def find_macro_call_names(sql: str, /) -> tuple[str, ...]: ...
 def build_native_declaration_contexts(
     *,
@@ -3282,6 +3294,7 @@ def serialize_hook_entries(
 def named_declaration_role_kind(*, relative_path: PurePath) -> DeclarationKind | None: ...
 def discover_model_description_inputs(*, project_dir: Path) -> DiscoveredProjectInputs: ...
 def microbatch_guidance() -> tuple[str, str]: ...
+def sql_analysis_opt_out_help(*, model_owned: bool = True) -> str: ...
 def explicit_references_help(*, allowed: str) -> str: ...
 def run_format_command(
     *,

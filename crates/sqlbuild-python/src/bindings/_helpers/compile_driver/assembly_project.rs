@@ -1,20 +1,20 @@
 //! Compiled project assembly: the project's models, resources, checks and semantic diagnostics.
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
-use pyo3::types::{PyCFunction, PyDict, PyDictMethods, PyList, PyString, PyStringMethods, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PyList, PyString, PyStringMethods, PyTuple};
 
 use sqlbuild_analysis::assembly::project::main::configured_namespace::configured_namespace;
 
 use crate::bindings::_helpers::compile_driver::assembly::AssemblyRequest;
 use crate::bindings::_helpers::compile_driver::assembly_analysis::{
-    AnalysisContext, NATIVE_STAGES_MODULE, analysis_context, and_not,
+    AnalysisContext, analysis_context, and_not,
 };
-use crate::bindings::_helpers::compile_driver::assembly_checks::{
-    compiled_sql_scenarios, test_model_query_overrides,
-};
+use crate::bindings::_helpers::compile_driver::assembly_checks::compiled_sql_scenarios;
+use crate::bindings::_helpers::compile_driver::assembly_facts::native_project_facts;
 use crate::bindings::_helpers::compile_driver::assembly_models::{
     binding_rows, compiled_models, project_binding_diagnostics,
 };
+use crate::bindings::_helpers::compile_driver::assembly_sql_tests::assembled_sql_tests;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::model_config::template_data::early_model_templates;
 use crate::bindings::_helpers::scopes::scope_errors::report_scope_index_errors;
@@ -24,8 +24,6 @@ const NATIVE_MODULE: &str = "sqlbuild._native";
 pub(crate) const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const ADAPTER_TYPES_MODULE: &str = "sqlbuild.adapter.contract.types";
 const SCENARIO_CONFIG_MODULE: &str = "sqlbuild._native";
-const SQL_TESTS_MODULE: &str = "sqlbuild.compiler.compile._helpers.native_stages.sql_tests";
-const RECOVERY_MODULE: &str = "sqlbuild.compiler.compile._helpers.diagnostics.recovery";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const SOURCE_SLOT: &str = "source";
 const SEED_SLOT: &str = "seed";
@@ -82,26 +80,7 @@ pub(crate) fn assembled_project<'py>(
     } else {
         context.analyses.getattr("session")?
     };
-    let native: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_STAGES_MODULE, "native_project_facts")?,
-        &[
-            ("inputs", inputs.clone()),
-            ("dialect", context.profile.getattr("sql_analysis_dialect")?),
-            ("analysis_model_names", names.clone()),
-            ("analyses", context.analyses.clone()),
-            ("session", native_session.clone()),
-            ("column_types_by_table", context.column_types.clone()),
-            (
-                "authoritative_column_types_by_table",
-                context.complete_schemas.clone(),
-            ),
-            ("column_nullability_by_table", context.nullability.clone()),
-            (
-                "dynamic_families_by_table",
-                context.dynamic_families.clone(),
-            ),
-        ],
-    )?;
+    let native: Bound<'py, PyAny> = native_project_facts(inputs, &context, names, &native_session)?;
     let resources: Bound<'py, PyAny> = native.getattr("resources")?;
     let scope_index: Bound<'py, PyAny> = scope_index_with_compile_usages(inputs)?;
     report_scope_index_errors(&scope_index)?;
@@ -117,7 +96,7 @@ pub(crate) fn assembled_project<'py>(
     let project: Bound<'py, PyAny> = project_view(inputs, &fields, &models)?;
     let binding_results: Bound<'py, PyDict> = binding_rows(&context.analyses)?;
     call_with(
-        &imported(py, RECOVERY_MODULE, "complete_semantic_diagnostics")?,
+        &imported(py, NATIVE_MODULE, "complete_semantic_project")?,
         &[
             ("project", project),
             ("profile", context.profile.clone()),
@@ -128,7 +107,7 @@ pub(crate) fn assembled_project<'py>(
                     &inputs.getattr("no_sql_validation")?,
                 )?,
             ),
-            ("native_session", native_session),
+            ("session", native_session),
             ("binding_results", binding_results.into_any()),
         ],
     )
@@ -270,27 +249,7 @@ fn project_fields<'py>(
     ] {
         fields.set_item(name, compiled_resources(inputs, resources, kind)?)?;
     }
-    let inputs_owned: pyo3::Py<PyAny> = inputs.clone().unbind();
-    let overrides: Bound<'py, PyCFunction> = PyCFunction::new_closure(
-        py,
-        None,
-        None,
-        move |arguments: &Bound<'_, PyTuple>, _: Option<&Bound<'_, PyDict>>| {
-            let py: Python<'_> = arguments.py();
-            test_model_query_overrides(&arguments.get_item(0)?, inputs_owned.bind(py))
-                .map(|overrides| overrides.into_any().unbind())
-        },
-    )?;
-    fields.set_item(
-        "sql_tests",
-        call_with(
-            &imported(py, SQL_TESTS_MODULE, "assemble_sql_tests")?,
-            &[
-                ("inputs", inputs.clone()),
-                ("macro_mock_queries", overrides.into_any()),
-            ],
-        )?,
-    )?;
+    fields.set_item("sql_tests", assembled_sql_tests(inputs)?)?;
     fields.set_item("sql_scenarios", compiled_sql_scenarios(inputs)?)?;
     for name in ["loader_functions", "hook_functions"] {
         fields.set_item(name, discovered.getattr(name)?)?;

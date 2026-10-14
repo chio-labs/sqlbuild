@@ -4,6 +4,8 @@ mod configured_namespace;
 mod environment_names;
 #[path = "tests/helpers.rs"]
 mod helpers;
+#[path = "tests/test_opt_out_help.rs"]
+mod opt_out_help;
 #[path = "tests/test_project_assembly.rs"]
 mod project_assembly;
 #[path = "tests/test_types.rs"]

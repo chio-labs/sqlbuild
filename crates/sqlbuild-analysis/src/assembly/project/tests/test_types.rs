@@ -92,3 +92,9 @@ pub(crate) struct ConfiguredNamespaceTestCase {
     pub(crate) value: &'static str,
     pub(crate) expected_namespace: Option<&'static str>,
 }
+
+pub(crate) struct OptOutHelpTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) model_owned: bool,
+    pub(crate) expected_help: &'static str,
+}
