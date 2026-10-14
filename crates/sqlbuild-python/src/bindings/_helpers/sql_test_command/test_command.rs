@@ -36,8 +36,6 @@ const STATIC_COMMAND_MODULE: &str = "sqlbuild.compiler.pipeline.main._static_com
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const TEST_PLAN_MODULE: &str = "sqlbuild.compiler.planner.main.commands._sql_test";
 const PLANNER_ERRORS: &str = "sqlbuild.compiler.planner.exceptions";
-const NESTED_PROGRESS_MODULE: &str =
-    "sqlbuild.cli.progress.classes.nested_command_progress_callbacks";
 const PROGRESS_MODELS: &str = "sqlbuild.cli.progress.models";
 const STATUS_REPORTER_MODULE: &str = "sqlbuild.presentation.classes.transient_status_reporter";
 const EXECUTOR_PIPELINE_MODELS: &str = "sqlbuild.executor.pipeline.models";
@@ -486,7 +484,7 @@ fn run_tests<'py>(
     }
     let worker_count: i64 = concurrency.min(i64::try_from(test_count).unwrap_or(i64::MAX));
     let progress: Bound<'py, PyAny> = call_with(
-        &imported(py, NESTED_PROGRESS_MODULE, "NestedCommandProgressCallbacks")?,
+        &imported(py, NATIVE_MODULE, "NestedCommandProgressCallbacks")?,
         &[
             ("total", PyInt::new(py, test_count).into_any()),
             ("label", text(py, "test")),

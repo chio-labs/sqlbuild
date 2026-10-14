@@ -26,6 +26,7 @@ pub mod janitor_text;
 pub mod json;
 pub mod load_command;
 pub mod models;
+pub mod nested_progress;
 pub mod panics;
 pub mod plan_display;
 pub mod posix_path;

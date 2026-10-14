@@ -10,6 +10,7 @@ from io import StringIO
 import pytest
 
 from sqlbuild._native import (
+    NestedCommandProgressCallbacks,
     build_test_expectation_rows,
     resolve_test_name_width,
     write_execution_header,
@@ -22,9 +23,6 @@ from sqlbuild.cli.commands.classes.build_progress_callbacks import (
     _aggregate_audit_results,
     _truncate_name,
     format_build_footer,
-)
-from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
-    NestedCommandProgressCallbacks,
 )
 from sqlbuild.cli.progress.models import AuditDisplayEntry, NestedProgressChildRow
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope

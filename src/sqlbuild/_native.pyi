@@ -3191,6 +3191,55 @@ class LoadProgressReporter:
     def clear_transient_line(self) -> None: ...
     def redraw_transient_line(self) -> None: ...
 
+class AuditProgressReporter:
+    def __init__(
+        self,
+        *,
+        entries: tuple[AuditPlanEntry, ...],
+        worker_limit: int,
+        stream: TextIO,
+        use_color: bool,
+    ) -> None: ...
+    def set_result_callback(self, callback: Callable[[AuditExecutionResult], None]) -> None: ...
+    def on_item_start(self, entry: AuditPlanEntry) -> None: ...
+    def on_item_complete(self, result: AuditExecutionResult) -> None: ...
+    def on_item_physical_complete(self, result: AuditExecutionResult) -> None: ...
+    def on_item_error(self, entry: AuditPlanEntry) -> None: ...
+    def close(self) -> None: ...
+    def clear_transient_line(self) -> None: ...
+    def redraw_transient_line(self) -> None: ...
+
+class NestedCommandProgressCallbacks:
+    def __init__(
+        self,
+        *,
+        total: int,
+        label: str,
+        stream: TextIO,
+        use_color: bool,
+        name_width: int = 50,
+        concurrency: int = 1,
+    ) -> None: ...
+    def on_item_start(
+        self, *, group_name: str, item_name: str, canonical_resource_name: str | None = None
+    ) -> None: ...
+    def on_item_complete(
+        self,
+        *,
+        group_name: str,
+        item_name: str,
+        status_text: str,
+        detail: str = "",
+        error_code: str | None = None,
+        error_help: str | None = None,
+        error_message: str | None = None,
+        child_rows: tuple[NestedProgressChildRow, ...] = (),
+        canonical_resource_name: str | None = None,
+        canonical_resource_id: str | None = None,
+    ) -> None: ...
+    def clear_transient_line(self) -> None: ...
+    def redraw_transient_line(self) -> None: ...
+
 def observe_source_freshness_json(
     *,
     adapter: object,
