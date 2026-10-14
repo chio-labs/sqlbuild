@@ -54,7 +54,10 @@ pub(crate) fn config_str<'py>(
 /// An authored boolean, or `None` when the key is absent or `None`.
 #[pyfunction(name = "get_config_bool")]
 #[pyo3(signature = (*, values, key))]
-fn config_bool<'py>(values: &Bound<'py, PyAny>, key: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
+pub(crate) fn config_bool<'py>(
+    values: &Bound<'py, PyAny>,
+    key: &str,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
     let Some(value) = authored(values, key)? else {
         return Ok(None);
     };
@@ -67,7 +70,7 @@ fn config_bool<'py>(values: &Bound<'py, PyAny>, key: &str) -> PyResult<Option<Bo
 /// An authored sequence of strings as a tuple, or `None` when absent or `None`.
 #[pyfunction(name = "get_config_string_tuple")]
 #[pyo3(signature = (*, values, key))]
-fn config_string_tuple<'py>(
+pub(crate) fn config_string_tuple<'py>(
     values: &Bound<'py, PyAny>,
     key: &str,
 ) -> PyResult<Option<Bound<'py, PyTuple>>> {
@@ -87,7 +90,10 @@ fn config_string_tuple<'py>(
 /// An authored integer, excluding booleans, or `None` when absent or `None`.
 #[pyfunction(name = "get_config_int")]
 #[pyo3(signature = (*, values, key))]
-fn config_int<'py>(values: &Bound<'py, PyAny>, key: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
+pub(crate) fn config_int<'py>(
+    values: &Bound<'py, PyAny>,
+    key: &str,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
     let Some(value) = authored(values, key)? else {
         return Ok(None);
     };
@@ -100,7 +106,7 @@ fn config_int<'py>(values: &Bound<'py, PyAny>, key: &str) -> PyResult<Option<Bou
 /// A cursor bound as text from a string, integer, date or datetime.
 #[pyfunction(name = "get_config_cursor_bound")]
 #[pyo3(signature = (*, values, key))]
-fn config_cursor_bound<'py>(
+pub(crate) fn config_cursor_bound<'py>(
     values: &Bound<'py, PyAny>,
     key: &str,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {

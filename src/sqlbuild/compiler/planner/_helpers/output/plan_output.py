@@ -6,6 +6,7 @@ from sqlbuild._native import (
     build_relation_fixture_context,
     build_selected_audit_entries,
     build_source_load_entries,
+    extract_seed_columns,
     plan_sql_tests,
     upstream_loader_dependency_names,
 )
@@ -28,7 +29,6 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.output.plan_entry import (
     build_model_materializations,
-    extract_seed_columns,
     scope_overlaps,
 )
 from sqlbuild.compiler.planner._helpers.resolve.resolve import resolve_function_sql

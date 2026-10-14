@@ -219,6 +219,7 @@ from sqlbuild.compiler.planner.models import (
     CursorInputEvidence,
     CursorOverridePair,
     CursorOverrides,
+    CursorInputRelation,
     DeferralInputs,
     DirectModelVersionIdentities,
     EmptyCursorInputDecision,
@@ -449,6 +450,7 @@ from sqlbuild.spec.contracts.models import (
     SourceEntry,
     SourceFreshnessAgePolicy,
     SourceLocation,
+    StartCursorsConfig,
     TargetConfig,
 )
 from sqlbuild.spec.contracts.types import (
@@ -5022,6 +5024,62 @@ def build_model_warnings(
     on_schema_change: OnSchemaChange | None,
     type_enforcement: bool,
 ) -> tuple[PlanWarning, ...]: ...
+def validate_source_cursor_input_columns(
+    *,
+    model: CompiledModelView,
+    cursor_column: str | None,
+    models_by_name: dict[str, CompiledModelView] | None = None,
+    functions_by_name: dict[str, CompiledFunctionView] | None = None,
+    source_map: dict[str, SourceEntry] | None = None,
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
+) -> None: ...
+def build_cursor_input_relations(
+    *,
+    model: CompiledModelView,
+    adapter: BaseAdapter,
+    model_locations: dict[str, CompiledRelationLocation],
+    models_by_name: dict[str, CompiledModelView],
+    functions_by_name: dict[str, CompiledFunctionView] | None = None,
+    seed_locations: dict[str, CompiledRelationLocation],
+    source_map: dict[str, SourceEntry],
+    cursor_column: str | None,
+    runtime_cursor_producer_names: frozenset[str],
+) -> tuple[CursorInputRelation, ...]: ...
+def runtime_cursor_producer_names(
+    *, scope: PlannerScope, source_map: dict[str, SourceEntry]
+) -> frozenset[str]: ...
+def resolve_microbatch_lookback(
+    *, model: CompiledModelView, effective_grain: str | None = None
+) -> str | None: ...
+def extract_seed_columns(seed: CompiledSeedView) -> tuple[ColumnInfo, ...]: ...
+def assemble_model_plan_entry(
+    *,
+    model: CompiledModelView,
+    adapter: BaseAdapter,
+    snapshot: WarehouseSnapshot,
+    change_result: ChangeDetectionResult,
+    action: PlanAction,
+    reason: PlanReason,
+    materialization_type: MaterializationType,
+    resolved_sql: str,
+    sql_analysis_enabled: bool,
+    pre_hooks: object,
+    post_hooks: object,
+    cursor_column: str | None,
+    cursor_input_relations: tuple[CursorInputRelation, ...],
+    runtime_owned_cursor_bounds: bool,
+    cursor_bounds: CursorBounds | None,
+    microbatch_range: CursorBounds | None,
+    empty_cursor_inputs: tuple[str, ...],
+    waiting_on_empty_inputs: bool,
+    backfill: BackfillResult,
+    start_cursor_override: str | None,
+    end_cursor_override: str | None,
+    future_cursor_config: FutureCursorsConfig | None,
+    start_cursor_config: StartCursorsConfig | None,
+    invocation_time: datetime | None,
+    effective_grain: str | None,
+) -> tuple[ModelPlanEntry, tuple[PlanWarning, ...]]: ...
 def plan_audit(
     *,
     audit: CompiledAuditView,

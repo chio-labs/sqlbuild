@@ -45,7 +45,10 @@ fn version_identity_config<'py>(config_values: &Bound<'py, PyAny>) -> PyResult<B
 }
 
 /// `value or {}`.
-fn or_empty<'py>(value: Option<Bound<'py, PyAny>>, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn or_empty<'py>(
+    value: Option<Bound<'py, PyAny>>,
+    py: Python<'py>,
+) -> PyResult<Bound<'py, PyAny>> {
     match value {
         Some(value) if value.is_truthy()? => Ok(value),
         _ => Ok(PyDict::new(py).into_any()),

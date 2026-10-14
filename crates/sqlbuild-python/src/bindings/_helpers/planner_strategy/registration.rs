@@ -18,6 +18,30 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         super::audit_entries::build_selected_audit_entries,
         module
     )?)?;
+    module.add_function(wrap_pyfunction!(
+        super::cursor_inputs::reject_unexposed_cursor_input_columns,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        super::cursor_inputs::build_cursor_input_relations,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        super::cursor_inputs::runtime_cursor_producer_names,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        super::model_entries::assemble_model_plan_entry,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        super::model_entries::resolve_microbatch_lookback,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        super::model_entries::extract_seed_columns,
+        module
+    )?)?;
     audits::register(module)?;
     cursor_types::register(module)?;
     fixture_completion::register(module)?;

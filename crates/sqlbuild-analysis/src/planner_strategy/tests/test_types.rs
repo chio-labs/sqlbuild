@@ -1,8 +1,11 @@
 use std::collections::BTreeSet;
 
+use sqlbuild_core::plan_display::errors::UnknownCursorGrain;
+
 use crate::planner_strategy::models::{
-    AuditAttachmentKind, CapDirection, CappedBound, ChangeFacts, CursorType, MaterializationType,
-    PlanAction, PlanReason, SchemaActionRow, WarningRow,
+    AuditAttachmentKind, CapDirection, CappedBound, ChangeFacts, CursorInputColumnCheck,
+    CursorType, LookbackConfig, MaterializationType, PlanAction, PlanReason, SchemaActionRow,
+    WarningRow,
 };
 
 pub(super) struct ActionTestCase {
@@ -80,4 +83,23 @@ pub(super) struct Steps;
 /// `orders` reads `customers` and the `discount` function; `discount` reads `products`; `customers` is a microbatch model reading `events` as its watermark input.
 pub(super) struct Lineage {
     pub(super) capped: BTreeSet<String>,
+}
+
+pub(super) struct CursorInputColumnTestCase {
+    pub(super) description: &'static str,
+    pub(super) check: CursorInputColumnCheck,
+    pub(super) expected_failure: Option<(String, &'static str)>,
+}
+
+pub(super) struct LookbackTestCase {
+    pub(super) description: &'static str,
+    pub(super) config: LookbackConfig,
+    pub(super) expected_lookback: Result<Option<String>, UnknownCursorGrain>,
+}
+
+pub(super) struct TableTypeDdlTestCase {
+    pub(super) description: &'static str,
+    pub(super) ddl: &'static str,
+    pub(super) table_type: &'static str,
+    pub(super) expected_ddl: &'static str,
 }

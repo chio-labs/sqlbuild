@@ -76,3 +76,13 @@ pub const DECIMAL_TYPE_NAMES: [&str; 3] = ["DECIMAL", "NUMERIC", "NUMBER"];
 pub const POLYGLOT_CUSTOM_TYPE_NAME: &str = "CUSTOM";
 /// The dialect cursor type classification parses unknown types with.
 pub const GENERIC_DIALECT: &str = "generic";
+/// Error code of an authored cursor input column its input does not expose.
+pub const CURSOR_INPUT_COLUMN_ERROR_CODE: &str = "S302";
+/// Incremental strategies whose microbatches replay one batch by default.
+pub const IDEMPOTENT_MICROBATCH_STRATEGIES: [&str; 2] = ["delete_insert", "merge"];
+/// The table type that drops the adapter's transient DDL keyword.
+pub const PERMANENT_TABLE_TYPE: &str = "permanent";
+/// The transient table DDL a permanent table rewrites once.
+pub const TRANSIENT_TABLE_DDL: &str = "TRANSIENT TABLE";
+/// The permanent table DDL replacing the transient keyword.
+pub const PERMANENT_TABLE_DDL: &str = "TABLE";

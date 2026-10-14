@@ -1,6 +1,7 @@
 pub(crate) mod audit_entries;
 pub(crate) mod audits;
 pub(crate) mod constants;
+pub(crate) mod cursor_inputs;
 pub(crate) mod cursor_types;
 pub(crate) mod fixture_completion;
 pub(crate) mod fixture_context;
@@ -13,6 +14,7 @@ pub(crate) mod fixture_types;
 pub(crate) mod fixture_values;
 pub(crate) mod lineage;
 pub(crate) mod microbatches;
+pub(crate) mod model_entries;
 pub(crate) mod models;
 pub(crate) mod registration;
 pub(crate) mod strategy;

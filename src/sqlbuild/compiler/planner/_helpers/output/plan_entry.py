@@ -8,56 +8,44 @@ from decimal import Decimal
 from typing import Any
 
 from sqlbuild._native import (
+    assemble_model_plan_entry,
     audit_is_selected,
-    build_model_warnings,
+    build_cursor_input_relations,
     build_source_load_map,
     cap_microbatch_bounds,
-    check_cursor_type_consistency,
     count_microbatches,
     detect_model_changes,
-    get_config_bool,
     get_config_cursor_bound,
-    get_config_int,
     get_config_str,
-    get_config_string_tuple,
     get_materialization_type,
     microbatch_guidance,
     microbatch_limit_warning,
-    render_source_relation,
     replaces_incremental_relation,
     resolve_bounded_cursor_override,
-    resolve_cursor_input_roles,
     resolve_effective_microbatch_batch_size,
-    resolve_lineage_reference,
-    resolve_microbatch_limit_config,
+    resolve_microbatch_lookback,
     resolve_model_plan_action,
-    resolve_schema_actions,
+    runtime_cursor_producer_names,
     source_binding_diagnostics,
     validate_capped_watermark_inputs,
+    validate_source_cursor_input_columns,
 )
-from sqlbuild._native import cursor_parse as parse
 from sqlbuild._native import cursor_render as render
 from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo
-from sqlbuild.compiler.compile.constants import CURSOR_INPUTS_CONFIG_KEY
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
     CompilerDiagnostic,
-    CompileSqlReference,
-    CursorInputRoles,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledAuditView,
-    CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
-    CompiledSeedView,
 )
-from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
     check_full_rebuild_allowed,
     describe_full_rebuild_cause,
@@ -119,41 +107,30 @@ from sqlbuild.compiler.planner.models import (
     PlannerScope,
     PlanWarning,
     ResolvedModelAction,
-    SchemaAction,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
-    ContractPolicy,
     CursorGrain,
     CursorType,
-    GraphResourceKind,
     IncrementalMode,
-    IncrementalStrategy,
     MaterializationType,
     MicrobatchStrategy,
-    OnSchemaChange,
     PlanAction,
     PlanReason,
     WarningSeverity,
 )
-from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.cursor_algebra.models import TimestampValue
 from sqlbuild.cursor_algebra.types import BoundSentinel
 from sqlbuild.spec.contracts.models import (
     FutureCursorsConfig,
     LocalConfig,
     ProjectConfig,
-    SchemaColumn,
-    SchemaDynamicColumnFamily,
     SourceEntry,
     StartCursorsConfig,
 )
-from sqlbuild.spec.contracts.types import MicrobatchLimitAction, TableType
-
-_IDEMPOTENT_MICROBATCH_STRATEGIES: frozenset[IncrementalStrategy] = frozenset(
-    (IncrementalStrategy.DELETE_INSERT, IncrementalStrategy.MERGE)
-)
+from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 
 
 @dataclass(frozen=True)
@@ -169,33 +146,6 @@ class _MicrobatchRangeInputs:
     invocation_time: datetime | None
     full_refresh: bool
     replaces_relation: bool = False
-
-
-@dataclass(frozen=True)
-class _ModelPlanConfig:
-    incremental_strategy: str | None
-    incremental_mode: str | None
-    microbatch_strategy: str | None
-    cursor_watermark_mode: str | None
-    batch_size: str | None
-    snapshot_strategy: str | None
-    updated_at_column: str | None
-    check_columns: tuple[str, ...]
-    observed_at_column: str | None
-    historical_input: str | None
-    valid_from_column: str | None
-    valid_to_column: str | None
-    initial_valid_from: str | None
-    invalidate_hard_deletes: bool
-    snapshot_full_refresh: str | None
-    snapshot_schema_change: str | None
-
-
-@dataclass(frozen=True)
-class _CustomMaterializationConfig:
-    name: str | None
-    config: dict[str, object]
-    placeholders: dict[str, str]
 
 
 def build_planner_relations_context(
@@ -405,7 +355,7 @@ def build_plan_entries(
     end_cursor_override: str | None = inputs.end_cursor_override
     entries: list[ModelPlanEntry] = []
     warnings: list[PlanWarning] = []
-    runtime_cursor_producer_names: frozenset[str] = _runtime_cursor_producer_names(
+    runtime_producer_names: frozenset[str] = runtime_cursor_producer_names(
         scope=scope,
         source_map=relations.source_map,
     )
@@ -444,7 +394,7 @@ def build_plan_entries(
                 source_map=relations.source_read_map,
                 source_warehouse_columns=relations.source_warehouse_columns,
                 star_exclude_keyword=relations.star_exclude_keyword,
-                runtime_cursor_producer_names=runtime_cursor_producer_names,
+                runtime_cursor_producer_names=runtime_producer_names,
                 future_cursor_config=inputs.future_cursor_config,
                 start_cursor_config=inputs.start_cursor_config,
                 invocation_time=inputs.invocation_time,
@@ -728,41 +678,11 @@ def plan_model_from_change(
         full_rebuild_cause=full_rebuild_cause,
     )
 
-    on_schema_change: OnSchemaChange | None = _get_on_schema_change(model)
-    schema_actions: tuple[SchemaAction, ...] = resolve_schema_actions(
-        schema_findings=change_result.schema_findings,
-        on_schema_change=on_schema_change,
-    )
-
-    type_enforcement: bool = _get_type_enforcement(model)
-    declared_columns: tuple[ColumnInfo, ...] = _get_declared_columns(model)
-    contract_enforced: bool = model.config.values.get("contract") == ContractPolicy.ENFORCED
-    contract_columns: tuple[ColumnInfo, ...] = _get_contract_columns(model)
-    contract_dynamic_columns: tuple[SchemaDynamicColumnFamily, ...] = (
-        model.schema_entry.dynamic_columns if model.schema_entry is not None else ()
-    )
-    unique_key: tuple[str, ...] = _get_unique_key(model)
-    warehouse_columns: tuple[ColumnInfo, ...] = snapshot.existing_columns.get(model.name, ())
-
-    warnings: tuple[PlanWarning, ...] = build_model_warnings(
-        model_name=model.name,
-        materialization_type=materialization_type,
-        change_result=change_result,
-        schema_actions=schema_actions,
-        on_schema_change=on_schema_change,
-        type_enforcement=type_enforcement,
-    )
-
     pre_hooks, post_hooks = resolve_model_hook_entries(
         model=model,
         adapter=adapter,
         context=context,
         external_sql_reference_resolver=external_sql_reference_resolver,
-    )
-    cursor_type: str | None = get_config_str(values=model.config.values, key="cursor_type")
-    cursor_grain: str | None = get_config_str(values=model.config.values, key="cursor_grain")
-    cursor_start: str | None = get_config_cursor_bound(
-        values=model.config.values, key="cursor_start"
     )
     effective_future_cursor_config, effective_start_cursor_config = _resolve_cursor_safety_configs(
         model=model, context=context
@@ -772,7 +692,7 @@ def plan_model_from_change(
         models_by_name=context.models_by_name,
         functions_by_name=context.functions_by_name,
     )
-    cursor_input_relations: tuple[CursorInputRelation, ...] = _build_cursor_input_relations(
+    cursor_input_relations: tuple[CursorInputRelation, ...] = build_cursor_input_relations(
         model=model,
         adapter=adapter,
         model_locations=context.model_locations,
@@ -783,8 +703,8 @@ def plan_model_from_change(
         cursor_column=cursor_column,
         runtime_cursor_producer_names=context.runtime_cursor_producer_names,
     )
-    runtime_owned_cursor_bounds: bool = _has_runtime_owned_cursor_watermarks(
-        cursor_input_relations
+    runtime_owned_cursor_bounds: bool = any(
+        relation.is_runtime_owned for relation in cursor_input_relations
     ) and not (start_cursor_override is not None and end_cursor_override is not None)
     cursor_bounds: CursorBounds | None = _compute_plan_cursor_bounds(
         model=model,
@@ -809,18 +729,6 @@ def plan_model_from_change(
         cursor_overrides=cursor_overrides,
     )
 
-    cursor_type_warning: PlanWarning | None = check_cursor_type_consistency(
-        model_name=model.name,
-        cursor_column=cursor_column,
-        cursor_type=cursor_type,
-        warehouse_columns=warehouse_columns,
-        sql_analysis_enabled=sql_analysis_enabled,
-    )
-    if cursor_type_warning is not None:
-        warnings = (*warnings, cursor_type_warning)
-
-    plan_config: _ModelPlanConfig = _resolve_model_plan_config(model=model)
-
     microbatch_range: CursorBounds | None = _compute_microbatch_range(
         model=model,
         inputs=_MicrobatchRangeInputs(
@@ -838,139 +746,54 @@ def plan_model_from_change(
         ),
     )
 
-    warnings = _append_cursor_safety_warnings(
-        warnings=warnings,
-        model_name=model.name,
-        bounds=microbatch_range or cursor_bounds,
-    )
-
-    fingerprint: Fingerprint | None = snapshot.fingerprints.models.get(model.name)
-    previous_query_sql: str | None = fingerprint.definition if fingerprint is not None else None
-
-    custom: _CustomMaterializationConfig = _resolve_custom_materialization_config(
-        model=model, materialization_type=materialization_type
-    )
-
-    ddl_cursor_bounds: CursorBounds | None = (
-        _build_runtime_placeholder_bounds()
-        if runtime_owned_cursor_bounds and cursor_column is not None
-        else (microbatch_range if microbatch_range else cursor_bounds)
-    )
-    logical_ddl: str = _render_table_type_ddl(
-        ddl=_build_logical_ddl_from_adapter(
-            adapter=adapter,
-            action=action,
-            resolved_sql=resolved_sql,
-            destination=model.destination,
-            unique_key=unique_key,
-            merge_exclude_columns=get_config_string_tuple(
-                values=model.config.values, key="merge_exclude_columns"
-            )
-            or (),
-            warehouse_columns=warehouse_columns,
-            cursor_column=cursor_column,
-            cursor_bounds=ddl_cursor_bounds,
-            cursor_type=cursor_type,
-        ),
-        table_type=model.config.table_type.value.value,
-    )
-
-    entry: ModelPlanEntry = ModelPlanEntry(
-        key=model.key,
-        name=model.name,
-        relative_path=model.relative_path,
-        materialization_type=materialization_type,
+    entry: ModelPlanEntry
+    warnings: tuple[PlanWarning, ...]
+    entry, warnings = assemble_model_plan_entry(
+        model=model,
+        adapter=adapter,
+        snapshot=snapshot,
+        change_result=change_result,
         action=action,
         reason=reason,
-        destination=model.destination,
-        fingerprint_query_sql=model.query_sql,
+        materialization_type=materialization_type,
         resolved_sql=resolved_sql,
-        logical_ddl=logical_ddl,
-        incremental_strategy=plan_config.incremental_strategy,
-        incremental_mode=plan_config.incremental_mode,
-        microbatch_strategy=plan_config.microbatch_strategy,
-        cursor_watermark_mode=plan_config.cursor_watermark_mode,
+        sql_analysis_enabled=sql_analysis_enabled,
+        pre_hooks=pre_hooks,
+        post_hooks=post_hooks,
         cursor_column=cursor_column,
-        cursor_type=cursor_type,
-        cursor_grain=cursor_grain,
-        cursor_start=cursor_start,
-        cursor_end=get_config_cursor_bound(values=model.config.values, key="cursor_end"),
-        lookback=(
-            resolve_microbatch_lookback(
-                model=model,
-                effective_grain=resolve_effective_timestamp_grain(
-                    cursor_type=cursor_type,
-                    downstream_grain=cursor_grain,
-                    microbatch_strategy=plan_config.microbatch_strategy,
-                    cursor_input_grains=tuple(
-                        relation.cursor_grain for relation in cursor_input_relations
-                    ),
-                ),
-            )
-            if plan_config.incremental_mode == IncrementalMode.MICROBATCH
-            else get_config_str(values=model.config.values, key="lookback")
-        ),
+        cursor_input_relations=cursor_input_relations,
+        runtime_owned_cursor_bounds=runtime_owned_cursor_bounds,
         cursor_bounds=cursor_bounds,
+        microbatch_range=microbatch_range,
         empty_cursor_inputs=empty_cursor_inputs,
         waiting_on_empty_inputs=waiting_on_empty_inputs,
-        cursor_input_relations=cursor_input_relations,
-        batch_size=plan_config.batch_size,
-        batch_concurrency=get_config_int(values=model.config.values, key="batch_concurrency") or 1,
-        unaccounted_partition_policy=get_config_str(
-            values=model.config.values, key="unaccounted_partition_policy"
-        ),
-        microbatch_range=microbatch_range,
-        microbatch_limit=resolve_microbatch_limit_config(values=model.config.values)[0],
-        declared_microbatch_limit_action=resolve_microbatch_limit_config(
-            values=model.config.values
-        )[1],
+        backfill=backfill,
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
         future_cursor_config=effective_future_cursor_config,
         start_cursor_config=effective_start_cursor_config,
         invocation_time=context.invocation_time,
-        unique_key=unique_key,
-        merge_exclude_columns=get_config_string_tuple(
-            values=model.config.values, key="merge_exclude_columns"
-        )
-        or (),
-        snapshot_strategy=plan_config.snapshot_strategy,
-        updated_at_column=plan_config.updated_at_column,
-        check_columns=plan_config.check_columns,
-        observed_at_column=plan_config.observed_at_column,
-        historical_input=plan_config.historical_input,
-        valid_from_column=plan_config.valid_from_column,
-        valid_to_column=plan_config.valid_to_column,
-        initial_valid_from=plan_config.initial_valid_from,
-        invalidate_hard_deletes=plan_config.invalidate_hard_deletes,
-        snapshot_full_refresh=plan_config.snapshot_full_refresh,
-        snapshot_schema_change=plan_config.snapshot_schema_change,
-        table_type=model.config.table_type.value.value,
-        on_schema_change=on_schema_change,
-        type_enforcement=type_enforcement,
-        declared_columns=declared_columns,
-        contract_enforced=contract_enforced,
-        contract_columns=contract_columns,
-        contract_dynamic_columns=contract_dynamic_columns,
-        pre_hooks=pre_hooks,
-        post_hooks=post_hooks,
-        previous_query_sql=previous_query_sql,
-        fingerprint_metadata_json=change_result.fingerprint_metadata_json,
-        previous_metadata_json=change_result.previous_metadata_json,
-        fingerprint_version_hash=change_result.fingerprint_version_hash,
-        previous_version_hash=change_result.previous_version_hash,
-        query_changed=change_result.query_changed,
-        config_changed=change_result.config_changed,
-        schema_actions=schema_actions,
-        schema_findings=change_result.schema_findings,
-        backfill=backfill,
-        changed_functions=change_result.changed_functions,
-        custom_materialization_name=custom.name,
-        custom_config=custom.config,
-        custom_placeholders=custom.placeholders,
+        effective_grain=(
+            resolve_effective_timestamp_grain(
+                cursor_type=get_config_str(values=model.config.values, key="cursor_type"),
+                downstream_grain=get_config_str(values=model.config.values, key="cursor_grain"),
+                microbatch_strategy=get_config_str(
+                    values=model.config.values, key="microbatch_strategy"
+                ),
+                cursor_input_grains=tuple(
+                    relation.cursor_grain for relation in cursor_input_relations
+                ),
+            )
+            if get_config_str(values=model.config.values, key="incremental_mode")
+            == IncrementalMode.MICROBATCH
+            else None
+        ),
     )
-
-    return entry, warnings
+    return entry, _append_cursor_safety_warnings(
+        warnings=warnings,
+        model_name=model.name,
+        bounds=microbatch_range or cursor_bounds,
+    )
 
 
 def resolve_cursor_overrides(
@@ -1029,138 +852,12 @@ def resolve_cursor_overrides(
     return resolved_start, resolved_end
 
 
-def _get_on_schema_change(model: CompiledModelView) -> OnSchemaChange | None:
-    """Extract on_schema_change from model config."""
-
-    raw: object | None = model.config.values.get("on_schema_change")
-    if raw is None:
-        return None
-    if isinstance(raw, str) and raw in set(OnSchemaChange):
-        return OnSchemaChange(raw)
-    raise PlannerInputError(f"model '{model.name}': unknown on_schema_change '{raw}'")
-
-
-def extract_seed_columns(seed: CompiledSeedView) -> tuple[ColumnInfo, ...]:
-    """Extract declared columns from seed schema entry."""
-
-    columns: list[ColumnInfo] = []
-    col: SchemaColumn
-    for col in seed.schema_entry.columns:
-        if col.type is not None:
-            columns.append(ColumnInfo(name=col.name, type=col.type))
-    return tuple(columns)
-
-
-def _get_type_enforcement(model: CompiledModelView) -> bool:
-    """Resolve whether type enforcement is active for a model."""
-
-    if model.schema_entry is not None and model.schema_entry.type_enforcement is not None:
-        return model.schema_entry.type_enforcement
-    return False
-
-
-def _get_declared_columns(model: CompiledModelView) -> tuple[ColumnInfo, ...]:
-    """Extract declared columns with types from schema entry."""
-
-    if model.schema_entry is None:
-        return ()
-    columns: list[ColumnInfo] = []
-    col: SchemaColumn
-    for col in model.schema_entry.columns:
-        if col.type is not None:
-            columns.append(ColumnInfo(name=col.name, type=col.type))
-    return tuple(columns)
-
-
-def _get_contract_columns(model: CompiledModelView) -> tuple[ColumnInfo, ...]:
-    if model.schema_entry is None:
-        return ()
-    return tuple(
-        ColumnInfo(name=col.name, type=col.type or "") for col in model.schema_entry.columns
-    )
-
-
-def _get_unique_key(model: CompiledModelView) -> tuple[str, ...]:
-    """Extract unique_key from model config as a normalized tuple."""
-
-    raw: object | None = model.config.values.get("unique_key")
-    if isinstance(raw, str):
-        return (raw,)
-    if isinstance(raw, list):
-        return tuple(k for k in raw if isinstance(k, str))
-    return ()
-
-
-def _get_check_columns(model: CompiledModelView) -> tuple[str, ...]:
-    """Extract check_columns from model config as a normalized tuple."""
-
-    raw: object | None = model.config.values.get("check_columns")
-    if isinstance(raw, str):
-        return (raw,)
-    if isinstance(raw, list):
-        return tuple(column for column in raw if isinstance(column, str))
-    return ()
-
-
 def _resolve_cursor_safety_configs(
     *, model: CompiledModelView, context: ModelPlanContext
 ) -> tuple[FutureCursorsConfig | None, StartCursorsConfig | None]:
     return (
         resolve_future_cursor_config(model=model, project_config=context.future_cursor_config),
         resolve_start_cursor_config(model=model, project_config=context.start_cursor_config),
-    )
-
-
-def _resolve_model_plan_config(*, model: CompiledModelView) -> _ModelPlanConfig:
-    return _ModelPlanConfig(
-        incremental_strategy=get_config_str(values=model.config.values, key="incremental_strategy"),
-        incremental_mode=get_config_str(values=model.config.values, key="incremental_mode"),
-        microbatch_strategy=get_config_str(values=model.config.values, key="microbatch_strategy"),
-        cursor_watermark_mode=get_config_str(
-            values=model.config.values, key="cursor_watermark_mode"
-        ),
-        batch_size=get_config_str(values=model.config.values, key="batch_size"),
-        snapshot_strategy=get_config_str(values=model.config.values, key="snapshot_strategy"),
-        updated_at_column=get_config_str(values=model.config.values, key="updated_at"),
-        check_columns=_get_check_columns(model),
-        observed_at_column=get_config_str(values=model.config.values, key="observed_at"),
-        historical_input=get_config_str(values=model.config.values, key="historical_input"),
-        valid_from_column=get_config_str(values=model.config.values, key="valid_from_column"),
-        valid_to_column=get_config_str(values=model.config.values, key="valid_to_column"),
-        initial_valid_from=get_config_str(values=model.config.values, key="initial_valid_from"),
-        invalidate_hard_deletes=get_config_bool(
-            values=model.config.values, key="invalidate_hard_deletes"
-        )
-        or False,
-        snapshot_full_refresh=get_config_str(
-            values=model.config.values, key="snapshot_full_refresh"
-        ),
-        snapshot_schema_change=get_config_str(
-            values=model.config.values, key="snapshot_schema_change"
-        ),
-    )
-
-
-def _resolve_custom_materialization_config(
-    *, model: CompiledModelView, materialization_type: MaterializationType
-) -> _CustomMaterializationConfig:
-    if materialization_type != MaterializationType.CUSTOM:
-        return _CustomMaterializationConfig(name=None, config={}, placeholders={})
-    raw_name: object | None = model.config.values.get("materialized")
-    raw_config: object | None = model.config.values.get("config")
-    raw_placeholders: object | None = model.config.values.get("placeholders")
-    return _CustomMaterializationConfig(
-        name=raw_name if isinstance(raw_name, str) else None,
-        config=(
-            {str(key): value for key, value in raw_config.items()}
-            if isinstance(raw_config, dict)
-            else {}
-        ),
-        placeholders=(
-            {str(key): str(value) for key, value in raw_placeholders.items()}
-            if isinstance(raw_placeholders, dict)
-            else {}
-        ),
     )
 
 
@@ -1266,36 +963,6 @@ def _compute_microbatch_range(
             input_evidence=cursor_snapshot.input_evidence,
         ),
         model=model,
-    )
-
-
-def resolve_microbatch_lookback(
-    *, model: CompiledModelView, effective_grain: str | None = None
-) -> str | None:
-    """Resolve explicit or default lookback for one microbatch model."""
-
-    lookback: str | None = get_config_str(values=model.config.values, key="lookback")
-    if lookback is not None:
-        return lookback
-    raw_strategy: str | None = get_config_str(
-        values=model.config.values, key="incremental_strategy"
-    )
-    strategy: IncrementalStrategy | None = (
-        IncrementalStrategy(raw_strategy) if raw_strategy is not None else None
-    )
-    if strategy not in _IDEMPOTENT_MICROBATCH_STRATEGIES:
-        return None
-    batch_size: str | None = get_config_str(values=model.config.values, key="batch_size")
-    if batch_size is None:
-        return None
-    resolved_grain: str | None = effective_grain or get_config_str(
-        values=model.config.values, key="cursor_grain"
-    )
-    if resolved_grain is None:
-        return batch_size
-    return resolve_effective_microbatch_batch_size(
-        batch_size=batch_size,
-        effective_grain=resolved_grain,
     )
 
 
@@ -1486,352 +1153,6 @@ def _append_maximum_start_warning(
             message=message,
         ),
     )
-
-
-def _render_table_type_ddl(*, ddl: str, table_type: str) -> str:
-    """Render permanent Snowflake table DDL from the adapter's transient default."""
-
-    return ddl.replace("TRANSIENT TABLE", "TABLE", 1) if table_type == TableType.PERMANENT else ddl
-
-
-def _build_logical_ddl_from_adapter(
-    *,
-    adapter: BaseAdapter,
-    action: PlanAction,
-    resolved_sql: str,
-    destination: CompiledRelationLocation,
-    unique_key: tuple[str, ...],
-    merge_exclude_columns: tuple[str, ...],
-    warehouse_columns: tuple[ColumnInfo, ...],
-    cursor_column: str | None = None,
-    cursor_bounds: CursorBounds | None = None,
-    cursor_type: str | None = None,
-) -> str:
-    """Generate logical DDL using adapter render methods."""
-
-    qualified_name: str = destination.qualified_name or destination.name
-
-    if action == PlanAction.CREATE_VIEW:
-        return ";\n\n".join(
-            adapter.render_create_view_as(destination=qualified_name, sql=resolved_sql)
-        )
-
-    if action == PlanAction.CREATE_TABLE:
-        return ";\n\n".join(
-            adapter.render_create_table_as(destination=qualified_name, sql=resolved_sql)
-        )
-
-    if action == PlanAction.INCREMENTAL_APPEND:
-        return ";\n\n".join(adapter.render_append(destination=qualified_name, sql=resolved_sql))
-
-    if action == PlanAction.INCREMENTAL_DELETE_INSERT:
-        if cursor_column is not None and cursor_bounds is not None:
-            return ";\n\n".join(
-                adapter.render_delete_insert_cursor(
-                    destination=qualified_name,
-                    sql=resolved_sql,
-                    cursor_column=cursor_column,
-                    cursor_start=sentinel_to_token(sentinel=cursor_bounds.start),
-                    cursor_end=sentinel_to_token(sentinel=cursor_bounds.end),
-                    cursor_type=cursor_type,
-                )
-            )
-        return ";\n\n".join(
-            adapter.render_delete_insert(
-                destination=qualified_name,
-                sql=resolved_sql,
-                unique_key=unique_key,
-            )
-        )
-
-    if action == PlanAction.INCREMENTAL_MERGE:
-        source_columns: tuple[str, ...] = tuple(col.name for col in warehouse_columns)
-        return ";\n\n".join(
-            adapter.render_merge(
-                destination=qualified_name,
-                sql=resolved_sql,
-                unique_key=unique_key,
-                source_columns=source_columns,
-                exclude_columns=merge_exclude_columns,
-            )
-        )
-
-    return ""
-
-
-def _build_cursor_input_relations(
-    *,
-    model: CompiledModelView,
-    adapter: BaseAdapter,
-    model_locations: dict[str, CompiledRelationLocation],
-    models_by_name: dict[str, CompiledModelView],
-    functions_by_name: dict[str, CompiledFunctionView] | None = None,
-    seed_locations: dict[str, CompiledRelationLocation],
-    source_map: dict[str, SourceEntry],
-    cursor_column: str | None,
-    runtime_cursor_producer_names: frozenset[str],
-) -> tuple[CursorInputRelation, ...]:
-    """Build cursor-bearing input relation metadata for runtime range discovery."""
-
-    materialized: str | None = get_config_str(values=model.config.values, key="materialized")
-    if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
-        return ()
-
-    cursor_watermark_inputs: dict[str, str] = resolve_cursor_input_roles(
-        model=model
-    ).watermark_inputs
-    relations: list[CursorInputRelation] = []
-    input_name: str
-    input_cursor_column: str
-    for input_name, input_cursor_column in cursor_watermark_inputs.items():
-        ref: CompileSqlReference = resolve_lineage_reference(
-            model=model,
-            input_name=input_name,
-            models_by_name=models_by_name,
-            functions_by_name=functions_by_name or {},
-        )
-        producer_model: CompiledModelView | None = (
-            models_by_name.get(ref.ref_name) if ref.ref_kind == SqlReferenceKind.REF else None
-        )
-        relation: str | None = _resolve_cursor_input_relation(
-            ref=ref,
-            adapter=adapter,
-            model_locations=model_locations,
-            seed_locations=seed_locations,
-            source_map=source_map,
-        )
-        if relation is not None:
-            relations.append(
-                CursorInputRelation(
-                    relation=relation,
-                    cursor_column=input_cursor_column,
-                    cursor_grain=(
-                        CursorGrain(input_grain)
-                        if (
-                            input_grain := _resolve_cursor_input_grain(
-                                ref=ref, models_by_name=models_by_name
-                            )
-                        )
-                        is not None
-                        else None
-                    ),
-                    is_model_backed=(
-                        ref.ref_kind == SqlReferenceKind.REF and ref.ref_name in model_locations
-                    ),
-                    is_runtime_produced=ref.ref_name in runtime_cursor_producer_names,
-                    input_name=ref.ref_name,
-                    input_kind=_cursor_input_kind(ref=ref, model_locations=model_locations),
-                    terminal_cursor_start=(
-                        parse(
-                            raw=get_config_cursor_bound(
-                                values=producer_model.config.values, key="cursor_start"
-                            ),
-                            cursor_type=get_config_str(
-                                values=model.config.values, key="cursor_type"
-                            )
-                            or CursorType.TIMESTAMP,
-                        )
-                        if producer_model is not None
-                        and get_config_cursor_bound(
-                            values=producer_model.config.values, key="cursor_start"
-                        )
-                        is not None
-                        else None
-                    ),
-                    terminal_cursor_end=(
-                        parse(
-                            raw=get_config_cursor_bound(
-                                values=producer_model.config.values, key="cursor_end"
-                            ),
-                            cursor_type=get_config_str(
-                                values=model.config.values, key="cursor_type"
-                            )
-                            or CursorType.TIMESTAMP,
-                        )
-                        if producer_model is not None
-                        and get_config_cursor_bound(
-                            values=producer_model.config.values, key="cursor_end"
-                        )
-                        is not None
-                        else None
-                    ),
-                )
-            )
-    return tuple(relations)
-
-
-def validate_source_cursor_input_columns(
-    *,
-    model: CompiledModelView,
-    cursor_column: str | None,
-    models_by_name: dict[str, CompiledModelView] | None = None,
-    functions_by_name: dict[str, CompiledFunctionView] | None = None,
-    source_map: dict[str, SourceEntry] | None = None,
-    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
-) -> None:
-    """Validate cursor input columns using contracts before source warehouse metadata."""
-
-    materialized: str | None = get_config_str(values=model.config.values, key="materialized")
-    if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
-        return
-
-    cursor_roles: CursorInputRoles = resolve_cursor_input_roles(model=model)
-    effective_models_by_name: dict[str, CompiledModelView] = models_by_name or {}
-    effective_source_map: dict[str, SourceEntry] = source_map or {}
-    authored_inputs: tuple[tuple[str, str], ...] = tuple(
-        cursor_roles.filter_inputs.items()
-    ) + tuple(cursor_roles.watermark_inputs.items())
-    input_name: str
-    input_cursor_column: str
-    for input_name, input_cursor_column in authored_inputs:
-        ref: CompileSqlReference = resolve_lineage_reference(
-            model=model,
-            input_name=input_name,
-            models_by_name=effective_models_by_name,
-            functions_by_name=functions_by_name or {},
-        )
-        if ref.ref_kind == SqlReferenceKind.REF:
-            upstream_model: CompiledModelView | None = effective_models_by_name.get(ref.ref_name)
-            if upstream_model is None:
-                continue
-            has_enforced_contract: bool = (
-                upstream_model.config.values.get("contract") == ContractPolicy.ENFORCED
-            )
-            if not has_enforced_contract:
-                continue
-            declared_names: tuple[str, ...] = _model_declared_column_names(upstream_model)
-            if input_cursor_column.lower() in {name.lower() for name in declared_names}:
-                continue
-            declared_display: str = ", ".join(declared_names) or "none"
-            raise PlannerInputError(
-                f"model '{model.name}': {CURSOR_INPUTS_CONFIG_KEY} "
-                f"references model '{ref.ref_name}' "
-                f"column '{input_cursor_column}', but that model contract does not expose "
-                f"the column. Known output columns: {declared_display}",
-                code="S302",
-            )
-        if ref.ref_kind != SqlReferenceKind.SOURCE:
-            continue
-        source_entry: SourceEntry | None = effective_source_map.get(ref.ref_name)
-        if source_entry is not None and source_entry.contract == ContractPolicy.ENFORCED:
-            declared_names = tuple(column.name for column in source_entry.columns)
-            if input_cursor_column.lower() in {name.lower() for name in declared_names}:
-                continue
-            declared_display = ", ".join(declared_names) or "none"
-            raise PlannerInputError(
-                f"model '{model.name}': {CURSOR_INPUTS_CONFIG_KEY} "
-                f"references source '{ref.ref_name}' "
-                f"column '{input_cursor_column}', but that source contract does not expose "
-                f"the column. Declared contract columns: {declared_display}",
-                code="S302",
-            )
-        known_columns: tuple[ColumnInfo, ...] | None = source_warehouse_columns.get(ref.ref_name)
-        if known_columns is None:
-            continue
-        known_column_names: frozenset[str] = frozenset(col.name.lower() for col in known_columns)
-        if input_cursor_column.lower() in known_column_names:
-            continue
-        known_display: str = ", ".join(col.name for col in known_columns) or "none"
-        raise PlannerInputError(
-            f"model '{model.name}': {CURSOR_INPUTS_CONFIG_KEY} references source '{ref.ref_name}' "
-            f"column '{input_cursor_column}', but that source does not expose the column. "
-            f"Known source columns: {known_display}",
-            code="S302",
-        )
-
-
-def _model_declared_column_names(model: CompiledModelView) -> tuple[str, ...]:
-    if model.schema_entry is None:
-        return ()
-    return tuple(column.name for column in model.schema_entry.columns)
-
-
-def _has_runtime_owned_cursor_watermarks(
-    cursor_input_relations: tuple[CursorInputRelation, ...],
-) -> bool:
-    """Return whether any cursor input is produced by this invocation."""
-
-    return any(relation.is_runtime_owned for relation in cursor_input_relations)
-
-
-def _runtime_cursor_producer_names(
-    *, scope: PlannerScope, source_map: dict[str, SourceEntry]
-) -> frozenset[str]:
-    """Return selected relations whose contents are produced during this invocation."""
-
-    names: set[str] = set()
-    key: CompiledObjectKey
-    for key in scope.selected_keys:
-        if key.resource_type in {CompiledResourceType.MODEL, CompiledResourceType.SEED}:
-            names.add(key.name)
-        elif key.resource_type == CompiledResourceType.SOURCE:
-            source: SourceEntry | None = source_map.get(key.name)
-            if source is not None and source.loader is not None:
-                names.add(key.name)
-    return frozenset(names)
-
-
-def _build_runtime_placeholder_bounds() -> CursorBounds:
-    """Return placeholder cursor bounds for runtime-owned models."""
-
-    return CursorBounds(start=BoundSentinel.START, end=BoundSentinel.END)
-
-
-def _resolve_cursor_input_relation(
-    *,
-    ref: CompileSqlReference,
-    adapter: BaseAdapter,
-    model_locations: dict[str, CompiledRelationLocation],
-    seed_locations: dict[str, CompiledRelationLocation],
-    source_map: dict[str, SourceEntry],
-) -> str | None:
-    """Resolve one cursor input reference to a qualified relation name."""
-
-    if ref.ref_kind == SqlReferenceKind.REF:
-        target: CompiledRelationLocation | None = model_locations.get(ref.ref_name)
-        if target is None:
-            target = seed_locations.get(ref.ref_name)
-        return target.qualified_name if target is not None else None
-    if ref.ref_kind == SqlReferenceKind.SEED:
-        seed_target: CompiledRelationLocation | None = seed_locations.get(ref.ref_name)
-        return seed_target.qualified_name if seed_target is not None else None
-    if ref.ref_kind == SqlReferenceKind.SOURCE:
-        source: SourceEntry | None = source_map.get(ref.ref_name)
-        if source is None:
-            return None
-        return render_source_relation(entry=source, adapter=adapter)
-    return None
-
-
-def _cursor_input_kind(
-    *, ref: CompileSqlReference, model_locations: dict[str, CompiledRelationLocation]
-) -> GraphResourceKind | None:
-    """Return the resource kind a resolved cursor input reference reads."""
-
-    if ref.ref_kind == SqlReferenceKind.REF:
-        return (
-            GraphResourceKind.MODEL if ref.ref_name in model_locations else GraphResourceKind.SEED
-        )
-    if ref.ref_kind == SqlReferenceKind.SEED:
-        return GraphResourceKind.SEED
-    if ref.ref_kind == SqlReferenceKind.SOURCE:
-        return GraphResourceKind.SOURCE
-    return None
-
-
-def _resolve_cursor_input_grain(
-    *,
-    ref: CompileSqlReference,
-    models_by_name: dict[str, CompiledModelView],
-) -> str | None:
-    """Resolve timestamp grain metadata for a model-backed cursor input relation."""
-
-    if ref.ref_kind != SqlReferenceKind.REF:
-        return None
-    upstream_model: CompiledModelView | None = models_by_name.get(ref.ref_name)
-    if upstream_model is None:
-        return None
-    return get_config_str(values=upstream_model.config.values, key="cursor_grain")
 
 
 def scope_overlaps(

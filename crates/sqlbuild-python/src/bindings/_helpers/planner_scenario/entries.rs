@@ -56,7 +56,7 @@ pub(super) fn seed_entries<'py>(
                     "columns",
                     imported(
                         py,
-                        "sqlbuild.compiler.planner._helpers.output.plan_entry",
+                        "sqlbuild._native",
                         "extract_seed_columns",
                     )?
                     .call1((&seed,))?,
