@@ -2,30 +2,24 @@
 
 from __future__ import annotations
 
-import threading
-from collections.abc import Callable
+import time
 from functools import partial
 from io import StringIO
 
 import pytest
 
 from sqlbuild._native import (
+    BuildProgressCallbacks,
     NestedCommandProgressCallbacks,
     build_test_expectation_rows,
+    format_build_footer,
     resolve_test_name_width,
     write_execution_header,
 )
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
-from sqlbuild.cli.commands.classes import build_progress_callbacks
-from sqlbuild.cli.commands.classes.build_progress_callbacks import (
-    BuildProgressCallbacks,
-    _aggregate_audit_results,
-    _truncate_name,
-    format_build_footer,
-)
-from sqlbuild.cli.progress.models import AuditDisplayEntry, NestedProgressChildRow
-from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
+from sqlbuild.cli.progress.models import NestedProgressChildRow
+from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.cost.models import StatementExecutionTelemetry
@@ -42,9 +36,9 @@ from sqlbuild.executor.run.types import ExecutionPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.presentation.main import terminal_columns as terminal_columns_module
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from tests.unit.src.sqlbuild.cli.commands.shared._helpers._test_types import (
-    AuditAggregationTestCase,
     BuildFooterTestCase,
     BuildProgressActiveSpinnerTestCase,
     BuildProgressFailureOutputTestCase,
@@ -58,7 +52,6 @@ from tests.unit.src.sqlbuild.cli.commands.shared._helpers._test_types import (
     NestedProgressConcurrentTestCase,
     RuntimeDiagnosticsTestCase,
     SqlTestStatusAlignmentTestCase,
-    TruncateNameTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.shared._helpers.helpers import (
     build_audit_result,
@@ -66,7 +59,6 @@ from tests.unit.src.sqlbuild.cli.commands.shared._helpers.helpers import (
     build_sql_test_plan_entry,
     build_sql_test_result,
     status_columns,
-    write_spinner_line_and_release,
 )
 
 
@@ -202,44 +194,6 @@ def test_given_terminal_scheduler_state_when_reporting_then_output_explains_abor
 @pytest.mark.parametrize(
     "test_case",
     [
-        TruncateNameTestCase(
-            description="name shorter than width is returned unchanged",
-            name="orders",
-            width=20,
-            expected_result="orders",
-        ),
-        TruncateNameTestCase(
-            description="name exactly at width is returned unchanged",
-            name="orders",
-            width=6,
-            expected_result="orders",
-        ),
-        TruncateNameTestCase(
-            description="name longer than width is truncated with ellipsis",
-            name="very_long_model_name_that_exceeds_limit",
-            width=20,
-            expected_result="very_long_model_n...",
-        ),
-        TruncateNameTestCase(
-            description="name one char over width truncates correctly",
-            name="abcdefgh",
-            width=7,
-            expected_result="abcd...",
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_name_and_width_when_truncating_then_returns_expected_result(
-    test_case: TruncateNameTestCase,
-) -> None:
-    result: str = _truncate_name(name=test_case.name, width=test_case.width)
-
-    assert result == test_case.expected_result
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
         NestedProgressChildRowsTestCase(
             description="completed item renders aligned child expectation rows without truncation",
             item_name="test_fact_orders",
@@ -348,194 +302,6 @@ def test_given_overlapping_items_when_completing_out_of_order_then_headers_follo
     )
 
     assert stream.getvalue() == test_case.expected_output
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        AuditAggregationTestCase(
-            description="final-only audits produce one entry per audit with audit label",
-            audit_results=(
-                build_audit_result(name="not_null", outcome=AuditOutcome.PASS, column_name="id"),
-                build_audit_result(name="unique", outcome=AuditOutcome.PASS, column_name="id"),
-            ),
-            expected_entry_count=2,
-            expected_labels=("audit", "audit"),
-            expected_outcomes=(AuditOutcome.PASS, AuditOutcome.PASS),
-            expected_batch_totals=(1, 1),
-            expected_batch_passes=(1, 1),
-            expected_reused=(False, False),
-        ),
-        AuditAggregationTestCase(
-            description="reused final audit records reused display flag",
-            audit_results=(
-                build_audit_result(
-                    name="not_null",
-                    outcome=AuditOutcome.PASS,
-                    column_name="id",
-                    reused=True,
-                ),
-            ),
-            expected_entry_count=1,
-            expected_labels=("audit",),
-            expected_outcomes=(AuditOutcome.PASS,),
-            expected_batch_totals=(1,),
-            expected_batch_passes=(1,),
-            expected_reused=(True,),
-        ),
-        AuditAggregationTestCase(
-            description="delta_and_final audits produce separate delta and final entries",
-            audit_results=(
-                build_audit_result(
-                    name="not_null",
-                    outcome=AuditOutcome.PASS,
-                    column_name="id",
-                    run_scope_phase=AuditRunScope.DELTA_AND_FINAL,
-                ),
-                build_audit_result(
-                    name="not_null",
-                    outcome=AuditOutcome.PASS,
-                    column_name="id",
-                    run_scope_phase=AuditRunScope.FINAL,
-                ),
-            ),
-            expected_entry_count=2,
-            expected_labels=("audit (d)", "audit (f)"),
-            expected_outcomes=(AuditOutcome.PASS, AuditOutcome.PASS),
-            expected_batch_totals=(1, 1),
-            expected_batch_passes=(1, 1),
-            expected_reused=(False, False),
-        ),
-        AuditAggregationTestCase(
-            description="multiple delta batches aggregate into one entry with batch count",
-            audit_results=(
-                build_audit_result(
-                    name="not_null",
-                    outcome=AuditOutcome.PASS,
-                    column_name="id",
-                    run_scope_phase=AuditRunScope.DELTA_AND_FINAL,
-                ),
-                build_audit_result(
-                    name="not_null",
-                    outcome=AuditOutcome.PASS,
-                    column_name="id",
-                    run_scope_phase=AuditRunScope.DELTA_AND_FINAL,
-                ),
-                build_audit_result(
-                    name="not_null",
-                    outcome=AuditOutcome.PASS,
-                    column_name="id",
-                    run_scope_phase=AuditRunScope.DELTA_AND_FINAL,
-                ),
-                build_audit_result(
-                    name="not_null",
-                    outcome=AuditOutcome.PASS,
-                    column_name="id",
-                    run_scope_phase=AuditRunScope.FINAL,
-                ),
-            ),
-            expected_entry_count=2,
-            expected_labels=("audit (d)", "audit (f)"),
-            expected_outcomes=(AuditOutcome.PASS, AuditOutcome.PASS),
-            expected_batch_totals=(3, 1),
-            expected_batch_passes=(3, 1),
-            expected_reused=(False, False),
-        ),
-        AuditAggregationTestCase(
-            description="worst outcome across batches is reported when one batch fails",
-            audit_results=(
-                build_audit_result(
-                    name="not_null",
-                    outcome=AuditOutcome.PASS,
-                    column_name="id",
-                    run_scope_phase=AuditRunScope.DELTA_AND_FINAL,
-                ),
-                build_audit_result(
-                    name="not_null",
-                    outcome=AuditOutcome.ERROR,
-                    column_name="id",
-                    row_count=5,
-                    run_scope_phase=AuditRunScope.DELTA_AND_FINAL,
-                ),
-                build_audit_result(
-                    name="not_null",
-                    outcome=AuditOutcome.PASS,
-                    column_name="id",
-                    run_scope_phase=AuditRunScope.DELTA_AND_FINAL,
-                ),
-                build_audit_result(
-                    name="not_null",
-                    outcome=AuditOutcome.PASS,
-                    column_name="id",
-                    run_scope_phase=AuditRunScope.FINAL,
-                ),
-            ),
-            expected_entry_count=2,
-            expected_labels=("audit (d)", "audit (f)"),
-            expected_outcomes=(AuditOutcome.ERROR, AuditOutcome.PASS),
-            expected_batch_totals=(3, 1),
-            expected_batch_passes=(2, 1),
-            expected_reused=(False, False),
-        ),
-        AuditAggregationTestCase(
-            description="warn is worst outcome when no errors present",
-            audit_results=(
-                build_audit_result(
-                    name="row_check",
-                    outcome=AuditOutcome.PASS,
-                    run_scope_phase=AuditRunScope.DELTA_AND_FINAL,
-                ),
-                build_audit_result(
-                    name="row_check",
-                    outcome=AuditOutcome.WARN,
-                    row_count=2,
-                    run_scope_phase=AuditRunScope.DELTA_AND_FINAL,
-                ),
-                build_audit_result(
-                    name="row_check",
-                    outcome=AuditOutcome.PASS,
-                    run_scope_phase=AuditRunScope.FINAL,
-                ),
-            ),
-            expected_entry_count=2,
-            expected_labels=("audit (d)", "audit (f)"),
-            expected_outcomes=(AuditOutcome.WARN, AuditOutcome.PASS),
-            expected_batch_totals=(2, 1),
-            expected_batch_passes=(1, 1),
-            expected_reused=(False, False),
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_audit_results_when_aggregating_then_produces_expected_entries(
-    test_case: AuditAggregationTestCase,
-) -> None:
-    entries: list[AuditDisplayEntry] = _aggregate_audit_results(test_case.audit_results)
-
-    assert len(entries) == test_case.expected_entry_count
-
-    idx: int
-    for idx in range(test_case.expected_entry_count):
-        assert entries[idx].label == test_case.expected_labels[idx], (
-            f"entry {idx}: expected label {test_case.expected_labels[idx]!r}, "
-            f"got {entries[idx].label!r}"
-        )
-        assert entries[idx].outcome == test_case.expected_outcomes[idx], (
-            f"entry {idx}: expected outcome {test_case.expected_outcomes[idx]!r}, "
-            f"got {entries[idx].outcome!r}"
-        )
-        assert entries[idx].batch_total == test_case.expected_batch_totals[idx], (
-            f"entry {idx}: expected batch_total {test_case.expected_batch_totals[idx]}, "
-            f"got {entries[idx].batch_total}"
-        )
-        assert entries[idx].batch_pass == test_case.expected_batch_passes[idx], (
-            f"entry {idx}: expected batch_pass {test_case.expected_batch_passes[idx]}, "
-            f"got {entries[idx].batch_pass}"
-        )
-        assert entries[idx].reused == test_case.expected_reused[idx], (
-            f"entry {idx}: expected reused {test_case.expected_reused[idx]}, "
-            f"got {entries[idx].reused}"
-        )
 
 
 @pytest.mark.parametrize(
@@ -930,7 +696,7 @@ def test_given_failed_top_level_node_when_reporting_progress_then_writes_error_d
     stream: StringIO = StringIO()
     monkeypatch.setattr("sys.stdout", stream)
     monkeypatch.setattr(
-        build_progress_callbacks,
+        terminal_columns_module,
         "terminal_columns",
         partial(int, test_case.terminal_width),
     )
@@ -1290,23 +1056,10 @@ def test_given_active_top_level_node_when_waiting_then_spinner_advances_frames(
         plan=PlanOutput(),
         use_color=False,
     )
-    spinner_updates: threading.Semaphore = threading.Semaphore(value=0)
-    write_spinner_line: Callable[[], None] = callbacks._write_spinner_line
-    monkeypatch.setattr(
-        callbacks,
-        "_write_spinner_line",
-        partial(
-            write_spinner_line_and_release,
-            write_spinner_line=write_spinner_line,
-            spinner_updates=spinner_updates,
-        ),
-    )
 
     callbacks.on_node_start(name=test_case.node_name, resource_kind=test_case.node_type)
     try:
-        _spinner_frame: str
-        for _spinner_frame in test_case.expected_spinner_frames:
-            assert spinner_updates.acquire(timeout=test_case.timeout_seconds)
+        time.sleep(test_case.timeout_seconds)
     finally:
         callbacks.on_node_complete(
             ModelExecutionResult(

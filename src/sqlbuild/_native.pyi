@@ -240,7 +240,7 @@ from sqlbuild.compiler.sql_test_glue.models import (
     NativeSqlTestPlanningRequest,
 )
 from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestPlanRow
-from sqlbuild.cost.models import CostRunRecord
+from sqlbuild.cost.models import CostRunRecord, StatementExecutionTelemetry
 from sqlbuild.cursor_algebra.models import (
     AlignedInterval,
     DateValue,
@@ -249,7 +249,11 @@ from sqlbuild.cursor_algebra.models import (
 )
 from sqlbuild.cursor_algebra.types import Bound, BoundSentinel, CursorScalar
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
+from sqlbuild.executor.build.models import (
+    BuildExecutionResult,
+    SchedulerState,
+    SeedExecutionResult,
+)
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.executor.janitor.models import JanitorExecutionResult, JanitorPlan
@@ -3190,6 +3194,28 @@ class LoadProgressReporter:
     def on_complete(self, result: LoadExecutionResult) -> None: ...
     def clear_transient_line(self) -> None: ...
     def redraw_transient_line(self) -> None: ...
+
+class BuildProgressCallbacks:
+    def __init__(
+        self,
+        *,
+        plan: PlanOutput,
+        use_color: bool,
+        verbose: bool = False,
+        debug: bool = False,
+        event_output_path: Path | None = None,
+    ) -> None: ...
+    @property
+    def elapsed(self) -> float: ...
+    def on_node_start(self, *, name: str, resource_kind: ExecutionResourceKind) -> None: ...
+    def on_sub_progress(self, message: str) -> None: ...
+    def on_scheduler_state(self, state: SchedulerState) -> None: ...
+    def on_statement_complete(self, telemetry: StatementExecutionTelemetry) -> None: ...
+    def clear_transient_line(self) -> None: ...
+    def redraw_transient_line(self) -> None: ...
+    def on_node_complete(self, node_result: object) -> None: ...
+    def write_execution_event(self, result: object) -> None: ...
+    def close(self) -> None: ...
 
 class AuditProgressReporter:
     def __init__(

@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import re
-import threading
-from collections.abc import Callable
 from pathlib import Path
 
 from sqlbuild.compiler.auditing.types import (
@@ -30,15 +28,6 @@ from sqlbuild.executor.testing.types import SqlTestOutcome
 _STATUS_TOKEN_PATTERN: re.Pattern[str] = re.compile(
     r"^.*? (PASS|FAIL|ERROR|OK)(?= |$)", flags=re.MULTILINE
 )
-
-
-def write_spinner_line_and_release(
-    *,
-    write_spinner_line: Callable[[], None],
-    spinner_updates: threading.Semaphore,
-) -> None:
-    write_spinner_line()
-    spinner_updates.release()
 
 
 def build_audit_result(

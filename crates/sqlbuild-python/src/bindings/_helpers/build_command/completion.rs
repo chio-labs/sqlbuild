@@ -25,7 +25,6 @@ const COST_COLLECTION_MODULE: &str = "sqlbuild.cli.commands._helpers.cost.collec
 const COST_TYPES: &str = "sqlbuild.cost.types";
 const BUILD_MODELS: &str = "sqlbuild.executor.build.models";
 const BUILD_TYPES: &str = "sqlbuild.executor.build.types";
-const CALLBACKS_MODULE: &str = "sqlbuild.cli.commands.classes.build_progress_callbacks";
 const RUNTIME_TARGET_MODULE: &str = "sqlbuild.cli.target_artifacts.main._write_runtime_target";
 const CHECK_TARGET_MODULE: &str =
     "sqlbuild.cli.target_artifacts.main._write_python_check_runtime_target";
@@ -360,7 +359,7 @@ pub(crate) fn complete_direct_build<'py>(
     let cost_seconds: f64 = finish_cost_timing(context, cost_started);
     let record: Bound<'py, PyAny> = record?;
     let footer: String = call_with(
-        &imported(py, CALLBACKS_MODULE, "format_build_footer")?,
+        &imported(py, NATIVE_MODULE, "format_build_footer")?,
         &[
             ("result", result.clone()),
             ("elapsed", preparation.callbacks.getattr("elapsed")?),

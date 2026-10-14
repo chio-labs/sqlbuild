@@ -14,7 +14,7 @@ const PYTHON_NODE_MODELS: &str = "sqlbuild.executor.python_nodes.models";
 const TESTING_MODELS: &str = "sqlbuild.executor.testing.models";
 const AUDITING_MODELS: &str = "sqlbuild.executor.auditing.models";
 const CLONE_MODELS: &str = "sqlbuild.executor.clone.models";
-const SQL_TEST_ID_MODULE: &str = "sqlbuild.executor.testing.main.resource_id";
+const SQL_TEST_ID_MODULE: &str = "sqlbuild.executor.testing.main._resource_id";
 const AUDIT_ID_MODULE: &str = "sqlbuild.executor.auditing.main.resource_id";
 
 /// The executor result types that result output distinguishes.

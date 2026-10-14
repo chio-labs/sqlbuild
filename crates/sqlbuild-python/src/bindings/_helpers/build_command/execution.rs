@@ -17,7 +17,6 @@ use crate::bindings::_helpers::build_command::support::{
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const CALLBACKS_MODULE: &str = "sqlbuild.cli.commands.classes.build_progress_callbacks";
 const PARSING_MODULE: &str = "sqlbuild.cli.commands._helpers.input.parsing";
 const CURSOR_OVERRIDES_MODULE: &str =
     "sqlbuild.compiler.planner.main.cursor_window._typed_cursor_overrides";
@@ -207,7 +206,7 @@ pub(crate) fn prepare_build_execution<'py>(
     let plan: Bound<'py, PyAny> = pipeline.getattr("plan_output")?;
     let debug: bool = context.request_flag("debug")? || context.request_flag("json_output")?;
     let callbacks: Bound<'py, PyAny> = call_with(
-        &imported(py, CALLBACKS_MODULE, "BuildProgressCallbacks")?,
+        &imported(py, NATIVE_MODULE, "BuildProgressCallbacks")?,
         &[
             ("plan", plan.clone()),
             ("use_color", boolean(py, context.use_color)),
