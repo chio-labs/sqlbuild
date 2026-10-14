@@ -14,6 +14,8 @@ use sqlbuild_cli::dispatch::models::{CommandFacts, CommandFailure, InvocationPol
 
 use crate::bindings::_helpers::cli::dispatch::{command_facts, dispatch_command};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use sqlbuild_core::cli_text::main::format_coded_error::format_coded_error;
+use sqlbuild_core::cli_text::models::CliStyle;
 
 const NO_COLOR_OPTION: &str = "--no-color";
 const EXCEPTIONS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
@@ -29,7 +31,6 @@ const INVOCATION_CONTEXT_MODULE: &str = "sqlbuild.runtime.output_capture.main.in
 const OUTPUT_CAPTURE_ERRORS_MODULE: &str = "sqlbuild.runtime.output_capture.exceptions";
 const DIAGNOSTICS_MODULE: &str = "sqlbuild.diagnostics.main.diagnostics_context";
 const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
-const CODED_ERROR_MODULE: &str = "sqlbuild.presentation.main.coded_error_text";
 const TRANSIENT_LINE_MODULE: &str = "sqlbuild.presentation.main.transient_line_coordinator";
 const SKILLS_MODULE: &str = "sqlbuild._native";
 const RULES_ERRORS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
@@ -142,19 +143,27 @@ fn print_expected_error(
 ) -> PyResult<()> {
     let py: Python<'_> = invocation.py();
     let (code, message, help) = error_parts(error, fallback_code)?;
-    let text: Bound<'_, PyAny> = call_with(
-        &imported(py, CODED_ERROR_MODULE, "format_coded_error")?,
-        &[
-            ("code", code),
-            ("message", message),
-            ("help", help),
-            (
-                "use_color",
-                PyBool::new(py, invocation.use_color).to_owned().into_any(),
-            ),
-        ],
-    )?;
-    print_object(&text.add("\n")?, Some("stderr"), None)
+    let help: Option<String> = if help.is_none() {
+        None
+    } else {
+        Some(help.str()?.extract()?)
+    };
+    let text: String = format_coded_error(
+        (
+            &code.extract::<String>()?,
+            &message.extract::<String>()?,
+            help.as_deref(),
+        ),
+        true,
+        CliStyle {
+            use_color: invocation.use_color,
+        },
+    );
+    print_object(
+        &PyString::new(py, &format!("{text}\n")).into_any(),
+        Some("stderr"),
+        None,
+    )
 }
 
 /// The compile JSON error document `sqb compile --json` prints for a failure.

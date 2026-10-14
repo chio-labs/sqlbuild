@@ -14,7 +14,8 @@ use crate::bindings::_helpers::build_progress::terminal::{
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{imported, within};
 
-const SPINNERS_DISABLED_MODULE: &str = "sqlbuild.presentation.main._progress_spinners_disabled";
+const NO_PROGRESS_VARIABLE: &str = "SQLBUILD_NO_PROGRESS";
+const PROGRESS_DISABLED_VALUES: [&str; 4] = ["1", "on", "true", "yes"];
 const PREFLIGHT_COMPLETION_PREFIX: &str = "Prepared ";
 
 /// Mutable reporter state; only held briefly and never across Python calls.
@@ -149,12 +150,8 @@ impl TransientStatusReporter {
         enabled: bool,
     ) -> PyResult<Self> {
         let lines: Bound<'_, PyAny> = shared_lines(py)?;
-        let spinners_disabled: bool =
-            imported(py, SPINNERS_DISABLED_MODULE, "progress_spinners_disabled")?
-                .call0()?
-                .is_truthy()?;
         Ok(Self {
-            enabled: enabled && !spinners_disabled && tty_flag(stream)?,
+            enabled: enabled && !progress_spinners_disabled() && tty_flag(stream)?,
             stream: stream.clone().unbind(),
             lock: lines.getattr("lock")?.unbind(),
             lines: lines.unbind(),
@@ -291,6 +288,30 @@ impl TransientStatusReporter {
         }
         Ok(())
     }
+}
+
+/// Whether `SQLBUILD_NO_PROGRESS` turns transient spinners off.
+pub(crate) fn progress_spinners_disabled() -> bool {
+    std::env::var(NO_PROGRESS_VARIABLE)
+        .is_ok_and(|value| PROGRESS_DISABLED_VALUES.contains(&value.trim().to_lowercase().as_str()))
+}
+
+/// Run `body` under a stderr spinner when `enabled` and stderr is an interactive terminal.
+pub(crate) fn maybe_status<'py, T>(
+    py: Python<'py>,
+    (message, enabled): (&str, bool),
+    body: impl FnOnce() -> PyResult<T>,
+) -> PyResult<T> {
+    let stderr: Bound<'py, PyAny> = py.import("sys")?.getattr("stderr")?;
+    if !enabled || progress_spinners_disabled() || !tty_flag(&stderr)? {
+        return body();
+    }
+    let reporter: Bound<'py, TransientStatusReporter> =
+        Bound::new(py, TransientStatusReporter::new(py, &stderr, false, true)?)?;
+    TransientStatusReporter::start(&reporter, message.to_owned())?;
+    let result: PyResult<T> = body();
+    TransientStatusReporter::close(&reporter)?;
+    result
 }
 
 /// A native status reporter writing to `stream`.

@@ -32,3 +32,11 @@ pub(super) struct DbtPlanTextTestCase {
     pub(super) max_entries: Option<usize>,
     pub(super) expected_text: &'static str,
 }
+
+pub(super) struct CodedErrorTestCase {
+    pub(super) description: &'static str,
+    pub(super) parts: (&'static str, &'static str, Option<&'static str>),
+    pub(super) include_error_label: bool,
+    pub(super) style: CliStyle,
+    pub(super) expected_rendered: &'static str,
+}
