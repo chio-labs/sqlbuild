@@ -8,7 +8,7 @@ use crate::bindings::_helpers::dbt_command::auto_init::args_tuple;
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, flag, status, stream};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const DEBUG_MODULE: &str = "sqlbuild.integrations.dbt.main.pipeline.debug";
+const DEBUG_MODULE: &str = "sqlbuild._native";
 
 /// Run `body` under a stderr status line that is always closed; returns its exit code.
 fn with_status(

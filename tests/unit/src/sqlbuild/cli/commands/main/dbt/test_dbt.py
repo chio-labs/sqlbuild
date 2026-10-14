@@ -74,7 +74,7 @@ def test_given_dbt_plan_when_running_then_writes_progress_to_expected_stream(
         return build_empty_dbt_plan()
 
     monkeypatch.setattr(
-        "sqlbuild.integrations.dbt.main.pipeline.plan.plan_dbt_interop_from_project",
+        "sqlbuild._native.plan_dbt_interop_from_project",
         plan_dbt_interop_from_project,
     )
     write_minimal_sqlbuild_project(tmp_path)
@@ -125,7 +125,7 @@ def test_given_dbt_execution_command_when_running_then_routes_expected_stream_an
         return 0
 
     monkeypatch.setattr(
-        "sqlbuild.integrations.dbt.main.pipeline.execute.execute_dbt_interop_from_project",
+        "sqlbuild._native.execute_dbt_interop_from_project",
         execute_dbt_interop_from_project,
     )
     write_minimal_sqlbuild_project(tmp_path)
@@ -200,7 +200,7 @@ def test_given_dbt_debug_command_when_running_then_invokes_dbt_and_sqlbuild_debu
         return 0
 
     monkeypatch.setattr(
-        "sqlbuild.integrations.dbt.main.pipeline.debug.debug_dbt_from_project",
+        "sqlbuild._native.debug_dbt_from_project",
         debug_dbt_from_project,
     )
     monkeypatch.setattr("sqlbuild._native.run_debug_command", run_sqlbuild_debug)
@@ -293,7 +293,7 @@ def test_given_existing_sqlbuild_project_when_running_dbt_command_then_uses_expe
         run_dbt_profile_init,
     )
     monkeypatch.setattr(
-        "sqlbuild.integrations.dbt.main.pipeline.plan.plan_dbt_interop_from_project",
+        "sqlbuild._native.plan_dbt_interop_from_project",
         plan_dbt_interop_from_project,
     )
 
@@ -382,7 +382,7 @@ def test_given_missing_sqlbuild_twin_when_running_dbt_command_then_initializes_a
         run_dbt_profile_init,
     )
     monkeypatch.setattr(
-        "sqlbuild.integrations.dbt.main.pipeline.plan.plan_dbt_interop_from_project",
+        "sqlbuild._native.plan_dbt_interop_from_project",
         plan_dbt_interop_from_project,
     )
 

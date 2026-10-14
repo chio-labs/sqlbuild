@@ -36,3 +36,4 @@ pub const EVENT_TIME_CURSOR_CONFLICT_HELP: &str =
 /// Help for a missing dbt project directory.
 pub const MISSING_PROJECT_DIR_HELP: &str = "to point SQLBuild at the dbt project, set this in sqlbuild_project.toml:\n            [dbt]\n            project_dir = \"path/to/dbt_project\"\n  = help: or pass `--project-dir` to `sqb dbt`";
 pub const MISSING_PROJECT_DIR_MESSAGE: &str = "dbt project directory is not configured";
+pub(crate) const DBT_NO_CONNECTION_FLAG: &str = "--no-connection";

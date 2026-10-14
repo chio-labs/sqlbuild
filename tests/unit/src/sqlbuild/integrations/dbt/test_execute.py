@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -7,20 +8,21 @@ from typing import cast
 
 import pytest
 
+from sqlbuild import _native as execute_module
+from sqlbuild import _native as phases_module
+from sqlbuild import _native as plan_module
 from sqlbuild._native import (
     DbtCombinedGraph,
     build_dbt_interop_plan,
     build_failed_sqlbuild_model_names,
     build_merged_dbt_execution_argv,
+    execute_dbt_commands,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.integrations.dbt._helpers.pipeline import execute as dbt_execute_module
-from sqlbuild.integrations.dbt._helpers.pipeline import execution_phases as phases_module
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
-from sqlbuild.integrations.dbt.main.pipeline import execute as execute_module
-from sqlbuild.integrations.dbt.main.pipeline import plan as plan_module
+from sqlbuild.integrations.dbt.main.runtime import _execute_json_event_stream as event_module
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCommandExecutionResult,
@@ -40,6 +42,7 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtCompileFullRefreshPipelineTestCase,
     DbtExecutionSelectionStatusTestCase,
     DbtExecutionSummaryFooterTestCase,
+    DbtResultBackfillTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     CompileOnlyDbtRunner,
@@ -437,13 +440,13 @@ def test_given_planned_dbt_tests_when_executing_then_does_not_resolve_selection_
         ),
     )
     monkeypatch.setattr(
-        dbt_execute_module,
+        event_module,
         "execute_dbt_json_event_stream",
         lambda **kwargs: (0, streamed_results),
     )
     progress_stream: StringIO = StringIO()
 
-    result: DbtCommandExecutionResult = dbt_execute_module.execute_dbt_commands(
+    result: DbtCommandExecutionResult = execute_dbt_commands(
         runner=cast(DbtRunner, NoSelectionRunner()),
         options=DbtCliOptions(project_dir=Path("/dbt")),
         merged_argv=("dbt", "test", "--select", planned_node.unique_id),
@@ -457,3 +460,86 @@ def test_given_planned_dbt_tests_when_executing_then_does_not_resolve_selection_
     assert result.node_results[0].unique_id == planned_node.unique_id
     assert test_case.expected_output_fragment in progress_stream.getvalue()
     assert test_case.expected_completion_fragment not in progress_stream.getvalue()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtResultBackfillTestCase(
+            description="unicode message takes precedence over failures",
+            message="  café\u2003",
+            failures=3,
+            expected_message="café",
+        ),
+        DbtResultBackfillTestCase(
+            description="blank message falls back to failure count",
+            message="\u2003",
+            failures=3,
+            expected_message="3 failure(s)",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_missing_streamed_nodes_when_finalizing_then_backfills_selected_artifact_results(
+    test_case: DbtResultBackfillTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    streamed: DbtNodeExecutionResult = DbtNodeExecutionResult(
+        unique_id="model.analytics.orders",
+        resource_type="model",
+        node_name="orders",
+        status="error",
+        index=1,
+        total=2,
+        execution_time=0.25,
+    )
+    (tmp_path / "run_results.json").write_text(
+        json.dumps(
+            {
+                "results": [
+                    {"unique_id": streamed.unique_id, "status": "error"},
+                    {
+                        "unique_id": "model.analytics.customers",
+                        "status": "skipped",
+                        "message": test_case.message,
+                        "failures": test_case.failures,
+                    },
+                    {"unique_id": "model.analytics.inventory", "status": "success"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        event_module, "execute_dbt_json_event_stream", lambda **kwargs: (1, (streamed,))
+    )
+    output: StringIO = StringIO()
+    callbacks: list[DbtNodeExecutionResult] = []
+    progress: list[str] = []
+
+    result: DbtCommandExecutionResult = execute_dbt_commands(
+        runner=DbtRunner(),
+        options=DbtCliOptions(target_path=tmp_path),
+        merged_argv=("dbt", "build"),
+        progress_stream=StringIO(),
+        stdout_stream=output,
+        use_color=False,
+        expected_nodes=(
+            DbtLsNode(unique_id=streamed.unique_id),
+            DbtLsNode(unique_id="model.analytics.customers"),
+        ),
+        on_node_result=callbacks.append,
+        on_progress=progress.append,
+    )
+
+    assert result.returncode == 1
+    assert result.node_results[0] == streamed
+    assert len(result.node_results) == 2
+    appended: DbtNodeExecutionResult = result.node_results[1]
+    assert appended.unique_id == "model.analytics.customers"
+    assert appended.status == "skipped"
+    assert (appended.index, appended.total) == (2, 3)
+    assert appended.messages[0].message == test_case.expected_message
+    assert callbacks == [appended]
+    assert progress == ["Finalizing dbt run...", "Finalized dbt run."]
+    assert "customers" in output.getvalue()
+    assert "inventory" not in output.getvalue()

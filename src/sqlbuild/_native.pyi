@@ -31,6 +31,7 @@ from sqlbuild.cli.commands.models import (
     ContractCommandRequest,
     CostCommandRequest,
     DbtInitCommandRequest,
+    DbtSqlbuildWorkContext,
     DiffCommandRequest,
     FreshnessCommandRequest,
     JanitorCommandRequest,
@@ -201,6 +202,7 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     ChangeDetectionResult,
+    ColumnRenameHint,
     CursorBounds,
     DeferralInputs,
     DirectModelVersionIdentities,
@@ -216,6 +218,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerScope,
     PlanOutput,
     PlanWarning,
+    QueryShape,
     ReferenceRename,
     SchemaAction,
     SchemaFinding,
@@ -231,6 +234,7 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import (
     CursorGrain,
     CursorType,
+    InputColumns,
     MaterializationType,
     OnSchemaChange,
     PlanAction,
@@ -321,21 +325,42 @@ from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.models import (
     DbtCliConfigOverrides,
     DbtCliOptions,
+    DbtCommandExecutionResult,
+    DbtCommandResult,
     DbtInteropCommandArgs,
+    DbtInteropCompiledProject,
+    DbtInteropExecutionRequest,
+    DbtInteropInvocation,
     DbtInteropParsedArgs,
     DbtInteropPlan,
+    DbtInteropPlanResolution,
     DbtInteropRoutedArgs,
     DbtInteropSelectionResult,
     DbtLsNode,
     DbtManifestIndex,
     DbtManifestModel,
     DbtNodeExecutionResult,
+    DbtPlanEnvironment,
+    DbtSqlbuildPlanRequest,
     NormalizedDbtProfileConnection,
     ResolvedDbtConfig,
     ResolvedDbtProfileOutput,
 )
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
-from sqlbuild.lint.models import HeaderSpan, LintBody, LintConfig, LintRunResult, LintViolation
+from sqlbuild.lint.models import (
+    CompileFacts,
+    ExpandedLintFile,
+    FixVerdict,
+    HeaderSpan,
+    LintBody,
+    LintConfig,
+    LintFileRole,
+    LintRunResult,
+    LintViolation,
+    PendingLintBody,
+    PreparedLintFiles,
+    RuleFixResult,
+)
 from sqlbuild.lint.types import RelationKeyRow, RelationKeys
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.models import DisplayOptions
@@ -1183,6 +1208,71 @@ def declared_relation_keys(
     sources: Iterable[SourceEntry],
 ) -> RelationKeys: ...
 def compiled_relation_keys(project: CompiledProjectView) -> RelationKeys: ...
+def compile_facts(*, project: CompiledProjectView, project_dir: Path) -> CompileFacts: ...
+def lint_file_role(
+    *, file_path: Path, project_dir: Path, relative_path: PurePath | None = None
+) -> LintFileRole: ...
+def lint_body_ranges(
+    *,
+    contents: str,
+    headers: tuple[HeaderSpan, ...],
+    file_path: Path,
+    project_dir: Path,
+    role: LintFileRole | None = None,
+) -> tuple[tuple[int, int], ...]: ...
+def prepare_lint_body(
+    *,
+    role: LintFileRole,
+    file_path: Path,
+    contents: str,
+    body_range: tuple[int, int],
+    context: SqlExpansionContext,
+    dialect: str,
+    external_identifiers: tuple[str, ...] = (),
+    allows_ceremonial_select: bool = False,
+    allows_dynamic_output_star: bool = False,
+    compiled_expansion: CompiledSqlExpansion | None = None,
+) -> LintBody: ...
+def expand_lint_body(
+    *,
+    role: LintFileRole,
+    file_path: Path,
+    contents: str,
+    body_range: tuple[int, int],
+    context: SqlExpansionContext,
+    dialect: str,
+    external_identifiers: tuple[str, ...] = (),
+    allows_ceremonial_select: bool = False,
+    allows_dynamic_output_star: bool = False,
+    compiled_expansion: CompiledSqlExpansion | None = None,
+) -> PendingLintBody: ...
+def expand_file_bodies(
+    *,
+    file_path: Path,
+    contents: str,
+    headers: tuple[HeaderSpan, ...],
+    context: SqlExpansionContext,
+    dialect: str,
+    project_dir: Path,
+    relative_path: Path,
+    dynamic_output_paths: frozenset[Path],
+    compiled_expansions: dict[Path, CompiledSqlExpansion] | None,
+) -> ExpandedLintFile: ...
+def prepare_expanded_files(
+    *, expanded_files: tuple[ExpandedLintFile, ...], dialect: str, skip_unexpandable: bool
+) -> PreparedLintFiles: ...
+def plan_rule_fixes(
+    *,
+    project_dir: Path,
+    files: dict[Path, str],
+    config: LintConfig,
+    adapter: TypedSqlValueRenderer | None,
+    discovered_inputs: DiscoveredProjectInputs | None,
+    enabled: bool,
+) -> tuple[dict[Path, str], tuple[RuleFixResult, ...], list[LintViolation]]: ...
+def fix_verdict(
+    *, before: CompileFacts, after: CompileFacts, edited: frozenset[Path]
+) -> FixVerdict: ...
 def build_lint_expansion_context(
     *,
     project_dir: Path,
@@ -1683,6 +1773,144 @@ def build_dbt_ls_argv(
     exclude: Sequence[str] | None = None,
     resource_types: Sequence[str] | None = None,
 ) -> tuple[str, ...]: ...
+def resolve_dbt_execution_invocation(
+    request: DbtInteropExecutionRequest,
+) -> DbtInteropInvocation: ...
+def dbt_interop_plan_safety_gates() -> PlanSafetyGates: ...
+def execute_dbt_interop_from_project(request: DbtInteropExecutionRequest) -> int: ...
+def plan_dbt_interop_from_project(
+    *,
+    project_dir: Path,
+    args: tuple[str, ...],
+    dbt_runner: DbtRunner | None = None,
+    dbt_executable: str | None = None,
+    sqlbuild_executable: str = "sqb",
+    no_sql_validation: bool = False,
+    on_progress: Callable[[str], None] | None = None,
+    progress_stream: TextIO | None = None,
+    use_color: bool = False,
+) -> DbtInteropPlan: ...
+def debug_dbt_from_project(
+    *,
+    project_dir: Path,
+    args: tuple[str, ...],
+    dbt_runner: DbtRunner | None = None,
+    dbt_executable: str | None = None,
+    stdout_stream: TextIO,
+    stderr_stream: TextIO,
+) -> int: ...
+def resolve_dbt_connection_config(
+    *,
+    request: DbtInteropExecutionRequest,
+    invocation: DbtInteropInvocation,
+    compiled: DbtInteropCompiledProject,
+) -> dict[str, object]: ...
+def write_dbt_execution_plan_text(
+    *,
+    request: DbtInteropExecutionRequest,
+    invocation: DbtInteropInvocation,
+    plan: DbtInteropPlan,
+    merged_dbt_argv: tuple[str, ...] | None,
+) -> None: ...
+def execute_dbt_without_state_tracking(
+    *,
+    request: DbtInteropExecutionRequest,
+    invocation: DbtInteropInvocation,
+    merged_dbt_argv: tuple[str, ...] | None,
+) -> DbtCommandExecutionResult: ...
+def write_dbt_execution_summary(
+    *,
+    request: DbtInteropExecutionRequest,
+    invocation: DbtInteropInvocation,
+    execution: DbtCommandExecutionResult,
+) -> None: ...
+def resolve_sqlbuild_execution_plan_output(
+    *,
+    request: DbtInteropExecutionRequest,
+    invocation: DbtInteropInvocation,
+    compiled: DbtInteropCompiledProject,
+    manifest: DbtManifestIndex,
+    plan: DbtInteropPlan,
+    failed_sqlbuild_model_names: tuple[str, ...],
+) -> PlanOutput | None: ...
+def run_dbt_sqlbuild_work(
+    *,
+    request: DbtInteropExecutionRequest,
+    invocation: DbtInteropInvocation,
+    compiled: DbtInteropCompiledProject,
+    plan_output: PlanOutput,
+    connection_config: dict[str, object],
+) -> int: ...
+def write_sqlbuild_skip_notice(
+    *,
+    request: DbtInteropExecutionRequest,
+    invocation: DbtInteropInvocation,
+    message: str,
+) -> None: ...
+def execute_dbt_sqlbuild_work(
+    *,
+    context: DbtSqlbuildWorkContext,
+    command: DbtInteropCommand,
+    project: CompiledProjectView,
+    project_dir: Path,
+    fail_fast: bool,
+    verbose: bool,
+) -> int: ...
+def build_sqlbuild_plan_output(
+    *,
+    environment: DbtPlanEnvironment,
+    request: DbtSqlbuildPlanRequest,
+    hooks: ConnectionHooks,
+) -> PlanOutput | None: ...
+def attach_sqlbuild_plan_output(
+    *,
+    plan: DbtInteropPlan,
+    project_dir: Path,
+    discovered_inputs: DiscoveredProjectInputs,
+    compiled: DbtInteropCompiledProject,
+    sqlbuild_args: tuple[str, ...],
+    connection_progress: Any | None,
+    on_progress: Callable[[str], None] | None,
+) -> DbtInteropPlan: ...
+def dbt_failure_detail(result: DbtCommandResult) -> str | None: ...
+def load_compiled_dbt_manifest(
+    *,
+    runner: DbtRunner,
+    dbt_options: DbtCliOptions,
+    full_refresh: bool,
+    on_progress: Callable[[str], None] | None,
+) -> DbtManifestIndex: ...
+def compile_dbt_interop_project(
+    *,
+    project_dir: Path,
+    discovered_inputs: DiscoveredProjectInputs,
+    manifest: DbtManifestIndex,
+    dbt_vars: dict[str, object],
+    no_sql_validation: bool,
+    on_progress: Callable[[str], None] | None,
+) -> DbtInteropCompiledProject: ...
+def resolve_dbt_interop_plan(
+    *,
+    command: DbtInteropCommand,
+    invocation: DbtInteropInvocation,
+    compiled: DbtInteropCompiledProject,
+    manifest: DbtManifestIndex,
+    sqlbuild_executable: str,
+    on_progress: Callable[[str], None] | None,
+) -> DbtInteropPlanResolution: ...
+def execute_dbt_commands(
+    *,
+    runner: DbtRunner,
+    options: DbtCliOptions,
+    merged_argv: tuple[str, ...] | None,
+    progress_stream: TextIO,
+    stdout_stream: TextIO,
+    use_color: bool,
+    skip_message: str = "Skipping dbt: no dbt work selected.",
+    expected_nodes: tuple[DbtLsNode, ...] | None = None,
+    on_node_result: Callable[[DbtNodeExecutionResult], None] | None = None,
+    on_progress: Callable[[str], None] | None = None,
+) -> DbtCommandExecutionResult: ...
 def parse_dbt_ls_json_lines(*, stdout: str) -> tuple[DbtLsNode, ...]: ...
 def route_dbt_interop_args(
     *, command: DbtInteropCommand | str, parsed: DbtInteropParsedArgs
@@ -4060,6 +4288,34 @@ def detect_model_changes_in_scope(
     expected_version_hashes: dict[str, str] | None = None,
     expected_metadata_jsons: dict[str, str] | None = None,
 ) -> dict[str, ChangeDetectionResult]: ...
+def parse_query_shape(*, query_sql: str, dialect: str | None) -> QueryShape | None: ...
+def renames_explain_change(
+    *,
+    previous: QueryShape,
+    current: QueryShape,
+    renames: Mapping[str, str],
+    input_columns: InputColumns,
+) -> bool: ...
+def build_migration_fingerprint(
+    *, query_sql: str, metadata_json: str, ref_identities: Mapping[str, str], dialect: str | None
+) -> str | None: ...
+def migration_fingerprint_ref_names(*, query_sql: str, metadata_json: str) -> frozenset[str]: ...
+def identical_renames(
+    *,
+    previous: QueryShape,
+    current: QueryShape,
+    excluded: frozenset[str],
+    declared: Mapping[str, str],
+    input_columns: InputColumns,
+) -> tuple[tuple[str, str], ...]: ...
+def rename_hints(
+    *,
+    model_name: str,
+    previous: QueryShape,
+    current: QueryShape,
+    excluded: frozenset[str],
+    live_columns: frozenset[str],
+) -> tuple[ColumnRenameHint, ...]: ...
 def detect_model_changes(
     *,
     model: CompiledModelView,

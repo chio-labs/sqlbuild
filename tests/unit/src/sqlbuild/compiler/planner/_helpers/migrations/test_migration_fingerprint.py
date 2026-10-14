@@ -4,15 +4,52 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import build_migration_fingerprint
 from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations._test_types import (
     IneligibleFingerprintTestCase,
     MigrationFingerprintTestCase,
+    StoredMigrationHashTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations.helpers import (
     BASE_CONFIG,
     ORDERS_SQL,
     model_fingerprint,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StoredMigrationHashTestCase(
+            description="empty config",
+            metadata_json='{"config": {}}',
+            expected_fingerprint="7734ff9fad2e1b98899e6f9ade8f30aee082ece92540d972b7f54816b28d6b70",
+        ),
+        StoredMigrationHashTestCase(
+            description="ordered keys and large integer",
+            metadata_json='{"config": {"unique_key": ["b", "a"], "scale": 12345678901234567890}}',
+            expected_fingerprint="24c0e337e8fdabcffca3ca478fc59883dd2187e849d036a547638909e8f22f09",
+        ),
+        StoredMigrationHashTestCase(
+            description="Unicode numeric and null metadata",
+            metadata_json='{"config": {"cursor_inputs": {"orders": "id"}, "amount": 1.0, "note": "café", "optional": null}}',
+            expected_fingerprint="e9ca28719a39368e4e00095c8361457354240f71f4f552f2e44f871709de1226",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_recorded_metadata_when_fingerprinting_then_preserves_stored_hash(
+    test_case: StoredMigrationHashTestCase,
+) -> None:
+    assert (
+        build_migration_fingerprint(
+            query_sql='SELECT o.id FROM __ref("orders") o',
+            metadata_json=test_case.metadata_json,
+            ref_identities={"orders": "previous_orders"},
+            dialect="duckdb",
+        )
+        == test_case.expected_fingerprint
+    )
 
 
 @pytest.mark.parametrize(

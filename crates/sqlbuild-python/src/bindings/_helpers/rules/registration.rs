@@ -1,6 +1,8 @@
 //! Register the native rules, lint and DSL header functions.
 
+use crate::bindings::_helpers::rules::{fix_facts::compile_facts, fix_verdict::fix_verdict};
 use pyo3::prelude::{Bound, PyModule, PyResult};
+use pyo3::{types::PyModuleMethods, wrap_pyfunction};
 
 use crate::bindings::_helpers::rules::{
     builtin_catalogue, catalogue, custom_rule_cache, custom_rule_evidence, dsl_headers,
@@ -9,6 +11,36 @@ use crate::bindings::_helpers::rules::{
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(
+        crate::bindings::_helpers::rules::lint_headers::lint_file_role,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        crate::bindings::_helpers::rules::lint_headers::lint_body_ranges,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        crate::bindings::_helpers::rules::lint_preparation::prepare_lint_body,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        crate::bindings::_helpers::rules::lint_preparation::expand_lint_body,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        crate::bindings::_helpers::rules::lint_preparation::expand_file_bodies,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        crate::bindings::_helpers::rules::lint_preparation::prepare_expanded_files,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        crate::bindings::_helpers::rules::fix_session::plan_rule_fixes,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(compile_facts, module)?)?;
+    module.add_function(wrap_pyfunction!(fix_verdict, module)?)?;
     evaluation::register(module)?;
     lint::register(module)?;
     lint_text::register(module)?;

@@ -11,6 +11,28 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations.helpers import
 
 
 @dataclass(frozen=True)
+class RenameLookupFailureTestCase:
+    description: str
+    expected_error: str
+
+
+@dataclass(frozen=True)
+class StoredMigrationHashTestCase:
+    description: str
+    metadata_json: str
+    expected_fingerprint: str
+
+
+@dataclass(frozen=True)
+class StoredProjectionTestCase:
+    description: str
+    query_sql: str
+    expected_references: frozenset[str]
+    expected_expression_hash: str
+    expected_fingerprint: str
+
+
+@dataclass(frozen=True)
 class MigrationFingerprintTestCase:
     description: str
     origin_sql: str

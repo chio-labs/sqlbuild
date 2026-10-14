@@ -11,10 +11,9 @@ import pytest
 
 import sqlbuild.compiler.planner.classes.fixture_column_inferences as fixture_inferences
 import sqlbuild.compiler.planner.classes.migration_fingerprint_cache as fingerprint_cache
-from sqlbuild._native import infer_fixture_column_facts
+from sqlbuild._native import build_migration_fingerprint, infer_fixture_column_facts
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.models import FixtureColumnInference
-from sqlbuild.compiler.planner._helpers.migrations.fingerprint import build_migration_fingerprint
 
 ORDERS_SQL: str = 'SELECT o.order_id, o.amount_cents FROM __ref("stg_orders") AS o'
 CURSOR_METADATA: str = json.dumps(

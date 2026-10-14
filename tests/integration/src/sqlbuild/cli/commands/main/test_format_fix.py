@@ -424,5 +424,46 @@ def test_given_unused_cte_output_when_fixing_then_model_rows_are_unchanged(
     )
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [FormatCompileIntegrationTestCase("macro and CRLF source", "UNION DISTINCT")],
+    ids=lambda case: case.description,
+)
+def test_given_macro_and_crlf_source_when_fixing_then_previews_preserve_bytes_and_write_keeps_mode(
+    test_case: FormatCompileIntegrationTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
+    macros: Path = tmp_path / "macros"
+    macros.mkdir()
+    (macros / "values.py").write_text('def order_value():\n    return "1"\n')
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    original: bytes = (
+        b'MODEL (description "Orders");\r\n'
+        b"SELECT @order_value() AS order_id UNION SELECT 2 AS order_id\r\n"
+    )
+    model.write_bytes(original)
+    model.chmod(0o640)
+    original_mode: int = model.stat().st_mode
+
+    assert main(["--project-dir", str(tmp_path), "format", "--fix", "--check", "--json"]) == 1
+    capsys.readouterr()
+    assert model.read_bytes() == original
+    assert main(["--project-dir", str(tmp_path), "format", "--fix", "--diff"]) == 0
+    capsys.readouterr()
+    assert model.read_bytes() == original
+
+    assert main(["--project-dir", str(tmp_path), "format", "--fix", "--json"]) == 0
+    payload: dict[str, Any] = json.loads(capsys.readouterr().out)
+    assert any(
+        fix["code"] == "SQBRSQL008" and fix["status"] == "applied" for fix in payload["rule_fixes"]
+    )
+    written: bytes = model.read_bytes()
+    assert b"@order_value()" in written
+    assert test_case.expected_literal.encode() in written
+    assert written.count(b"\n") == written.count(b"\r\n")
+    assert model.stat().st_mode == original_mode
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-vv"]))

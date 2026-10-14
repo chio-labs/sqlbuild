@@ -15,8 +15,8 @@ use crate::bindings::_helpers::dbt_command::support::{color_enabled, effective_d
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const VALIDATE_ARGS_MODULE: &str = "sqlbuild.integrations.dbt.main.cli._validate_execution_args";
-const PLAN_MODULE: &str = "sqlbuild.integrations.dbt.main.pipeline.plan";
-const EXECUTE_MODULE: &str = "sqlbuild.integrations.dbt.main.pipeline.execute";
+const PLAN_MODULE: &str = "sqlbuild._native";
+const EXECUTE_MODULE: &str = "sqlbuild._native";
 const DBT_MODELS: &str = "sqlbuild.integrations.dbt.models";
 const PRESENTATION_MODELS: &str = "sqlbuild.presentation.models";
 const PLAN_COMMAND: &str = "plan";

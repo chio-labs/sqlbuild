@@ -5,10 +5,9 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
+from sqlbuild._native import build_migration_fingerprint, parse_query_shape
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.migrations.types import OldNameViewAction
-from sqlbuild.compiler.planner._helpers.migrations.fingerprint import build_migration_fingerprint
-from sqlbuild.compiler.planner._helpers.migrations.projections import parse_query_shape
 from sqlbuild.compiler.planner.models import OldNameViewPlanEntry, QueryShape
 from sqlbuild.compiler.planner.types import InputColumns
 
@@ -49,6 +48,11 @@ def input_lookup(relations: dict[tuple[str, str], frozenset[str]]) -> InputColum
     """Return an input-column lookup over (reference kind, relation name) pairs."""
 
     return lambda kind, name: relations.get((kind, name))
+
+
+def unavailable_input_columns(kind: str, name: str) -> frozenset[str] | None:
+    """Represent an input inspection failure encountered during a rename proof."""
+    raise RuntimeError(f"cannot inspect {kind} {name}")
 
 
 def old_name_entry(

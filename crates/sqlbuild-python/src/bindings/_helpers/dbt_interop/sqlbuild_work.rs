@@ -1,0 +1,227 @@
+//! Enforce interop plan safety before entering the Python build executor.
+
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::PyDict;
+use pyo3::{pyfunction, wrap_pyfunction};
+
+use crate::bindings::_helpers::build_command::support::{
+    boolean, emit, joined, keyword_relay, none, text, tuple,
+};
+use crate::bindings::_helpers::compile_driver::python_calls::{
+    KeywordArguments, call_with, imported,
+};
+
+const WORK_OPTIONS: (&[&str], &[&str]) = (
+    &[
+        "context",
+        "command",
+        "project",
+        "project_dir",
+        "fail_fast",
+        "verbose",
+    ],
+    &[],
+);
+const BUILD_MODELS: &str = "sqlbuild.executor.build.models";
+const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
+const COMMAND_CONSTANTS: &str = "sqlbuild.cli.commands.constants";
+
+/// Interop has no allow flags; destructive work uses the ordinary interactive safety gates.
+#[pyfunction]
+fn dbt_interop_plan_safety_gates(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
+    call_with(
+        &imported(py, COMMAND_MODELS, "PlanSafetyGates")?,
+        &[
+            ("allow_missing_migration_origin", boolean(py, false)),
+            ("allow_snapshot_full_refresh", boolean(py, false)),
+            ("allow_table_type_downgrade", boolean(py, false)),
+            ("allow_retention_decrease", boolean(py, false)),
+            (
+                "missing_origin_help",
+                imported(py, COMMAND_CONSTANTS, "MISSING_ORIGIN_DBT_HELP")?,
+            ),
+            (
+                "snapshot_full_refresh_help",
+                imported(py, COMMAND_CONSTANTS, "SNAPSHOT_FULL_REFRESH_DBT_HELP")?,
+            ),
+            (
+                "table_type_downgrade_help",
+                imported(py, COMMAND_CONSTANTS, "TABLE_TYPE_DOWNGRADE_DBT_HELP")?,
+            ),
+            (
+                "retention_decrease_help",
+                imported(py, COMMAND_CONSTANTS, "RETENTION_DECREASE_DBT_HELP")?,
+            ),
+            (
+                "execution_limit_note",
+                imported(py, COMMAND_CONSTANTS, "EXECUTION_LIMIT_DBT_NOTE")?,
+            ),
+        ],
+    )
+}
+
+/// Execute SQLBuild work only after its plan safety policies succeed.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+fn execute_dbt_sqlbuild_work<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<i64> {
+    let args = KeywordArguments::read(py, "execute_dbt_sqlbuild_work", options, WORK_OPTIONS)?;
+    let context = args.value("context")?;
+    let project = args.value("project")?;
+    let plan = context.getattr("plan_output")?;
+    let output = context.getattr("output_stream")?;
+    let color = context.getattr("use_color")?;
+    call_with(
+        &imported(py, "sqlbuild._native", "enforce_plan_safety_policies")?,
+        &[
+            ("plan", plan.clone()),
+            ("gates", dbt_interop_plan_safety_gates(py)?),
+            ("snapshots_config", context.getattr("snapshots_config")?),
+            ("target_name", project.getattr("effective_target_name")?),
+            ("execution_limits", context.getattr("execution_limits")?),
+            (
+                "streams",
+                tuple(py, &[py.import("sys")?.getattr("stdin")?, output.clone()])?,
+            ),
+        ],
+    )?;
+    let callbacks = call_with(
+        &imported(py, "sqlbuild._native", "BuildProgressCallbacks")?,
+        &[
+            ("plan", plan.clone()),
+            ("use_color", color.clone()),
+            ("verbose", args.value("verbose")?),
+            ("debug", boolean(py, false)),
+        ],
+    )?;
+    let command = args.value("command")?;
+    let kinds = imported(py, "sqlbuild.integrations.dbt.types", "DbtInteropCommand")?;
+    let display = if command.eq(kinds.getattr("RUN")?)? {
+        "sqb build --no-tests --no-audits".to_owned()
+    } else {
+        format!("sqb {}", command.getattr("value")?.extract::<String>()?)
+    };
+    let concurrency = project.getattr("settings")?.getattr("concurrency")?;
+    let header = call_with(
+        &imported(py, "sqlbuild._native", "format_execution_header")?,
+        &[
+            ("command", text(py, &display)),
+            ("target", none(py)),
+            ("concurrency", concurrency.clone()),
+        ],
+    )?;
+    let style = call_with(
+        &imported(py, "sqlbuild.presentation.classes.cli_style", "CliStyle")?,
+        &[("use_color", color.clone())],
+    )?;
+    emit(
+        &output,
+        &format!(
+            "{}  {}\n\n",
+            style
+                .call_method1("object_name", ("SQLBuild execution",))?
+                .extract::<String>()?,
+            style
+                .call_method1("muted", (header,))?
+                .extract::<String>()?
+        ),
+    )?;
+    let connection = call_with(
+        &imported(py, "sqlbuild._native", "ConnectionProgressReporter")?,
+        &[
+            ("adapter_name", context.getattr("adapter_name")?),
+            ("stream", output.clone()),
+            ("blank_line_after_complete", boolean(py, true)),
+            ("use_color", color.clone()),
+        ],
+    )?;
+    let build = command.eq(kinds.getattr("BUILD")?)?;
+    let runtime = call_with(
+        &imported(py, BUILD_MODELS, "BuildRuntimeParams")?,
+        &[
+            ("run_id", project.getattr("run_id")?),
+            ("run_tests", boolean(py, build)),
+            ("run_audits", boolean(py, build)),
+            ("fail_fast", args.value("fail_fast")?),
+            ("max_concurrency", concurrency),
+            ("use_color", color.clone()),
+        ],
+    )?;
+    let hooks = call_with(
+        &imported(py, BUILD_MODELS, "BuildCallbacks")?,
+        &[
+            (
+                "on_node_start",
+                keyword_relay(
+                    callbacks.getattr("on_node_start")?,
+                    &["name", "resource_kind"],
+                )?,
+            ),
+            ("on_node_complete", callbacks.getattr("on_node_complete")?),
+            ("on_sub_progress", callbacks.getattr("on_sub_progress")?),
+            (
+                "on_connection_start",
+                connection.getattr("on_connection_start")?,
+            ),
+            (
+                "on_connection_complete",
+                keyword_relay(
+                    connection.getattr("on_connection_complete")?,
+                    &["connection_count", "elapsed_seconds"],
+                )?,
+            ),
+            (
+                "on_connection_error",
+                keyword_relay(
+                    connection.getattr("on_connection_error")?,
+                    &["connection_count", "elapsed_seconds"],
+                )?,
+            ),
+        ],
+    )?;
+    let result = call_with(
+        &imported(
+            py,
+            "sqlbuild.executor.pipeline.main.run",
+            "run_build_pipeline",
+        )?,
+        &[
+            ("plan", plan.clone()),
+            ("connection_config", context.getattr("connection_config")?),
+            ("adapter", context.getattr("adapter")?),
+            ("settings", project.getattr("settings")?),
+            ("runtime", runtime),
+            ("callbacks", hooks),
+        ],
+    )?;
+    call_with(
+        &imported(py, "sqlbuild._native", "write_runtime_target")?,
+        &[
+            (
+                "target_dir",
+                joined(&args.value("project_dir")?, &["target"])?,
+            ),
+            ("plan_output", plan),
+            ("result", result.clone()),
+        ],
+    )?;
+    let footer = call_with(
+        &imported(py, "sqlbuild._native", "format_build_footer")?,
+        &[
+            ("result", result.clone()),
+            ("elapsed", callbacks.getattr("elapsed")?),
+            ("use_color", color),
+        ],
+    )?;
+    emit(&output, &format!("\n{}\n", footer.extract::<String>()?))?;
+    Ok(i64::from(!result.getattr("status")?.eq(
+        imported(py, "sqlbuild.executor.build.types", "BuildStatus")?.getattr("SUCCESS")?,
+    )?))
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(dbt_interop_plan_safety_gates, module)?)?;
+    module.add_function(wrap_pyfunction!(execute_dbt_sqlbuild_work, module)?)
+}
