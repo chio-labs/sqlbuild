@@ -8,6 +8,9 @@ from typing import cast
 
 import pytest
 
+from sqlbuild import _native as execute_module
+from sqlbuild import _native as phases_module
+from sqlbuild import _native as plan_module
 from sqlbuild._native import (
     DbtCombinedGraph,
     build_dbt_interop_plan,
@@ -18,10 +21,7 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.integrations.dbt._helpers.pipeline import execution_phases as phases_module
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
-from sqlbuild.integrations.dbt.main.pipeline import execute as execute_module
-from sqlbuild.integrations.dbt.main.pipeline import plan as plan_module
 from sqlbuild.integrations.dbt.main.runtime import _execute_json_event_stream as event_module
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,

@@ -1,5 +1,6 @@
 use crate::dbt_cli::main::build_dbt_argv::build_dbt_argv;
 use crate::dbt_cli::main::choose_dbt_config::choose_dbt_config;
+use crate::dbt_cli::main::dbt_debug_args::dbt_debug_args;
 use crate::dbt_cli::main::resolve_dbt_executable::resolve_dbt_executable;
 use crate::dbt_cli::main::route_dbt_interop_args::route_dbt_interop_args;
 use crate::dbt_cli::models::{
@@ -7,6 +8,41 @@ use crate::dbt_cli::models::{
 };
 use crate::dbt_cli::tests::helpers::{buckets, failure, full_options, text, texts};
 use crate::dbt_cli::tests::test_types::{ArgvTestCase, ConfigTestCase, RouteTestCase};
+
+#[test]
+fn given_debug_flags_when_routing_then_preserves_only_dbt_owned_arguments() {
+    let test_cases = [
+        ArgvTestCase {
+            description: "strip local flags and separate configuration values",
+            argv: dbt_debug_args(&texts(&[
+                "--project-dir",
+                "project",
+                "--profiles-dir",
+                "profiles",
+                "--target",
+                "dev",
+                "--target-path",
+                "target",
+                "--no-connection",
+                "--connection",
+                "--debug",
+            ])),
+            expected_argv: vec!["--connection", "--debug"],
+        },
+        ArgvTestCase {
+            description: "preserve equals forms for dbt and tolerate a trailing value flag",
+            argv: dbt_debug_args(&texts(&["--target=dev", "--no-connection", "--target"])),
+            expected_argv: vec!["--target=dev"],
+        },
+    ];
+    for test_case in test_cases {
+        assert_eq!(
+            test_case.argv, test_case.expected_argv,
+            "{}",
+            test_case.description
+        );
+    }
+}
 
 #[test]
 fn given_options_when_building_argv_then_orders_flags_like_dbt() {

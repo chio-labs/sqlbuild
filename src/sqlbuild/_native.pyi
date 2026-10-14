@@ -1777,6 +1777,76 @@ def resolve_dbt_execution_invocation(
     request: DbtInteropExecutionRequest,
 ) -> DbtInteropInvocation: ...
 def dbt_interop_plan_safety_gates() -> PlanSafetyGates: ...
+def execute_dbt_interop_from_project(request: DbtInteropExecutionRequest) -> int: ...
+def plan_dbt_interop_from_project(
+    *,
+    project_dir: Path,
+    args: tuple[str, ...],
+    dbt_runner: DbtRunner | None = None,
+    dbt_executable: str | None = None,
+    sqlbuild_executable: str = "sqb",
+    no_sql_validation: bool = False,
+    on_progress: Callable[[str], None] | None = None,
+    progress_stream: TextIO | None = None,
+    use_color: bool = False,
+) -> DbtInteropPlan: ...
+def debug_dbt_from_project(
+    *,
+    project_dir: Path,
+    args: tuple[str, ...],
+    dbt_runner: DbtRunner | None = None,
+    dbt_executable: str | None = None,
+    stdout_stream: TextIO,
+    stderr_stream: TextIO,
+) -> int: ...
+def resolve_dbt_connection_config(
+    *,
+    request: DbtInteropExecutionRequest,
+    invocation: DbtInteropInvocation,
+    compiled: DbtInteropCompiledProject,
+) -> dict[str, object]: ...
+def write_dbt_execution_plan_text(
+    *,
+    request: DbtInteropExecutionRequest,
+    invocation: DbtInteropInvocation,
+    plan: DbtInteropPlan,
+    merged_dbt_argv: tuple[str, ...] | None,
+) -> None: ...
+def execute_dbt_without_state_tracking(
+    *,
+    request: DbtInteropExecutionRequest,
+    invocation: DbtInteropInvocation,
+    merged_dbt_argv: tuple[str, ...] | None,
+) -> DbtCommandExecutionResult: ...
+def write_dbt_execution_summary(
+    *,
+    request: DbtInteropExecutionRequest,
+    invocation: DbtInteropInvocation,
+    execution: DbtCommandExecutionResult,
+) -> None: ...
+def resolve_sqlbuild_execution_plan_output(
+    *,
+    request: DbtInteropExecutionRequest,
+    invocation: DbtInteropInvocation,
+    compiled: DbtInteropCompiledProject,
+    manifest: DbtManifestIndex,
+    plan: DbtInteropPlan,
+    failed_sqlbuild_model_names: tuple[str, ...],
+) -> PlanOutput | None: ...
+def run_dbt_sqlbuild_work(
+    *,
+    request: DbtInteropExecutionRequest,
+    invocation: DbtInteropInvocation,
+    compiled: DbtInteropCompiledProject,
+    plan_output: PlanOutput,
+    connection_config: dict[str, object],
+) -> int: ...
+def write_sqlbuild_skip_notice(
+    *,
+    request: DbtInteropExecutionRequest,
+    invocation: DbtInteropInvocation,
+    message: str,
+) -> None: ...
 def execute_dbt_sqlbuild_work(
     *,
     context: DbtSqlbuildWorkContext,

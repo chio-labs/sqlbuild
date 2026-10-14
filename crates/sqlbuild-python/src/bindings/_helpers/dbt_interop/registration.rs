@@ -17,5 +17,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     super::runtime_execution::register(module)?;
     super::pipeline_prologue::register(module)?;
     super::plan_output::register(module)?;
-    super::sqlbuild_work::register(module)
+    super::sqlbuild_work::register(module)?;
+    super::pipeline_phases::register(module)?;
+    super::pipeline::register(module)
 }

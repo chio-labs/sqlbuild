@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import debug_dbt_from_project
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
-from sqlbuild.integrations.dbt.main.pipeline.debug import debug_dbt_from_project
 from sqlbuild.integrations.dbt.models import DbtCommandResult
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import DbtDebugPipelineTestCase
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import RecordingDbtInvoker

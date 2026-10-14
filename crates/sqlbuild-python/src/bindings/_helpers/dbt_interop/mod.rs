@@ -4,6 +4,8 @@ pub(crate) mod execution;
 pub(crate) mod graph;
 pub(crate) mod manifest;
 pub(crate) mod orchestration;
+pub(crate) mod pipeline;
+pub(crate) mod pipeline_phases;
 pub(crate) mod pipeline_prologue;
 pub(crate) mod plan;
 pub(crate) mod plan_output;
