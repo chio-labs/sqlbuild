@@ -105,11 +105,6 @@ reason = "Resource identities are validated natively; the package keeps the erro
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
-path = "src/sqlbuild/sql_values/__init__.py"
-reason = "Typed SQL values are normalized and state literals rendered natively; the package keeps the value models, types, limits and errors the native bindings build and raise."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
 path = "src/sqlbuild/compiler/refactoring/__init__.py"
 reason = "Refactorings run natively; the package keeps the compiled-project input, manual-location model and error classes the native command reads and raises."
 
