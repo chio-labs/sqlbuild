@@ -5,7 +5,7 @@ from contextlib import AbstractContextManager
 from contextvars import Token
 from datetime import date, datetime
 from pathlib import Path, PurePath
-from typing import Any, TextIO, TypedDict
+from typing import Any, Literal, TextIO, TypedDict, overload
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
@@ -182,7 +182,13 @@ from sqlbuild.compiler.lineage.models import (
     ModelColumnLineage,
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
-from sqlbuild.compiler.migrations.models import MigrationRelation
+from sqlbuild.compiler.migrations.models import (
+    ColumnMigrationEvent,
+    MigrationEvent,
+    MigrationRelation,
+    OldNameViewEvent,
+    OldNameViewHistory,
+)
 from sqlbuild.compiler.migrations.types import (
     MigrationDecision,
     MigrationPromotion,
@@ -4429,14 +4435,56 @@ def deterministic_column_migration_event_id(
 def deterministic_old_name_view_event_id(
     *, event_type: OldNameViewEventType, migration_event_id: str
 ) -> str: ...
-def render_event_exists_sql(*, table: str, event_id: str) -> str: ...
-def render_event_insert_sql(
+def render_migration_state_create_sql(
     *,
-    table: str,
-    columns: tuple[str, ...],
-    column_types: Mapping[str, StateSqlValueType],
-    values: tuple[object | None, ...],
+    kind: Literal["model", "column", "old_name"],
+    database: str | None,
+    schema: str,
+    render_qualified_name: Callable[..., str | None],
+    render_framework_type: Callable[[FrameworkType], str],
 ) -> str: ...
+def render_migration_event_read_sql(
+    *,
+    kind: Literal["model", "column", "old_name"],
+    database: str | None,
+    schema: str,
+    render_qualified_name: Callable[..., str | None],
+    stored_columns: tuple[str, ...] | None = None,
+) -> tuple[str, tuple[str, ...]]: ...
+def render_migration_event_write_sql(
+    *,
+    kind: Literal["model", "column", "old_name"],
+    event: MigrationEvent | ColumnMigrationEvent | OldNameViewEvent,
+    render_qualified_name: Callable[..., str | None],
+) -> tuple[str, str]: ...
+@overload
+def decode_migration_event_rows(
+    *, kind: Literal["model"], rows: Iterable[Sequence[object]], columns: tuple[str, ...]
+) -> tuple[MigrationEvent, ...]: ...
+@overload
+def decode_migration_event_rows(
+    *, kind: Literal["column"], rows: Iterable[Sequence[object]], columns: tuple[str, ...]
+) -> tuple[ColumnMigrationEvent, ...]: ...
+@overload
+def decode_migration_event_rows(
+    *, kind: Literal["old_name"], rows: Iterable[Sequence[object]], columns: tuple[str, ...]
+) -> tuple[OldNameViewEvent, ...]: ...
+def newest_migration_event_mentioning(
+    *, events: Iterable[MigrationEvent], relation: MigrationRelation
+) -> MigrationEvent | None: ...
+def newest_column_migration_event_mentioning(
+    *,
+    events: Iterable[ColumnMigrationEvent],
+    relation: MigrationRelation,
+    origin_column: str,
+    destination_column: str,
+) -> ColumnMigrationEvent | None: ...
+def project_old_name_views(
+    *, moves: Iterable[MigrationEvent], facts: Iterable[OldNameViewEvent]
+) -> tuple[OldNameViewHistory, ...]: ...
+def resolve_old_name_view_retention(
+    *, config_values: Mapping[str, object], project_retention: str | None
+) -> str | None: ...
 def source_freshness_data_version_hash(
     *,
     source_name: str,

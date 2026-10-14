@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild._native import read_latest_fingerprints
+from sqlbuild._native import project_old_name_views, read_latest_fingerprints
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapter.relations.main.get_columns_for_inspection import get_columns_for_inspection
@@ -19,7 +19,6 @@ from sqlbuild.compiler.migrations.constants import (
     MIGRATION_TABLE_NAME,
     OLD_NAME_VIEW_TABLE_NAME,
 )
-from sqlbuild.compiler.migrations.main._project_old_name_views import project_old_name_views
 from sqlbuild.compiler.migrations.main._read_column_events import read_column_migration_events
 from sqlbuild.compiler.migrations.main._read_events import read_migration_events
 from sqlbuild.compiler.migrations.main.read_old_name_view_events import (

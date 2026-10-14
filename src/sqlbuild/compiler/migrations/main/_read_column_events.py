@@ -5,11 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from sqlbuild._native import decode_migration_event_rows, render_migration_event_read_sql
 from sqlbuild.adapter.contract.types import AdapterExecute
-from sqlbuild.compiler.migrations._helpers.column_sql import (
-    build_column_read_sql,
-    decode_column_event_row,
-)
 from sqlbuild.compiler.migrations.exceptions import MigrationStateError
 from sqlbuild.compiler.migrations.models import ColumnMigrationEvent
 
@@ -24,8 +21,10 @@ def read_column_migration_events(
 ) -> tuple[ColumnMigrationEvent, ...]:
     """Read every column migration event this version understands from one schema."""
 
-    sql: str = build_column_read_sql(
-        database=database, schema=schema, render_qualified_name=render_qualified_name
+    sql: str
+    columns: tuple[str, ...]
+    sql, columns = render_migration_event_read_sql(
+        kind="column", database=database, schema=schema, render_qualified_name=render_qualified_name
     )
     try:
         rows: list[tuple[Any, ...]] = execute(connection=connection, sql=sql).fetchall()
@@ -33,11 +32,4 @@ def read_column_migration_events(
         raise MigrationStateError(
             f"Unable to read column migration events from schema '{schema}': {error}"
         ) from error
-    events: list[ColumnMigrationEvent] = []
-    row: tuple[Any, ...]
-    for row in rows:
-        try:
-            events.append(decode_column_event_row(tuple(row)))
-        except ValueError:
-            continue
-    return tuple(events)
+    return decode_migration_event_rows(kind="column", rows=rows, columns=columns)

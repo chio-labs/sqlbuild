@@ -5,10 +5,8 @@ from __future__ import annotations
 import duckdb
 import pytest
 
+from sqlbuild._native import newest_column_migration_event_mentioning
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.migrations.main._newest_column_event import (
-    newest_column_migration_event_mentioning,
-)
 from sqlbuild.compiler.migrations.main._read_column_events import read_column_migration_events
 from sqlbuild.compiler.migrations.main.write_column_event import write_column_migration_event
 from sqlbuild.compiler.migrations.models import ColumnMigrationEvent

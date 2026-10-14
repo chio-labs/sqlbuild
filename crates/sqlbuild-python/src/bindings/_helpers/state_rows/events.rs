@@ -1,4 +1,4 @@
-//! Migration event IDs and the SQL that appends and looks up one event row.
+//! Migration event IDs and the typed literals of one appended event row.
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{
@@ -9,7 +9,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::json::errors::JsonEmitError;
 use sqlbuild_state::events::errors::StateSqlError;
 use sqlbuild_state::events::main::column_migration_event_id::column_migration_event_id;
-use sqlbuild_state::events::main::event_exists_sql::event_exists_sql;
+use sqlbuild_state::events::main::event_cells::event_cells;
 use sqlbuild_state::events::main::event_insert_sql::event_insert_sql;
 use sqlbuild_state::events::main::migration_event_id::migration_event_id;
 use sqlbuild_state::events::main::old_name_view_event_id::old_name_view_event_id;
@@ -20,14 +20,12 @@ use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::state_rows::timestamps::{date_time_typed, presumed_utc};
 
 const SQL_VALUES_EXCEPTIONS: &str = "sqlbuild.sql_values.exceptions";
-const STRING_TYPE: &str = "string";
-const TEXT_TIMESTAMP_TYPE: &str = "text_timestamp";
 
 fn emit_error(error: JsonEmitError) -> PyErr {
     PyValueError::new_err(format!("{error:?}"))
 }
 
-fn relation(value: &Bound<'_, PyAny>) -> PyResult<EventRelation> {
+pub(crate) fn relation(value: &Bound<'_, PyAny>) -> PyResult<EventRelation> {
     Ok(EventRelation {
         database: value.getattr("database")?.extract()?,
         schema: value.getattr("schema")?.extract()?,
@@ -77,13 +75,6 @@ fn old_name_id(event_type: &Bound<'_, PyAny>, migration_event_id: &str) -> PyRes
     old_name_view_event_id(&event_type, migration_event_id).map_err(emit_error)
 }
 
-/// The lookup that makes an append-only event write idempotent.
-#[pyfunction(name = "render_event_exists_sql")]
-#[pyo3(signature = (*, table, event_id))]
-fn exists_sql(table: &str, event_id: &str) -> String {
-    event_exists_sql(table, event_id)
-}
-
 fn state_value(value: &Bound<'_, PyAny>, column_type: StateColumnType) -> PyResult<StateValue> {
     if value.is_none() {
         return Ok(StateValue::Null);
@@ -97,49 +88,23 @@ fn state_value(value: &Bound<'_, PyAny>, column_type: StateColumnType) -> PyResu
     Ok(StateValue::Other)
 }
 
-fn column_type(declared: &Bound<'_, PyAny>) -> PyResult<StateColumnType> {
-    let name: String = declared.str()?.extract()?;
-    match name.as_str() {
-        STRING_TYPE => Ok(StateColumnType::String),
-        TEXT_TIMESTAMP_TYPE => Ok(StateColumnType::TextTimestamp),
-        _ => Err(PyValueError::new_err(format!(
-            "migration event columns are string or text timestamps, not {name}"
-        ))),
-    }
-}
-
-/// One append-only event row as `INSERT ... VALUES` with typed literals.
-#[pyfunction(name = "render_event_insert_sql")]
-#[pyo3(signature = (*, table, columns, column_types, values))]
-fn insert_sql(
+/// One append-only event row as `INSERT ... VALUES` with typed literals, failing like Python.
+pub(crate) fn typed_insert_sql(
+    py: Python<'_>,
     table: &str,
-    columns: Vec<String>,
-    column_types: &Bound<'_, PyAny>,
-    values: Vec<Bound<'_, PyAny>>,
+    (columns, values): (&[&str], &[Bound<'_, PyAny>]),
 ) -> PyResult<String> {
-    if columns.len() != values.len() {
-        return Err(PyValueError::new_err(
-            "event columns and values must have the same length",
-        ));
-    }
-    let mut cells: Vec<StateCell> = Vec::with_capacity(columns.len());
-    for (column, value) in columns.into_iter().zip(&values) {
-        let column_type: StateColumnType = column_type(&column_types.get_item(&column)?)?;
-        let converted: PyResult<StateValue> = state_value(value, column_type);
-        let value: StateValue = match converted {
-            Ok(value) => value,
+    let mut cells: Vec<StateCell> = event_cells(columns, vec![StateValue::Null; values.len()]);
+    for (index, value) in values.iter().enumerate() {
+        match state_value(value, cells[index].column_type) {
+            Ok(converted) => cells[index].value = converted,
             Err(error) => {
-                event_insert_sql(table, &cells).map_err(rendering_error(value.py()))?;
+                event_insert_sql(table, &cells[..index]).map_err(rendering_error(py))?;
                 return Err(error);
             }
-        };
-        cells.push(StateCell {
-            column,
-            column_type,
-            value,
-        });
+        }
     }
-    event_insert_sql(table, &cells).map_err(rendering_error(column_types.py()))
+    event_insert_sql(table, &cells).map_err(rendering_error(py))
 }
 
 /// `SqlValueRenderingError(message)` for an ill-typed value.
@@ -158,7 +123,5 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(migration_id, module)?)?;
     module.add_function(wrap_pyfunction!(column_id, module)?)?;
     module.add_function(wrap_pyfunction!(old_name_id, module)?)?;
-    module.add_function(wrap_pyfunction!(exists_sql, module)?)?;
-    module.add_function(wrap_pyfunction!(insert_sql, module)?)?;
     Ok(())
 }

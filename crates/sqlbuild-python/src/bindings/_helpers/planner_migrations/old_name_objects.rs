@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::planner_migrations::column_objects::{config, model};
+use crate::bindings::_helpers::state_rows::migration_projections::old_name_retention;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 
 pub(super) fn relation<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -48,17 +49,7 @@ pub(super) fn retention<'py>(
     item: &Bound<'py, PyAny>,
     project: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(
-        &imported(
-            item.py(),
-            "sqlbuild.compiler.migrations.main._resolve_old_name_view_retention",
-            "resolve_old_name_view_retention",
-        )?,
-        &[
-            ("config_values", item.getattr("config")?.getattr("values")?),
-            ("project_retention", project.clone()),
-        ],
-    )
+    old_name_retention(&item.getattr("config")?.getattr("values")?, project)
 }
 
 pub(super) fn expires<'py>(

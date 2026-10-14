@@ -1,0 +1,89 @@
+//! Migration state table layouts and the Python objects stored in them.
+
+use pyo3::exceptions::PyValueError;
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::types::PyString;
+use sqlbuild_state::events::constants::{
+    COLUMN_MIGRATION_COLUMNS, COLUMN_MIGRATION_TABLE_NAME, MIGRATION_COLUMNS, MIGRATION_TABLE_NAME,
+    OLD_NAME_VIEW_COLUMNS, OLD_NAME_VIEW_TABLE_NAME,
+};
+use sqlbuild_state::events::models::EventOrder;
+
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::state_rows::constants::{
+    COLUMN_KIND, MIGRATION_EXCEPTIONS, MODEL_KIND, OLD_NAME_KIND,
+};
+use crate::bindings::_helpers::state_rows::models::{EventTable, EventTableLayout};
+use crate::bindings::_helpers::state_rows::timestamps::presumed_utc;
+
+/// The layout of the state table `kind` names: `model`, `column` or `old_name`.
+pub(crate) fn layout(kind: &str) -> PyResult<EventTableLayout> {
+    match kind {
+        MODEL_KIND => Ok(EventTableLayout {
+            table: EventTable::Model,
+            name: MIGRATION_TABLE_NAME,
+            columns: &MIGRATION_COLUMNS,
+            relation_attribute: "destination",
+            state_message: "model migration state requires a target schema",
+            event_message: "model migration events require a destination schema",
+        }),
+        COLUMN_KIND => Ok(EventTableLayout {
+            table: EventTable::Column,
+            name: COLUMN_MIGRATION_TABLE_NAME,
+            columns: &COLUMN_MIGRATION_COLUMNS,
+            relation_attribute: "relation",
+            state_message: "column migration state requires a target schema",
+            event_message: "column migration events require a relation schema",
+        }),
+        OLD_NAME_KIND => Ok(EventTableLayout {
+            table: EventTable::OldName,
+            name: OLD_NAME_VIEW_TABLE_NAME,
+            columns: &OLD_NAME_VIEW_COLUMNS,
+            relation_attribute: "new",
+            state_message: "old-name view state requires a target schema",
+            event_message: "old-name view facts require a destination schema",
+        }),
+        _ => Err(PyValueError::new_err(format!(
+            "unknown migration state table kind: {kind}"
+        ))),
+    }
+}
+
+/// `MigrationStateError(message)`.
+pub(crate) fn state_error(py: Python<'_>, message: &str) -> PyErr {
+    match imported(py, MIGRATION_EXCEPTIONS, "MigrationStateError")
+        .and_then(|class| class.call1((message,)))
+    {
+        Ok(error) => PyErr::from_value(error),
+        Err(error) => error,
+    }
+}
+
+/// The adapter-qualified name of `layout`'s table in one schema.
+pub(crate) fn qualified_table<'py>(
+    layout: &EventTableLayout,
+    render_qualified_name: &Bound<'py, PyAny>,
+    (database, schema): (Bound<'py, PyAny>, Bound<'py, PyAny>),
+) -> PyResult<String> {
+    let py: Python<'py> = render_qualified_name.py();
+    let table: Bound<'py, PyAny> = call_with(
+        render_qualified_name,
+        &[
+            ("database", database),
+            ("schema", schema),
+            ("name", PyString::new(py, layout.name).into_any()),
+        ],
+    )?;
+    if table.is_none() {
+        return Err(state_error(py, layout.state_message));
+    }
+    table.extract()
+}
+
+/// The history order of a stored event: its creation time in UTC, then its ID.
+pub(crate) fn event_order(event: &Bound<'_, PyAny>) -> PyResult<EventOrder> {
+    Ok(EventOrder {
+        created_at: presumed_utc(&event.getattr("created_at")?)?,
+        event_id: event.getattr("event_id")?.extract()?,
+    })
+}

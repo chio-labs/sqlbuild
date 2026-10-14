@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from sqlbuild._native import render_migration_state_create_sql
 from sqlbuild.adapter.contract.types import FrameworkType
-from sqlbuild.compiler.migrations._helpers.column_sql import build_column_create_table_sql
 
 
 def build_column_migration_state_create_table_sql(
@@ -17,7 +17,8 @@ def build_column_migration_state_create_table_sql(
 ) -> str:
     """Build DDL that creates the column migration event table when it is missing."""
 
-    return build_column_create_table_sql(
+    return render_migration_state_create_sql(
+        kind="column",
         database=database,
         schema=schema,
         render_qualified_name=render_qualified_name,

@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from typing import Any
 
+from sqlbuild._native import project_old_name_views
 from sqlbuild.adapter.contract.types import AdapterExecute
-from sqlbuild.compiler.migrations.main._project_old_name_views import project_old_name_views
 from sqlbuild.compiler.migrations.main._read_events import read_migration_events
 from sqlbuild.compiler.migrations.main.read_old_name_view_events import (
     read_old_name_view_events,

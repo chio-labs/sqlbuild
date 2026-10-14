@@ -5,12 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from typing import Any
 
+from sqlbuild._native import decode_migration_event_rows, render_migration_event_read_sql
 from sqlbuild.adapter.contract.types import AdapterExecute
-from sqlbuild.compiler.migrations._helpers.old_name_sql import (
-    build_old_name_read_sql,
-    decode_old_name_event_row,
-    readable_old_name_columns,
-)
 from sqlbuild.compiler.migrations.exceptions import MigrationStateError
 from sqlbuild.compiler.migrations.models import OldNameViewEvent
 
@@ -26,12 +22,14 @@ def read_old_name_view_events(
 ) -> tuple[OldNameViewEvent, ...]:
     """Read every old-name fact this version understands from the columns the table has."""
 
-    columns: tuple[str, ...] = readable_old_name_columns(stored_columns)
-    sql: str = build_old_name_read_sql(
+    sql: str
+    columns: tuple[str, ...]
+    sql, columns = render_migration_event_read_sql(
+        kind="old_name",
         database=database,
         schema=schema,
-        columns=columns,
         render_qualified_name=render_qualified_name,
+        stored_columns=tuple(stored_columns),
     )
     try:
         rows: list[tuple[Any, ...]] = execute(connection=connection, sql=sql).fetchall()
@@ -39,10 +37,4 @@ def read_old_name_view_events(
         raise MigrationStateError(
             f"Unable to read old-name view facts from schema '{schema}': {error}"
         ) from error
-    events: list[OldNameViewEvent] = []
-    row: tuple[Any, ...]
-    for row in rows:
-        event: OldNameViewEvent | None = decode_old_name_event_row(row=tuple(row), columns=columns)
-        if event is not None:
-            events.append(event)
-    return tuple(events)
+    return decode_migration_event_rows(kind="old_name", rows=rows, columns=columns)

@@ -10,6 +10,7 @@ use crate::bindings::_helpers::planner_migrations::constants::MIGRATION_TYPES;
 use crate::bindings::_helpers::planner_migrations::model_handover::{
     applies, empty_version, handover,
 };
+use crate::bindings::_helpers::state_rows::migration_projections::newest_move;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyBool, PyTuple};
 use sqlbuild_analysis::planner_migrations::main::model_decision::model_decision;
@@ -84,17 +85,7 @@ pub(super) fn decide<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, P
             ),))?,
         ));
     }
-    let newest = call_with(
-        &imported(
-            py,
-            "sqlbuild.compiler.migrations.main._newest_event",
-            "newest_migration_event_mentioning",
-        )?,
-        &[
-            ("events", state.getattr("events")?),
-            ("relation", relation(&destination)?),
-        ],
-    )?;
+    let newest = newest_move(&state.getattr("events")?, &relation(&destination)?)?;
     let origin_relation = state.call_method1("relation", (&origin,))?;
     let fingerprint = call_with(
         &state.getattr("model_fingerprint")?,

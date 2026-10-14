@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from sqlbuild._native import render_migration_event_write_sql
 from sqlbuild.adapter.contract.types import AdapterExecute
-from sqlbuild.compiler.migrations._helpers.sql import build_existing_event_sql, build_insert_sql
 from sqlbuild.compiler.migrations._helpers.writes import append_event_row
 from sqlbuild.compiler.migrations.constants import MIGRATION_WRITE_ATTEMPTS
 from sqlbuild.compiler.migrations.models import MigrationEvent
@@ -23,13 +23,16 @@ def write_migration_event(
 ) -> None:
     """Create the state table from adapter DDL when given, then insert the event if absent."""
 
+    existing_sql: str
+    insert_sql: str
+    existing_sql, insert_sql = render_migration_event_write_sql(
+        kind="model", event=event, render_qualified_name=render_qualified_name
+    )
     _ = append_event_row(
         connection=connection,
         execute=execute,
-        existing_sql=build_existing_event_sql(
-            event=event, render_qualified_name=render_qualified_name
-        ),
-        insert_sql=build_insert_sql(event=event, render_qualified_name=render_qualified_name),
+        existing_sql=existing_sql,
+        insert_sql=insert_sql,
         create_table_sql=create_table_sql,
         attempts=attempts,
         subject=event.destination_model,

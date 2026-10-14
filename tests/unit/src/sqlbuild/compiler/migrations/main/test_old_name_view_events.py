@@ -7,11 +7,13 @@ from datetime import UTC, datetime, timedelta
 import duckdb
 import pytest
 
+from sqlbuild._native import project_old_name_views
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.migrations.constants import OLD_NAME_VIEW_COLUMNS
-from sqlbuild.compiler.migrations.main._project_old_name_views import project_old_name_views
 from sqlbuild.compiler.migrations.main.read_old_name_view_events import (
     read_old_name_view_events,
+)
+from sqlbuild.compiler.migrations.main.stored_old_name_view_columns import (
+    stored_old_name_view_columns,
 )
 from sqlbuild.compiler.migrations.main.write_event import write_migration_event
 from sqlbuild.compiler.migrations.main.write_old_name_view_event import write_old_name_view_event
@@ -90,7 +92,9 @@ def test_given_old_name_facts_when_writing_and_reading_then_rows_are_idempotent(
         execute=adapter.execute,
         database=None,
         schema="main",
-        stored_columns=OLD_NAME_VIEW_COLUMNS,
+        stored_columns=stored_old_name_view_columns(
+            adapter=adapter, connection=connection, database=None, schema="main"
+        ),
         render_qualified_name=adapter.render_qualified_name,
     )
 
