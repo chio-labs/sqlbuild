@@ -351,6 +351,7 @@ from sqlbuild.rule_engine.models import (
 )
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
+from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.models import (
     DbtConfig,
@@ -1806,6 +1807,12 @@ def execute_query_diff(
     *, request: DiffCommandRequest, preparation: QueryDiffPreparation
 ) -> DiffExecutionResult: ...
 def machine_output_mode(args: CliNamespace, /) -> bool: ...
+
+class CliObservabilityScope:
+    def __enter__(self) -> EventDispatcher: ...
+    def __exit__(self, *exc_info: object) -> bool: ...
+
+def cli_observability_scope(*, args: CliNamespace, project_dir: Path) -> CliObservabilityScope: ...
 def current_native_progress_projector() -> NativeProgressProjector | None: ...
 
 class ConnectionProgressReporter:

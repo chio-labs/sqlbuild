@@ -12,7 +12,7 @@ from typing import Any, cast
 
 import pytest
 
-from sqlbuild.cli.commands._helpers.entry.observability import cli_observability_scope
+from sqlbuild._native import cli_observability_scope
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.execution_history import (
     CanonicalLifecycleEvent,

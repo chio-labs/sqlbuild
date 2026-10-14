@@ -14,6 +14,7 @@ use sqlbuild_cli::dispatch::models::{CommandFacts, CommandFailure, InvocationPol
 
 use crate::bindings::_helpers::cli::argv::parse_cli_invocation;
 use crate::bindings::_helpers::cli::dispatch::{command_facts, dispatch_command};
+use crate::bindings::_helpers::cli::observability::cli_observability_scope;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use sqlbuild_core::cli_text::main::format_coded_error::format_coded_error;
@@ -23,7 +24,6 @@ const NO_COLOR_OPTION: &str = "--no-color";
 const EXCEPTIONS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const COMPUTE_LOGS_MODULE: &str =
     "sqlbuild.cli.commands.main.entrypoint._dispatch_with_compute_logs";
-const OBSERVABILITY_MODULE: &str = "sqlbuild.cli.commands._helpers.entry.observability";
 const LIFECYCLE_EVENT_MODULE: &str = "sqlbuild.runtime.observability.main.create_lifecycle_event";
 const INVOCATION_SCOPE_MODULE: &str = "sqlbuild.runtime.observability.main.invocation_scope";
 const EXTERNAL_SCOPE_MODULE: &str =
@@ -417,13 +417,14 @@ fn observed_dispatch<'py>(
             .unwrap_or(u64::MAX)
             .into_bound_py_any(py)
     };
-    let scope: Bound<'py, PyAny> = call_with(
-        &imported(py, OBSERVABILITY_MODULE, "cli_observability_scope")?,
-        &[
-            ("args", invocation.args.clone()),
-            ("project_dir", invocation.project_dir()?),
-        ],
-    )?;
+    let scope: Bound<'py, PyAny> = Bound::new(
+        py,
+        cli_observability_scope(
+            invocation.args.clone().unbind(),
+            invocation.project_dir()?.unbind(),
+        ),
+    )?
+    .into_any();
     within(&scope, |dispatcher| {
         let publish = |event: Bound<'py, PyAny>| -> PyResult<()> {
             dispatcher.call_method1("publish_lifecycle", (event,))?;

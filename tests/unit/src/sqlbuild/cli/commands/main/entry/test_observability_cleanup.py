@@ -5,16 +5,15 @@ from collections.abc import Callable
 from contextvars import Token
 from io import StringIO
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 from _pytest.capture import CaptureResult
 
 from sqlbuild._native import (
     NativeProgressProjector,
+    cli_observability_scope,
     current_native_progress_projector,
 )
-from sqlbuild.cli.commands._helpers.entry.observability import cli_observability_scope
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.output.constants import INTEGRATION_RESULT_PATH_ENV
 from sqlbuild.observability import OperationLifecycle
@@ -23,24 +22,19 @@ from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
     NoExporterFastPathTestCase,
     ObservabilityCleanupCase,
 )
-from tests.unit.src.sqlbuild.cli.commands.main.entry.helpers import CloseFailingProjector
-
-_PROJECTOR_FACTORY: str = (
-    "sqlbuild.cli.commands._helpers.entry.observability.NativeProgressProjector"
-)
 
 
 @pytest.mark.parametrize(
     "test_case",
     (
         ObservabilityCleanupCase(
-            description="projector close failure preserves original exception and cleanup",
+            description="command failure propagates and restores the outer projector",
             expected_original_error="original command failure",
         ),
     ),
     ids=lambda case: case.description,
 )
-def test_given_projector_close_failure_when_command_fails_then_original_error_and_cleanup_survive(
+def test_given_command_failure_when_scope_exits_then_original_error_and_projector_survive(
     tmp_path: Path,
     test_case: ObservabilityCleanupCase,
 ) -> None:
@@ -48,10 +42,7 @@ def test_given_projector_close_failure_when_command_fails_then_original_error_an
     outer: NativeProgressProjector = NativeProgressProjector(stream=StringIO(), use_color=False)
     outer_token: Token[NativeProgressProjector | None] = outer.install()
 
-    with (
-        patch(_PROJECTOR_FACTORY, CloseFailingProjector),
-        pytest.raises(ValueError, match=test_case.expected_original_error),
-    ):
+    with pytest.raises(ValueError, match=test_case.expected_original_error):
         with cli_observability_scope(args=args, project_dir=tmp_path):
             assert current_native_progress_projector() is not outer
             raise ValueError(test_case.expected_original_error)
@@ -217,27 +208,3 @@ def test_given_integration_result_file_when_operation_runs_then_human_progress_u
     captured: CaptureResult[str] = capsys.readouterr()
     assert test_case.expected_stdout_fragment in captured.out
     assert captured.err == test_case.expected_stderr_fragment
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    (
-        ObservabilityCleanupCase(
-            description="projector close failure preserves successful scope result",
-            expected_original_error="",
-        ),
-    ),
-    ids=lambda case: case.description,
-)
-def test_given_projector_close_failure_when_scope_succeeds_then_cleanup_does_not_raise(
-    tmp_path: Path,
-    test_case: ObservabilityCleanupCase,
-) -> None:
-    args: CliNamespace = CliNamespace()
-
-    with patch(_PROJECTOR_FACTORY, CloseFailingProjector):
-        with cli_observability_scope(args=args, project_dir=tmp_path):
-            result: str = "command result"
-
-    assert result == "command result"
-    assert test_case.expected_original_error == ""

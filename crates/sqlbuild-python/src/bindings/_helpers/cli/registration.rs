@@ -2,7 +2,9 @@
 
 use pyo3::prelude::{Bound, PyModule, PyResult};
 
-use crate::bindings::_helpers::cli::{argv, entry, progress, progress_reporters, progress_text};
+use crate::bindings::_helpers::cli::{
+    argv, entry, observability, progress, progress_reporters, progress_text,
+};
 use crate::bindings::_helpers::{
     audit_command, build_command, build_progress, check, clone, command_runtime, contract_command,
     cost_command, cost_report, dbt_command, dbt_events, dbt_interop, debug_command, diff_report,
@@ -14,6 +16,7 @@ use crate::bindings::_helpers::{
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     argv::register(module)?;
     entry::register(module)?;
+    observability::register(module)?;
     progress::register(module)?;
     progress_reporters::register(module)?;
     progress_text::register(module)?;

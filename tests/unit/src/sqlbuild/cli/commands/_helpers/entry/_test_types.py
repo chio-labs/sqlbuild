@@ -38,14 +38,6 @@ class QueryDiffParsingTestCase:
 
 
 @dataclass(frozen=True)
-class EventExportWarningTestCase:
-    description: str
-    exporter_counts: tuple[tuple[str, int, int, int, int], ...]
-    command_succeeded: bool
-    expected_message: str | None
-
-
-@dataclass(frozen=True)
 class GlobalFlagPlacementTestCase:
     """One placement of the flags every command accepts."""
 

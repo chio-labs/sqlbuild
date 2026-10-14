@@ -142,3 +142,20 @@ pub enum Dispatch {
     /// Commands with no handler exit successfully.
     Nothing,
 }
+
+/// Lifecycle event export accounting of one sink at command exit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExporterLoss {
+    pub exporter_name: String,
+    pub dropped: u64,
+    pub failed: u64,
+}
+
+/// Lifecycle event export accounting of every sink at command exit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportSummary {
+    pub accepted: u64,
+    pub dropped: u64,
+    pub failed: u64,
+    pub per_exporter: Vec<ExporterLoss>,
+}
