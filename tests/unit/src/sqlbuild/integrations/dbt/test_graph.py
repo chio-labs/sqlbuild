@@ -2,23 +2,17 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import build_dbt_manifest_index
+from sqlbuild._native import DbtCombinedGraph, build_dbt_combined_graph, build_dbt_manifest_index
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.integrations.dbt._helpers.graph.core import (
-    build_dbt_combined_graph,
-    expand_combined_downstream,
-    expand_combined_upstream,
-)
-from sqlbuild.integrations.dbt.models import DbtCombinedGraph, DbtManifestIndex
+from sqlbuild.integrations.dbt.models import DbtManifestIndex
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import DbtCombinedGraphTestCase
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     build_compiled_project_with_models,
     build_manifest_data,
     build_manifest_model_node,
     build_manifest_source_node,
-    graph_edge_stable_ids,
-    graph_key_from_stable_id,
-    graph_key_stable_ids,
+    downstream_stable_ids,
+    upstream_stable_ids,
 )
 
 
@@ -124,22 +118,12 @@ def test_given_manifest_and_compiled_project_when_building_graph_then_returns_ex
 
     graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
 
-    assert graph_edge_stable_ids(graph.upstream_deps) == dict(test_case.expected_upstream_edges)
+    assert graph.upstream_deps == dict(test_case.expected_upstream_edges)
     assert (
-        graph_key_stable_ids(
-            expand_combined_downstream(
-                key=graph_key_from_stable_id(test_case.expected_downstream_from),
-                downstream=graph.downstream_deps,
-            )
-        )
+        downstream_stable_ids(graph=graph, stable_id=test_case.expected_downstream_from)
         == test_case.expected_downstream_keys
     )
     assert (
-        graph_key_stable_ids(
-            expand_combined_upstream(
-                key=graph_key_from_stable_id(test_case.expected_upstream_from),
-                upstream=graph.upstream_deps,
-            )
-        )
+        upstream_stable_ids(graph=graph, stable_id=test_case.expected_upstream_from)
         == test_case.expected_upstream_keys
     )

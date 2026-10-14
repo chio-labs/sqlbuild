@@ -13,6 +13,7 @@ pub mod cost_command;
 pub mod cost_report;
 pub mod dbt_command;
 pub mod dbt_events;
+pub mod dbt_graph;
 pub mod debug_report;
 pub mod format_command;
 pub mod freshness_text;

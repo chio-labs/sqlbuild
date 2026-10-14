@@ -7,7 +7,7 @@ from typing import cast
 
 import pytest
 
-from sqlbuild._native import build_dbt_interop_plan
+from sqlbuild._native import DbtCombinedGraph, build_dbt_interop_plan
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -22,8 +22,6 @@ from sqlbuild.integrations.dbt.main.pipeline import execute as execute_module
 from sqlbuild.integrations.dbt.main.pipeline import plan as plan_module
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
-    DbtCombinedGraph,
-    DbtCombinedGraphKey,
     DbtCommandExecutionResult,
     DbtInteropCompiledProject,
     DbtInteropExecutionRequest,
@@ -36,17 +34,16 @@ from sqlbuild.integrations.dbt.models import (
     DbtManifestIndex,
     DbtNodeExecutionResult,
 )
-from sqlbuild.integrations.dbt.types import (
-    DbtCombinedGraphOwner,
-    DbtCombinedGraphResourceType,
-    DbtInteropCommand,
-)
+from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtCompileFullRefreshPipelineTestCase,
     DbtExecutionSelectionStatusTestCase,
     DbtExecutionSummaryFooterTestCase,
 )
-from tests.unit.src.sqlbuild.integrations.dbt.helpers import CompileOnlyDbtRunner
+from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
+    CompileOnlyDbtRunner,
+    build_orders_dbt_graph,
+)
 
 
 @pytest.mark.parametrize(
@@ -188,7 +185,7 @@ def test_given_ordinary_execution_when_compiling_then_never_uses_dbt_state(
         execute_module,
         "resolve_dbt_interop_plan",
         lambda **kwargs: DbtInteropPlanResolution(
-            graph=DbtCombinedGraph(nodes=frozenset(), upstream_deps={}, downstream_deps={}),
+            graph=build_orders_dbt_graph(),
             plan=plan,
         ),
     )
@@ -274,21 +271,8 @@ def test_given_ordinary_dbt_events_when_executing_then_no_fingerprint_or_waterma
 def test_given_actual_dbt_failure_when_resolving_blockers_then_blocks_downstream_sqlbuild_work(
     test_case: DbtExecutionSummaryFooterTestCase,
 ) -> None:
-    dbt_key: DbtCombinedGraphKey = DbtCombinedGraphKey(
-        owner=DbtCombinedGraphOwner.DBT,
-        resource_type=DbtCombinedGraphResourceType.MODEL,
-        name="model.analytics.orders",
-    )
-    sqlbuild_key: DbtCombinedGraphKey = DbtCombinedGraphKey(
-        owner=DbtCombinedGraphOwner.SQLBUILD,
-        resource_type=DbtCombinedGraphResourceType.MODEL,
-        name="local_orders",
-    )
-    graph: DbtCombinedGraph = DbtCombinedGraph(
-        nodes=frozenset((dbt_key, sqlbuild_key)),
-        upstream_deps={dbt_key: (), sqlbuild_key: (dbt_key,)},
-        downstream_deps={dbt_key: (sqlbuild_key,), sqlbuild_key: ()},
-    )
+    graph: DbtCombinedGraph = build_orders_dbt_graph()
+    dbt_unique_id: str = "model.analytics.orders"
 
     result: tuple[str, ...] = build_failed_sqlbuild_model_names(
         graph=graph,
@@ -299,7 +283,7 @@ def test_given_actual_dbt_failure_when_resolving_blockers_then_blocks_downstream
         ),
         node_results=(
             DbtNodeExecutionResult(
-                unique_id=dbt_key.name,
+                unique_id=dbt_unique_id,
                 resource_type="model",
                 node_name="orders",
                 status=test_case.node_statuses[0],
@@ -327,27 +311,14 @@ def test_given_actual_dbt_failure_when_resolving_blockers_then_blocks_downstream
 def test_given_failed_dbt_test_when_resolving_blockers_then_blocks_tested_model_downstream(
     test_case: DbtExecutionSummaryFooterTestCase,
 ) -> None:
-    dbt_key: DbtCombinedGraphKey = DbtCombinedGraphKey(
-        owner=DbtCombinedGraphOwner.DBT,
-        resource_type=DbtCombinedGraphResourceType.MODEL,
-        name="model.analytics.orders",
-    )
-    sqlbuild_key: DbtCombinedGraphKey = DbtCombinedGraphKey(
-        owner=DbtCombinedGraphOwner.SQLBUILD,
-        resource_type=DbtCombinedGraphResourceType.MODEL,
-        name="local_orders",
-    )
-    graph: DbtCombinedGraph = DbtCombinedGraph(
-        nodes=frozenset((dbt_key, sqlbuild_key)),
-        upstream_deps={dbt_key: (), sqlbuild_key: (dbt_key,)},
-        downstream_deps={dbt_key: (sqlbuild_key,), sqlbuild_key: ()},
-    )
+    graph: DbtCombinedGraph = build_orders_dbt_graph()
+    dbt_unique_id: str = "model.analytics.orders"
     test_unique_id: str = "test.analytics.unique_orders.0123456789"
     manifest: DbtManifestIndex = DbtManifestIndex(
         models_by_unique_id={},
         models_by_name={},
         models_by_package_and_name={},
-        validation_depends_on_nodes_by_unique_id={test_unique_id: (dbt_key.name,)},
+        validation_depends_on_nodes_by_unique_id={test_unique_id: (dbt_unique_id,)},
     )
 
     result: tuple[str, ...] = build_failed_sqlbuild_model_names(

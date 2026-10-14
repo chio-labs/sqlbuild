@@ -6,22 +6,18 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    DbtCombinedGraph,
     assemble_project,
     build_compile_inputs,
+    build_dbt_combined_graph,
     build_dbt_manifest_index,
     discover_project_inputs,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.integrations.dbt._helpers.graph.core import (
-    build_dbt_combined_graph,
-    dbt_model_graph_key,
-    expand_combined_downstream,
-)
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
-    DbtCombinedGraph,
     DbtCommandResult,
     DbtManifestIndex,
 )
@@ -33,7 +29,7 @@ from tests.integration.src.sqlbuild.integrations.dbt.helpers import (
     build_external_sql_reference_resolver,
     build_sqlbuild_project_with_manifest,
 )
-from tests.unit.src.sqlbuild.integrations.dbt.helpers import graph_key_stable_ids
+from tests.unit.src.sqlbuild.integrations.dbt.helpers import downstream_stable_ids
 
 pytestmark: pytest.MarkDecorator = pytest.mark.dbt
 
@@ -94,11 +90,8 @@ def test_given_real_dbt_manifest_and_sqlbuild_project_when_building_graph_then_e
     graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
 
     assert (
-        graph_key_stable_ids(
-            expand_combined_downstream(
-                key=dbt_model_graph_key(test_case.expected_downstream_from),
-                downstream=graph.downstream_deps,
-            )
+        downstream_stable_ids(
+            graph=graph, stable_id=f"dbt:model:{test_case.expected_downstream_from}"
         )
         == test_case.expected_downstream_keys
     )

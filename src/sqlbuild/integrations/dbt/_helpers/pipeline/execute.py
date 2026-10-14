@@ -8,11 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO, cast
 
-from sqlbuild._native import format_summary_footer, render_dbt_node_result
-from sqlbuild.integrations.dbt._helpers.graph.core import (
-    dbt_model_graph_key,
-    expand_combined_downstream,
-)
+from sqlbuild._native import DbtCombinedGraph, format_summary_footer, render_dbt_node_result
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.constants import (
     DBT_DEFER_FLAG,
@@ -30,8 +26,6 @@ from sqlbuild.integrations.dbt.main.runtime._execute_json_event_stream import (
 )
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
-    DbtCombinedGraph,
-    DbtCombinedGraphKey,
     DbtCommandExecutionResult,
     DbtCommandResult,
     DbtInteropPlan,
@@ -40,12 +34,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtNodeExecutionResult,
     DbtNodeMessage,
 )
-from sqlbuild.integrations.dbt.types import (
-    DbtCombinedGraphOwner,
-    DbtCombinedGraphResourceType,
-    DbtInteropCommand,
-    DbtSupportedResourceType,
-)
+from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtSupportedResourceType
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 
@@ -187,19 +176,7 @@ def build_failed_sqlbuild_model_names(
             failed_unique_ids.update(
                 manifest.validation_depends_on_nodes_by_unique_id.get(result.unique_id, ())
             )
-    names: set[str] = set()
-    for unique_id in failed_unique_ids:
-        downstream: frozenset[DbtCombinedGraphKey] = expand_combined_downstream(
-            key=dbt_model_graph_key(unique_id),
-            downstream=graph.downstream_deps,
-        )
-        for key in downstream:
-            if (
-                key.owner == DbtCombinedGraphOwner.SQLBUILD
-                and key.resource_type == DbtCombinedGraphResourceType.MODEL
-            ):
-                names.add(key.name)
-    return tuple(sorted(names))
+    return graph.downstream_sqlbuild_model_names(failed_unique_ids)
 
 
 def render_dbt_execution_summary_footer(

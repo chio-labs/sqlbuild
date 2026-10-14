@@ -1460,6 +1460,29 @@ def resolve_sqlbuild_model_dbt_refs(
     manifest: DbtManifestIndex,
     selected_model_names: Iterable[str] | None = None,
 ) -> tuple[tuple[CompiledModelView, DbtManifestModel], ...]: ...
+
+class DbtCombinedGraph:
+    @property
+    def nodes(self) -> frozenset[str]: ...
+    @property
+    def upstream_deps(self) -> dict[str, tuple[str, ...]]: ...
+    @property
+    def downstream_deps(self) -> dict[str, tuple[str, ...]]: ...
+    def downstream_sqlbuild_model_names(self, unique_ids: Iterable[str]) -> tuple[str, ...]: ...
+
+def build_dbt_combined_graph(
+    *, manifest: DbtManifestIndex, project: CompiledProjectView
+) -> DbtCombinedGraph: ...
+def resolve_dbt_interop_sqlbuild_selection(
+    *,
+    project: CompiledProjectView,
+    graph: DbtCombinedGraph,
+    select: Sequence[str],
+    manifest: DbtManifestIndex | None = None,
+    exclude: Sequence[str] | None = None,
+    dbt_anchor_unique_ids_by_term: Mapping[str, Sequence[str]] | None = None,
+) -> DbtInteropSelectionResult: ...
+def dbt_fqn_selector_term(*, fqn: Sequence[str], fallback: str) -> str: ...
 def resolve_dbt_reference_relation(
     *,
     manifest: DbtManifestIndex | None,

@@ -4,21 +4,24 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlbuild._native import build_dbt_interop_plan, resolve_sqlbuild_model_dbt_refs
+from sqlbuild._native import (
+    DbtCombinedGraph,
+    build_dbt_interop_plan,
+    dbt_fqn_selector_term,
+    resolve_dbt_interop_sqlbuild_selection,
+    resolve_sqlbuild_model_dbt_refs,
+)
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.planner.main.selection.selector_expansion import split_selector_expansion
 from sqlbuild.compiler.planner.main.selection.sqlbuild_model_selectors import (
     resolve_sqlbuild_model_selector_names,
 )
 from sqlbuild.compiler.planner.models import SelectorExpansion
-from sqlbuild.integrations.dbt._helpers.selection.core import resolve_dbt_interop_sqlbuild_selection
-from sqlbuild.integrations.dbt._helpers.selection.selector_terms import dbt_fqn_selector_term
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.constants import DBT_PATH_SELECTOR_SEPARATOR
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
-    DbtCombinedGraph,
     DbtInteropCommandArgs,
     DbtInteropPlan,
     DbtInteropSelectionResult,

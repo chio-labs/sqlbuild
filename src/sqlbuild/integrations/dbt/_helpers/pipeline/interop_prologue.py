@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild._native import (
+    DbtCombinedGraph,
     build_compiled_project,
+    build_dbt_combined_graph,
     discover_project_inputs,
     load_dbt_manifest_index,
 )
@@ -27,7 +29,6 @@ from sqlbuild.integrations.dbt.main.cli._resolve_executable import resolve_dbt_e
 from sqlbuild.integrations.dbt.main.cli._route_interop_args import route_dbt_interop_args
 from sqlbuild.integrations.dbt.main.config._resolve_plan_options import resolve_dbt_plan_options
 from sqlbuild.integrations.dbt.main.config._resolve_vars_mapping import resolve_dbt_vars_mapping
-from sqlbuild.integrations.dbt.main.graph._build_combined_graph import build_dbt_combined_graph
 from sqlbuild.integrations.dbt.main.manifest._resolve_manifest_path import (
     resolve_dbt_manifest_path,
 )
@@ -38,7 +39,6 @@ from sqlbuild.integrations.dbt.main.runtime._resolve_interop_adapter import (
 )
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
-    DbtCombinedGraph,
     DbtCommandResult,
     DbtInteropCommandArgs,
     DbtInteropCompiledProject,

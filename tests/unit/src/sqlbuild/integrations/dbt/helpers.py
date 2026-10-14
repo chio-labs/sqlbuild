@@ -8,10 +8,14 @@ from types import MappingProxyType
 from typing import cast
 
 from sqlbuild._native import (
+    DbtCombinedGraph,
     DbtEventStream,
     DbtEventStreamUpdate,
     assemble_project,
+    build_dbt_combined_graph,
+    build_dbt_manifest_index,
     extract_sql_references,
+    transitive_closure,
 )
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
@@ -34,21 +38,11 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.integrations.dbt._helpers.cli.runner import build_dbt_ls_argv
-from sqlbuild.integrations.dbt._helpers.graph.core import (
-    dbt_model_graph_key,
-    dbt_source_graph_key,
-    sqlbuild_model_graph_key,
-)
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.models import (
     DbtCliConfigOverrides,
     DbtCliOptions,
-    DbtCombinedGraphKey,
     DbtCommandResult,
-)
-from sqlbuild.integrations.dbt.types import (
-    DbtCombinedGraphOwner,
-    DbtCombinedGraphResourceType,
 )
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
@@ -458,50 +452,37 @@ def build_compiled_project_with_model_specs(
     )
 
 
-def graph_edge_stable_ids(
-    graph_edges: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]],
-) -> dict[str, tuple[str, ...]]:
-    """Render graph edges as stable IDs for assertions."""
+def downstream_stable_ids(*, graph: DbtCombinedGraph, stable_id: str) -> tuple[str, ...]:
+    """Render keys transitively downstream of one graph key as sorted stable IDs."""
 
-    stable_edges: dict[str, tuple[str, ...]] = {}
-    for key, deps in graph_edges.items():
-        stable_deps: list[str] = []
-        for dep in deps:
-            stable_deps.append(dep.stable_id)
-        stable_edges[key.stable_id] = tuple(stable_deps)
-    return stable_edges
+    return tuple(sorted(transitive_closure(start=stable_id, edges=graph.downstream_deps)))
 
 
-def graph_key_stable_ids(keys: frozenset[DbtCombinedGraphKey]) -> tuple[str, ...]:
-    """Render graph keys as sorted stable IDs for assertions."""
+def upstream_stable_ids(*, graph: DbtCombinedGraph, stable_id: str) -> tuple[str, ...]:
+    """Render keys transitively upstream of one graph key as sorted stable IDs."""
 
-    return tuple(sorted(key.stable_id for key in keys))
+    return tuple(sorted(transitive_closure(start=stable_id, edges=graph.upstream_deps)))
 
 
-def graph_key_from_stable_id(stable_id: str) -> DbtCombinedGraphKey:
-    """Build a graph key from its stable string form."""
+def build_orders_dbt_graph() -> DbtCombinedGraph:
+    """Build a graph where SQLBuild `local_orders` reads dbt `model.analytics.orders`."""
 
-    owner, resource_type, name = stable_id.split(":", maxsplit=2)
-    owner_enum: DbtCombinedGraphOwner = DbtCombinedGraphOwner(owner)
-    resource_type_enum: DbtCombinedGraphResourceType = DbtCombinedGraphResourceType(resource_type)
-    factories: dict[
-        tuple[DbtCombinedGraphOwner, DbtCombinedGraphResourceType],
-        Callable[[str], DbtCombinedGraphKey],
-    ] = {
-        (
-            DbtCombinedGraphOwner.DBT,
-            DbtCombinedGraphResourceType.SOURCE,
-        ): dbt_source_graph_key,
-        (
-            DbtCombinedGraphOwner.DBT,
-            DbtCombinedGraphResourceType.MODEL,
-        ): dbt_model_graph_key,
-        (
-            DbtCombinedGraphOwner.SQLBUILD,
-            DbtCombinedGraphResourceType.MODEL,
-        ): sqlbuild_model_graph_key,
-    }
-    return factories[(owner_enum, resource_type_enum)](name)
+    return build_dbt_combined_graph(
+        manifest=build_dbt_manifest_index(
+            raw_data=build_manifest_data(
+                nodes=(
+                    build_manifest_model_node(
+                        unique_id="model.analytics.orders",
+                        package_name="analytics",
+                        name="orders",
+                    ),
+                )
+            )
+        ),
+        project=build_compiled_project_with_models(
+            {"local_orders": 'select * from __dbt_ref("orders")'}
+        ),
+    )
 
 
 def consume_dbt_events(*events: dict[str, object]) -> DbtEventStreamUpdate | None:

@@ -1,3 +1,4 @@
+pub(crate) mod graph;
 pub(crate) mod manifest;
 pub(crate) mod plan;
 pub(crate) mod profile;

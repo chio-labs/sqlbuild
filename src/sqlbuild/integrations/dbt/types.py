@@ -13,20 +13,6 @@ class DbtInvoker(Protocol):
     def __call__(self, *, argv: tuple[str, ...], cwd: Path | None) -> object: ...
 
 
-class DbtCombinedGraphOwner(StrEnum):
-    """Owner namespace for a combined dbt/SQLBuild graph node."""
-
-    DBT = "dbt"
-    SQLBUILD = "sqb"
-
-
-class DbtCombinedGraphResourceType(StrEnum):
-    """Resource type namespace for a combined dbt/SQLBuild graph node."""
-
-    MODEL = "model"
-    SOURCE = "source"
-
-
 class DbtSupportedResourceType(StrEnum):
     """dbt resource types SQLBuild currently handles with dedicated behavior."""
 
