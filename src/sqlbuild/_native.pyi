@@ -204,6 +204,7 @@ from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     BackfillResult,
     ChangeDetectionResult,
+    ColumnMigrationPlanning,
     ColumnRenameHint,
     CursorBounds,
     CursorOverridePair,
@@ -221,6 +222,7 @@ from sqlbuild.compiler.planner.models import (
     ParsedSelector,
     PathSelector,
     PlannerChangeResults,
+    PlannerOverrides,
     PlannerResolvedActions,
     PlannerRuntime,
     PlannerScope,
@@ -4446,6 +4448,17 @@ def migration_destination_fingerprints(
 ) -> dict[str, tuple[str, ...]]: ...
 def stored_migration_fingerprint(fingerprint: Fingerprint) -> str | None: ...
 def declared_column_aliases(model: CompiledModelView) -> tuple[tuple[str, str], ...]: ...
+def plan_column_migrations(
+    *,
+    runtime: PlannerRuntime,
+    scope: PlannerScope,
+    snapshot: WarehouseSnapshot,
+    full_refresh_model_names: frozenset[str],
+    physical_relations: Mapping[str, str],
+    overrides: PlannerOverrides,
+    deferral: DeferralInputs,
+    source_columns: Mapping[str, tuple[ColumnInfo, ...]],
+) -> ColumnMigrationPlanning: ...
 def old_name_schemas_to_read(*, snapshot: WarehouseSnapshot, needed: set[str]) -> set[str]: ...
 def old_name_claim_message(*, model_name: str, view: OldNameView, now: datetime) -> str: ...
 def old_name_claim_errors(

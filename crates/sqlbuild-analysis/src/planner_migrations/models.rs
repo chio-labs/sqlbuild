@@ -70,3 +70,15 @@ pub struct QueryShape {
     pub local_input_columns: BTreeSet<String>,
     pub clause_references: BTreeSet<String>,
 }
+/// Display facts for a column migration warning.
+#[derive(Debug)]
+pub struct ColumnWarning<'a> {
+    pub model_name: &'a str,
+    pub relation: &'a str,
+    pub origin: &'a str,
+    pub destination: &'a str,
+    pub completed: &'a str,
+    pub target: &'a str,
+    pub missing_outcome: &'a str,
+    pub message: &'a str,
+}

@@ -23,3 +23,11 @@ pub(super) struct MigrationMatchTestCase {
     pub expected_matches: &'static [(usize, usize)],
     pub expected_ambiguous: usize,
 }
+#[derive(Debug)]
+pub(super) struct ColumnDecisionTestCase {
+    pub description: &'static str,
+    pub recorded: bool,
+    pub live: (bool, bool),
+    pub still_produced: bool,
+    pub expected_decision: &'static str,
+}

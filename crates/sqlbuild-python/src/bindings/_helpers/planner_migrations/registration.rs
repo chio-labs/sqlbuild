@@ -7,6 +7,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     super::matching::register(module)?;
     super::old_names::register(module)?;
     super::columns::register(module)?;
+    super::column_planning::register(module)?;
     super::projections::register(module)?;
     super::fingerprint::register(module)
 }

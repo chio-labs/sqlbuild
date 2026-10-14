@@ -1,8 +1,16 @@
+mod column_candidates;
+mod column_entries;
+mod column_objects;
+mod column_overlay;
+mod column_planning;
+mod column_warnings;
 pub(crate) mod columns;
 mod compatibility;
+mod constants;
 mod errors;
 mod fingerprint;
 mod matching;
+mod models;
 mod old_names;
 mod projections;
 pub(crate) mod registration;

@@ -1,5 +1,7 @@
 #[path = "tests/helpers.rs"]
 mod helpers;
+#[path = "tests/test_column_decision.rs"]
+mod test_column_decision;
 #[path = "tests/test_column_renames.rs"]
 mod test_column_renames;
 #[path = "tests/test_decisions.rs"]

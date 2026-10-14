@@ -1,3 +1,5 @@
+pub mod column_decision;
+pub mod column_warning;
 pub mod compatibility_findings;
 pub mod declared_column_aliases;
 pub mod identical_renames;
