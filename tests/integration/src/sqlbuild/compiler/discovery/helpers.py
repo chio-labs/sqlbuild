@@ -24,6 +24,7 @@ from sqlbuild._native import (
     discover_audit_files,
     discover_constant_files,
     discover_enum_files,
+    discover_model_description_inputs,
     discover_model_schema_files,
     discover_project_inputs,
     discover_scope_snapshot,
@@ -35,9 +36,6 @@ from sqlbuild.compiler.discovery.constants import (
     SQL_AUDIT_HEADER_KEYS,
     SQL_FUNCTION_HEADER_KEYS,
     SQL_HOOK_HEADER_KEYS,
-)
-from sqlbuild.compiler.discovery.main._model_description_inputs import (
-    discover_model_description_inputs,
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,

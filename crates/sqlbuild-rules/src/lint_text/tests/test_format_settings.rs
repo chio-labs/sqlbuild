@@ -102,3 +102,45 @@ fn given_relative_paths_when_classifying_headers_then_only_plain_models_scan_one
         );
     }
 }
+
+#[test]
+fn given_project_paths_when_classifying_named_roles_then_kinds_match_python() {
+    let test_cases = [
+        crate::lint_text::tests::test_types::RoleKindTestCase {
+            description: "a generic audit",
+            relative_parts: &["audits", "generic", "not_null.sql"],
+            expected_kind: Some("audit"),
+        },
+        crate::lint_text::tests::test_types::RoleKindTestCase {
+            description: "a local SQL hook in a declaration group",
+            relative_parts: &["models", "orders", "_sqlbuild", "_hooks", "sql", "h.sql"],
+            expected_kind: Some("sql_hook"),
+        },
+        crate::lint_text::tests::test_types::RoleKindTestCase {
+            description: "a file named like a root is not under it",
+            relative_parts: &["schemas.sql"],
+            expected_kind: None,
+        },
+        crate::lint_text::tests::test_types::RoleKindTestCase {
+            description: "a plain model",
+            relative_parts: &["models", "orders.sql"],
+            expected_kind: None,
+        },
+    ];
+
+    for test_case in test_cases {
+        let parts: Vec<String> = test_case
+            .relative_parts
+            .iter()
+            .map(|part| (*part).to_owned())
+            .collect();
+        assert_eq!(
+            crate::lint_text::main::named_declaration_role_kind::named_declaration_role_kind(
+                &parts
+            ),
+            test_case.expected_kind,
+            "{}",
+            test_case.description
+        );
+    }
+}

@@ -221,7 +221,7 @@ from sqlbuild.compiler.scopes.models import (
     UsageRecord,
     VisibilityResolution,
 )
-from sqlbuild.compiler.scopes.types import JsonValue, ScopeQueryTarget
+from sqlbuild.compiler.scopes.types import DeclarationKind, JsonValue, ScopeQueryTarget
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessIdentity, SourceFreshnessRecord
 from sqlbuild.compiler.source_freshness.types import (
     SourceFreshnessAgeStatus,
@@ -3016,6 +3016,8 @@ def serialize_hook_entries(
     sql_fields: tuple[str, ...],
     python_hook_fields: Mapping[str, Mapping[str, object]] | None = None,
 ) -> list[dict[str, object]]: ...
+def named_declaration_role_kind(*, relative_path: PurePath) -> DeclarationKind | None: ...
+def discover_model_description_inputs(*, project_dir: Path) -> DiscoveredProjectInputs: ...
 def microbatch_guidance() -> tuple[str, str]: ...
 def explicit_references_help(*, allowed: str) -> str: ...
 def run_format_command(
