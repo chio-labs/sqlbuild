@@ -1,7 +1,7 @@
 import json
 import shutil
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 import pytest
 
@@ -12,6 +12,16 @@ RULES_CONFIG: str = '\n[rules]\nselect = ["SQBR"]\n'
 EDITED_MODEL: str = "models/staging/stg_orders.sql"
 
 type FindingKey = tuple[str, str, int | None, int | None, str]
+
+
+class CountingRulePath(Path):
+    """Count finding path conversions across the real native cache publication."""
+
+    conversions: ClassVar[int] = 0
+
+    def as_posix(self) -> str:
+        CountingRulePath.conversions += 1
+        return super().as_posix()
 
 
 def write_rules_fixture(*, project_dir: Path) -> None:

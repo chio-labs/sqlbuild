@@ -2,6 +2,15 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class SqlRulePublicationTestCase:
+    """Increasing path counts and the linear conversion budget."""
+
+    description: str
+    sizes: tuple[int, ...]
+    expected_counts: list[tuple[int, int]]
+
+
+@dataclass(frozen=True)
 class NativeRulesRequestTestCase:
     """A compile of the rules fixture: findings and cache use."""
 

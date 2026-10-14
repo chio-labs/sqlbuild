@@ -1,6 +1,6 @@
 //! Run the planned SQL rules through native lint, reusing cached and early-lint results.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::time::Instant;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -433,17 +433,16 @@ fn write_cache<'py>(
 ) -> PyResult<()> {
     let py: Python<'py> = bucket.py();
     let encode: Bound<'py, PyAny> = native(py, "encode_sql_rule_findings")?;
+    let mut by_path: HashMap<String, Vec<Bound<'py, PyAny>>> = HashMap::new();
+    for finding in evaluated {
+        let path: String = finding
+            .getattr("path")?
+            .call_method0("as_posix")?
+            .extract()?;
+        by_path.entry(path).or_default().push(finding.clone());
+    }
     for (path, identity) in written {
-        let mut own: Vec<Bound<'py, PyAny>> = Vec::new();
-        for finding in evaluated {
-            let finding_path: String = finding
-                .getattr("path")?
-                .call_method0("as_posix")?
-                .extract()?;
-            if finding_path == path {
-                own.push(finding.clone());
-            }
-        }
+        let own: &[Bound<'py, PyAny>] = by_path.get(&path).map(Vec::as_slice).unwrap_or_default();
         let encoded: Bound<'py, PyAny> =
             call_with(&encode, &[("findings", PyList::new(py, own)?.into_any())])?;
         bucket.set_item(path, (identity, encoded))?;
