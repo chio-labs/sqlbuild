@@ -6,10 +6,8 @@ import pytest
 
 from sqlbuild._native import (
     identical_renames,
-    rename_hints,
-)
-from sqlbuild.compiler.planner._helpers.migrations.projections import (
     parse_query_shape,
+    rename_hints,
     renames_explain_change,
 )
 from sqlbuild.compiler.planner.models import ColumnRenameHint

@@ -4121,6 +4121,18 @@ def detect_model_changes_in_scope(
     expected_version_hashes: dict[str, str] | None = None,
     expected_metadata_jsons: dict[str, str] | None = None,
 ) -> dict[str, ChangeDetectionResult]: ...
+def parse_query_shape(*, query_sql: str, dialect: str | None) -> QueryShape | None: ...
+def renames_explain_change(
+    *,
+    previous: QueryShape,
+    current: QueryShape,
+    renames: Mapping[str, str],
+    input_columns: InputColumns,
+) -> bool: ...
+def build_migration_fingerprint(
+    *, query_sql: str, metadata_json: str, ref_identities: Mapping[str, str], dialect: str | None
+) -> str | None: ...
+def migration_fingerprint_ref_names(*, query_sql: str, metadata_json: str) -> frozenset[str]: ...
 def identical_renames(
     *,
     previous: QueryShape,

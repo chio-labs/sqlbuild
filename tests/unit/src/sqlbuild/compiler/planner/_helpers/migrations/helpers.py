@@ -5,10 +5,9 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
+from sqlbuild._native import build_migration_fingerprint, parse_query_shape
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.migrations.types import OldNameViewAction
-from sqlbuild.compiler.planner._helpers.migrations.fingerprint import build_migration_fingerprint
-from sqlbuild.compiler.planner._helpers.migrations.projections import parse_query_shape
 from sqlbuild.compiler.planner.models import OldNameViewPlanEntry, QueryShape
 from sqlbuild.compiler.planner.types import InputColumns
 

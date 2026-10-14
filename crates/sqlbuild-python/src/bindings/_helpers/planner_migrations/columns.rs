@@ -15,7 +15,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 
-const PROJECTIONS_MODULE: &str = "sqlbuild.compiler.planner._helpers.migrations.projections";
 const MODELS_MODULE: &str = "sqlbuild.compiler.planner.models";
 
 fn projections(shape: &Bound<'_, PyAny>) -> PyResult<Vec<Projection>> {
@@ -72,16 +71,12 @@ fn identical_renames<'py>(
         for (old, new) in pairs {
             renames.set_item(old, new)?;
         }
-        call_with(
-            &imported(py, PROJECTIONS_MODULE, "renames_explain_change")?,
-            &[
-                ("previous", previous.clone()),
-                ("current", current.clone()),
-                ("renames", renames.into_any()),
-                ("input_columns", arguments.value("input_columns")?),
-            ],
-        )?
-        .extract()
+        super::projections::explain(
+            &previous,
+            &current,
+            &renames.into_any(),
+            &arguments.value("input_columns")?,
+        )
     };
     PyTuple::new(
         py,

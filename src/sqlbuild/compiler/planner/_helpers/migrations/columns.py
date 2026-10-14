@@ -9,7 +9,9 @@ from sqlbuild._native import (
     get_config_str,
     identical_renames,
     model_definition_hash,
+    parse_query_shape,
     rename_hints,
+    renames_explain_change,
 )
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import CompiledObjectKey
@@ -25,10 +27,6 @@ from sqlbuild.compiler.planner._helpers.migrations.planning import (
     missing_origin_policy,
     planning_database,
     redirected_cursor_snapshots,
-)
-from sqlbuild.compiler.planner._helpers.migrations.projections import (
-    parse_query_shape,
-    renames_explain_change,
 )
 from sqlbuild.compiler.planner.classes.known_input_columns import KnownInputColumns
 from sqlbuild.compiler.planner.classes.migration_state_inspection import (

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.planner._helpers.migrations.fingerprint import build_migration_fingerprint
+from sqlbuild._native import build_migration_fingerprint
 from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations._test_types import (
     IneligibleFingerprintTestCase,
     MigrationFingerprintTestCase,

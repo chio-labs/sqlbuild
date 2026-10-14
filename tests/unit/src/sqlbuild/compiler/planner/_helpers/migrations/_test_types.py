@@ -24,6 +24,15 @@ class StoredMigrationHashTestCase:
 
 
 @dataclass(frozen=True)
+class StoredProjectionTestCase:
+    description: str
+    query_sql: str
+    expected_references: frozenset[str]
+    expected_expression_hash: str
+    expected_fingerprint: str
+
+
+@dataclass(frozen=True)
 class MigrationFingerprintTestCase:
     description: str
     origin_sql: str

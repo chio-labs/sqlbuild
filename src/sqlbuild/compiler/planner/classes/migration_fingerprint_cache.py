@@ -11,10 +11,10 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, cast
 
-from sqlbuild._native import without_declared_columns_hash
-from sqlbuild.compiler.planner._helpers.migrations.fingerprint import (
+from sqlbuild._native import (
     build_migration_fingerprint,
     migration_fingerprint_ref_names,
+    without_declared_columns_hash,
 )
 from sqlbuild.compiler.planner.constants import MIGRATION_FINGERPRINT_ALGORITHM
 

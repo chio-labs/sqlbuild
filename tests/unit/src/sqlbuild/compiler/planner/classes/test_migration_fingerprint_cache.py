@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 import sqlbuild.compiler.planner.classes.migration_fingerprint_cache as fingerprint_cache
-from sqlbuild.compiler.planner._helpers.migrations.fingerprint import build_migration_fingerprint
+from sqlbuild._native import build_migration_fingerprint
 from sqlbuild.compiler.planner.classes.migration_fingerprint_cache import (
     MigrationFingerprintCache,
 )
