@@ -18,16 +18,18 @@ use sqlbuild_analysis::assembly::target_checks::main::target_error_message::targ
 use sqlbuild_analysis::assembly::target_checks::models::{LoaderCollision, MissingParts};
 use sqlbuild_core::text::main::python_strip::python_strip;
 
+use sqlbuild_model_config::templates::models::TemplateOptions;
+
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
+use crate::bindings::_helpers::model_config::template_data::expanded_template_data;
 
 const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
 const TARGET_NAME_MODULE: &str = "sqlbuild._native";
 const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
 const EFFECTIVE_RUNTIME_MODULE: &str = "sqlbuild.compiler.compile.main.effective_runtime";
 const EFFECTIVE_CONFIG_MODULE: &str = "sqlbuild.compiler.compile.main.effective_config";
-const EXPAND_TEMPLATE_MODULE: &str = "sqlbuild._native";
 const SETTING_HELP_MODULE: &str = "sqlbuild.errors.setting_help.main.setting_help";
 /// Connection settings that identify the warehouse two targets write to.
 const CONNECTION_IDENTITY_KEYS: [&str; 7] = [
@@ -369,21 +371,17 @@ fn managed_source_namespace(
     let value: Bound<'_, PyDict> = PyDict::new(py);
     pyo3::types::PyDictMethods::set_item(&value, "database", database)?;
     pyo3::types::PyDictMethods::set_item(&value, "schema", schema)?;
-    let false_value: Bound<'_, PyAny> = pyo3::types::PyBool::new(py, false).to_owned().into_any();
-    let expanded: Bound<'_, PyAny> = call_with(
-        &imported(py, EXPAND_TEMPLATE_MODULE, "expand_template_data")?,
-        &[
-            ("value", value.into_any()),
-            ("variables", effective_vars.clone()),
-            ("context_values", PyDict::new(py).into_any()),
-            (
-                "context_label",
-                PyString::new(py, LOADER_NAMESPACE_LABEL).into_any(),
-            ),
-            ("allow_context", false_value.clone()),
-            ("preserve_context_tokens", false_value.clone()),
-            ("preserve_unknown_context", false_value),
-        ],
+    let expanded: Bound<'_, PyAny> = expanded_template_data(
+        value.as_any(),
+        (effective_vars.downcast()?, &PyDict::new(py)),
+        (
+            TemplateOptions {
+                allow_context: false,
+                preserve_context_tokens: false,
+                preserve_unknown_context: false,
+            },
+            LOADER_NAMESPACE_LABEL,
+        ),
     )?;
     let part = |key: &str| -> PyResult<Option<String>> {
         let value: Bound<'_, PyAny> = expanded.get_item(key)?;

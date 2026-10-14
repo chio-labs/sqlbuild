@@ -3,8 +3,8 @@
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyInt, PyString};
-use pyo3::{pyfunction, wrap_pyfunction};
+use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyInt, PyList, PyString, PyTuple};
+use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
@@ -13,8 +13,13 @@ const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const SCOPE_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
 const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
 const SCOPE_LOOKUP_MODULE: &str = "sqlbuild.compiler.scopes.main.build_scope_lookup";
-const NATIVE_CONTEXTS_MODULE: &str =
-    "sqlbuild.compiler.model_loop.main._build_native_declaration_contexts";
+const NATIVE_MODULE: &str = "sqlbuild._native";
+const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
+const SCOPE_ERRORS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
+const BUILTINS_MODULE: &str = "builtins";
+const NO_DECLARATION_KIND: u8 = 255;
+/// Declaration kinds by their native code: enum 0, constant 1, macro 2.
+const DECLARATION_KINDS: [&str; 3] = ["ENUM", "CONSTANT", "MACRO"];
 const SQL_VALUE_ERRORS_MODULE: &str = "sqlbuild.sql_values.exceptions";
 const TYPES_MODULE: &str = "types";
 const SCALAR_KINDS: [&str; 6] = ["string", "integer", "boolean", "float", "decimal", "null"];
@@ -142,17 +147,8 @@ pub(crate) fn declaration_scope_resolver<'py>(
             imported(py, TYPES_MODULE, "MappingProxyType")?.call1((&declarations,))?,
         )],
     )?;
-    let native_contexts: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            NATIVE_CONTEXTS_MODULE,
-            "build_native_declaration_contexts",
-        )?,
-        &[
-            ("lookup", lookup.clone()),
-            ("declarations", declarations.into_any()),
-        ],
-    )?;
+    let native_contexts: Bound<'py, PyAny> =
+        native_declaration_contexts(&lookup, declarations.as_any())?;
     call_with(
         &imported(py, COMPILE_MODELS_MODULE, "DeclarationScopeResolver")?,
         &[
@@ -166,6 +162,173 @@ pub(crate) fn declaration_scope_resolver<'py>(
             ("native_contexts", native_contexts),
         ],
     )
+}
+
+/// The native code of declaration kind `kind`, or the no-kind code.
+fn kind_code(kinds: &[Bound<'_, PyAny>], kind: &Bound<'_, PyAny>) -> u8 {
+    let mut code: u8 = 0;
+    for known in kinds {
+        if known.is(kind) {
+            return code;
+        }
+        code += 1;
+    }
+    NO_DECLARATION_KIND
+}
+
+/// The native kind code of a runtime declaration value, by its class.
+fn value_kind_code(classes: &[Bound<'_, PyAny>], value: &Bound<'_, PyAny>) -> PyResult<u8> {
+    let mut code: u8 = 0;
+    for class in classes {
+        if value.is_instance(class)? {
+            return Ok(code);
+        }
+        code += 1;
+    }
+    Ok(NO_DECLARATION_KIND)
+}
+
+/// `{owner: list(items)}` of an index position mapping.
+fn listed_positions<'py>(positions: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+    let listed: Bound<'py, PyDict> = PyDict::new(positions.py());
+    for item in positions.call_method0("items")?.try_iter()? {
+        let (owner, items): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
+        listed.set_item(
+            owner,
+            PyList::new(
+                positions.py(),
+                items.try_iter()?.collect::<PyResult<Vec<_>>>()?,
+            )?,
+        )?;
+    }
+    Ok(listed)
+}
+
+/// Hand the lookup's declaration positions and runtime values to the native classifier.
+pub(crate) fn native_declaration_contexts<'py>(
+    lookup: &Bound<'py, PyAny>,
+    declarations: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = lookup.py();
+    let kind_type: Bound<'py, PyAny> = imported(py, SCOPE_TYPES_MODULE, "DeclarationKind")?;
+    let kinds: Vec<Bound<'py, PyAny>> = DECLARATION_KINDS
+        .iter()
+        .map(|kind| kind_type.getattr(*kind))
+        .collect::<PyResult<_>>()?;
+    let value_classes: Vec<Bound<'py, PyAny>> = vec![
+        imported(py, DISCOVERY_MODELS_MODULE, "EnumDeclaration")?,
+        imported(py, DISCOVERY_MODELS_MODULE, "ConstantDeclaration")?,
+        imported(py, COMPILE_MODELS_MODULE, "LoadedMacro")?,
+    ];
+    let index: Bound<'py, PyAny> = lookup.getattr("visibility_index")?;
+    let lookup_declarations: Bound<'py, PyAny> = lookup.getattr("declarations")?;
+    let identity_keys: Bound<'py, PyDict> = PyDict::new(py);
+    let mut positions: Vec<Bound<'py, PyTuple>> = Vec::new();
+    for identity in index.getattr("identities")?.try_iter()? {
+        let identity: Bound<'py, PyAny> = identity?;
+        let key: Bound<'py, PyAny> =
+            identity_keys.call_method1("setdefault", (&identity, identity_keys.len()))?;
+        let value: Bound<'py, PyAny> = declarations.call_method1("get", (&identity,))?;
+        positions.push(PyTuple::new(
+            py,
+            [
+                identity.clone(),
+                lookup_declarations.get_item(&identity)?.get_item(0)?,
+                identity.getattr("name")?,
+                kind_code(&kinds, &identity.getattr("kind")?)
+                    .into_pyobject(py)?
+                    .into_any(),
+                value.clone(),
+                value_kind_code(&value_classes, &value)?
+                    .into_pyobject(py)?
+                    .into_any(),
+                key,
+            ],
+        )?);
+    }
+    let reasons: Bound<'py, PyDict> = PyDict::new(py);
+    for reason in imported(py, SCOPE_TYPES_MODULE, "VisibilityReason")?.try_iter()? {
+        let reason: Bound<'py, PyAny> = reason?;
+        reasons.set_item(reason.getattr("value")?, reason)?;
+    }
+    let classes: Bound<'py, PyDict> = PyDict::new(py);
+    classes.set_item(
+        "visibility_record",
+        imported(py, SCOPE_MODELS_MODULE, "VisibilityRecord")?,
+    )?;
+    classes.set_item(
+        "resolution_context",
+        imported(py, COMPILE_MODELS_MODULE, "DeclarationResolutionContext")?,
+    )?;
+    classes.set_item(
+        "allocate",
+        imported(py, BUILTINS_MODULE, "object")?.getattr("__new__")?,
+    )?;
+    classes.set_item("reasons", reasons)?;
+    let keys: Bound<'py, PyDict> = PyDict::new(py);
+    keys.set_item("identity_keys", identity_keys)?;
+    keys.set_item("private_positions", index.getattr("private_positions")?)?;
+    keys.set_item("grants_by_resource", lookup.getattr("grants_by_resource")?)?;
+    let lookups: Bound<'py, PyDict> = PyDict::new(py);
+    lookups.set_item("resources_by_path", lookup.getattr("resources_by_path")?)?;
+    lookups.set_item("resources", lookup.getattr("resources")?)?;
+    lookups.set_item("declarations", &lookup_declarations)?;
+    lookups.set_item(
+        "index_declarations",
+        lookup.getattr("index")?.getattr("declarations")?,
+    )?;
+    for (name, class) in [
+        ("resource_record", "ResourceRecord"),
+        ("ownership_root", "OwnershipRoot"),
+        ("resource_identity", "ResourceIdentity"),
+        ("declaration_identity", "DeclarationIdentity"),
+    ] {
+        lookups.set_item(name, imported(py, SCOPE_MODELS_MODULE, class)?)?;
+    }
+    lookups.set_item(
+        "resource_kind",
+        imported(py, SCOPE_TYPES_MODULE, "ResourceKind")?,
+    )?;
+    lookups.set_item("declaration_kind", kind_type)?;
+    lookups.set_item(
+        "private_scope",
+        imported(py, SCOPE_TYPES_MODULE, "ScopeKind")?.getattr("PRIVATE")?,
+    )?;
+    lookups.set_item(
+        "identity_error",
+        imported(py, SCOPE_ERRORS_MODULE, "InvalidQualifiedIdentityError")?,
+    )?;
+    lookups.set_item(
+        "path_error",
+        imported(py, SCOPE_ERRORS_MODULE, "InvalidScopePathError")?,
+    )?;
+    let global_positions: Bound<'py, PyList> = PyList::new(
+        py,
+        index
+            .getattr("global_positions")?
+            .try_iter()?
+            .collect::<PyResult<Vec<_>>>()?,
+    )?;
+    imported(py, NATIVE_MODULE, "NativeDeclarationContexts")?.call1((
+        PyList::new(py, positions)?,
+        (
+            global_positions,
+            listed_positions(&index.getattr("local_positions")?)?,
+            listed_positions(&index.getattr("inherited_positions")?)?,
+        ),
+        classes,
+        (keys, lookups),
+    ))
+}
+
+/// Hand one scope lookup's positions and runtime values to the native classifier.
+#[pyfunction]
+#[pyo3(signature = (*, lookup, declarations))]
+fn build_native_declaration_contexts<'py>(
+    lookup: &Bound<'py, PyAny>,
+    declarations: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    native_declaration_contexts(lookup, declarations)
 }
 
 /// Canonical visibility for one authored path, projected onto runtime declaration values.
@@ -308,6 +471,7 @@ fn resolve_declaration_context<'py>(
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(build_native_declaration_contexts, module)?)?;
     module.add_function(wrap_pyfunction!(render_constant_declaration, module)?)?;
     module.add_function(wrap_pyfunction!(render_enum_member_value, module)?)?;
     module.add_function(wrap_pyfunction!(resolve_declaration_context, module)?)?;

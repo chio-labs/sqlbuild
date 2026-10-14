@@ -2771,6 +2771,11 @@ def fixture_projection_facts(
     sql: str, dialect: str | None, /
 ) -> tuple[list[tuple[str, str]], list[str], list[str]]: ...
 def find_macro_call_names(sql: str, /) -> tuple[str, ...]: ...
+def build_native_declaration_contexts(
+    *,
+    lookup: ScopeLookup,
+    declarations: Mapping[DeclarationIdentity, EnumDeclaration | ConstantDeclaration | LoadedMacro],
+) -> NativeDeclarationContexts: ...
 def render_constant_declaration(
     *,
     declaration: ConstantDeclaration,
