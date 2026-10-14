@@ -11,6 +11,10 @@ use crate::bindings::_helpers::rules::{
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(
+        crate::bindings::_helpers::rules::fix_session::plan_rule_fixes,
+        module
+    )?)?;
     module.add_function(wrap_pyfunction!(compile_facts, module)?)?;
     module.add_function(wrap_pyfunction!(fix_verdict, module)?)?;
     evaluation::register(module)?;

@@ -7,6 +7,7 @@ pub(crate) mod early_sql_lint;
 pub(crate) mod evaluation;
 pub(crate) mod findings;
 pub(crate) mod fix_facts;
+pub(crate) mod fix_session;
 pub(crate) mod fix_verdict;
 pub(crate) mod guidance;
 pub(crate) mod lint;

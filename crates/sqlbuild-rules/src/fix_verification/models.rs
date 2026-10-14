@@ -1,5 +1,23 @@
 use std::collections::BTreeMap;
 
+/// Proof requirements for a proposed automatic rule fix.
+#[derive(Debug)]
+pub struct FixEligibility {
+    pub model_body: bool,
+    pub has_fix: bool,
+    pub safe_code: bool,
+    pub conditionless_join: bool,
+    pub snowflake: bool,
+}
+
+/// One authored edit measured in Unicode character offsets.
+#[derive(Debug)]
+pub struct FixEdit {
+    pub start: usize,
+    pub end: usize,
+    pub replacement: String,
+}
+
 /// Equality facts extracted from compiler-owned Python views.
 #[derive(Debug)]
 pub struct ModelComparison {

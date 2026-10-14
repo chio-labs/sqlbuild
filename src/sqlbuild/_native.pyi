@@ -351,6 +351,7 @@ from sqlbuild.lint.models import (
     LintConfig,
     LintRunResult,
     LintViolation,
+    RuleFixResult,
 )
 from sqlbuild.lint.types import RelationKeyRow, RelationKeys
 from sqlbuild.presentation.classes.cli_style import CliStyle
@@ -1200,6 +1201,15 @@ def declared_relation_keys(
 ) -> RelationKeys: ...
 def compiled_relation_keys(project: CompiledProjectView) -> RelationKeys: ...
 def compile_facts(*, project: CompiledProjectView, project_dir: Path) -> CompileFacts: ...
+def plan_rule_fixes(
+    *,
+    project_dir: Path,
+    files: dict[Path, str],
+    config: LintConfig,
+    adapter: TypedSqlValueRenderer | None,
+    discovered_inputs: DiscoveredProjectInputs | None,
+    enabled: bool,
+) -> tuple[dict[Path, str], tuple[RuleFixResult, ...], list[LintViolation]]: ...
 def fix_verdict(
     *, before: CompileFacts, after: CompileFacts, edited: frozenset[Path]
 ) -> FixVerdict: ...
