@@ -2,7 +2,7 @@
 # migration work that moves to Rust. `remaining_lines` must equal the current count of that work:
 # a PR that moves code lowers it, and adding movable Python fails the check.
 # Native failures must surface as errors; `handled_native_errors` lists the reviewed exceptions.
-remaining_lines = 63824
+remaining_lines = 63635
 
 [[stays]]
 path = "executor"
@@ -188,6 +188,11 @@ note = "Entry point of the dbt subprocess runner."
 path = "compiler/python_nodes/_helpers/identity.py"
 reason = "user-code"
 note = "Identity hashing over live user functions (source and globals)."
+
+[[stays]]
+path = "compiler/macro_bridge/_helpers/store_environment.py"
+reason = "user-code"
+note = "Fingerprints the Python interpreter and installed packages that project macros import from; the macro call store cache key."
 
 [[stays]]
 path = "compiler/compile/_helpers/render/user_macros.py"
