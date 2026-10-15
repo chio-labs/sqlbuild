@@ -958,3 +958,38 @@ def observe_hosts(
     )
     monkeypatch.setattr(native_module, "custom_host_observer", observer)
     return observer
+
+
+PROVIDER_SOURCE: str = """
+from sqlbuild.providers import Provider
+
+
+class OrdersProvider(Provider):
+    'Order service settings.'
+
+    region: str = "eu"
+"""
+
+
+def write_provider_task_project(*, project_dir: Path, annotation: str) -> None:
+    """Write a DuckDB project whose task takes a provider parameter with `annotation`."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": (
+            'name = "orders_tasks"\nadapter = "duckdb"\n\n'
+            '[connection]\ndatabase = "orders.duckdb"\n'
+        ),
+        "providers/orders.py": PROVIDER_SOURCE,
+        "python/orders.py": (
+            "from providers.orders import OrdersProvider\n"
+            "from sqlbuild.tasks import task\n\n\n"
+            "@task\n"
+            f"def refresh_orders(ctx, orders_provider: {annotation}):\n"
+            '    """Refresh the order snapshot."""\n'
+            "    return None\n"
+        ),
+    }
+    for relative_path, text in files.items():
+        path: Path = project_dir / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")

@@ -13,6 +13,7 @@ from sqlbuild._native import (
     DiscoveredConstantFile,
     DiscoveredEnumFile,
     discover_audit_files,
+    discover_hook_functions,
     discover_macro_files,
     discover_project_inputs,
     discover_python_function_files,
@@ -22,8 +23,10 @@ from sqlbuild._native import (
     discover_sql_hook_files,
     discover_test_files,
 )
-from sqlbuild.compiler.discovery._helpers.filesystem.core import discover_hook_functions
-from sqlbuild.compiler.discovery.models import DiscoveredMacroFile, DiscoveredProjectInputs
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredMacroFile,
+    DiscoveredProjectInputs,
+)
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DiscoverGlobalDeclarationTestCase,
     DiscoverGroupedDeclarationTestCase,

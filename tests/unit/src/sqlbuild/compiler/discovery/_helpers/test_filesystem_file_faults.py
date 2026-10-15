@@ -15,6 +15,9 @@ from sqlbuild._native import (
     discover_audit_files,
     discover_constant_files,
     discover_enum_files,
+    discover_event_exporter_declarations,
+    discover_materialization_files,
+    discover_provider_classes,
     discover_scenario_files,
     discover_source_files,
     discover_sql_function_files,
@@ -22,11 +25,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.compiler.discovery._helpers.filesystem.command_output_sinks import (
     discover_command_output_sink_declarations,
-)
-from sqlbuild.compiler.discovery._helpers.filesystem.core import (
-    discover_event_exporter_declarations,
-    discover_materialization_files,
-    discover_provider_classes,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DiscoverFileFaultsTestCase,

@@ -492,12 +492,12 @@ note = "Tracks the loaded user modules macro call results depend on, and runs a 
 [[stays]]
 path = "compiler/python_nodes/_helpers/user_inventory.py"
 reason = "user-code"
-note = "Reads loaded user node functions: provider parameter annotations, identities over live functions and decorated dependency names; graph construction is native."
+note = "Reads loaded user node functions: identities over live functions and decorated dependency names; graph construction is native."
 
 [[stays]]
-path = "compiler/discovery/_helpers/filesystem/core.py"
+path = "compiler/discovery/_helpers/filesystem/project_modules.py"
 reason = "user-code"
-note = "Imports project Python node, provider, sink and materialization modules and reads their definitions."
+note = "Rule 2 shim: imports project Python node, hook, provider, sink and materialization modules and reads live members, signatures, provider parameter annotations and source lines; record building, provider naming and validation, settings errors, factory results and duplicate checks are native."
 
 [[stays]]
 path = "compiler/discovery/_helpers/validation/discovery.py"

@@ -1129,3 +1129,11 @@ class CustomRuleCacheSequenceTestCase:
     description: str
     steps: tuple[tuple[str, str], ...]
     expected_hits_and_misses: tuple[tuple[int, int], ...]
+
+
+@dataclass(frozen=True)
+class ProviderAnnotationToleranceTestCase:
+    description: str
+    annotation: str
+    expected_exit_code: int
+    expected_annotation_class_name: str | None

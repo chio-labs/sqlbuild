@@ -9,6 +9,7 @@ use sqlbuild_analysis::python_selection::models::{InventoryIndexes, InventoryNod
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::discovery::imported_modules::provider_usages;
 use crate::bindings::_helpers::graph::python_selection::resolve_python_sql_run_selection;
 use crate::bindings::_helpers::graph::views::compiled_graph_keys;
 
@@ -33,7 +34,7 @@ struct Vocabulary<'py> {
     node: Bound<'py, PyAny>,
     kinds: Bound<'py, PyAny>,
     sql_ref: Bound<'py, PyAny>,
-    user_facts: Bound<'py, PyAny>,
+    identity: Bound<'py, PyAny>,
     providers: Bound<'py, PyDict>,
 }
 
@@ -107,7 +108,7 @@ fn kind_parts<'py>(
     })
 }
 
-/// One `DiscoveredPythonNode` with its identity and provider usages read by the user shim.
+/// One `DiscoveredPythonNode` with its identity and provider usages read by the user shims.
 fn python_node<'py>(
     vocabulary: &Vocabulary<'py>,
     (kind, documented): (&str, bool),
@@ -122,18 +123,17 @@ fn python_node<'py>(
         }
     }
     let kind_member: Bound<'py, PyAny> = vocabulary.kinds.getattr(kind)?;
-    let (usages, identity): (Bound<'py, PyAny>, Bound<'py, PyAny>) = call_with(
-        &vocabulary.user_facts,
+    let usages: Bound<'py, PyAny> = provider_usages(&get("function")?, &vocabulary.providers)?;
+    let identity: Bound<'py, PyAny> = call_with(
+        &vocabulary.identity,
         &[
             ("kind", kind_member.getattr("value")?),
             ("name", get("name")?),
             ("function", get("function")?),
             ("file_path", get("file_path")?),
-            ("provider_by_name", vocabulary.providers.clone().into_any()),
             ("decorator_config", config.into_any()),
         ],
-    )?
-    .extract()?;
+    )?;
     let depends_on: Bound<'py, PyAny> = get("depends_on")?;
     let mut sql_deps: Vec<Bound<'py, PyAny>> = Vec::new();
     for dependency in depends_on.try_iter()? {
@@ -227,7 +227,7 @@ pub(crate) fn python_node_graph<'py>(
         node: imported(py, NODE_MODELS_MODULE, "DiscoveredPythonNode")?,
         kinds: imported(py, NODE_TYPES_MODULE, "PythonNodeKind")?,
         sql_ref: imported(py, SQL_REF_MODULE, "SqlResourceRef")?,
-        user_facts: imported(py, USER_INVENTORY_MODULE, "python_node_user_facts")?,
+        identity: imported(py, USER_INVENTORY_MODULE, "python_node_identity")?,
         providers,
     };
     let mut nodes: Vec<Bound<'py, PyAny>> = Vec::new();

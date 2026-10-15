@@ -89,6 +89,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredCheckFunction,
     DiscoveredCommandOutputSink,
     DiscoveredEventExporter,
+    DiscoveredEventExporterDeclaration,
     DiscoveredHookFunction,
     DiscoveredLoaderFunction,
     DiscoveredMacroFile,
@@ -96,6 +97,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredProvider,
     DiscoveredProviderUsage,
+    DiscoveredPythonNodeFunctions,
     DiscoveredSourceFile,
     DiscoveredSqlScenarioFile,
     DiscoveredSqlTestFile,
@@ -6284,6 +6286,28 @@ def observe_source_freshness_json(
     previous_records_by_source_name: Mapping[str, SourceFreshnessRecord] | None = None,
 ) -> str: ...
 def render_janitor_plan(*, plan: JanitorPlan, use_color: bool = False) -> str: ...
+def discover_python_node_functions(
+    *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] | None = None
+) -> DiscoveredPythonNodeFunctions: ...
+def discover_hook_functions(
+    *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] | None = None
+) -> tuple[DiscoveredHookFunction, ...]: ...
+def discover_materialization_files(
+    *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] | None = None
+) -> tuple[DiscoveredMaterializationFile, ...]: ...
+def discover_provider_classes(*, project_dir: Path) -> tuple[DiscoveredProvider, ...]: ...
+def discover_event_exporter_declarations(
+    *, project_dir: Path
+) -> tuple[DiscoveredEventExporterDeclaration, ...]: ...
+def bind_event_exporter_declarations(
+    *,
+    declarations: tuple[DiscoveredEventExporterDeclaration, ...],
+    providers: tuple[DiscoveredProvider, ...],
+    project_dir: Path,
+) -> tuple[DiscoveredEventExporter, ...]: ...
+def discover_event_exporter_functions(
+    *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] | None = None
+) -> tuple[DiscoveredEventExporter, ...]: ...
 def build_janitor_plan(
     *,
     project: CompiledProjectView,

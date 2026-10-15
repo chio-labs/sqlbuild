@@ -10,10 +10,9 @@ from typing import get_type_hints
 
 import sqlbuild._native as _native
 from sqlbuild._native import EventExporterDiscoveryError
-from sqlbuild.compiler.discovery._helpers.filesystem.core import (
-    _load_sink_module,
-    _provider_by_name,
-    _provider_usages,
+from sqlbuild.compiler.discovery._helpers.filesystem.project_modules import (
+    load_sink_module,
+    provider_usages,
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredCommandOutputSink,
@@ -67,7 +66,7 @@ def discover_command_output_sink_declarations(
     for file_path in _native.discover_python_module_files(
         project_dir=project_dir, root="sinks", public_only=True
     ):
-        module: ModuleType = _load_sink_module(file_path=file_path, project_dir=project_dir)
+        module: ModuleType = load_sink_module(file_path=file_path, project_dir=project_dir)
         seen_function_ids: set[int] = set()
         for _, value in inspect.getmembers(module, inspect.isfunction):
             if value.__module__ != module.__name__:
@@ -115,7 +114,9 @@ def bind_command_output_sink_declarations(
 ) -> tuple[DiscoveredCommandOutputSink, ...]:
     """Validate command-output sink provider parameters."""
 
-    provider_by_name: dict[str, DiscoveredProvider] = _provider_by_name(providers)
+    provider_by_name: dict[str, DiscoveredProvider] = {
+        provider.name: provider for provider in providers
+    }
     bound: list[DiscoveredCommandOutputSink] = []
     for declaration in declarations:
         usages: tuple[DiscoveredProviderUsage, ...] = _bind_sink_provider_usages(
@@ -255,4 +256,4 @@ def _bind_sink_provider_usages(
                 f"{sink_label} '{sink_name}' in {relative_path} provider parameter "
                 f"'{parameter.name}' must be unannotated or exactly {provider_class_name}"
             )
-    return _provider_usages(function=function, provider_by_name=provider_by_name)
+    return provider_usages(function=function, provider_by_name=provider_by_name)
