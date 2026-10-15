@@ -14,3 +14,14 @@ pub enum DagArtifactError {
     /// The emitter refused the encoded artifact.
     Emit(JsonEmitError),
 }
+
+/// Why a Dagster selection over the DAG artifact failed, in the order Python raised them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DagSelectionError {
+    /// The selector token did not parse.
+    Selector(crate::graph::errors::SelectorError),
+    /// A `test:` selector, which only `sqb test` and `sqb build` run.
+    UnitTest(String),
+    /// `DagsterDagInputError` with this message.
+    Input(String),
+}

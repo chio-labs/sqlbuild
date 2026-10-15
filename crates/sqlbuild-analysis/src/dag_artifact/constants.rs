@@ -27,3 +27,10 @@ pub(crate) const LOADER_NODE_META_KEY: &str = "sqlbuild_loader_node";
 pub(crate) const LOADER_DESTINATION_PREFIX: &str = "__loader__";
 /// The most parts a loader destination may have.
 pub(crate) const LOADER_MAX_PARTS: usize = 3;
+pub(crate) const SELECTOR_KIND_NAME: &str = "name";
+pub(crate) const SELECTOR_KIND_TAG: &str = "tag";
+pub(crate) const SELECTOR_KIND_PATH: &str = "path";
+pub(crate) const SELECTOR_KIND_CHECK: &str = "check";
+pub(crate) const SELECTOR_KIND_TEST: &str = "test";
+pub(crate) const SELECTOR_KIND_SEPARATOR: &str = ":";
+pub(crate) const SELECTOR_MODELS_PREFIX: &str = "models/";

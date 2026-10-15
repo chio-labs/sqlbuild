@@ -6,8 +6,8 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
+from sqlbuild._native import load_sqlbuild_dag
 from sqlbuild.integrations.rivers._helpers.assets import build_asset_defs
-from sqlbuild.integrations.rivers._helpers.dag import load_sqlbuild_dag
 from sqlbuild.integrations.rivers._helpers.imports import load_rivers
 from sqlbuild.integrations.rivers.classes.sqlbuild_rivers_translator import (
     SqlBuildRiversTranslator,
@@ -38,7 +38,7 @@ def sqlbuild_assets(
         if project is not None
         else Path("target/sqlbuild_dag.json")
     )
-    resolved_dag: Mapping[str, Any] = load_sqlbuild_dag(dag_input)
+    resolved_dag: Mapping[str, Any] = load_sqlbuild_dag(dag_input, error_class=RiversDagInputError)
     resolved_translator: SqlBuildRiversTranslator = translator or SqlBuildRiversTranslator()
     output_defs: tuple[Any, ...] = build_asset_defs(
         dag=resolved_dag,

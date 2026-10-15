@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.integrations.dagster._helpers.dag import load_sqlbuild_dag
+from sqlbuild._native import load_sqlbuild_dag
 from sqlbuild.integrations.dagster._helpers.imports import load_dagster
 from sqlbuild.integrations.dagster._helpers.invocation_factory import start_sqlbuild_cli_invocation
 from sqlbuild.integrations.dagster._helpers.translation import translate_sqlbuild_dag
@@ -14,6 +14,7 @@ from sqlbuild.integrations.dagster.classes.sqlbuild_cli_invocation import SqlBui
 from sqlbuild.integrations.dagster.classes.sqlbuild_dagster_translator import (
     SqlBuildDagsterTranslator,
 )
+from sqlbuild.integrations.dagster.exceptions import DagsterDagInputError
 from sqlbuild.integrations.dagster.models import SqlBuildProject
 
 
@@ -58,7 +59,7 @@ class SqlBuildCliResource(load_dagster().ConfigurableResource):  # type: ignore[
         loaded_dag: Mapping[str, Any] | None = None
         if self.dag_path is not None:
             loaded_dag = translate_sqlbuild_dag(
-                dag=load_sqlbuild_dag(self.dag_path),
+                dag=load_sqlbuild_dag(self.dag_path, error_class=DagsterDagInputError),
                 translator=translator or SqlBuildDagsterTranslator(),
             )
         return start_sqlbuild_cli_invocation(

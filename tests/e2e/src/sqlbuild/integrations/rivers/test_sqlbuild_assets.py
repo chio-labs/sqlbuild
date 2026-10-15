@@ -11,14 +11,14 @@ from typing import Any
 
 import pytest
 
-from sqlbuild._native import PlaygroundCommandRequest
+from sqlbuild._native import PlaygroundCommandRequest, load_sqlbuild_dag
 from sqlbuild._native import run_playground_command as run_playground
 from sqlbuild.integrations.rivers import SqlBuildProject, sqlbuild_assets
 from sqlbuild.integrations.rivers._helpers.assets import build_asset_defs
-from sqlbuild.integrations.rivers._helpers.dag import load_sqlbuild_dag
 from sqlbuild.integrations.rivers.classes.sqlbuild_rivers_translator import (
     SqlBuildRiversTranslator,
 )
+from sqlbuild.integrations.rivers.exceptions import RiversDagInputError
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     REPO_ROOT,
     prepare_waffle_shop,
@@ -76,7 +76,7 @@ def test_given_python_nodes_project_when_loading_rivers_assets_then_maps_real_ar
         yield
 
     output_defs: tuple[Any, ...] = build_asset_defs(
-        dag=load_sqlbuild_dag(sqlbuild_project.dag_path),
+        dag=load_sqlbuild_dag(sqlbuild_project.dag_path, error_class=RiversDagInputError),
         translator=SqlBuildRiversTranslator(),
     )
     repo: Any = rs.CodeRepository(assets=[sqlbuild_python_nodes])

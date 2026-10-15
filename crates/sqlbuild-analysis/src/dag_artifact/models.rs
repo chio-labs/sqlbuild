@@ -216,3 +216,38 @@ pub struct DagProjectInput {
     pub target_database: Option<String>,
     pub target_schema: Option<String>,
 }
+
+/// One DAG artifact node as the Dagster selection reads it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DagSelectionNode {
+    pub id: String,
+    pub name: String,
+    pub kind: String,
+    pub path: Option<String>,
+    pub tags: Vec<String>,
+}
+
+/// One DAG artifact check: its name, id and checked asset ids.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DagSelectionCheck {
+    pub name: String,
+    pub id: String,
+    pub checked_asset_ids: Vec<String>,
+}
+
+/// The DAG artifact's nodes, `(from, to)` edges and checks.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DagSelectionGraph {
+    pub nodes: Vec<DagSelectionNode>,
+    pub edges: Vec<(String, String)>,
+    pub checks: Vec<DagSelectionCheck>,
+}
+
+/// The node lookup and edge indexes every selector token resolves against.
+#[derive(Debug)]
+pub(crate) struct DagSelectionIndex<'a> {
+    pub(crate) graph: &'a DagSelectionGraph,
+    pub(crate) nodes: std::collections::BTreeMap<&'a str, &'a DagSelectionNode>,
+    pub(crate) upstream: crate::dag_artifact::_helpers::selection::Adjacency,
+    pub(crate) downstream: crate::dag_artifact::_helpers::selection::Adjacency,
+}

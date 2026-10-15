@@ -6,8 +6,8 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
+from sqlbuild._native import load_sqlbuild_dag
 from sqlbuild.integrations.dagster._helpers.assets import build_scenario_check_specs
-from sqlbuild.integrations.dagster._helpers.dag import load_sqlbuild_dag
 from sqlbuild.integrations.dagster._helpers.imports import load_dagster
 from sqlbuild.integrations.dagster.classes.sqlbuild_dagster_translator import (
     SqlBuildDagsterTranslator,
@@ -39,7 +39,7 @@ def sqlbuild_scenario_checks(
         if project is not None
         else Path("target/sqlbuild_dag.json")
     )
-    resolved_dag: Mapping[str, Any] = load_sqlbuild_dag(dag_input)
+    resolved_dag: Mapping[str, Any] = load_sqlbuild_dag(dag_input, error_class=DagsterDagInputError)
     resolved_translator: SqlBuildDagsterTranslator = translator or SqlBuildDagsterTranslator()
     check_specs: tuple[Any, ...] = build_scenario_check_specs(
         dag=resolved_dag,
