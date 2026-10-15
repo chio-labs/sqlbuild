@@ -2,7 +2,7 @@
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::planner_phases::constants::PLAN_OUTPUT_MODULE;
+use crate::bindings::_helpers::planner_phases::constants::NATIVE_MODULE;
 use crate::bindings::_helpers::planner_phases::objects::{
     model_key_names, native, planner_model, replace, sorted_names, strings, text, tuple,
 };
@@ -92,7 +92,7 @@ pub(crate) fn assemble_base_plan_output<'py>(
         ],
     )?;
     let plan_output = call_with(
-        &imported(py, PLAN_OUTPUT_MODULE, "build_plan_output")?,
+        &imported(py, NATIVE_MODULE, "build_plan_output")?,
         &[
             ("project", runtime.getattr("project")?),
             ("adapter", runtime.getattr("adapter")?),

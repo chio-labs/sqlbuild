@@ -1,6 +1,7 @@
 """Private SQLBuild native engine bindings."""
 
 from collections.abc import Callable, Iterable, Mapping, Sequence, Set
+from concurrent.futures import Future
 from contextlib import AbstractContextManager
 from contextvars import Token
 from datetime import date, datetime
@@ -224,6 +225,7 @@ from sqlbuild.compiler.planner.models import (
     DirectModelVersionIdentities,
     EmptyCursorInputDecision,
     FixtureRelationMetadata,
+    FunctionPlanEntry,
     FutureCursorSafetyEvidence,
     MaximumStartPolicyInputs,
     MaximumStartSafetyEvidence,
@@ -263,6 +265,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerSelection,
     PlannerWarehouseState,
     PlanOutput,
+    PlanOutputExtras,
     PlanWarning,
     QueryShape,
     ReferenceRename,
@@ -4837,6 +4840,97 @@ def apply_maximum_start_policy(
     policy: MaximumStartPolicyInputs,
     has_start_override: bool,
 ) -> CursorBounds: ...
+def build_plan_output(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    scope: PlannerScope,
+    snapshot: WarehouseSnapshot,
+    relations: PlannerRelationsContext,
+    changes: PlannerChangeResults,
+    model_entry_results: PlannerModelEntryResults,
+    reload_sources: bool,
+    extras: PlanOutputExtras | None = None,
+) -> PlanOutput: ...
+def plan_function(
+    *,
+    function: CompiledFunctionView,
+    adapter: BaseAdapter,
+    relations: PlannerRelationsContext,
+    fingerprint_query_sql: str,
+    previous_query_sql: str | None = None,
+    reason: PlanReason = ...,
+) -> FunctionPlanEntry: ...
+def plan_selected_sql_tests(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    selected_keys: frozenset[CompiledObjectKey],
+    sql_test_selection: SqlTestSelection,
+) -> PlannedSqlTests: ...
+def plan_selected_sql_tests_into(
+    *,
+    future: Future[PlannedSqlTests],
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    selected_keys: frozenset[CompiledObjectKey],
+    sql_test_selection: SqlTestSelection,
+) -> None: ...
+def sql_test_is_selected(
+    *,
+    test: CompiledSqlTest,
+    selected_keys: frozenset[CompiledObjectKey],
+    sql_test_selection: SqlTestSelection,
+) -> bool: ...
+def build_selected_test_entries(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    selected_keys: frozenset[CompiledObjectKey],
+    sql_test_selection: SqlTestSelection,
+    case_name: str | None = None,
+) -> tuple[list[SqlTestPlanEntry], list[PlanWarning]]: ...
+def resolve_static_command_scope(
+    *, project: CompiledProjectView, selection: PlannerSelection, auto_load_sources: bool = False
+) -> PlannerScope: ...
+def resolve_static_relation_context(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    scope: PlannerScope,
+    deferral: DeferralInputs | None = None,
+    project_config: ProjectConfig | None = None,
+    local_config: LocalConfig | None = None,
+    relation_keys: frozenset[CompiledObjectKey] | None = None,
+) -> PlannerRelationsContext: ...
+def build_audit_command_plan(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    scope: PlannerScope,
+    relations: PlannerRelationsContext,
+) -> PlanOutput: ...
+def build_test_command_plan(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    scope: PlannerScope,
+    relations: PlannerRelationsContext,
+    case_name: str | None = None,
+) -> PlanOutput: ...
+def build_seed_command_plan(
+    *,
+    project: CompiledProjectView,
+    scope: PlannerScope,
+    relations: PlannerRelationsContext,
+    fingerprints: dict[str, Fingerprint] | None = None,
+) -> PlanOutput: ...
+def build_relation_command_plan(
+    *, project: CompiledProjectView, scope: PlannerScope, relations: PlannerRelationsContext
+) -> PlanOutput: ...
+def read_selected_seed_fingerprints(
+    *, adapter: BaseAdapter, connection: Any, seeds: tuple[CompiledSeedView, ...]
+) -> dict[str, Fingerprint]: ...
 def resolve_future_cursor_config(
     *, model: CompiledModelView, project_config: FutureCursorsConfig | None
 ) -> FutureCursorsConfig | None: ...

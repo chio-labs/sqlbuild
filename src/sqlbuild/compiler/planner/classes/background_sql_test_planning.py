@@ -6,10 +6,10 @@ import threading
 from concurrent.futures import Future
 from types import TracebackType
 
+from sqlbuild._native import plan_selected_sql_tests_into
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.planner._helpers.output.plan_output import plan_selected_sql_tests
 from sqlbuild.compiler.planner.models import PlannedSqlTests, SqlTestSelection
 
 
@@ -30,7 +30,7 @@ class BackgroundSqlTestPlanning:
             future: Future[PlannedSqlTests] = Future()
             self._future = future
             threading.Thread(
-                target=_plan_into,
+                target=plan_selected_sql_tests_into,
                 kwargs={
                     "future": future,
                     "project": project,
@@ -63,26 +63,3 @@ class BackgroundSqlTestPlanning:
                 selected_keys=self._selected_keys, sql_test_selection=self._sql_test_selection
             )
         return self._future.result()
-
-
-def _plan_into(
-    *,
-    future: Future[PlannedSqlTests],
-    project: CompiledProjectView,
-    adapter: BaseAdapter,
-    selected_keys: frozenset[CompiledObjectKey],
-    sql_test_selection: SqlTestSelection,
-) -> None:
-    """Run planning on a daemon thread so a failed plan never waits for it at exit."""
-
-    try:
-        future.set_result(
-            plan_selected_sql_tests(
-                project=project,
-                adapter=adapter,
-                selected_keys=selected_keys,
-                sql_test_selection=sql_test_selection,
-            )
-        )
-    except BaseException as error:  # noqa: BLE001 - re-raised on the joining thread
-        future.set_exception(error)

@@ -4,7 +4,7 @@ import threading
 
 import pytest
 
-import sqlbuild.compiler.planner.classes.background_sql_test_planning as background_module
+import sqlbuild._native as native_module
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.classes.background_sql_test_planning import (
@@ -55,7 +55,7 @@ def test_given_enabled_planning_when_joining_then_returns_planned_tests(
         calls.append(selected_keys)
         return _PLANNED
 
-    monkeypatch.setattr(background_module, "plan_selected_sql_tests", plan)
+    monkeypatch.setattr(native_module, "plan_selected_sql_tests", plan)
 
     with BackgroundSqlTestPlanning(
         sql_test_selection=SqlTestSelection(),
@@ -97,7 +97,7 @@ def test_given_disabled_planning_when_joining_then_returns_empty_tests(
         calls.append(selected_keys)
         return _PLANNED
 
-    monkeypatch.setattr(background_module, "plan_selected_sql_tests", plan)
+    monkeypatch.setattr(native_module, "plan_selected_sql_tests", plan)
 
     with BackgroundSqlTestPlanning(
         sql_test_selection=SqlTestSelection(),
@@ -137,7 +137,7 @@ def test_given_failing_planning_when_joining_then_raises_original_error(
         del project, adapter, selected_keys, sql_test_selection
         raise PlannerInputError(str(test_case.expected_error))
 
-    monkeypatch.setattr(background_module, "plan_selected_sql_tests", plan)
+    monkeypatch.setattr(native_module, "plan_selected_sql_tests", plan)
 
     with BackgroundSqlTestPlanning(
         sql_test_selection=SqlTestSelection(),
@@ -179,7 +179,7 @@ def test_given_running_planning_when_planner_fails_then_worker_is_daemon(
         release.wait(timeout=5)
         return PlannedSqlTests(selected_keys=selected_keys)
 
-    monkeypatch.setattr(background_module, "plan_selected_sql_tests", plan)
+    monkeypatch.setattr(native_module, "plan_selected_sql_tests", plan)
 
     with BackgroundSqlTestPlanning(
         sql_test_selection=SqlTestSelection(),

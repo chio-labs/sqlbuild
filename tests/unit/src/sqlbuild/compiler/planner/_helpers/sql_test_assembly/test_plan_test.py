@@ -6,8 +6,11 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    build_test_command_plan,
     plan_compiled_sql_test_artifacts,
     project_with,
+    resolve_static_command_scope,
+    resolve_static_relation_context,
     sql_test_plan_error_messages,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -27,9 +30,6 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType, SqlTestMode
 from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, DiscoveredSqlTestFile
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.commands._relations import resolve_static_relation_context
-from sqlbuild.compiler.planner.main.commands._scope import resolve_static_command_scope
-from sqlbuild.compiler.planner.main.commands._sql_test import build_test_command_plan
 from sqlbuild.compiler.planner.models import (
     ChainStep,
     NativeSqlTestPlan,

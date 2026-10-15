@@ -13,8 +13,8 @@ const PLANNER_MODELS_MODULE: &str = "sqlbuild.compiler.planner.models";
 const SPLIT_SELECTORS_MODULE: &str = "sqlbuild._native";
 const PLANNER_SCOPES_MODULE: &str =
     "sqlbuild.compiler.planner.main.selection._resolve_planner_scopes";
-const STATIC_SCOPE_MODULE: &str = "sqlbuild.compiler.planner.main.commands._scope";
-const STATIC_RELATIONS_MODULE: &str = "sqlbuild.compiler.planner.main.commands._relations";
+const STATIC_SCOPE_MODULE: &str = "sqlbuild._native";
+const STATIC_RELATIONS_MODULE: &str = "sqlbuild._native";
 const DATACLASSES_MODULE: &str = "dataclasses";
 
 /// Whether a selection names nothing to select or exclude.
