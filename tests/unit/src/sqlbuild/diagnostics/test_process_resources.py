@@ -8,8 +8,8 @@ from unittest.mock import Mock
 
 import pytest
 
+from sqlbuild._native import ProcessResourceTracker
 from sqlbuild.diagnostics._helpers.process_resources import read_process_resources
-from sqlbuild.diagnostics.classes.process_resource_tracker import ProcessResourceTracker
 from sqlbuild.diagnostics.models import ProcessResourceUsage
 from tests.unit.src.sqlbuild.diagnostics._test_types import ProcessResourceTestCase
 

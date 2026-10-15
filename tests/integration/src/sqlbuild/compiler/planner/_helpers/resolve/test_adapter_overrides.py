@@ -4,8 +4,8 @@ from typing import Any
 
 import pytest
 
+from sqlbuild._native import resolve_source_references
 from sqlbuild.adapter.contract.models import ColumnInfo
-from sqlbuild.compiler.planner._helpers.resolve.sources import resolve_source_references
 from sqlbuild.spec.contracts.models import SourceColumnEntry, SourceEntry
 from tests.integration.src.sqlbuild.compiler.planner._helpers.resolve._test_types import (
     AdapterOverrideTestCase,

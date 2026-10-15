@@ -22,6 +22,7 @@ use sqlbuild_model_config::types::AuthoredNode;
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compiled_project::model_loop_config::{ConfigClasses, built_config};
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
+use crate::bindings::_helpers::model_config::config_errors::config_exception;
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
 use crate::bindings::_helpers::model_config::config_templates::{
     PythonHost, Stop, TemplateSources, expanded, template_error,
@@ -36,8 +37,6 @@ const MODEL_CONFIG_LABEL: &str = "model config";
 const ENVIRONMENT_DATABASE_LABEL: &str = "environment database";
 const ENVIRONMENT_SCHEMA_LABEL: &str = "environment schema";
 const TAGS_KEY: &str = "tags";
-const NATIVE_CONFIG_ERROR_MODULE: &str = "sqlbuild.compiler.model_config.main._native_config_error";
-const NATIVE_CONFIG_ERROR_FUNCTION: &str = "native_config_error";
 const ROW_DIFF_EXCLUDE_COLUMNS_KEY: &str = "row_diff_exclude_columns";
 const ROW_DIFF_TOLERANCES_KEY: &str = "row_diff_tolerances";
 const AUDIT_OVERRIDE_SECTIONS: [&str; 2] = ["by_type", "by_column"];
@@ -586,17 +585,14 @@ pub(crate) fn layered_values<'py>(
     })
 }
 
-/// The Python exception `native_config_error` makes of a native config error.
+/// The Python exception a native config error raises as.
 pub(crate) fn raised_config_error(py: Python<'_>, error: ConfigError) -> PyErr {
     let raised = || -> PyResult<PyErr> {
         let error: Py<NativeConfigError> = native_config_error(py, error)?;
-        let arguments: Bound<'_, PyDict> = PyDict::new(py);
-        arguments.set_item("error", error)?;
-        let exception: Bound<'_, PyAny> = py
-            .import(NATIVE_CONFIG_ERROR_MODULE)?
-            .getattr(NATIVE_CONFIG_ERROR_FUNCTION)?
-            .call((), Some(&arguments))?;
-        Ok(PyErr::from_value(exception))
+        Ok(PyErr::from_value(config_exception(
+            error.bind(py).as_any(),
+            None,
+        )?))
     };
     raised().unwrap_or_else(|error| error)
 }

@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.discovery._helpers.yml.yaml_classes import yaml_entry_classes
 from sqlbuild.compiler.discovery.constants import (
     REMOVED_SQL_MODEL_HEADER_KEYS,
     SQL_MODEL_HEADER_KEYS,
@@ -95,7 +94,6 @@ def parse_sources_yml(*, contents: str, file_path: Path) -> tuple[SourceEntry, .
     return _native.parse_sources_document(
         _native.load_yaml_document(str(file_path), contents, "source"),
         str(file_path),
-        yaml_entry_classes(),
     )
 
 
@@ -107,5 +105,4 @@ def parse_schema_yml(
     return (), _native.parse_schema_document(
         _native.load_yaml_document(str(file_path), contents, "schema"),
         str(file_path),
-        yaml_entry_classes(),
     )

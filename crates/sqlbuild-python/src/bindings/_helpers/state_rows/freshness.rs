@@ -23,7 +23,7 @@ use crate::bindings::_helpers::state_rows::timestamps::{
     date_time_typed, in_utc, offset_aware, presumed_utc,
 };
 
-const EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.source_freshness.exceptions";
+const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const TYPES_MODULE: &str = "sqlbuild.compiler.source_freshness.types";
 const TIMESTAMP_KIND: &str = "timestamp";
 const INTEGER_KIND: &str = "integer";
@@ -49,7 +49,7 @@ fn python_error(py: Python<'_>, error: FreshnessError) -> PyErr {
 /// Hash the stable source freshness identity used as a graph input.
 #[pyfunction(name = "source_freshness_data_version_hash")]
 #[pyo3(signature = (*, source_name, strategy, value_kind, data_version))]
-fn version_hash(
+pub(crate) fn version_hash(
     source_name: &str,
     strategy: &str,
     value_kind: &str,
@@ -66,7 +66,7 @@ fn observation_error(py: Python<'_>, message: &str) -> PyErr {
 /// A source freshness value normalized for stable state storage.
 #[pyfunction(name = "normalize_source_freshness_data_version")]
 #[pyo3(signature = (*, value, value_kind))]
-fn normalize<'py>(
+pub(crate) fn normalize<'py>(
     value: &Bound<'py, PyAny>,
     value_kind: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -163,7 +163,7 @@ fn comparable(record: &Bound<'_, PyAny>) -> PyResult<ComparableRecord> {
 /// Whether two source freshness records are equivalent for skip decisions.
 #[pyfunction(name = "source_freshness_records_equivalent")]
 #[pyo3(signature = (*, previous_record, current_record, lag_tolerance = None))]
-fn equivalent(
+pub(crate) fn equivalent(
     previous_record: &Bound<'_, PyAny>,
     current_record: &Bound<'_, PyAny>,
     lag_tolerance: Option<&str>,
@@ -197,7 +197,7 @@ fn aware_utc(value: &Bound<'_, PyAny>, field_name: &str) -> PyResult<LocalDateTi
 /// Optional timestamp age policy for one source freshness observation.
 #[pyfunction(name = "evaluate_source_freshness_age_policy")]
 #[pyo3(signature = (*, policy, data_version, observed_at))]
-fn age_policy<'py>(
+pub(crate) fn age_policy<'py>(
     policy: &Bound<'py, PyAny>,
     data_version: &Bound<'py, PyAny>,
     observed_at: &Bound<'py, PyAny>,

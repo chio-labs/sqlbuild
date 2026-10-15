@@ -55,6 +55,7 @@ use crate::bindings::_helpers::compiled_project::sql_test_loop::{
     AttachedSqlTests, SqlTestSettings, TestFileRow, TestScope,
 };
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
+use crate::bindings::_helpers::model_config::config_errors::raised_config_exception;
 use crate::bindings::_helpers::model_config::header_metadata::ContractClasses;
 use crate::bindings::_helpers::model_config::model_validator::NativeModelValidator;
 use crate::bindings::_helpers::render::declaration_expansion::{
@@ -100,8 +101,6 @@ const VALIDATE_METHOD: &str = "validate";
 const FILE_PATH_ARGUMENT: &str = "file_path";
 const CONSTANT_TEXT_CALLBACK: &str = "constant_text";
 const HELP_ARGUMENT: &str = "help";
-const ERROR_ARGUMENT: &str = "error";
-const VALUES_ARGUMENT: &str = "values";
 const CODE_ARGUMENT: &str = "code";
 const ANALYSIS_CONFLICT: &str = "MODEL sql_analysis conflicts with legacy sql_validation";
 const ANALYSIS_CONFLICT_CODE: &str = "P003";
@@ -122,8 +121,6 @@ pub(crate) struct LoopClasses<'py> {
     pub(crate) usage_record: Bound<'py, PyAny>,
     pub(crate) compile_error: Bound<'py, PyAny>,
     pub(crate) sql_hook_entry: Bound<'py, PyAny>,
-    /// `native_config_error`: the exception a native config error raises as.
-    pub(crate) config_error: Bound<'py, PyAny>,
     /// Discovered audit factories by name.
     pub(crate) audit_factories: Bound<'py, PyDict>,
     /// `UsageKind.GENERATED`, for usages an enum-typed column generates.
@@ -816,13 +813,12 @@ impl NativeModelLoop {
                 (rows, declared_columns, unmanaged, declared),
             ),
         )?;
-        validation_outcome(context, &outcome, external, values)
+        validation_outcome(&outcome, external, values)
     }
 }
 
 /// `_raise_validation_outcome`: nothing, the validator's error, or a rejected reference's error.
 pub(crate) fn validation_outcome(
-    context: &LoopContext<'_, '_>,
     outcome: &Bound<'_, PyAny>,
     external: Vec<Option<PyErr>>,
     values: &Bound<'_, PyDict>,
@@ -835,7 +831,7 @@ pub(crate) fn validation_outcome(
     {
         return Err(error);
     }
-    Err(config_error(context.classes, outcome, Some(values)))
+    Err(config_error(outcome, Some(values)))
 }
 
 /// `applied_interpolation`: record the interpolation's template reads, then its SQL or error.
@@ -900,21 +896,8 @@ pub(crate) fn helped_compile_error(
 }
 
 /// The Python exception a native config error raises as, given the values it names.
-pub(crate) fn config_error(
-    classes: &LoopClasses<'_>,
-    error: &Bound<'_, PyAny>,
-    values: Option<&Bound<'_, PyDict>>,
-) -> PyErr {
-    let raised = (|| {
-        let keywords: Bound<'_, PyDict> = PyDict::new(error.py());
-        keywords.set_item(ERROR_ARGUMENT, error)?;
-        keywords.set_item(VALUES_ARGUMENT, values)?;
-        classes.config_error.call((), Some(&keywords))
-    })();
-    match raised {
-        Ok(instance) => PyErr::from_value(instance),
-        Err(failure) => failure,
-    }
+pub(crate) fn config_error(error: &Bound<'_, PyAny>, values: Option<&Bound<'_, PyDict>>) -> PyErr {
+    raised_config_exception(error, values.map(Bound::as_any))
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

@@ -33,3 +33,5 @@ pub(crate) const MIGRATION_MANUAL: &str = "manual";
 pub(crate) const MIGRATION_AUTOMATIC: &str = "automatic";
 pub(crate) const MIGRATION_INCOMPATIBLE: &str = "incompatible";
 pub(crate) const WATERMARK_STRATEGY: &str = "watermark";
+pub(crate) const QUERY_DIFF_INDENT: &str = "      ";
+pub(crate) const UNIFIED_DIFF_HEADER_PREFIXES: [&str; 3] = ["---", "+++", "@@"];

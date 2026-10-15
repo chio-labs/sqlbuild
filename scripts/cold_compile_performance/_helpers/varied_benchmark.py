@@ -11,6 +11,7 @@ from sqlbuild._native import build_rule_catalogue, load_rules_config, select_cat
 from sqlbuild.rule_engine.models import Rule, RulesConfig
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import VariedCompileCacheTestCase
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
+    _RETAINED_BENCHMARK_PAYLOAD_KEYS,
     FreshProcessCompileBenchmarkResult,
     _run_fresh_process_compile_benchmark,
 )
@@ -23,7 +24,10 @@ def run_varied_cache_benchmark(
     _assert_complete_rules(project_dir)
     measurements: dict[str, FreshProcessCompileBenchmarkResult] = {}
     measurements["cold"] = _measure(
-        project_dir=project_dir, label="cold", budget=test_case.expected_cold_max_seconds
+        project_dir=project_dir,
+        label="cold",
+        budget=test_case.expected_cold_max_seconds,
+        retained_payload_keys=(*_RETAINED_BENCHMARK_PAYLOAD_KEYS, "resources"),
     )
     measurements["warm"] = _measure(
         project_dir=project_dir, label="warm", budget=test_case.expected_warm_max_seconds
@@ -109,10 +113,17 @@ def _measure_edit(
     return measurements
 
 
-def _measure(*, project_dir: Path, label: str, budget: float) -> FreshProcessCompileBenchmarkResult:
+def _measure(
+    *,
+    project_dir: Path,
+    label: str,
+    budget: float,
+    retained_payload_keys: tuple[str, ...] = _RETAINED_BENCHMARK_PAYLOAD_KEYS,
+) -> FreshProcessCompileBenchmarkResult:
     return _run_fresh_process_compile_benchmark(
         project_dir=project_dir,
         label=f"varied-{label}",
         expected_max_wall_seconds=budget,
         compile_args=(),
+        retained_payload_keys=retained_payload_keys,
     )

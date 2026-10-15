@@ -8,9 +8,11 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::cli_text::models::{
     CliStyle, ColumnMigrationText, MigrationDecisionText, MigrationText, MigrationTextReport,
-    OldNameText,
+    OldNameText, PreBuildWorkText, RetentionText, TableTypeText,
 };
-use sqlbuild_core::plan_display::main::{format_model_migrations, old_name_rows};
+use sqlbuild_core::plan_display::main::{
+    format_model_migrations, format_pre_build_work, old_name_rows,
+};
 use std::collections::BTreeMap;
 
 fn label(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
@@ -85,8 +87,8 @@ fn column(entry: &Bound<'_, PyAny>) -> PyResult<ColumnMigrationText> {
     })
 }
 
-#[pyfunction(name = "format_model_migrations", signature = (*, lines, plan, display_options))]
-fn format_migrations(
+/// Migration sections appended to `lines`, in planner order.
+pub(crate) fn migration_lines(
     lines: Vec<String>,
     plan: &Bound<'_, PyAny>,
     display_options: &Bound<'_, PyAny>,
@@ -125,6 +127,79 @@ fn format_migrations(
     ))
 }
 
+#[pyfunction(name = "format_model_migrations", signature = (*, lines, plan, display_options))]
+fn format_migrations(
+    lines: Vec<String>,
+    plan: &Bound<'_, PyAny>,
+    display_options: &Bound<'_, PyAny>,
+) -> PyResult<Vec<String>> {
+    migration_lines(lines, plan, display_options)
+}
+
+fn days(value: &Bound<'_, PyAny>) -> PyResult<Option<i64>> {
+    value.extract()
+}
+
+/// Table-type, retention and migration work that runs before model builds.
+pub(crate) fn pre_build_lines(
+    lines: Vec<String>,
+    plan: &Bound<'_, PyAny>,
+    display_options: &Bound<'_, PyAny>,
+) -> PyResult<Vec<String>> {
+    let mut table_types: Vec<TableTypeText> = Vec::new();
+    for entry in items(&plan.getattr("table_type_entries")?)? {
+        table_types.push(TableTypeText {
+            model_name: text(&entry.getattr("model_name")?)?,
+            desired_type: text(&entry.getattr("desired_type")?)?,
+            actual_type: optional_text(&entry.getattr("actual_type")?)?
+                .filter(|actual| !actual.is_empty()),
+            source: text(&entry.getattr("source")?)?,
+            irreversible_warning: optional_text(&entry.getattr("irreversible_warning")?)?,
+        });
+    }
+    let mut retention: Vec<RetentionText> = Vec::new();
+    for entry in items(&plan.getattr("retention_entries")?)? {
+        let request = entry.getattr("request")?;
+        let mut parts: Vec<String> = Vec::new();
+        for field in ["database", "schema", "name"] {
+            let part = request.getattr(field)?;
+            if part.is_truthy()? {
+                parts.push(text(&part)?);
+            }
+        }
+        retention.push(RetentionText {
+            scope: parts.join("."),
+            desired_days: request.getattr("desired_days")?.extract()?,
+            actual_days: days(&entry.getattr("actual_days")?)?,
+            effective_days: days(&entry.getattr("effective_days")?)?,
+            source: text(&entry.getattr("source")?)?,
+            direction: text(&entry.getattr("direction")?.getattr("value")?)?,
+            phase: text(&entry.getattr("phase")?.getattr("value")?)?,
+            irreversible_warning: optional_text(&entry.getattr("irreversible_warning")?)?,
+        });
+    }
+    let work = PreBuildWorkText {
+        table_types,
+        retention,
+        display: display_limit(display_options)?,
+    };
+    migration_lines(
+        format_pre_build_work::format_pre_build_work(lines, &work),
+        plan,
+        display_options,
+    )
+}
+
+/// Format retention, table-type, and migration work that runs before model builds.
+#[pyfunction(name = "format_pre_build_work", signature = (*, lines, plan, display_options))]
+fn format_pre_build(
+    lines: Vec<String>,
+    plan: &Bound<'_, PyAny>,
+    display_options: &Bound<'_, PyAny>,
+) -> PyResult<Vec<String>> {
+    pre_build_lines(lines, plan, display_options)
+}
+
 #[pyfunction(name = "old_name_rows", signature = (*, entry, style))]
 fn render_old_name(entry: &Bound<'_, PyAny>, style: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     Ok(old_name_rows::old_name_rows(
@@ -137,5 +212,6 @@ fn render_old_name(entry: &Bound<'_, PyAny>, style: &Bound<'_, PyAny>) -> PyResu
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(format_migrations, module)?)?;
+    module.add_function(wrap_pyfunction!(format_pre_build, module)?)?;
     module.add_function(wrap_pyfunction!(render_old_name, module)?)
 }

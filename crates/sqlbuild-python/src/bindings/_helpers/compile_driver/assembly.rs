@@ -10,11 +10,10 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, within,
 };
 
-const COLLECTOR_MODULE: &str = "sqlbuild.compiler.compile._helpers.diagnostics.collector";
+const COLLECTOR_MODULE: &str = "sqlbuild._native";
 const PROJECT_WITH_MODULE: &str = "sqlbuild._native";
 const RECORD_ANALYSES_MODULE: &str = "sqlbuild._native";
-const EXPLICIT_REFERENCES_MODULE: &str =
-    "sqlbuild.compiler.compile._helpers.explicit_references.checks";
+const EXPLICIT_REFERENCES_MODULE: &str = "sqlbuild._native";
 const ACTIVE_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.main.active_macro_bridge";
 const RUN_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.classes.macro_bridge";
 

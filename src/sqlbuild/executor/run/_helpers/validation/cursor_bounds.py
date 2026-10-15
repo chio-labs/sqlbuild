@@ -8,6 +8,14 @@ from datetime import UTC, datetime
 from functools import partial
 from typing import Any
 
+from sqlbuild._native import (
+    apply_maximum_start_policy,
+    apply_typed_cursor_replay_policy,
+    cursor_window_override_flags,
+    decide_empty_cursor_inputs,
+    empty_input_rebuild_refusal,
+    resolve_cursor_intrinsics,
+)
 from sqlbuild._native import cursor_clamp as clamp
 from sqlbuild._native import cursor_compare as compare
 from sqlbuild._native import (
@@ -22,24 +30,10 @@ from sqlbuild._native import cursor_parse as parse
 from sqlbuild._native import cursor_render as render
 from sqlbuild._native import cursor_sentinel_from_token as sentinel_from_token
 from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
-from sqlbuild._native import resolve_cursor_intrinsics
+from sqlbuild._native import resolve_future_cursor_safety as apply_future_cursor_safety
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.relations.main.cached_relation_exists import cached_relation_exists
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
-from sqlbuild.compiler.planner.main.cursor_window.cursor_window_override_flags import (
-    cursor_window_override_flags,
-)
-from sqlbuild.compiler.planner.main.cursor_window.empty_cursor_input_decision import (
-    decide_empty_cursor_inputs,
-)
-from sqlbuild.compiler.planner.main.cursor_window.empty_input_rebuild_refusal import (
-    empty_input_rebuild_refusal,
-)
-from sqlbuild.compiler.planner.main.execution.cursor_replay_policy import (
-    apply_typed_cursor_replay_policy,
-)
-from sqlbuild.compiler.planner.main.execution.future_cursor_safety import apply_future_cursor_safety
-from sqlbuild.compiler.planner.main.execution.maximum_start_safety import apply_maximum_start_policy
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
     CursorInputEvidence,

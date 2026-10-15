@@ -12,6 +12,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
+from sqlbuild._native import collect_snowflake_cost
 from sqlbuild.adapter.contract.classes.base_adapter import (
     BaseAdapter,
     _encode_typed_json,
@@ -152,7 +153,6 @@ from sqlbuild.adapters.snowflake.constants import (
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.cost.main.collection import collect_snowflake_cost
 from sqlbuild.cost.models import RunCostSummary
 from sqlbuild.cost.types import CostCapability, CostStatus
 from sqlbuild.diagnostics.main.log_sql import log_sql
@@ -533,20 +533,16 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         database: str | None,
         schema: str,
     ) -> str:
-        from sqlbuild.compiler.source_freshness.main.read_latest_sql import (
-            build_read_latest_sql,
-        )
+        from sqlbuild._native import build_source_freshness_read_latest_sql
 
-        return build_read_latest_sql(
+        return build_source_freshness_read_latest_sql(
             database=database,
             schema=schema,
             render_qualified_name=self.render_qualified_name,
         )
 
     def render_create_source_freshness_table_sql(self, *, database: str | None, schema: str) -> str:
-        from sqlbuild.compiler.source_freshness.main.create_table_sql import (
-            build_create_table_sql as build_source_freshness_create_table_sql,
-        )
+        from sqlbuild._native import build_source_freshness_create_table_sql
 
         return self._with_state_table_retention(
             create_sql=build_source_freshness_create_table_sql(

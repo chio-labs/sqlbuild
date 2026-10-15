@@ -1,7 +1,8 @@
 //! Whole per-file SQL-test scan results kept as one kind of the shared native store.
 
 use pyo3::exceptions::PyValueError;
-use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyclass, pymethods};
 use sqlbuild_cache::digest::main::content_digest::content_digest;
 use sqlbuild_cache::digest::main::hex_digest::hex_digest;
@@ -12,6 +13,11 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::bindings::_helpers::cache::native_store::{open_store, save_store};
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
+
+const CODE_IDENTITY_MODULE: &str = "sqlbuild.compiler.frontier.main.compiled_code_identity";
+const METRIC_MODULE: &str = "sqlbuild.compiler.profiling.main._metric";
+const SCAN_CACHE_LOGGER: &str = "sqlbuild.compile";
 
 /// The native store kind holding SQL-test scan results.
 const SQL_TEST_SCAN_STORE_KIND: &str = "sql-test-scans";
@@ -111,8 +117,81 @@ impl SqlTestScanStore {
     }
 }
 
+/// The compile cache folder's scan store, opened on first use and saved once.
+#[pyclass(module = "sqlbuild._native", frozen)]
+pub(crate) struct SqlTestScanCache {
+    state: Mutex<(Option<PathBuf>, Option<Py<SqlTestScanStore>>)>,
+}
+
+#[pymethods]
+impl SqlTestScanCache {
+    #[new]
+    #[pyo3(signature = (*, cache_dir))]
+    fn new(cache_dir: Option<PathBuf>) -> Self {
+        Self {
+            state: Mutex::new((cache_dir, None)),
+        }
+    }
+
+    /// The native store this compile reads and writes, or None when it has none.
+    fn opened(&self, py: Python<'_>) -> PyResult<Option<Py<SqlTestScanStore>>> {
+        let mut state = self.state.lock().map_err(poisoned)?;
+        let (cache_dir, store) = &mut *state;
+        let Some(directory) = cache_dir.as_ref().filter(|_| store.is_none()) else {
+            return Ok(store.as_ref().map(|store| store.clone_ref(py)));
+        };
+        let identity: String = imported(py, CODE_IDENTITY_MODULE, "compiled_code_identity")?
+            .call0()?
+            .extract()?;
+        let (opened, error) = SqlTestScanStore::open_in(py, directory.clone(), &identity);
+        *store = opened.map(|opened| Py::new(py, opened)).transpose()?;
+        if let Some(error) = error {
+            debug(py, "SQL test scan store not loaded: %s", &error)?;
+            *cache_dir = None;
+        }
+        Ok(store.as_ref().map(|store| store.clone_ref(py)))
+    }
+
+    /// Persist results stored by this compile and report hit and miss counts.
+    fn save(&self, py: Python<'_>) -> PyResult<()> {
+        let store: Option<Py<SqlTestScanStore>> = self
+            .state
+            .lock()
+            .map_err(poisoned)?
+            .1
+            .as_ref()
+            .map(|store| store.clone_ref(py));
+        let (hits, misses) = store.as_ref().map_or((0, 0), |store| store.get().counts());
+        metric(py, "sql_test_scan_cache_hits", hits)?;
+        metric(py, "sql_test_scan_cache_misses", misses)?;
+        let Some(store) = store else {
+            return Ok(());
+        };
+        if let (_, Some(error)) = store.get().save(py)? {
+            debug(py, "SQL test scan store not saved: %s", &error)?;
+        }
+        Ok(())
+    }
+}
+
+fn metric(py: Python<'_>, name: &str, value: usize) -> PyResult<()> {
+    let keywords: Bound<'_, PyDict> = PyDict::new(py);
+    keywords.set_item("metric", name)?;
+    keywords.set_item("value", value)?;
+    imported(py, METRIC_MODULE, "record_compile_metric")?.call((), Some(&keywords))?;
+    Ok(())
+}
+
+fn debug(py: Python<'_>, message: &str, error: &str) -> PyResult<()> {
+    imported(py, "logging", "getLogger")?
+        .call1((SCAN_CACHE_LOGGER,))?
+        .call_method1("debug", (message, error))?;
+    Ok(())
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<SqlTestScanStore>()?;
+    module.add_class::<SqlTestScanCache>()?;
     module.add(
         "SQL_TEST_SCAN_STORE_FILE_NAME",
         SQL_TEST_SCAN_STORE_FILE_NAME,

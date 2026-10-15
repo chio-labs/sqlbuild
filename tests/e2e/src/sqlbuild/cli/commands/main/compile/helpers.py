@@ -30,9 +30,9 @@ import duckdb
 import pytest
 
 import sqlbuild._native as native_module
+import sqlbuild._native as plan_artifacts_module
 import sqlbuild.adapter.type_system._helpers.type_normalization as type_normalization
 import sqlbuild.cli.compile_reuse._helpers.provider_settings as provider_settings
-import sqlbuild.cli.compile_reuse.constants as reuse_constants
 import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
 import sqlbuild.compiler.frontier.main.compiled_code_identity as compiled_code_identity_module
 import sqlbuild.compiler.macro_bridge.classes.macro_bridge as macro_bridge_class
@@ -41,17 +41,10 @@ from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
     semantic_compile_fingerprint,
 )
 from scripts.compiler_differential.constants import FAILURE_BASE_FILES
+from sqlbuild._native import compiler_cache_directory
 from sqlbuild._native import run_cli as main
 from sqlbuild.adapter.contract.classes.duckdb_backed_adapter import DuckDbBackedAdapter
 from sqlbuild.adapter.contract.types import TypeDialect
-from sqlbuild.cli.compile_reuse.constants import (
-    EXCLUDED_ROOT_DIRECTORIES,
-    NATIVE_REUSE_DIRECTORY_NAME,
-    NATIVE_REUSE_SUFFIX,
-    RETIRED_REUSE_DIRECTORY_NAME,
-    REUSE_DISABLE_ENV_VAR,
-    REUSE_LOGGER_NAME,
-)
 from sqlbuild.compiler.analysis_session.constants import NATIVE_ANALYSIS_STORE_FILE_NAME
 from sqlbuild.compiler.compile.constants import (
     RETIRED_FACT_CACHE_DIRECTORY_NAME,
@@ -60,14 +53,13 @@ from sqlbuild.compiler.compile.constants import (
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.frontier.constants import (
+    COMPILE_REUSE_DISABLE_ENV_VAR as REUSE_DISABLE_ENV_VAR,
+)
+from sqlbuild.compiler.frontier.constants import (
     COMPILER_CACHE_DIRECTORY_NAME,
     RETIRED_CACHE_NAMESPACE_SUFFIXES,
 )
-from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from sqlbuild.compiler.macro_bridge.constants import MACRO_CALL_STORE_FILE_NAME
-from sqlbuild.compiler.planner.main.execution import (
-    _plan_compiled_sql_test_artifacts as plan_artifacts_module,
-)
 from sqlbuild.observability import EventDispatcher, LifecycleEvent
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     FreshProcessCompileCachePerformanceGuardTestCase,
@@ -85,6 +77,10 @@ from tests.integration.src.sqlbuild.compiler.contracts.helpers import (
     contract_statuses,
 )
 
+NATIVE_REUSE_DIRECTORY_NAME: str = "project-reuse-v2"
+NATIVE_REUSE_SUFFIX: str = ".store"
+RETIRED_REUSE_DIRECTORY_NAME: str = "project-reuse-v1"
+REUSE_LOGGER_NAME: str = "sqlbuild.compile.reuse"
 _DBT_SHAPED_SQL_SIZE_PROFILE: tuple[tuple[float, int], ...] = (
     (0.50, 1_800),
     (0.75, 4_500),
@@ -163,6 +159,14 @@ class LayeredProductionCompileBenchmarkResult(NamedTuple):
 class SemanticCompileBenchmarkResult(NamedTuple):
     cold: CompileBenchmarkMeasurement
     warm: CompileBenchmarkMeasurement
+
+
+_RETAINED_BENCHMARK_PAYLOAD_KEYS: tuple[str, ...] = (
+    "compile_timings",
+    "has_errors",
+    "diagnostics",
+    "summary",
+)
 
 
 class FreshProcessCompileBenchmarkResult(NamedTuple):
@@ -664,6 +668,7 @@ def _run_fresh_process_compile_benchmark(
     label: str,
     expected_max_wall_seconds: float,
     compile_args: tuple[str, ...],
+    retained_payload_keys: tuple[str, ...] = _RETAINED_BENCHMARK_PAYLOAD_KEYS,
 ) -> FreshProcessCompileBenchmarkResult:
     run: _TimedSqbRun = _run_timed_sqb(
         project_dir=project_dir,
@@ -681,7 +686,7 @@ def _run_fresh_process_compile_benchmark(
         elapsed_seconds=run.elapsed_seconds,
         peak_rss_bytes=run.peak_rss_bytes,
         semantic_fingerprint=semantic_fingerprint,
-        payload=payload,
+        payload={key: payload.get(key) for key in retained_payload_keys},
         cpu_seconds=run.cpu_seconds,
         major_page_faults=run.major_page_faults,
         minor_page_faults=run.minor_page_faults,
@@ -3397,7 +3402,7 @@ def record_digested_files(*, monkeypatch: pytest.MonkeyPatch) -> list[int]:
 def settle_racy_window(*, monkeypatch: pytest.MonkeyPatch) -> None:
     """Treat files written before a compile starts as settled instead of waiting two seconds."""
 
-    monkeypatch.setattr(reuse_constants, "RACY_WINDOW_NS", 0)
+    monkeypatch.setattr(native_module, "COMPILE_REUSE_RACY_WINDOW_NS", 0)
 
 
 def write_large_file(*, project_dir: Path, relative_path: str, size_bytes: int) -> Path:
@@ -4221,7 +4226,9 @@ def ignore_project_changes(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make compile reuse stop watching the models folder, so a model edit goes unseen."""
 
     monkeypatch.setattr(
-        reuse_constants, "EXCLUDED_ROOT_DIRECTORIES", EXCLUDED_ROOT_DIRECTORIES | {"models"}
+        native_module,
+        "COMPILE_REUSE_EXCLUDED_ROOT_DIRECTORIES",
+        native_module.COMPILE_REUSE_EXCLUDED_ROOT_DIRECTORIES | {"models"},
     )
 
 

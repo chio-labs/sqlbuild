@@ -6,7 +6,6 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyString, PyStringMethods};
 use pyo3::{PyErr, pyfunction, wrap_pyfunction};
-use sqlbuild_analysis::assembly::analysis_session::types::Pairs;
 use sqlbuild_analysis::assembly::project::main::check_sql_syntax::check_sql_syntax;
 use sqlbuild_analysis::assembly::project::main::sql_syntax_error::sql_syntax_error as check_syntax_error;
 use sqlbuild_analysis::assembly::project::models::{SyntaxCheck, SyntaxFailure, SyntaxMode};
@@ -64,20 +63,6 @@ fn syntax_value_error(failure: SyntaxFailure) -> PyErr {
     }
 }
 
-/// Whether every `(sql, placeholders)` parses, raising the `ValueError` Python's validation raises.
-#[pyfunction]
-fn check_native_sql_syntax(
-    py: Python<'_>,
-    request: (String, Vec<(String, Pairs)>),
-) -> PyResult<bool> {
-    let (dialect, rows) = request;
-    let checks: Vec<SyntaxCheck> = rows
-        .into_iter()
-        .map(|(sql, placeholders)| SyntaxCheck { sql, placeholders })
-        .collect();
-    syntax_valid(py, &dialect, &checks)
-}
-
 /// Whether every check parses, raising what Python's validation raises.
 pub(crate) fn syntax_valid(
     py: Python<'_>,
@@ -90,7 +75,6 @@ pub(crate) fn syntax_valid(
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(check_native_sql_syntax, module)?)?;
     module.add_function(wrap_pyfunction!(sql_syntax_error, module)?)?;
     Ok(())
 }

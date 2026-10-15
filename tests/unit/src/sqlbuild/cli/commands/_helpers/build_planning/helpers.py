@@ -4,13 +4,6 @@ from pathlib import Path
 
 from sqlbuild.adapter.contract.models import RetentionRequest
 from sqlbuild.adapter.contract.types import RetentionScope
-from sqlbuild.cli.commands.constants import (
-    EXECUTION_LIMIT_BUILD_NOTE,
-    MISSING_ORIGIN_BUILD_HELP,
-    RETENTION_DECREASE_BUILD_HELP,
-    SNAPSHOT_FULL_REFRESH_BUILD_HELP,
-    TABLE_TYPE_DOWNGRADE_BUILD_HELP,
-)
 from sqlbuild.cli.commands.models import PlanSafetyGates
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -123,3 +116,18 @@ def build_policy_gates(
         retention_decrease_help=RETENTION_DECREASE_BUILD_HELP,
         execution_limit_note=EXECUTION_LIMIT_BUILD_NOTE,
     )
+
+
+EXECUTION_LIMIT_BUILD_NOTE: str = "No warehouse changes were made."
+MISSING_ORIGIN_BUILD_HELP: str = (
+    "Pass --allow-missing-migration-origin to confirm in non-interactive runs."
+)
+RETENTION_DECREASE_BUILD_HELP: str = (
+    "Pass --allow-retention-decrease to confirm in non-interactive runs."
+)
+SNAPSHOT_FULL_REFRESH_BUILD_HELP: str = (
+    "Pass --allow-snapshot-full-refresh to confirm in non-interactive runs."
+)
+TABLE_TYPE_DOWNGRADE_BUILD_HELP: str = (
+    "Pass --allow-table-type-downgrade to confirm in non-interactive runs."
+)

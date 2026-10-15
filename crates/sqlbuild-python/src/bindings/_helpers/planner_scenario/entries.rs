@@ -74,11 +74,7 @@ pub(super) fn function_entry<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = function.py();
     let body = call_with(
-        &imported(
-            py,
-            "sqlbuild.compiler.planner._helpers.resolve.resolve",
-            "resolve_function_sql",
-        )?,
+        &imported(py, "sqlbuild._native", "resolve_function_sql")?,
         &[
             ("adapter", context.adapter.clone()),
             ("function", function.clone()),

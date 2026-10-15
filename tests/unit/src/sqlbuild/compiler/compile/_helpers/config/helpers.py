@@ -16,7 +16,6 @@ from sqlbuild.compiler.compile.models import (
     NativeModelConfigSession,
 )
 from sqlbuild.compiler.compile.types import CompileInputsView
-from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     MaterializationDefaultsConfig,
@@ -87,7 +86,7 @@ def validate_natively(  # noqa: PLR0913
     )
     assert not isinstance(outcome, int)
     for error in filter(None, (outcome,)):
-        raise native_config_error(error=error, values=config.values)
+        raise error.exception(values=config.values)
 
 
 def build_config_natively(  # noqa: PLR0913
@@ -127,7 +126,7 @@ def build_config_natively(  # noqa: PLR0913
         native_config_classes(session=session),
     )
     for error in filter(_is_config_error, (built,)):
-        raise native_config_error(error=cast(_native.NativeConfigError, error))
+        raise cast(_native.NativeConfigError, error).exception()
     return cast(CompileModelConfig, built)
 
 

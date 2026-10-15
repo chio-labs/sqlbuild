@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.presentation.classes.transient_line_coordinator import TransientLineCoordinator
+from sqlbuild._native import TransientLineCoordinator
 from tests.unit.src.sqlbuild.presentation.classes._test_types import (
     TransientLineCoordinatorTestCase,
 )

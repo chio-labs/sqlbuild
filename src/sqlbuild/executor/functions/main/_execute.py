@@ -8,6 +8,9 @@ from typing import Any
 
 from sqlbuild._native import (
     compute_function_definition_hash,
+    error_code,
+    error_help,
+    error_message,
     function_node_type,
     write_fingerprint,
 )
@@ -18,9 +21,6 @@ from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import FunctionPlanEntry
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
-from sqlbuild.errors.contracts.main.error_code import error_code
-from sqlbuild.errors.contracts.main.error_help import error_help
-from sqlbuild.errors.contracts.main.error_message import error_message
 from sqlbuild.executor.build.models import FunctionExecutionResult
 from sqlbuild.executor.functions.constants import (
     FUNCTION_EXECUTION_FAILED_CODE,

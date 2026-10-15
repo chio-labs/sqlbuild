@@ -6,7 +6,8 @@ use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
 use pyo3::types::{PyCFunction, PyDict, PyFrozenSet, PyString, PyTuple, PyTupleMethods};
-use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
+use pyo3::{IntoPyObject, IntoPyObjectExt, pyfunction, wrap_pyfunction};
+use sqlbuild_core::build_command::constants::EXECUTION_LIMIT_BUILD_NOTE;
 
 use sqlbuild_core::build_command::errors::BuildCommandError;
 
@@ -15,14 +16,11 @@ use crate::bindings::_helpers::build_command::policies::build_command_error;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const CONSTANTS_MODULE: &str = "sqlbuild.cli.commands.constants";
 const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const CLONE_MODELS: &str = "sqlbuild.executor.clone.models";
 const CLONE_TYPES: &str = "sqlbuild.executor.clone.types";
 const SPEC_TYPES: &str = "sqlbuild.spec.contracts.types";
-const CLONE_BOUNDARY_MODULE: &str = "sqlbuild.compiler.planner.main.clone.resolve_clone_boundary";
-const VIEW_CHAIN_MODULE: &str = "sqlbuild.compiler.planner.main.clone.resolve_skipped_view_chain";
 const TRANSIENT_MODELS_MODULE: &str =
     "sqlbuild.executor.clone.main._build_destination_transient_models";
 const RETENTION_REQUESTS_MODULE: &str = "sqlbuild.executor.clone.main._build_retention_requests";
@@ -164,14 +162,10 @@ fn defer_clone_selection(scope: &Bound<'_, PyAny>) -> PyResult<(Vec<String>, Vec
     let is_view: Bound<'_, PyAny> = membership(py, &keys, |key| recreated_over_clones(scope, key))?;
     let callbacks: (&Bound<'_, PyAny>, &Bound<'_, PyAny>) = (&is_clonable, &is_view);
     Ok((
+        traversed_names(scope, (NATIVE_MODULE, "resolve_clone_boundary"), callbacks)?,
         traversed_names(
             scope,
-            (CLONE_BOUNDARY_MODULE, "resolve_clone_boundary"),
-            callbacks,
-        )?,
-        traversed_names(
-            scope,
-            (VIEW_CHAIN_MODULE, "resolve_skipped_view_chain"),
+            (NATIVE_MODULE, "resolve_skipped_view_chain"),
             callbacks,
         )?,
         selected_executable_model_count(scope)?,
@@ -639,7 +633,7 @@ pub(crate) fn run_defer_clone_boundary_prephase(
             ("limits", invocation.getattr("execution_limits")?),
             (
                 "refusal_note",
-                imported(py, CONSTANTS_MODULE, "EXECUTION_LIMIT_BUILD_NOTE")?,
+                EXECUTION_LIMIT_BUILD_NOTE.into_bound_py_any(py)?,
             ),
         ],
     )?;

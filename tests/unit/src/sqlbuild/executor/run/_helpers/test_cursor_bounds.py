@@ -10,11 +10,11 @@ import pytest
 
 from sqlbuild._native import cursor_render as render
 from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
+from sqlbuild._native import normalize_cursor_snapshot_grain
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner._helpers.resolve.cursor import normalize_cursor_snapshot_grain
 from sqlbuild.compiler.planner.exceptions import FutureCursorSafetyError
 from sqlbuild.compiler.planner.models import (
     CursorBounds,

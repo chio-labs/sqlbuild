@@ -11,7 +11,7 @@ use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
 use crate::bindings::_helpers::scopes::scope_validation::validate_scope_index;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const SCAN_CACHE_MODULE: &str = "sqlbuild.compiler.compile.classes.sql_test_scan_cache";
+const SCAN_CACHE_MODULE: &str = "sqlbuild._native";
 const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";

@@ -17,6 +17,7 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_helpers import (
 )
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     WarmTargetEditTestCase,
+    WarmTargetProjectConfigEditTestCase,
     WarmTargetTestCase,
 )
 
@@ -93,6 +94,45 @@ def test_given_one_edited_model_when_compiling_warm_then_rewrites_only_its_artif
     assert exit_code == test_case.expected_exit_code
     assert changed_artifacts(compiled_dir=compiled_dir, mtime_ns=_UNCHANGED_MTIME_NS) == (
         test_case.expected_changed
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        WarmTargetProjectConfigEditTestCase(
+            "unused_var_added",
+            edited_project_config=('name = "shop"\nadapter = "duckdb"\n\n[vars]\nrevision = "1"\n'),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_project_config_edit_when_compiling_twice_then_rewrites_no_unchanged_artifact(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    test_case: WarmTargetProjectConfigEditTestCase,
+) -> None:
+    write_warm_target_project(project_dir=tmp_path)
+    _ = compile_project(project_dir=tmp_path, compile_args=())
+    compiled_dir: Path = tmp_path / "target" / "compiled"
+    stamp_artifacts(
+        artifacts=compiled_artifacts(compiled_dir=compiled_dir), mtime_ns=_UNCHANGED_MTIME_NS
+    )
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        test_case.edited_project_config, encoding="utf-8"
+    )
+
+    edit_exit_code: int = compile_project(project_dir=tmp_path, compile_args=())
+    edit_changed: tuple[str, ...] = changed_artifacts(
+        compiled_dir=compiled_dir, mtime_ns=_UNCHANGED_MTIME_NS
+    )
+    after_edit_exit_code: int = compile_project(project_dir=tmp_path, compile_args=())
+    _ = capsys.readouterr()
+
+    assert (edit_exit_code, after_edit_exit_code) == test_case.expected_exit_codes
+    assert edit_changed == test_case.expected_edit_changed
+    assert changed_artifacts(compiled_dir=compiled_dir, mtime_ns=_UNCHANGED_MTIME_NS) == (
+        test_case.expected_after_edit_changed
     )
 
 

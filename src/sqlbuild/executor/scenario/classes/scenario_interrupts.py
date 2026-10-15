@@ -8,9 +8,7 @@ import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 
-from sqlbuild.presentation.main.transient_line_coordinator import (
-    shared_transient_line_coordinator,
-)
+from sqlbuild._native import shared_transient_line_coordinator
 
 _STOP_NOTICE: str = "Interrupted; cleaning up running scenarios...\n"
 _ABANDON_NOTICE: str = (

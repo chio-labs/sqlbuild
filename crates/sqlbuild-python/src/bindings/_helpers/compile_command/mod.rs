@@ -1,4 +1,6 @@
 pub(crate) mod artifact_batch;
+pub(crate) mod constants;
+pub(crate) mod models;
 pub(crate) mod prepared_artifacts;
 pub(crate) mod registration;
 pub(crate) mod report;

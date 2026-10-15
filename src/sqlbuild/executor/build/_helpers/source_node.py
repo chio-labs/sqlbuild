@@ -7,12 +7,12 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from sqlbuild._native import CostContext
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.models import PlanOutput, SourceLoadPlanEntry
-from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.executor.build.models import BuildCallbacks, BuildRuntimeParams
 from sqlbuild.executor.load.main._execute import execute_source_load
 from sqlbuild.executor.load.models import LoadExecutionResult, LoadRuntimeParams

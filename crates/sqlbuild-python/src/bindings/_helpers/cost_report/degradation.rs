@@ -19,7 +19,7 @@ const LOGGER_NAME: &str = "sqlbuild.cli.commands._helpers.cost.collection";
 const COLLECTION_LOGGER_NAME: &str = "sqlbuild.cost";
 const COST_TYPES: &str = "sqlbuild.cost.types";
 const COST_MODELS: &str = "sqlbuild.cost.models";
-const COST_CONSTANTS: &str = "sqlbuild.cost.constants";
+const DEFAULT_RATE_SOURCE: &str = "default";
 const CONFIGURED_RATE_SOURCE: &str = "configured";
 const STATEMENT_LEDGER_PATH: [&str; 4] = ["target", "executions", "", "statements.jsonl"];
 const BUILD_BREAKDOWN_LIMIT: usize = 5;
@@ -273,7 +273,7 @@ pub(crate) fn finalize_build_cost<'py>(
     }
     let config: Bound<'py, PyAny> = finalization.getattr("config")?;
     let rate_source: String = if config.getattr("usd_per_credit_is_default")?.is_truthy()? {
-        imported(py, COST_CONSTANTS, "DEFAULT_RATE_SOURCE")?.extract()?
+        DEFAULT_RATE_SOURCE.to_owned()
     } else {
         CONFIGURED_RATE_SOURCE.to_owned()
     };

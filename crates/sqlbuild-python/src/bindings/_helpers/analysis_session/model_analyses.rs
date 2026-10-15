@@ -11,10 +11,10 @@ use crate::bindings::_helpers::analysis_session::profile_inputs::{
 use crate::bindings::_helpers::analysis_session::stage_functions::family_rows;
 use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_sql;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::compile_driver::analysis_cache::record_analysis_cache_metrics;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.analysis_session.models";
-const ANALYSIS_CACHE_MODULE: &str = "sqlbuild.compiler.compile._helpers.analysis.cache";
 const PLANNER_TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const CODE_IDENTITY_MODULE: &str = "sqlbuild.compiler.frontier.main.compiled_code_identity";
@@ -260,15 +260,7 @@ fn record_cache(python: &[Bound<'_, PyAny>], session: &Bound<'_, PyAny>) -> PyRe
 
 /// Record the analysis cache entries a native session read, missed and bypassed.
 fn record_metrics(py: Python<'_>, (hits, misses, bypasses): (usize, usize, usize)) -> PyResult<()> {
-    let arguments: Bound<'_, PyDict> = PyDict::new(py);
-    arguments.set_item("batch_hits", 0)?;
-    arguments.set_item("entry_hits", hits)?;
-    arguments.set_item("misses", misses)?;
-    arguments.set_item("bypasses", bypasses)?;
-    py.import(ANALYSIS_CACHE_MODULE)?
-        .getattr("record_analysis_cache_metrics")?
-        .call((), Some(&arguments))?;
-    Ok(())
+    record_analysis_cache_metrics(py, (0, hits, misses, bypasses))
 }
 
 /// Each model's native request row, in analysis order.

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.planner.models import PlannerScope
-from sqlbuild.compiler.source_freshness.main._propagation import (
+from sqlbuild._native import (
     build_direct_source_freshness_propagation_result,
 )
+from sqlbuild.compiler.planner.models import PlannerScope
 from sqlbuild.compiler.source_freshness.models import (
     DirectSourceFreshnessPlanningResult,
     DirectSourceFreshnessPropagationResult,

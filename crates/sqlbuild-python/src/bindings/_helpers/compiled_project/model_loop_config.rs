@@ -76,7 +76,7 @@ impl<'py> ModelConfigs<'py> {
         let builder: &NativeModelConfigBuilder = classes.builder.get();
         let matched: Option<String> = builder
             .selected_path_default(py, relative_path)?
-            .map_err(|error| config_error(context.classes, error.bind(py).as_any(), None))?;
+            .map_err(|error| config_error(error.bind(py).as_any(), None))?;
         let metadata: Option<Bound<'py, PyDict>> = reusable_metadata(header)?;
         let reusable: bool = match metadata {
             Some(_) => self.reusable(context, &matched)?,
@@ -94,7 +94,7 @@ impl<'py> ModelConfigs<'py> {
         let built: BuiltConfig<'py> = match built {
             ConfigBuild::Built(built) => built,
             ConfigBuild::Rejected(error) => {
-                return Err(config_error(context.classes, error.bind(py).as_any(), None));
+                return Err(config_error(error.bind(py).as_any(), None));
             }
         };
         let fields: Bound<'py, PyDict> = config_fields(classes, &built, matched.as_deref())?;
@@ -113,7 +113,7 @@ impl<'py> ModelConfigs<'py> {
         let builder: &NativeModelConfigBuilder = context.classes.config.builder.get();
         let values: Bound<'py, PyDict> = builder
             .inherited_values(py, matched.as_deref())?
-            .map_err(|error| config_error(context.classes, error.bind(py).as_any(), None))?;
+            .map_err(|error| config_error(error.bind(py).as_any(), None))?;
         let checked: Bound<'py, PyTuple> = PyTuple::new(
             py,
             [values.as_any(), builder.target_namespace(py)?.as_any()],

@@ -10,14 +10,13 @@ use sqlbuild_model_config::header_metadata::main::parse_schema_columns::parse_sc
 use sqlbuild_model_config::header_metadata::models::ColumnRequest;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
+use crate::bindings::_helpers::model_config::config_errors::config_exception;
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
+use crate::bindings::_helpers::model_config::contract_classes::contract_classes;
 use crate::bindings::_helpers::model_config::header_metadata::{ContractClasses, column_tuple};
 
-const CONTRACT_CLASSES_MODULE: &str =
-    "sqlbuild.compiler.model_config.main._native_contract_classes";
-const CONFIG_ERROR_MODULE: &str = "sqlbuild.compiler.model_config.main._native_config_error";
 const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild.compiler.discovery.exceptions";
 const DECLARATION_ERROR_CLASS: &str = "DeclarationParseError";
 
@@ -44,10 +43,7 @@ pub(crate) fn schema_columns<'py>(
     };
     let columns = parse_columns(&PyNode(raw_columns.clone()), request)
         .map_err(|error| raised(py, error, declaration_errors))?;
-    let classes: ContractClasses<'py> =
-        imported(py, CONTRACT_CLASSES_MODULE, "native_contract_classes")?
-            .call0()?
-            .extract()?;
+    let classes: ContractClasses<'py> = contract_classes(py)?.extract()?;
     column_tuple(py, &classes, &columns, column_locations)
 }
 
@@ -70,10 +66,7 @@ fn raised(py: Python<'_>, error: ConfigError, declaration_errors: bool) -> PyErr
                 .call1((error.message,));
         }
         let native = native_config_error(py, error)?.into_bound(py).into_any();
-        call_with(
-            &imported(py, CONFIG_ERROR_MODULE, "native_config_error")?,
-            &[("error", native)],
-        )
+        config_exception(&native, None)
     })();
     match built {
         Ok(instance) => PyErr::from_value(instance),

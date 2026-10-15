@@ -6,4 +6,5 @@ pub(crate) mod plan_facts;
 pub(crate) mod registration;
 pub(crate) mod result_text;
 pub(crate) mod terminal;
+pub(crate) mod transient_lines;
 pub(crate) mod transient_status;

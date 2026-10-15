@@ -3,8 +3,11 @@
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyDict, PyDictMethods, PyTuple};
-use pyo3::{FromPyObject, pyfunction, wrap_pyfunction};
+use std::collections::{BTreeMap, BTreeSet};
+
+use pyo3::exceptions::{PyOSError, PyTypeError};
+use pyo3::types::{PyDict, PyDictMethods, PySet, PyString, PyTuple};
+use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::explicit_references::errors::ReferenceFailure;
 use sqlbuild_analysis::explicit_references::main::check_explicit_references::check_explicit_references;
 use sqlbuild_analysis::explicit_references::main::execution_gate_edges::execution_gate_edges;
@@ -15,12 +18,14 @@ use sqlbuild_analysis::explicit_references::models::{
     ReferenceReport, ReferenceRequest, SqlOwner,
 };
 use sqlbuild_analysis::explicit_references::types::ResourceKey;
+use sqlbuild_config::project::main::explicit_references_help::explicit_references_help as references_help;
 use sqlbuild_core::panics::main::native_failure::native_failure;
 use sqlbuild_pysource::literal_sql::main::literal_sql_calls::literal_sql_calls;
 use sqlbuild_pysource::literal_sql::models::FunctionSource;
 
-use crate::bindings::_helpers::analysis::reference_facts::{ProjectFacts, project_facts, ref_keys};
+use crate::bindings::_helpers::analysis::reference_facts::{ProjectFacts, project_facts};
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::types::CompilerDetach;
 
 const EXPLICIT_REFERENCES_CONTEXT: &str = "native explicit-reference checks";
@@ -29,48 +34,106 @@ const COMPILE_INPUT_ERROR: &str = "CompileInputError";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const REFERENCE_MODELS_MODULE: &str = "sqlbuild.compiler.references.models";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
+const REFERENCE_TYPES_MODULE: &str = "sqlbuild.compiler.references.types";
+const LOADER_DEFINITION_MODULE: &str = "sqlbuild.python_nodes.main.read_loader_definition";
+const NATIVE_MODULE: &str = "sqlbuild._native";
+const BUILTINS_MODULE: &str = "builtins";
+const VALUE_PLACEHOLDER: &str = "__sqlbuild_python_value_";
+const HARD_CODED_ALLOWED: &str = "hard-coded relation names";
+const NODE_OWNERS: [(&str, &str); 3] = [
+    ("task", "task_functions"),
+    ("asset", "asset_functions"),
+    ("check", "check_functions"),
+];
+const NODE_KIND: &str = "node";
+const HOOK_KIND: &str = "hook";
+const LOADER_KIND: &str = "loader";
+const MODEL_REF_KIND: &str = "model";
+const SOURCE_REF_KIND: &str = "source";
 const DIAGNOSTIC_PHASE: &str = "compile";
 const DIAGNOSTIC_SEVERITY: &str = "error";
 
-/// One Python SQL owner as Python collects it: the owner, its path order and literal SQL calls.
-type OwnerInput<'py> = (Bound<'py, PyAny>, usize, Vec<(String, String, usize)>);
-
-/// The project-wide settings of one explicit-reference check.
-#[derive(FromPyObject)]
-#[pyo3(from_item_all)]
-struct ReportSettings {
-    /// Whether the project keeps old-name views unless a model disables them.
-    retains_old_names: bool,
-    enforce_explicit: bool,
-    explicit_help: String,
-    /// The text Python substitutes for f-string values in literal SQL.
-    placeholder: String,
+/// One Python function whose literal SQL the checks read, and the references it owns.
+struct PythonSqlOwner<'py> {
+    label: String,
+    kind: &'static str,
+    function: Bound<'py, PyAny>,
+    relative_path: Bound<'py, PyAny>,
+    own_refs: Vec<ResourceKey>,
+    upstream_loader_by_source: Vec<(String, String)>,
 }
 
-/// Python's audit-gate, hook-read and Python-SQL checks as a `PythonSqlReferenceReport`.
+impl<'py> PythonSqlOwner<'py> {
+    fn new(label: String, kind: &'static str, node: &Bound<'py, PyAny>) -> PyResult<Self> {
+        Ok(Self {
+            label,
+            kind,
+            function: node.getattr("function")?,
+            relative_path: node.getattr("relative_path")?,
+            own_refs: Vec::new(),
+            upstream_loader_by_source: Vec::new(),
+        })
+    }
+}
+
+/// Return P005, P007 and P008 errors and unmatched Python-SQL relations; raise P001.
 #[pyfunction]
+#[pyo3(signature = (*, project, discovered_inputs, enforce_explicit))]
 fn explicit_reference_report<'py>(
     py: Python<'py>,
     project: &Bound<'py, PyAny>,
-    settings: ReportSettings,
-    owners: Vec<OwnerInput<'py>>,
+    discovered_inputs: &Bound<'py, PyAny>,
+    enforce_explicit: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let facts: ProjectFacts = project_facts(project, settings.retains_old_names)?;
+    let owners: Vec<PythonSqlOwner<'py>> = if enforce_explicit {
+        python_sql_owners(project, discovered_inputs)?
+    } else {
+        Vec::new()
+    };
+    let path_order: Bound<'py, PyDict> = PyDict::new(py);
+    let unique_paths: Bound<'py, PySet> =
+        PySet::new(py, owners.iter().map(|owner| owner.relative_path.clone()))?;
+    for (index, path) in imported(py, BUILTINS_MODULE, "sorted")?
+        .call1((unique_paths,))?
+        .try_iter()?
+        .enumerate()
+    {
+        path_order.set_item(path?, index)?;
+    }
+    let retains_old_names: bool = !discovered_inputs
+        .getattr("project_config")?
+        .getattr("migrations")?
+        .getattr("old_name_views")?
+        .is_none();
+    let facts: ProjectFacts = project_facts(project, retains_old_names)?;
+    let mut sql_owners: Vec<SqlOwner> = Vec::with_capacity(owners.len());
+    for owner in &owners {
+        let order: usize = path_order
+            .as_any()
+            .get_item(&owner.relative_path)?
+            .extract()?;
+        sql_owners.push(sql_owner(
+            owner,
+            order,
+            literal_sql_calls_of(&owner.function)?,
+        ));
+    }
     let request = ReferenceRequest {
-        enforce_explicit: settings.enforce_explicit,
+        enforce_explicit,
         dialect: project.getattr("sql_analysis_dialect")?.extract()?,
-        explicit_help: settings.explicit_help,
-        placeholder: settings.placeholder,
+        explicit_help: if enforce_explicit {
+            references_help(HARD_CODED_ALLOWED)
+        } else {
+            String::new()
+        },
+        placeholder: VALUE_PLACEHOLDER.to_owned(),
         resources: facts.resources,
         models: facts.models,
         sources: facts.sources,
         seeds: facts.seeds,
         audits: facts.audits,
         hooks: facts.hooks,
-        owners: owners
-            .iter()
-            .map(|(owner, path_order, literals)| sql_owner(owner, *path_order, literals))
-            .collect::<PyResult<_>>()?,
+        owners: sql_owners,
     };
     match py
         .compiler_detach(|| Ok(check_explicit_references(&request)))
@@ -90,39 +153,168 @@ fn explicit_reference_report<'py>(
     }
 }
 
+/// Every task, asset, check, loader and hook function, as Python discovery lists them.
+fn python_sql_owners<'py>(
+    project: &Bound<'py, PyAny>,
+    discovered_inputs: &Bound<'py, PyAny>,
+) -> PyResult<Vec<PythonSqlOwner<'py>>> {
+    let py: Python<'py> = project.py();
+    let mut owners: Vec<PythonSqlOwner<'py>> = Vec::new();
+    for (label, attribute) in NODE_OWNERS {
+        for node in discovered_inputs.getattr(attribute)?.try_iter()? {
+            let node: Bound<'py, PyAny> = node?;
+            let name: String = node.getattr("name")?.extract()?;
+            owners.push(PythonSqlOwner::new(
+                format!("{label}:{name}"),
+                NODE_KIND,
+                &node,
+            )?);
+        }
+    }
+    owners.extend(loader_owners(project, discovered_inputs)?);
+    let hook_names = imported(py, NATIVE_MODULE, "model_python_hook_names")?;
+    let mut attached: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for model in project.getattr("models")?.try_iter()? {
+        let model: Bound<'py, PyAny> = model?;
+        let keywords: Bound<'py, PyDict> = PyDict::new(py);
+        keywords.set_item("model", &model)?;
+        let model_name: String = model.getattr("name")?.extract()?;
+        for hook_name in hook_names.call((), Some(&keywords))?.try_iter()? {
+            attached
+                .entry(hook_name?.extract()?)
+                .or_default()
+                .insert(model_name.clone());
+        }
+    }
+    for hook in project.getattr("hook_functions")?.try_iter()? {
+        let hook: Bound<'py, PyAny> = hook?;
+        let name: String = hook.getattr("name")?.extract()?;
+        let mut owner = PythonSqlOwner::new(format!("hook:{name}"), HOOK_KIND, &hook)?;
+        owner.own_refs = attached
+            .get(&name)
+            .into_iter()
+            .flatten()
+            .map(|model| (MODEL_REF_KIND.to_owned(), model.clone()))
+            .collect();
+        owners.push(owner);
+    }
+    Ok(owners)
+}
+
+/// Each loader function, owning its sources and naming the loaders it depends on.
+fn loader_owners<'py>(
+    project: &Bound<'py, PyAny>,
+    discovered_inputs: &Bound<'py, PyAny>,
+) -> PyResult<Vec<PythonSqlOwner<'py>>> {
+    let py: Python<'py> = project.py();
+    let mut sources_by_loader: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for source in project.getattr("sources")?.try_iter()? {
+        let source: Bound<'py, PyAny> = source?;
+        let loader: Option<String> = source
+            .getattr("source_entry")?
+            .getattr("loader")?
+            .extract()?;
+        if let Some(loader) = loader {
+            sources_by_loader
+                .entry(loader)
+                .or_default()
+                .insert(source.getattr("name")?.extract()?);
+        }
+    }
+    let read_definition = imported(py, LOADER_DEFINITION_MODULE, "read_loader_definition")?;
+    let mut owners: Vec<PythonSqlOwner<'py>> = Vec::new();
+    for loader in discovered_inputs.getattr("loader_functions")?.try_iter()? {
+        let loader: Bound<'py, PyAny> = loader?;
+        let name: String = loader.getattr("name")?.extract()?;
+        let mut upstream: Vec<(String, String)> = Vec::new();
+        for dependency in loader.getattr("depends_on")?.try_iter()? {
+            let dependency: Bound<'py, PyAny> = dependency?;
+            if !dependency.is_callable() {
+                continue;
+            }
+            let definition: Bound<'py, PyAny> = read_definition.call1((&dependency,))?;
+            if definition.is_none() {
+                continue;
+            }
+            let definition_name: String = definition.getattr("name")?.extract()?;
+            let shown: String = match dependency.getattr_opt("__name__")? {
+                Some(shown) => shown.extract()?,
+                None => definition_name.clone(),
+            };
+            for source_name in sources_by_loader
+                .get(&definition_name)
+                .into_iter()
+                .flatten()
+            {
+                upstream.retain(|(known, _)| known != source_name);
+                upstream.push((source_name.clone(), shown.clone()));
+            }
+        }
+        let mut owner = PythonSqlOwner::new(format!("loader:{name}"), LOADER_KIND, &loader)?;
+        owner.own_refs = sources_by_loader
+            .get(&name)
+            .into_iter()
+            .flatten()
+            .map(|source| (SOURCE_REF_KIND.to_owned(), source.clone()))
+            .collect();
+        owner.upstream_loader_by_source = upstream;
+        owners.push(owner);
+    }
+    Ok(owners)
+}
+
+/// The literal SQL calls of a function's dedented source, or none when its source is unreadable.
+fn literal_sql_calls_of(function: &Bound<'_, PyAny>) -> PyResult<Vec<(String, String, usize)>> {
+    let py: Python<'_> = function.py();
+    let (lines, start_line): (Bound<'_, PyAny>, usize) =
+        match imported(py, "inspect", "getsourcelines")?.call1((function,)) {
+            Ok(found) => found.extract()?,
+            Err(error)
+                if error.is_instance_of::<PyOSError>(py)
+                    || error.is_instance_of::<PyTypeError>(py) =>
+            {
+                return Ok(Vec::new());
+            }
+            Err(error) => return Err(error),
+        };
+    let joined: Bound<'_, PyAny> = PyString::new(py, "").call_method1("join", (lines,))?;
+    let source: String = imported(py, "textwrap", "dedent")?
+        .call1((joined,))?
+        .extract()?;
+    Ok(python_literal_sql_calls(
+        py,
+        &source,
+        start_line,
+        VALUE_PLACEHOLDER,
+    ))
+}
+
 fn sql_owner(
-    owner: &Bound<'_, PyAny>,
+    owner: &PythonSqlOwner<'_>,
     path_order: usize,
-    literals: &[(String, String, usize)],
-) -> PyResult<SqlOwner> {
-    Ok(SqlOwner {
-        label: owner.getattr("label")?.extract()?,
-        kind: owner.getattr("kind")?.str()?.extract()?,
+    literals: Vec<(String, String, usize)>,
+) -> SqlOwner {
+    SqlOwner {
+        label: owner.label.clone(),
+        kind: owner.kind.to_owned(),
         path_order,
-        own_refs: ref_keys(&owner.getattr("own_refs")?)?,
-        upstream_loaders: owner
-            .getattr("upstream_loader_by_source")?
-            .call_method0("items")?
-            .try_iter()?
-            .map(|item| item?.extract())
-            .collect::<PyResult<_>>()?,
+        own_refs: owner.own_refs.clone(),
+        upstream_loaders: owner.upstream_loader_by_source.clone(),
         literals: literals
-            .iter()
-            .map(|(method, sql, line)| LiteralSql {
-                method: method.clone(),
-                sql: sql.clone(),
-                line: *line,
-            })
+            .into_iter()
+            .map(|(method, sql, line)| LiteralSql { method, sql, line })
             .collect(),
-    })
+    }
 }
 
 /// The report's diagnostics and unmatched relations as Python's compile models.
 fn python_report<'py>(
     py: Python<'py>,
     report: &ReferenceReport,
-    owners: &[OwnerInput<'py>],
+    owners: &[PythonSqlOwner<'py>],
 ) -> PyResult<Bound<'py, PyAny>> {
+    let owner_kind: Bound<'py, PyAny> =
+        imported(py, REFERENCE_TYPES_MODULE, "HardCodedRelationOwnerKind")?;
     let compile_models = py.import(COMPILE_MODELS_MODULE)?;
     let reference_models = py.import(REFERENCE_MODELS_MODULE)?;
     let source_location: Bound<'py, PyAny> = py
@@ -146,7 +338,7 @@ fn python_report<'py>(
         match row.owner {
             Some(owner) => {
                 let location: Bound<'py, PyDict> = PyDict::new(py);
-                location.set_item("path", owners[owner].0.getattr("relative_path")?)?;
+                location.set_item("path", &owners[owner].relative_path)?;
                 location.set_item("line", row.line)?;
                 location.set_item("column", 1)?;
                 fields.set_item("location", source_location.call((), Some(&location))?)?;
@@ -160,15 +352,15 @@ fn python_report<'py>(
     let relation_name: Bound<'py, PyAny> = reference_models.getattr("RelationName")?;
     let mut unmatched: Vec<Bound<'py, PyAny>> = Vec::with_capacity(report.unmatched.len());
     for row in &report.unmatched {
-        let owner: &Bound<'py, PyAny> = &owners[row.owner].0;
+        let owner: &PythonSqlOwner<'py> = &owners[row.owner];
         let relation: Bound<'py, PyDict> = PyDict::new(py);
         relation.set_item("name", &row.relation.name)?;
         relation.set_item("schema", &row.relation.schema)?;
         relation.set_item("database", &row.relation.database)?;
         let fields: Bound<'py, PyDict> = PyDict::new(py);
-        fields.set_item("owner_label", owner.getattr("label")?)?;
-        fields.set_item("owner_kind", owner.getattr("kind")?)?;
-        fields.set_item("relative_path", owner.getattr("relative_path")?)?;
+        fields.set_item("owner_label", &owner.label)?;
+        fields.set_item("owner_kind", owner_kind.call1((owner.kind,))?)?;
+        fields.set_item("relative_path", &owner.relative_path)?;
         fields.set_item("line", row.line)?;
         fields.set_item("method", &row.method)?;
         fields.set_item("relation", relation_name.call((), Some(&relation))?)?;
@@ -183,7 +375,6 @@ fn python_report<'py>(
 }
 
 /// `(method, sql, line)` for each literal SQL call to the context in a dedented function source.
-#[pyfunction]
 fn python_literal_sql_calls(
     py: Python<'_>,
     source: &str,
@@ -278,7 +469,6 @@ fn hook_row(edge: HookEdge) -> HookRow {
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(explicit_reference_report, module)?)?;
-    module.add_function(wrap_pyfunction!(python_literal_sql_calls, module)?)?;
     module.add_function(wrap_pyfunction!(hard_coded_relation_remedy, module)?)?;
     module.add_function(wrap_pyfunction!(old_name_reference_message, module)?)?;
     Ok(())

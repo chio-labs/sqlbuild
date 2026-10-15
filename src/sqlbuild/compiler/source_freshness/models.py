@@ -6,8 +6,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from sqlbuild._native import require_aware_utc_datetime
 from sqlbuild.adapter.contract.types import FrameworkType
-from sqlbuild.compiler.source_freshness._helpers.datetime import require_aware_utc_datetime
 from sqlbuild.compiler.source_freshness.types import (
     SourceFreshnessAgeStatus,
     SourceFreshnessUnknownReason,

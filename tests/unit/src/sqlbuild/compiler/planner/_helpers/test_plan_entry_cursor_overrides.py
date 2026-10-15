@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import compute_microbatch_range, compute_plan_cursor_bounds
 from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
@@ -15,11 +16,6 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
-from sqlbuild.compiler.planner._helpers.output.plan_entry import (
-    _compute_microbatch_range,
-    _compute_plan_cursor_bounds,
-    _MicrobatchRangeInputs,
-)
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
@@ -86,7 +82,7 @@ def test_given_planner_owned_microbatch_with_cursor_end_when_planning_then_senti
     )
     backfill: BackfillResult = BackfillResult(action=BackfillAction.FORWARD_ONLY)
 
-    plan_bounds: CursorBounds | None = _compute_plan_cursor_bounds(
+    plan_bounds: CursorBounds | None = compute_plan_cursor_bounds(
         model=model,
         snapshot=snapshot,
         backfill=backfill,
@@ -95,22 +91,20 @@ def test_given_planner_owned_microbatch_with_cursor_end_when_planning_then_senti
         end_cursor_override=None,
         runtime_owned_cursor_bounds=False,
     )
-    microbatch_range: CursorBounds | None = _compute_microbatch_range(
+    microbatch_range: CursorBounds | None = compute_microbatch_range(
         model=model,
-        inputs=_MicrobatchRangeInputs(
-            snapshot=snapshot,
-            backfill=backfill,
-            start_cursor_override=None,
-            end_cursor_override=None,
-            runtime_owned_cursor_bounds=False,
-            cursor_input_relations=(
-                CursorInputRelation(relation="main.raw_orders", cursor_column="cursor_value"),
-            ),
-            future_cursor_config=None,
-            start_cursor_config=None,
-            invocation_time=None,
-            full_refresh=False,
+        snapshot=snapshot,
+        backfill=backfill,
+        start_cursor_override=None,
+        end_cursor_override=None,
+        runtime_owned_cursor_bounds=False,
+        cursor_input_relations=(
+            CursorInputRelation(relation="main.raw_orders", cursor_column="cursor_value"),
         ),
+        future_cursor_config=None,
+        start_cursor_config=None,
+        invocation_time=None,
+        full_refresh=False,
     )
 
     assert plan_bounds == CursorBounds(
@@ -161,7 +155,7 @@ def test_given_explicit_cursor_overrides_without_snapshot_when_planning_then_use
         ),
     )
 
-    bounds: CursorBounds | None = _compute_plan_cursor_bounds(
+    bounds: CursorBounds | None = compute_plan_cursor_bounds(
         model=model,
         snapshot=WarehouseSnapshot(),
         backfill=BackfillResult(action=BackfillAction.BOUNDED, duration="7d"),
@@ -257,7 +251,7 @@ def test_given_runtime_owned_missing_snapshot_when_overrides_complete_then_all_r
             }
         ),
     )
-    plan_bounds: CursorBounds | None = _compute_plan_cursor_bounds(
+    plan_bounds: CursorBounds | None = compute_plan_cursor_bounds(
         model=model,
         snapshot=snapshot,
         backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
@@ -266,20 +260,18 @@ def test_given_runtime_owned_missing_snapshot_when_overrides_complete_then_all_r
         end_cursor_override=test_case.end_override,
         runtime_owned_cursor_bounds=True,
     )
-    microbatch_range: CursorBounds | None = _compute_microbatch_range(
+    microbatch_range: CursorBounds | None = compute_microbatch_range(
         model=microbatch_model,
-        inputs=_MicrobatchRangeInputs(
-            snapshot=snapshot,
-            backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
-            start_cursor_override=test_case.start_override,
-            end_cursor_override=test_case.end_override,
-            runtime_owned_cursor_bounds=True,
-            cursor_input_relations=(),
-            future_cursor_config=None,
-            start_cursor_config=None,
-            invocation_time=None,
-            full_refresh=False,
-        ),
+        snapshot=snapshot,
+        backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+        start_cursor_override=test_case.start_override,
+        end_cursor_override=test_case.end_override,
+        runtime_owned_cursor_bounds=True,
+        cursor_input_relations=(),
+        future_cursor_config=None,
+        start_cursor_config=None,
+        invocation_time=None,
+        full_refresh=False,
     )
 
     assert plan_bounds == test_case.expected_bounds
@@ -355,28 +347,26 @@ def test_given_planner_owned_model_backed_input_when_grain_is_coarser_then_range
         }
     )
 
-    microbatch_range: CursorBounds | None = _compute_microbatch_range(
+    microbatch_range: CursorBounds | None = compute_microbatch_range(
         model=model,
-        inputs=_MicrobatchRangeInputs(
-            snapshot=snapshot,
-            backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
-            start_cursor_override=None,
-            end_cursor_override=None,
-            runtime_owned_cursor_bounds=False,
-            cursor_input_relations=(
-                CursorInputRelation(
-                    relation="main.daily_rollup",
-                    cursor_column="activity_day",
-                    cursor_grain=test_case.upstream_grain,
-                    is_model_backed=True,
-                    is_runtime_produced=False,
-                ),
+        snapshot=snapshot,
+        backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+        start_cursor_override=None,
+        end_cursor_override=None,
+        runtime_owned_cursor_bounds=False,
+        cursor_input_relations=(
+            CursorInputRelation(
+                relation="main.daily_rollup",
+                cursor_column="activity_day",
+                cursor_grain=test_case.upstream_grain,
+                is_model_backed=True,
+                is_runtime_produced=False,
             ),
-            future_cursor_config=None,
-            start_cursor_config=None,
-            invocation_time=None,
-            full_refresh=False,
         ),
+        future_cursor_config=None,
+        start_cursor_config=None,
+        invocation_time=None,
+        full_refresh=False,
     )
 
     assert microbatch_range == test_case.expected_bounds
@@ -421,7 +411,7 @@ def test_given_snapshot_cursor_grain_when_planning_then_dml_bound_matches_query_
         ),
     )
 
-    bounds: CursorBounds | None = _compute_plan_cursor_bounds(
+    bounds: CursorBounds | None = compute_plan_cursor_bounds(
         model=model,
         snapshot=WarehouseSnapshot(
             cursor_snapshots={

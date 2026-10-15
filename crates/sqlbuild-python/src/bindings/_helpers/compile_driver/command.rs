@@ -5,6 +5,7 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods, PyMapping, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
+use crate::bindings::_helpers::compile_command::models::CompileReuseAttempt;
 use crate::bindings::_helpers::compile_command::report::{
     format_compile_json, format_compile_text, json_semantic_notice,
 };
@@ -22,10 +23,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::rules::results::format_skipped_type_proof_rules;
 
-const REUSE_MODELS_MODULE: &str = "sqlbuild.cli.compile_reuse.models";
-const REUSE_TYPES_MODULE: &str = "sqlbuild.cli.compile_reuse.types";
+const BYPASS_OUTCOME: &str = "bypass";
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const PROFILING_MODULE: &str = "sqlbuild.compiler.profiling.main._collect";
@@ -104,12 +103,9 @@ fn bypass_attempt<'py>(
         path_class.call_method0("cwd")?
     };
     call_with(
-        &imported(py, REUSE_MODELS_MODULE, "CompileReuseAttempt")?,
+        py.get_type::<CompileReuseAttempt>().as_any(),
         &[
-            (
-                "outcome",
-                imported(py, REUSE_TYPES_MODULE, "CompileReuseOutcome")?.getattr("BYPASS")?,
-            ),
+            ("outcome", BYPASS_OUTCOME.into_pyobject(py)?.into_any()),
             ("project_dir", path_class.call1((project_dir,))?),
             ("started", started.into_pyobject(py)?.into_any()),
         ],
@@ -154,8 +150,7 @@ fn recorded_compile<'py>(
         &imported(py, PROFILING_MODULE, "collect_compile_timings")?.call0()?,
         |detailed_timings| {
             within(
-                &imported(py, COMPILE_CONSTANTS_MODULE, "COMPILE_INPUT_READS")?
-                    .call_method0("recording")?,
+                &imported(py, NATIVE_MODULE, "record_compile_input_reads")?.call0()?,
                 |input_reads| {
                     let artifact_writes: Py<CompileArtifactWrites> = new_artifact_recorder(py)?;
                     let manager: Bound<'py, PyAny> = call_with(

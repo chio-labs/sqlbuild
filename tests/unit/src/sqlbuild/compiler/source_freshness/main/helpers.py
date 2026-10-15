@@ -5,7 +5,11 @@ from datetime import UTC, datetime
 from types import MappingProxyType
 from typing import Any
 
-from sqlbuild._native import source_freshness_data_version_hash
+from sqlbuild._native import (
+    build_source_freshness_read_latest_sql,
+    source_freshness_data_version_hash,
+    write_source_freshness_records,
+)
 from sqlbuild.adapter.contract.models import (
     RelationLookup,
     TableFreshnessMetadata,
@@ -16,9 +20,7 @@ from sqlbuild.adapter.relations.main.relation_lookup import build_relation_looku
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.source_freshness._helpers.sql import build_read_latest_sql
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
-from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
     SourceFreshnessRecord,
@@ -100,7 +102,7 @@ def render_qualified_name(*, database: str | None, schema: str | None, name: str
 
 
 def render_read_latest_sql(*, database: str | None, schema: str) -> str:
-    return build_read_latest_sql(
+    return build_source_freshness_read_latest_sql(
         database=database,
         schema=schema,
         render_qualified_name=render_qualified_name,

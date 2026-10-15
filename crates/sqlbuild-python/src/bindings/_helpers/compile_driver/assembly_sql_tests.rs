@@ -10,7 +10,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
-const COLLECTOR_MODULE: &str = "sqlbuild.compiler.compile._helpers.diagnostics.collector";
+const COLLECTOR_MODULE: &str = "sqlbuild._native";
 const DECIMAL_MODULE: &str = "decimal";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const SQL_TEST_INPUT_FAILURE: &str = "input";

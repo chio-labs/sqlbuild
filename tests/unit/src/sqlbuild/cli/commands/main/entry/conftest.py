@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.cli.commands.constants import SQLBUILD_CONCURRENCY_ENV_VAR
+SQLBUILD_CONCURRENCY_ENV_VAR: str = "SQLBUILD_CONCURRENCY"
 
 
 @pytest.fixture(autouse=True)

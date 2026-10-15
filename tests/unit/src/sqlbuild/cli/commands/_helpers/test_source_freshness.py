@@ -6,6 +6,7 @@ from typing import cast
 
 import pytest
 
+from sqlbuild._native import CostContext
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.freshness.source_freshness import (
     append_eligible_direct_source_freshness_records,
@@ -15,7 +16,6 @@ from sqlbuild.compiler.source_freshness.models import (
     DirectSourceFreshnessPlanningResult,
     DirectSourceFreshnessPropagationResult,
 )
-from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus

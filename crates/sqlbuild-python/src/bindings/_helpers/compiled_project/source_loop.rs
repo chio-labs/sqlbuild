@@ -16,6 +16,7 @@ use crate::bindings::_helpers::compiled_project::model_loop_macros::{
 };
 use crate::bindings::_helpers::compiled_project::source_views::{AttachedSource, replaced};
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
+use crate::bindings::_helpers::model_config::config_errors::raised_config_exception;
 use crate::bindings::_helpers::model_config::config_templates::{
     PythonHost, Stop, TemplateSources, expanded, template_error,
 };
@@ -350,20 +351,8 @@ pub(crate) fn expanded_template<'py>(
             let error: Bound<'py, PyAny> = native_config_error(py, template_error(&error, label))?
                 .into_bound(py)
                 .into_any();
-            Err(raised_config_error(context, &error))
+            Err(raised_config_exception(&error, None))
         }
-    }
-}
-
-fn raised_config_error(context: &LoopContext<'_, '_>, error: &Bound<'_, PyAny>) -> PyErr {
-    let raised = (|| {
-        let keywords: Bound<'_, PyDict> = PyDict::new(error.py());
-        keywords.set_item("error", error)?;
-        context.classes.config_error.call((), Some(&keywords))
-    })();
-    match raised {
-        Ok(instance) => PyErr::from_value(instance),
-        Err(failure) => failure,
     }
 }
 

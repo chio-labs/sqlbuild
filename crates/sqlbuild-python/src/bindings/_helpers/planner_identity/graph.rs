@@ -292,7 +292,7 @@ fn topologically_order_keys<'py>(
 /// Model names reachable downstream from the given keys, including model roots.
 #[pyfunction]
 #[pyo3(signature = (*, start_keys, downstream_deps))]
-fn build_downstream_model_name_closure<'py>(
+pub(crate) fn build_downstream_model_name_closure<'py>(
     start_keys: &Bound<'py, PyAny>,
     downstream_deps: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyFrozenSet>> {

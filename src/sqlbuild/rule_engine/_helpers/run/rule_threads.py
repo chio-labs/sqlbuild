@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
-from contextvars import Token
 from pathlib import Path
 from threading import Event
 
@@ -11,6 +10,7 @@ from sqlbuild._native import (
     build_lint_expansion_context,
     early_lint_expansions,
     finish_rule_run,
+    lint_stop_scope,
     plan_rule_run,
     run_lint,
     run_planned_sql_rules,
@@ -25,7 +25,6 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.lint.classes.stop_context import LintStopContext
 from sqlbuild.lint.models import LintConfig, LintRunResult
 from sqlbuild.rule_engine._helpers.engine.custom_dispatch import evaluate_native, start_custom_rules
 from sqlbuild.rule_engine.models import (
@@ -133,8 +132,7 @@ def _prepare_sql_lint(
     compiled_expansions: dict[Path, CompiledSqlExpansion],
     stop: Event,
 ) -> PreparedSqlLintResult:
-    stop_token: Token[Event | None] = LintStopContext.active.set(stop)
-    try:
+    with lint_stop_scope(stop):
         context: SqlExpansionContext = build_lint_expansion_context(
             project_dir=project_dir,
             discovered_inputs=discovered_inputs,
@@ -147,6 +145,4 @@ def _prepare_sql_lint(
             compiled_expansions=compiled_expansions,
             expansion_context=context,
         )
-    finally:
-        LintStopContext.active.reset(stop_token)
     return PreparedSqlLintResult(result=result, context=context)

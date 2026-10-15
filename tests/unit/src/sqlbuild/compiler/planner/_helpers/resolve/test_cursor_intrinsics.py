@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import resolve_model_sql
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledModelView
-from sqlbuild.compiler.planner._helpers.resolve.resolve import resolve_model_sql
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     BackfillResult,

@@ -1,7 +1,8 @@
 //! Calling the Python stages the native driver still runs: imports, keyword calls and `with`.
 
 use pyo3::exceptions::PyTypeError;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString};
 
 /// `module.name`, imported.
@@ -109,6 +110,11 @@ impl<'py> KeywordArguments<'py> {
         Ok(Self { values })
     }
 
+    /// Whether the argument `name` was passed.
+    pub(crate) fn contains(&self, name: &str) -> PyResult<bool> {
+        self.values.contains(name)
+    }
+
     /// The argument `name`, or `None` when it was not passed.
     pub(crate) fn value(&self, name: &str) -> PyResult<Bound<'py, PyAny>> {
         let py: Python<'py> = self.values.py();
@@ -136,4 +142,20 @@ impl<'py> KeywordArguments<'py> {
     pub(crate) fn passed(&self, name: &str) -> PyResult<bool> {
         self.values.contains(name)
     }
+}
+
+/// The `contextvars.ContextVar(name, default=None)` kept in `cell`, created once per interpreter.
+pub(crate) fn context_variable<'py>(
+    py: Python<'py>,
+    cell: &'static PyOnceLock<Py<PyAny>>,
+    name: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    cell.get_or_try_init(py, || {
+        let keywords: Bound<'_, PyDict> = PyDict::new(py);
+        keywords.set_item("default", py.None())?;
+        imported(py, "contextvars", "ContextVar")?
+            .call((name,), Some(&keywords))
+            .map(Bound::unbind)
+    })
+    .map(|variable| variable.bind(py).clone())
 }

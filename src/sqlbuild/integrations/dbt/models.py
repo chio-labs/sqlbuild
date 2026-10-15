@@ -166,18 +166,6 @@ class NormalizedDbtProfileConnection:
 
 
 @dataclass(frozen=True)
-class DbtProfileConnectionRequest:
-    """Request to resolve one dbt-profile-backed SQLBuild connection."""
-
-    sqlbuild_project_dir: Path
-    dbt_project_dir: Path | None
-    profiles_dir: Path | None
-    profile_name: str | None
-    target_name: str | None
-    cli_vars: dict[str, object] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
 class DbtInitProgressCallbacks:
     """Optional progress hooks for `sqb dbt init` phases."""
 

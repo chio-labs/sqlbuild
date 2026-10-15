@@ -11,6 +11,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::compiled_project::loop_classes::model_loop_classes;
+use crate::bindings::_helpers::model_config::contract_classes::contract_classes;
+use crate::bindings::_helpers::model_config::unicode_environment::unicode_environment;
 use crate::bindings::_helpers::render::declaration_values::constant_declaration_sql;
 use crate::bindings::_helpers::render::macro_expansion_result::macro_expansion_classes;
 
@@ -22,12 +24,9 @@ const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 const DISCOVERY_CONSTANTS_MODULE: &str = "sqlbuild.compiler.discovery.constants";
 const SCOPE_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
 const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
-const COLLECTOR_MODULE: &str = "sqlbuild.compiler.compile._helpers.diagnostics.collector";
-const UNICODE_ENVIRONMENT_MODULE: &str = "sqlbuild.compiler.compile.classes.unicode_environment";
+const COLLECTOR_MODULE: &str = "sqlbuild._native";
 const PROJECT_VARS_MODULE: &str = "sqlbuild._native";
 const MACRO_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.main.active_macro_bridge";
-const CONTRACT_CLASSES_MODULE: &str =
-    "sqlbuild.compiler.model_config.main._native_contract_classes";
 const SQL_ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.sql_analysis.models";
 const PYTHON_NODE_MODELS_MODULE: &str = "sqlbuild.python_nodes.models";
 
@@ -128,10 +127,7 @@ fn sql_hook_inputs<'py>(
             ),
             ("hook_files", discovered.getattr("sql_hook_files")?),
             ("effective_vars", context.getattr("effective_vars")?),
-            (
-                "environment",
-                imported(py, UNICODE_ENVIRONMENT_MODULE, "UnicodeEnvironment")?.call0()?,
-            ),
+            ("environment", unicode_environment(py)?),
             (
                 "render_project_var",
                 imported(py, PROJECT_VARS_MODULE, "render_project_var_text")?,
@@ -276,11 +272,7 @@ pub(crate) fn build_model_inputs<'py>(
     let syntax: Bound<'py, PyAny> = context.getattr("sql_lexical_syntax")?;
     let native_loop: Bound<'py, PyAny> =
         imported(py, NATIVE_MODULE, "NativeModelLoop")?.call1((
-            (
-                validator,
-                imported(py, CONTRACT_CLASSES_MODULE, "native_contract_classes")?.call0()?,
-                classes,
-            ),
+            (validator, contract_classes(py)?.into_any(), classes),
             syntax.getattr("native_mapping")?,
             reserved_cursor_markers(),
             (

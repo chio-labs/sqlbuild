@@ -10,6 +10,7 @@ from numbers import Number
 from typing import Any, cast
 
 from sqlbuild._native import (
+    CostContext,
     assert_no_unresolved_sql_markers,
     evaluate_measurement,
     render_audit_sql,
@@ -22,7 +23,6 @@ from sqlbuild.compiler.auditing.types import (
 )
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.planner.models import AuditPlanEntry
-from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.constants import (
     DEFAULT_EVIDENCE_ROW_LIMIT,

@@ -4,6 +4,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::planner_resolution::constants::CURSOR_START;
+use crate::bindings::_helpers::planner_resolution::cursor_policies::{
+    future_cursor_config, start_cursor_config,
+};
 use crate::bindings::_helpers::planner_resolution::values::{NATIVE_MODULE, string};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::PyDict;
@@ -11,8 +14,6 @@ use pyo3::{IntoPyObject, PyErr, pyfunction, wrap_pyfunction};
 
 const MODELS: &str = "sqlbuild.compiler.planner.models";
 const CURSOR: &str = "sqlbuild._native";
-const POLICIES: &str = "sqlbuild.compiler.planner._helpers.resolve.cursor_policies";
-const FUTURE: &str = "sqlbuild.compiler.planner.main.execution.future_cursor_safety";
 
 fn config<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
     call_with(
@@ -103,20 +104,8 @@ fn compute_model_cursor_bounds<'py>(
     }
     let context = args.value("context")?;
     let incremental_mode = config(&model, "incremental_mode")?;
-    let future_config = call_with(
-        &imported(py, POLICIES, "resolve_future_cursor_config")?,
-        &[
-            ("model", model.clone()),
-            ("project_config", context.getattr("future_cursor_config")?),
-        ],
-    )?;
-    let start_config = call_with(
-        &imported(py, POLICIES, "resolve_start_cursor_config")?,
-        &[
-            ("model", model.clone()),
-            ("project_config", context.getattr("start_cursor_config")?),
-        ],
-    )?;
+    let future_config = future_cursor_config(&model, &context.getattr("future_cursor_config")?)?;
+    let start_config = start_cursor_config(&model, &context.getattr("start_cursor_config")?)?;
     if incremental_mode.eq("microbatch")? {
         return unbounded(py);
     }
@@ -270,7 +259,7 @@ fn compute_model_cursor_bounds<'py>(
         return Ok(bounds);
     }
     call_with(
-        &imported(py, FUTURE, "apply_future_cursor_safety")?,
+        &imported(py, NATIVE_MODULE, "resolve_future_cursor_safety")?,
         &[
             ("bounds", bounds),
             ("cursor_type", cursor_type),

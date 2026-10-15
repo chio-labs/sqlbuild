@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.sql_analysis.main._normalize_analysis import normalize_analysis_sql
 from tests.unit.src.sqlbuild.compiler.sql_analysis.main._test_types import (
     NormalizationBatchFailureTestCase,
     NormalizationBatchTestCase,
     NormalizationChunkTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.sql_analysis.main.helpers import (
+    normalize_analysis_sql,
     normalize_analysis_sql_results,
     pool_catalog,
     without_catalog,

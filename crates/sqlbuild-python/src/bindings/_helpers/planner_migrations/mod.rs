@@ -13,6 +13,7 @@ mod discovery_models;
 mod discovery_requests;
 mod errors;
 mod fingerprint;
+mod known_input_columns;
 mod matching;
 mod model_entries;
 mod model_handover;

@@ -7,13 +7,10 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from sqlbuild._native import apply_typed_cursor_replay_policy, compute_cursor_bounds
 from sqlbuild._native import cursor_observed_partition as observed_partition
 from sqlbuild._native import cursor_parse as parse
 from sqlbuild._native import cursor_render as render
-from sqlbuild.compiler.planner._helpers.resolve.cursor import (
-    apply_typed_cursor_replay_policy,
-    compute_cursor_bounds,
-)
 from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,

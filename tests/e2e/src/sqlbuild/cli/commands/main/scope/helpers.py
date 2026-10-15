@@ -8,7 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from time import perf_counter
 
-from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
+from sqlbuild._native import compiler_cache_directory
 from sqlbuild.compiler.scopes.constants import SCOPE_CACHE_DIRECTORY_NAME, SCOPE_CACHE_FILENAME
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import REPO_ROOT
 

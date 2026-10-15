@@ -6,14 +6,13 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::cli_text::main::format_plan_completion::format_plan_completion;
 use sqlbuild_core::cli_text::main::format_plan_text::format_plan_text;
 use sqlbuild_core::cli_text::models::{
-    CursorPlanText, DisplayLimit, FunctionPlanText, ModelPlanText, PlanTextReport, PlanWarningText,
-    ProviderUsageText, PythonPlanText, RenameHintText, SchemaFindingText, SeedPlanText,
-    SourceFreshnessText, SourceLoadPlanText,
+    CliStyle, CursorPlanText, DisplayLimit, FunctionPlanText, ModelPlanText, PlanTextReport,
+    PlanWarningText, ProviderUsageText, PythonPlanText, RenameHintText, SchemaFindingText,
+    SeedPlanText, SourceFreshnessText, SourceLoadPlanText,
 };
+use sqlbuild_core::plan_display::main::format_query_diff::format_query_diff;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
 use crate::bindings::_helpers::plan_output::cursor_details::{
     CursorDetails, DEFERRED, RESOLVED, cursor_details, runtime_inputs_clause,
@@ -22,13 +21,13 @@ use crate::bindings::_helpers::plan_output::display::{
     cursor_bound_display, format_no_input_rows, format_waiting_on_empty_inputs,
     inclusive_cursor_end, model_materialization_label,
 };
+use crate::bindings::_helpers::plan_output::migrations::pre_build_lines;
+use crate::bindings::_helpers::plan_output::plan_json::unified_diff;
 use crate::bindings::_helpers::plan_output::python_identity::{
     definition_source_text, dependency_source_text,
 };
 use crate::bindings::_helpers::plan_output::values::{items, optional_text, text, texts};
 
-const QUERY_DIFF_MODULE: &str = "sqlbuild.compiler.planner.main.changes._query_diff";
-const PRE_BUILD_MODULE: &str = "sqlbuild.compiler.planner.main.pre_build.pre_build_work_display";
 const DISPLAY_MODELS_MODULE: &str = "sqlbuild.presentation.models";
 const SKIP_ACTION: &str = "skip";
 const QUERY_CHANGED: &str = "query_changed";
@@ -48,16 +47,17 @@ const PLAN_OPTIONS: (&[&str], &[&str]) = (
     ],
 );
 
-/// `format_query_diff(previous=..., current=...)`.
+/// The coloured unified diff between a previous and a current query.
 pub(crate) fn query_diff(
     previous: &Bound<'_, PyAny>,
     current: &Bound<'_, PyAny>,
 ) -> PyResult<Vec<String>> {
-    call_with(
-        &imported(previous.py(), QUERY_DIFF_MODULE, "format_query_diff")?,
-        &[("previous", previous.clone()), ("current", current.clone())],
-    )?
-    .extract()
+    let lines = unified_diff(
+        previous.py(),
+        &previous.extract::<String>()?,
+        &current.extract::<String>()?,
+    )?;
+    Ok(format_query_diff(&lines, CliStyle { use_color: true }))
 }
 
 fn token<'py>(bound: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -437,14 +437,7 @@ fn report(arguments: &KeywordArguments<'_>) -> PyResult<PlanTextReport> {
             reason: text(&seed.getattr("reason")?)?,
         });
     }
-    let pre_build: Bound<'_, PyAny> = call_with(
-        &imported(py, PRE_BUILD_MODULE, "format_pre_build_work")?,
-        &[
-            ("lines", PyList::empty(py).into_any()),
-            ("plan", plan.clone()),
-            ("display_options", display_options.clone()),
-        ],
-    )?;
+    let pre_build: Vec<String> = pre_build_lines(Vec::new(), &plan, &display_options)?;
     Ok(PlanTextReport {
         use_color: flag_or("use_color", true)?,
         include_header: flag_or("include_header", true)?,
@@ -476,7 +469,7 @@ fn report(arguments: &KeywordArguments<'_>) -> PyResult<PlanTextReport> {
             metadata.call_method1("get", ("direct_remaining_stale_model_names",))?,
         ))?,
         pruned_models: pruned_models(&metadata)?,
-        pre_build_lines: pre_build.extract()?,
+        pre_build_lines: pre_build,
     })
 }
 

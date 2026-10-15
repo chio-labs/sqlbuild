@@ -1,7 +1,7 @@
 //! The warehouse inspection phase: snapshot, migrations and inspection relations in one pass.
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::planner_phases::constants::PLAN_ENTRY_MODULE;
+use crate::bindings::_helpers::planner_phases::constants::NATIVE_MODULE;
 use crate::bindings::_helpers::planner_phases::full_refresh::effectively_full_refreshed_model_names;
 use crate::bindings::_helpers::planner_phases::objects::{native, planner_model};
 use crate::bindings::_helpers::planner_warehouse::fingerprint_cache::MigrationFingerprintCache;
@@ -98,7 +98,7 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
     )?;
     fingerprints.call_method0("persist")?;
     let inspection_relations = call_with(
-        &imported(py, PLAN_ENTRY_MODULE, "build_planner_relations_context")?,
+        &imported(py, NATIVE_MODULE, "build_planner_relations_context")?,
         &[
             ("project", project.clone()),
             ("adapter", adapter.clone()),

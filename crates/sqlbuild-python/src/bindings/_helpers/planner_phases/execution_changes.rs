@@ -2,7 +2,7 @@
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::planner_phases::constants::PLAN_ENTRY_MODULE;
+use crate::bindings::_helpers::planner_phases::constants::NATIVE_MODULE;
 use crate::bindings::_helpers::planner_phases::objects::{native, planner_model};
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
@@ -127,7 +127,7 @@ pub(crate) fn build_planner_entry_results<'py>(
     let config = runtime.getattr("project_config")?;
     let execution_scope = pruning.getattr("execution_scope")?;
     let relations = call_with(
-        &imported(py, PLAN_ENTRY_MODULE, "build_planner_relations_context")?,
+        &imported(py, NATIVE_MODULE, "build_planner_relations_context")?,
         &[
             ("project", project.clone()),
             ("adapter", runtime.getattr("adapter")?),
@@ -202,7 +202,7 @@ pub(crate) fn build_planner_entry_results<'py>(
         ],
     )?;
     let entries = call_with(
-        &imported(py, PLAN_ENTRY_MODULE, "build_plan_entries")?,
+        &imported(py, NATIVE_MODULE, "build_plan_entries")?,
         &[
             ("project", project),
             ("adapter", runtime.getattr("adapter")?),

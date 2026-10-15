@@ -8,6 +8,7 @@ use crate::bindings::_helpers::build_command::support::{boolean, keyword_relay, 
 use crate::bindings::_helpers::command_runtime::connection::{
     anchor_duckdb_database, with_dbt_profile,
 };
+use crate::bindings::_helpers::compile_driver::plan_result::connection_with_hooks;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
@@ -120,18 +121,7 @@ fn open_connection<'py>(
         ));
     }
     let relayed = call_with(&imported(py, HOOKS, "ConnectionHooks")?, &pairs)?;
-    call_with(
-        &imported(
-            py,
-            "sqlbuild.runtime.contracts.main.open_connection",
-            "open_connection_with_hooks",
-        )?,
-        &[
-            ("adapter", environment.getattr("adapter")?),
-            ("connection_config", config),
-            ("hooks", relayed),
-        ],
-    )
+    connection_with_hooks(&environment.getattr("adapter")?, &config, &relayed)
 }
 
 /// Build the SQLBuild plan from current warehouse facts, closing the custom adapter connection.
@@ -193,11 +183,7 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
         )?;
         let discovered = environment.getattr("discovered_inputs")?;
         let result = call_with(
-            &imported(
-                py,
-                "sqlbuild.compiler.planner.main.execution.execution",
-                "build_execution_plan",
-            )?,
+            &imported(py, "sqlbuild._native", "build_execution_plan")?,
             &[
                 ("project", environment.getattr("project")?),
                 ("adapter", environment.getattr("adapter")?),
@@ -226,11 +212,7 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
                 ) =>
             {
                 call_with(
-                    &imported(
-                        py,
-                        "sqlbuild.compiler.planner.main.execution.display_plan",
-                        "build_display_only_sqlbuild_plan",
-                    )?,
+                    &imported(py, "sqlbuild._native", "build_display_only_sqlbuild_plan")?,
                     &[
                         ("project", environment.getattr("project")?),
                         ("selected_model_names", selected),

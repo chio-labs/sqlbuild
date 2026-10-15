@@ -37,7 +37,6 @@ ALLOWED_DBT_REF_SCAN_PATHS: frozenset[str] = frozenset(
 ALLOWED_METADATA_LOOP_PATHS: frozenset[str] = frozenset(
     {
         "src/sqlbuild/adapter/relations/main/relation_lookup.py",
-        "src/sqlbuild/compiler/planner/_helpers/output/plan_entry.py",
         "src/sqlbuild/compiler/planner/_helpers/warehouse/semantic_sources.py",
         "src/sqlbuild/executor/janitor/_helpers/plan.py",
         "src/sqlbuild/executor/pipeline/_helpers/testing.py",
@@ -187,11 +186,6 @@ POLICY_IMPLEMENTATION_PATH_PREFIX: str = "scripts/fensu_policy/"
 PROVIDER_CLASS_NAME: str = "Provider"
 PROVIDER_MODULE_PARTS: tuple[str, ...] = ("src", "sqlbuild", "providers.py")
 PUBLIC_EXPORT_ASSIGNMENT_TARGETS: tuple[str, ...] = ("__all__",)
-PUBLIC_COLOR_ENTRY_PARTS: frozenset[tuple[str, ...]] = frozenset(
-    {
-        ("src", "sqlbuild", "presentation", "main", "terminal_columns.py"),
-    }
-)
 ROOT_SCOPE_NAME: str = "root"
 RUNTIME_ROOT_PARTS: tuple[str, ...] = ("src", "sqlbuild")
 SELECTOR_MARKER: str = "+"

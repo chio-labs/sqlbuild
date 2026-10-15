@@ -14,6 +14,7 @@ use crate::bindings::_helpers::render::macro_call_rows::span_row;
 use crate::bindings::_helpers::render::macro_expansion::{
     ExpansionOutput, NativeMacroExpansion, expanded,
 };
+use crate::bindings::_helpers::sqltext::sql_references::extract_references;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
@@ -23,12 +24,15 @@ const SCOPES_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
 const SCOPES_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
 const REF_MODELS_MODULE: &str = "sqlbuild.python_nodes.models";
 const REF_TYPES_MODULE: &str = "sqlbuild.python_nodes.types";
-const MACRO_ARGUMENTS_MODULE: &str =
-    "sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments";
+const TYPED_REFERENCE_FUNCTIONS: [(&str, &str); 3] = [
+    ("model", "__ref"),
+    ("source", "__source"),
+    ("seed", "__seed"),
+];
 const USER_MACROS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.user_macros";
 const ACTIVE_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.main.active_macro_bridge";
 const BRIDGE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.macro_bridge.constants";
-const DIAGNOSTICS_MODULE: &str = "sqlbuild.compiler.compile._helpers.diagnostics.collector";
+const DIAGNOSTICS_MODULE: &str = "sqlbuild._native";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
 const SQL_ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.sql_analysis.models";
 const BUILTINS_MODULE: &str = "builtins";
@@ -97,12 +101,12 @@ fn generated_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
 fn built_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     let native: Bound<'_, PyAny> = py.import(NATIVE_MODULE)?.into_any();
     let declaration_kind: Bound<'_, PyAny> = imported(py, SCOPES_TYPES_MODULE, "DeclarationKind")?;
-    let ref_kinds: Bound<'_, PyAny> =
-        imported(py, MACRO_ARGUMENTS_MODULE, "typed_reference_kinds")?.call0()?;
+    let ref_kind: Bound<'_, PyAny> = imported(py, REF_TYPES_MODULE, "SqlResourceRefKind")?;
+    let ref_kinds: Bound<'_, PyDict> = PyDict::new(py);
     let ref_functions: Bound<'_, PyDict> = PyDict::new(py);
-    for item in ref_kinds.call_method0("items")?.try_iter()? {
-        let (function, kind): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;
-        ref_functions.set_item(kind.getattr("value")?, function)?;
+    for (kind, function) in TYPED_REFERENCE_FUNCTIONS {
+        ref_kinds.set_item(function, ref_kind.call1((kind,))?)?;
+        ref_functions.set_item(kind, function)?;
     }
     let store_tokens: Bound<'_, PyDict> = keywords(
         py,
@@ -152,7 +156,7 @@ fn built_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
                 "resource_ref",
                 imported(py, REF_MODELS_MODULE, "SqlResourceRef")?,
             ),
-            ("ref_kinds", ref_kinds),
+            ("ref_kinds", ref_kinds.into_any()),
             ("ref_functions", ref_functions.into_any()),
             ("store_tokens", store_tokens.into_any()),
             (
@@ -245,21 +249,18 @@ fn expansion_result<'py>(request: ExpansionRequest<'py>) -> PyResult<Bound<'py, 
             ],
         )?);
     }
-    let resource_ref: Bound<'py, PyAny> = imported(py, REF_MODELS_MODULE, "SqlResourceRef")?;
-    let ref_kind: Bound<'py, PyAny> = imported(py, REF_TYPES_MODULE, "SqlResourceRefKind")?;
-    let mut references: Vec<Bound<'py, PyAny>> = Vec::new();
-    for (kind, name) in output.argument_references {
-        references.push(call_with(
-            &resource_ref,
-            &[
-                ("kind", ref_kind.call1((kind,))?),
-                ("name", PyString::new(py, &name).into_any()),
-            ],
-        )?);
-    }
-    let argument_references: Bound<'py, PyAny> =
-        imported(py, MACRO_ARGUMENTS_MODULE, "call_site_sql_references")?
-            .call1((PyTuple::new(py, references)?,))?;
+    let argument_references: Bound<'py, PyAny> = if output.argument_references.is_empty() {
+        PyTuple::empty(py).into_any()
+    } else {
+        let calls: Vec<String> = output
+            .argument_references
+            .iter()
+            .map(|(kind, name)| format!("{}(\"{name}\")", typed_reference_function(kind)))
+            .collect();
+        let syntax: Bound<'py, PyAny> =
+            imported(py, SQL_ANALYSIS_MODELS_MODULE, "SqlLexicalSyntax")?.call0()?;
+        extract_references(&calls.join(" "), &syntax)?.into_any()
+    };
     result_model(
         py,
         &[
@@ -270,6 +271,14 @@ fn expansion_result<'py>(request: ExpansionRequest<'py>) -> PyResult<Bound<'py, 
             ("usages", unique(py, output.usages)?.into_any()),
         ],
     )
+}
+
+/// The typed reference function naming a `SqlResourceRefKind` value, such as `__ref`.
+fn typed_reference_function(kind: &str) -> &'static str {
+    TYPED_REFERENCE_FUNCTIONS
+        .iter()
+        .find(|(typed, _)| *typed == kind)
+        .map_or("", |(_, function)| function)
 }
 
 fn optional<'py>(value: Bound<'py, PyAny>) -> Option<Bound<'py, PyAny>> {

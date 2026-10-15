@@ -3,13 +3,12 @@
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
 use crate::bindings::_helpers::planner_resolution::values::{NATIVE_MODULE, string};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyList, PyTuple};
+use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyString, PyTuple};
 use pyo3::{IntoPyObject, PyErr, pyfunction, wrap_pyfunction};
 
-const CONFIG_MODULE: &str = "sqlbuild.compiler.planner._helpers.resolve.config";
-const INTRINSICS_MODULE: &str = "sqlbuild.compiler.planner._helpers.resolve.cursor_intrinsics";
 const MODELS_MODULE: &str = "sqlbuild.compiler.planner.models";
 const HOOK_MODULE: &str = "sqlbuild.compiler.discovery.models";
 const ERROR_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
@@ -213,8 +212,7 @@ fn resolve_model_sql<'py>(
         &imported(py, NATIVE_MODULE, "resolve_cursor_input_roles")?,
         &[("model", model.clone())],
     )?;
-    let inclusive =
-        imported(py, CONFIG_MODULE, "get_config_append_cursor_inclusive")?.call1((&model,))?;
+    let inclusive = append_cursor_inclusive(&model)?;
     let mut sql = resolution.resolve(
         model.getattr("query_sql")?,
         &[
@@ -241,18 +239,62 @@ fn resolve_model_sql<'py>(
             };
             return Err(unresolved_bounds_error(py, &name, cause.as_deref())?);
         }
-        sql = call_with(
-            &imported(py, INTRINSICS_MODULE, "render_cursor_intrinsic_bounds")?,
-            &[
-                ("sql", sql),
-                ("bounds", bounds),
-                ("cursor_type", cursor_type),
-                ("adapter", resolution.adapter.clone()),
-            ],
-        )?;
+        sql = intrinsic_bounds(&sql, &bounds, &cursor_type, &resolution.adapter)?;
     }
     resolution.assert_resolved(&sql, &format!("Model '{name}'"))?;
     Ok(sql)
+}
+
+/// Effective append cursor lower-bound inclusivity.
+fn append_cursor_inclusive<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py = model.py();
+    let strategy = call_with(
+        &imported(py, NATIVE_MODULE, "get_config_str")?,
+        &[
+            ("values", model.getattr("config")?.getattr("values")?),
+            ("key", string(py, "incremental_strategy")),
+        ],
+    )?;
+    let raw = model
+        .getattr("config")?
+        .getattr("values")?
+        .call_method1("get", ("append_cursor_inclusive",))?;
+    let inclusive =
+        !strategy.eq("append")? || !raw.is_instance_of::<PyBool>() || raw.is_truthy()?;
+    Ok(inclusive.into_pyobject(py)?.to_owned().into_any())
+}
+
+/// `__cursor_start()` / `__cursor_end()` replaced with the adapter's typed bound literals.
+fn intrinsic_bounds<'py>(
+    sql: &Bound<'py, PyAny>,
+    bounds: &Bound<'py, PyAny>,
+    cursor_type: &Bound<'py, PyAny>,
+    adapter: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = sql.py();
+    let literal = |field: &str| -> PyResult<Bound<'py, PyAny>> {
+        call_with(
+            &adapter.getattr("render_cursor_bound_literal")?,
+            &[
+                (
+                    "value",
+                    PyString::new(py, &sentinel_to_token(&bounds.getattr(field)?)?).into_any(),
+                ),
+                ("cursor_type", cursor_type.clone()),
+            ],
+        )
+    };
+    let start_sql = literal("start")?;
+    let end_sql = literal("end")?;
+    call_with(
+        &imported(py, NATIVE_MODULE, "resolve_cursor_intrinsics")?,
+        &[
+            ("sql", sql.clone()),
+            ("start_sql", start_sql),
+            ("end_sql", end_sql),
+        ],
+    )?
+    .get_item(0)
 }
 
 fn unresolved_bounds_error(py: Python<'_>, name: &str, cause: Option<&str>) -> PyResult<PyErr> {

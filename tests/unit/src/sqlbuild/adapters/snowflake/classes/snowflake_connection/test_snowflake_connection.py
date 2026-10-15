@@ -8,10 +8,9 @@ from typing import Any
 
 import pytest
 
+from sqlbuild._native import COST_TELEMETRY_HEALTH, CostContext
 from sqlbuild.adapters.snowflake.classes.snowflake_connection import _SnowflakeConnection
 from sqlbuild.adapters.snowflake.classes.snowflake_cursor import _SnowflakeCursor
-from sqlbuild.cost.classes.cost_context import CostContext
-from sqlbuild.cost.constants import COST_TELEMETRY_HEALTH
 from sqlbuild.cost.models import StatementExecutionTelemetry
 from sqlbuild.observability import (
     EventDispatcher,
@@ -512,13 +511,9 @@ def test_given_ledger_write_failure_when_executing_then_statement_result_is_unch
 ) -> None:
     cursor: _Cursor = _Cursor()
     connection: _SnowflakeConnection = _SnowflakeConnection(_RawConnection(cursor))
-    ledger_path: Path = tmp_path / "statements.jsonl"
-
-    def fail_append(**kwargs: Any) -> None:
-        del kwargs
-        raise OSError("disk unavailable")
-
-    monkeypatch.setattr("sqlbuild.cost._helpers.ledger._append_statement", fail_append)
+    blocker: Path = tmp_path / "blocker"
+    blocker.write_text("not a directory", encoding="utf-8")
+    ledger_path: Path = blocker / "statements.jsonl"
     with CostContext.scope(
         run_id="ledger-failure-run",
         resource_type="model",
@@ -531,7 +526,9 @@ def test_given_ledger_write_failure_when_executing_then_statement_result_is_unch
     assert cursor.sfqid == test_case.expected_query_id
     assert test_case.expected_status == "success"
     assert not ledger_path.exists()
-    assert COST_TELEMETRY_HEALTH.consume_ledger_failure(run_id="ledger-failure-run") == "OSError"
+    assert COST_TELEMETRY_HEALTH.consume_ledger_failure(run_id="ledger-failure-run") == (
+        "FileExistsError"
+    )
 
 
 @pytest.mark.parametrize(

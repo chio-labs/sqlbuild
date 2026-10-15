@@ -14,10 +14,10 @@ from types import ModuleType
 from typing import TYPE_CHECKING, Any, get_type_hints
 
 import sqlbuild._native as _native
-from sqlbuild._native import validate_resource_identity
-from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
-from sqlbuild.compiler.discovery._helpers.filesystem.scoped_paths import (
+from sqlbuild._native import (
     project_relative_path,
+    record_settings_class_read,
+    validate_resource_identity,
 )
 from sqlbuild.compiler.discovery.constants import (
     PYTHON_INIT_MODULE_STEM,
@@ -216,7 +216,7 @@ def discover_provider_classes(*, project_dir: Path) -> tuple[DiscoveredProvider,
     ) = cached_event_exporter_extensions(project_dir=project_dir)
     if cached is not None:
         for cached_provider in cached[0]:
-            COMPILE_INPUT_READS.settings_class_read(cached_provider.provider_class)
+            record_settings_class_read(cached_provider.provider_class)
         return cached[0]
     providers_root: Path = project_dir / "providers"
     if not providers_root.is_dir():
@@ -249,7 +249,7 @@ def discover_provider_classes(*, project_dir: Path) -> tuple[DiscoveredProvider,
                     f"{file_path.relative_to(project_dir)}"
                 )
             seen_names[provider_name] = file_path
-            COMPILE_INPUT_READS.settings_class_read(provider_class)
+            record_settings_class_read(provider_class)
             discovered_providers.append(
                 DiscoveredProvider(
                     file_path=file_path,

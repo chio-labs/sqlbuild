@@ -20,7 +20,7 @@ const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const CLI_CONSTANTS_MODULE: &str = "sqlbuild.cli.commands.constants";
+const EMPTY_DAG_PATH: &str = "";
 const TARGET_DIRECTORY: &str = "target";
 const DEFAULT_DAG_FILE: &str = "sqlbuild_dag.json";
 
@@ -90,8 +90,7 @@ pub(crate) fn resolved_dag_path<'py>(
     dag_path: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project_dir.py();
-    let empty: Bound<'py, PyAny> = imported(py, CLI_CONSTANTS_MODULE, "EMPTY_DAG_PATH")?;
-    if dag_path.eq(&empty)? {
+    if dag_path.eq(EMPTY_DAG_PATH)? {
         return target_dir(project_dir)?.call_method1("__truediv__", (DEFAULT_DAG_FILE,));
     }
     let path: Bound<'py, PyAny> = imported(py, "pathlib", "Path")?.call1((dag_path,))?;

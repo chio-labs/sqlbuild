@@ -14,6 +14,7 @@ import duckdb
 import pytest
 
 import sqlbuild._native as native_module
+import sqlbuild._native as plan_artifacts_module
 from sqlbuild._native import PlannedStaticSqlTests, PreparedCompileArtifacts
 from sqlbuild._native import run_cli as main
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
@@ -28,9 +29,6 @@ from sqlbuild.compiler.analysis_session.models import NativeQueryColumns
 from sqlbuild.compiler.frontier.constants import STAGE_CAPTURE_SUFFIX
 from sqlbuild.compiler.frontier.types import CompilerStage
 from sqlbuild.compiler.planner.exceptions import NativeSqlTestPlanningError
-from sqlbuild.compiler.planner.main.execution import (
-    _plan_compiled_sql_test_artifacts as plan_artifacts_module,
-)
 from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     RepeatedJsonParseTestCase,

@@ -11,10 +11,9 @@ use sqlbuild_model_config::header_metadata::models::ParsedAudit;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
+use crate::bindings::_helpers::model_config::contract_classes::contract_classes;
 use crate::bindings::_helpers::model_config::header_metadata::{ContractClasses, audit_tuple};
 
-const CONTRACT_CLASSES_MODULE: &str =
-    "sqlbuild.compiler.model_config.main._native_contract_classes";
 const IDENTITY_ERRORS_MODULE: &str = "sqlbuild.compiler.resource_names.exceptions";
 
 /// A resource identity error as `ResourceIdentityError`, anything else as `error_class(message)`.
@@ -54,11 +53,7 @@ fn parse_audit_instances<'py>(
             Ok(parsed) => parsed,
             Err(error) => return Err(raised(py, error, &error_class)?),
         };
-    let classes: ContractClasses<'py> = py
-        .import(CONTRACT_CLASSES_MODULE)?
-        .getattr("native_contract_classes")?
-        .call0()?
-        .extract()?;
+    let classes: ContractClasses<'py> = contract_classes(py)?.extract()?;
     audit_tuple(py, &classes, &parsed)
 }
 

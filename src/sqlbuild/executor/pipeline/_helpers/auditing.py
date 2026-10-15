@@ -15,10 +15,10 @@ from functools import partial
 from typing import Any, cast
 from uuid import uuid4
 
+from sqlbuild._native import CostContext
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput
-from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.diagnostics.classes.diagnostic_record_redactor import DiagnosticRecordRedactor
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.main._execute import execute_audit

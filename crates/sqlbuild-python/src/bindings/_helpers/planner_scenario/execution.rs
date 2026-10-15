@@ -127,11 +127,7 @@ pub(crate) fn build_scenario_execution_plan<'py>(
         let model = imported(py, "dataclasses", "replace")?.call((record,), Some(&changes))?;
         let model_context = model_context(&project, &context, (&models, &locations, &columns))?;
         let result = call_with(
-            &imported(
-                py,
-                "sqlbuild.compiler.planner._helpers.output.plan_entry",
-                "plan_model",
-            )?,
+            &imported(py, "sqlbuild._native", "plan_model")?,
             &[
                 ("model", model),
                 ("snapshot", snapshot.clone()),

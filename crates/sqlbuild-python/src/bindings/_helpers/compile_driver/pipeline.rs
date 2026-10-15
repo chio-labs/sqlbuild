@@ -8,6 +8,9 @@ use crate::bindings::_helpers::compile_driver::phases::monotonic;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::{
     compile_analysis_selection, project_graph,
 };
+use crate::bindings::_helpers::compile_driver::plan_result::{
+    PlanningInputs, connection_with_hooks, pipeline_result,
+};
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
@@ -21,13 +24,11 @@ const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const ANALYSIS_SELECTION_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS_MODULE: &str = "sqlbuild.compiler.pipeline.models";
-const TIMING_TRACKER_MODULE: &str = "sqlbuild.diagnostics.classes.build_phase_timing_tracker";
+const TIMING_TRACKER_MODULE: &str = "sqlbuild._native";
 const RULE_EXCEPTIONS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
 const RULE_THREADS_MODULE: &str = "sqlbuild.rule_engine._helpers.run.rule_threads";
 const RULE_MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
-const OPEN_CONNECTION_MODULE: &str = "sqlbuild.runtime.contracts.main.open_connection";
 const RUNTIME_MODELS_MODULE: &str = "sqlbuild.runtime.contracts.models";
-const PLAN_MODULE: &str = "sqlbuild.compiler.pipeline.main._plan_result";
 const GENERIC_DIALECT: &str = "generic";
 
 /// The current build's phase timing tracker, when one is recording.
@@ -339,25 +340,18 @@ fn planned<'py>(
     let started: f64 = monotonic(py)?;
     let mut connection: Option<Bound<'py, PyAny>> = None;
     let result: PyResult<Bound<'py, PyAny>> = (|| {
-        let opened: Bound<'py, PyAny> = call_with(
-            &imported(py, OPEN_CONNECTION_MODULE, "open_connection_with_hooks")?,
-            &[
-                ("adapter", adapter.clone()),
-                ("connection_config", compiled.getattr("connection_config")?),
-                ("hooks", hooks.clone()),
-            ],
-        )?;
+        let opened: Bound<'py, PyAny> =
+            connection_with_hooks(adapter, &compiled.getattr("connection_config")?, hooks)?;
         connection = Some(opened.clone());
-        call_with(
-            &imported(py, PLAN_MODULE, "build_pipeline_result")?,
-            &[
-                ("discovered_inputs", discovered.clone()),
-                ("adapter", adapter.clone()),
-                ("connection", opened),
-                ("project", compiled.getattr("project")?),
-                ("options", options.clone()),
-                ("on_progress", hooks.getattr("on_progress")?),
-            ],
+        pipeline_result(
+            &PlanningInputs {
+                discovered_inputs: discovered,
+                adapter,
+                connection: &opened,
+            },
+            &compiled.getattr("project")?,
+            options,
+            &hooks.getattr("on_progress")?,
         )
     })();
     if let Some(connection) = connection.filter(|connection| !connection.is_none()) {

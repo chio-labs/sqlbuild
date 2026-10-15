@@ -1,12 +1,9 @@
-"""Compile reuse requests, provider settings inputs, and per-invocation reuse state."""
+"""Compile reuse requests and provider settings inputs."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-
-from sqlbuild._native import NativeReuseAttempt
-from sqlbuild.cli.compile_reuse.types import CompileReuseOutcome
 
 
 @dataclass(frozen=True)
@@ -47,19 +44,3 @@ class SettingsInputsResult:
 
     inputs: tuple[SettingsEnvironmentInputs, ...]
     unsupported_reason: str | None = None
-
-
-@dataclass(frozen=True)
-class CompileReuseAttempt:
-    """Result of checking for a reusable compile, carried into a full compile on a miss."""
-
-    outcome: CompileReuseOutcome
-    project_dir: Path
-    started: float
-    check_ms: int = 0
-    exit_code: int | None = None
-    entry_path: Path | None = None
-    native: NativeReuseAttempt | None = field(default=None, compare=False, repr=False)
-    """The natively checked attempt, recorded natively after a miss."""
-    selected_target: str | None = None
-    json_output: bool = False

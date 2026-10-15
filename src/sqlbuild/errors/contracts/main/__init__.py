@@ -1,1 +1,0 @@
-"""Expected-error contract entries."""

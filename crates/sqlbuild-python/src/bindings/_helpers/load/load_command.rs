@@ -35,8 +35,7 @@ const EFFECTIVE_RUNTIME_MODULE: &str = "sqlbuild._native";
 const EFFECTIVE_SETTINGS_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const RELATION_LOOKUP_MODULE: &str = "sqlbuild.adapter.relations.main.relation_lookup";
-const CURSOR_OVERRIDES_MODULE: &str =
-    "sqlbuild.compiler.planner.main.cursor_window._typed_cursor_overrides";
+const CURSOR_OVERRIDES_MODULE: &str = "sqlbuild._native";
 const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
 const PROVIDER_SESSION_MODULE: &str = "sqlbuild.provider.main.session";
 const PYTHON_NODE_MODELS: &str = "sqlbuild.python_nodes.models";
@@ -324,7 +323,7 @@ fn prepare<'py>(
         requested.extract()?
     };
     let typed: Bound<'py, PyAny> = call_with(
-        &imported(py, CURSOR_OVERRIDES_MODULE, "typed_cursor_overrides")?,
+        &imported(py, CURSOR_OVERRIDES_MODULE, "type_cursor_overrides")?,
         &[("cursor_overrides", request.getattr("cursor_overrides")?)],
     )?;
     let cursor_overrides: Bound<'py, PyAny> = if typed.is_truthy()? {

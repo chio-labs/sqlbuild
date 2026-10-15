@@ -15,6 +15,7 @@ use sqlbuild_core::seed_command::main::seed_exit_code::seed_exit_code;
 use sqlbuild_core::seed_command::models::SeedRow;
 
 use crate::bindings::_helpers::command_runtime::invocation::resolve_command_invocation;
+use crate::bindings::_helpers::compile_driver::plan_result::connection_with_hooks;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
@@ -22,9 +23,8 @@ const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
 const STATIC_COMMAND_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
-const SEED_PLAN_MODULE: &str = "sqlbuild.compiler.planner.main.commands._seed";
-const SEED_STATE_MODULE: &str = "sqlbuild.compiler.planner.main.commands._seed_state";
-const OPEN_CONNECTION_MODULE: &str = "sqlbuild.runtime.contracts.main.open_connection";
+const SEED_PLAN_MODULE: &str = "sqlbuild._native";
+const SEED_STATE_MODULE: &str = "sqlbuild._native";
 const RUNTIME_CONTRACT_MODELS: &str = "sqlbuild.runtime.contracts.models";
 const EXECUTOR_RUN_MODULE: &str = "sqlbuild.executor.pipeline.main.run";
 const SUCCESS_STATUS: &str = "success";
@@ -248,14 +248,8 @@ fn compile_seeds<'py>(
                 ("on_connection_error", relay.getattr("on_connection_error")?),
             ],
         )?;
-        let connection: Bound<'py, PyAny> = call_with(
-            &imported(py, OPEN_CONNECTION_MODULE, "open_connection_with_hooks")?,
-            &[
-                ("adapter", adapter.clone()),
-                ("connection_config", connection_config),
-                ("hooks", hooks),
-            ],
-        )?;
+        let connection: Bound<'py, PyAny> =
+            connection_with_hooks(&adapter, &connection_config, &hooks)?;
         let read: PyResult<Bound<'py, PyAny>> = call_with(
             &imported(py, SEED_STATE_MODULE, "read_selected_seed_fingerprints")?,
             &[

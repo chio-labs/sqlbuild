@@ -6,7 +6,9 @@ from itertools import chain
 from pathlib import Path
 from typing import Any, NamedTuple, cast
 
-from sqlbuild.cli.compile_reuse.constants import REUSE_DISABLE_ENV_VAR
+from sqlbuild.compiler.frontier.constants import (
+    COMPILE_REUSE_DISABLE_ENV_VAR as REUSE_DISABLE_ENV_VAR,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import run_installed_sqb
 
 

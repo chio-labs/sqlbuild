@@ -1,0 +1,661 @@
+//! Clone planning: destination and origin entries, and deferred-clone graph traversal.
+
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::planner_entries::values::{
+    COMPILE_MODELS, native, planner_model, planner_type, string,
+};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PySet, PySetMethods, PyTuple};
+use pyo3::{pyfunction, wrap_pyfunction};
+
+const VIEW_MATERIALIZATION: &str = "view";
+const GRAPH_ARGUMENTS: [&str; 4] = ["selected", "upstream", "is_clonable", "is_view"];
+
+/// Whether a model is explicitly disabled with a boolean `enabled = false`.
+fn disabled_model(model: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let raw = model
+        .getattr("config")?
+        .getattr("values")?
+        .call_method1("get", ("enabled",))?;
+    Ok(raw.is_instance_of::<PyBool>() && !raw.is_truthy()?)
+}
+
+fn tuple_of<'py>(py: Python<'py>, items: Vec<Bound<'py, PyAny>>) -> PyResult<Bound<'py, PyAny>> {
+    Ok(PyTuple::new(py, items)?.into_any())
+}
+
+/// Entries keyed by node key, returned in `execution_order`.
+fn in_order<'py>(
+    entries: &Bound<'py, PyDict>,
+    execution_order: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let mut ordered: Vec<Bound<'py, PyAny>> = Vec::new();
+    for key in execution_order.try_iter()? {
+        if let Some(entry) = entries.get_item(key?)? {
+            ordered.push(entry);
+        }
+    }
+    tuple_of(entries.py(), ordered)
+}
+
+fn clone_plan_output<'py>(
+    project: &Bound<'py, PyAny>,
+    select: &Bound<'py, PyAny>,
+    exclude: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = project.py();
+    let upstream =
+        imported(py, "sqlbuild._native", "build_execution_upstream_deps")?.call1((project,))?;
+    let downstream =
+        imported(py, "sqlbuild._native", "build_downstream_deps")?.call1((&upstream,))?;
+    let selected = native(
+        py,
+        "resolve_graph_selection",
+        &[
+            ("graph", project.getattr("lineage_graph")?),
+            ("select", select.clone()),
+            ("exclude", exclude.clone()),
+        ],
+    )?;
+    planner_model(
+        py,
+        "PlanOutput",
+        &[
+            (
+                "execution_order",
+                native(
+                    py,
+                    "topologically_order_keys",
+                    &[("upstream", upstream.clone())],
+                )?,
+            ),
+            ("selected_keys", selected),
+            ("upstream_deps", upstream),
+            ("downstream_deps", downstream),
+        ],
+    )
+}
+
+/// Locations and source columns that destination SQL resolves against.
+struct CloneResolution<'py> {
+    model_locations: Bound<'py, PyAny>,
+    seed_locations: Bound<'py, PyAny>,
+    function_locations: Bound<'py, PyAny>,
+    source_map: Bound<'py, PyAny>,
+    source_warehouse_columns: Bound<'py, PyAny>,
+}
+
+fn clone_resolution<'py>(
+    project: &Bound<'py, PyAny>,
+    source_project: &Bound<'py, PyAny>,
+    (adapter, connection): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+) -> PyResult<CloneResolution<'py>> {
+    let py = project.py();
+    let model_locations = native(
+        py,
+        "build_model_locations",
+        &[("models", project.getattr("models")?)],
+    )?;
+    let seed_locations = native(
+        py,
+        "build_seed_locations",
+        &[("seeds", project.getattr("seeds")?)],
+    )?;
+    let function_locations = native(
+        py,
+        "build_function_locations",
+        &[("functions", project.getattr("functions")?)],
+    )?;
+    let source_map = PyDict::new(py);
+    for source in source_project.getattr("sources")?.try_iter()? {
+        let source = source?;
+        source_map.set_item(source.getattr("name")?, source.getattr("source_entry")?)?;
+    }
+    let source_warehouse_columns = native(
+        py,
+        "gather_source_columns",
+        &[
+            ("project", source_project.clone()),
+            ("adapter", adapter.clone()),
+            ("connection", connection.clone()),
+        ],
+    )?;
+    Ok(CloneResolution {
+        model_locations,
+        seed_locations,
+        function_locations,
+        source_map: source_map.into_any(),
+        source_warehouse_columns,
+    })
+}
+
+fn model_entry<'py>(
+    model: &Bound<'py, PyAny>,
+    materialization_type: Bound<'py, PyAny>,
+    resolved_sql: Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = model.py();
+    let action = if materialization_type.eq(VIEW_MATERIALIZATION)? {
+        "CREATE_VIEW"
+    } else {
+        "CREATE_TABLE"
+    };
+    planner_model(
+        py,
+        "ModelPlanEntry",
+        &[
+            ("key", model.getattr("key")?),
+            ("name", model.getattr("name")?),
+            ("relative_path", model.getattr("relative_path")?),
+            ("materialization_type", materialization_type),
+            ("action", planner_type(py, "PlanAction", action)?),
+            ("reason", planner_type(py, "PlanReason", "NO_CHANGE")?),
+            ("destination", model.getattr("destination")?),
+            ("fingerprint_query_sql", string(py, "")),
+            ("resolved_sql", resolved_sql),
+            ("logical_ddl", string(py, "")),
+        ],
+    )
+}
+
+fn clone_model_entries<'py>(
+    (project, plan): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    (adapter, connection): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    source_project: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = project.py();
+    let resolution = clone_resolution(project, source_project, (adapter, connection))?;
+    let selected = plan.getattr("selected_keys")?;
+    let entries = PyDict::new(py);
+    for model in project.getattr("models")?.try_iter()? {
+        let model = model?;
+        if !selected.contains(model.getattr("key")?)? || disabled_model(&model)? {
+            continue;
+        }
+        let materialization_type =
+            native(py, "get_materialization_type", &[("model", model.clone())])?;
+        let resolved_sql = if materialization_type.eq(VIEW_MATERIALIZATION)? {
+            let functions = PyDict::new(py);
+            for function in project.getattr("functions")?.try_iter()? {
+                let function = function?;
+                functions.set_item(function.getattr("name")?, function)?;
+            }
+            let context = planner_model(
+                py,
+                "ModelPlanContext",
+                &[
+                    ("model_locations", resolution.model_locations.clone()),
+                    ("models_by_name", PyDict::new(py).into_any()),
+                    ("functions_by_name", functions.into_any()),
+                    ("seed_locations", resolution.seed_locations.clone()),
+                    ("function_locations", resolution.function_locations.clone()),
+                    ("source_map", resolution.source_map.clone()),
+                    (
+                        "source_warehouse_columns",
+                        resolution.source_warehouse_columns.clone(),
+                    ),
+                    (
+                        "star_exclude_keyword",
+                        adapter.call_method0("star_exclude_keyword")?,
+                    ),
+                ],
+            )?;
+            native(
+                py,
+                "resolve_model_sql",
+                &[
+                    ("adapter", adapter.clone()),
+                    ("model", model.clone()),
+                    ("snapshot", planner_model(py, "WarehouseSnapshot", &[])?),
+                    ("context", context),
+                    (
+                        "backfill",
+                        planner_model(
+                            py,
+                            "BackfillResult",
+                            &[(
+                                "action",
+                                planner_type(py, "BackfillAction", "FORWARD_ONLY")?,
+                            )],
+                        )?,
+                    ),
+                    ("full_refresh", PyBool::new(py, false).to_owned().into_any()),
+                    (
+                        "cursor_overrides",
+                        planner_model(py, "CursorOverridePair", &[])?,
+                    ),
+                ],
+            )?
+        } else {
+            string(py, "")
+        };
+        entries.set_item(
+            model.getattr("key")?,
+            model_entry(&model, materialization_type, resolved_sql)?,
+        )?;
+    }
+    in_order(&entries, &plan.getattr("execution_order")?)
+}
+
+fn clone_source_entries<'py>(
+    project: &Bound<'py, PyAny>,
+    (selected, execution_order): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    adapter: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = project.py();
+    let entries = PyDict::new(py);
+    for source in project.getattr("sources")?.try_iter()? {
+        let source = source?;
+        let entry = source.getattr("source_entry")?;
+        if !selected.contains(source.getattr("key")?)?
+            || !entry.getattr("managed")?.is_truthy()?
+            || entry.getattr("loader")?.is_none()
+            || !entry.getattr("expression")?.is_none()
+        {
+            continue;
+        }
+        let table = entry.getattr("table")?;
+        let relation_name = if table.is_truthy()? {
+            table
+        } else {
+            entry.getattr("name")?
+        };
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("database", entry.getattr("database")?)?;
+        kwargs.set_item("schema", entry.getattr("schema")?)?;
+        kwargs.set_item("name", &relation_name)?;
+        let qualified = adapter
+            .getattr("render_qualified_name")?
+            .call((), Some(&kwargs))?;
+        let destination = imported(py, COMPILE_MODELS, "CompiledRelationLocation")?.call(
+            (),
+            Some(&{
+                let location = PyDict::new(py);
+                location.set_item("database", entry.getattr("database")?)?;
+                location.set_item("schema", entry.getattr("schema")?)?;
+                location.set_item("name", relation_name)?;
+                location.set_item("qualified_name", qualified)?;
+                location
+            }),
+        )?;
+        entries.set_item(
+            source.getattr("key")?,
+            planner_model(
+                py,
+                "CloneSourcePlanEntry",
+                &[
+                    ("key", source.getattr("key")?),
+                    ("name", source.getattr("name")?),
+                    ("destination", destination),
+                ],
+            )?,
+        )?;
+    }
+    in_order(&entries, execution_order)
+}
+
+fn clone_function_entries<'py>(
+    (project, plan): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    (adapter, connection): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    source_project: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = project.py();
+    let resolution = clone_resolution(project, source_project, (adapter, connection))?;
+    let selected = plan.getattr("selected_keys")?;
+    let entries = PyDict::new(py);
+    for function in project.getattr("functions")?.try_iter()? {
+        let function = function?;
+        if !selected.contains(function.getattr("key")?)? {
+            continue;
+        }
+        let body_sql = native(
+            py,
+            "resolve_function_sql",
+            &[
+                ("adapter", adapter.clone()),
+                ("function", function.clone()),
+                ("model_locations", resolution.model_locations.clone()),
+                ("seed_locations", resolution.seed_locations.clone()),
+                ("function_locations", resolution.function_locations.clone()),
+                ("source_map", resolution.source_map.clone()),
+                (
+                    "source_warehouse_columns",
+                    resolution.source_warehouse_columns.clone(),
+                ),
+                (
+                    "star_exclude_keyword",
+                    adapter.call_method0("star_exclude_keyword")?,
+                ),
+            ],
+        )?;
+        let field = |name: &str| function.getattr(name);
+        let entry = planner_model(
+            py,
+            "FunctionPlanEntry",
+            &[
+                ("key", field("key")?),
+                ("name", field("name")?),
+                ("relative_path", field("relative_path")?),
+                ("destination", field("destination")?),
+                ("arguments", field("arguments")?),
+                ("returns", field("returns")?),
+                ("body_sql", body_sql),
+                (
+                    "fingerprint_query_sql",
+                    native(
+                        py,
+                        "build_compiled_function_fingerprint_sql",
+                        &[("function", function.clone())],
+                    )?,
+                ),
+                ("fingerprint_destination", field("fingerprint_destination")?),
+                ("return_columns", field("return_columns")?),
+                ("language", field("language")?),
+                ("source_file_path", field("source_file_path")?),
+                ("runtime_version", field("runtime_version")?),
+                ("entry_point", field("entry_point")?),
+                ("packages", field("packages")?),
+            ],
+        )?;
+        entries.set_item(function.getattr("key")?, entry)?;
+    }
+    in_order(&entries, &plan.getattr("execution_order")?)
+}
+
+fn seed_entry<'py>(seed: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py = seed.py();
+    planner_model(
+        py,
+        "SeedPlanEntry",
+        &[
+            ("key", seed.getattr("key")?),
+            ("name", seed.getattr("name")?),
+            ("destination", seed.getattr("destination")?),
+            (
+                "file_path",
+                seed.getattr("seed_file")?.getattr("file_path")?,
+            ),
+            ("columns", PyTuple::empty(py).into_any()),
+            (
+                "csv_settings",
+                seed.getattr("schema_entry")?.getattr("csv_settings")?,
+            ),
+        ],
+    )
+}
+
+/// Seeds whose `field` (the key or the name) is in `wanted`, as clone seed entries.
+fn seed_entries<'py>(
+    project: &Bound<'py, PyAny>,
+    field: &str,
+    wanted: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
+    for seed in project.getattr("seeds")?.try_iter()? {
+        let seed = seed?;
+        if wanted.contains(seed.getattr(field)?)? {
+            entries.push(seed_entry(&seed)?);
+        }
+    }
+    tuple_of(project.py(), entries)
+}
+
+fn origin_model_entries<'py>(
+    project: &Bound<'py, PyAny>,
+    selected_names: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = project.py();
+    let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
+    for model in project.getattr("models")?.try_iter()? {
+        let model = model?;
+        if !selected_names.contains(model.getattr("name")?)? || disabled_model(&model)? {
+            continue;
+        }
+        let materialization_type =
+            native(py, "get_materialization_type", &[("model", model.clone())])?;
+        entries.push(model_entry(&model, materialization_type, string(py, ""))?);
+    }
+    tuple_of(py, entries)
+}
+
+fn names_of<'py>(entries: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let mut names: Vec<Bound<'py, PyAny>> = Vec::new();
+    for entry in entries.try_iter()? {
+        names.push(entry?.getattr("name")?);
+    }
+    Ok(PyFrozenSet::new(entries.py(), names)?.into_any())
+}
+
+fn origin_source_entries<'py>(
+    project: &Bound<'py, PyAny>,
+    selected_names: &Bound<'py, PyAny>,
+    adapter: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = project.py();
+    let mut keys: Vec<Bound<'py, PyAny>> = Vec::new();
+    let mut order: Vec<Bound<'py, PyAny>> = Vec::new();
+    for source in project.getattr("sources")?.try_iter()? {
+        let source = source?;
+        if selected_names.contains(source.getattr("name")?)? {
+            keys.push(source.getattr("key")?);
+        }
+        order.push(source.getattr("key")?);
+    }
+    clone_source_entries(
+        project,
+        (
+            &PyFrozenSet::new(py, keys)?.into_any(),
+            &tuple_of(py, order)?,
+        ),
+        adapter,
+    )
+}
+
+/// Prepare planner outputs needed for clone execution.
+#[pyfunction]
+#[pyo3(signature = (**kwargs))]
+fn run_clone_planning<'py>(
+    py: Python<'py>,
+    kwargs: Option<Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let args = KeywordArguments::read(
+        py,
+        "run_clone_planning",
+        kwargs,
+        (
+            &[
+                "project",
+                "select",
+                "exclude",
+                "adapter",
+                "connection",
+                "origin_project",
+                "origin_source_project",
+                "destination_source_project",
+            ],
+            &[],
+        ),
+    )?;
+    let project = args.value("project")?;
+    let adapter = args.value("adapter")?;
+    let connection = args.value("connection")?;
+    let destination_sources = args.value("destination_source_project")?;
+    let plan = clone_plan_output(&project, &args.value("select")?, &args.value("exclude")?)?;
+    let models = clone_model_entries(
+        (&project, &plan),
+        (&adapter, &connection),
+        &destination_sources,
+    )?;
+    let seeds = seed_entries(&project, "key", &plan.getattr("selected_keys")?)?;
+    let functions = clone_function_entries(
+        (&project, &plan),
+        (&adapter, &connection),
+        &destination_sources,
+    )?;
+    let mut sources = PyTuple::empty(py).into_any();
+    if destination_sources
+        .getattr("effective_target_name")?
+        .eq(project.getattr("effective_target_name")?)?
+    {
+        sources = clone_source_entries(
+            &project,
+            (
+                &plan.getattr("selected_keys")?,
+                &plan.getattr("execution_order")?,
+            ),
+            &adapter,
+        )?;
+    }
+    let origin_project = args.value("origin_project")?;
+    let origin_models = origin_model_entries(&origin_project, &names_of(&models)?)?;
+    let origin_seeds = seed_entries(&origin_project, "name", &names_of(&seeds)?)?;
+    let origin_sources = origin_source_entries(
+        &args.value("origin_source_project")?,
+        &names_of(&sources)?,
+        &adapter,
+    )?;
+    let origin_by_name = PyDict::new(py);
+    for entry in origin_sources.try_iter()? {
+        let entry = entry?;
+        origin_by_name.set_item(entry.getattr("name")?, entry)?;
+    }
+    let mut kept_sources: Vec<Bound<'py, PyAny>> = Vec::new();
+    let mut kept_origins: Vec<Bound<'py, PyAny>> = Vec::new();
+    for entry in sources.try_iter()? {
+        let entry = entry?;
+        let Some(origin) = origin_by_name.get_item(entry.getattr("name")?)? else {
+            continue;
+        };
+        if origin
+            .getattr("destination")?
+            .ne(entry.getattr("destination")?)?
+        {
+            kept_origins.push(origin);
+            kept_sources.push(entry);
+        }
+    }
+    PyTuple::new(
+        py,
+        [
+            plan,
+            tuple_of(py, kept_sources)?,
+            models,
+            seeds,
+            functions,
+            origin_models,
+            origin_seeds,
+            tuple_of(py, kept_origins)?,
+        ],
+    )
+}
+
+/// The traversal callbacks and graph of one deferred-clone query.
+struct CloneGraph<'py> {
+    selected: Bound<'py, PyAny>,
+    upstream: Bound<'py, PyAny>,
+    is_clonable: Bound<'py, PyAny>,
+    is_view: Bound<'py, PyAny>,
+}
+
+impl<'py> CloneGraph<'py> {
+    fn read(args: &KeywordArguments<'py>) -> PyResult<Self> {
+        Ok(Self {
+            selected: args.value("selected")?,
+            upstream: args.value("upstream")?,
+            is_clonable: args.value("is_clonable")?,
+            is_view: args.value("is_view")?,
+        })
+    }
+
+    fn parents(&self, node: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+        self.upstream
+            .call_method1("get", (node, PyTuple::empty(node.py())))?
+            .try_iter()?
+            .collect()
+    }
+
+    fn holds(&self, check: &Bound<'py, PyAny>, node: &Bound<'py, PyAny>) -> PyResult<bool> {
+        check.call1((node,))?.is_truthy()
+    }
+
+    /// Depth-first walk from every selected node in Python's recursion order.
+    fn walk(&self, skipped_views: bool) -> PyResult<Bound<'py, PyFrozenSet>> {
+        let py = self.selected.py();
+        let visited = PySet::empty(py)?;
+        let found = PySet::empty(py)?;
+        for start in self.selected.try_iter()? {
+            let start = start?;
+            if visited.contains(&start)? {
+                continue;
+            }
+            visited.add(&start)?;
+            let mut stack: Vec<(Vec<Bound<'py, PyAny>>, usize)> = vec![(self.parents(&start)?, 0)];
+            while let Some((parents, index)) = stack.last_mut() {
+                let Some(parent) = parents.get(*index).cloned() else {
+                    stack.pop();
+                    continue;
+                };
+                *index += 1;
+                let descend = if self.selected.contains(&parent)? {
+                    true
+                } else if skipped_views {
+                    let view = self.holds(&self.is_view, &parent)?;
+                    if view && self.holds(&self.is_clonable, &parent)? {
+                        found.add(&parent)?;
+                    }
+                    view
+                } else if self.holds(&self.is_view, &parent)? {
+                    true
+                } else {
+                    if self.holds(&self.is_clonable, &parent)? {
+                        found.add(&parent)?;
+                    }
+                    false
+                };
+                if descend && !visited.contains(&parent)? {
+                    visited.add(&parent)?;
+                    stack.push((self.parents(&parent)?, 0));
+                }
+            }
+        }
+        PyFrozenSet::new(py, found.iter())
+    }
+}
+
+/// Return non-view clonable ancestors anchoring selected nodes.
+#[pyfunction]
+#[pyo3(signature = (**kwargs))]
+fn resolve_clone_boundary<'py>(
+    py: Python<'py>,
+    kwargs: Option<Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyFrozenSet>> {
+    let args = KeywordArguments::read(
+        py,
+        "resolve_clone_boundary",
+        kwargs,
+        (&GRAPH_ARGUMENTS, &[]),
+    )?;
+    CloneGraph::read(&args)?.walk(false)
+}
+
+/// Return skipped view ancestors rebuilt over cloned boundaries.
+#[pyfunction]
+#[pyo3(signature = (**kwargs))]
+fn resolve_skipped_view_chain<'py>(
+    py: Python<'py>,
+    kwargs: Option<Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyFrozenSet>> {
+    let args = KeywordArguments::read(
+        py,
+        "resolve_skipped_view_chain",
+        kwargs,
+        (&GRAPH_ARGUMENTS, &[]),
+    )?;
+    CloneGraph::read(&args)?.walk(true)
+}
+
+pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(run_clone_planning, module)?)?;
+    module.add_function(wrap_pyfunction!(resolve_clone_boundary, module)?)?;
+    module.add_function(wrap_pyfunction!(resolve_skipped_view_chain, module)?)
+}

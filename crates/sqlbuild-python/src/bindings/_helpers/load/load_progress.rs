@@ -15,7 +15,7 @@ use crate::bindings::_helpers::build_progress::terminal::start_spinner;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported, within};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const LINES_MODULE: &str = "sqlbuild.presentation.main.transient_line_coordinator";
+const LINES_MODULE: &str = "sqlbuild._native";
 const LIFECYCLE_TYPES: &str = "sqlbuild.adapter.contract.types";
 const LOADER_NODE_KEY: &str = "sqlbuild_loader_node";
 const SPINNER_TICK_SECONDS: f64 = 0.1;

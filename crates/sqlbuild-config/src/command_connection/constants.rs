@@ -22,3 +22,35 @@ pub(crate) const UNSUPPORTED_WAREHOUSE_CODE: &str = "C260";
 pub(crate) const SETTING_SNIPPET_INDENT: &str = "            ";
 /// Two quotes around at least one character.
 pub(crate) const MIN_QUOTED_IDENTIFIER_LENGTH: usize = 3;
+/// The warehouse group each CLI command selects a target's default warehouse from.
+pub const COMMAND_WAREHOUSE_GROUPS: [(&str, Option<&str>); 29] = [
+    ("audit", Some("build")),
+    ("build", Some("build")),
+    ("check", Some("build")),
+    ("clone", Some("build")),
+    ("dbt", Some("build")),
+    ("load", Some("build")),
+    ("plan", Some("build")),
+    ("seed", Some("build")),
+    ("contract", Some("query")),
+    ("cost", Some("query")),
+    ("debug", Some("query")),
+    ("diff", Some("query")),
+    ("freshness", Some("query")),
+    ("query", Some("query")),
+    ("janitor", Some("query")),
+    ("scenario", Some("query")),
+    ("test", Some("query")),
+    ("clean", None),
+    ("compile", None),
+    ("dag", None),
+    ("format", None),
+    ("init", None),
+    ("lineage", None),
+    ("mv", None),
+    ("playground", None),
+    ("rename", None),
+    ("rules", None),
+    ("scope", None),
+    ("skills", None),
+];

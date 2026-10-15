@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import resolve_source_references
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
@@ -11,9 +12,6 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
-from sqlbuild.compiler.planner._helpers.resolve.sources import (
-    resolve_source_references,
-)
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.spec.contracts.models import SourceColumnEntry, SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types import (

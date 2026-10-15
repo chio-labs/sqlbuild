@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
+from sqlbuild._native import compiler_cache_directory
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     RuntimeArtifactPreservationBuildE2ETestCase,
 )

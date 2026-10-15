@@ -46,6 +46,26 @@ fn given_path_default_keys_when_selecting_then_the_python_choice_is_made() {
             ),
         },
         SelectTestCase {
+            description: "a single glob consumes exactly one segment",
+            model_path: "models/commerce/eu/partner_feed/staging/orders.sql",
+            keys: &["commerce/*/staging"],
+            expected_choice: PathDefaultChoice::Selected(None),
+        },
+        SelectTestCase {
+            description: "a single glob outranks a recursive glob",
+            model_path: "models/commerce/partner_feed/staging/orders.sql",
+            keys: &["commerce/**/staging", "commerce/*/staging"],
+            expected_choice: PathDefaultChoice::Selected(Some("commerce/*/staging".to_owned())),
+        },
+        SelectTestCase {
+            description: "a literal prefix outranks a recursive glob on a Windows path",
+            model_path: "models\\commerce\\partner_feed\\staging\\orders.sql",
+            keys: &["commerce/**/staging", "commerce/partner_feed/staging"],
+            expected_choice: PathDefaultChoice::Selected(Some(
+                "commerce/partner_feed/staging".to_owned(),
+            )),
+        },
+        SelectTestCase {
             description: "no key matches",
             model_path: "staging/orders.sql",
             keys: &["marts", "*/finance"],

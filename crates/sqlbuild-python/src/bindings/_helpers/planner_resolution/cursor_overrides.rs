@@ -21,7 +21,7 @@ fn type_cursor_overrides<'py>(
         py,
         "type_cursor_overrides",
         kwargs,
-        (&["cursor_overrides", "selected_models"], &[]),
+        (&["cursor_overrides"], &["selected_models"]),
     )?;
     let overrides = args.value("cursor_overrides")?;
     if overrides.is_none() || !overrides.getattr("has_untyped")?.is_truthy()? {
@@ -29,7 +29,12 @@ fn type_cursor_overrides<'py>(
     }
     let get_config = imported(py, "sqlbuild._native", "get_config_str")?;
     let mut models: Vec<(String, String)> = Vec::new();
-    for model in args.value("selected_models")?.try_iter()? {
+    let selected = if args.passed("selected_models")? {
+        args.value("selected_models")?
+    } else {
+        pyo3::types::PyTuple::empty(py).into_any()
+    };
+    for model in selected.try_iter()? {
         let model = model?;
         let values = model.getattr("config")?.getattr("values")?;
         let config = |key: &str| {

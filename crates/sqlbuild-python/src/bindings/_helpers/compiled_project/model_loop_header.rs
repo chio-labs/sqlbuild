@@ -99,7 +99,7 @@ pub(crate) fn header_schema<'py>(
     let metadata = parse_header_metadata(&node(columns), &node(audits), source.relative_path);
     let parsed_columns = metadata
         .columns
-        .map_err(|error| raised_config_error(py, context, error))?;
+        .map_err(|error| raised_config_error(py, error))?;
     let local_columns: Bound<'py, PyTuple> = column_tuple(
         py,
         context.contracts,
@@ -110,13 +110,13 @@ pub(crate) fn header_schema<'py>(
         Some(schema) => merged_columns(context, schema, &local_columns, model)?,
         None => local_columns,
     };
-    let families = dynamic_families(py, context, &node(dynamic), model)?;
+    let families = dynamic_families(py, &node(dynamic), model)?;
     let parsed_audits = metadata
         .audits
-        .map_err(|error| raised_config_error(py, context, error))?;
+        .map_err(|error| raised_config_error(py, error))?;
     let available: Vec<String> = context.classes.audit_factories.keys().extract()?;
     let references: Vec<String> = audit_factory_references(&node(factories), model, &available)
-        .map_err(|error| raised_config_error(py, context, error))?;
+        .map_err(|error| raised_config_error(py, error))?;
     let direct_audits: Bound<'py, PyTuple> = audit_tuple(py, context.contracts, &parsed_audits)?;
     let (generated, generated_identities) = factory_audits(py, context, &references)?;
     let direct_identities: Vec<String> = direct_audits
@@ -124,14 +124,14 @@ pub(crate) fn header_schema<'py>(
         .map(|audit| audit_identity(&audit))
         .collect::<PyResult<_>>()?;
     merged_audit_identities(&direct_identities, &generated_identities, model)
-        .map_err(|error| raised_config_error(py, context, error))?;
+        .map_err(|error| raised_config_error(py, error))?;
     let migrations: Vec<ColumnMigration> = columns
         .iter()
         .map(|column| column_migration(&column))
         .collect::<PyResult<_>>()?;
     if let Some(error) = column_migration_error(source.name, source.values, &migrations)? {
         let error = native_config_error(py, error)?.into_bound(py).into_any();
-        return Err(config_error(context.classes, &error, Some(source.values)));
+        return Err(config_error(&error, Some(source.values)));
     }
     let mut type_enforcement: bool = !families.is_empty();
     for column in columns.iter() {
@@ -180,11 +180,10 @@ pub(crate) fn header_schema<'py>(
 /// The header's dynamic column families, each `name_pattern` compiled natively.
 fn dynamic_families(
     py: Python<'_>,
-    context: &LoopContext<'_, '_>,
     raw: &PyNode<'_>,
     model: (&str, &str),
 ) -> PyResult<Vec<DynamicFamily>> {
-    parse_dynamic_columns(raw, model).map_err(|error| raised_config_error(py, context, error))
+    parse_dynamic_columns(raw, model).map_err(|error| raised_config_error(py, error))
 }
 
 /// The header description: absent, or a non-blank string by Python's `str.strip`.
@@ -209,11 +208,10 @@ fn description(
 
 fn raised_config_error(
     py: Python<'_>,
-    context: &LoopContext<'_, '_>,
     error: sqlbuild_model_config::errors::ConfigError,
 ) -> pyo3::PyErr {
     match native_config_error(py, error) {
-        Ok(native) => config_error(context.classes, native.bind(py).as_any(), None),
+        Ok(native) => config_error(native.bind(py).as_any(), None),
         Err(failure) => failure,
     }
 }

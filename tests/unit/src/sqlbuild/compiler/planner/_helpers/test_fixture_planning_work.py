@@ -8,6 +8,7 @@ import pytest
 import sqlbuild._native as sql_test_assembly
 from sqlbuild import _native as fixture_completion
 from sqlbuild._native import (
+    build_selected_test_entries,
     compiled_model_record,
     project_with,
 )
@@ -21,8 +22,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.planner._helpers.output import plan_output
-from sqlbuild.compiler.planner._helpers.output.plan_output import build_selected_test_entries
 from sqlbuild.compiler.planner.classes import fixture_column_inferences as fixture_inferences
 from sqlbuild.compiler.planner.models import (
     FixtureColumnMetadata,
@@ -101,7 +100,7 @@ def test_given_many_tests_when_building_entries_then_project_fixture_metadata_is
         settings=SettingsConfig(sql_analysis=True),
     )
     metadata_builder: Mock = Mock(wraps=fixture_completion.build_relation_fixture_context)
-    monkeypatch.setattr(plan_output, "build_relation_fixture_context", metadata_builder)
+    monkeypatch.setattr(fixture_completion, "build_relation_fixture_context", metadata_builder)
     fixture_completion.fixture_read_cache_info(reset=True)
     topology_builder: Mock = Mock(wraps=sql_test_assembly.resolve_sql_test_model_chains)
     monkeypatch.setattr(sql_test_assembly, "resolve_sql_test_model_chains", topology_builder)

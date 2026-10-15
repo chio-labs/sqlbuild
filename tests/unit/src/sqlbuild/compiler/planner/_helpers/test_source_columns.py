@@ -8,6 +8,7 @@ import pytest
 
 from sqlbuild._native import (
     build_cursor_input_relations,
+    build_planner_relations_context,
     gather_source_columns,
     runtime_cursor_producer_names,
     validate_source_cursor_input_columns,
@@ -25,7 +26,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.planner._helpers.output.plan_entry import build_planner_relations_context
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     CursorInputRelation,

@@ -6,14 +6,12 @@ from datetime import datetime, timedelta
 from fnmatch import fnmatchcase
 from typing import Any
 
+from sqlbuild._native import is_scenario_artifact_physical_name
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup
 from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
-from sqlbuild.compiler.planner.main.scenarios.is_scenario_artifact_physical_name import (
-    is_scenario_artifact_physical_name,
-)
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.executor.diff.classes.query_artifact_lifecycle import QueryDiffArtifactLifecycle
 from sqlbuild.executor.diff.models import QueryDiffArtifactInspection

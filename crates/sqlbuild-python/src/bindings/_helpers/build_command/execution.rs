@@ -22,13 +22,12 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::cursor::overrides::{cursor_integer, cursor_timestamp};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const CURSOR_OVERRIDES_MODULE: &str =
-    "sqlbuild.compiler.planner.main.cursor_window._typed_cursor_overrides";
+const CURSOR_OVERRIDES_MODULE: &str = "sqlbuild._native";
 const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
 const BUILD_MODELS: &str = "sqlbuild.executor.build.models";
 const PIPELINE_RUN_MODULE: &str = "sqlbuild.executor.pipeline.main.run";
 const FRESHNESS_MODULE: &str = "sqlbuild.cli.commands._helpers.freshness.source_freshness";
-const COST_CONTEXT_MODULE: &str = "sqlbuild.cost.classes.cost_context";
+const COST_CONTEXT_MODULE: &str = "sqlbuild._native";
 const GRAPH_MODULE: &str = "sqlbuild.compiler.python_nodes.main._graph";
 const CHECKS_MODULE: &str = "sqlbuild.executor.python_nodes.main._checks";
 const EXECUTOR_PYTHON_MODELS: &str = "sqlbuild.executor.python_nodes.models";
@@ -179,7 +178,7 @@ fn cursors<'py>(
     let mut overrides: Bound<'py, PyAny> = plan.getattr("cursor_overrides")?;
     if !overrides.is_truthy()? {
         overrides = call_with(
-            &imported(py, CURSOR_OVERRIDES_MODULE, "typed_cursor_overrides")?,
+            &imported(py, CURSOR_OVERRIDES_MODULE, "type_cursor_overrides")?,
             &[(
                 "cursor_overrides",
                 context.request.getattr("cursor_overrides")?,

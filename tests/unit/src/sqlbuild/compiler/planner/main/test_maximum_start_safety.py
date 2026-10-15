@@ -5,10 +5,10 @@ from datetime import UTC, datetime
 
 import pytest
 
+from sqlbuild._native import compute_cursor_bounds
 from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
-from sqlbuild.compiler.planner._helpers.resolve.cursor import compute_cursor_bounds
+from sqlbuild._native import resolve_future_cursor_safety as apply_future_cursor_safety
 from sqlbuild.compiler.planner.exceptions import MaximumAutomaticStartError
-from sqlbuild.compiler.planner.main.execution.future_cursor_safety import apply_future_cursor_safety
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
     MaximumStartPolicyInputs,

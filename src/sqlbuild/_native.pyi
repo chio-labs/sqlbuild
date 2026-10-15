@@ -1,10 +1,14 @@
 """Private SQLBuild native engine bindings."""
 
-from collections.abc import Callable, Iterable, Mapping, Sequence, Set
+import threading
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence, Set
+from concurrent.futures import Future
 from contextlib import AbstractContextManager
 from contextvars import Token
 from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path, PurePath
+from threading import Event
 from typing import Any, Literal, TextIO, TypedDict
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -52,7 +56,7 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode, ScopeIndexLoader
 from sqlbuild.cli.compile.models import CompileAnalysis
-from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt, CompileReuseRequest
+from sqlbuild.cli.compile_reuse.models import CompileReuseRequest
 from sqlbuild.cli.entry.models import (
     AuthoredTargetWarehouse,
     CommandWarehouseScope,
@@ -74,8 +78,8 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
 from sqlbuild.compiler.compile.models import (
+    AnalysisCacheContext,
     CompileAdapterContext,
     CompileAnalysisSelection,
     CompileAuditInput,
@@ -211,6 +215,7 @@ from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     BackfillResult,
     ChangeDetectionResult,
+    CloneSourcePlanEntry,
     ColumnMigrationPlanEntry,
     ColumnMigrationPlanning,
     ColumnRenameHint,
@@ -224,6 +229,7 @@ from sqlbuild.compiler.planner.models import (
     DirectModelVersionIdentities,
     EmptyCursorInputDecision,
     FixtureRelationMetadata,
+    FunctionPlanEntry,
     FutureCursorSafetyEvidence,
     MaximumStartPolicyInputs,
     MaximumStartSafetyEvidence,
@@ -251,6 +257,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerChangeResults,
     PlannerEntryResults,
     PlannerIdentityContext,
+    PlannerModelEntryResults,
     PlannerOverrides,
     PlannerPolicies,
     PlannerRelationsContext,
@@ -262,6 +269,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerSelection,
     PlannerWarehouseState,
     PlanOutput,
+    PlanOutputExtras,
     PlanWarning,
     QueryShape,
     ReferenceRename,
@@ -337,9 +345,14 @@ from sqlbuild.compiler.scopes.models import (
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, JsonValue, ScopeQueryTarget
 from sqlbuild.compiler.source_freshness.models import (
+    AdapterSourceFreshnessBatch,
     DirectSourceFreshnessPlanningResult,
+    DirectSourceFreshnessPropagationResult,
     SourceFreshnessIdentity,
+    SourceFreshnessObservation,
     SourceFreshnessRecord,
+    SourceFreshnessRenderers,
+    SourceFreshnessSet,
 )
 from sqlbuild.compiler.source_freshness.types import (
     SourceFreshnessAgeStatus,
@@ -357,7 +370,14 @@ from sqlbuild.compiler.sql_test_glue.models import (
     NativeSqlTestPlanningRequest,
 )
 from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestPlanRow
-from sqlbuild.cost.models import CostRunRecord, StatementExecutionTelemetry
+from sqlbuild.cost.models import (
+    CostResourceContext,
+    CostRunRecord,
+    QueryCostObservation,
+    RunCostSummary,
+    StatementExecutionTelemetry,
+    StatementLedgerEntry,
+)
 from sqlbuild.cursor_algebra.models import (
     AlignedInterval,
     DateValue,
@@ -365,6 +385,7 @@ from sqlbuild.cursor_algebra.models import (
     TimestampValue,
 )
 from sqlbuild.cursor_algebra.types import Bound, BoundSentinel, CursorScalar
+from sqlbuild.diagnostics.models import PartialBuildPhaseTimings, ProcessResourceUsage
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
@@ -422,9 +443,8 @@ from sqlbuild.lint.models import (
     RuleFixResult,
 )
 from sqlbuild.lint.types import RelationKeyRow, RelationKeys
-from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.models import DisplayOptions
-from sqlbuild.presentation.types import CompletionState
+from sqlbuild.presentation.types import CompletionState, TransientLineOwner
 from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.rule_engine.models import (
@@ -1636,6 +1656,36 @@ class NativeReuseAttempt:
 
 def check_compile_reuse(check: dict[str, object]) -> NativeReuseAttempt: ...
 def run_compile(request: CompileCommandRequest) -> int: ...
+
+class CompileReuseAttempt:
+    """Result of checking for a reusable compile, carried into a full compile on a miss."""
+
+    outcome: str
+    project_dir: Path
+    started: float
+    check_ms: int
+    exit_code: int | None
+    entry_path: Path | None
+    native: NativeReuseAttempt | None
+    selected_target: str | None
+    json_output: bool
+    def __init__(
+        self,
+        *,
+        outcome: str,
+        project_dir: Path,
+        started: float,
+        check_ms: int = 0,
+        exit_code: int | None = None,
+        entry_path: Path | None = None,
+        native: NativeReuseAttempt | None = None,
+        selected_target: str | None = None,
+        json_output: bool = False,
+    ) -> None: ...
+
+COMPILE_REUSE_RACY_WINDOW_NS: int
+COMPILE_REUSE_EXCLUDED_ROOT_DIRECTORIES: frozenset[str]
+
 def attempt_compile_reuse(*, request: CompileReuseRequest) -> CompileReuseAttempt: ...
 
 class CompileArtifactWrites:
@@ -2941,12 +2991,8 @@ class DiscoveredSqlModelFile:
     @property
     def extract_implicit_alias_columns(self) -> bool: ...
 
-def parse_schema_document(
-    loaded: object, path: str, classes: dict[str, object]
-) -> tuple[SchemaSeedEntry, ...]: ...
-def parse_sources_document(
-    loaded: object, path: str, classes: dict[str, object]
-) -> tuple[SourceEntry, ...]: ...
+def parse_schema_document(loaded: object, path: str, /) -> tuple[SchemaSeedEntry, ...]: ...
+def parse_sources_document(loaded: object, path: str, /) -> tuple[SourceEntry, ...]: ...
 def analyze_compile_project(
     *,
     project_dir: Path,
@@ -3452,7 +3498,114 @@ def effective_config_connection(
 def effective_config_settings(
     settings: tuple[object, object], overrides: frozenset[str], names: list[str], /
 ) -> dict[str, object]: ...
-def yaml_entry_line_index(contents: str, /) -> list[tuple[str, int]]: ...
+def yaml_entry_line(*, contents: str, name: str) -> int | None: ...
+
+class CollectedCompileDiagnostics:
+    def __enter__(self) -> CollectedCompileDiagnostics: ...
+    def __exit__(self, *exception: object) -> bool: ...
+    def add(self, *, key: tuple[str, ...], diagnostic: CompilerDiagnostic) -> None: ...
+    @property
+    def diagnostics(self) -> tuple[CompilerDiagnostic, ...]: ...
+
+class CliStyle:
+    use_color: bool
+    def __init__(self, *, use_color: bool) -> None: ...
+    def title(self, text: str) -> str: ...
+    def section(self, text: str) -> str: ...
+    def label(self, text: str) -> str: ...
+    def value(self, text: str) -> str: ...
+    def accent(self, text: str) -> str: ...
+    def accent_strong(self, text: str) -> str: ...
+    def plan_section(self, text: str) -> str: ...
+    def object_name(self, text: str) -> str: ...
+    def command(self, text: str) -> str: ...
+    def muted(self, text: str) -> str: ...
+    def success(self, text: str) -> str: ...
+    def success_strong(self, text: str) -> str: ...
+    def warning(self, text: str) -> str: ...
+    def warning_strong(self, text: str) -> str: ...
+    def error(self, text: str) -> str: ...
+    def error_strong(self, text: str) -> str: ...
+    def error_muted(self, text: str) -> str: ...
+    def log_label(self, text: str) -> str: ...
+    def dbt_section(self, text: str) -> str: ...
+    def dbt_label(self, text: str) -> str: ...
+    def dbt_object_name(self, text: str) -> str: ...
+    def dbt_execution_label(self, text: str) -> str: ...
+    def status(self, *, status: str, text: str | None = None) -> str: ...
+
+def collect_compile_diagnostics() -> CollectedCompileDiagnostics: ...
+
+class TransientLineCoordinator:
+    lock: threading.RLock
+    def __init__(self) -> None: ...
+    def claim(self, *, stream: TextIO, owner: TransientLineOwner) -> None: ...
+    def release(self, *, owner: TransientLineOwner) -> None: ...
+    def clear_active(self) -> None: ...
+    def write_persistent(self, *, stream: TextIO, text: str) -> None: ...
+
+def shared_transient_line_coordinator() -> TransientLineCoordinator: ...
+
+class BuildPhaseTimingTracker:
+    compile_seconds: float | None
+    planning_seconds: float | None
+    connection_preparation_seconds: float | None
+    schema_preparation_seconds: float | None
+    execution_seconds: float | None
+    cost_collection_seconds: float | None
+    def __init__(self, *, monotonic: Callable[[], float] | None = None) -> None: ...
+    def snapshot(self) -> PartialBuildPhaseTimings: ...
+    @classmethod
+    def current(cls) -> BuildPhaseTimingTracker | None: ...
+    def scope(self) -> PhaseTimingScope: ...
+
+class PhaseTimingScope:
+    def __enter__(self) -> None: ...
+    def __exit__(self, *exception: object) -> bool: ...
+
+class ProcessResourceTracker:
+    def __init__(
+        self,
+        *,
+        monotonic: Callable[[], float] | None = None,
+        resource_reader: Callable[[], tuple[float, float, int | None]] | None = None,
+    ) -> None: ...
+    def finish(self) -> ProcessResourceUsage: ...
+
+class LintStopScope:
+    def __enter__(self) -> None: ...
+    def __exit__(self, *exception: object) -> bool: ...
+
+def lint_stop_scope(stop: Event, /) -> LintStopScope: ...
+def active_lint_stop() -> Event | None: ...
+def error_code(*, error: BaseException, fallback_code: str) -> str: ...
+def error_help(error: BaseException, /) -> str | None: ...
+def error_message(error: BaseException, /) -> str: ...
+def setting_help(
+    *, purpose: str, file_name: str, section: str, key: str, value: bool | int | str
+) -> str: ...
+def snippet_help(*, purpose: str, target: str, lines: tuple[str, ...]) -> str: ...
+def open_connection_with_hooks(
+    *, adapter: BaseAdapter, connection_config: dict[str, object], hooks: ConnectionHooks
+) -> Any: ...
+def build_analysis_cache_context(
+    *,
+    root: Path | None,
+    inference_profile: ExpressionInferenceProfile,
+    allow_compact_analysis: bool,
+    rich_type_inference: bool = True,
+    signature_namespace: object = None,
+) -> AnalysisCacheContext | None: ...
+
+class CompileInputRecording:
+    def __enter__(self) -> CompileInputReads: ...
+    def __exit__(self, *exception: object) -> bool: ...
+
+def record_compile_input_reads() -> CompileInputRecording: ...
+def record_settings_class_read(settings_class: type) -> None: ...
+def report_compile_diagnostic(*, key: tuple[str, ...], diagnostic: CompilerDiagnostic) -> None: ...
+def compiler_cache_directory(project_dir: Path, /) -> Path: ...
+def project_relative_path(*, path: Path, project_dir: Path) -> Path: ...
 def resolve_target_name(
     *, project_config: ProjectConfig, local_config: LocalConfig, selected_target: str | None
 ) -> str | None: ...
@@ -3623,9 +3776,6 @@ def load_project_config_file(project_dir: Path, /) -> ProjectConfig: ...
 def load_local_config_file(project_dir: Path, /) -> LocalConfig: ...
 def resolve_config_file_path(project_dir: Path, local: bool, /) -> Path: ...
 def validate_local_sql_analysis(project_dir: Path, flags: tuple[bool, bool, bool], /) -> None: ...
-def sql_test_cte_span(
-    contents: str, sql_body: str, cte_name: str, call: str | None, /
-) -> tuple[int, int, int, int]: ...
 def normalize_scope_path(*, path: str | PurePath) -> str: ...
 def scope_index_fingerprint(*, project_dir: Path) -> str | None: ...
 def load_or_build_scope_index(*, project_dir: Path, no_cache: bool = False) -> ScopeIndex: ...
@@ -3641,6 +3791,7 @@ class NativeConfigError:
     code: str | None
     help: str | None
     key: str | None
+    def exception(self, values: Mapping[str, object] | None = None) -> Exception: ...
 
 def parse_schema_columns(
     raw_columns: object,
@@ -3914,6 +4065,17 @@ class SqlTestScanStore:
     ) -> tuple[SqlTestScanStore | None, str | None]: ...
     def counts(self) -> tuple[int, int]: ...
     def save(self) -> tuple[int | None, str | None]: ...
+
+class UnicodeEnvironment(Mapping[str, str]):
+    def __init__(self) -> None: ...
+    def __getitem__(self, name: str) -> str: ...
+    def __iter__(self) -> Iterator[str]: ...
+    def __len__(self) -> int: ...
+
+class SqlTestScanCache:
+    def __init__(self, *, cache_dir: Path | None) -> None: ...
+    def opened(self) -> SqlTestScanStore | None: ...
+    def save(self) -> None: ...
 
 SQL_TEST_SCAN_STORE_FILE_NAME: str
 
@@ -4528,9 +4690,6 @@ def sql_syntax_error(
     dialect: str | None,
     parse_one: bool = False,
 ) -> str | None: ...
-def check_native_sql_syntax(
-    request: tuple[str, list[tuple[str, list[tuple[str, str]]]]], /
-) -> bool: ...
 def assemble_native_project_resources(
     *,
     inputs: CompileInputsView,
@@ -4538,10 +4697,10 @@ def assemble_native_project_resources(
     syntax_checks: tuple[tuple[tuple[str, dict[str, str] | None], ...], ...],
 ) -> NativeProjectResources: ...
 def explicit_reference_report(
-    project: Any,
-    settings: dict[str, object],
-    owners: list[tuple[Any, int, list[tuple[str, str, int]]]],
-    /,
+    *,
+    project: CompiledProjectView,
+    discovered_inputs: DiscoveredProjectInputs,
+    enforce_explicit: bool,
 ) -> PythonSqlReferenceReport: ...
 def hard_coded_relation_remedy(
     *,
@@ -4647,9 +4806,6 @@ def schema_validations(
     *, requests: Sequence[SqlSchemaValidationRequest]
 ) -> tuple[SqlBindingResult, ...]: ...
 def ignores_quoted_case(*, connection: Mapping[str, object], dialect: str | None) -> bool: ...
-def python_literal_sql_calls(
-    source: str, start_line: int, placeholder: str
-) -> list[tuple[str, str, int]]: ...
 def _oracle_json_dumps(dialect_json: str, value_json: str) -> str: ...
 def _oracle_text_positions(
     data: bytes, byte_offsets: list[int]
@@ -4797,6 +4953,66 @@ def evaluate_source_freshness_age_policy(
     data_version: object,
     observed_at: datetime,
 ) -> SourceFreshnessAgeStatus | None: ...
+def require_aware_utc_datetime(*, value: datetime, field_name: str) -> datetime: ...
+def build_source_freshness_read_latest_sql(
+    *, database: str | None, schema: str, render_qualified_name: Callable[..., str | None]
+) -> str: ...
+def build_source_freshness_create_table_sql(
+    *,
+    database: str | None,
+    schema: str,
+    render_qualified_name: Callable[..., str | None],
+    render_framework_type: Callable[[FrameworkType], str],
+) -> str: ...
+def read_latest_source_freshness(
+    *,
+    connection: object,
+    execute: AdapterExecute[Any, Any],
+    table_exists: bool,
+    database: str | None,
+    schema: str,
+    render_qualified_name: Callable[..., str | None],
+    render_read_latest_sql: Callable[..., str],
+    source_names: tuple[str, ...] | None = None,
+) -> SourceFreshnessSet: ...
+def write_source_freshness_records(
+    *,
+    connection: object,
+    execute: AdapterExecute[Any, Any],
+    database: str | None,
+    schema: str,
+    records: tuple[SourceFreshnessRecord, ...],
+    renderers: SourceFreshnessRenderers,
+) -> None: ...
+def observe_configured_source_freshness(
+    *, adapter: StrictAdapter, connection: object, source: SourceEntry, observed_at: datetime
+) -> SourceFreshnessObservation: ...
+def observe_adapter_sources_freshness(
+    *,
+    adapter: StrictAdapter,
+    connection: object,
+    sources: tuple[SourceEntry, ...],
+    observed_at: datetime,
+) -> AdapterSourceFreshnessBatch: ...
+def source_freshness_record_from_observation(
+    *, observation: SourceFreshnessObservation, source: SourceEntry, run_id: str
+) -> SourceFreshnessRecord: ...
+def build_direct_source_freshness_planning_result(
+    *,
+    adapter: StrictAdapter,
+    connection: object,
+    sources: tuple[SourceEntry, ...],
+    state_database: str | None,
+    state_schemas: tuple[str, ...],
+    observed_at: datetime,
+    run_id: str,
+    render_qualified_name: Callable[..., str | None],
+    state_table_exists_by_schema: Mapping[str, bool],
+    filter_previous_to_sources: bool = False,
+) -> DirectSourceFreshnessPlanningResult: ...
+def build_direct_source_freshness_propagation_result(
+    *, source_freshness: DirectSourceFreshnessPlanningResult, scope: PlannerScope
+) -> DirectSourceFreshnessPropagationResult: ...
 def redact_diagnostic_text(value: str) -> str: ...
 def redact_diagnostic_value(*, name: str, value: object) -> object: ...
 def sql_rule_lint_key(*, config: LintConfig) -> str: ...
@@ -4819,7 +5035,7 @@ def cursor_sentinel_to_token(*, sentinel: Bound) -> str: ...
 def cursor_sentinel_from_token(*, token: str) -> BoundSentinel | None: ...
 def cursor_compare(*, left: CursorScalar, right: CursorScalar) -> int: ...
 def type_cursor_overrides(
-    *, cursor_overrides: CursorOverrides | None, selected_models: Iterable[CompiledModelView]
+    *, cursor_overrides: CursorOverrides | None, selected_models: Iterable[CompiledModelView] = ()
 ) -> CursorOverrides | None: ...
 def maximum_allowed_start(
     *, discovered_value: str, cursor_grain: str | None, invocation_time: datetime, max_ahead: str
@@ -4836,6 +5052,245 @@ def apply_maximum_start_policy(
     policy: MaximumStartPolicyInputs,
     has_start_override: bool,
 ) -> CursorBounds: ...
+def build_plan_output(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    scope: PlannerScope,
+    snapshot: WarehouseSnapshot,
+    relations: PlannerRelationsContext,
+    changes: PlannerChangeResults,
+    model_entry_results: PlannerModelEntryResults,
+    reload_sources: bool,
+    extras: PlanOutputExtras | None = None,
+) -> PlanOutput: ...
+def plan_function(
+    *,
+    function: CompiledFunctionView,
+    adapter: BaseAdapter,
+    relations: PlannerRelationsContext,
+    fingerprint_query_sql: str,
+    previous_query_sql: str | None = None,
+    reason: PlanReason = ...,
+) -> FunctionPlanEntry: ...
+def plan_selected_sql_tests(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    selected_keys: frozenset[CompiledObjectKey],
+    sql_test_selection: SqlTestSelection,
+) -> PlannedSqlTests: ...
+def plan_selected_sql_tests_into(
+    *,
+    future: Future[PlannedSqlTests],
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    selected_keys: frozenset[CompiledObjectKey],
+    sql_test_selection: SqlTestSelection,
+) -> None: ...
+def sql_test_is_selected(
+    *,
+    test: CompiledSqlTest,
+    selected_keys: frozenset[CompiledObjectKey],
+    sql_test_selection: SqlTestSelection,
+) -> bool: ...
+def build_selected_test_entries(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    selected_keys: frozenset[CompiledObjectKey],
+    sql_test_selection: SqlTestSelection,
+    case_name: str | None = None,
+) -> tuple[list[SqlTestPlanEntry], list[PlanWarning]]: ...
+def resolve_static_command_scope(
+    *, project: CompiledProjectView, selection: PlannerSelection, auto_load_sources: bool = False
+) -> PlannerScope: ...
+def resolve_static_relation_context(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    scope: PlannerScope,
+    deferral: DeferralInputs | None = None,
+    project_config: ProjectConfig | None = None,
+    local_config: LocalConfig | None = None,
+    relation_keys: frozenset[CompiledObjectKey] | None = None,
+) -> PlannerRelationsContext: ...
+def build_audit_command_plan(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    scope: PlannerScope,
+    relations: PlannerRelationsContext,
+) -> PlanOutput: ...
+def build_test_command_plan(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    scope: PlannerScope,
+    relations: PlannerRelationsContext,
+    case_name: str | None = None,
+) -> PlanOutput: ...
+def build_seed_command_plan(
+    *,
+    project: CompiledProjectView,
+    scope: PlannerScope,
+    relations: PlannerRelationsContext,
+    fingerprints: dict[str, Fingerprint] | None = None,
+) -> PlanOutput: ...
+def build_relation_command_plan(
+    *, project: CompiledProjectView, scope: PlannerScope, relations: PlannerRelationsContext
+) -> PlanOutput: ...
+def read_selected_seed_fingerprints(
+    *, adapter: BaseAdapter, connection: Any, seeds: tuple[CompiledSeedView, ...]
+) -> dict[str, Fingerprint]: ...
+def run_clone_planning(
+    *,
+    project: CompiledProjectView,
+    select: tuple[str, ...],
+    exclude: tuple[str, ...],
+    adapter: BaseAdapter,
+    connection: Any,
+    origin_project: CompiledProjectView,
+    origin_source_project: CompiledProjectView,
+    destination_source_project: CompiledProjectView,
+) -> tuple[
+    PlanOutput,
+    tuple[CloneSourcePlanEntry, ...],
+    tuple[ModelPlanEntry, ...],
+    tuple[SeedPlanEntry, ...],
+    tuple[FunctionPlanEntry, ...],
+    tuple[ModelPlanEntry, ...],
+    tuple[SeedPlanEntry, ...],
+    tuple[CloneSourcePlanEntry, ...],
+]: ...
+def resolve_clone_boundary[K](
+    *,
+    selected: frozenset[K],
+    upstream: Mapping[K, tuple[K, ...]],
+    is_clonable: Callable[[K], bool],
+    is_view: Callable[[K], bool],
+) -> frozenset[K]: ...
+def resolve_skipped_view_chain[K](
+    *,
+    selected: frozenset[K],
+    upstream: Mapping[K, tuple[K, ...]],
+    is_clonable: Callable[[K], bool],
+    is_view: Callable[[K], bool],
+) -> frozenset[K]: ...
+def sql_test_model_chain_names_by_key(
+    *, project: CompiledProjectView, tests: tuple[CompiledSqlTest, ...]
+) -> dict[CompiledObjectKey, tuple[str, ...]]: ...
+def build_execution_plan(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    connection: Any,
+    selection: PlannerSelection,
+    overrides: PlannerOverrides,
+    deferral: DeferralInputs,
+    policies: PlannerPolicies,
+    on_progress: Callable[[str], None] | None = None,
+    project_config: ProjectConfig | None = None,
+    local_config: LocalConfig | None = None,
+) -> PlanOutput: ...
+def start_sql_test_planning(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    selected_keys: frozenset[CompiledObjectKey],
+    sql_test_selection: SqlTestSelection,
+    enabled: bool,
+) -> Future[PlannedSqlTests]: ...
+def build_display_only_sqlbuild_plan(
+    *, project: CompiledProjectView, selected_model_names: tuple[str, ...], full_refresh: bool
+) -> PlanOutput: ...
+def format_pre_build_work(
+    *, lines: list[str], plan: PlanOutput, display_options: DisplayOptions
+) -> list[str]: ...
+def resolve_future_cursor_config(
+    *, model: CompiledModelView, project_config: FutureCursorsConfig | None
+) -> FutureCursorsConfig | None: ...
+def resolve_start_cursor_config(
+    *, model: CompiledModelView, project_config: StartCursorsConfig | None
+) -> StartCursorsConfig | None: ...
+def future_cursor_cap_warning(bounds: CursorBounds | None, /) -> str | None: ...
+def maximum_start_cap_warning(bounds: CursorBounds | None, /) -> str | None: ...
+def compute_plan_cursor_bounds(
+    *,
+    model: CompiledModelView,
+    snapshot: WarehouseSnapshot,
+    backfill: BackfillResult,
+    full_refresh: bool,
+    start_cursor_override: str | None,
+    end_cursor_override: str | None,
+    runtime_owned_cursor_bounds: bool,
+    invocation_time: datetime | None = None,
+    future_cursor_config: FutureCursorsConfig | None = None,
+    start_cursor_config: StartCursorsConfig | None = None,
+    replaces_relation: bool = False,
+    cursor_input_relations: tuple[CursorInputRelation, ...] = (),
+) -> CursorBounds | None: ...
+def compute_microbatch_range(
+    *,
+    model: CompiledModelView,
+    snapshot: WarehouseSnapshot,
+    backfill: BackfillResult,
+    full_refresh: bool,
+    start_cursor_override: str | None,
+    end_cursor_override: str | None,
+    runtime_owned_cursor_bounds: bool,
+    invocation_time: datetime | None = None,
+    future_cursor_config: FutureCursorsConfig | None = None,
+    start_cursor_config: StartCursorsConfig | None = None,
+    replaces_relation: bool = False,
+    cursor_input_relations: tuple[CursorInputRelation, ...] = (),
+) -> CursorBounds | None: ...
+def resolve_empty_cursor_inputs(
+    *,
+    model: CompiledModelView,
+    snapshot: WarehouseSnapshot,
+    full_refresh: bool,
+    runtime_owned_cursor_bounds: bool,
+    start_cursor_override: str | None,
+    end_cursor_override: str | None,
+) -> tuple[tuple[str, ...], bool]: ...
+def resolve_cursor_overrides(
+    *,
+    model: CompiledModelView,
+    cursor_overrides: CursorOverrides | None,
+    start_cursor_override: str | None,
+    end_cursor_override: str | None,
+) -> tuple[str | None, str | None]: ...
+def build_planner_relations_context(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    connection: Any,
+    scope: PlannerScope,
+    deferral: DeferralInputs | None = None,
+    project_config: ProjectConfig | None = None,
+    local_config: LocalConfig | None = None,
+    known_source_columns: dict[str, tuple[ColumnInfo, ...]] | None = None,
+    relation_keys: frozenset[CompiledObjectKey] | None = None,
+) -> PlannerRelationsContext: ...
+def build_plan_entries(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    scope: PlannerScope,
+    snapshot: WarehouseSnapshot,
+    relations: PlannerRelationsContext,
+    resolved_actions: PlannerResolvedActions,
+    cursor_overrides: CursorOverrides | None,
+    full_refresh: bool,
+    build_inputs: PlanEntryBuildInputs | None = None,
+) -> PlannerModelEntryResults: ...
+def build_model_materializations(
+    model_entries: tuple[ModelPlanEntry, ...], /
+) -> dict[str, str]: ...
+def scope_overlaps(
+    *, scope_deps: tuple[CompiledObjectKey, ...], selected_keys: frozenset[CompiledObjectKey]
+) -> bool: ...
 def resolve_future_cursor_safety(
     *,
     bounds: CursorBounds,
@@ -5790,3 +6245,96 @@ def list_source_candidates(
     database: str | None,
     entries: tuple[SourceEntry, ...],
 ) -> tuple[RelationInfo, ...]: ...
+
+class CostArtifactError(ValueError): ...
+class SourceFreshnessInputError(ValueError): ...
+class SourceFreshnessObservationError(ValueError): ...
+
+class CostTelemetryHealth:
+    def mark_ledger_failure(self, *, run_id: str, error: BaseException) -> None: ...
+    def consume_ledger_failure(self, *, run_id: str) -> str | None: ...
+
+COST_TELEMETRY_HEALTH: CostTelemetryHealth
+
+class CostScope:
+    def __enter__(self) -> None: ...
+    def __exit__(self, *exception: object) -> None: ...
+
+class CostContext:
+    @staticmethod
+    def current() -> CostResourceContext | None: ...
+    @staticmethod
+    def scope(
+        *,
+        run_id: str,
+        resource_type: str,
+        resource_name: str,
+        ledger_path: Path | None = None,
+        phase: str = "execute",
+        attempt: int = 1,
+        on_statement_complete: Callable[[StatementExecutionTelemetry], None] | None = None,
+    ) -> CostScope: ...
+    @staticmethod
+    def resource_scope(
+        *,
+        resource_type: str,
+        resource_name: str,
+        phase: str | None = None,
+        attempt: int = 1,
+    ) -> CostScope: ...
+
+def allocate_run_cost(
+    *,
+    observations: Iterable[QueryCostObservation],
+    run_id: str,
+    usd_per_credit: Decimal,
+    rate_source: str,
+    result_limit_reached: bool = False,
+) -> RunCostSummary: ...
+def record_statement(
+    *,
+    context: CostResourceContext,
+    statement_id: str,
+    sql: str,
+    query_id: object,
+    status: str,
+    started_at: datetime,
+    completed_at: datetime,
+    error: BaseException | None = None,
+) -> None: ...
+def read_statement_ledger(*, path: Path, run_id: str) -> tuple[StatementLedgerEntry, ...]: ...
+def collect_snowflake_cost(
+    *,
+    connection: Any,
+    run_id: str,
+    started_at: datetime,
+    completed_at: datetime,
+    statement_ledger_path: Path,
+    usd_per_credit: Decimal,
+    rate_source: str,
+    database: str | None = None,
+    attempts: int = 3,
+    retry_delay_seconds: float = 1.0,
+    result_limit: int = 10000,
+) -> RunCostSummary: ...
+def snowflake_query_observations(
+    *,
+    connection: Any,
+    started_at: datetime,
+    completed_at: datetime,
+    expected_query_ids: Iterable[str],
+    classification_query_ids: Iterable[str],
+    deadline: float,
+    database: str | None = None,
+    result_limit: int | None = None,
+) -> tuple[tuple[QueryCostObservation, ...], frozenset[str], dict[str, str], bool]: ...
+def render_snowflake_query_history_sql(
+    *,
+    started_at: datetime,
+    classification_query_ids: Iterable[str],
+    database: str | None = None,
+    completed_at: datetime | None = None,
+    result_limit: int = 10000,
+) -> str: ...
+def snowflake_statement_is_metadata_only(*, query_type: object, query_text: object) -> bool: ...
+def parse_sqlbuild_query_tag(value: object) -> dict[str, str | None] | None: ...

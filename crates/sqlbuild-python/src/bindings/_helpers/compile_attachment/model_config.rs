@@ -7,11 +7,11 @@ use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use crate::bindings::_helpers::compile_attachment::storage_policies::inherited_storage;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::compiled_project::loop_classes::table_backed;
+use crate::bindings::_helpers::model_config::unicode_environment::unicode_environment;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
-const UNICODE_ENVIRONMENT_MODULE: &str = "sqlbuild.compiler.compile.classes.unicode_environment";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
 
 /// Capture the project inputs every model's native config build and validation read.
@@ -49,10 +49,7 @@ pub(crate) fn native_model_config_session<'py>(
                 project_config.getattr("path_defaults")?,
                 hook_entries,
             ),
-            (
-                inputs.getattr("effective_vars")?,
-                imported(py, UNICODE_ENVIRONMENT_MODULE, "UnicodeEnvironment")?.call0()?,
-            ),
+            (inputs.getattr("effective_vars")?, unicode_environment(py)?),
             (
                 (
                     inputs.getattr("effective_target_name")?,

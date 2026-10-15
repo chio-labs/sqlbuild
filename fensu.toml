@@ -60,6 +60,51 @@ reason = "Native bindings own configuration resolution; this package only declar
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
+path = "src/sqlbuild/compiler/planner/__init__.py"
+reason = "Native bindings own planning, plan entries, plan output and command plans; this package only declares the plan models, types, constants, errors and the fixture inference cache the native planner reads."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/compiler/source_freshness/__init__.py"
+reason = "Native bindings own source freshness observation, planning, propagation and state reads and writes; this package only declares the models, types and constants they build."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/cost/constants.py"
+reason = "Native bindings own run-cost allocation, Snowflake cost collection, the statement ledger and the cost context; this package only declares the cost models, types and constants they use."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/compiler/project_assembly/__init__.py"
+reason = "Native bindings own project assembly and SQL syntax checks; this package only declares the resource fact models the native assembly builds."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/compiler/contract_adoption/__init__.py"
+reason = "Native bindings own contract comparison, edits and repository writes; this package only declares the adoption models, types and errors the native command builds and raises."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/compiler/pipeline/__init__.py"
+reason = "Native bindings own the compile-and-plan pipeline; this package declares the pipeline models and keeps the custom materialization loader that imports project code."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/runtime/contracts/__init__.py"
+reason = "Native bindings open planning connections and report their lifecycle; this package only declares the connection hook models and types callers pass."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/errors/contracts/__init__.py"
+reason = "Native bindings read expected-error codes, messages and help; this package only declares the shared and executor input errors callers raise."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/presentation/__init__.py"
+reason = "Native bindings own CLI styling, terminal width and the transient line coordinator; this package only declares the display options and presentation types callers pass."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
 path = "src/sqlbuild/compiler/dag/types.py"
 reason = "The native DAG builder owns DAG behavior; this package only declares the node kinds integrations read from the artifact."
 

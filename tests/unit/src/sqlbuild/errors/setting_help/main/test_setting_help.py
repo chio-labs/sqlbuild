@@ -9,13 +9,10 @@ from scripts.setting_help.main.parse_setting_snippet import parse_setting_snippe
 from sqlbuild._native import (
     explicit_references_help,
     microbatch_guidance,
+    setting_help,
+    snippet_help,
     sql_analysis_opt_out_help,
 )
-from sqlbuild.errors.setting_help.main.join_helps import join_helps
-from sqlbuild.errors.setting_help.main.model_header_help import model_header_help
-from sqlbuild.errors.setting_help.main.setting_help import setting_help
-from sqlbuild.errors.setting_help.main.setting_note import setting_note
-from sqlbuild.errors.setting_help.main.snippet_help import snippet_help
 from tests.unit.src.sqlbuild.errors.setting_help.main._test_types import (
     SettingCatalogueTestCase,
     SettingHelpTestCase,
@@ -52,32 +49,15 @@ from tests.unit.src.sqlbuild.errors.setting_help.main._test_types import (
             '            table_promotion_mode = "staged"',
         ),
         SettingHelpTestCase(
-            "an explicit note states the current value",
-            setting_note(
+            "an integer setting is bare",
+            setting_help(
+                purpose="to wait",
                 file_name="sqlbuild_local.toml",
                 section="settings",
-                key="sql_analysis",
-                value=False,
+                key="timeout",
+                value=30,
             ),
-            "sqlbuild_local.toml sets [settings] sql_analysis = false",
-        ),
-        SettingHelpTestCase(
-            "a default note says the value is the default",
-            setting_note(
-                file_name="sqlbuild_project.toml",
-                section="references",
-                key="enforce_explicit",
-                value=True,
-                explicit=False,
-            ),
-            "sqlbuild_project.toml does not set [references] enforce_explicit, "
-            "so it defaults to true",
-        ),
-        SettingHelpTestCase(
-            "a MODEL header help shows the exact entry",
-            model_header_help(purpose="to skip it", entry="sql_analysis false"),
-            "to skip it, add this to the MODEL header:\n            MODEL (\n"
-            "              sql_analysis false,\n              ...\n            );",
+            "to wait, set this in sqlbuild_local.toml:\n            [settings]\n            timeout = 30",
         ),
         SettingHelpTestCase(
             "a snippet help shows every line to write",
@@ -89,11 +69,6 @@ from tests.unit.src.sqlbuild.errors.setting_help.main._test_types import (
             "to describe it, add this to seeds/lookups.yml:\n"
             "            - name: product_types\n"
             "              description: Product type catalogue",
-        ),
-        SettingHelpTestCase(
-            "several helps keep one label each",
-            join_helps("first", "second"),
-            "first\n  = help: second",
         ),
     ),
     ids=lambda case: case.description,

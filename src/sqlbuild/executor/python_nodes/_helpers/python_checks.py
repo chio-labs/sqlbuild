@@ -6,6 +6,7 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
+from sqlbuild._native import CostContext
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction
@@ -15,7 +16,6 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonNodeIdentity,
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
-from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.node_results.main._direct_store import build_direct_node_result_store

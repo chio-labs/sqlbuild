@@ -7,11 +7,13 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 
+use sqlbuild_config::command_connection::constants::COMMAND_WAREHOUSE_GROUPS;
+
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ENTRY_MODELS: &str = "sqlbuild.cli.entry.models";
-const COMMAND_CONSTANTS: &str = "sqlbuild.cli.commands.constants";
+const WAREHOUSE_GROUP: (&str, &str) = ("sqlbuild.spec.contracts.types", "WarehouseGroup");
 const COMMAND_TYPES: &str = "sqlbuild.cli.commands.types";
 const CONTEXT_ATTRIBUTE: &str = "_command_warehouse_scope_context";
 const CONTEXT_NAME: &str = "sqlbuild_command_warehouse_scope";
@@ -65,10 +67,18 @@ pub(crate) fn command_warehouse_scope<'py>(
     let group: Bound<'py, PyAny> = if command.is_none() {
         py.None().into_bound(py)
     } else {
-        imported(py, COMMAND_CONSTANTS, "COMMAND_WAREHOUSE_GROUPS")?.call_method1(
-            "get",
-            (imported(py, COMMAND_TYPES, "CliCommand")?.call1((command,))?,),
-        )?
+        let name: String = imported(py, COMMAND_TYPES, "CliCommand")?
+            .call1((command,))?
+            .str()?
+            .to_string();
+        match COMMAND_WAREHOUSE_GROUPS
+            .iter()
+            .find(|(candidate, _)| *candidate == name)
+            .and_then(|(_, group)| *group)
+        {
+            Some(group) => imported(py, WAREHOUSE_GROUP.0, WAREHOUSE_GROUP.1)?.call1((group,))?,
+            None => py.None().into_bound(py),
+        }
     };
     let vars: Bound<'py, PyAny> = match cli_vars.filter(|cli_vars| !cli_vars.is_none()) {
         Some(cli_vars) => py.get_type::<PyDict>().call1((cli_vars,))?,

@@ -6,6 +6,7 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple}
 use sqlbuild_analysis::assembly::analysis_session::main::native_dialect::native_dialect;
 
 use crate::bindings::_helpers::analysis::binding_catalog::{BindingCatalog, ignores_quoted_case};
+use crate::bindings::_helpers::compile_driver::analysis_cache::analysis_cache_context;
 use crate::bindings::_helpers::compile_driver::assembly::AssemblyRequest;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     call_with, imported, keywords, within,
@@ -13,7 +14,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ADAPTER_MODELS_MODULE: &str = "sqlbuild.adapter.contract.models";
-const ANALYSIS_CACHE_MODULE: &str = "sqlbuild.compiler.compile._helpers.analysis.cache";
 pub(crate) const ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.analysis_session.models";
 const PROFILING_MODULE: &str = "sqlbuild.compiler.profiling.main._record";
 const PROFILING_CPU_MODULE: &str = "sqlbuild.compiler.profiling.main._record_cpu";
@@ -411,14 +411,11 @@ fn analysis_cache<'py>(
             ("vars", inputs.getattr("effective_vars")?),
         ],
     )?;
-    call_with(
-        &imported(py, ANALYSIS_CACHE_MODULE, "build_analysis_cache_context")?,
-        &[
-            ("root", request.analysis_cache_dir.bind(py).clone()),
-            ("inference_profile", context.profile.clone()),
-            ("allow_compact_analysis", allow_compact.clone()),
-            ("rich_type_inference", rich.clone()),
-            ("signature_namespace", namespace.into_any()),
-        ],
-    )
+    Ok(analysis_cache_context(
+        request.analysis_cache_dir.bind(py),
+        &context.profile,
+        (allow_compact, rich),
+        namespace.as_any(),
+    )?
+    .unwrap_or_else(|| py.None().into_bound(py)))
 }

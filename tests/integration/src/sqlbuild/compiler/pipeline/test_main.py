@@ -22,7 +22,6 @@ from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.rule_engine.exceptions import RulesError
-from sqlbuild.runtime.contracts.main import open_connection as compile_pipeline
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     AppendCursorPipelineIntegrationTestCase,
     CompileProgressIntegrationTestCase,
@@ -141,13 +140,14 @@ def test_given_rule_finding_when_running_shared_compile_pipeline_then_planning_i
         'MODEL (description "Orders");\nSELECT order_id FROM orders LIMIT 1\n',
         encoding="utf-8",
     )
-    open_connection: Mock = Mock()
-    monkeypatch.setattr(compile_pipeline, "open_connection_with_hooks", open_connection)
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connect: Mock = Mock()
+    monkeypatch.setattr(adapter, "connect", connect)
 
     with pytest.raises(RulesError, match=test_case.expected_error_pattern):
-        _ = run_compile_pipeline_for_project(project_dir=tmp_path, adapter=DuckDbAdapter())
+        _ = run_compile_pipeline_for_project(project_dir=tmp_path, adapter=adapter)
 
-    assert open_connection.call_count == test_case.expected_connection_calls
+    assert connect.call_count == test_case.expected_connection_calls
 
 
 @pytest.mark.parametrize(

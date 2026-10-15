@@ -31,3 +31,14 @@ pub struct ReplayPolicy {
     pub has_backfill: bool,
     pub has_start_override: bool,
 }
+
+/// The change a configured exclusive `cursor_end` makes to a concrete window.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CursorEndClamp {
+    /// The window already ends at or before `cursor_end`.
+    Unchanged,
+    /// The window starts at or after `cursor_end`, so it collapses to `[cursor_end, cursor_end)`.
+    Empty,
+    /// The window ends after `cursor_end`, so its end becomes `cursor_end`.
+    Capped,
+}

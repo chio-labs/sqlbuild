@@ -6,14 +6,14 @@ from typing import Any
 
 import pytest
 
-from sqlbuild._native import source_freshness_data_version_hash
+from sqlbuild._native import (
+    build_direct_source_freshness_planning_result,
+    source_freshness_data_version_hash,
+    write_source_freshness_records,
+)
 from sqlbuild.adapter.contract.models import TableFreshnessMetadata, TableFreshnessRequest
 from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.source_freshness.main._planning import (
-    build_direct_source_freshness_planning_result,
-)
-from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
 from sqlbuild.compiler.source_freshness.models import (
     DirectSourceFreshnessPlanningResult,
     SourceFreshnessRecord,

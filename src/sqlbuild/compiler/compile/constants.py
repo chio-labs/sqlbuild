@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.classes.compile_input_read_registry import (
-    CompileInputReadRegistry,
-)
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.python_nodes.types import SqlResourceRefKind
@@ -92,7 +89,6 @@ TABLE_FN_EXPECTED_TEST_CTE_NAME: str = "__table_fn_expected__"
 DEFAULT_SQL_TEST_MODE: SqlTestMode = SqlTestMode.MODEL
 COMPILE_CACHE_DISABLE_ENV_VAR: str = "SQLBUILD_DISABLE_COMPILE_CACHE"
 COMPILE_CACHE_DISABLE_VALUE: str = "1"
-COMPILE_INPUT_READS: CompileInputReadRegistry = CompileInputReadRegistry()
 RETIRED_FACT_CACHE_DIRECTORY_NAME: str = "facts-v1"
 RETIRED_REFERENCE_CACHE_DIRECTORY_NAME: str = "references-v3"
 SQL_TEST_CTE_SCAN_ALGORITHM: str = "expanded-sql-test-ctes-v1"

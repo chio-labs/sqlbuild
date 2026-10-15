@@ -1,11 +1,6 @@
 import pytest
 
-from sqlbuild.compiler.planner.main.clone.resolve_clone_boundary import (
-    resolve_clone_boundary,
-)
-from sqlbuild.compiler.planner.main.clone.resolve_skipped_view_chain import (
-    resolve_skipped_view_chain,
-)
+from sqlbuild._native import resolve_clone_boundary, resolve_skipped_view_chain
 from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
     CloneBoundaryTestCase,
 )

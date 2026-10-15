@@ -18,9 +18,9 @@ from sqlbuild._native import (
     build_compile_inputs,
     discover_project_inputs,
     inputs_with,
+    record_compile_input_reads,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
 )
@@ -168,7 +168,7 @@ def recorded_assembly(
 ) -> tuple[object, tuple[tuple[str, ...], bool]]:
     """Assemble `inputs`; return its assembly view and the input reads recorded."""
 
-    with COMPILE_INPUT_READS.recording() as reads:
+    with record_compile_input_reads() as reads:
         project: CompiledProjectView = assemble_with(inputs=inputs, monkeypatch=monkeypatch)
     return assembly_view(project), (reads.environment_names, reads.read_run_id)
 

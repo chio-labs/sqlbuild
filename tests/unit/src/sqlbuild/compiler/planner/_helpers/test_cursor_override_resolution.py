@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import resolve_cursor_overrides
 from sqlbuild.compiler.compile.types import CompiledModelView
-from sqlbuild.compiler.planner._helpers.output.plan_entry import resolve_cursor_overrides
 from sqlbuild.compiler.planner.models import CursorOverrides
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     CursorOverrideResolutionTestCase,

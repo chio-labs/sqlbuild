@@ -614,19 +614,6 @@ class AttachedAuditTargetKind(StrEnum):
         return CompiledResourceType(self.value)
 
 
-class CompileContextKey(StrEnum):
-    RUN_ID = "run.id"
-    RUN_TARGET = "run.target"
-    MODEL_NAME = "model.name"
-    MODEL_DATABASE = "model.database"
-    MODEL_SCHEMA = "model.schema"
-    MODEL_ALIAS = "model.alias"
-    DESTINATION_DATABASE = "destination.database"
-    DESTINATION_SCHEMA = "destination.schema"
-    DESTINATION_TABLE = "destination.table"
-    DESTINATION_QUALIFIED = "destination.qualified"
-
-
 class CompiledResourceType(StrEnum):
     MODEL = "model"
     SOURCE = "source"

@@ -362,7 +362,11 @@ fn warning_json<'py>(warning: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
 }
 
 /// `difflib.unified_diff` between two texts, each line without its newline.
-fn unified_diff<'py>(py: Python<'py>, previous: &str, current: &str) -> PyResult<Vec<String>> {
+pub(crate) fn unified_diff<'py>(
+    py: Python<'py>,
+    previous: &str,
+    current: &str,
+) -> PyResult<Vec<String>> {
     let lines = |text: &str| -> PyResult<Bound<'py, PyAny>> {
         PyString::new(py, text).call_method1("splitlines", (true,))
     };

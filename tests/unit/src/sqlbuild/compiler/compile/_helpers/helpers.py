@@ -12,10 +12,12 @@ from sqlbuild._native import (
     build_manifest,
     build_native_declaration_contexts,
     build_scope_lookup,
+    collect_compile_diagnostics,
     discover_project_inputs,
     expand_sql_macros,
     infer_native_query_columns,
     project_lineage_views,
+    resolve_ref_references,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
@@ -25,9 +27,6 @@ from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeQueryColumns
-from sqlbuild.compiler.compile._helpers.diagnostics.collector import (
-    collect_compile_diagnostics,
-)
 from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
@@ -63,7 +62,6 @@ from sqlbuild.compiler.lineage.types import (
     ColumnTransformKind,
     InferredNullability,
 )
-from sqlbuild.compiler.planner._helpers.resolve.refs import resolve_ref_references
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
