@@ -420,11 +420,6 @@ reason = "user-code"
 note = "Inspects user provider settings classes for the environment and files they read."
 
 [[stays]]
-path = "cli/compile_reuse/_helpers/runtime_identity.py"
-reason = "user-code"
-note = "Interpreter and invocation facts of the Python host that user code runs in."
-
-[[stays]]
 path = "cli/compile_reuse/_helpers/startup_inputs.py"
 reason = "user-code"
 note = "Interpreter and site-path inputs user modules import from."
@@ -452,7 +447,7 @@ note = "Identity hashing over live user functions (source and globals)."
 [[stays]]
 path = "compiler/macro_bridge/_helpers/store_environment.py"
 reason = "user-code"
-note = "Fingerprints the Python interpreter and installed packages that project macros import from; the macro call store cache key."
+note = "Fingerprints the installed packages, import path and live module files that project macros import from; the macro call store cache key. The interpreter stamp it shares with compile reuse is native (interpreter_identity)."
 
 [[stays]]
 path = "rule_engine/classes/runtime_guard.py"
@@ -662,13 +657,12 @@ note = "Shape rule: data records only (StatementExecutionTelemetry, CostResource
 [[stays]]
 path = "cli/compile_reuse/models.py"
 reason = "user-code"
-note = "Shape rule: data records only (CompileReuseRequest, SettingsEnvironmentInputs, SettingsInputsResult), no logic; consumed by cli/compile_reuse/_helpers/provider_settings.py, cli/compile_reuse/_helpers/runtime_identity.py."
+note = "Shape rule: data records only (CompileReuseRequest, SettingsEnvironmentInputs, SettingsInputsResult), no logic; consumed by cli/compile_reuse/_helpers/provider_settings.py, and read natively by the compile reuse check."
 
 [[stays]]
 path = "compiler/source_freshness/constants.py"
 reason = "adapter"
 note = "Shape rule: source freshness column names and adapter column types, no logic; SOURCE_FRESHNESS_TABLE_NAME is re-exported from sqlbuild._native."
-note = "Shape rule: data constants only (SOURCE_FRESHNESS_TABLE_NAME, COLUMN_SOURCE_NAME, COLUMN_TARGET_DATABASE, COLUMN_TARGET_SCHEMA, ...), no logic; consumed by adapter/contract/classes/duckdb_backed_adapter.py, adapters/bigquery/classes/bigquery_adapter.py, adapters/databricks/classes/databricks_adapter.py and 3 more, and read natively by the source freshness state bindings."
 
 [[stays]]
 path = "compiler/auditing/types.py"
@@ -764,11 +758,6 @@ note = "Shape rule: data constants only (DEFAULT_SEED_CSV_SETTINGS), no logic; c
 path = "cli/entry/constants.py"
 reason = "public-api"
 note = "Shape rule: data constants only (NATIVE_ALLOCATOR_PURGE_DELAY_VARIABLE, NATIVE_ALLOCATOR_PURGE_DELAY_MILLISECONDS, OUTPUT_STREAM_ENCODING, OUTPUT_STREAM_ERRORS, ...), no logic; consumed by cli/entry/_helpers/streams.py, cli/entry/main/entry.py, cli/entry/main/launched.py."
-
-[[stays]]
-path = "cli/compile_reuse/constants.py"
-reason = "user-code"
-note = "Shape rule: data constants only (REUSE_FORMAT_VERSION, OUTPUT_FILE_DESCRIPTORS), no logic; consumed by cli/compile_reuse/_helpers/runtime_identity.py."
 
 [[stays]]
 path = "sql_values/exceptions.py"

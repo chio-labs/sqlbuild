@@ -19,8 +19,6 @@ from sqlbuild._native import (
 )
 from sqlbuild._native import run_cli as main
 from sqlbuild.cli.compile_reuse._helpers import provider_settings as provider_settings_module
-from sqlbuild.cli.compile_reuse._helpers import runtime_identity as runtime_identity_module
-from sqlbuild.cli.compile_reuse._helpers.runtime_identity import runtime_identity
 
 STAGING_PREFIX: str = ".sqlbuild-staging-"
 NATIVE_REUSE_DIRECTORY_NAME: str = "project-reuse-v2"
@@ -206,11 +204,7 @@ def change_runtime(project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Report a different interpreter from now on."""
 
     del project_dir
-
-    def changed() -> dict[str, str]:
-        return {**runtime_identity(), "python": "3.0.0 (simulated)"}
-
-    monkeypatch.setattr(runtime_identity_module, "runtime_identity", changed)
+    monkeypatch.setattr(sys, "version", "3.0.0 (main, Jan  1 2026, 00:00:00) [simulated]")
 
 
 def change_native_build(project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:

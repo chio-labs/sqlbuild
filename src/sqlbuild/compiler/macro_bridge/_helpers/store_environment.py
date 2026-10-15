@@ -40,10 +40,7 @@ def store_environment(*, project_dir: Path, fingerprint: str) -> str:
         [
             MACRO_CALL_STORE_ENVIRONMENT_VERSION,
             _native.BUILD_IDENTITY,
-            sys.version,
-            sys.executable,
-            sys.platform,
-            str(sys.implementation.cache_tag),
+            *_native.interpreter_identity(),
             json.dumps(_search_path_stamps(project_dir=project_dir)),
             json.dumps(_tracked_environment()),
             json.dumps(_installed_distribution_records()),
