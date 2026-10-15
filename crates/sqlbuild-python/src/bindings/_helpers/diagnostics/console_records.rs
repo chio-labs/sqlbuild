@@ -4,7 +4,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyInt, PyString};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::cli_text::models::CliStyle;
-use sqlbuild_core::diagnostic_text::constants::SQL_TEXT_LOG_FIELD;
+use sqlbuild_core::diagnostic_routing::constants::SQL_TEXT_FIELD;
 use sqlbuild_core::diagnostic_text::main::format_diagnostic_record::format_diagnostic_record;
 use sqlbuild_core::diagnostic_text::models::DiagnosticRecordText;
 
@@ -62,7 +62,7 @@ fn format_diagnostics_console_record(
         event: text_field(record, "sqlbuild_event")?,
         tokens,
         duration_ms,
-        sql: text_field(record, SQL_TEXT_LOG_FIELD)?,
+        sql: text_field(record, SQL_TEXT_FIELD)?,
     };
     Ok(format_diagnostic_record(&text, CliStyle { use_color }))
 }

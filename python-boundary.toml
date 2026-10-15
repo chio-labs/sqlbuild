@@ -730,7 +730,7 @@ note = "Shape rule: data exceptions only (DbtProfileError), no logic; consumed b
 [[stays]]
 path = "diagnostics/constants.py"
 rule = 4
-note = "Shape rule: data constants only (SQL_DIGEST_FIELD, SQL_TEXT_FIELD, SQL_PRIVATE_RECORD_FIELD, SQL_PRIVATE_RECORD_MARKER), no logic; the marker object identifies trusted private SQL records for the native compute log handler; consumed by diagnostics/classes/invocation_diagnostic_routing.py."
+note = "Shape rule: the SQL_PRIVATE_RECORD_MARKER object() sentinel only, no logic; its identity marks trusted private SQL records for the native compute log handler; the record field names are native (sqlbuild._native); consumed by diagnostics/classes/invocation_diagnostic_routing.py."
 
 [[stays]]
 path = "cursor_algebra/exceptions.py"

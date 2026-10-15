@@ -26,7 +26,9 @@ use sqlbuild_core::constants::{
     SETTINGS_SECTION, SOURCE_FRESHNESS_TABLE_NAME, STAGED_PROMOTION_MODE,
     TABLE_PROMOTION_MODE_SETTING_KEY, ZERO_DAY_DURATION,
 };
-use sqlbuild_core::diagnostic_text::constants::{DIAGNOSTIC_LOGGER_PREFIX, SQL_TEXT_LOG_FIELD};
+use sqlbuild_core::diagnostic_routing::constants::{
+    SQL_DIGEST_FIELD, SQL_PRIVATE_RECORD_FIELD, SQL_TEXT_FIELD,
+};
 use sqlbuild_rules::constants::MIN_CUSTOM_RULE_TEST_CASES_KEY;
 use sqlbuild_rules::custom_host_pool::constants::CUSTOM_RULE_PROJECT_SUBJECT;
 use sqlbuild_state::execution_history::constants::{
@@ -103,8 +105,9 @@ pub(crate) const EXPORTED_TEXTS: &[(&str, &str)] = &[
     ("LAUNCH_RECORD_OPTION", LAUNCH_RECORD_OPTION),
     ("ZERO_DAY_CURSOR_DURATION", ZERO_DAY_DURATION),
     ("AST_CTE_KIND", CTE_AST_KIND),
-    ("LOGGER_PREFIX", DIAGNOSTIC_LOGGER_PREFIX),
-    ("SQL_TEXT_FIELD", SQL_TEXT_LOG_FIELD),
+    ("SQL_TEXT_FIELD", SQL_TEXT_FIELD),
+    ("SQL_DIGEST_FIELD", SQL_DIGEST_FIELD),
+    ("SQL_PRIVATE_RECORD_FIELD", SQL_PRIVATE_RECORD_FIELD),
     ("MIN_CUSTOM_RULE_TEST_CASES", MIN_CUSTOM_RULE_TEST_CASES_KEY),
 ];
 /// Integer constants exported under their Python names.

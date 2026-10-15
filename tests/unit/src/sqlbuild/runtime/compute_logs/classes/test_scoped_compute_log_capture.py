@@ -10,14 +10,13 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from sqlbuild._native import LocalFilesystemComputeLogStorage
+from sqlbuild._native import SQL_DIGEST_FIELD, LocalFilesystemComputeLogStorage
 from sqlbuild.compute_logs import (
     CaptureMetadata,
     CaptureStateError,
     ComputeLogStream,
     FinalCaptureMetadata,
 )
-from sqlbuild.diagnostics.constants import SQL_DIGEST_FIELD
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.diagnostics.main.log_sql import log_sql
 from sqlbuild.diagnostics.models import DiagnosticRoutingOptions

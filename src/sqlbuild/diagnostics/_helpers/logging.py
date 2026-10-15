@@ -16,7 +16,6 @@ from sqlbuild.runtime.observability.main.execution_identity_to_dict import (
 )
 from sqlbuild.runtime.observability.models import ExecutionIdentity
 
-_LOGGER_ROOT_NAME: str = "sqlbuild"
 _EMPTY_CONTEXT: dict[str, object] = {}
 _DIAGNOSTICS_CONTEXT: ContextVar[dict[str, object] | None] = ContextVar(
     "sqlbuild_diagnostics_context", default=None

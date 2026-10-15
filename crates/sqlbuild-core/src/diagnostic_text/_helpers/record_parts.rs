@@ -1,7 +1,7 @@
 //! The header pieces of a `--debug` console line.
 
 use crate::cli_text::models::CliStyle;
-use crate::diagnostic_text::constants::DIAGNOSTIC_LOGGER_PREFIX;
+use crate::diagnostic_routing::constants::LOGGER_PREFIX;
 use crate::diagnostic_text::models::DiagnosticRecordText;
 
 /// Whether Python's `str.isspace()` holds for `character`.
@@ -43,7 +43,7 @@ pub(crate) fn header(record: &DiagnosticRecordText, style: CliStyle) -> String {
     let context: String = context_message(record, style).unwrap_or_else(|| {
         let scope: &str = record
             .logger_name
-            .strip_prefix(DIAGNOSTIC_LOGGER_PREFIX)
+            .strip_prefix(LOGGER_PREFIX)
             .unwrap_or(&record.logger_name);
         format!(
             "{} {}",
