@@ -27,7 +27,7 @@ note = "Imports project adapter modules."
 [[stays]]
 path = "adapter/relations"
 reason = "adapter"
-note = "Relation inspection wrappers adapters call, with per-connection caches."
+note = "Relation inspection wrappers adapters call, with per-connection caches; executed-statement classification and invalidation keys are native."
 
 [[stays]]
 path = "adapter/state_sql"

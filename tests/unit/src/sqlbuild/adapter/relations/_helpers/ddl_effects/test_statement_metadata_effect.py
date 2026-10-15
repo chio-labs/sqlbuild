@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.relations._helpers.ddl_effects import (
+from sqlbuild._native import (
     qualified_relation_name_key,
     statement_metadata_effect,
 )
