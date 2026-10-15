@@ -1,10 +1,13 @@
 //! Plan selected SQLBuild work against the live adapter and attach it to the interop plan.
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::build_command::support::{boolean, keyword_relay, none};
+use crate::bindings::_helpers::command_runtime::connection::{
+    anchor_duckdb_database, with_dbt_profile,
+};
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
@@ -35,19 +38,20 @@ pub(crate) fn connection_config<'py>(
         &imported(py, "sqlbuild._native", "build_effective_connection_config")?,
         &[("discovered_inputs", discovered.clone())],
     )?;
-    let config = call_with(
-        &imported(
-            py,
-            "sqlbuild.integrations.dbt.main.profile._resolve_connection_config",
-            "resolve_connection_config",
-        )?,
-        &[
-            ("raw_config", raw),
-            ("project_dir", environment.getattr("project_dir")?),
-            ("adapter_name", environment.getattr("adapter_name")?),
-            ("discovered_inputs", discovered.clone()),
-        ],
+    let raw: Bound<'_, PyDict> = raw.cast_into()?;
+    let project_dir = environment.getattr("project_dir")?;
+    let adapter_name = environment.getattr("adapter_name")?;
+    let config: Bound<'_, PyDict> = with_dbt_profile(
+        &raw,
+        raw.copy()?,
+        (&project_dir, &adapter_name),
+        (&discovered, &py.None().into_bound(py)),
     )?;
+    anchor_duckdb_database(
+        &config,
+        (&project_dir, &adapter_name.str()?.extract::<String>()?),
+    )?;
+    let config = config.into_any();
     call_with(
         &imported(py, "sqlbuild._native", "apply_command_warehouse")?,
         &[

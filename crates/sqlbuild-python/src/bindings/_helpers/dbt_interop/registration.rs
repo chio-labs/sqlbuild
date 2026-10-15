@@ -14,6 +14,9 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     orchestration::register(module)?;
     plan::register(module)?;
     profile::register(module)?;
+    super::profile_connection::register(module)?;
+    super::reference_resolver::register(module)?;
+    super::runtime_config::register(module)?;
     super::runtime_execution::register(module)?;
     super::pipeline_prologue::register(module)?;
     super::plan_output::register(module)?;

@@ -1,7 +1,7 @@
 """Compatibility entrypoint for built-in adapter class discovery."""
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.discovery.main.builtin_adapter_classes import (
+from sqlbuild.adapter.discovery.main._builtin_adapter_classes import (
     builtin_adapter_classes as _builtin_adapter_classes,
 )
 

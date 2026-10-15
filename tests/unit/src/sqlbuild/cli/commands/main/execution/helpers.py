@@ -11,7 +11,6 @@ import pytest
 
 from sqlbuild import _native as native
 from sqlbuild.adapter.discovery.main import resolve_adapter as adapters_module
-from sqlbuild.cli.commands._helpers.planning import external_refs as external_refs_module
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledSqlScenario
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlScenarioFile
@@ -62,9 +61,7 @@ def configure_native_scenario_command(
     monkeypatch.setattr(native, "resolve_project_connection_config", lambda **_: {})
     monkeypatch.setattr(native, "run_compile_only_pipeline", compile_project)
     monkeypatch.setattr(adapters_module, "resolve_adapter", lambda **_: Mock())
-    monkeypatch.setattr(
-        external_refs_module, "resolve_external_sql_reference_resolver", lambda **_: None
-    )
+    monkeypatch.setattr(native, "resolve_external_sql_reference_resolver", lambda **_: None)
     monkeypatch.setattr(executor_run_module, "run_scenario_test_pipeline", lambda **_: ())
 
 

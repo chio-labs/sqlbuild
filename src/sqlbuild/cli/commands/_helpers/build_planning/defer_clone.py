@@ -10,14 +10,12 @@ from sqlbuild._native import (
     build_compiled_project,
     build_planner_scope,
     enforce_model_execution_limit,
+    resolve_external_sql_reference_resolver,
     resolve_target_config,
     run_clone_pipeline_with_options,
     split_unit_test_selectors,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands._helpers.planning.external_refs import (
-    resolve_external_sql_reference_resolver,
-)
 from sqlbuild.cli.commands.constants import EXECUTION_LIMIT_BUILD_NOTE
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import (

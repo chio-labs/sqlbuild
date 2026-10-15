@@ -312,7 +312,7 @@ fn route_dbt_interop_args<'py>(
 }
 
 /// `Path(raw).expanduser()` resolved, relative paths against the resolved project root.
-fn resolved_path<'py>(
+pub(crate) fn resolved_path<'py>(
     project_root: &Bound<'py, PyAny>,
     raw_value: Option<String>,
 ) -> PyResult<Bound<'py, PyAny>> {

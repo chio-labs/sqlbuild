@@ -13,6 +13,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::dbt_interop::pipeline_prologue::progress;
+use crate::bindings::_helpers::dbt_interop::runtime_config::config_overrides;
 
 const MODELS: &str = "sqlbuild.integrations.dbt.models";
 const PLAN_OPTIONS: (&[&str], &[&str]) = (
@@ -323,12 +324,12 @@ fn debug_dbt_from_project(py: Python<'_>, options: Option<Bound<'_, PyDict>>) ->
         "discover_project_inputs",
         &[("project_dir", args.value("project_dir")?)],
     )?;
-    let overrides = imported(
-        py,
-        "sqlbuild.integrations.dbt.main.config._parse_config_overrides",
-        "parse_dbt_config_overrides",
-    )?
-    .call1((args.value("args")?,))?;
+    let dbt_args: Vec<String> = args
+        .value("args")?
+        .try_iter()?
+        .map(|arg| arg?.extract())
+        .collect::<PyResult<_>>()?;
+    let overrides = config_overrides(py, &dbt_args)?;
     let resolved = native(
         py,
         "resolve_dbt_config",

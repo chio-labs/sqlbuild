@@ -21,3 +21,8 @@ pub(super) fn strings(items: &[&str]) -> Value {
             .collect(),
     )
 }
+
+/// Owned copies of command-line strings.
+pub(super) fn owned(items: &[&str]) -> Vec<String> {
+    items.iter().map(|item| (*item).to_owned()).collect()
+}

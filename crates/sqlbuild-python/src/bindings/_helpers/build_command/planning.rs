@@ -14,7 +14,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const CONSTANTS_MODULE: &str = "sqlbuild.cli.commands.constants";
 const DEFER_CLONE_MODULE: &str = "sqlbuild.cli.commands._helpers.build_planning.defer_clone";
-const EXTERNAL_REFS_MODULE: &str = "sqlbuild.cli.commands._helpers.planning.external_refs";
+const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const RUNTIME_CONTRACT_MODELS: &str = "sqlbuild.runtime.contracts.models";
 const CONNECTION_TIMING: [&str; 2] = ["connection_count", "elapsed_seconds"];

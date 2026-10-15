@@ -12,9 +12,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::dbt_command::auto_init::{args_tuple, ensure_twin_project};
 use crate::bindings::_helpers::dbt_command::debug::run_dbt_debug;
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, effective_dir, flag, stream};
+use crate::bindings::_helpers::dbt_interop::runtime_config::validate_dbt_execution_args;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const VALIDATE_ARGS_MODULE: &str = "sqlbuild.integrations.dbt.main.cli._validate_execution_args";
 const PLAN_MODULE: &str = "sqlbuild._native";
 const EXECUTE_MODULE: &str = "sqlbuild._native";
 const DBT_MODELS: &str = "sqlbuild.integrations.dbt.models";
@@ -148,10 +148,7 @@ fn run_dbt_command(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResu
     let command: Bound<'_, PyAny> = arguments.value("command")?;
     let args_value: Bound<'_, PyAny> = arguments.value("args")?;
     let no_color: bool = arguments.flag("no_color")?;
-    call_with(
-        &imported(py, VALIDATE_ARGS_MODULE, "validate_dbt_execution_args")?,
-        &[("command", command.clone()), ("args", args_value.clone())],
-    )?;
+    validate_dbt_execution_args(&command, &args_value)?;
     let args: Vec<String> = args_value
         .try_iter()?
         .map(|arg| arg?.extract())

@@ -18,7 +18,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 
-const DBT_PROFILE_MODULE: &str = "sqlbuild.integrations.dbt.main.profile.profile_connection";
+const DBT_PROFILE_MODULE: &str = "sqlbuild._native";
 const DBT_ERRORS_MODULE: &str = "sqlbuild.integrations.dbt.exceptions";
 const EFFECTIVE_CONFIG_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
@@ -60,7 +60,7 @@ fn dbt_profile_error(py: Python<'_>) -> PyErr {
 }
 
 /// The config with a referenced dbt profile resolved and user overrides kept on top.
-fn with_dbt_profile<'py>(
+pub(crate) fn with_dbt_profile<'py>(
     raw_config: &Bound<'py, PyDict>,
     config: Bound<'py, PyDict>,
     (project_dir, adapter_name): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
@@ -100,7 +100,7 @@ fn with_dbt_profile<'py>(
 }
 
 /// Make a relative DuckDB database path relative to the project directory.
-fn anchor_duckdb_database(
+pub(crate) fn anchor_duckdb_database(
     config: &Bound<'_, PyDict>,
     (project_dir, adapter_name): (&Bound<'_, PyAny>, &str),
 ) -> PyResult<()> {

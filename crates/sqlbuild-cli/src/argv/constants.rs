@@ -2,6 +2,12 @@
 
 /// The exported `sqb` parser tree: every parser, group and action in `add_argument` order.
 pub(crate) const COMMAND_TABLE: &str = include_str!("command_table.json");
+/// The exported `sqb dbt plan|run|build` execution parser, its command name a placeholder.
+pub(crate) const DBT_EXECUTION_TABLE: &str = include_str!("dbt_execution_table.json");
+/// The placeholder of the dbt command name in the execution parser's texts.
+pub(crate) const DBT_COMMAND_PLACEHOLDER: &str = "{command}";
+/// `sqb dbt` execution arguments after this separator go to dbt verbatim.
+pub(crate) const DBT_EXECUTION_SEPARATOR: &str = "--";
 /// `argparse.SUPPRESS` as a destination.
 pub(crate) const SUPPRESS_DEST: &str = "==SUPPRESS==";
 /// The placeholder of the installed version in the `--version` text.

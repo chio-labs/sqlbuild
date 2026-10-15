@@ -1,0 +1,230 @@
+{
+ "prog": "sqb dbt {command}",
+ "description": "Run `dbt {command}` with SQLBuild interop.",
+ "epilog": "Pass raw dbt operational flags after `--`, e.g. `-- --log-level debug`.",
+ "groups": [
+  {
+   "title": "positional arguments"
+  },
+  {
+   "title": "options"
+  }
+ ],
+ "actions": [
+  {
+   "kind": "help",
+   "options": [
+    "-h",
+    "--help"
+   ],
+   "dest": "help",
+   "nargs": 0,
+   "default": {
+    "suppress": true
+   },
+   "help": "show this help message and exit",
+   "group": 1
+  },
+  {
+   "kind": "extend",
+   "options": [
+    "--select",
+    "-s"
+   ],
+   "dest": "select",
+   "nargs": "+",
+   "default": [],
+   "group": 1
+  },
+  {
+   "kind": "extend",
+   "options": [
+    "--exclude"
+   ],
+   "dest": "exclude",
+   "nargs": "+",
+   "default": [],
+   "group": 1
+  },
+  {
+   "kind": "store",
+   "options": [
+    "--vars"
+   ],
+   "dest": "vars",
+   "group": 1
+  },
+  {
+   "kind": "store",
+   "options": [
+    "--threads"
+   ],
+   "dest": "threads",
+   "group": 1
+  },
+  {
+   "kind": "store_true",
+   "options": [
+    "--full-refresh"
+   ],
+   "dest": "full_refresh",
+   "nargs": 0,
+   "const": true,
+   "default": false,
+   "group": 1
+  },
+  {
+   "kind": "store",
+   "options": [
+    "--event-time-start"
+   ],
+   "dest": "event_time_start",
+   "group": 1
+  },
+  {
+   "kind": "store",
+   "options": [
+    "--event-time-end"
+   ],
+   "dest": "event_time_end",
+   "group": 1
+  },
+  {
+   "kind": "store",
+   "options": [
+    "--project-dir"
+   ],
+   "dest": "project_dir",
+   "group": 1
+  },
+  {
+   "kind": "store",
+   "options": [
+    "--profiles-dir"
+   ],
+   "dest": "profiles_dir",
+   "group": 1
+  },
+  {
+   "kind": "store",
+   "options": [
+    "--profile"
+   ],
+   "dest": "profile",
+   "group": 1
+  },
+  {
+   "kind": "store",
+   "options": [
+    "--target"
+   ],
+   "dest": "target",
+   "group": 1
+  },
+  {
+   "kind": "store",
+   "options": [
+    "--target-path"
+   ],
+   "dest": "target_path",
+   "group": 1
+  },
+  {
+   "kind": "store",
+   "options": [
+    "--state"
+   ],
+   "dest": "state",
+   "group": 1
+  },
+  {
+   "kind": "store",
+   "options": [
+    "--indirect-selection"
+   ],
+   "dest": "indirect_selection",
+   "group": 1
+  },
+  {
+   "kind": "store_true",
+   "options": [
+    "--defer"
+   ],
+   "dest": "defer",
+   "nargs": 0,
+   "const": true,
+   "default": false,
+   "group": 1
+  },
+  {
+   "kind": "store",
+   "options": [
+    "--defer-to"
+   ],
+   "dest": "defer_to",
+   "group": 1
+  },
+  {
+   "kind": "store",
+   "options": [
+    "--start-cursor-ts"
+   ],
+   "dest": "start_cursor_ts",
+   "group": 1
+  },
+  {
+   "kind": "store",
+   "options": [
+    "--end-cursor-ts"
+   ],
+   "dest": "end_cursor_ts",
+   "group": 1
+  },
+  {
+   "kind": "store",
+   "options": [
+    "--start-cursor-int"
+   ],
+   "dest": "start_cursor_int",
+   "group": 1
+  },
+  {
+   "kind": "store",
+   "options": [
+    "--end-cursor-int"
+   ],
+   "dest": "end_cursor_int",
+   "group": 1
+  },
+  {
+   "kind": "store_true",
+   "options": [
+    "--fail-fast"
+   ],
+   "dest": "fail_fast",
+   "nargs": 0,
+   "const": true,
+   "default": false,
+   "group": 1
+  },
+  {
+   "kind": "store_true",
+   "options": [
+    "--hard-copy"
+   ],
+   "dest": "hard_copy",
+   "nargs": 0,
+   "const": true,
+   "default": false,
+   "group": 1
+  },
+  {
+   "kind": "store",
+   "dest": "dbt_passthrough",
+   "nargs": "*",
+   "help": "raw dbt flags after `--`, forwarded verbatim",
+   "metavar": "-- DBT_ARGS",
+   "group": 0
+  }
+ ]
+}

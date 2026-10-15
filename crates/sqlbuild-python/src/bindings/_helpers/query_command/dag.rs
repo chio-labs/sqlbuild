@@ -12,7 +12,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::query_command::project::{ProjectAdapter, project_adapter};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const EXTERNAL_REFS_MODULE: &str = "sqlbuild.cli.commands._helpers.planning.external_refs";
+const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
 const PYTHON_GRAPH_MODULE: &str = "sqlbuild.compiler.python_nodes.main._graph";
 
 fn array_length(document: &serde_json::Value, key: &str) -> PyResult<usize> {

@@ -3,15 +3,13 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import cast
 
+from sqlbuild._native import build_compile_reference_resolver
 from sqlbuild.compiler.compile.models import (
     CompileDirectLogicSqlTestInputPayload,
     CompileModelSqlTestInputPayload,
     CompileSqlTestInput,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
-from sqlbuild.integrations.dbt.main.manifest.build_compile_reference_resolver import (
-    build_compile_reference_resolver,
-)
 
 
 def base_repo_files() -> dict[str, str]:
