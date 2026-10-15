@@ -84,12 +84,14 @@ const R_DECLARATION_SCOPE_RESOLVER: RecordSpec = RecordSpec {
             name: "native_contexts",
             default: FieldDefault::Required,
             compared: false,
+            shown: false,
         },
         FieldSpec::new("resource_specific", FieldDefault::None),
         FieldSpec {
             name: "contexts_by_directory",
             default: FieldDefault::EmptyDict,
             compared: false,
+            shown: false,
         },
     ],
 };
@@ -221,6 +223,7 @@ const R_COMPILE_ANALYSIS_SELECTION: RecordSpec = RecordSpec {
             name: "on_inputs_ready",
             default: FieldDefault::None,
             compared: false,
+            shown: false,
         },
     ],
 };
@@ -304,6 +307,7 @@ const R_COMPILE_PROJECT_INPUTS: RecordSpec = RecordSpec {
             name: "macro_context",
             default: FieldDefault::None,
             compared: false,
+            shown: false,
         },
         FieldSpec::new("loaded_macros", FieldDefault::EmptyDict),
         FieldSpec::new("public_enums", FieldDefault::EmptyDict),
@@ -325,11 +329,13 @@ const R_COMPILE_PROJECT_INPUTS: RecordSpec = RecordSpec {
             name: "declaration_scope",
             default: FieldDefault::None,
             compared: false,
+            shown: false,
         },
         FieldSpec {
             name: "native_project",
             default: FieldDefault::None,
             compared: false,
+            shown: false,
         },
     ],
 };
@@ -1154,6 +1160,7 @@ const R_DISCOVERED_PROJECT_INPUTS: RecordSpec = RecordSpec {
             name: "native_session",
             default: FieldDefault::None,
             compared: false,
+            shown: false,
         },
     ],
 };
@@ -1258,21 +1265,25 @@ const R_MACRO_CONTEXT: RecordSpec = RecordSpec {
             name: "_value_renderer",
             default: FieldDefault::None,
             compared: false,
+            shown: false,
         },
         FieldSpec {
             name: "_collection_rendering",
             default: FieldDefault::Member("sqlbuild._native", "CollectionRendering", "VALUE_LIST"),
             compared: false,
+            shown: false,
         },
         FieldSpec {
             name: "_constant_declarations",
             default: FieldDefault::EmptyDict,
             compared: false,
+            shown: false,
         },
         FieldSpec {
             name: "_enforce_explicit_references",
             default: FieldDefault::True,
             compared: false,
+            shown: false,
         },
     ],
 };
@@ -1376,11 +1387,13 @@ const R_COMPILE_MODEL_INPUT: RecordSpec = RecordSpec {
             name: "sql_expansion",
             default: FieldDefault::None,
             compared: false,
+            shown: false,
         },
         FieldSpec {
             name: "lint_expansion",
             default: FieldDefault::None,
             compared: false,
+            shown: false,
         },
     ],
 };
@@ -1498,6 +1511,7 @@ const R_COMPILED_PROJECT: RecordSpec = RecordSpec {
             name: "binding_catalog",
             default: FieldDefault::None,
             compared: false,
+            shown: false,
         },
         FieldSpec::new("effective_target_database", FieldDefault::None),
         FieldSpec::new("effective_target_schema", FieldDefault::None),
@@ -1541,16 +1555,19 @@ const R_COMPILED_PROJECT: RecordSpec = RecordSpec {
             name: "sql_expansions",
             default: FieldDefault::EmptyDict,
             compared: false,
+            shown: false,
         },
         FieldSpec {
             name: "native_session",
             default: FieldDefault::None,
             compared: false,
+            shown: false,
         },
         FieldSpec {
             name: "native_project",
             default: FieldDefault::None,
             compared: false,
+            shown: false,
         },
     ],
 };

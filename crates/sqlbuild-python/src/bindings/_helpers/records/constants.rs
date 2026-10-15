@@ -6,7 +6,9 @@ use crate::bindings::_helpers::compiler_errors::constants::COMPILER_ERRORS;
 use crate::bindings::_helpers::compiler_records::constants::COMPILER_RECORDS;
 use crate::bindings::_helpers::contract_records::constants::CONTRACT_RECORDS;
 use crate::bindings::_helpers::freshness::observation::normalize_observation;
-use crate::bindings::_helpers::planner_records::constants::PLANNER_RECORDS;
+use crate::bindings::_helpers::planner_records::constants::{
+    PLANNER_ENUMS, PLANNER_RECORDS, PLANNER_VALUE_RECORDS,
+};
 use crate::bindings::_helpers::record_behaviours::constants::{
     BEHAVIOUR_CACHED_PROPERTIES, BEHAVIOUR_FINISHERS, BEHAVIOUR_METHODS, BEHAVIOUR_ORDERED,
     BEHAVIOUR_PROPERTIES, BEHAVIOUR_SEQUENCES,
@@ -138,6 +140,7 @@ pub(crate) const ENUMS: &[&[EnumSpec]] = &[
     DBT_ENUMS,
     PRESENTATION_ENUMS,
     COMPILER_ENUMS,
+    PLANNER_ENUMS,
 ];
 
 /// Every native record group, in registration order.
@@ -155,6 +158,7 @@ pub(crate) const RECORDS: &[&[RecordSpec]] = &[
     COMPILE_VALUE_RECORDS,
     SCOPE_RECORDS,
     PLANNER_RECORDS,
+    PLANNER_VALUE_RECORDS,
     RULE_RECORDS,
     CONTRACT_RECORDS,
 ];

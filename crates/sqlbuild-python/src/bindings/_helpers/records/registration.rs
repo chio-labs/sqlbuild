@@ -132,7 +132,7 @@ fn dataclass_fields<'py>(
     for field in spec.fields {
         let options: Bound<'py, PyDict> = PyDict::new(py);
         options.set_item("compare", field.compared)?;
-        options.set_item("repr", field.compared)?;
+        options.set_item("repr", field.shown)?;
         let declared: Bound<'py, PyAny> = dataclasses.getattr("field")?.call((), Some(&options))?;
         declared.setattr("name", field.name)?;
         declared.setattr("type", "object")?;

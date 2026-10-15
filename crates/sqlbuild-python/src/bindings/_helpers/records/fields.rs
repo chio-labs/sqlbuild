@@ -119,7 +119,7 @@ fn default_value<'py>(
     }
 }
 
-/// The values of the fields that take part in equality, hashing and repr.
+/// The values of the fields that take part in equality and hashing.
 pub(crate) fn compared_values<'py>(
     record: &Bound<'py, NativeRecord>,
 ) -> PyResult<Bound<'py, PyTuple>> {
@@ -135,14 +135,14 @@ pub(crate) fn compared_values<'py>(
     PyTuple::new(py, values)
 }
 
-/// `Name(field=value!r, ...)` over the compared fields, as a dataclass repr reads.
+/// `Name(field=value!r, ...)` over the shown fields, as a dataclass repr reads.
 pub(crate) fn repr_text(record: &Bound<'_, NativeRecord>) -> PyResult<String> {
     let py: Python<'_> = record.py();
     let cls: Bound<'_, PyType> = record.get_type();
     let spec: &RecordSpec = record_spec(&cls)?;
     let mut parts: Vec<String> = Vec::with_capacity(spec.fields.len());
     for (field, value) in spec.fields.iter().zip(record.get().values.iter()) {
-        if field.compared {
+        if field.shown {
             parts.push(format!("{}={}", field.name, value.bind(py).repr()?));
         }
     }

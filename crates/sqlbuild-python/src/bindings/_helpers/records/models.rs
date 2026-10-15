@@ -40,12 +40,13 @@ pub(crate) enum FieldDefault {
     CallText(&'static str, &'static str, &'static str),
 }
 
-/// One record field: its name, default and whether it takes part in equality and repr.
+/// One record field: its name, default, and whether it takes part in equality and in repr.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct FieldSpec {
     pub(crate) name: &'static str,
     pub(crate) default: FieldDefault,
     pub(crate) compared: bool,
+    pub(crate) shown: bool,
 }
 
 /// The layout of one native record class.
@@ -290,6 +291,27 @@ impl FieldSpec {
             name,
             default,
             compared: true,
+            shown: true,
+        }
+    }
+
+    /// A field left out of equality, hashing and repr.
+    pub(crate) const fn uncompared(name: &'static str, default: FieldDefault) -> Self {
+        Self {
+            name,
+            default,
+            compared: false,
+            shown: false,
+        }
+    }
+
+    /// A field left out of equality and hashing but shown in repr.
+    pub(crate) const fn uncompared_shown(name: &'static str, default: FieldDefault) -> Self {
+        Self {
+            name,
+            default,
+            compared: false,
+            shown: true,
         }
     }
 }

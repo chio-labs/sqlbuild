@@ -664,10 +664,8 @@ class FixtureColumnInferences:
     ) -> FixtureColumnInference | None:
         """Return the inference for one fixture query, computing each distinct query once."""
 
-class NativeSqlTestArtifact:
+class NativeSqlTestArtifact(NativeRecord):
     """One native-planned SQL-test artifact and its distinct planning error messages."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     sql: str
     model_names: tuple[str, ...]
@@ -677,20 +675,16 @@ class NativeSqlTestArtifact:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> NativeSqlTestArtifact: ...
 
-class RelationFixtureDiagnostic:
+class RelationFixtureDiagnostic(NativeRecord):
     """One statically provable invalid fixture condition."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     key: FixtureKey
     message: str
     def __init__(self, key: FixtureKey, message: str) -> None: ...
     def __replace__(self, **changes: Any) -> RelationFixtureDiagnostic: ...
 
-class RelationFixtureCompletion:
+class RelationFixtureCompletion(NativeRecord):
     """Completed fixture SQL plus metadata reused by SQL-test validation."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     fixture_sql_by_key: dict[FixtureKey, str]
     inferred_by_fixture: dict[FixtureKey, tuple[InferredColumn, ...]]
@@ -705,10 +699,8 @@ class RelationFixtureCompletion:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> RelationFixtureCompletion: ...
 
-class FixtureColumnMetadata:
+class FixtureColumnMetadata(NativeRecord):
     """Known type and nullability for one relation fixture column."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     name: str
     type: str | None
@@ -716,10 +708,8 @@ class FixtureColumnMetadata:
     def __init__(self, name: str, type: str | None, nullable: bool | None) -> None: ...
     def __replace__(self, **changes: Any) -> FixtureColumnMetadata: ...
 
-class FixtureRelationMetadata:
+class FixtureRelationMetadata(NativeRecord):
     """Known columns and whether they form an authoritative relation shape."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     columns: tuple[FixtureColumnMetadata, ...]
     authoritative_names: bool
@@ -728,10 +718,8 @@ class FixtureRelationMetadata:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> FixtureRelationMetadata: ...
 
-class RelationFixturePlanningContext:
+class RelationFixturePlanningContext(NativeRecord):
     """Project-wide fixture metadata shared across test and scenario planning."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     models_by_name: dict[str, CompiledModelView]
     relations: dict[FixtureKey, FixtureRelationMetadata]
@@ -748,10 +736,8 @@ class RelationFixturePlanningContext:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> RelationFixturePlanningContext: ...
 
-class SelectorExpansion:
+class SelectorExpansion(NativeRecord):
     """One selector split into graph expansion flags and core text."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     core: str
     upstream: bool
@@ -759,10 +745,8 @@ class SelectorExpansion:
     def __init__(self, core: str, upstream: bool = ..., downstream: bool = ...) -> None: ...
     def __replace__(self, **changes: Any) -> SelectorExpansion: ...
 
-class ParsedScenarioArtifactName:
+class ParsedScenarioArtifactName(NativeRecord):
     """Parsed physical name for one planner-owned scenario artifact."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     hash_prefix: str
     kind: str
@@ -770,10 +754,8 @@ class ParsedScenarioArtifactName:
     def __init__(self, hash_prefix: str, kind: str, logical_name: str) -> None: ...
     def __replace__(self, **changes: Any) -> ParsedScenarioArtifactName: ...
 
-class MissingUpstream:
+class MissingUpstream(NativeRecord):
     """One upstream dependency missing from both scope and warehouse."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     key: CompiledObjectKey
     required_by: tuple[CompiledObjectKey, ...]
@@ -782,10 +764,8 @@ class MissingUpstream:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> MissingUpstream: ...
 
-class WarehouseFingerprints:
+class WarehouseFingerprints(NativeRecord):
     """Latest direct fingerprints grouped by node type."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     models: dict[str, Fingerprint]
     functions: dict[str, Fingerprint]
@@ -804,10 +784,8 @@ class WarehouseFingerprints:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> WarehouseFingerprints: ...
 
-class CursorSnapshotScope:
+class CursorSnapshotScope(NativeRecord):
     """Execution selection used for cursor validation and runtime producer resolution."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     model_keys: frozenset[CompiledObjectKey]
     runtime_producer_keys: frozenset[CompiledObjectKey]
@@ -824,10 +802,8 @@ class CursorSnapshotScope:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> CursorSnapshotScope: ...
 
-class ReferenceRename:
+class ReferenceRename(NativeRecord):
     """One model rename that downstream references may have been rewritten for."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     new_name: str
     origin_name: str
@@ -837,10 +813,8 @@ class ReferenceRename:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> ReferenceRename: ...
 
-class WarehouseSnapshot:
+class WarehouseSnapshot(NativeRecord):
     """Frozen point-in-time picture of warehouse state for planning."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     existing_relations: dict[str, RelationInfo]
     existing_columns: dict[str, tuple[ColumnInfo, ...]]
@@ -869,20 +843,16 @@ class WarehouseSnapshot:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> WarehouseSnapshot: ...
 
-class SelectionStalenessNodeKey:
+class SelectionStalenessNodeKey(NativeRecord):
     """Neutral node identity for shared selection-aware staleness classification."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     resource_type: str
     name: str
     def __init__(self, resource_type: str, name: str) -> None: ...
     def __replace__(self, **changes: Any) -> SelectionStalenessNodeKey: ...
 
-class SelectionStalenessGraph:
+class SelectionStalenessGraph(NativeRecord):
     """Neutral graph inputs for selected-model stale warning classification."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     upstream_deps: dict[SelectionStalenessNodeKey, tuple[SelectionStalenessNodeKey, ...]]
     selected_model_names: frozenset[str]
@@ -905,30 +875,24 @@ class SelectionStalenessGraph:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> SelectionStalenessGraph: ...
 
-class SelectionStalenessWarning:
+class SelectionStalenessWarning(NativeRecord):
     """Neutral stale warning classification for one selected model."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     model_name: str
     trigger_names: tuple[str, ...]
     def __init__(self, model_name: str, trigger_names: tuple[str, ...]) -> None: ...
     def __replace__(self, **changes: Any) -> SelectionStalenessWarning: ...
 
-class BackfillResult:
+class BackfillResult(NativeRecord):
     """Resolved backfill action from a change detection policy."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     action: BackfillAction
     duration: str | None
     def __init__(self, action: BackfillAction, duration: str | None = ...) -> None: ...
     def __replace__(self, **changes: Any) -> BackfillResult: ...
 
-class ChangeDetectionResult:
+class ChangeDetectionResult(NativeRecord):
     """Per-model output from change detection and policy resolution."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     model_name: str
     change_kind: ChangeKind
@@ -959,10 +923,8 @@ class ChangeDetectionResult:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> ChangeDetectionResult: ...
 
-class UnitTestSelectorSplit:
+class UnitTestSelectorSplit(NativeRecord):
     """Resource selectors left after unit-test selectors moved into a test selection."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     select: tuple[str, ...]
     exclude: tuple[str, ...]
@@ -975,10 +937,8 @@ class UnitTestSelectorSplit:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> UnitTestSelectorSplit: ...
 
-class ModelPlanContext:
+class ModelPlanContext(NativeRecord):
     """Relation lookups and source columns for building one model plan entry."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     model_locations: dict[str, CompiledRelationLocation]
     models_by_name: dict[str, CompiledModelView]
@@ -1009,10 +969,8 @@ class ModelPlanContext:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> ModelPlanContext: ...
 
-class CursorOverridePair:
+class CursorOverridePair(NativeRecord):
     """Resolved per-model cursor start/end overrides for plan entry construction."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     start_cursor_override: str | None
     end_cursor_override: str | None
@@ -1021,10 +979,8 @@ class CursorOverridePair:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> CursorOverridePair: ...
 
-class PlanEntryBuildInputs:
+class PlanEntryBuildInputs(NativeRecord):
     """Blocked models and cursor overrides for plan entry building."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     source_freshness_blocked_model_names: frozenset[str]
     external_blocked_model_names: frozenset[str]
@@ -1051,20 +1007,16 @@ class PlanEntryBuildInputs:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> PlanEntryBuildInputs: ...
 
-class FunctionChangeResult:
+class FunctionChangeResult(NativeRecord):
     """Per-function output from change detection."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     fingerprint_sql: str
     reason: PlanReason
     def __init__(self, fingerprint_sql: str, reason: PlanReason = ...) -> None: ...
     def __replace__(self, **changes: Any) -> FunctionChangeResult: ...
 
-class PlannerChangeResults:
+class PlannerChangeResults(NativeRecord):
     """Change detection output for selected planner resources."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     models: dict[str, ChangeDetectionResult]
     functions: dict[str, FunctionChangeResult]
@@ -1073,29 +1025,23 @@ class PlannerChangeResults:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> PlannerChangeResults: ...
 
-class ResolvedModelAction:
+class ResolvedModelAction(NativeRecord):
     """Effective model change and backfill decided from the model's own change."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     change: ChangeDetectionResult
     backfill: BackfillResult
     def __init__(self, change: ChangeDetectionResult, backfill: BackfillResult) -> None: ...
     def __replace__(self, **changes: Any) -> ResolvedModelAction: ...
 
-class PlannerResolvedActions:
+class PlannerResolvedActions(NativeRecord):
     """Per-model planning decisions keyed by model name."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     models: dict[str, ResolvedModelAction]
     def __init__(self, models: dict[str, ResolvedModelAction]) -> None: ...
     def __replace__(self, **changes: Any) -> PlannerResolvedActions: ...
 
-class DirectModelVersionIdentities:
+class DirectModelVersionIdentities(NativeRecord):
     """Current direct model version identity values by model name."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     function_local_hashes: dict[str, str]
     seed_version_hashes: dict[str, str]
@@ -1114,10 +1060,8 @@ class DirectModelVersionIdentities:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> DirectModelVersionIdentities: ...
 
-class PlannerModelEntryResults:
+class PlannerModelEntryResults(NativeRecord):
     """Model plan-entry phase output."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     entries: tuple[ModelPlanEntry, ...]
     warnings: tuple[PlanWarning, ...]
@@ -1126,10 +1070,8 @@ class PlannerModelEntryResults:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> PlannerModelEntryResults: ...
 
-class SchemaAction:
+class SchemaAction(NativeRecord):
     """One concrete schema change action to apply to a target table."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     kind: SchemaActionKind
     column_name: str
@@ -1139,10 +1081,8 @@ class SchemaAction:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> SchemaAction: ...
 
-class PlanWarning:
+class PlanWarning(NativeRecord):
     """One warning or error produced during plan resolution."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     model_name: str | None
     severity: WarningSeverity
@@ -1157,10 +1097,8 @@ class PlanWarning:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> PlanWarning: ...
 
-class ColumnRenameHint:
+class ColumnRenameHint(NativeRecord):
     """A removed column that an added column may have been renamed from."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     model_name: str
     added_column: str
@@ -1178,10 +1116,8 @@ class ColumnRenameHint:
     def message(self) -> str:
         """The one-line hint shown beside the added column."""
 
-class QueryProjection:
+class QueryProjection(NativeRecord):
     """One named top-level output column of a query and its canonical expression."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     name: str
     expression: str
@@ -1195,10 +1131,8 @@ class QueryProjection:
     def key(self) -> str:
         """The case-insensitive output name."""
 
-class QueryShape:
+class QueryShape(NativeRecord):
     """Canonical top-level projections and the rest of one query, ignoring formatting."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     projections: tuple[QueryProjection, ...]
     body: str
@@ -1219,10 +1153,8 @@ class QueryShape:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> QueryShape: ...
 
-class PlanOutputExtras:
+class PlanOutputExtras(NativeRecord):
     """Optional supplemental seed fingerprints and precomputed SQL tests for plan assembly."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     seed_version_hashes: dict[str, str] | None
     seed_metadata_jsons: dict[str, str] | None
@@ -1237,10 +1169,8 @@ class PlanOutputExtras:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> PlanOutputExtras: ...
 
-class PlannedSqlTests:
+class PlannedSqlTests(NativeRecord):
     """SQL test entries planned for one selection; reusable only for the same selection."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     selected_keys: frozenset[CompiledObjectKey]
     sql_test_selection: SqlTestSelection
@@ -1255,10 +1185,8 @@ class PlannedSqlTests:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> PlannedSqlTests: ...
 
-class NativeSqlTestPlan:
+class NativeSqlTestPlan(NativeRecord):
     """Native chain and assertion steps for one SQL test, with SQL when rendered."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     chain: tuple[ChainStep, ...]
     assertions: tuple[SqlTestAssertionStep, ...]
@@ -1277,10 +1205,8 @@ class NativeSqlTestPlan:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> NativeSqlTestPlan: ...
 
-class SqlTestPlanResult:
+class SqlTestPlanResult(NativeRecord):
     """One SQL test's plan entry and warnings, or the fixture diagnostics preventing it."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     entry: SqlTestPlanEntry | None
     warnings: tuple[PlanWarning, ...]
@@ -1293,10 +1219,8 @@ class SqlTestPlanResult:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> SqlTestPlanResult: ...
 
-class ScenarioGraphPlan:
+class ScenarioGraphPlan(NativeRecord):
     """Inferred graph slice and fixture boundaries for one SQL scenario."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     key: CompiledObjectKey
     name: str
@@ -1325,30 +1249,24 @@ class ScenarioGraphPlan:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> ScenarioGraphPlan: ...
 
-class ScenarioArtifactIdentity:
+class ScenarioArtifactIdentity(NativeRecord):
     """Logical identity for one scenario-owned physical artifact."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     kind: ScenarioArtifactKind | str
     logical_name: str
     def __init__(self, kind: ScenarioArtifactKind | str, logical_name: str) -> None: ...
     def __replace__(self, **changes: Any) -> ScenarioArtifactIdentity: ...
 
-class ScenarioArtifactName:
+class ScenarioArtifactName(NativeRecord):
     """Resolved physical relation name for one scenario artifact."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     identity: ScenarioArtifactIdentity
     physical_name: str
     def __init__(self, identity: ScenarioArtifactIdentity, physical_name: str) -> None: ...
     def __replace__(self, **changes: Any) -> ScenarioArtifactName: ...
 
-class PlanProviderUsage:
+class PlanProviderUsage(NativeRecord):
     """Provider usage metadata scoped to planned work."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     provider_name: str
     consumer_kind: str
@@ -1367,10 +1285,8 @@ class PlanProviderUsage:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> PlanProviderUsage: ...
 
-class PlannerRuntime:
+class PlannerRuntime(NativeRecord):
     """Resolved execution environment shared by planner phases."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     project: CompiledProjectView
     adapter: BaseAdapter
@@ -1391,10 +1307,8 @@ class PlannerRuntime:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> PlannerRuntime: ...
 
-class PlannerScopeResolution:
+class PlannerScopeResolution(NativeRecord):
     """Resolved planner scopes for one plan build."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     selected_scope: PlannerScope
     stale_warning_scope: PlannerScope
@@ -1407,10 +1321,8 @@ class PlannerScopeResolution:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> PlannerScopeResolution: ...
 
-class PlannerWarehouseState:
+class PlannerWarehouseState(NativeRecord):
     """Warehouse snapshot and inspection relations gathered once per plan."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     snapshot: WarehouseSnapshot
     inspection_relations: PlannerRelationsContext
@@ -1435,10 +1347,8 @@ class PlannerWarehouseState:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> PlannerWarehouseState: ...
 
-class ModelMigrationRequest:
+class ModelMigrationRequest(NativeRecord):
     """One destination model whose data should come from an earlier relation."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     model: CompiledModelView
     discovery: MigrationDiscovery
@@ -1459,10 +1369,8 @@ class ModelMigrationRequest:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> ModelMigrationRequest: ...
 
-class ModelMigrationDeclaration:
+class ModelMigrationDeclaration(NativeRecord):
     """One project model's explicit migrate_from, resolved to a relation."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     model_name: str
     origin_location: CompiledRelationLocation
@@ -1472,10 +1380,8 @@ class ModelMigrationDeclaration:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> ModelMigrationDeclaration: ...
 
-class ModelMigrationDiscovery:
+class ModelMigrationDiscovery(NativeRecord):
     """Manual and automatically discovered migration requests for one plan."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     requests: tuple[ModelMigrationRequest, ...]
     warnings: tuple[PlanWarning, ...]
@@ -1488,20 +1394,16 @@ class ModelMigrationDiscovery:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> ModelMigrationDiscovery: ...
 
-class MigrationCompatibilityResult:
+class MigrationCompatibilityResult(NativeRecord):
     """Compatibility status plus human-readable blocking findings."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     status: MigrationCompatibility
     findings: tuple[str, ...]
     def __init__(self, status: MigrationCompatibility, findings: tuple[str, ...] = ...) -> None: ...
     def __replace__(self, **changes: Any) -> MigrationCompatibilityResult: ...
 
-class ModelMigrationPlanning:
+class ModelMigrationPlanning(NativeRecord):
     """Migration decisions plus the warehouse snapshot as it will look after moves."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     snapshot: WarehouseSnapshot
     entries: tuple[ModelMigrationPlanEntry, ...]
@@ -1514,10 +1416,8 @@ class ModelMigrationPlanning:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> ModelMigrationPlanning: ...
 
-class OldNameViewPlanning:
+class OldNameViewPlanning(NativeRecord):
     """Old-name steps for this build plus every compatibility view still recorded."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     entries: tuple[OldNameViewPlanEntry, ...]
     views: tuple[OldNameView, ...]
@@ -1530,10 +1430,8 @@ class OldNameViewPlanning:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> OldNameViewPlanning: ...
 
-class ColumnMigrationPlanning:
+class ColumnMigrationPlanning(NativeRecord):
     """Column rename decisions plus the warehouse snapshot as it will look after renames."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     snapshot: WarehouseSnapshot
     entries: tuple[ColumnMigrationPlanEntry, ...]
@@ -1548,10 +1446,8 @@ class ColumnMigrationPlanning:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> ColumnMigrationPlanning: ...
 
-class PlannerIdentityContext:
+class PlannerIdentityContext(NativeRecord):
     """Expected version identities for inspection and stale-warning scopes."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     version_identities: DirectModelVersionIdentities
     stale_warning_identities: DirectModelVersionIdentities
@@ -1562,10 +1458,8 @@ class PlannerIdentityContext:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> PlannerIdentityContext: ...
 
-class PlannerScopePruningResult:
+class PlannerScopePruningResult(NativeRecord):
     """Scope pruning outcome with pruned scopes, actions, and staleness state."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     inspection_scope: PlannerScope
     execution_scope: PlannerScope
@@ -1582,10 +1476,8 @@ class PlannerScopePruningResult:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> PlannerScopePruningResult: ...
 
-class PlannerChangeReconciliation:
+class PlannerChangeReconciliation(NativeRecord):
     """Write-hash-honest changes merged back into resolved actions."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     changes: PlannerChangeResults
     resolved_actions: PlannerResolvedActions
@@ -1594,10 +1486,8 @@ class PlannerChangeReconciliation:
     ) -> None: ...
     def __replace__(self, **changes: Any) -> PlannerChangeReconciliation: ...
 
-class PlannerEntryResults:
+class PlannerEntryResults(NativeRecord):
     """Model plan entries for one plan build."""
-
-    __dataclass_fields__: ClassVar[dict[str, Any]]
 
     model_entry_results: PlannerModelEntryResults
     def __init__(self, model_entry_results: PlannerModelEntryResults) -> None: ...

@@ -590,6 +590,7 @@ const R_SCHEMA_AUDIT_INSTANCE: RecordSpec = RecordSpec {
             name: "location",
             default: FieldDefault::None,
             compared: false,
+            shown: false,
         },
     ],
 };

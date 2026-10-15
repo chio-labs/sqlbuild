@@ -206,6 +206,7 @@ const R_SCOPE_LOOKUP: RecordSpec = RecordSpec {
             name: "native",
             default: FieldDefault::None,
             compared: false,
+            shown: false,
         },
     ],
 };

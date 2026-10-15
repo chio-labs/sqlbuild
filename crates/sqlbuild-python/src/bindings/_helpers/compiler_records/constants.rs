@@ -419,6 +419,7 @@ const R_LINT_CONFIG: RecordSpec = RecordSpec {
             name: "relation_keys",
             default: FieldDefault::EmptyDict,
             compared: false,
+            shown: false,
         },
     ],
 };
@@ -433,6 +434,7 @@ const R_LINT_RUN_RESULT: RecordSpec = RecordSpec {
             name: "source_texts",
             default: FieldDefault::EmptyDict,
             compared: false,
+            shown: false,
         },
         FieldSpec::new("unexpandable", FieldDefault::EmptyDict),
     ],
@@ -674,6 +676,7 @@ const R_SQL_SCHEMA_VALIDATION_REQUEST: RecordSpec = RecordSpec {
             name: "catalog",
             default: FieldDefault::None,
             compared: false,
+            shown: false,
         },
     ],
 };
@@ -962,6 +965,7 @@ const R_PROJECT_GRAPH: RecordSpec = RecordSpec {
             name: "native",
             default: FieldDefault::Required,
             compared: false,
+            shown: false,
         },
     ],
 };

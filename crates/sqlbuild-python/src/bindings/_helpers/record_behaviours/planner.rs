@@ -309,3 +309,45 @@ pub(crate) fn forward_only_backfill(py: Python<'_>) -> PyResult<Bound<'_, PyAny>
     )?;
     imported(py, NATIVE_MODULE, "BackfillResult")?.call((), Some(&keywords))
 }
+
+/// `ScenarioArtifactIdentity.kind` coerced to `ScenarioArtifactKind`.
+pub(crate) fn finish_scenario_artifact_kind(
+    py: Python<'_>,
+    mut values: Vec<Py<PyAny>>,
+) -> PyResult<Vec<Py<PyAny>>> {
+    if let Some(kind) = values.first_mut() {
+        *kind = imported(py, NATIVE_MODULE, "ScenarioArtifactKind")?
+            .call1((kind.bind(py),))?
+            .unbind();
+    }
+    Ok(values)
+}
+
+/// `ColumnRenameHint.message`: the one-line hint shown beside the added column.
+pub(crate) fn rename_hint_message(hint: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+    let relation: &str = if hint.getattr("identical")?.is_truthy()? {
+        "same expression as"
+    } else {
+        "similar to"
+    };
+    let candidates: Vec<String> = hint
+        .getattr("candidate_columns")?
+        .try_iter()?
+        .map(|candidate| Ok(candidate?.str()?.to_string()))
+        .collect::<PyResult<_>>()?;
+    let origin: &str = match candidates.as_slice() {
+        [only] => only,
+        _ => "<column>",
+    };
+    format!(
+        "{relation} {}; if this is a rename, add {} (migrate_from {origin})",
+        candidates.join(", "),
+        hint.getattr("added_column")?.str()?
+    )
+    .into_py_any(hint.py())
+}
+
+/// `QueryProjection.key`: the case-insensitive output name.
+pub(crate) fn projection_key(projection: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+    Ok(projection.getattr("name")?.call_method0("lower")?.unbind())
+}

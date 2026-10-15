@@ -1,7 +1,8 @@
 //! Layouts of the planner, migration, cursor and fingerprint value records hosted natively.
 
+use crate::bindings::_helpers::build_command::support::utc_now;
 use crate::bindings::_helpers::record_behaviours::planner::forward_only_backfill;
-use crate::bindings::_helpers::records::models::{FieldDefault, FieldSpec, RecordSpec};
+use crate::bindings::_helpers::records::models::{EnumSpec, FieldDefault, FieldSpec, RecordSpec};
 
 const R_PARSED_SELECTOR: RecordSpec = RecordSpec {
     name: "ParsedSelector",
@@ -187,6 +188,7 @@ const R_TIMESTAMP_VALUE: RecordSpec = RecordSpec {
             name: "source_text",
             default: FieldDefault::None,
             compared: false,
+            shown: false,
         },
     ],
 };
@@ -327,27 +329,32 @@ const R_MODEL_CURSOR_SNAPSHOT: RecordSpec = RecordSpec {
             name: "physical_target_max",
             default: FieldDefault::None,
             compared: false,
+            shown: false,
         },
         FieldSpec::new("target_eligible_max", FieldDefault::None),
         FieldSpec {
             name: "target_relation",
             default: FieldDefault::None,
             compared: false,
+            shown: false,
         },
         FieldSpec {
             name: "destination_cursor_column",
             default: FieldDefault::None,
             compared: false,
+            shown: false,
         },
         FieldSpec {
             name: "input_evidence",
             default: FieldDefault::EmptyTuple,
             compared: false,
+            shown: false,
         },
         FieldSpec {
             name: "expected_watermark_count",
             default: FieldDefault::Int(0),
             compared: false,
+            shown: false,
         },
         FieldSpec::new("unavailable_watermark_tags", FieldDefault::EmptyTuple),
         FieldSpec::new(
@@ -362,11 +369,13 @@ const R_MODEL_CURSOR_SNAPSHOT: RecordSpec = RecordSpec {
             name: "empty_input_names",
             default: FieldDefault::EmptyTuple,
             compared: false,
+            shown: false,
         },
         FieldSpec {
             name: "unreadable_input_names",
             default: FieldDefault::EmptyTuple,
             compared: false,
+            shown: false,
         },
     ],
 };
@@ -980,4 +989,708 @@ pub(crate) const PLANNER_RECORDS: &[RecordSpec] = &[
     R_SCENARIO_ASSERTION_EXPECTATION_PLAN,
     R_SCENARIO_EXECUTION_PLAN,
     R_PLAN_OUTPUT,
+];
+
+const R_NATIVE_SQL_TEST_ARTIFACT: RecordSpec = RecordSpec {
+    name: "NativeSqlTestArtifact",
+    doc: "One native-planned SQL-test artifact and its distinct planning error messages.",
+    fields: &[
+        FieldSpec::required("sql"),
+        FieldSpec::required("model_names"),
+        FieldSpec::new("error_messages", FieldDefault::EmptyTuple),
+    ],
+};
+const R_RELATION_FIXTURE_DIAGNOSTIC: RecordSpec = RecordSpec {
+    name: "RelationFixtureDiagnostic",
+    doc: "One statically provable invalid fixture condition.",
+    fields: &[FieldSpec::required("key"), FieldSpec::required("message")],
+};
+const R_RELATION_FIXTURE_COMPLETION: RecordSpec = RecordSpec {
+    name: "RelationFixtureCompletion",
+    doc: "Completed fixture SQL plus metadata reused by SQL-test validation.",
+    fields: &[
+        FieldSpec::required("fixture_sql_by_key"),
+        FieldSpec::required("inferred_by_fixture"),
+        FieldSpec::required("expected_types"),
+        FieldSpec::required("diagnostics"),
+    ],
+};
+const R_FIXTURE_COLUMN_METADATA: RecordSpec = RecordSpec {
+    name: "FixtureColumnMetadata",
+    doc: "Known type and nullability for one relation fixture column.",
+    fields: &[
+        FieldSpec::required("name"),
+        FieldSpec::required("type"),
+        FieldSpec::required("nullable"),
+    ],
+};
+const R_FIXTURE_RELATION_METADATA: RecordSpec = RecordSpec {
+    name: "FixtureRelationMetadata",
+    doc: "Known columns and whether they form an authoritative relation shape.",
+    fields: &[
+        FieldSpec::required("columns"),
+        FieldSpec::required("authoritative_names"),
+    ],
+};
+const R_RELATION_FIXTURE_PLANNING_CONTEXT: RecordSpec = RecordSpec {
+    name: "RelationFixturePlanningContext",
+    doc: "Project-wide fixture metadata shared across test and scenario planning.",
+    fields: &[
+        FieldSpec::required("models_by_name"),
+        FieldSpec::required("relations"),
+        FieldSpec::required("authoritative_columns"),
+        FieldSpec::required("expected_types"),
+        FieldSpec::uncompared_shown(
+            "fixture_inferences",
+            FieldDefault::Call("sqlbuild._native", "FixtureColumnInferences"),
+        ),
+    ],
+};
+const R_SELECTOR_EXPANSION: RecordSpec = RecordSpec {
+    name: "SelectorExpansion",
+    doc: "One selector split into graph expansion flags and core text.",
+    fields: &[
+        FieldSpec::required("core"),
+        FieldSpec::new("upstream", FieldDefault::False),
+        FieldSpec::new("downstream", FieldDefault::False),
+    ],
+};
+const R_PARSED_SCENARIO_ARTIFACT_NAME: RecordSpec = RecordSpec {
+    name: "ParsedScenarioArtifactName",
+    doc: "Parsed physical name for one planner-owned scenario artifact.",
+    fields: &[
+        FieldSpec::required("hash_prefix"),
+        FieldSpec::required("kind"),
+        FieldSpec::required("logical_name"),
+    ],
+};
+const R_MISSING_UPSTREAM: RecordSpec = RecordSpec {
+    name: "MissingUpstream",
+    doc: "One upstream dependency missing from both scope and warehouse.",
+    fields: &[
+        FieldSpec::required("key"),
+        FieldSpec::required("required_by"),
+    ],
+};
+const R_WAREHOUSE_FINGERPRINTS: RecordSpec = RecordSpec {
+    name: "WarehouseFingerprints",
+    doc: "Latest direct fingerprints grouped by node type.",
+    fields: &[
+        FieldSpec::new("models", FieldDefault::EmptyDict),
+        FieldSpec::new("functions", FieldDefault::EmptyDict),
+        FieldSpec::new("seeds", FieldDefault::EmptyDict),
+        FieldSpec::new("python_nodes", FieldDefault::EmptyDict),
+        FieldSpec::uncompared("unfiltered_schemas", FieldDefault::EmptyDict),
+        FieldSpec::uncompared("unfiltered_database", FieldDefault::None),
+    ],
+};
+const R_CURSOR_SNAPSHOT_SCOPE: RecordSpec = RecordSpec {
+    name: "CursorSnapshotScope",
+    doc: "Execution selection used for cursor validation and runtime producer resolution.",
+    fields: &[
+        FieldSpec::required("model_keys"),
+        FieldSpec::required("runtime_producer_keys"),
+        FieldSpec::new("invocation_time", FieldDefault::None),
+        FieldSpec::new("start_cursor_config", FieldDefault::None),
+        FieldSpec::new("cursor_overrides", FieldDefault::None),
+    ],
+};
+const R_REFERENCE_RENAME: RecordSpec = RecordSpec {
+    name: "ReferenceRename",
+    doc: "One model rename that downstream references may have been rewritten for.",
+    fields: &[
+        FieldSpec::required("new_name"),
+        FieldSpec::required("origin_name"),
+        FieldSpec::new("recorded_at", FieldDefault::None),
+    ],
+};
+const R_WAREHOUSE_SNAPSHOT: RecordSpec = RecordSpec {
+    name: "WarehouseSnapshot",
+    doc: "Frozen point-in-time picture of warehouse state for planning.",
+    fields: &[
+        FieldSpec::new("existing_relations", FieldDefault::EmptyDict),
+        FieldSpec::new("existing_columns", FieldDefault::EmptyDict),
+        FieldSpec::new(
+            "fingerprints",
+            FieldDefault::Call("sqlbuild._native", "WarehouseFingerprints"),
+        ),
+        FieldSpec::new("cursor_snapshots", FieldDefault::EmptyDict),
+        FieldSpec::new(
+            "source_freshness_state_schemas",
+            FieldDefault::EmptyFrozenset,
+        ),
+        FieldSpec::new("column_dialect", FieldDefault::None),
+        FieldSpec::new("renamed_models", FieldDefault::EmptyFrozenset),
+        FieldSpec::new("reference_renames", FieldDefault::EmptyTuple),
+        FieldSpec::new("migration_state_schemas", FieldDefault::EmptyFrozenset),
+        FieldSpec::new("old_name_view_state_schemas", FieldDefault::EmptyFrozenset),
+        FieldSpec::new("listed_state_schemas", FieldDefault::EmptyFrozenset),
+    ],
+};
+const R_SELECTION_STALENESS_NODE_KEY: RecordSpec = RecordSpec {
+    name: "SelectionStalenessNodeKey",
+    doc: "Neutral node identity for shared selection-aware staleness classification.",
+    fields: &[
+        FieldSpec::required("resource_type"),
+        FieldSpec::required("name"),
+    ],
+};
+const R_SELECTION_STALENESS_GRAPH: RecordSpec = RecordSpec {
+    name: "SelectionStalenessGraph",
+    doc: "Neutral graph inputs for selected-model stale warning classification.",
+    fields: &[
+        FieldSpec::required("upstream_deps"),
+        FieldSpec::required("selected_model_names"),
+        FieldSpec::required("run_model_names"),
+        FieldSpec::required("run_seed_names"),
+        FieldSpec::required("run_source_names"),
+        FieldSpec::required("changed_model_names"),
+        FieldSpec::required("changed_seed_names"),
+        FieldSpec::required("changed_source_names"),
+    ],
+};
+const R_SELECTION_STALENESS_WARNING: RecordSpec = RecordSpec {
+    name: "SelectionStalenessWarning",
+    doc: "Neutral stale warning classification for one selected model.",
+    fields: &[
+        FieldSpec::required("model_name"),
+        FieldSpec::required("trigger_names"),
+    ],
+};
+const R_BACKFILL_RESULT: RecordSpec = RecordSpec {
+    name: "BackfillResult",
+    doc: "Resolved backfill action from a change detection policy.",
+    fields: &[
+        FieldSpec::required("action"),
+        FieldSpec::new("duration", FieldDefault::None),
+    ],
+};
+const R_CHANGE_DETECTION_RESULT: RecordSpec = RecordSpec {
+    name: "ChangeDetectionResult",
+    doc: "Per-model output from change detection and policy resolution.",
+    fields: &[
+        FieldSpec::required("model_name"),
+        FieldSpec::required("change_kind"),
+        FieldSpec::new("query_changed", FieldDefault::False),
+        FieldSpec::new("config_changed", FieldDefault::False),
+        FieldSpec::new("fingerprint_metadata_json", FieldDefault::None),
+        FieldSpec::new("previous_metadata_json", FieldDefault::None),
+        FieldSpec::new("fingerprint_version_hash", FieldDefault::None),
+        FieldSpec::new("previous_version_hash", FieldDefault::None),
+        FieldSpec::new("schema_findings", FieldDefault::EmptyTuple),
+        FieldSpec::new("backfill", FieldDefault::Factory(forward_only_backfill)),
+        FieldSpec::new("recorded_build_relation_missing", FieldDefault::False),
+        FieldSpec::new("changed_functions", FieldDefault::EmptyTuple),
+    ],
+};
+const R_UNIT_TEST_SELECTOR_SPLIT: RecordSpec = RecordSpec {
+    name: "UnitTestSelectorSplit",
+    doc: "Resource selectors left after unit-test selectors moved into a test selection.",
+    fields: &[
+        FieldSpec::required("select"),
+        FieldSpec::required("exclude"),
+        FieldSpec::required("sql_test_selection"),
+    ],
+};
+const R_MODEL_PLAN_CONTEXT: RecordSpec = RecordSpec {
+    name: "ModelPlanContext",
+    doc: "Relation lookups and source columns for building one model plan entry.",
+    fields: &[
+        FieldSpec::required("model_locations"),
+        FieldSpec::required("models_by_name"),
+        FieldSpec::required("seed_locations"),
+        FieldSpec::required("function_locations"),
+        FieldSpec::required("source_map"),
+        FieldSpec::required("source_warehouse_columns"),
+        FieldSpec::required("star_exclude_keyword"),
+        FieldSpec::new("functions_by_name", FieldDefault::EmptyDict),
+        FieldSpec::new(
+            "runtime_cursor_producer_names",
+            FieldDefault::EmptyFrozenset,
+        ),
+        FieldSpec::new("future_cursor_config", FieldDefault::None),
+        FieldSpec::new("start_cursor_config", FieldDefault::None),
+        FieldSpec::new("invocation_time", FieldDefault::None),
+    ],
+};
+const R_CURSOR_OVERRIDE_PAIR: RecordSpec = RecordSpec {
+    name: "CursorOverridePair",
+    doc: "Resolved per-model cursor start/end overrides for plan entry construction.",
+    fields: &[
+        FieldSpec::new("start_cursor_override", FieldDefault::None),
+        FieldSpec::new("end_cursor_override", FieldDefault::None),
+    ],
+};
+const R_PLAN_ENTRY_BUILD_INPUTS: RecordSpec = RecordSpec {
+    name: "PlanEntryBuildInputs",
+    doc: "Blocked models and cursor overrides for plan entry building.",
+    fields: &[
+        FieldSpec::new(
+            "source_freshness_blocked_model_names",
+            FieldDefault::EmptyFrozenset,
+        ),
+        FieldSpec::new("external_blocked_model_names", FieldDefault::EmptyFrozenset),
+        FieldSpec::new("start_cursor_override", FieldDefault::None),
+        FieldSpec::new("end_cursor_override", FieldDefault::None),
+        FieldSpec::new("future_cursor_config", FieldDefault::None),
+        FieldSpec::new("start_cursor_config", FieldDefault::None),
+        FieldSpec::new("invocation_time", FieldDefault::None),
+        FieldSpec::new("max_microbatches", FieldDefault::None),
+        FieldSpec::new("max_microbatches_is_override", FieldDefault::False),
+        FieldSpec::new(
+            "microbatch_limit_action",
+            FieldDefault::Member("sqlbuild._native", "MicrobatchLimitAction", "ERROR"),
+        ),
+    ],
+};
+const R_FUNCTION_CHANGE_RESULT: RecordSpec = RecordSpec {
+    name: "FunctionChangeResult",
+    doc: "Per-function output from change detection.",
+    fields: &[
+        FieldSpec::required("fingerprint_sql"),
+        FieldSpec::new(
+            "reason",
+            FieldDefault::Member("sqlbuild._native", "PlanReason", "NO_CHANGE"),
+        ),
+    ],
+};
+const R_PLANNER_CHANGE_RESULTS: RecordSpec = RecordSpec {
+    name: "PlannerChangeResults",
+    doc: "Change detection output for selected planner resources.",
+    fields: &[
+        FieldSpec::required("models"),
+        FieldSpec::required("functions"),
+    ],
+};
+const R_RESOLVED_MODEL_ACTION: RecordSpec = RecordSpec {
+    name: "ResolvedModelAction",
+    doc: "Effective model change and backfill decided from the model's own change.",
+    fields: &[
+        FieldSpec::required("change"),
+        FieldSpec::required("backfill"),
+    ],
+};
+const R_PLANNER_RESOLVED_ACTIONS: RecordSpec = RecordSpec {
+    name: "PlannerResolvedActions",
+    doc: "Per-model planning decisions keyed by model name.",
+    fields: &[FieldSpec::required("models")],
+};
+const R_DIRECT_MODEL_VERSION_IDENTITIES: RecordSpec = RecordSpec {
+    name: "DirectModelVersionIdentities",
+    doc: "Current direct model version identity values by model name.",
+    fields: &[
+        FieldSpec::required("function_local_hashes"),
+        FieldSpec::required("seed_version_hashes"),
+        FieldSpec::required("seed_metadata_jsons"),
+        FieldSpec::required("model_metadata_jsons"),
+        FieldSpec::required("model_local_hashes"),
+        FieldSpec::required("model_version_hashes"),
+    ],
+};
+const R_PLANNER_MODEL_ENTRY_RESULTS: RecordSpec = RecordSpec {
+    name: "PlannerModelEntryResults",
+    doc: "Model plan-entry phase output.",
+    fields: &[
+        FieldSpec::required("entries"),
+        FieldSpec::new("warnings", FieldDefault::EmptyTuple),
+    ],
+};
+const R_SCHEMA_ACTION: RecordSpec = RecordSpec {
+    name: "SchemaAction",
+    doc: "One concrete schema change action to apply to a target table.",
+    fields: &[
+        FieldSpec::required("kind"),
+        FieldSpec::required("column_name"),
+        FieldSpec::new("column_type", FieldDefault::None),
+    ],
+};
+const R_PLAN_WARNING: RecordSpec = RecordSpec {
+    name: "PlanWarning",
+    doc: "One warning or error produced during plan resolution.",
+    fields: &[
+        FieldSpec::required("model_name"),
+        FieldSpec::required("severity"),
+        FieldSpec::required("message"),
+        FieldSpec::new("code", FieldDefault::None),
+    ],
+};
+const R_COLUMN_RENAME_HINT: RecordSpec = RecordSpec {
+    name: "ColumnRenameHint",
+    doc: "A removed column that an added column may have been renamed from.",
+    fields: &[
+        FieldSpec::required("model_name"),
+        FieldSpec::required("added_column"),
+        FieldSpec::required("candidate_columns"),
+        FieldSpec::new("identical", FieldDefault::False),
+    ],
+};
+const R_QUERY_PROJECTION: RecordSpec = RecordSpec {
+    name: "QueryProjection",
+    doc: "One named top-level output column of a query and its canonical expression.",
+    fields: &[
+        FieldSpec::required("name"),
+        FieldSpec::required("expression"),
+        FieldSpec::required("references"),
+        FieldSpec::new("passthrough", FieldDefault::False),
+    ],
+};
+const R_QUERY_SHAPE: RecordSpec = RecordSpec {
+    name: "QueryShape",
+    doc: "Canonical top-level projections and the rest of one query, ignoring formatting.",
+    fields: &[
+        FieldSpec::required("projections"),
+        FieldSpec::required("body"),
+        FieldSpec::new("alias_clauses", FieldDefault::Text("{}")),
+        FieldSpec::new("positional", FieldDefault::False),
+        FieldSpec::new("input_relations", FieldDefault::None),
+        FieldSpec::new("local_input_columns", FieldDefault::EmptyFrozenset),
+        FieldSpec::new("clause_references", FieldDefault::EmptyFrozenset),
+    ],
+};
+const R_PLAN_OUTPUT_EXTRAS: RecordSpec = RecordSpec {
+    name: "PlanOutputExtras",
+    doc: "Optional supplemental seed fingerprints and precomputed SQL tests for plan assembly.",
+    fields: &[
+        FieldSpec::new("seed_version_hashes", FieldDefault::None),
+        FieldSpec::new("seed_metadata_jsons", FieldDefault::None),
+        FieldSpec::new("seed_plan_reasons", FieldDefault::None),
+        FieldSpec::new("planned_sql_tests", FieldDefault::None),
+    ],
+};
+const R_PLANNED_SQL_TESTS: RecordSpec = RecordSpec {
+    name: "PlannedSqlTests",
+    doc: "SQL test entries planned for one selection; reusable only for the same selection.",
+    fields: &[
+        FieldSpec::required("selected_keys"),
+        FieldSpec::new(
+            "sql_test_selection",
+            FieldDefault::Call("sqlbuild._native", "SqlTestSelection"),
+        ),
+        FieldSpec::new("entries", FieldDefault::EmptyTuple),
+        FieldSpec::new("warnings", FieldDefault::EmptyTuple),
+    ],
+};
+const R_NATIVE_SQL_TEST_PLAN: RecordSpec = RecordSpec {
+    name: "NativeSqlTestPlan",
+    doc: "Native chain and assertion steps for one SQL test, with SQL when rendered.",
+    fields: &[
+        FieldSpec::required("chain"),
+        FieldSpec::required("assertions"),
+        FieldSpec::required("model_names"),
+        FieldSpec::required("warnings"),
+        FieldSpec::required("error_messages"),
+        FieldSpec::new("sql", FieldDefault::None),
+    ],
+};
+const R_SQL_TEST_PLAN_RESULT: RecordSpec = RecordSpec {
+    name: "SqlTestPlanResult",
+    doc: "One SQL test's plan entry and warnings, or the fixture diagnostics preventing it.",
+    fields: &[
+        FieldSpec::required("entry"),
+        FieldSpec::new("warnings", FieldDefault::EmptyTuple),
+        FieldSpec::new("fixture_diagnostics", FieldDefault::EmptyTuple),
+    ],
+};
+const R_SCENARIO_GRAPH_PLAN: RecordSpec = RecordSpec {
+    name: "ScenarioGraphPlan",
+    doc: "Inferred graph slice and fixture boundaries for one SQL scenario.",
+    fields: &[
+        FieldSpec::required("key"),
+        FieldSpec::required("name"),
+        FieldSpec::new("target_model_names", FieldDefault::EmptyTuple),
+        FieldSpec::new("assertion_target_model_names", FieldDefault::EmptyTuple),
+        FieldSpec::new("model_names", FieldDefault::EmptyTuple),
+        FieldSpec::new("source_fixture_names", FieldDefault::EmptyTuple),
+        FieldSpec::new("ref_fixture_names", FieldDefault::EmptyTuple),
+        FieldSpec::new("seed_names", FieldDefault::EmptyTuple),
+        FieldSpec::new("seed_fixture_names", FieldDefault::EmptyTuple),
+        FieldSpec::new("dbt_ref_fixture_names", FieldDefault::EmptyTuple),
+        FieldSpec::new("function_deps", FieldDefault::EmptyTuple),
+    ],
+};
+const R_SCENARIO_ARTIFACT_IDENTITY: RecordSpec = RecordSpec {
+    name: "ScenarioArtifactIdentity",
+    doc: "Logical identity for one scenario-owned physical artifact.",
+    fields: &[
+        FieldSpec::required("kind"),
+        FieldSpec::required("logical_name"),
+    ],
+};
+const R_SCENARIO_ARTIFACT_NAME: RecordSpec = RecordSpec {
+    name: "ScenarioArtifactName",
+    doc: "Resolved physical relation name for one scenario artifact.",
+    fields: &[
+        FieldSpec::required("identity"),
+        FieldSpec::required("physical_name"),
+    ],
+};
+const R_PLAN_PROVIDER_USAGE: RecordSpec = RecordSpec {
+    name: "PlanProviderUsage",
+    doc: "Provider usage metadata scoped to planned work.",
+    fields: &[
+        FieldSpec::required("provider_name"),
+        FieldSpec::required("consumer_kind"),
+        FieldSpec::required("consumer_name"),
+        FieldSpec::required("parameter_name"),
+        FieldSpec::new("annotation_class_name", FieldDefault::None),
+        FieldSpec::new("annotation_module", FieldDefault::None),
+    ],
+};
+const R_PLANNER_RUNTIME: RecordSpec = RecordSpec {
+    name: "PlannerRuntime",
+    doc: "Resolved execution environment shared by planner phases.",
+    fields: &[
+        FieldSpec::required("project"),
+        FieldSpec::required("adapter"),
+        FieldSpec::required("connection"),
+        FieldSpec::new("project_config", FieldDefault::None),
+        FieldSpec::new("local_config", FieldDefault::None),
+        FieldSpec::new("on_progress", FieldDefault::None),
+        FieldSpec::new("invocation_time", FieldDefault::Factory(utc_now)),
+    ],
+};
+const R_PLANNER_SCOPE_RESOLUTION: RecordSpec = RecordSpec {
+    name: "PlannerScopeResolution",
+    doc: "Resolved planner scopes for one plan build.",
+    fields: &[
+        FieldSpec::required("selected_scope"),
+        FieldSpec::required("stale_warning_scope"),
+        FieldSpec::required("inspection_scope"),
+    ],
+};
+const R_PLANNER_WAREHOUSE_STATE: RecordSpec = RecordSpec {
+    name: "PlannerWarehouseState",
+    doc: "Warehouse snapshot and inspection relations gathered once per plan.",
+    fields: &[
+        FieldSpec::required("snapshot"),
+        FieldSpec::required("inspection_relations"),
+        FieldSpec::new("migration_entries", FieldDefault::EmptyTuple),
+        FieldSpec::new("migration_warnings", FieldDefault::EmptyTuple),
+        FieldSpec::new("column_migration_entries", FieldDefault::EmptyTuple),
+        FieldSpec::new("column_rename_hints", FieldDefault::EmptyTuple),
+        FieldSpec::new("old_name_view_entries", FieldDefault::EmptyTuple),
+        FieldSpec::new("old_name_views", FieldDefault::EmptyTuple),
+        FieldSpec::new(
+            "migration_fingerprints",
+            FieldDefault::Call("sqlbuild._native", "MigrationFingerprintCache"),
+        ),
+    ],
+};
+const R_MODEL_MIGRATION_REQUEST: RecordSpec = RecordSpec {
+    name: "ModelMigrationRequest",
+    doc: "One destination model whose data should come from an earlier relation.",
+    fields: &[
+        FieldSpec::required("model"),
+        FieldSpec::required("discovery"),
+        FieldSpec::new("raw_origin", FieldDefault::None),
+        FieldSpec::new("origin_location", FieldDefault::None),
+        FieldSpec::new("origin_model", FieldDefault::None),
+        FieldSpec::new("force", FieldDefault::False),
+        FieldSpec::new("identity_only", FieldDefault::False),
+    ],
+};
+const R_MODEL_MIGRATION_DECLARATION: RecordSpec = RecordSpec {
+    name: "ModelMigrationDeclaration",
+    doc: "One project model's explicit migrate_from, resolved to a relation.",
+    fields: &[
+        FieldSpec::required("model_name"),
+        FieldSpec::required("origin_location"),
+        FieldSpec::required("origin_model"),
+    ],
+};
+const R_MODEL_MIGRATION_DISCOVERY: RecordSpec = RecordSpec {
+    name: "ModelMigrationDiscovery",
+    doc: "Manual and automatically discovered migration requests for one plan.",
+    fields: &[
+        FieldSpec::new("requests", FieldDefault::EmptyTuple),
+        FieldSpec::new("warnings", FieldDefault::EmptyTuple),
+        FieldSpec::new("destination_fingerprints", FieldDefault::EmptyDict),
+    ],
+};
+const R_MIGRATION_COMPATIBILITY_RESULT: RecordSpec = RecordSpec {
+    name: "MigrationCompatibilityResult",
+    doc: "Compatibility status plus human-readable blocking findings.",
+    fields: &[
+        FieldSpec::required("status"),
+        FieldSpec::new("findings", FieldDefault::EmptyTuple),
+    ],
+};
+const R_MODEL_MIGRATION_PLANNING: RecordSpec = RecordSpec {
+    name: "ModelMigrationPlanning",
+    doc: "Migration decisions plus the warehouse snapshot as it will look after moves.",
+    fields: &[
+        FieldSpec::required("snapshot"),
+        FieldSpec::new("entries", FieldDefault::EmptyTuple),
+        FieldSpec::new("warnings", FieldDefault::EmptyTuple),
+    ],
+};
+const R_OLD_NAME_VIEW_PLANNING: RecordSpec = RecordSpec {
+    name: "OldNameViewPlanning",
+    doc: "Old-name steps for this build plus every compatibility view still recorded.",
+    fields: &[
+        FieldSpec::new("entries", FieldDefault::EmptyTuple),
+        FieldSpec::new("views", FieldDefault::EmptyTuple),
+        FieldSpec::new("warnings", FieldDefault::EmptyTuple),
+    ],
+};
+const R_COLUMN_MIGRATION_PLANNING: RecordSpec = RecordSpec {
+    name: "ColumnMigrationPlanning",
+    doc: "Column rename decisions plus the warehouse snapshot as it will look after renames.",
+    fields: &[
+        FieldSpec::required("snapshot"),
+        FieldSpec::new("entries", FieldDefault::EmptyTuple),
+        FieldSpec::new("hints", FieldDefault::EmptyTuple),
+        FieldSpec::new("warnings", FieldDefault::EmptyTuple),
+    ],
+};
+const R_PLANNER_IDENTITY_CONTEXT: RecordSpec = RecordSpec {
+    name: "PlannerIdentityContext",
+    doc: "Expected version identities for inspection and stale-warning scopes.",
+    fields: &[
+        FieldSpec::required("version_identities"),
+        FieldSpec::required("stale_warning_identities"),
+    ],
+};
+const R_PLANNER_SCOPE_PRUNING_RESULT: RecordSpec = RecordSpec {
+    name: "PlannerScopePruningResult",
+    doc: "Scope pruning outcome with pruned scopes, actions, and staleness state.",
+    fields: &[
+        FieldSpec::required("inspection_scope"),
+        FieldSpec::required("execution_scope"),
+        FieldSpec::required("resolved_actions"),
+        FieldSpec::required("pruned_direct_model_names"),
+        FieldSpec::required("direct_identity_stale_model_names"),
+    ],
+};
+const R_PLANNER_CHANGE_RECONCILIATION: RecordSpec = RecordSpec {
+    name: "PlannerChangeReconciliation",
+    doc: "Write-hash-honest changes merged back into resolved actions.",
+    fields: &[
+        FieldSpec::required("changes"),
+        FieldSpec::required("resolved_actions"),
+    ],
+};
+const R_PLANNER_ENTRY_RESULTS: RecordSpec = RecordSpec {
+    name: "PlannerEntryResults",
+    doc: "Model plan entries for one plan build.",
+    fields: &[FieldSpec::required("model_entry_results")],
+};
+
+/// Planner value records, in registration order.
+pub(crate) const PLANNER_VALUE_RECORDS: &[RecordSpec] = &[
+    R_NATIVE_SQL_TEST_ARTIFACT,
+    R_RELATION_FIXTURE_DIAGNOSTIC,
+    R_RELATION_FIXTURE_COMPLETION,
+    R_FIXTURE_COLUMN_METADATA,
+    R_FIXTURE_RELATION_METADATA,
+    R_RELATION_FIXTURE_PLANNING_CONTEXT,
+    R_SELECTOR_EXPANSION,
+    R_PARSED_SCENARIO_ARTIFACT_NAME,
+    R_MISSING_UPSTREAM,
+    R_WAREHOUSE_FINGERPRINTS,
+    R_CURSOR_SNAPSHOT_SCOPE,
+    R_REFERENCE_RENAME,
+    R_WAREHOUSE_SNAPSHOT,
+    R_SELECTION_STALENESS_NODE_KEY,
+    R_SELECTION_STALENESS_GRAPH,
+    R_SELECTION_STALENESS_WARNING,
+    R_BACKFILL_RESULT,
+    R_CHANGE_DETECTION_RESULT,
+    R_UNIT_TEST_SELECTOR_SPLIT,
+    R_MODEL_PLAN_CONTEXT,
+    R_CURSOR_OVERRIDE_PAIR,
+    R_PLAN_ENTRY_BUILD_INPUTS,
+    R_FUNCTION_CHANGE_RESULT,
+    R_PLANNER_CHANGE_RESULTS,
+    R_RESOLVED_MODEL_ACTION,
+    R_PLANNER_RESOLVED_ACTIONS,
+    R_DIRECT_MODEL_VERSION_IDENTITIES,
+    R_PLANNER_MODEL_ENTRY_RESULTS,
+    R_SCHEMA_ACTION,
+    R_PLAN_WARNING,
+    R_COLUMN_RENAME_HINT,
+    R_QUERY_PROJECTION,
+    R_QUERY_SHAPE,
+    R_PLAN_OUTPUT_EXTRAS,
+    R_PLANNED_SQL_TESTS,
+    R_NATIVE_SQL_TEST_PLAN,
+    R_SQL_TEST_PLAN_RESULT,
+    R_SCENARIO_GRAPH_PLAN,
+    R_SCENARIO_ARTIFACT_IDENTITY,
+    R_SCENARIO_ARTIFACT_NAME,
+    R_PLAN_PROVIDER_USAGE,
+    R_PLANNER_RUNTIME,
+    R_PLANNER_SCOPE_RESOLUTION,
+    R_PLANNER_WAREHOUSE_STATE,
+    R_MODEL_MIGRATION_REQUEST,
+    R_MODEL_MIGRATION_DECLARATION,
+    R_MODEL_MIGRATION_DISCOVERY,
+    R_MIGRATION_COMPATIBILITY_RESULT,
+    R_MODEL_MIGRATION_PLANNING,
+    R_OLD_NAME_VIEW_PLANNING,
+    R_COLUMN_MIGRATION_PLANNING,
+    R_PLANNER_IDENTITY_CONTEXT,
+    R_PLANNER_SCOPE_PRUNING_RESULT,
+    R_PLANNER_CHANGE_RECONCILIATION,
+    R_PLANNER_ENTRY_RESULTS,
+];
+
+/// Planner string enums, in declaration order.
+pub(crate) const PLANNER_ENUMS: &[EnumSpec] = &[
+    EnumSpec {
+        name: "GraphResourceKind",
+        doc: "",
+        members: &[
+            ("MODEL", "model"),
+            ("SEED", "seed"),
+            ("SOURCE", "source"),
+            ("FUNCTION", "function"),
+        ],
+    },
+    EnumSpec {
+        name: "ChangeKind",
+        doc: "",
+        members: &[
+            ("FIRST_RUN", "first_run"),
+            ("RENAMED", "renamed"),
+            ("QUERY_CHANGED", "query_changed"),
+            ("FUNCTION_CHANGED", "function_changed"),
+            ("CONFIG_CHANGED", "config_changed"),
+            ("SCHEMA_CHANGED", "schema_changed"),
+            ("NO_CHANGE", "no_change"),
+        ],
+    },
+    EnumSpec {
+        name: "SchemaChangeKind",
+        doc: "",
+        members: &[
+            ("COLUMN_ADDED", "column_added"),
+            ("COLUMN_REMOVED", "column_removed"),
+            ("COLUMN_TYPE_CHANGED", "column_type_changed"),
+        ],
+    },
+    EnumSpec {
+        name: "SchemaColumnSource",
+        doc: "",
+        members: &[("YML", "yml"), ("SQL_ANALYSIS", "sql_analysis")],
+    },
+    EnumSpec {
+        name: "CursorWatermarkMode",
+        doc: "",
+        members: &[("ALL", "all"), ("ANY", "any")],
+    },
+    EnumSpec {
+        name: "SchemaActionKind",
+        doc: "",
+        members: &[
+            ("ADD_COLUMN", "add_column"),
+            ("DROP_COLUMN", "drop_column"),
+            ("ALTER_COLUMN_TYPE", "alter_column_type"),
+        ],
+    },
+    EnumSpec {
+        name: "WarningSeverity",
+        doc: "",
+        members: &[("ERROR", "error"), ("WARNING", "warning"), ("INFO", "info")],
+    },
 ];

@@ -50,10 +50,11 @@ use crate::bindings::_helpers::record_behaviours::migrations::{
 };
 use crate::bindings::_helpers::record_behaviours::planner::{
     column_migration_blocks_build, column_migration_origin_missing, finish_cursor_overrides,
-    materialization_is_table_backed, model_migration_blocks_build, model_migration_origin_hidden,
-    model_migration_origin_missing, model_migration_storage_transition,
-    model_migration_target_label, old_name_runs_steps, overrides_have_untyped, overrides_typed_as,
-    plan_python_source_entries, retention_decreases,
+    finish_scenario_artifact_kind, materialization_is_table_backed, model_migration_blocks_build,
+    model_migration_origin_hidden, model_migration_origin_missing,
+    model_migration_storage_transition, model_migration_target_label, old_name_runs_steps,
+    overrides_have_untyped, overrides_typed_as, plan_python_source_entries, projection_key,
+    rename_hint_message, retention_decreases,
 };
 use crate::bindings::_helpers::record_behaviours::python_nodes::graph_selected_sql_refs;
 use crate::bindings::_helpers::record_behaviours::references::{
@@ -75,6 +76,7 @@ use crate::bindings::_helpers::records::types::{ClassMethod, ClassProperty, Reco
 
 /// Compiler records whose bound values are normalized or validated natively.
 pub(crate) const BEHAVIOUR_FINISHERS: &[(&str, RecordFinish)] = &[
+    ("ScenarioArtifactIdentity", finish_scenario_artifact_kind),
     ("MeasurementThresholdBound", finish_threshold_bound),
     ("MeasurementThresholds", finish_thresholds),
     ("MeasurementContract", finish_measurement_contract),
@@ -98,6 +100,8 @@ pub(crate) const BEHAVIOUR_FINISHERS: &[(&str, RecordFinish)] = &[
 ];
 /// Computed attributes of compiler shapes.
 pub(crate) const BEHAVIOUR_PROPERTIES: &[(&str, &str, ClassProperty)] = &[
+    ("ColumnRenameHint", "message", rename_hint_message),
+    ("QueryProjection", "key", projection_key),
     ("ScopeCompleteness", "complete", completeness_complete),
     ("ScopeTargetQuery", "unknown", target_query_unknown),
     ("SettingsConfig", "sql_validation", settings_sql_validation),
