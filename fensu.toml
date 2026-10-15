@@ -25,6 +25,11 @@ max_positional_args = 1
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
+path = "src/sqlbuild/cost/models.py"
+reason = "Native bindings own run-cost allocation, Snowflake cost collection, the statement ledger and the cost context; this package only declares the cost models and types they use."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
 path = "src/sqlbuild/lint/__init__.py"
 reason = "Native bindings own lint entry points, expansion preparation and compiler-verified fix planning; this package retains boundary models, custom-rule and macro callbacks."
 
@@ -67,11 +72,6 @@ reason = "Native bindings own migration planning and state rows; this package on
 rule = "FFR309"
 path = "src/sqlbuild/compiler/source_freshness/__init__.py"
 reason = "Native bindings own source freshness observation, planning, propagation and state reads and writes; this package only declares the models, types and constants they build."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
-path = "src/sqlbuild/cost/constants.py"
-reason = "Native bindings own run-cost allocation, Snowflake cost collection, the statement ledger and the cost context; this package only declares the cost models, types and constants they use."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
