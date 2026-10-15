@@ -32,11 +32,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerScope,
     PlannerSelection,
 )
-from sqlbuild.compiler.planner.types import ChangeKind
-from sqlbuild.compiler.source_freshness.models import (
-    DirectSourceFreshnessPlanningResult,
-    SourceFreshnessIdentity,
-)
+from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     CompleteModelChangesWorkTestCase,
     PlannerStaleWarningScopeTestCase,

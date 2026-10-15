@@ -286,7 +286,7 @@ from sqlbuild.cursor_algebra.models import (
     TimestampValue,
 )
 from sqlbuild.cursor_algebra.types import Bound, BoundSentinel, CursorScalar
-from sqlbuild.diagnostics.models import PartialBuildPhaseTimings, ProcessResourceUsage
+from sqlbuild.diagnostics.models import ProcessResourceUsage
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
@@ -329,7 +329,7 @@ from sqlbuild.lint.types import (
     RelationKeyRow,
 )
 from sqlbuild.presentation.models import DisplayOptions
-from sqlbuild.presentation.types import CompletionState, TransientLineOwner
+from sqlbuild.presentation.types import TransientLineOwner
 from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.rule_engine.models import (
