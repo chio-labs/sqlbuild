@@ -1,0 +1,29 @@
+//! Fixed texts and limits of warehouse-inspection planning.
+
+pub(crate) const TIMESTAMP_CURSOR_TYPE: &str = "timestamp";
+pub(crate) const RETENTION_INCREASE: &str = "increase";
+pub(crate) const RETENTION_DECREASE: &str = "decrease";
+pub(crate) const RETENTION_MIXED: &str = "mixed";
+pub(crate) const RETENTION_MATCH: &str = "match";
+pub(crate) const RETENTION_PHASE_PRE: &str = "pre";
+pub(crate) const RETENTION_PHASE_POST: &str = "post";
+pub(crate) const CHANGE_PHASE_PREPARE: &str = "prepare";
+pub(crate) const CHANGE_PHASE_FINALIZE: &str = "finalize";
+pub(crate) const TABLE_TYPE_COPY_PREFIX: &str = "__sqb_type_swap__";
+pub(crate) const MESSAGE_ITEM_LIMIT: usize = 10;
+pub(crate) const FRESHNESS_NAME_LIMIT: usize = 10;
+pub(crate) const SOURCE_FRESHNESS_UNKNOWN_WARNING_TITLE: &str = "source freshness unknown";
+pub(crate) const FRESHNESS_UNAVAILABLE_EXPLANATION: &str = "adapter freshness metadata is unavailable, for example for a view, an external table, or a table without a last-modified time";
+pub(crate) const FRESHNESS_ERROR_EXPLANATION: &str = "the freshness observation failed";
+pub(crate) const FRESHNESS_UNAVAILABLE: &str = "unavailable";
+pub(crate) const FRESHNESS_ERROR: &str = "error";
+pub(crate) const SOURCE_CALL_OPEN: &str = "__source(\"";
+pub(crate) const CONTEXT_PLACEHOLDER_OPEN: &str = "${CTX:";
+pub(crate) const VARIABLE_PLACEHOLDER_OPEN: &str = "${";
+pub(crate) const SOURCE_DEFERRAL_CONTEXT_FIELDS: [&str; 2] = ["schema", "database"];
+pub(crate) const FINGERPRINT_CACHE_VERSION: i64 = 1;
+pub(crate) const FINGERPRINT_CACHE_ENTRY_SEPARATOR: char = '\n';
+pub(crate) const MAX_FINGERPRINT_CACHE_ENTRY_CHARACTERS: usize = 4_096;
+pub(crate) const MIGRATION_FINGERPRINT_ALGORITHM: &str = "migration-fingerprint-v1";
+pub(crate) const CHANGE_KIND_FIRST_RUN: &str = "first_run";
+pub(crate) const CHANGE_KIND_RENAMED: &str = "renamed";
