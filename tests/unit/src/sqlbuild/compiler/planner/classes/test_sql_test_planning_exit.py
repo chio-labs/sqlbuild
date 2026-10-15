@@ -52,7 +52,7 @@ _FAILED_BUILD: str = dedent(
 )
 _UNJOINED_PLANNING: str = dedent(
     """
-    from sqlbuild.compiler.planner.models import SqlTestSelection
+    from sqlbuild._native import SqlTestSelection
 
     native.start_sql_test_planning(
         project=None,
