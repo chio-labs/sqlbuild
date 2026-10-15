@@ -6,10 +6,10 @@ use crate::project_validation::_helpers::conflicts::{conflict, node_path, unique
 use crate::project_validation::_helpers::python_nodes::{
     validate_check_dependencies, validate_loader_dependencies, validate_python_node_dependencies,
 };
-use crate::project_validation::constants::DLT_LOADER_KIND;
 use crate::project_validation::models::{
     NamedPath, NodeFact, NodeKind, ProjectFacts, SourceFileFact, ValidationFailure,
 };
+use crate::yaml_entries::main::integration_loader_name::integration_loader_name;
 
 /// Validate loader and node names, node dependencies, then the loaders sources name.
 pub(crate) fn validate_loaders(facts: &ProjectFacts) -> Result<(), ValidationFailure> {
@@ -62,15 +62,6 @@ fn source_loader_name_collisions(
         }
     }
     Ok(())
-}
-
-/// Python's `integration_loader_name`.
-fn integration_loader_name(kind: &str, source_name: &str) -> String {
-    if kind == DLT_LOADER_KIND {
-        source_name.to_owned()
-    } else {
-        format!("{kind}__{source_name}")
-    }
 }
 
 fn source_loader_references(

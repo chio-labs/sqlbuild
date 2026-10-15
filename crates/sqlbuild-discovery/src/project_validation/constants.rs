@@ -1,7 +1,5 @@
 //! Names and limits cross-file discovery validation checks against.
 
-/// The loader kind whose generated loader takes the source's own name.
-pub(crate) const DLT_LOADER_KIND: &str = "dlt";
 /// The prefix discovery strips from model paths before matching path defaults.
 pub(crate) const MODELS_PREFIX: &str = "models/";
 /// `str(Path(...).parent)` of a path with no folder.
