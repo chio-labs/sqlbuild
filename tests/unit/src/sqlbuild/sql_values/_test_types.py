@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sqlbuild._native import SqlValueLimits
+from sqlbuild._native import SqlValueLimits, StateSqlValueType
 
 
 @dataclass(frozen=True)
@@ -38,3 +38,16 @@ class SqlValueBehaviorTestCase:
 class StateLiteralGoldenTestCase:
     description: str
     expected_literals: dict[str, str]
+
+
+@dataclass(frozen=True)
+class StateSqlGoldenTestCase:
+    description: str
+    expected_sql: str
+
+
+@dataclass(frozen=True)
+class StateSqlTypeErrorTestCase:
+    description: str
+    column_type: StateSqlValueType
+    expected_error: type[Exception]

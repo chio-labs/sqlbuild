@@ -16,6 +16,7 @@ from sqlbuild._native import (
     SqlLexicalSyntax,
     SqlValue,
     SqlValueKind,
+    render_insert_source_freshness_records_sql,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import (
     _COLLECTION_SQL_VALUE_KINDS,
@@ -105,9 +106,6 @@ from sqlbuild.adapter.relations.main.get_columns_for_relations import (
 )
 from sqlbuild.adapter.relations.main.invalidate_cached_relations import invalidate_cached_relations
 from sqlbuild.adapter.relations.main.relation_age_timestamp import relation_age_timestamp_utc
-from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql import (
-    render_insert_source_freshness_records_sql,
-)
 from sqlbuild.adapter.type_system.main.conditional_result_nullability import (
     conditional_result_nullability,
 )

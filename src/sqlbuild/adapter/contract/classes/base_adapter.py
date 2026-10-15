@@ -15,6 +15,7 @@ from sqlbuild._native import (
     SqlLexicalSyntax,
     SqlValue,
     SqlValueKind,
+    render_insert_source_freshness_records_sql,
 )
 from sqlbuild.adapter.contract.classes.historical_check_snapshot_sql import (
     HistoricalCheckSnapshotSql,
@@ -79,9 +80,6 @@ from sqlbuild.adapter.contract.types import (
 )
 from sqlbuild.adapter.relations.main.get_columns_for_relations import (
     get_columns_for_relations_bulk,
-)
-from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql import (
-    render_insert_source_freshness_records_sql,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS

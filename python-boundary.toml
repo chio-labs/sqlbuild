@@ -30,11 +30,6 @@ reason = "adapter"
 note = "Relation inspection wrappers adapters call, with per-connection caches; executed-statement classification and invalidation keys are native."
 
 [[stays]]
-path = "adapter/state_sql"
-reason = "adapter"
-note = "State-table SQL rendered through adapter callbacks."
-
-[[stays]]
 path = "adapter/type_system"
 reason = "adapter"
 note = "Type normalisation adapters import; already a thin native wrapper."
@@ -678,6 +673,7 @@ note = "Shape rule: data records only (CompileReuseRequest, SettingsEnvironmentI
 path = "compiler/source_freshness/constants.py"
 reason = "adapter"
 note = "Shape rule: source freshness column names and adapter column types, no logic; SOURCE_FRESHNESS_TABLE_NAME is re-exported from sqlbuild._native."
+note = "Shape rule: data constants only (SOURCE_FRESHNESS_TABLE_NAME, COLUMN_SOURCE_NAME, COLUMN_TARGET_DATABASE, COLUMN_TARGET_SCHEMA, ...), no logic; consumed by adapter/contract/classes/duckdb_backed_adapter.py, adapters/bigquery/classes/bigquery_adapter.py, adapters/databricks/classes/databricks_adapter.py and 3 more, and read natively by the source freshness state bindings."
 
 [[stays]]
 path = "compiler/auditing/types.py"

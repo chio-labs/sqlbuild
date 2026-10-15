@@ -12,7 +12,13 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, ClassVar
 
-from sqlbuild._native import SeedCsvSettings, SourceFreshnessRecord, SqlLexicalSyntax, SqlValue
+from sqlbuild._native import (
+    SeedCsvSettings,
+    SourceFreshnessRecord,
+    SqlLexicalSyntax,
+    SqlValue,
+    render_insert_source_freshness_records_sql,
+)
 from sqlbuild.adapter.contract._helpers.seed_csv import get_seed_csv_null_values
 from sqlbuild.adapter.contract.classes.base_adapter import (
     BaseAdapter,
@@ -78,9 +84,6 @@ from sqlbuild.adapter.contract.types import (
 )
 from sqlbuild.adapter.relations.main.get_columns_for_relations import (
     get_columns_for_relations_bulk,
-)
-from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql import (
-    render_insert_source_freshness_records_sql,
 )
 from sqlbuild.adapter.type_system.main.first_arg_nullability import first_arg_nullability
 from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize_numeric_family

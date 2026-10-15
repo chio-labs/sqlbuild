@@ -19,8 +19,6 @@ pub(crate) const ADAPTER_EXCEPTIONS: &str = "sqlbuild.adapter.contract.exception
 pub(crate) const LIFECYCLE_MODULE: &str =
     "sqlbuild.runtime.observability.classes.operation_lifecycle";
 pub(crate) const OBSERVABILITY_MODELS: &str = "sqlbuild.runtime.observability.models";
-pub(crate) const STATE_TABLE_DDL_MODULE: &str =
-    "sqlbuild.adapter.state_sql.main.render_state_table_create_sql";
 pub(crate) const OBSERVATION_ERROR: &str = "SourceFreshnessObservationError";
 pub(crate) const INPUT_ERROR: &str = "SourceFreshnessInputError";
 

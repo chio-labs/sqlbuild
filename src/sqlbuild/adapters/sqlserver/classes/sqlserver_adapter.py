@@ -16,6 +16,7 @@ from sqlbuild._native import (
     SqlLexicalSyntax,
     SqlValue,
     SqlValueKind,
+    render_insert_source_freshness_records_sql,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import (
     BaseAdapter,
@@ -95,9 +96,6 @@ from sqlbuild.adapter.contract.types import (
 )
 from sqlbuild.adapter.relations.main.get_columns_for_relations import (
     get_columns_for_relations_bulk,
-)
-from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql import (
-    render_insert_source_freshness_records_sql,
 )
 from sqlbuild.adapters.sqlserver._helpers.grants import (
     render_sqlserver_view_grants,

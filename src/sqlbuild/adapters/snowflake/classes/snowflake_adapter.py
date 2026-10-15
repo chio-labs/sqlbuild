@@ -19,6 +19,7 @@ from sqlbuild._native import (
     SqlValue,
     TableType,
     collect_snowflake_cost,
+    render_insert_source_freshness_records_sql,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import (
     BaseAdapter,
@@ -109,9 +110,6 @@ from sqlbuild.adapter.relations.models import (
     ListedRelation,
     SchemaColumnListing,
     SchemaRelationListing,
-)
-from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql import (
-    render_insert_source_freshness_records_sql,
 )
 from sqlbuild.adapter.type_system.main.conditional_result_nullability import (
     conditional_result_nullability,

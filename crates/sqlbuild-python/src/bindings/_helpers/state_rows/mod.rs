@@ -7,4 +7,5 @@ pub(crate) mod migration_projections;
 pub(crate) mod migration_rows;
 pub(crate) mod models;
 pub(crate) mod registration;
+pub(crate) mod state_tables;
 pub(crate) mod timestamps;

@@ -21,7 +21,7 @@ const JSON_TYPE: &str = "json";
 /// `render_state_sql_literal(*, value, declared_type)`: `value` as its state column's literal.
 #[pyfunction]
 #[pyo3(signature = (*, value, declared_type))]
-fn render_state_sql_literal(
+pub(crate) fn render_state_sql_literal(
     py: Python<'_>,
     value: &Bound<'_, PyAny>,
     declared_type: &str,

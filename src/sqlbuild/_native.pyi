@@ -5022,6 +5022,21 @@ def normalize_sql_value(
     limits: SqlValueLimits | None = None,
 ) -> SqlValue: ...
 def render_state_sql_literal(*, value: object | None, declared_type: StateSqlValueType) -> str: ...
+def render_state_table_create_sql(
+    *,
+    qualified_name: str,
+    columns: tuple[str, ...],
+    column_types: Mapping[str, StateSqlValueType],
+    required_columns: frozenset[str],
+    render_framework_type: Callable[[FrameworkType], str],
+) -> str: ...
+def render_insert_source_freshness_records_sql(
+    *,
+    database: str | None,
+    schema: str,
+    records: tuple[SourceFreshnessRecord, ...],
+    render_qualified_name: Callable[..., str | None],
+) -> str: ...
 def model_header_declarations(
     header: tuple[object | None, object | None], model_name: str, relative_path: Path, /
 ) -> tuple[tuple[object, ...], tuple[object, ...]]: ...

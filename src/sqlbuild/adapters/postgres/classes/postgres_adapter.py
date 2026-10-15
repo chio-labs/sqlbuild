@@ -10,7 +10,13 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar
 
-from sqlbuild._native import SeedCsvSettings, SourceFreshnessRecord, SqlLexicalSyntax, SqlValue
+from sqlbuild._native import (
+    SeedCsvSettings,
+    SourceFreshnessRecord,
+    SqlLexicalSyntax,
+    SqlValue,
+    render_insert_source_freshness_records_sql,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import (
     BaseAdapter,
     _build_names_filter,
@@ -87,9 +93,6 @@ from sqlbuild.adapter.contract.types import (
 )
 from sqlbuild.adapter.relations.main.get_columns_for_relations import (
     get_columns_for_relations_bulk,
-)
-from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql import (
-    render_insert_source_freshness_records_sql,
 )
 from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize_numeric_family
 from sqlbuild.adapter.type_system.main.types_equal import types_equal

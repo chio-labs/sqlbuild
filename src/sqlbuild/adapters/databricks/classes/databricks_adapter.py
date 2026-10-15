@@ -13,7 +13,13 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar
 
-from sqlbuild._native import SeedCsvSettings, SourceFreshnessRecord, SqlLexicalSyntax, SqlValue
+from sqlbuild._native import (
+    SeedCsvSettings,
+    SourceFreshnessRecord,
+    SqlLexicalSyntax,
+    SqlValue,
+    render_insert_source_freshness_records_sql,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import (
     BaseAdapter,
     _encode_typed_json,
@@ -97,9 +103,6 @@ from sqlbuild.adapter.relations.main.get_columns_for_relations import (
     get_columns_for_relations_bulk,
 )
 from sqlbuild.adapter.relations.main.relation_age_timestamp import relation_age_timestamp_utc
-from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql import (
-    render_insert_source_freshness_records_sql,
-)
 from sqlbuild.adapter.type_system.main.conditional_result_nullability import (
     conditional_result_nullability,
 )

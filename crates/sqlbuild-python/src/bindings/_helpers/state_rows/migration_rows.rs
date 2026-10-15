@@ -20,13 +20,14 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
 use crate::bindings::_helpers::state_rows::constants::{
-    MIGRATION_MODELS, MIGRATION_TYPES, SQL_VALUE_TYPES, STATE_TABLE_DDL,
+    MIGRATION_MODELS, MIGRATION_TYPES, SQL_VALUE_TYPES,
 };
 use crate::bindings::_helpers::state_rows::events::typed_insert_sql;
 use crate::bindings::_helpers::state_rows::migration_objects::{
     layout, qualified_table, state_error,
 };
 use crate::bindings::_helpers::state_rows::models::{EventTable, EventTableLayout};
+use crate::bindings::_helpers::state_rows::state_tables::state_table_create_sql;
 use crate::bindings::_helpers::state_rows::timestamps::date_time_typed;
 
 /// DDL that creates one migration state table when it is missing.
@@ -51,19 +52,17 @@ fn create_sql<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py, 
         };
         column_types.set_item(*column, value_types.getattr(member)?)?;
     }
-    call_with(
-        &imported(py, STATE_TABLE_DDL, "render_state_table_create_sql")?,
-        &[
-            ("qualified_name", PyString::new(py, &table).into_any()),
-            ("columns", PyTuple::new(py, layout.columns)?.into_any()),
-            ("column_types", column_types.into_any()),
-            ("required_columns", PyFrozenSet::empty(py)?.into_any()),
-            (
-                "render_framework_type",
-                request.get("render_framework_type")?,
-            ),
-        ],
-    )
+    let columns: Bound<'py, PyAny> = PyTuple::new(py, layout.columns)?.into_any();
+    let sql: String = state_table_create_sql(
+        &table,
+        (
+            &columns,
+            column_types.as_any(),
+            PyFrozenSet::empty(py)?.as_any(),
+        ),
+        &request.get("render_framework_type")?,
+    )?;
+    Ok(PyString::new(py, &sql).into_any())
 }
 
 /// The SQL reading every stored event of one schema, and the columns it selects.
