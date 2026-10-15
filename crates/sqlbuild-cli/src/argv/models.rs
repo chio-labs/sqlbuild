@@ -180,3 +180,20 @@ pub struct DbtExecutionOutcome {
     pub writes: Vec<(Stream, String)>,
     pub parsed: Result<DbtParsedFlags, DbtExecutionFailure>,
 }
+
+/// One `CliNamespace` attribute default, rebuilt fresh for every namespace.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NamespaceDefault {
+    None,
+    Bool(bool),
+    Int(i64),
+    Text(&'static str),
+    /// A new empty `list`.
+    EmptyList,
+    /// A new empty `dict`.
+    EmptyDict,
+    /// `CompileLineageMode.FAST`.
+    CompileLineageFast,
+    /// `ColumnLineageMode.RICH`.
+    ColumnLineageRich,
+}

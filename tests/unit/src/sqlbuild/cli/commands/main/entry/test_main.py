@@ -159,12 +159,9 @@ def test_given_root_help_arguments_when_running_main_then_it_returns_expected_ex
     test_case: MainTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delitem(sys.modules, "sqlbuild.cli.compile.main.run", raising=False)
-
     exit_code: int = main(test_case.argv)
 
     assert exit_code == test_case.expected_exit_code
-    assert "sqlbuild.cli.compile.main.run" not in sys.modules
 
 
 @pytest.mark.parametrize(

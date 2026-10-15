@@ -12,6 +12,7 @@ use pyo3::{IntoPyObjectExt, pyclass, pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_cli::dispatch::main::event_export_warning::event_export_warning;
 use sqlbuild_cli::dispatch::models::{ExportSummary, ExporterLoss};
 
+use crate::bindings::_helpers::cli::launch_state::withhold_launch_record;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
@@ -20,7 +21,6 @@ const EVENT_DISPATCHER_MODULE: &str = "sqlbuild.runtime.observability.classes.ev
 const DISPATCHER_SCOPE_MODULE: &str = "sqlbuild.runtime.observability.main.dispatcher_scope";
 const IDENTITY_MODULE: &str = "sqlbuild.runtime.observability.main.current_execution_identity";
 const EXTENSIONS_MODULE: &str = "sqlbuild.compiler.discovery.main.runtime_extensions";
-const LAUNCH_RECORD_MODULE: &str = "sqlbuild.cli.entry.main._withhold_launch_record";
 const EXPORTER_DISPATCHER_MODULE: &str = "sqlbuild.runtime.event_exporting.classes.dispatcher";
 const EXPORTER_SCOPE_CLASS_MODULE: &str = "sqlbuild.runtime.event_exporting.classes.command_scope";
 const EXPORTER_SCOPE_MODULE: &str =
@@ -340,7 +340,7 @@ impl Observed {
             let sinks: Bound<'_, PyAny> = extensions.getattr("command_output_sinks")?;
             command_output_sinks = sinks.is_truthy()?;
             if event_exporters.is_truthy()? || command_output_sinks {
-                imported(py, LAUNCH_RECORD_MODULE, "withhold_launch_record")?.call0()?;
+                withhold_launch_record(py)?;
                 let timeout: Bound<'_, PyAny> =
                     extensions.getattr("lifecycle_shutdown_timeout_seconds")?;
                 let timeout: Bound<'_, PyAny> = if timeout.is_none() {

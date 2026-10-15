@@ -22,7 +22,6 @@ from sqlbuild.adapter.contract.types import (
     TypeDialect,
 )
 from sqlbuild.adapter.relations.models import InspectionQueryRecord
-from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.models import (
     AuditCommandRequest,
     BuildCommandRequest,
@@ -1634,6 +1633,7 @@ class NativeReuseAttempt:
     def record(self, record: dict[str, object]) -> tuple[str, int]: ...
 
 def check_compile_reuse(check: dict[str, object]) -> NativeReuseAttempt: ...
+def run_compile(request: CompileCommandRequest) -> int: ...
 def attempt_compile_reuse(*, request: CompileReuseRequest) -> CompileReuseAttempt: ...
 
 class CompileArtifactWrites:
@@ -2369,6 +2369,174 @@ def render_dbt_node_result(
 def format_dbt_active_node_status(
     *, active_nodes: Sequence[tuple[str, float]], now: float
 ) -> str: ...
+
+class CliNamespace:
+    command: str | None
+    project_dir: str | None
+    dbt_project_dir: str | None
+    dbt_profiles_dir: str | None
+    dbt_target: str | None
+    dbt_profile: str | None
+    sqb_output_dir: str | None
+    dry_run: bool
+    overwrite: bool
+    skip_dbt_debug: bool
+    no_sql_validation: bool
+    no_cache: bool
+    defer_to: str | None
+    defer_clone_from: str | None
+    defer_sources_to: str | None
+    target: str | None
+    warehouse: str | None
+    case: str | None
+    inspect: bool
+    target_range: str | None
+    from_target: str | None
+    to_target: str | None
+    hard_copy: bool
+    json: bool
+    json_output: Path | None
+    event_output: Path | None
+    manifest: bool
+    dag: str | None
+    compile_lineage_mode: CompileLineageMode
+    profile_skip_discovery_sql_analysis: bool
+    profile_skip_column_inference: bool
+    profile_skip_contracts: bool
+    profile_skip_write: bool
+    start_cursor: str | None
+    end_cursor: str | None
+    start_cursor_ts: str | None
+    max_microbatches: int | None
+    end_cursor_ts: str | None
+    start_cursor_int: str | None
+    end_cursor_int: str | None
+    no_color: bool
+    fail_fast: bool
+    full_refresh: bool
+    as_target: str | None
+    selection_diagnostics: bool
+    include_python: bool
+    load_sources: bool | None
+    reload: bool
+    run_tests: bool
+    run_audits: bool
+    allow_snapshot_full_refresh: bool
+    allow_table_type_downgrade: bool
+    allow_retention_decrease: bool
+    allow_missing_migration_origin: bool
+    allow_snapshot_schema_change: bool
+    concurrency: int | None
+    verbose: bool
+    debug: bool
+    auto_approve: bool
+    retention_days: int | None
+    direct_state_history_versions: int | None
+    drop_old_name_views: list[str]
+    bounded: str | None
+    max_column_examples: int | None
+    max_row_only_examples: int | None
+    sample_rows: int | None
+    sample_seed: int | None
+    exhaustive: bool
+    max_models: int | None
+    max_columns: int | None
+    query_sql: str | None
+    query_file: str | None
+    query_format: str
+    query_limit: int | None
+    query_no_limit: bool
+    cost_selector: str
+    refactor_target: str | None
+    refactor_new_name: str | None
+    refactor_destination: str | None
+    refactor_cascade: bool
+    cost_limit: int | None
+    cost_no_limit: bool
+    cost_sort: str | None
+    cost_order: str | None
+    cost_since: str | None
+    cost_until: str | None
+    lineage_targets: list[str]
+    lineage_format: str
+    lineage_direction: str | None
+    lineage_depth: str
+    lineage_mode: ColumnLineageMode
+    lineage_include_uses: bool
+    no_connection: bool
+    fail_on_error: bool
+    fail_on_stale: bool
+    state: bool
+    full: bool
+    schema_only: bool
+    left_query: str | None
+    left_query_file: Path | None
+    left_label: str | None
+    right_query: str | None
+    right_query_file: Path | None
+    right_label: str | None
+    key: list[str]
+    unkeyed: bool
+    exclude_column: list[str]
+    tolerance: list[str]
+    max_value_length: int | None
+    no_example_values: bool
+    full_example_values: bool
+    playground_path: str
+    playground_template: str
+    scenario_command: str | None
+    scenario_selector: list[str]
+    scenario_retain: bool
+    scenario_namespace: str | None
+    scenario_local: bool
+    scenario_strict: bool
+    scenario_sync_snapshots: bool
+    scenario_refresh: bool
+    scenario_force: bool
+    scenario_max_snapshot_rows: int | None
+    scenario_max_snapshot_total_rows: int | None
+    scenario_max_snapshot_bytes: int | None
+    scenario_max_snapshot_total_bytes: int | None
+    skills_global: bool
+    skills_target: list[str]
+    skills_force: bool
+    select: list[str]
+    positional_select: list[str]
+    select_file: list[str]
+    exclude: list[str]
+    dbt_command: str | None
+    dbt_args: list[str]
+    vars: dict[str, object]
+    rules_command: str | None
+    rules_rule_selector: str | None
+    rules_skills_check: bool
+    format_check: bool
+    format_diff: bool
+    format_fixtures_only: bool
+    format_fix: bool
+    format_paths: list[str]
+    scope_target: str | None
+    scope_at: str | None
+    scope_as_path: str | None
+    scope_browse: str | None
+    scope_list: str | None
+    contract_command: str | None
+    contract_from: str | None
+    contract_write: bool
+    scope_defined_under: str | None
+    scope_kind: list[str]
+    scope_match: str | None
+    scope_used_only: bool
+    scope_include_nearby: bool
+    scope_nearby_depth: int
+    scope_dependency_depth: int
+    scope_explain: str | None
+    scope_globals: str
+    scope_page_size: int
+    scope_after: str | None
+    scope_paths: str
+
+    def __init__(self) -> None: ...
 
 class DbtInitProgressReporter:
     def __init__(self, *, stream: TextIO, use_color: bool) -> None: ...

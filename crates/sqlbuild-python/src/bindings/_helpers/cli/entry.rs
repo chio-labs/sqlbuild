@@ -14,9 +14,11 @@ use sqlbuild_cli::dispatch::models::{CommandFacts, CommandFailure, InvocationPol
 
 use crate::bindings::_helpers::cli::argv::parse_cli_invocation;
 use crate::bindings::_helpers::cli::dispatch::{command_facts, dispatch_command};
+use crate::bindings::_helpers::cli::launch_state::offer_launch_record;
 use crate::bindings::_helpers::cli::observability::cli_observability_scope;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use sqlbuild_cli::launcher::constants::LAUNCH_RECORD_OPTION;
 use sqlbuild_core::cli_text::main::format_coded_error::format_coded_error;
 use sqlbuild_core::cli_text::models::CliStyle;
 
@@ -570,6 +572,26 @@ fn parsed_invocation<'py>(
     )
 }
 
+/// `argv` without a leading launch record option, after offering the record it names.
+fn offered_launch_record<'py>(argv: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = argv.py();
+    let mut first: Option<String> = None;
+    if argv.len()? > 0 {
+        let item: Bound<'py, PyAny> = argv.get_item(0)?;
+        if item.is_instance_of::<PyString>() {
+            first = Some(item.extract()?);
+        }
+    }
+    let Some(path) =
+        first.and_then(|first| first.strip_prefix(LAUNCH_RECORD_OPTION).map(str::to_owned))
+    else {
+        offer_launch_record(py, None)?;
+        return Ok(argv.clone());
+    };
+    offer_launch_record(py, Some(imported(py, "pathlib", "Path")?.call1((path,))?))?;
+    argv.get_item(pyo3::types::PySlice::new(py, 1, isize::MAX, 1))
+}
+
 /// Run the CLI for `argv` (default `sys.argv[1:]`) and return its exit code.
 #[pyfunction]
 #[pyo3(signature = (argv=None, handlers=None))]
@@ -585,6 +607,7 @@ fn run_cli<'py>(
             .getattr("argv")?
             .get_item(pyo3::types::PySlice::new(py, 1, isize::MAX, 1))?,
     };
+    let argv: Bound<'py, PyAny> = offered_launch_record(&argv)?;
     let external: Bound<'py, PyAny> = external_context(py)?;
     let invocation_scope: Bound<'py, PyAny> =
         imported(py, INVOCATION_SCOPE_MODULE, "invocation_scope")?.call0()?;

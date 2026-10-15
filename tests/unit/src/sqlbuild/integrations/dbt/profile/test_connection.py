@@ -21,12 +21,6 @@ from tests.unit.src.sqlbuild.integrations.dbt.profile.helpers import (
     "test_case",
     [
         DbtProfileConnectionTestCase(
-            description="a connection without the dbt_profile source is not resolved",
-            raw_config={"database": "orders.duckdb"},
-            adapter_name="duckdb",
-            expected_connection=None,
-        ),
-        DbtProfileConnectionTestCase(
             description="the project's dbt profile resolves to adapter config",
             raw_config={"source": "dbt_profile", "target": " dev "},
             adapter_name="duckdb",
@@ -47,7 +41,33 @@ def test_given_raw_connection_when_resolving_dbt_profile_then_returns_expected_c
         project_config=dbt_workspace_project_config(adapter_name=test_case.adapter_name),
     )
 
-    assert (None if resolved is None else resolved.connection) == test_case.expected_connection
+    assert resolved is not None
+    assert resolved.connection == test_case.expected_connection
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtProfileConnectionTestCase(
+            description="a connection without the dbt_profile source is not resolved",
+            raw_config={"database": "orders.duckdb"},
+            adapter_name="duckdb",
+            expected_connection=None,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_non_profile_connection_when_resolving_dbt_profile_then_returns_none(
+    test_case: DbtProfileConnectionTestCase, tmp_path: Path
+) -> None:
+    resolved: NormalizedDbtProfileConnection | None = resolve_raw_dbt_profile_connection(
+        raw_config=test_case.raw_config,
+        project_dir=tmp_path,
+        adapter_name=test_case.adapter_name,
+        project_config=dbt_workspace_project_config(adapter_name=test_case.adapter_name),
+    )
+
+    assert resolved == test_case.expected_connection
 
 
 @pytest.mark.parametrize(
