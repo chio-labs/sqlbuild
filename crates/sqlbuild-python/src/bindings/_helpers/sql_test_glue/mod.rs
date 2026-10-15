@@ -3,6 +3,7 @@ pub(crate) mod authored_ctes;
 mod compiled_tests;
 mod constants;
 mod cursor_window;
+mod fixture_validation;
 mod plan_assembly;
 mod plan_driver;
 mod plan_entries;

@@ -7,8 +7,12 @@ pub(super) const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
 pub(super) const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
 pub(super) const PLAN_MODELS: &str = "sqlbuild.compiler.planner.models";
 pub(super) const NATIVE_PLANNING: &str = "sqlbuild._native";
-pub(super) const FIXTURE_VALIDATION: &str =
-    "sqlbuild.compiler.planner._helpers.sql_tests.fixture_validation";
+pub(super) const FIXTURE_PREFIXES: [(&str, &str); 4] = [
+    ("model", "__ref__"),
+    ("source", "__source__"),
+    ("seed", "__seed__"),
+    ("sql_test", "__expected__"),
+];
 pub(super) const CURSOR_ALGEBRA_EXCEPTIONS: &str = "sqlbuild.cursor_algebra.exceptions";
 pub(super) const PLANNER_TYPES: &str = "sqlbuild.compiler.planner.types";
 pub(super) const INTEGER_CURSOR_TYPE: &str = "integer";

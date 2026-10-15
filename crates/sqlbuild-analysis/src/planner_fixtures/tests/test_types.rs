@@ -42,3 +42,19 @@ pub(super) struct FixtureMarkerTestCase {
     pub sql: &'static str,
     pub expected_sql: &'static str,
 }
+
+#[derive(Debug)]
+pub(crate) struct FixtureLineTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) contents: &'static str,
+    pub(crate) cte_name: &'static str,
+    pub(crate) expected_line: usize,
+}
+
+#[derive(Debug)]
+pub(crate) struct CollectionMismatchTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) expected_type: Option<&'static str>,
+    pub(crate) inferred_type: Option<&'static str>,
+    pub(crate) expected_mismatch: bool,
+}

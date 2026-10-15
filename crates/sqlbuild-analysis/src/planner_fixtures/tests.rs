@@ -10,3 +10,5 @@ mod test_reads;
 mod test_schema;
 #[path = "tests/test_types.rs"]
 mod test_types;
+#[path = "tests/test_validation.rs"]
+mod test_validation;

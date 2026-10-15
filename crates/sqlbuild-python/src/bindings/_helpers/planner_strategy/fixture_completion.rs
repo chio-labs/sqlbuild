@@ -20,7 +20,7 @@ use crate::bindings::_helpers::planner_strategy::fixture_values::{
 
 #[pyfunction]
 #[pyo3(signature = (*, project, adapter, request, planning_context = None))]
-fn build_relation_fixture_completion<'py>(
+pub(crate) fn build_relation_fixture_completion<'py>(
     project: &Bound<'py, PyAny>,
     adapter: &Bound<'py, PyAny>,
     request: (Bound<'py, PyAny>, Bound<'py, PyAny>),

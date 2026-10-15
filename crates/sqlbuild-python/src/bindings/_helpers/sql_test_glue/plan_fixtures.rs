@@ -1,11 +1,12 @@
-//! Complete SQL-test fixtures through the existing fixture completion boundary.
+//! Complete SQL-test fixtures through the native fixture validation boundary.
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::sql_test_glue::authored_ctes::prefixed_ctes;
-use crate::bindings::_helpers::sql_test_glue::constants::{FIXTURE_VALIDATION, NATIVE_PLANNING};
+use crate::bindings::_helpers::sql_test_glue::constants::NATIVE_PLANNING;
+use crate::bindings::_helpers::sql_test_glue::fixture_validation::validated_fixtures;
 use crate::bindings::_helpers::sql_test_glue::plan_values::model_payload;
 
 pub(super) fn validated_test<'py>(
@@ -13,31 +14,28 @@ pub(super) fn validated_test<'py>(
     chain: &Bound<'py, PyAny>,
     inputs: (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
     context: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
+) -> PyResult<Result<Bound<'py, PyAny>, Vec<String>>> {
     let py = test.py();
     let payload = test.getattr("payload")?;
     let ctes = payload.getattr("authored_ctes")?;
     let expected = payload.getattr("expected_ctes")?;
-    let completed = call_with(
-        &imported(py, FIXTURE_VALIDATION, "build_validated_test_fixtures")?,
-        &[
-            ("test", test.clone()),
-            ("project", inputs.0.clone()),
-            ("adapter", inputs.1.clone()),
-            ("ordered_model_names", chain.clone()),
-            ("mock_refs", prefixed_ctes(&ctes, "__ref__")?.into_any()),
-            (
-                "mock_sources",
-                prefixed_ctes(&ctes, "__source__")?.into_any(),
-            ),
-            ("mock_seeds", prefixed_ctes(&ctes, "__seed__")?.into_any()),
-            (
-                "expected_outputs",
-                prefixed_ctes(&expected, "__expected__")?.into_any(),
-            ),
-            ("planning_context", context.clone()),
-        ],
-    )?;
+    let completed = match validated_fixtures(
+        test,
+        (
+            chain,
+            [
+                prefixed_ctes(&ctes, "__ref__")?,
+                prefixed_ctes(&ctes, "__source__")?,
+                prefixed_ctes(&ctes, "__seed__")?,
+                prefixed_ctes(&expected, "__expected__")?,
+            ],
+        ),
+        inputs,
+        context,
+    )? {
+        Ok(completed) => completed,
+        Err(diagnostics) => return Ok(Err(diagnostics)),
+    };
     let replace = imported(py, "dataclasses", "replace")?;
     let mut authored: Vec<Bound<'py, PyAny>> = Vec::new();
     for cte in ctes.try_iter()? {
@@ -46,9 +44,7 @@ pub(super) fn validated_test<'py>(
         let mut replacement = cte.clone();
         for (index, prefix) in ["__ref__", "__source__", "__seed__"].iter().enumerate() {
             if let Some(name) = name.strip_prefix(prefix) {
-                let sql = completed
-                    .get_item(index)?
-                    .call_method1("get", (name, cte.getattr("sql_body")?))?;
+                let sql = completed[index].call_method1("get", (name, cte.getattr("sql_body")?))?;
                 let kwargs = PyDict::new(py);
                 kwargs.set_item("sql_body", sql)?;
                 replacement = replace.call((&cte,), Some(&kwargs))?;
@@ -65,9 +61,7 @@ pub(super) fn validated_test<'py>(
         let kwargs = PyDict::new(py);
         kwargs.set_item(
             "sql_body",
-            completed
-                .get_item(3)?
-                .call_method1("get", (name, cte.getattr("sql_body")?))?,
+            completed[3].call_method1("get", (name, cte.getattr("sql_body")?))?,
         )?;
         expected_ctes.push(replace.call((&cte,), Some(&kwargs))?);
     }
@@ -77,7 +71,7 @@ pub(super) fn validated_test<'py>(
     let payload = replace.call((payload,), Some(&kwargs))?;
     let kwargs = PyDict::new(py);
     kwargs.set_item("payload", payload)?;
-    replace.call((test,), Some(&kwargs))
+    replace.call((test,), Some(&kwargs)).map(Ok)
 }
 
 pub(super) fn validate<'py>(
@@ -110,21 +104,15 @@ pub(super) fn validate<'py>(
             "zip() argument lengths differ",
         ));
     }
-    let exception = imported(
-        py,
-        "sqlbuild.compiler.planner.exceptions",
-        "SqlTestFixtureValidationError",
-    )?;
     let mut validated = tests.to_vec();
     let mut diagnostics: std::collections::BTreeMap<usize, Bound<'py, PyAny>> =
         std::collections::BTreeMap::new();
     for (index, chain) in indexes.into_iter().zip(chains) {
-        match validated_test(&tests[index], &chain, inputs, context) {
+        match validated_test(&tests[index], &chain, inputs, context)? {
             Ok(test) => validated[index] = test,
-            Err(error) if error.value(py).is_instance(&exception)? => {
-                diagnostics.insert(index, error.value(py).getattr("diagnostics")?);
+            Err(errors) => {
+                diagnostics.insert(index, PyTuple::new(py, errors)?.into_any());
             }
-            Err(error) => return Err(error),
         }
     }
     Ok((validated, diagnostics))

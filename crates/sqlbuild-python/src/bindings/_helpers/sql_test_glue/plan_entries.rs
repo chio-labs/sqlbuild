@@ -162,18 +162,15 @@ pub(super) fn expected_diagnostics(
         if message.is_none() {
             continue;
         }
-        let location = call_with(
-            &imported(py, super::constants::FIXTURE_VALIDATION, "fixture_location")?,
-            &[
-                ("test", test.clone()),
-                ("resource_type", resource_types.getattr("SQL_TEST")?),
-                ("name", name),
-            ],
+        let location = super::fixture_validation::fixture_location(
+            test,
+            &resource_types.getattr("SQL_TEST")?,
+            &name.extract::<String>()?,
         )?;
         result.push(format!(
             "SQL test '{}': {}: {}",
             test.getattr("name")?.extract::<String>()?,
-            location.extract::<String>()?,
+            location,
             message.extract::<String>()?
         ));
     }
