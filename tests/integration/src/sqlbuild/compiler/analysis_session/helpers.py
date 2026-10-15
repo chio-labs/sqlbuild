@@ -16,6 +16,7 @@ import pytest
 import sqlbuild._native as native_module
 from sqlbuild._native import (
     analyze_native_model_sql,
+    build_analysis_cache_context,
     build_compile_inputs,
     cursor_intrinsics_analysis_sql,
     discover_project_inputs,
@@ -36,7 +37,6 @@ from sqlbuild.compiler.analysis_session.models import (
     NativePivotTables,
 )
 from sqlbuild.compiler.analysis_session.types import ProofRow
-from sqlbuild.compiler.compile._helpers.analysis.cache import build_analysis_cache_context
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,

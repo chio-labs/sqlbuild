@@ -77,6 +77,7 @@ from sqlbuild.compiler.auditing.types import (
     AuditSeverity,
 )
 from sqlbuild.compiler.compile.models import (
+    AnalysisCacheContext,
     CompileAdapterContext,
     CompileAnalysisSelection,
     CompileAuditInput,
@@ -3505,6 +3506,14 @@ class CollectedCompileDiagnostics:
     def diagnostics(self) -> tuple[CompilerDiagnostic, ...]: ...
 
 def collect_compile_diagnostics() -> CollectedCompileDiagnostics: ...
+def build_analysis_cache_context(
+    *,
+    root: Path | None,
+    inference_profile: ExpressionInferenceProfile,
+    allow_compact_analysis: bool,
+    rich_type_inference: bool = True,
+    signature_namespace: object = None,
+) -> AnalysisCacheContext | None: ...
 
 class CompileInputRecording:
     def __enter__(self) -> CompileInputReads: ...
@@ -4606,10 +4615,10 @@ def assemble_native_project_resources(
     syntax_checks: tuple[tuple[tuple[str, dict[str, str] | None], ...], ...],
 ) -> NativeProjectResources: ...
 def explicit_reference_report(
-    project: Any,
-    settings: dict[str, object],
-    owners: list[tuple[Any, int, list[tuple[str, str, int]]]],
-    /,
+    *,
+    project: CompiledProjectView,
+    discovered_inputs: DiscoveredProjectInputs,
+    enforce_explicit: bool,
 ) -> PythonSqlReferenceReport: ...
 def hard_coded_relation_remedy(
     *,
@@ -4715,9 +4724,6 @@ def schema_validations(
     *, requests: Sequence[SqlSchemaValidationRequest]
 ) -> tuple[SqlBindingResult, ...]: ...
 def ignores_quoted_case(*, connection: Mapping[str, object], dialect: str | None) -> bool: ...
-def python_literal_sql_calls(
-    source: str, start_line: int, placeholder: str
-) -> list[tuple[str, str, int]]: ...
 def _oracle_json_dumps(dialect_json: str, value_json: str) -> str: ...
 def _oracle_text_positions(
     data: bytes, byte_offsets: list[int]

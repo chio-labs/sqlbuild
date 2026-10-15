@@ -31,6 +31,19 @@ pub(crate) fn sorted_dumps(
     dumps(&encoded, &dialect).map_err(|error| PyValueError::new_err(format!("{error:?}")))
 }
 
+/// `json.dumps(value, ensure_ascii=False, sort_keys=True, separators=separators)`.
+pub(crate) fn unicode_sorted_dumps(
+    value: &Bound<'_, PyAny>,
+    separators: (&str, &str),
+) -> PyResult<String> {
+    let encoded: JsonValue = Encoder::new(value.py(), false)?.encode(value)?;
+    let mut options: StdlibJsonOptions =
+        StdlibJsonOptions::new(None).with_separators(separators.0, separators.1);
+    options.ensure_ascii = false;
+    dumps(&encoded, &JsonDialect::Stdlib(options))
+        .map_err(|error| PyValueError::new_err(format!("{error:?}")))
+}
+
 /// The C encoder's type dispatch, with dictionaries ordered as `sorted(dict.items())`.
 struct Encoder<'py> {
     default_str: bool,

@@ -1,4 +1,5 @@
 pub(crate) mod analysis;
+pub(crate) mod analysis_cache;
 pub(crate) mod assembly;
 pub(crate) mod assembly_analysis;
 pub(crate) mod assembly_checks;
