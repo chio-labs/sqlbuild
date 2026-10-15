@@ -1,4 +1,4 @@
-//! One call's cursor values read from and built as `sqlbuild.cursor_algebra.models` objects.
+//! One call's cursor values read from and built as the native cursor value records.
 
 use std::cell::RefCell;
 

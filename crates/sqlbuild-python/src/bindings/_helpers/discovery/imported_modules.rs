@@ -115,7 +115,7 @@ pub(crate) fn module_functions<'py>(
         .collect()
 }
 
-/// `sqlbuild.compiler.discovery.models.<class_name>(**pairs)`.
+/// `sqlbuild._native.<class_name>(**pairs)`.
 pub(crate) fn discovered<'py>(
     py: Python<'py>,
     class_name: &str,
