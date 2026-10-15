@@ -17,7 +17,8 @@ pub(crate) const ENUM_MODULE: &str = "enum";
 pub(crate) const STR_ENUM: &str = "StrEnum";
 
 /// Every native string enum group, registered before the records.
-pub(crate) const ENUMS: &[&[EnumSpec]] = &[FRESHNESS_ENUMS, CLI_ENUMS, DBT_ENUMS];
+pub(crate) const ENUMS: &[&[EnumSpec]] =
+    &[FRESHNESS_ENUMS, CLI_ENUMS, DBT_ENUMS, PRESENTATION_ENUMS];
 
 /// Every native record group, in registration order.
 pub(crate) const RECORDS: &[&[RecordSpec]] = &[
@@ -29,6 +30,7 @@ pub(crate) const RECORDS: &[&[RecordSpec]] = &[
     FRESHNESS_RECORDS,
     COST_RECORDS,
     SQL_VALUE_RECORDS,
+    DIAGNOSTIC_RECORDS,
 ];
 
 /// Records whose bound values are normalized before the record is created.
@@ -1421,6 +1423,23 @@ const SQL_VALUE_LIMITS: RecordSpec = RecordSpec {
 const SQL_VALUE_RECORDS: &[RecordSpec] =
     &[AUTHORED_SQL_SET, AUTHORED_SQL_VALUE_CALL, SQL_VALUE_LIMITS];
 
+const PARTIAL_BUILD_PHASE_TIMINGS: RecordSpec = RecordSpec {
+    name: "PartialBuildPhaseTimings",
+    doc: "Available disjoint phase durations after an exceptional build.",
+    fields: &[
+        FieldSpec::new("compile_seconds", FieldDefault::None),
+        FieldSpec::new("planning_seconds", FieldDefault::None),
+        FieldSpec::new("connection_preparation_seconds", FieldDefault::None),
+        FieldSpec::new("schema_preparation_seconds", FieldDefault::None),
+        FieldSpec::new("execution_seconds", FieldDefault::None),
+        FieldSpec::new("cost_collection_seconds", FieldDefault::None),
+        FieldSpec::new("total_seconds", FieldDefault::None),
+    ],
+};
+
+/// Phase durations available after an exceptional build.
+const DIAGNOSTIC_RECORDS: &[RecordSpec] = &[PARTIAL_BUILD_PHASE_TIMINGS];
+
 /// `sqb` commands, compile lineage modes and playground templates.
 const CLI_ENUMS: &[EnumSpec] = &[COMPILE_LINEAGE_MODE, CLI_COMMAND, PLAYGROUND_TEMPLATE];
 const DBT_INTEROP_COMMAND: EnumSpec = EnumSpec {
@@ -1444,3 +1463,12 @@ const DBT_INTEROP_SKIP_REASON: EnumSpec = EnumSpec {
 
 /// dbt interop commands and skip reasons.
 const DBT_ENUMS: &[EnumSpec] = &[DBT_INTEROP_COMMAND, DBT_INTEROP_SKIP_REASON];
+
+const COMPLETION_STATE: EnumSpec = EnumSpec {
+    name: "CompletionState",
+    doc: "Overall outcome state for a completion summary line.",
+    members: &[("OK", "ok"), ("WARN", "warn"), ("FAIL", "fail")],
+};
+
+/// Completion summary outcomes.
+const PRESENTATION_ENUMS: &[EnumSpec] = &[COMPLETION_STATE];

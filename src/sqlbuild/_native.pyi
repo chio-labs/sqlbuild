@@ -9457,3 +9457,31 @@ class SqlValueLimits(NativeRecord):
 
 class SqlValueValidationError(ValueError):
     """An authored value cannot be represented by the typed SQL value domain."""
+
+class CompletionState(StrEnum):
+    """Overall outcome state for a completion summary line."""
+
+    OK = "ok"
+    WARN = "warn"
+    FAIL = "fail"
+
+class PartialBuildPhaseTimings(NativeRecord):
+    """Available disjoint phase durations after an exceptional build."""
+
+    compile_seconds: float | None
+    planning_seconds: float | None
+    connection_preparation_seconds: float | None
+    schema_preparation_seconds: float | None
+    execution_seconds: float | None
+    cost_collection_seconds: float | None
+    total_seconds: float | None
+    def __init__(
+        self,
+        compile_seconds: float | None = None,
+        planning_seconds: float | None = None,
+        connection_preparation_seconds: float | None = None,
+        schema_preparation_seconds: float | None = None,
+        execution_seconds: float | None = None,
+        cost_collection_seconds: float | None = None,
+        total_seconds: float | None = None,
+    ) -> None: ...
