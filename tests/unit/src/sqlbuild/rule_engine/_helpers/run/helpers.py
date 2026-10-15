@@ -2,22 +2,10 @@ from collections.abc import Callable
 
 import pytest
 
+import sqlbuild._native as native
 from sqlbuild import _native
 from sqlbuild._native import NativeRulesRequest
-from sqlbuild.rule_engine._helpers.engine import custom_dispatch as native
 from sqlbuild.rule_engine.models import NativeRulesEvaluation
-
-
-def record_custom_starts(*, monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    """Record every custom-rule start instead of starting one."""
-
-    started: list[str] = []
-
-    def record_start(**_: object) -> None:
-        started.append("custom")
-
-    monkeypatch.setattr(native, "start_custom_rules", record_start)
-    return started
 
 
 def record_reuse(*, monkeypatch: pytest.MonkeyPatch) -> list[bool]:

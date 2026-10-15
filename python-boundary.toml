@@ -2,7 +2,7 @@
 # migration work that moves to Rust. `remaining_lines` must equal the current count of that work:
 # a PR that moves code lowers it, and adding movable Python fails the check.
 # Native failures must surface as errors; `handled_native_errors` lists the reviewed exceptions.
-remaining_lines = 9599
+remaining_lines = 9564
 
 [[stays]]
 path = "executor"
@@ -112,12 +112,7 @@ note = "Samples process resources for debug logging through Python's resource mo
 [[stays]]
 path = "rule_engine/_helpers/host"
 reason = "user-code"
-note = "Subprocess host that loads and runs user rule modules."
-
-[[stays]]
-path = "rule_engine/_helpers/engine/custom_dispatch.py"
-reason = "user-code"
-note = "Submits custom rules to their worker thread beside native built-in rule evaluation."
+note = "Rule 2: the subprocess host that loads and runs user rule modules (custom_host, custom_evaluation, tracked_facts, module_state, custom_host_launch); host fan-out, partitioning and CPU capacity run natively."
 
 [[stays]]
 path = "rule_engine/_helpers/engine/custom_payloads.py"
@@ -128,16 +123,6 @@ note = "Reads user rule functions (source lines, qualified names, import closure
 path = "rule_engine/_helpers/engine/_custom_catalogue.py"
 reason = "user-code"
 note = "Imports the project's custom rule modules and collects their @rule functions for the native catalogue."
-
-[[stays]]
-path = "rule_engine/_helpers/engine/custom_rules.py"
-reason = "user-code"
-note = "Dispatches custom rules to the rule-host worker pool and digests the fact views they read."
-
-[[stays]]
-path = "rule_engine/_helpers/run/rule_threads.py"
-reason = "user-code"
-note = "Runs rule phases and early SQL lint on worker threads with futures and stop events."
 
 [[stays]]
 path = "rule_engine/classes/rule_context.py"
@@ -162,7 +147,7 @@ note = "Public custom-rule test harness that runs user rules over a real compile
 [[stays]]
 path = "rule_engine/_helpers/engine/fact_replay.py"
 reason = "user-code"
-note = "Recomputes the fact-view values a custom rule read, for its cache key."
+note = "Rule 2: the fact digest scheme shared with the rule host (tracked_facts.py, custom_host.py); recomputes values through the user-facing fact views and encodes live Python objects with orjson."
 
 [[stays]]
 path = "rule_engine/main/define.py"
@@ -173,11 +158,6 @@ note = "Public @rule decorator entry point."
 path = "rule_engine/main/evaluate_rule.py"
 reason = "user-code"
 note = "Public custom-rule test harness entry point."
-
-[[stays]]
-path = "rule_engine/main/_evaluate.py"
-reason = "user-code"
-note = "Project evaluation entry used by the public custom-rule test harness."
 
 [[stays]]
 path = "rule_engine/classes/audit_facts.py"
@@ -233,11 +213,6 @@ note = "Lazy Polyglot SQL document user rules read through RuleContext."
 path = "rule_engine/classes/fact_reads.py"
 reason = "user-code"
 note = "Records the fact-view reads of one user rule evaluation."
-
-[[stays]]
-path = "rule_engine/classes/fact_digests.py"
-reason = "user-code"
-note = "Digests the fact-view values user rules read, for the custom-rule cache."
 
 [[stays]]
 path = "rule_engine/classes/shared_fact_encoder.py"

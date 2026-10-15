@@ -39,6 +39,10 @@ const STREAM_OPTIONS: (&[&str], &[&str]) = (
         "enable_status",
     ],
 );
+/// A running node: unique id, display name and start offset in seconds.
+type ActiveNode = (String, String, f64);
+type LineResult = io::Result<Option<String>>;
+
 const WAITING_MESSAGE: &str = "Waiting for dbt node output...";
 /// How often the running-node progress line refreshes while dbt is silent.
 const STATUS_REFRESH: Duration = Duration::from_secs(1);
@@ -50,7 +54,7 @@ const SIGNAL_POLL: Duration = Duration::from_millis(100);
 /// The live progress line and the running nodes it lists, in first-start order.
 struct StatusState {
     status: Option<Py<PyAny>>,
-    active_nodes: Vec<(String, String, f64)>,
+    active_nodes: Vec<ActiveNode>,
 }
 
 /// What the read loop and the progress refresher share.
@@ -173,14 +177,14 @@ fn streamed<'py>(
         let returncode: i64 = py
             .compiler_detach(|| Ok(dbt_process_returncode(&mut child)))
             .map_err(PyRuntimeError::new_err)?
-            .map_err(|error| PyErr::from(error))?;
+            .map_err(PyErr::from)?;
         waited = true;
         py.check_signals()?;
         Ok((returncode, results))
     })();
-    let child: Child = cleanup(py, &shared, refresher, (child, waited));
+    let process_id: u32 = cleanup(py, &shared, refresher, (child, waited));
     let (returncode, results) = result?;
-    Ok((returncode, results, Some(child.id())))
+    Ok((returncode, results, Some(process_id)))
 }
 
 /// One dbt output line: progress message, node row, results and the running-node status.
@@ -261,7 +265,7 @@ fn refreshed_status(
     py: Python<'_>,
     (stream, use_color, tty): (&Bound<'_, PyAny>, bool, bool),
     shared: &Shared,
-    (current, active_nodes): (Option<Py<PyAny>>, &[(String, String, f64)]),
+    (current, active_nodes): (Option<Py<PyAny>>, &[ActiveNode]),
 ) -> PyResult<Option<Py<PyAny>>> {
     if !tty || active_nodes.is_empty() {
         return Ok(None);
@@ -306,10 +310,7 @@ fn locked<'a>(
 
 /// Read output lines on a thread so the waiting caller can notice interrupt signals.
 fn start_reader(mut lines: BufReader<PipeReader>) -> Receiver<io::Result<Option<String>>> {
-    let (sender, receiver): (
-        Sender<io::Result<Option<String>>>,
-        Receiver<io::Result<Option<String>>>,
-    ) = channel();
+    let (sender, receiver): (Sender<LineResult>, Receiver<LineResult>) = channel();
     std::thread::spawn(move || {
         loop {
             let line: io::Result<Option<String>> = read_dbt_output_line(&mut lines);
@@ -395,7 +396,7 @@ fn cleanup(
     shared: &Shared,
     refresher: Option<(JoinHandle<()>, Receiver<()>)>,
     (child, waited): (Child, bool),
-) -> Child {
+) -> u32 {
     if let Ok(mut stopped) = shared.stopped.lock() {
         *stopped = true;
     }
@@ -415,9 +416,9 @@ fn cleanup(
     }
     let _closed: PyResult<()> = close_status(py, shared);
     if waited {
-        return child;
+        return child.id();
     }
-    py.detach(|| stop_dbt_process(child, terminate))
+    py.detach(|| stop_dbt_process(child, terminate)).id()
 }
 
 /// Ask a process to stop as `Popen.terminate` does.

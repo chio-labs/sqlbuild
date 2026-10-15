@@ -63,5 +63,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     lint_stop::register(module)?;
     selection::register(module)?;
     results::register(module)?;
-    guidance::register(module)
+    guidance::register(module)?;
+    crate::bindings::_helpers::rules::rule_dispatch::register(module)
 }

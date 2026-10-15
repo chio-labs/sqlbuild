@@ -13,7 +13,7 @@ use sqlbuild_rules::rule_cache::main::rules_bulk_cache_path::rules_bulk_cache_pa
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const RULE_THREADS_MODULE: &str = "sqlbuild.rule_engine._helpers.run.rule_threads";
+const RULE_THREADS_MODULE: &str = "sqlbuild._native";
 const RULES_MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
 const LINT_MODELS_MODULE: &str = "sqlbuild.lint.models";
 const LINT_CONSTANTS_MODULE: &str = "sqlbuild.lint.constants";

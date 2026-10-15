@@ -9,6 +9,7 @@ from typing import Any, cast
 
 import pytest
 
+import sqlbuild._native as native
 from sqlbuild import _native
 from sqlbuild._native import (
     NativeRulesRequest,
@@ -16,6 +17,8 @@ from sqlbuild._native import (
     install_rules_skills,
     project_with,
 )
+from sqlbuild._native import evaluate_custom_rules as evaluate_custom_rules_cached
+from sqlbuild._native import evaluate_project_rules as evaluate
 from sqlbuild.compiler.compile.models import (
     CompiledDirectLogicSqlTestPayload,
     CompiledModelSqlTestPayload,
@@ -29,7 +32,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, Discovere
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.rule_engine._helpers.engine import custom_dispatch as native
 from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
-from sqlbuild.rule_engine.constants import MIN_CUSTOM_RULE_TEST_CASES
+from sqlbuild.rule_engine.constants import MIN_CUSTOM_RULE_TEST_CASES, RULES_SKILL_PATHS
 from sqlbuild.rule_engine.main._evaluate import evaluate
 from sqlbuild.rule_engine.models import (
     CustomRulesOutcome,
@@ -101,7 +104,7 @@ def captured_native_request(
     monkeypatch.setattr(_native, "scope_metadata_projection", scope_metadata_projection)
     monkeypatch.setattr(native, "build_rules_request", build_rules_request)
     monkeypatch.setattr(native, "evaluate_rules_request", evaluate_rules_request)
-    native.evaluate_native(
+    native.evaluate_native_rules(
         project=project,
         config=RulesConfig(cache=RulesCacheConfig(enabled=False)),
         project_dir=project_dir,
@@ -383,7 +386,7 @@ def evaluate_incremental_step(
         rule_exceptions=step.rule_exceptions,
         cache=RulesCacheConfig(enabled=cache_enabled),
     )
-    return native.evaluate_native(
+    return native.evaluate_native_rules(
         project=_incremental_project(step.models),
         config=config,
         project_dir=project_dir,

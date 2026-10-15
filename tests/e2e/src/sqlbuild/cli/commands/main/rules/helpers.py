@@ -494,16 +494,20 @@ def few_marts(*, project: Project, ctx: RuleContext) -> list[Finding]:
     return [ctx.finding(subject=marts[0], message=f"{len(marts)} marts")]
 """,
 }
-STALE_SOURCE_FACTS_SITECUSTOMIZE: str = """from sqlbuild.rule_engine.classes import fact_digests
+STALE_SOURCE_FACTS_SITECUSTOMIZE: str = """from sqlbuild.rule_engine._helpers.engine import (
+    fact_replay,
+)
 
-_digest = fact_digests.FactDigests.digest
-
-
-def _stale_sources(self, key):
-    return "stale" if key == ("project.sources",) else _digest(self, key)
+_digest = fact_replay.fact_outcome_digest
 
 
-fact_digests.FactDigests.digest = _stale_sources
+def _stale_sources(*, views, key, shared=None):
+    if key == ("project.sources",):
+        return "stale"
+    return _digest(views=views, key=key, shared=shared)
+
+
+fact_replay.fact_outcome_digest = _stale_sources
 """
 
 

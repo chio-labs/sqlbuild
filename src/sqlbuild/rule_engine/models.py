@@ -12,7 +12,7 @@ from sqlbuild.compiler.compile.models import DeclarationScopeBuild, SqlExpansion
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.lint.models import LintRunResult
-from sqlbuild.rule_engine.types import FactKey, RuleCheck, RuleOptionValue, RuleSubject
+from sqlbuild.rule_engine.types import RuleCheck, RuleOptionValue, RuleSubject
 
 
 @dataclass(frozen=True, slots=True)
@@ -465,36 +465,6 @@ class CustomRulesOutcome:
     cache_misses: int
     custom_ms: int
     custom_cpu_ms: int = 0
-
-
-@dataclass(frozen=True)
-class CustomHostEvaluation:
-    """Decoded findings and recorded reads of one custom-rule invocation."""
-
-    findings: tuple[dict[str, object], ...]
-    reads: tuple[FactKey, ...] | None
-
-
-@dataclass(frozen=True)
-class CustomHostRun:
-    """Every planned custom-rule invocation, merged across host processes."""
-
-    evaluated: dict[tuple[str, str], CustomHostEvaluation]
-    untracked_reads: dict[str, tuple[FactKey, ...]]
-    uncacheable: frozenset[str]
-    observed: dict[FactKey, str | None]
-
-
-@dataclass(frozen=True)
-class CustomHostSlice:
-    """One host process's invocations, in the order that host evaluated them."""
-
-    evaluations: tuple[tuple[str, str, CustomHostEvaluation], ...]
-    untracked_reads: dict[str, tuple[FactKey, ...]]
-    uncacheable: frozenset[str]
-    observed: dict[FactKey, str | None]
-    bounded: bool
-    stateful: frozenset[str]
 
 
 @dataclass(frozen=True)

@@ -9,9 +9,9 @@ from sqlbuild._native import (
     compiled_model_record,
     project_with,
 )
+from sqlbuild._native import evaluate_project_rules as evaluate
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine.exceptions import RulesError
-from sqlbuild.rule_engine.main._evaluate import evaluate
 from sqlbuild.rule_engine.models import RuleExemption, RuleIgnore, RulesConfig, RulesResult
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate._test_types import PolicyBehaviorTestCase
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_project

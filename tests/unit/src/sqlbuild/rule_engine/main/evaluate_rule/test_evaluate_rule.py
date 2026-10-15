@@ -6,10 +6,10 @@ from typing import cast
 
 import pytest
 
+from sqlbuild._native import evaluate_project_rules as evaluate
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine.constants import MIN_CUSTOM_RULE_TEST_CASES
 from sqlbuild.rule_engine.exceptions import RulesError
-from sqlbuild.rule_engine.main._evaluate import evaluate
 from sqlbuild.rule_engine.models import RulesCacheConfig, RulesConfig, RulesResult
 from sqlbuild.rule_engine.types import RuleOptionValue
 from sqlbuild.rules.testing import RuleCase, RuleResult, evaluate_rule

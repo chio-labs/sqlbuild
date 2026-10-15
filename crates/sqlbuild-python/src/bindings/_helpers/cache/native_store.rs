@@ -1,7 +1,7 @@
 //! Digests, project fingerprints and store files of the shared native store, with the GIL released.
 
 use pyo3::exceptions::{PyOSError, PyRuntimeError};
-use pyo3::prelude::{Bound, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_cache::digest::main::compiled_code_identity::compiled_code_identity as compiled;
@@ -14,7 +14,6 @@ use sqlbuild_cache::digest::main::installed_code_identity::installed_code_identi
 use sqlbuild_cache::digest::types::ContentDigest;
 use sqlbuild_cache::store::main::open_native_store::open_native_store;
 use sqlbuild_cache::store::models::NativeStore;
-use sqlbuild_rules::constants::NATIVE_BUILD_IDENTITY;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -91,12 +90,13 @@ pub(crate) fn save_store(
 /// The digest that changes with every released, locally edited, or rebuilt SQLBuild version.
 #[pyfunction]
 pub(crate) fn compiled_code_identity(py: Python<'_>) -> PyResult<String> {
-    static IDENTITY: PyOnceLock<String> = PyOnceLock::new();
-    IDENTITY
-        .get_or_try_init(py, || {
-            Ok::<String, PyErr>(compiled(&installed_identity(py)?, NATIVE_BUILD_IDENTITY))
-        })
-        .cloned()
+    static INSTALLED: PyOnceLock<String> = PyOnceLock::new();
+    let installed: &String = INSTALLED.get_or_try_init(py, || installed_identity(py))?;
+    let build_identity: String = py
+        .import(NATIVE_MODULE)?
+        .getattr("BUILD_IDENTITY")?
+        .extract()?;
+    Ok(compiled(installed, &build_identity))
 }
 
 /// `compiled_code_identity`, looked up on the extension module so tests can replace it.

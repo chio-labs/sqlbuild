@@ -4,8 +4,8 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyTuple};
-use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
+use pyo3::types::PyDict;
+use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_rules::custom_rule_cache::main::custom_rule_cache_text::custom_rule_cache_text;
 use sqlbuild_rules::custom_rule_cache::main::lookup_custom_rule_cache::lookup_custom_rule_cache;
 use sqlbuild_rules::custom_rule_cache::main::ordered_custom_findings::ordered_custom_findings;
@@ -28,14 +28,6 @@ use crate::bindings::_helpers::rules::findings::{FindingClasses, invalid_finding
 const RULES_ERRORS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
 const RULES_ERROR: &str = "RulesError";
 
-/// `(code, subject, (read set, digest) or None, findings)` of one evaluated invocation.
-type EvaluationPy<'py> = (
-    String,
-    String,
-    Option<(ReadSet, Option<String>)>,
-    Vec<Bound<'py, PyAny>>,
-);
-
 /// One custom rule's cache identity from its metadata, source fingerprint and settings.
 #[pyfunction]
 #[pyo3(signature = (**request))]
@@ -57,14 +49,6 @@ fn custom_rule_identity(request: Option<&Bound<'_, PyDict>>) -> PyResult<String>
     }))
 }
 
-fn readset_tuple<'py>(py: Python<'py>, readset: &ReadSet) -> PyResult<Bound<'py, PyTuple>> {
-    let keys: Vec<Bound<'py, PyTuple>> = readset
-        .iter()
-        .map(|key| PyTuple::new(py, key))
-        .collect::<PyResult<_>>()?;
-    PyTuple::new(py, keys)
-}
-
 fn rules_error(py: Python<'_>, message: String) -> PyResult<pyo3::PyErr> {
     let class: Bound<'_, PyAny> = py.import(RULES_ERRORS_MODULE)?.getattr(RULES_ERROR)?;
     Ok(pyo3::PyErr::from_value(class.call1((message,))?))
@@ -77,9 +61,8 @@ fn stored_rules(path: &std::path::Path) -> StoredRules {
     parse_custom_rule_cache(&text)
 }
 
-/// One custom-rule run's subjects, reused and new results, and the cache file it reads and writes.
-#[pyclass(module = "sqlbuild._native")]
-struct CustomRuleCache {
+/// One run's custom-rule cache: stored results, pending read sets and accounting.
+pub(crate) struct CustomRuleCache {
     path: Option<PathBuf>,
     rules: Vec<CustomRule>,
     project: SubjectsInput,
@@ -90,12 +73,9 @@ struct CustomRuleCache {
     misses: usize,
 }
 
-#[pymethods]
 impl CustomRuleCache {
     /// Load the cache at `path` (`None` when caching is off) for `(code, identity, subject)` rules.
-    #[new]
-    #[pyo3(signature = (*, path, rules, target_name, models))]
-    fn new(
+    pub(crate) fn new(
         path: Option<PathBuf>,
         rules: Vec<(String, Option<String>, Option<String>)>,
         target_name: Option<String>,
@@ -137,16 +117,15 @@ impl CustomRuleCache {
     }
 
     /// Stored read sets whose current digest decides whether their results are reused.
-    fn pending_readsets<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyTuple>>> {
-        self.pending
-            .iter()
-            .map(|readset| readset_tuple(py, readset))
-            .collect()
+    pub(crate) fn pending_readsets(&self) -> &[ReadSet] {
+        &self.pending
     }
 
     /// Reuse results given each pending read set's digest; returns the subjects still to run.
-    #[pyo3(signature = (*, digests))]
-    fn plan(&mut self, digests: Vec<Option<String>>) -> BTreeMap<String, Option<Vec<String>>> {
+    pub(crate) fn plan(
+        &mut self,
+        digests: Vec<Option<String>>,
+    ) -> BTreeMap<String, Option<Vec<String>>> {
         if self.path.is_none() {
             self.misses = self.rules.len();
             return self
@@ -170,19 +149,11 @@ impl CustomRuleCache {
     }
 
     /// Record evaluated results; with caching on, validate them, store them and write the file.
-    #[pyo3(signature = (*, evaluated))]
-    fn record(&mut self, py: Python<'_>, evaluated: Vec<EvaluationPy<'_>>) -> PyResult<()> {
-        let evaluations: Vec<CustomEvaluation> = evaluated
-            .into_iter()
-            .map(|(code, subject, cacheable, findings)| {
-                Ok(CustomEvaluation {
-                    code,
-                    subject,
-                    cacheable,
-                    findings: findings.iter().map(plain_value).collect::<PyResult<_>>()?,
-                })
-            })
-            .collect::<PyResult<_>>()?;
+    pub(crate) fn record(
+        &mut self,
+        py: Python<'_>,
+        evaluations: Vec<CustomEvaluation>,
+    ) -> PyResult<()> {
         let Some(path) = self.path.clone() else {
             self.extend_results(evaluations);
             return Ok(());
@@ -206,7 +177,7 @@ impl CustomRuleCache {
     }
 
     /// Every finding in rule code, then subject order; a malformed payload is a `RulesError`.
-    fn findings<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    pub(crate) fn findings<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
         let classes = FindingClasses::new(py)?;
         ordered_custom_findings(&self.rules, &self.results)
             .iter()
@@ -218,18 +189,14 @@ impl CustomRuleCache {
             .collect()
     }
 
-    #[getter]
-    fn hits(&self) -> usize {
+    pub(crate) fn hits(&self) -> usize {
         self.hits
     }
 
-    #[getter]
-    fn misses(&self) -> usize {
+    pub(crate) fn misses(&self) -> usize {
         self.misses
     }
-}
 
-impl CustomRuleCache {
     fn extend_results(&mut self, evaluations: Vec<CustomEvaluation>) {
         for evaluation in evaluations {
             self.results
@@ -239,7 +206,6 @@ impl CustomRuleCache {
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_class::<CustomRuleCache>()?;
     module.add_function(wrap_pyfunction!(custom_rule_identity, module)?)?;
     Ok(())
 }

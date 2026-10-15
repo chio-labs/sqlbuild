@@ -2,7 +2,6 @@
 
 import os
 import random
-import shutil
 import time
 from collections.abc import Callable
 from operator import attrgetter
@@ -12,14 +11,12 @@ from typing import Protocol
 
 import pytest
 
-import sqlbuild._native as native_module
 from sqlbuild._native import (
     build_rule_catalogue,
     project_with,
 )
+from sqlbuild._native import evaluate_custom_rules as evaluate_custom_rules_cached
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
-from sqlbuild.rule_engine._helpers.host import custom_host_pool
 from sqlbuild.rule_engine._helpers.host.module_state import module_state_token, rule_namespaces
 from sqlbuild.rule_engine.classes.module_state_monitor import ModuleStateMonitor
 from sqlbuild.rule_engine.exceptions import OpaqueModuleStateError
@@ -110,34 +107,6 @@ def evaluate_order_rules(
     return evaluate_custom_rules_cached(
         project=project, config=config, project_dir=root, rules=rules, dialect="duckdb"
     )
-
-
-def use_hosts(*, monkeypatch: pytest.MonkeyPatch, hosts: int) -> list[str]:
-    """Allow up to `hosts` host processes for any plan and record every host launch."""
-
-    launches: list[str] = []
-    launch: Callable[[str], str] = native_module.run_custom_host_json
-
-    def recording_launch(spec_json: str) -> str:
-        launches.append(spec_json)
-        return launch(spec_json)
-
-    monkeypatch.setattr(custom_host_pool, "_MIN_INVOCATIONS_PER_HOST", 1)
-    monkeypatch.setattr(custom_host_pool, "available_cores", lambda: hosts)
-    monkeypatch.setattr(native_module, "run_custom_host_json", recording_launch)
-    return launches
-
-
-def write_cgroup_files(*, root: Path, proc_cgroup: str, files: dict[str, str]) -> Path:
-    """Write a fake `/proc/self/cgroup` and cgroup hierarchy beneath `root`."""
-
-    for relative_path, contents in files.items():
-        path: Path = root / "cgroup" / relative_path
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(contents, encoding="utf-8", errors="surrogateescape")
-    proc: Path = root / "proc-self-cgroup"
-    proc.write_text(proc_cgroup, encoding="utf-8", errors="surrogateescape")
-    return proc
 
 
 def record_signals(*, monkeypatch: pytest.MonkeyPatch) -> list[tuple[int, int]]:
@@ -440,47 +409,6 @@ def timed_state_history(
         rules=rules, model_count=model_count, detectors=(detector(rules=rules, root=root),)
     )
     return time.process_time() - started, history
-
-
-def delay_inputs(*, monkeypatch: pytest.MonkeyPatch, delay_seconds: float) -> None:
-    """Publish every host project payload only after a delay."""
-
-    write: Callable[..., None] = custom_host_pool._write_inputs
-
-    def delayed_write(*, path: Path, project: CompiledProjectView, config: RulesConfig) -> None:
-        time.sleep(delay_seconds)
-        write(path=path, project=project, config=config)
-
-    monkeypatch.setattr(custom_host_pool, "_write_inputs", delayed_write)
-
-
-def fail_inputs(*, monkeypatch: pytest.MonkeyPatch, delay_seconds: float) -> None:
-    """Fail to publish every host project payload after a delay."""
-
-    def failed_write(*, path: Path, project: CompiledProjectView, config: RulesConfig) -> None:
-        del path, project, config
-        time.sleep(delay_seconds)
-        raise OSError("project payload disk is full")
-
-    monkeypatch.setattr(custom_host_pool, "_write_inputs", failed_write)
-
-
-def fail_inputs_without_directory(
-    *, monkeypatch: pytest.MonkeyPatch, delay_seconds: float
-) -> list[float]:
-    """Remove the host-input directory, then fail to publish; return when each write failed."""
-
-    failures: list[float] = []
-
-    def failed_write(*, path: Path, project: CompiledProjectView, config: RulesConfig) -> None:
-        del project, config
-        time.sleep(delay_seconds)
-        shutil.rmtree(path.parent)
-        failures.append(time.monotonic())
-        raise OSError("project payload disk is full")
-
-    monkeypatch.setattr(custom_host_pool, "_write_inputs", failed_write)
-    return failures
 
 
 def touch_files(*, root: Path, names: tuple[str, ...]) -> None:

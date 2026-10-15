@@ -2,7 +2,7 @@
 
 import threading
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence, Set
-from concurrent.futures import Future
+from concurrent.futures import Executor, Future
 from contextlib import AbstractContextManager
 from contextvars import Token
 from dataclasses import Field
@@ -351,9 +351,11 @@ from sqlbuild.presentation.types import TransientLineOwner
 from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.rule_engine.models import (
+    CustomRulesOutcome,
     Finding,
     NativeRulesEvaluation,
     PreparedSqlLint,
+    PreparedSqlLintResult,
     Rule,
     RuleRunPlan,
     RulesConfig,
@@ -6500,38 +6502,59 @@ def custom_rule_identity(
     dialect: str,
     project_dir: str,
 ) -> str: ...
-
-class CustomRuleCache:
-    """One custom-rule run's subjects, reused and new results, and its cache file."""
-
-    def __init__(
-        self,
-        *,
-        path: Path | None,
-        rules: list[tuple[str, str | None, str | None]],
-        target_name: str | None,
-        models: list[tuple[str, str, str | None]],
-    ) -> None: ...
-    def pending_readsets(self) -> list[tuple[tuple[str, ...], ...]]: ...
-    def plan(self, *, digests: list[str | None]) -> dict[str, list[str] | None]: ...
-    def record(
-        self,
-        *,
-        evaluated: list[
-            tuple[
-                str,
-                str,
-                tuple[tuple[tuple[str, ...], ...], str | None] | None,
-                list[dict[str, object]],
-            ]
-        ],
-    ) -> None: ...
-    def findings(self) -> list[Finding]: ...
-    @property
-    def hits(self) -> int: ...
-    @property
-    def misses(self) -> int: ...
-
+def evaluate_project_rules(
+    *,
+    project: CompiledProjectView,
+    config: RulesConfig,
+    project_dir: Path,
+    dialect: str = "generic",
+    verify_determinism: bool = False,
+) -> RulesResult: ...
+def evaluate_native_rules(
+    *,
+    project: CompiledProjectView,
+    config: RulesConfig,
+    project_dir: Path,
+    catalogue: tuple[Rule, ...],
+    dialect: str = "generic",
+    initial_findings: tuple[Finding, ...] | None = None,
+    defer_suppressions: bool = False,
+    verify_determinism: bool = False,
+) -> RulesResult: ...
+def evaluate_custom_rules(
+    *,
+    project: CompiledProjectView,
+    config: RulesConfig,
+    project_dir: Path,
+    rules: tuple[Rule, ...],
+    dialect: str,
+    verify_determinism: bool = False,
+    implementation_fingerprints: dict[str, str] | None = None,
+) -> CustomRulesOutcome: ...
+def evaluate_rules(
+    *,
+    graph: ProjectGraph,
+    discovered_inputs: DiscoveredProjectInputs,
+    config: RulesConfig,
+    project_dir: Path,
+    dialect: str,
+    selected_keys: frozenset[CompiledObjectKey] | None = None,
+    prepared_sql: PreparedSqlLint | None = None,
+    expansion_reuse: SqlExpansionReuse | None = None,
+    no_sql_analysis: bool = False,
+) -> RulesRunResult: ...
+def prepare_sql_rules(
+    *, inputs: CompileInputsView, executor: Executor, dialect: str, stop: Event
+) -> PreparedSqlLint | None: ...
+def prepare_early_sql_lint(
+    *,
+    project_dir: Path,
+    config: LintConfig,
+    discovered_inputs: DiscoveredProjectInputs,
+    static_declaration_scope: DeclarationScopeBuild | None,
+    compiled_expansions: dict[Path, CompiledSqlExpansion],
+    stop: Event,
+) -> PreparedSqlLintResult: ...
 def custom_rule_test_evidence(
     *, rule: Rule, project_dir: Path
 ) -> list[tuple[str, int, int, str]]: ...
