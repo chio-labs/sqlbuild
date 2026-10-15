@@ -2,7 +2,11 @@
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::PyDict;
-use pyo3::{pyfunction, wrap_pyfunction};
+use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
+use sqlbuild_core::build_command::constants::{
+    EXECUTION_LIMIT_DBT_NOTE, MISSING_ORIGIN_DBT_HELP, RETENTION_DECREASE_DBT_HELP,
+    SNAPSHOT_FULL_REFRESH_DBT_HELP, TABLE_TYPE_DOWNGRADE_DBT_HELP,
+};
 
 use crate::bindings::_helpers::build_command::support::{
     boolean, emit, joined, keyword_relay, none, text, tuple,
@@ -24,7 +28,6 @@ const WORK_OPTIONS: (&[&str], &[&str]) = (
 );
 const BUILD_MODELS: &str = "sqlbuild.executor.build.models";
 const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
-const COMMAND_CONSTANTS: &str = "sqlbuild.cli.commands.constants";
 
 /// Interop has no allow flags; destructive work uses the ordinary interactive safety gates.
 #[pyfunction]
@@ -38,23 +41,23 @@ fn dbt_interop_plan_safety_gates(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
             ("allow_retention_decrease", boolean(py, false)),
             (
                 "missing_origin_help",
-                imported(py, COMMAND_CONSTANTS, "MISSING_ORIGIN_DBT_HELP")?,
+                MISSING_ORIGIN_DBT_HELP.into_bound_py_any(py)?,
             ),
             (
                 "snapshot_full_refresh_help",
-                imported(py, COMMAND_CONSTANTS, "SNAPSHOT_FULL_REFRESH_DBT_HELP")?,
+                SNAPSHOT_FULL_REFRESH_DBT_HELP.into_bound_py_any(py)?,
             ),
             (
                 "table_type_downgrade_help",
-                imported(py, COMMAND_CONSTANTS, "TABLE_TYPE_DOWNGRADE_DBT_HELP")?,
+                TABLE_TYPE_DOWNGRADE_DBT_HELP.into_bound_py_any(py)?,
             ),
             (
                 "retention_decrease_help",
-                imported(py, COMMAND_CONSTANTS, "RETENTION_DECREASE_DBT_HELP")?,
+                RETENTION_DECREASE_DBT_HELP.into_bound_py_any(py)?,
             ),
             (
                 "execution_limit_note",
-                imported(py, COMMAND_CONSTANTS, "EXECUTION_LIMIT_DBT_NOTE")?,
+                EXECUTION_LIMIT_DBT_NOTE.into_bound_py_any(py)?,
             ),
         ],
     )

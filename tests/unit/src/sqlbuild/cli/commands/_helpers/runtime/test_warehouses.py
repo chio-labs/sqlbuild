@@ -8,11 +8,11 @@ import pytest
 
 from sqlbuild._native import (
     command_warehouse_scope,
+    current_command_warehouse_scope,
     describe_connection_warehouse,
     parse_cli_invocation,
     resolve_project_connection_config,
 )
-from sqlbuild.cli.commands.constants import COMMAND_WAREHOUSE_GROUPS
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.types import CliCommand
 from sqlbuild.cli.entry.models import ParsedCliInvocation, ResolvedWarehouse
@@ -20,7 +20,6 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.contracts.models import LocalTargetConfig, TargetWarehousesConfig
 from sqlbuild.spec.contracts.types import WarehouseGroup
 from tests.unit.src.sqlbuild.cli.commands._helpers.runtime._test_types import (
-    CommandWarehouseClassificationTestCase,
     CommandWarehouseErrorTestCase,
     CommandWarehouseGroupTestCase,
     CommandWarehouseResolutionTestCase,
@@ -266,20 +265,6 @@ def test_given_adapter_without_warehouses_when_cli_warehouse_is_given_then_it_fa
 @pytest.mark.parametrize(
     "test_case",
     [
-        CommandWarehouseClassificationTestCase(description=command.value, command=command)
-        for command in CliCommand
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_cli_command_when_checking_warehouse_groups_then_it_is_classified(
-    test_case: CommandWarehouseClassificationTestCase,
-) -> None:
-    assert (test_case.command in COMMAND_WAREHOUSE_GROUPS) == test_case.expected_classified
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
         WarehouseFlagParseTestCase(
             description="build", argv=("build", "--warehouse", "W"), expected_warehouse="W"
         ),
@@ -380,7 +365,8 @@ def test_given_command_without_group_when_parsing_warehouse_flag_then_it_is_reje
 def test_given_cli_command_when_resolving_group_then_matches_its_workload(
     test_case: CommandWarehouseGroupTestCase,
 ) -> None:
-    assert COMMAND_WAREHOUSE_GROUPS[test_case.command] is test_case.expected_group
+    with command_warehouse_scope(command=test_case.command, cli_warehouse=None):
+        assert current_command_warehouse_scope().group is test_case.expected_group
 
 
 if __name__ == "__main__":

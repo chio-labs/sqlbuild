@@ -6,7 +6,8 @@ use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
 use pyo3::types::{PyCFunction, PyDict, PyFrozenSet, PyString, PyTuple, PyTupleMethods};
-use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
+use pyo3::{IntoPyObject, IntoPyObjectExt, pyfunction, wrap_pyfunction};
+use sqlbuild_core::build_command::constants::EXECUTION_LIMIT_BUILD_NOTE;
 
 use sqlbuild_core::build_command::errors::BuildCommandError;
 
@@ -15,7 +16,6 @@ use crate::bindings::_helpers::build_command::policies::build_command_error;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const CONSTANTS_MODULE: &str = "sqlbuild.cli.commands.constants";
 const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const CLONE_MODELS: &str = "sqlbuild.executor.clone.models";
@@ -633,7 +633,7 @@ pub(crate) fn run_defer_clone_boundary_prephase(
             ("limits", invocation.getattr("execution_limits")?),
             (
                 "refusal_note",
-                imported(py, CONSTANTS_MODULE, "EXECUTION_LIMIT_BUILD_NOTE")?,
+                EXECUTION_LIMIT_BUILD_NOTE.into_bound_py_any(py)?,
             ),
         ],
     )?;

@@ -90,13 +90,6 @@ class WarehouseFlagRejectedTestCase:
 
 
 @dataclass(frozen=True)
-class CommandWarehouseClassificationTestCase:
-    description: str
-    command: CliCommand
-    expected_classified: bool = True
-
-
-@dataclass(frozen=True)
 class CommandWarehouseGroupTestCase:
     description: str
     command: CliCommand

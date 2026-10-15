@@ -1,6 +1,10 @@
 //! Compile the build plan, show it, gate it and write the compile target.
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use sqlbuild_core::build_command::constants::{
+    EXECUTION_LIMIT_BUILD_NOTE, MISSING_ORIGIN_BUILD_HELP, RETENTION_DECREASE_BUILD_HELP,
+    SNAPSHOT_FULL_REFRESH_BUILD_HELP, TABLE_TYPE_DOWNGRADE_BUILD_HELP,
+};
 use sqlbuild_core::build_command::models::PlanSafetyGates;
 
 use crate::bindings::_helpers::build_command::defer_clone::run_defer_clone_boundary_prephase;
@@ -13,7 +17,6 @@ use crate::bindings::_helpers::cli::progress_text::with_verbose_inspection;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const CONSTANTS_MODULE: &str = "sqlbuild.cli.commands.constants";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const RUNTIME_CONTRACT_MODELS: &str = "sqlbuild.runtime.contracts.models";
@@ -148,10 +151,6 @@ pub(crate) fn write_plan_text(
     emit(&stream, &format!("\n{plan_text}\n\n"))
 }
 
-fn constant(py: Python<'_>, name: &str) -> PyResult<String> {
-    imported(py, CONSTANTS_MODULE, name)?.extract()
-}
-
 /// Apply every plan safety gate with the build's allow flags.
 pub(crate) fn enforce_build_plan_policies(
     context: &BuildContext<'_>,
@@ -163,11 +162,11 @@ pub(crate) fn enforce_build_plan_policies(
         allow_snapshot_full_refresh: context.request_flag("allow_snapshot_full_refresh")?,
         allow_table_type_downgrade: context.request_flag("allow_table_type_downgrade")?,
         allow_retention_decrease: context.request_flag("allow_retention_decrease")?,
-        missing_origin_help: constant(py, "MISSING_ORIGIN_BUILD_HELP")?,
-        snapshot_full_refresh_help: constant(py, "SNAPSHOT_FULL_REFRESH_BUILD_HELP")?,
-        table_type_downgrade_help: constant(py, "TABLE_TYPE_DOWNGRADE_BUILD_HELP")?,
-        retention_decrease_help: constant(py, "RETENTION_DECREASE_BUILD_HELP")?,
-        execution_limit_note: constant(py, "EXECUTION_LIMIT_BUILD_NOTE")?,
+        missing_origin_help: MISSING_ORIGIN_BUILD_HELP.to_owned(),
+        snapshot_full_refresh_help: SNAPSHOT_FULL_REFRESH_BUILD_HELP.to_owned(),
+        table_type_downgrade_help: TABLE_TYPE_DOWNGRADE_BUILD_HELP.to_owned(),
+        retention_decrease_help: RETENTION_DECREASE_BUILD_HELP.to_owned(),
+        execution_limit_note: EXECUTION_LIMIT_BUILD_NOTE.to_owned(),
     };
     let sys: Bound<'_, PyAny> = py.import("sys")?.into_any();
     enforce_plan_policies(
