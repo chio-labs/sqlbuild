@@ -2,7 +2,7 @@
 # migration work that moves to Rust. `remaining_lines` must equal the current count of that work:
 # a PR that moves code lowers it, and adding movable Python fails the check.
 # Native failures must surface as errors; `handled_native_errors` lists the reviewed exceptions.
-remaining_lines = 23650
+remaining_lines = 21360
 
 [[stays]]
 path = "executor"
@@ -612,9 +612,3 @@ note = "Public facade."
 [[handled_native_errors]]
 location = "compiler/planner/models.py::CursorBounds._parse_inferred"
 note = "A bound that is not integer text is parsed as a timestamp instead; CursorAlgebraError is an input error, and native compiler failures are not caught."
-
-[[handled_native_errors]]
-location = "cli/commands/_helpers/refactor/compile_facts.py::compile_for_refactor"
-note = "Reports the Python stage errors the native compile driver propagates as refactor diagnostics; a native compiler failure is a RuntimeError and is not caught."
-location = "compiler/planner/_helpers/warehouse/snapshot.py::_parse_warehouse_cursor"
-note = "A warehouse cursor value that is not an integer is parsed as a timestamp instead; CursorAlgebraError is an input error, and native compiler failures are not caught."
