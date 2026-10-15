@@ -2,16 +2,8 @@
 
 from __future__ import annotations
 
-from shlex import quote
-
 from sqlbuild.executor.load.models import LoaderContext
 from sqlbuild.integrations.ingestr.models import IngestrCommandResult
-
-
-def format_ingestr_command(command: tuple[str, ...]) -> str:
-    """Return a display-safe ingestr command line."""
-
-    return " ".join(quote(part) for part in command)
 
 
 def record_ingestr_output(*, ctx: LoaderContext, result: IngestrCommandResult) -> None:

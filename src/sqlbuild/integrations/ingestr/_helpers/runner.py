@@ -8,7 +8,7 @@ import sys
 from os import environ
 from pathlib import Path
 
-from sqlbuild.integrations.ingestr._helpers.output import format_ingestr_command
+from sqlbuild._native import format_ingestr_command
 from sqlbuild.integrations.ingestr.exceptions import IngestrIntegrationError
 from sqlbuild.integrations.ingestr.models import IngestrCommandResult
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle

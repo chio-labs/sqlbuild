@@ -1,18 +1,6 @@
 //! Command lines quoted for the shell of the platform they are printed on.
 
-/// Python's `shlex.quote`.
-fn shell_quote(text: &str) -> String {
-    if text.is_empty() {
-        return "''".to_owned();
-    }
-    let safe: bool = text
-        .chars()
-        .all(|character| character.is_ascii_alphanumeric() || "_@%+=:,./-".contains(character));
-    if safe {
-        return text.to_owned();
-    }
-    format!("'{}'", text.replace('\'', "'\"'\"'"))
-}
+use sqlbuild_core::shell_text::main::shell_quote::shell_quote;
 
 /// Python's `subprocess.list2cmdline` for one argument.
 fn windows_quote(argument: &str) -> String {

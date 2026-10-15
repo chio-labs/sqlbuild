@@ -407,7 +407,7 @@ note = "Loader runtime that runs inside user loaders; synthetic loader record bu
 [[stays]]
 path = "integrations/ingestr"
 reason = "user-code"
-note = "Loader runtime that runs inside the executor load phase; synthetic loader record building and naming are native."
+note = "Loader runtime that runs the ingestr subprocess inside the executor load phase; synthetic loader record building, naming, destination URIs and command lines are native."
 
 [[stays]]
 path = "integrations/dbt/_helpers/profile/load.py"

@@ -1,6 +1,7 @@
 //! Fields, headers, connectors, paths and follow-up commands of scope text output.
 
 use sqlbuild_core::cli_text::models::CliStyle;
+use sqlbuild_core::shell_text::main::shell_quote::shell_quote;
 
 use crate::scope_report::models::{DiagnosticFacts, ReportDiagnostic, ScopeSection};
 use crate::scope_text::constants::{
@@ -164,20 +165,6 @@ pub(crate) fn diagnostic_lines(
         ));
     }
     lines
-}
-
-/// Python's `shlex.quote`.
-fn shell_quote(text: &str) -> String {
-    if text.is_empty() {
-        return "''".to_owned();
-    }
-    let safe: bool = text
-        .chars()
-        .all(|character| character.is_ascii_alphanumeric() || "_@%+=:,./-".contains(character));
-    if safe {
-        return text.to_owned();
-    }
-    format!("'{}'", text.replace('\'', "'\"'\"'"))
 }
 
 /// What a follow-up command adds to the request's own options.

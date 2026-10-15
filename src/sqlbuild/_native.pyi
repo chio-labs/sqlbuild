@@ -4029,6 +4029,18 @@ def format_seed_execution_json(
     *, results: tuple[SeedExecutionResult, ...], plan: PlanOutput
 ) -> str: ...
 def format_load_execution_json(*, results: tuple[LoadExecutionResult, ...]) -> str: ...
+def build_ingestr_command(
+    *,
+    source_entry: SourceEntry,
+    adapter_name: str,
+    connection_config: dict[str, object],
+    destination_name: str,
+    vars: dict[str, object],
+    environment: str | None,
+    run_id: str,
+    is_reload: bool,
+) -> tuple[str, ...]: ...
+def format_ingestr_command(command: Sequence[str], /) -> str: ...
 def format_clone_execution_json(
     *, result: CloneExecutionResult, resource_types_by_name: Mapping[str, str]
 ) -> str: ...
