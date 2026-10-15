@@ -158,6 +158,7 @@ from sqlbuild.runtime.execution_history.types import (
 )
 from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
 from sqlbuild.runtime.observability.models import DiagnosticLog, LifecycleEvent
+from sqlbuild.runtime.observability.types import JSONValue
 from sqlbuild.runtime.output_capture.models import (
     BoundCommandOutputSink,
     CommandOutputCaptureSummary,
@@ -5080,6 +5081,30 @@ def build_microbatch_create_index_sqls(
     render_identifier: Callable[[str], str],
     render_qualified_name: Callable[..., str | None],
 ) -> tuple[str, ...]: ...
+
+CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION: int
+LIFECYCLE_EVENT_SCHEMA_VERSIONS: frozenset[int]
+HOOK_PHASES: frozenset[str]
+HOOK_TYPES: frozenset[str]
+OPERATION_ADAPTERS: frozenset[str]
+OPERATION_KINDS: frozenset[str]
+OPERATION_METADATA_FIELDS: frozenset[str]
+OPERATION_NAMES: frozenset[str]
+OPERATION_PHASES: frozenset[str]
+OPERATION_SCOPES: frozenset[str]
+OPERATION_STRATEGIES: frozenset[str]
+OPERATION_TARGET_KINDS: frozenset[str]
+RESOURCE_SKIP_CODES: frozenset[str]
+RESOURCE_SKIP_MODES: frozenset[str]
+
+def lifecycle_event_catalogued(*, schema_version: object, event_type: object) -> bool: ...
+def lifecycle_event_terminal(*, schema_version: int, event_type: str) -> bool: ...
+def validate_lifecycle_schema_version(*, value: object) -> None: ...
+def freeze_lifecycle_json(*, value: object, path: str) -> JSONValue: ...
+def validate_lifecycle_required_text(*, value: object, field_name: str) -> None: ...
+def validate_lifecycle_optional_text(*, value: object, field_name: str) -> None: ...
+def validate_lifecycle_timestamp(*, value: object) -> None: ...
+def validate_known_lifecycle_event(*, event: LifecycleEvent) -> None: ...
 def render_state_table_create_sql(
     *,
     qualified_name: str,

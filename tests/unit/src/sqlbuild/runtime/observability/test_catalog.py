@@ -5,9 +5,13 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from sqlbuild._native import (
+    LIFECYCLE_EVENT_SCHEMA_VERSIONS,
+    lifecycle_event_catalogued,
+    lifecycle_event_terminal,
+)
 from sqlbuild.observability import create_lifecycle_event, invocation_scope, run_scope
 from sqlbuild.runtime.observability.classes.run_lifecycle import RunLifecycle
-from sqlbuild.runtime.observability.constants import LIFECYCLE_EVENT_CATALOGS
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.main.canonicalize_operation_adapter import (
     canonicalize_operation_adapter,
@@ -398,10 +402,12 @@ def test_given_catalog_when_looking_up_events_then_authority_is_version_dimensio
     test_case: CatalogVersionCase,
 ) -> None:
     assert (
-        LIFECYCLE_EVENT_CATALOGS[test_case.schema_version][test_case.event_type].terminal
+        lifecycle_event_terminal(
+            schema_version=test_case.schema_version, event_type=test_case.event_type
+        )
         is test_case.expected_terminal
     )
-    assert test_case.expected_unsupported_version not in LIFECYCLE_EVENT_CATALOGS
+    assert test_case.expected_unsupported_version not in LIFECYCLE_EVENT_SCHEMA_VERSIONS
 
 
 @pytest.mark.parametrize(
@@ -426,8 +432,11 @@ def test_given_microbatch_events_when_inspecting_versioned_catalog_then_v1_remai
     test_case: CatalogEventPresenceCase,
 ) -> None:
     assert (
-        test_case.event_type in LIFECYCLE_EVENT_CATALOGS[test_case.schema_version]
-    ) is test_case.expected_present
+        lifecycle_event_catalogued(
+            schema_version=test_case.schema_version, event_type=test_case.event_type
+        )
+        is test_case.expected_present
+    )
 
 
 @pytest.mark.parametrize(

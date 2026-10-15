@@ -4,7 +4,7 @@ from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
-from sqlbuild.runtime.observability._helpers.validation import freeze_json
+from sqlbuild._native import freeze_lifecycle_json
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.models import DiagnosticLog, LifecycleEvent
 from tests.unit.src.sqlbuild.runtime.observability._test_types import (
@@ -173,7 +173,7 @@ def test_given_invalid_nested_payload_when_freezing_then_error_names_full_path(
     test_case: FreezeJsonErrorCase,
 ) -> None:
     with pytest.raises(ObservabilityValidationError) as error_info:
-        freeze_json(value=test_case.payload, path="payload")
+        freeze_lifecycle_json(value=test_case.payload, path="payload")
 
     assert str(error_info.value) == test_case.expected_error
 

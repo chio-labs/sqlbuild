@@ -7,11 +7,11 @@ from importlib.metadata import version
 from types import MappingProxyType
 from uuid import uuid4
 
+from sqlbuild._native import CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION
 from sqlbuild.runtime.observability._helpers.identity import (
     current_execution_identity,
     current_invocation_external_context,
 )
-from sqlbuild.runtime.observability.constants import CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.models import ExecutionIdentity, LifecycleEvent
 from sqlbuild.runtime.observability.types import JSONValue

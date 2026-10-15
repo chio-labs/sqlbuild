@@ -10,6 +10,18 @@ from contextlib import ExitStack
 from types import TracebackType
 from typing import Any
 
+from sqlbuild._native import (
+    HOOK_PHASES,
+    HOOK_TYPES,
+    OPERATION_ADAPTERS,
+    OPERATION_KINDS,
+    OPERATION_METADATA_FIELDS,
+    OPERATION_NAMES,
+    OPERATION_PHASES,
+    OPERATION_SCOPES,
+    OPERATION_STRATEGIES,
+    OPERATION_TARGET_KINDS,
+)
 from sqlbuild.runtime.observability._helpers.dispatcher import (
     current_event_dispatcher,
     dispatcher_scope,
@@ -21,19 +33,7 @@ from sqlbuild.runtime.observability._helpers.identity import (
     operation_scope,
 )
 from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
-from sqlbuild.runtime.observability.constants import (
-    HOOK_PHASES,
-    HOOK_TYPES,
-    OPERATION_ADAPTERS,
-    OPERATION_KINDS,
-    OPERATION_METADATA_FIELDS,
-    OPERATION_NAMES,
-    OPERATION_PHASES,
-    OPERATION_SCOPES,
-    OPERATION_STRATEGIES,
-    OPERATION_TARGET_KINDS,
-    RETRY_SCHEDULED_EVENT,
-)
+from sqlbuild.runtime.observability.constants import RETRY_SCHEDULED_EVENT
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.models import ExecutionIdentity, OperationAttributes
 from sqlbuild.runtime.observability.types import JSONValue

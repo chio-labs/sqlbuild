@@ -1,6 +1,6 @@
 """Canonical operation adapter identity."""
 
-from sqlbuild.runtime.observability.constants import OPERATION_ADAPTERS
+from sqlbuild._native import OPERATION_ADAPTERS
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 
 

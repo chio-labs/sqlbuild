@@ -33,6 +33,7 @@ pub mod init_command;
 pub mod integration_results;
 pub mod janitor_text;
 pub mod json;
+pub mod lifecycle_events;
 pub mod load_command;
 pub mod migration_values;
 pub mod models;

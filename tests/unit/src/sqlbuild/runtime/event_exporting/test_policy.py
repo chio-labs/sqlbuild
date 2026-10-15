@@ -8,16 +8,16 @@ from sqlbuild._native import (
 )
 from sqlbuild.runtime.event_exporting.constants import EVENT_EXPORT_KINDS
 from sqlbuild.runtime.event_exporting.types import LifecycleEventKind
-from sqlbuild.runtime.observability.constants import LIFECYCLE_EVENT_CATALOG
 from tests.unit.src.sqlbuild.runtime.event_exporting._test_types import (
     EventExportPolicyTestCase,
     SeverityNarrowingTestCase,
 )
+from tests.unit.src.sqlbuild.runtime.event_exporting.helpers import CATALOGUED_EVENT_TYPES
 
 
 @pytest.mark.parametrize(
     "test_case",
-    (EventExportPolicyTestCase("complete canonical mapping", len(LIFECYCLE_EVENT_CATALOG)),),
+    (EventExportPolicyTestCase("complete canonical mapping", len(CATALOGUED_EVENT_TYPES)),),
     ids=lambda case: case.description,
 )
 def test_given_canonical_catalog_when_building_export_policy_then_every_type_is_mapped_once(
@@ -25,7 +25,7 @@ def test_given_canonical_catalog_when_building_export_policy_then_every_type_is_
 ) -> None:
     policy: dict[str, tuple[str, EventExportSeverity, int]] = lifecycle_export_policy_catalog()
     assert len(policy) == test_case.expected_event_count
-    assert policy.keys() == LIFECYCLE_EVENT_CATALOG.keys()
+    assert tuple(policy) == CATALOGUED_EVENT_TYPES
     assert {kind for kind, _, _ in policy.values()} == EVENT_EXPORT_KINDS
     assert policy["invocation_failed"] == ("invocation", EventExportSeverity.ERROR, 3)
     assert policy["resource_attempt_skipped"] == ("resource", EventExportSeverity.INFO, 2)

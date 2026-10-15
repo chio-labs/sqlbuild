@@ -212,7 +212,7 @@ note = "Encodes the Python fact-view values user rules read, for their digests."
 [[stays]]
 path = "runtime/observability"
 reason = "public-api"
-note = "Documented observability API used throughout the executor."
+note = "Documented observability API used throughout the executor: lifecycle emitters, dispatcher, scopes and envelope shapes. The event catalogue, payload validation and JSON freezing are native (sqlbuild-core lifecycle_events)."
 
 [[stays]]
 path = "runtime/execution_history/__init__.py"

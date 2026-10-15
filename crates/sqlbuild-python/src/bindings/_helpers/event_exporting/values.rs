@@ -9,11 +9,11 @@ use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple, PyTupleMethods};
 use sqlbuild_core::event_export::main::lifecycle_export_policy::lifecycle_export_policy;
 use sqlbuild_core::event_export::main::sanitized_exception_type::sanitized_exception_type;
 use sqlbuild_core::event_export::models::{ExportPolicy, ExportSeverity, ExporterCounts};
+use sqlbuild_core::lifecycle_events::constants::CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION;
+use sqlbuild_core::lifecycle_events::main::catalog::catalog;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
-use crate::bindings::_helpers::event_exporting::constants::{
-    CATALOG_MODULE, EXCEPTIONS_MODULE, SEVERITY_MODULE,
-};
+use crate::bindings::_helpers::event_exporting::constants::{EXCEPTIONS_MODULE, SEVERITY_MODULE};
 
 /// `BoundEventExporter` parameters, in positional order.
 const BOUND_EXPORTER_PARAMETERS: [&str; 5] = [
@@ -74,15 +74,13 @@ pub(crate) fn error_type_of(py: Python<'_>, error: &PyErr) -> String {
 /// Export dimensions of every catalogued lifecycle event type, derived once per interpreter.
 pub(crate) fn export_policies(py: Python<'_>) -> PyResult<&HashMap<String, ExportPolicy>> {
     POLICIES.get_or_try_init(py, || {
-        let catalog: Bound<'_, PyAny> = imported(py, CATALOG_MODULE, "LIFECYCLE_EVENT_CATALOG")?;
         let mut policies: HashMap<String, ExportPolicy> = HashMap::new();
-        for entry in catalog.call_method0("items")?.try_iter()? {
-            let (event_type, definition): (String, Bound<'_, PyAny>) = entry?.extract()?;
-            let terminal: bool = definition.getattr("terminal")?.is_truthy()?;
-            let policy: ExportPolicy = lifecycle_export_policy(&event_type, terminal);
-            policies.insert(event_type, policy);
+        for definition in catalog(CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION).unwrap_or_default() {
+            let policy: ExportPolicy =
+                lifecycle_export_policy(definition.event_type, definition.terminal);
+            policies.insert(definition.event_type.to_owned(), policy);
         }
-        Ok(policies)
+        Ok::<_, pyo3::PyErr>(policies)
     })
 }
 

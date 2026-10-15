@@ -49,6 +49,7 @@ pub(crate) mod graph;
 pub(crate) mod hand_built;
 pub(crate) mod init_command;
 pub(crate) mod janitor;
+pub(crate) mod lifecycle_events;
 pub(crate) mod lineage;
 pub(crate) mod load;
 pub(crate) mod macro_bridge;
