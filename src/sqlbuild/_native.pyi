@@ -27,19 +27,19 @@ from sqlbuild.adapter.contract.types import (
     TypeDialect,
 )
 from sqlbuild.adapter.relations.models import InspectionQueryRecord
-from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode, ScopeIndexLoader
-from sqlbuild.cli.compile.models import CompileAnalysis
-from sqlbuild.cli.compile_reuse.models import CompileReuseRequest
-from sqlbuild.cli.entry.models import (
-    AuthoredTargetWarehouse,
-    CommandWarehouseScope,
-    CompileCommandRequest,
-    CompileProfileFlags,
-    ParsedCliInvocation,
-    ResolvedWarehouse,
-    SelectorFileSummary,
+from sqlbuild.cli.commands.types import (
+    CliCommand,
+    CompileLineageMode,
+    DagCommandHandler,
+    DebugCommandHandler,
+    FormatCommandHandler,
+    LineageCommandHandler,
+    QueryCommandHandler,
+    ScopeCommandHandler,
+    ScopeIndexLoader,
+    SkillsUpdateCommandHandler,
 )
-from sqlbuild.cli.output.models import SkillMaintenanceResult, SkillUpdateResult, WrittenTarget
+from sqlbuild.cli.compile_reuse.models import CompileReuseRequest
 from sqlbuild.compiler.auditing.models import (
     AuditGateIdentity,
     MeasurementContract,
@@ -2975,12 +2975,6 @@ def run_skills_command(
 ) -> int: ...
 def run_playground_command(request: PlaygroundCommandRequest) -> int: ...
 def validate_cli_warehouse(*, cli_warehouse: str | None, project_dir: Path) -> None: ...
-def find_target_group_warehouse(
-    *,
-    discovered_inputs: DiscoveredProjectInputs,
-    selected_target: str | None,
-    group: WarehouseGroup,
-) -> AuthoredTargetWarehouse | None: ...
 def resolve_command_warehouse(
     *,
     discovered_inputs: DiscoveredProjectInputs | None,
@@ -8437,4 +8431,255 @@ class LineageCommandRequest:
         lineage_mode: ColumnLineageMode = ...,
         include_uses: bool = False,
         cli_vars: dict[str, object] | None = None,
+    ) -> None: ...
+
+class CompileProfileFlags:
+    """Profiling toggles that skip compile phases for benchmarking."""
+
+    skip_discovery_sql_analysis: bool
+    skip_column_inference: bool
+    skip_contracts: bool
+    skip_write: bool
+    def __init__(
+        self,
+        skip_discovery_sql_analysis: bool = False,
+        skip_column_inference: bool = False,
+        skip_contracts: bool = False,
+        skip_write: bool = False,
+    ) -> None: ...
+
+class CompileCommandRequest:
+    """CLI inputs for one `sqb compile` invocation."""
+
+    project_dir: Path | None
+    no_sql_validation: bool
+    defer_to: str | None
+    selected_target: str | None
+    json_output: bool
+    manifest: bool
+    dag_path: str | None
+    no_color: bool
+    lineage_mode: CompileLineageMode
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    cli_vars: dict[str, object] | None
+    profile_flags: CompileProfileFlags
+    no_cache: bool
+    debug: bool
+    def __init__(
+        self,
+        project_dir: Path | None = None,
+        no_sql_validation: bool = False,
+        defer_to: str | None = None,
+        selected_target: str | None = None,
+        json_output: bool = False,
+        manifest: bool = False,
+        dag_path: str | None = None,
+        no_color: bool = False,
+        lineage_mode: CompileLineageMode = ...,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        cli_vars: dict[str, object] | None = None,
+        profile_flags: CompileProfileFlags = ...,
+        no_cache: bool = False,
+        debug: bool = False,
+    ) -> None: ...
+
+class SelectorFileSummary:
+    """Non-expanded provenance for one selector file."""
+
+    path: Path
+    selector_count: int
+    def __init__(
+        self,
+        path: Path,
+        selector_count: int,
+    ) -> None: ...
+
+class ParsedCliInvocation:
+    """Outcome of parsing CLI arguments: either a namespace or an exit code."""
+
+    args: CliNamespace | None
+    exit_code: int | None
+    def __init__(
+        self,
+        args: CliNamespace | None,
+        exit_code: int | None,
+    ) -> None: ...
+
+class CliEntrypointHandlers:
+    """Injected command handlers for the CLI entrypoint."""
+
+    run_compile: Callable[[CompileCommandRequest], int]
+    run_cost: Callable[..., int]
+    run_dag: DagCommandHandler
+    run_plan: Callable[..., int]
+    run_dbt_plan: Callable[[Path | None, tuple[str, ...], bool], int]
+    run_dbt_run: Callable[[Path | None, tuple[str, ...], bool], int]
+    run_dbt_build: Callable[[Path | None, tuple[str, ...], bool], int]
+    run_dbt_debug: Callable[[Path | None, tuple[str, ...], bool], int]
+    run_dbt_init: Callable[..., int]
+    run_build: Callable[..., int]
+    run_freshness: Callable[..., int]
+    run_test: Callable[..., int]
+    run_check: Callable[..., int]
+    run_audit: Callable[..., int]
+    run_seed: Callable[..., int]
+    run_load: Callable[..., int]
+    run_clone: Callable[..., int]
+    run_diff: Callable[..., int]
+    run_query: QueryCommandHandler
+    run_debug: DebugCommandHandler
+    run_lineage: LineageCommandHandler
+    run_janitor: Callable[..., int]
+    run_init: Callable[[Path | None], int]
+    run_playground: Callable[..., int]
+    run_skills_update: SkillsUpdateCommandHandler
+    run_format: FormatCommandHandler
+    run_scenario: Callable[..., int]
+    run_scenario_capture: Callable[..., int]
+    run_rules: Callable[..., int]
+    run_scope: ScopeCommandHandler
+    run_contract: Callable[..., int] | None
+    run_refactor: Callable[..., int] | None
+    def __init__(
+        self,
+        run_compile: Callable[[CompileCommandRequest], int],
+        run_cost: Callable[..., int],
+        run_dag: DagCommandHandler,
+        run_plan: Callable[..., int],
+        run_dbt_plan: Callable[[Path | None, tuple[str, ...], bool], int],
+        run_dbt_run: Callable[[Path | None, tuple[str, ...], bool], int],
+        run_dbt_build: Callable[[Path | None, tuple[str, ...], bool], int],
+        run_dbt_debug: Callable[[Path | None, tuple[str, ...], bool], int],
+        run_dbt_init: Callable[..., int],
+        run_build: Callable[..., int],
+        run_freshness: Callable[..., int],
+        run_test: Callable[..., int],
+        run_check: Callable[..., int],
+        run_audit: Callable[..., int],
+        run_seed: Callable[..., int],
+        run_load: Callable[..., int],
+        run_clone: Callable[..., int],
+        run_diff: Callable[..., int],
+        run_query: QueryCommandHandler,
+        run_debug: DebugCommandHandler,
+        run_lineage: LineageCommandHandler,
+        run_janitor: Callable[..., int],
+        run_init: Callable[[Path | None], int],
+        run_playground: Callable[..., int],
+        run_skills_update: SkillsUpdateCommandHandler,
+        run_format: FormatCommandHandler,
+        run_scenario: Callable[..., int],
+        run_scenario_capture: Callable[..., int],
+        run_rules: Callable[..., int],
+        run_scope: ScopeCommandHandler,
+        run_contract: Callable[..., int] | None = None,
+        run_refactor: Callable[..., int] | None = None,
+    ) -> None: ...
+
+class CommandWarehouseScope:
+    """The warehouse group and CLI override active for one command invocation."""
+
+    group: WarehouseGroup | None
+    cli_warehouse: str | None
+    cli_vars: dict[str, object]
+    def __init__(
+        self,
+        group: WarehouseGroup | None,
+        cli_warehouse: str | None = None,
+        cli_vars: dict[str, object] = ...,
+    ) -> None: ...
+
+class ResolvedWarehouse:
+    """The warehouse one command connects with and where that value came from."""
+
+    warehouse: str | None
+    source: str
+    def __init__(
+        self,
+        warehouse: str | None,
+        source: str,
+    ) -> None: ...
+
+class WrittenTarget:
+    """Result of writing compiled output to target/."""
+
+    model_count: int
+    seed_count: int
+    function_count: int
+    audit_count: int
+    test_count: int
+    target_dir: Path
+    diagnostics: tuple[CompilerDiagnostic, ...]
+    def __init__(
+        self,
+        model_count: int,
+        seed_count: int,
+        function_count: int,
+        audit_count: int,
+        test_count: int,
+        target_dir: Path,
+        diagnostics: tuple[CompilerDiagnostic, ...] = ...,
+    ) -> None: ...
+
+class SkillMaintenanceResult:
+    """Non-blocking generated-skill maintenance result."""
+
+    message: str
+    def __init__(
+        self,
+        message: str = "",
+    ) -> None: ...
+
+class SkillUpdateResult:
+    """Result of installing or updating skill files."""
+
+    written_paths: tuple[Path, ...]
+    def __init__(
+        self,
+        written_paths: tuple[Path, ...],
+    ) -> None: ...
+
+class CompileAnalysis:
+    """Compiled project analysis shared by compile output phases."""
+
+    discovered_inputs: DiscoveredProjectInputs
+    adapter: BaseAdapter
+    graph: ProjectGraph
+    selected_keys: frozenset[CompiledObjectKey]
+    lineage: ProjectColumnLineage | None
+    diagnostics: tuple[CompilerDiagnostic, ...]
+    discover_ms: int
+    graph_ms: int
+    lineage_ms: int
+    contract_ms: int
+    contract_cpu_ms: int
+    built_in_rules_ms: int
+    custom_rules_ms: int
+    custom_rules_cpu_ms: int
+    early_lint_wait_ms: int
+    rule_cache_hits: int
+    rule_cache_misses: int
+    skipped_type_proof_rules: tuple[str, ...]
+    def __init__(
+        self,
+        discovered_inputs: DiscoveredProjectInputs,
+        adapter: BaseAdapter,
+        graph: ProjectGraph,
+        selected_keys: frozenset[CompiledObjectKey],
+        lineage: ProjectColumnLineage | None,
+        diagnostics: tuple[CompilerDiagnostic, ...],
+        discover_ms: int,
+        graph_ms: int,
+        lineage_ms: int,
+        contract_ms: int,
+        contract_cpu_ms: int,
+        built_in_rules_ms: int = 0,
+        custom_rules_ms: int = 0,
+        custom_rules_cpu_ms: int = 0,
+        early_lint_wait_ms: int = 0,
+        rule_cache_hits: int = 0,
+        rule_cache_misses: int = 0,
+        skipped_type_proof_rules: tuple[str, ...] = (),
     ) -> None: ...

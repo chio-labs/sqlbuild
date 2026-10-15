@@ -6,9 +6,18 @@ pub(crate) const NATIVE_MODULE: &str = "sqlbuild._native";
 /// The class attribute holding a record class's index into `RECORDS`.
 pub(crate) const RECORD_SPEC_ATTRIBUTE: &str = "__native_record__";
 pub(crate) const FROZEN_INSTANCE_ERROR: (&str, &str) = ("dataclasses", "FrozenInstanceError");
+pub(crate) const DATACLASSES_MODULE: &str = "dataclasses";
+pub(crate) const DATACLASS_FIELDS_ATTRIBUTE: &str = "__dataclass_fields__";
+/// The marker `dataclasses` gives ordinary (not class or init-only) fields.
+pub(crate) const DATACLASS_FIELD_KIND: &str = "_FIELD";
 
 /// Every native record group, in registration order.
-pub(crate) const RECORDS: &[&[RecordSpec]] = &[COMMAND_RECORDS];
+pub(crate) const RECORDS: &[&[RecordSpec]] = &[
+    COMMAND_RECORDS,
+    ENTRY_RECORDS,
+    OUTPUT_RECORDS,
+    COMPILE_RECORDS,
+];
 
 const NESTED_PROGRESS_CHILD_ROW: RecordSpec = RecordSpec {
     name: "NestedProgressChildRow",
@@ -675,3 +684,182 @@ const COMMAND_RECORDS: &[RecordSpec] = &[
     CONTRACT_COMMAND_REQUEST,
     LINEAGE_COMMAND_REQUEST,
 ];
+
+const COMPILE_PROFILE_FLAGS: RecordSpec = RecordSpec {
+    name: "CompileProfileFlags",
+    doc: "Profiling toggles that skip compile phases for benchmarking.",
+    fields: &[
+        FieldSpec::new("skip_discovery_sql_analysis", FieldDefault::False),
+        FieldSpec::new("skip_column_inference", FieldDefault::False),
+        FieldSpec::new("skip_contracts", FieldDefault::False),
+        FieldSpec::new("skip_write", FieldDefault::False),
+    ],
+};
+const COMPILE_COMMAND_REQUEST: RecordSpec = RecordSpec {
+    name: "CompileCommandRequest",
+    doc: "CLI inputs for one `sqb compile` invocation.",
+    fields: &[
+        FieldSpec::new("project_dir", FieldDefault::None),
+        FieldSpec::new("no_sql_validation", FieldDefault::False),
+        FieldSpec::new("defer_to", FieldDefault::None),
+        FieldSpec::new("selected_target", FieldDefault::None),
+        FieldSpec::new("json_output", FieldDefault::False),
+        FieldSpec::new("manifest", FieldDefault::False),
+        FieldSpec::new("dag_path", FieldDefault::None),
+        FieldSpec::new("no_color", FieldDefault::False),
+        FieldSpec::new(
+            "lineage_mode",
+            FieldDefault::Member("sqlbuild.cli.commands.types", "CompileLineageMode", "FAST"),
+        ),
+        FieldSpec::new("select", FieldDefault::EmptyTuple),
+        FieldSpec::new("exclude", FieldDefault::EmptyTuple),
+        FieldSpec::new("cli_vars", FieldDefault::None),
+        FieldSpec::new(
+            "profile_flags",
+            FieldDefault::Call("sqlbuild._native", "CompileProfileFlags"),
+        ),
+        FieldSpec::new("no_cache", FieldDefault::False),
+        FieldSpec::new("debug", FieldDefault::False),
+    ],
+};
+const SELECTOR_FILE_SUMMARY: RecordSpec = RecordSpec {
+    name: "SelectorFileSummary",
+    doc: "Non-expanded provenance for one selector file.",
+    fields: &[
+        FieldSpec::required("path"),
+        FieldSpec::required("selector_count"),
+    ],
+};
+const PARSED_CLI_INVOCATION: RecordSpec = RecordSpec {
+    name: "ParsedCliInvocation",
+    doc: "Outcome of parsing CLI arguments: either a namespace or an exit code.",
+    fields: &[
+        FieldSpec::required("args"),
+        FieldSpec::required("exit_code"),
+    ],
+};
+const CLI_ENTRYPOINT_HANDLERS: RecordSpec = RecordSpec {
+    name: "CliEntrypointHandlers",
+    doc: "Injected command handlers for the CLI entrypoint.",
+    fields: &[
+        FieldSpec::required("run_compile"),
+        FieldSpec::required("run_cost"),
+        FieldSpec::required("run_dag"),
+        FieldSpec::required("run_plan"),
+        FieldSpec::required("run_dbt_plan"),
+        FieldSpec::required("run_dbt_run"),
+        FieldSpec::required("run_dbt_build"),
+        FieldSpec::required("run_dbt_debug"),
+        FieldSpec::required("run_dbt_init"),
+        FieldSpec::required("run_build"),
+        FieldSpec::required("run_freshness"),
+        FieldSpec::required("run_test"),
+        FieldSpec::required("run_check"),
+        FieldSpec::required("run_audit"),
+        FieldSpec::required("run_seed"),
+        FieldSpec::required("run_load"),
+        FieldSpec::required("run_clone"),
+        FieldSpec::required("run_diff"),
+        FieldSpec::required("run_query"),
+        FieldSpec::required("run_debug"),
+        FieldSpec::required("run_lineage"),
+        FieldSpec::required("run_janitor"),
+        FieldSpec::required("run_init"),
+        FieldSpec::required("run_playground"),
+        FieldSpec::required("run_skills_update"),
+        FieldSpec::required("run_format"),
+        FieldSpec::required("run_scenario"),
+        FieldSpec::required("run_scenario_capture"),
+        FieldSpec::required("run_rules"),
+        FieldSpec::required("run_scope"),
+        FieldSpec::new("run_contract", FieldDefault::None),
+        FieldSpec::new("run_refactor", FieldDefault::None),
+    ],
+};
+const COMMAND_WAREHOUSE_SCOPE: RecordSpec = RecordSpec {
+    name: "CommandWarehouseScope",
+    doc: "The warehouse group and CLI override active for one command invocation.",
+    fields: &[
+        FieldSpec::required("group"),
+        FieldSpec::new("cli_warehouse", FieldDefault::None),
+        FieldSpec::new("cli_vars", FieldDefault::EmptyDict),
+    ],
+};
+const RESOLVED_WAREHOUSE: RecordSpec = RecordSpec {
+    name: "ResolvedWarehouse",
+    doc: "The warehouse one command connects with and where that value came from.",
+    fields: &[
+        FieldSpec::required("warehouse"),
+        FieldSpec::required("source"),
+    ],
+};
+
+/// Parsed `sqb` invocations, compile requests, entry handlers and command warehouses.
+const ENTRY_RECORDS: &[RecordSpec] = &[
+    COMPILE_PROFILE_FLAGS,
+    COMPILE_COMMAND_REQUEST,
+    SELECTOR_FILE_SUMMARY,
+    PARSED_CLI_INVOCATION,
+    CLI_ENTRYPOINT_HANDLERS,
+    COMMAND_WAREHOUSE_SCOPE,
+    RESOLVED_WAREHOUSE,
+];
+
+const WRITTEN_TARGET: RecordSpec = RecordSpec {
+    name: "WrittenTarget",
+    doc: "Result of writing compiled output to target/.",
+    fields: &[
+        FieldSpec::required("model_count"),
+        FieldSpec::required("seed_count"),
+        FieldSpec::required("function_count"),
+        FieldSpec::required("audit_count"),
+        FieldSpec::required("test_count"),
+        FieldSpec::required("target_dir"),
+        FieldSpec::new("diagnostics", FieldDefault::EmptyTuple),
+    ],
+};
+const SKILL_MAINTENANCE_RESULT: RecordSpec = RecordSpec {
+    name: "SkillMaintenanceResult",
+    doc: "Non-blocking generated-skill maintenance result.",
+    fields: &[FieldSpec::new("message", FieldDefault::Text(""))],
+};
+const SKILL_UPDATE_RESULT: RecordSpec = RecordSpec {
+    name: "SkillUpdateResult",
+    doc: "Result of installing or updating skill files.",
+    fields: &[FieldSpec::required("written_paths")],
+};
+
+/// Compile output and skill maintenance results.
+const OUTPUT_RECORDS: &[RecordSpec] = &[
+    WRITTEN_TARGET,
+    SKILL_MAINTENANCE_RESULT,
+    SKILL_UPDATE_RESULT,
+];
+
+const COMPILE_ANALYSIS: RecordSpec = RecordSpec {
+    name: "CompileAnalysis",
+    doc: "Compiled project analysis shared by compile output phases.",
+    fields: &[
+        FieldSpec::required("discovered_inputs"),
+        FieldSpec::required("adapter"),
+        FieldSpec::required("graph"),
+        FieldSpec::required("selected_keys"),
+        FieldSpec::required("lineage"),
+        FieldSpec::required("diagnostics"),
+        FieldSpec::required("discover_ms"),
+        FieldSpec::required("graph_ms"),
+        FieldSpec::required("lineage_ms"),
+        FieldSpec::required("contract_ms"),
+        FieldSpec::required("contract_cpu_ms"),
+        FieldSpec::new("built_in_rules_ms", FieldDefault::Int(0)),
+        FieldSpec::new("custom_rules_ms", FieldDefault::Int(0)),
+        FieldSpec::new("custom_rules_cpu_ms", FieldDefault::Int(0)),
+        FieldSpec::new("early_lint_wait_ms", FieldDefault::Int(0)),
+        FieldSpec::new("rule_cache_hits", FieldDefault::Int(0)),
+        FieldSpec::new("rule_cache_misses", FieldDefault::Int(0)),
+        FieldSpec::new("skipped_type_proof_rules", FieldDefault::EmptyTuple),
+    ],
+};
+
+/// The compiled project analysis shared by compile output phases.
+const COMPILE_RECORDS: &[RecordSpec] = &[COMPILE_ANALYSIS];

@@ -12,10 +12,9 @@ import pytest
 
 import sqlbuild._native as discovery_entry
 import sqlbuild._native as plan_artifacts_module
-from sqlbuild._native import run_compile
+from sqlbuild._native import CompileCommandRequest, run_compile
 from sqlbuild.adapter.discovery.main import resolve_adapter as runtime_adapters
 from sqlbuild.cli.commands.types import CompileLineageMode
-from sqlbuild.cli.entry.models import CompileCommandRequest
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileColumnContractModeTestCase,

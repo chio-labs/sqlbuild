@@ -6,13 +6,13 @@ from pathlib import Path, PurePosixPath
 import pytest
 
 from sqlbuild._native import (
+    SkillMaintenanceResult,
     load_packaged_skill_files,
     maintain_sqlbuild_skills,
     update_sqlbuild_skills,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.types import CliCommand
-from sqlbuild.cli.output.models import SkillMaintenanceResult
 from tests.unit.src.sqlbuild.cli.commands.main.skills._test_types import (
     SkillContentTestCase,
     SkillDirectoryCollisionTestCase,

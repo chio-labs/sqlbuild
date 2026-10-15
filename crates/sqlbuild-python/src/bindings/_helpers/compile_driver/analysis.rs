@@ -33,7 +33,7 @@ const RULE_THREADS_MODULE: &str = "sqlbuild.rule_engine._helpers.run.rule_thread
 const RULE_MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const CLI_COMPILE_MODELS_MODULE: &str = "sqlbuild.cli.compile.models";
+const CLI_COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const GENERIC_DIALECT: &str = "generic";
 const TARGET_DIRECTORY: &str = "target";
 

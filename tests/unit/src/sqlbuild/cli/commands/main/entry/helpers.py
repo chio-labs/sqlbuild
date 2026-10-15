@@ -6,9 +6,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol, cast
 
-from sqlbuild._native import loader_destination_parts
-from sqlbuild.cli.entry.models import (
+from sqlbuild._native import (
     CliEntrypointHandlers,
+    loader_destination_parts,
 )
 from sqlbuild.spec.contracts.exceptions import SpecConfigError
 

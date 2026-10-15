@@ -19,6 +19,7 @@ pub(crate) enum FieldDefault {
     Int(i64),
     Text(&'static str),
     EmptyTuple,
+    EmptyDict,
     /// `getattr(getattr(import(module), class), member)`.
     Member(&'static str, &'static str, &'static str),
     /// `getattr(import(module), name)()`, evaluated for every instance.

@@ -99,6 +99,7 @@ fn default_value<'py>(
         FieldDefault::Int(value) => value.into_bound_py_any(py),
         FieldDefault::Text(value) => Ok(PyString::new(py, value).into_any()),
         FieldDefault::EmptyTuple => Ok(PyTuple::empty(py).into_any()),
+        FieldDefault::EmptyDict => Ok(PyDict::new(py).into_any()),
         FieldDefault::Member(module, class, member) => imported(py, module, class)?.getattr(member),
         FieldDefault::Call(module, name) => imported(py, module, name)?.call0(),
     }

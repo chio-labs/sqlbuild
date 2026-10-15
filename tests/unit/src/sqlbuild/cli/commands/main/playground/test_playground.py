@@ -7,11 +7,11 @@ from _pytest.capture import CaptureResult
 
 from sqlbuild._native import (
     PlaygroundCommandRequest,
+    SkillMaintenanceResult,
     maintain_sqlbuild_skills,
     run_playground_command,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.output.models import SkillMaintenanceResult
 from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
     CreatePlaygroundProjectTestCase,
     RunPlaygroundTestCase,

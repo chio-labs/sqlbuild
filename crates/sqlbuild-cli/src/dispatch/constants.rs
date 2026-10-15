@@ -12,7 +12,7 @@ pub(crate) const DBT_INIT_SUBCOMMAND: &str = "init";
 pub(crate) const DIFF_COMMAND_NAME: &str = "diff";
 
 const NATIVE_RECORDS: &str = "sqlbuild._native";
-const ENTRY_MODELS: &str = "sqlbuild.cli.entry.models";
+const ENTRY_MODELS: &str = "sqlbuild._native";
 const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
 
 const PROJECT_DIR: Field = field("project_dir", Source::ProjectDir);

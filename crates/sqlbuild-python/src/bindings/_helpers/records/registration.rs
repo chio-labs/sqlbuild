@@ -3,7 +3,10 @@
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 
-use crate::bindings::_helpers::records::constants::{NATIVE_MODULE, RECORD_SPEC_ATTRIBUTE};
+use crate::bindings::_helpers::records::constants::{
+    DATACLASS_FIELD_KIND, DATACLASS_FIELDS_ATTRIBUTE, DATACLASSES_MODULE, NATIVE_MODULE,
+    RECORD_SPEC_ATTRIBUTE,
+};
 use crate::bindings::_helpers::records::fields::all_specs;
 use crate::bindings::_helpers::records::models::{NativeRecord, RecordAttribute, RecordSpec};
 
@@ -13,10 +16,37 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<RecordAttribute>()?;
     let base: Bound<'_, PyAny> = py.get_type::<NativeRecord>().into_any();
     let metaclass: Bound<'_, PyAny> = base.get_type().into_any();
+    let dataclasses: Bound<'_, PyModule> = py.import(DATACLASSES_MODULE)?;
     for (index, spec) in all_specs().enumerate() {
-        module.add(spec.name, record_class(&metaclass, &base, (index, spec))?)?;
+        let class: Bound<'_, PyAny> = record_class(&metaclass, &base, (index, spec))?;
+        class.setattr(
+            DATACLASS_FIELDS_ATTRIBUTE,
+            dataclass_fields(&dataclasses, spec)?,
+        )?;
+        module.add(spec.name, class)?;
     }
     Ok(())
+}
+
+/// The `dataclasses.Field` table that lets `dataclasses.replace` and `fields` read a record.
+fn dataclass_fields<'py>(
+    dataclasses: &Bound<'py, PyModule>,
+    spec: &RecordSpec,
+) -> PyResult<Bound<'py, PyDict>> {
+    let py: Python<'py> = dataclasses.py();
+    let field_kind: Bound<'py, PyAny> = dataclasses.getattr(DATACLASS_FIELD_KIND)?;
+    let fields: Bound<'py, PyDict> = PyDict::new(py);
+    for field in spec.fields {
+        let options: Bound<'py, PyDict> = PyDict::new(py);
+        options.set_item("compare", field.compared)?;
+        options.set_item("repr", field.compared)?;
+        let declared: Bound<'py, PyAny> = dataclasses.getattr("field")?.call((), Some(&options))?;
+        declared.setattr("name", field.name)?;
+        declared.setattr("type", "object")?;
+        declared.setattr("_field_type", &field_kind)?;
+        fields.set_item(field.name, declared)?;
+    }
+    Ok(fields)
 }
 
 /// A `NativeRecord` subclass laid out as `spec`.

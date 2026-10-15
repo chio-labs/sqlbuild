@@ -35,11 +35,6 @@ reason = "Typed SQL values are normalized and state literals rendered natively; 
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
-path = "src/sqlbuild/cli/compile/__init__.py"
-reason = "Native bindings own the compile command, its reuse attempt and its analysis; this package only declares the compile analysis models the native code builds."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
 path = "src/sqlbuild/cli/compile_reuse/__init__.py"
 reason = "Native bindings own the compile reuse check, replay and launch records; this package declares the reuse models and constants and keeps the provider settings, runtime identity and startup inputs the native code reads from the interpreter."
 
@@ -186,7 +181,7 @@ reason = "Graph algorithms and views run natively; the package keeps only the ed
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
 path = "src/sqlbuild/cli/output/__init__.py"
-reason = "Execution-result output is rendered natively; the package keeps only the integration-result models, constants and types its callers and readers share."
+reason = "Execution-result output is rendered natively; the package keeps only the integration-result constants its callers and readers share."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
