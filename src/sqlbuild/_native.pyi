@@ -196,7 +196,6 @@ from sqlbuild.compiler.scopes.models import (
     VisibilityRecord,
     VisibilityResolution,
 )
-from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.compiler.scopes.types import (
     DeclarationKind,
     ScopeKind,
@@ -207,17 +206,7 @@ from sqlbuild.compiler.source_freshness.models import (
 from sqlbuild.compiler.sql_analysis.models import (
     SqlLexicalSyntax,
 )
-from sqlbuild.compiler.sql_test_glue.models import (
-    NativeSqlTestAssembly,
-    NativeSqlTestChainRequest,
-    NativeSqlTestPlanningRequest,
-)
 from sqlbuild.cost.models import CostResourceContext, RunCostSummary, StatementExecutionTelemetry
-from sqlbuild.cost.models import (
-    CostResourceContext,
-    RunCostSummary,
-    StatementExecutionTelemetry,
-)
 from sqlbuild.cost.types import CostStatus
 from sqlbuild.cursor_algebra.models import AlignedInterval, DateValue, Duration, TimestampValue
 from sqlbuild.cursor_algebra.types import Bound, BoundSentinel, CursorScalar
@@ -259,22 +248,6 @@ from sqlbuild.integrations.dbt.models import (
     ResolvedDbtProfileOutput,
 )
 from sqlbuild.integrations.dbt.types import DbtInvoker
-from sqlbuild.lint.models import (
-    CompileFacts,
-    ExpandedLintFile,
-    FixVerdict,
-    HeaderSpan,
-    LintBody,
-    LintConfig,
-    LintFileRole,
-    LintRunResult,
-    LintViolation,
-    PendingLintBody,
-    PreparedLintFiles,
-    RuleFixResult,
-from sqlbuild.integrations.dbt.types import (
-    DbtInvoker,
-)
 from sqlbuild.microbatches.models import MicrobatchInterval
 from sqlbuild.presentation.types import TransientLineOwner
 from sqlbuild.provider.classes.container import ProviderContainer
