@@ -258,9 +258,7 @@ from sqlbuild.compiler.scopes.models import (
     UsageRecord,
     VisibilityResolution,
 )
-from sqlbuild.compiler.scopes.types import (
-    DeclarationKind,
-)
+from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.compiler.source_freshness.models import (
     DirectSourceFreshnessPlanningResult,
     SourceFreshnessRecord,
@@ -275,18 +273,9 @@ from sqlbuild.compiler.sql_test_glue.models import (
     NativeSqlTestChainRequest,
     NativeSqlTestPlanningRequest,
 )
-from sqlbuild.cost.models import (
-    CostResourceContext,
-    RunCostSummary,
-    StatementExecutionTelemetry,
-)
+from sqlbuild.cost.models import CostResourceContext, RunCostSummary, StatementExecutionTelemetry
 from sqlbuild.cost.types import CostStatus
-from sqlbuild.cursor_algebra.models import (
-    AlignedInterval,
-    DateValue,
-    Duration,
-    TimestampValue,
-)
+from sqlbuild.cursor_algebra.models import AlignedInterval, DateValue, Duration, TimestampValue
 from sqlbuild.cursor_algebra.types import Bound, BoundSentinel, CursorScalar
 from sqlbuild.diagnostics.models import ProcessResourceUsage
 from sqlbuild.executor.auditing.models import AuditExecutionResult
@@ -312,24 +301,12 @@ from sqlbuild.integrations.dbt.models import (
     DbtCommandResult,
     DbtInitRequest,
     DbtInitResult,
-    DbtInteropCommandArgs,
-    DbtInteropCompiledProject,
-    DbtInteropExecutionRequest,
-    DbtInteropInvocation,
-    DbtInteropParsedArgs,
-    DbtInteropPlan,
-    DbtInteropPlanResolution,
-    DbtInteropRoutedArgs,
-    DbtInteropSelectionResult,
-    DbtLsNode,
     DbtLsResult,
-    DbtManifestIndex,
-    DbtManifestModel,
     DbtNodeExecutionResult,
     NormalizedDbtProfileConnection,
     ResolvedDbtProfileOutput,
 )
-from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInvoker
+from sqlbuild.integrations.dbt.types import DbtInvoker
 from sqlbuild.lint.models import (
     CompileFacts,
     ExpandedLintFile,

@@ -15,8 +15,6 @@ from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.pipeline._helpers import materializations
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.diagnostics.models import PartialBuildPhaseTimings
-from sqlbuild.rule_engine._helpers.run import rule_threads
 from sqlbuild.rule_engine.models import RulesRunResult
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from tests.unit.src.sqlbuild.compiler.pipeline.main._test_types import PipelinePhaseTimingTestCase
