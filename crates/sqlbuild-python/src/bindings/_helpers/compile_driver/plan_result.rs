@@ -1,5 +1,6 @@
 //! Plan a compiled project over an open warehouse connection, and open that connection.
 
+use pyo3::exceptions::PyException;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -254,7 +255,7 @@ pub(crate) fn connection_with_hooks<'py>(
         Ok(connection) => connection,
         Err(error) => {
             let on_error: Bound<'py, PyAny> = hooks.getattr("on_connection_error")?;
-            if !on_error.is_none() {
+            if error.is_instance_of::<PyException>(hooks.py()) && !on_error.is_none() {
                 on_error.call((SINGLE_CONNECTION,), Some(&elapsed(started)?))?;
             }
             return Err(error);

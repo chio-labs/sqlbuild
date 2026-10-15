@@ -29,7 +29,7 @@ class RecordingConnectionAdapter(BaseAdapter):
 class FailingConnectionAdapter(BaseAdapter):
     adapter_name: ClassVar[str] = "failing-connection-test"
 
-    def __init__(self, *, events: list[str], error: Exception) -> None:
+    def __init__(self, *, events: list[str], error: BaseException) -> None:
         self.events = events
         self.error = error
         self.connected_config: dict[str, object] | None = None
