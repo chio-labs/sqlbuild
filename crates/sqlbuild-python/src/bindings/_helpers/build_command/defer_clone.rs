@@ -21,8 +21,6 @@ const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const CLONE_MODELS: &str = "sqlbuild.executor.clone.models";
 const CLONE_TYPES: &str = "sqlbuild.executor.clone.types";
 const SPEC_TYPES: &str = "sqlbuild.spec.contracts.types";
-const CLONE_BOUNDARY_MODULE: &str = "sqlbuild.compiler.planner.main.clone.resolve_clone_boundary";
-const VIEW_CHAIN_MODULE: &str = "sqlbuild.compiler.planner.main.clone.resolve_skipped_view_chain";
 const TRANSIENT_MODELS_MODULE: &str =
     "sqlbuild.executor.clone.main._build_destination_transient_models";
 const RETENTION_REQUESTS_MODULE: &str = "sqlbuild.executor.clone.main._build_retention_requests";
@@ -166,12 +164,12 @@ fn defer_clone_selection(scope: &Bound<'_, PyAny>) -> PyResult<(Vec<String>, Vec
     Ok((
         traversed_names(
             scope,
-            (CLONE_BOUNDARY_MODULE, "resolve_clone_boundary"),
+            (NATIVE_MODULE, "resolve_clone_boundary"),
             callbacks,
         )?,
         traversed_names(
             scope,
-            (VIEW_CHAIN_MODULE, "resolve_skipped_view_chain"),
+            (NATIVE_MODULE, "resolve_skipped_view_chain"),
             callbacks,
         )?,
         selected_executable_model_count(scope)?,

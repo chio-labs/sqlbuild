@@ -11,8 +11,7 @@ const NATIVE_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS_MODULE: &str = "sqlbuild.compiler.pipeline.models";
 const PLANNER_MODELS_MODULE: &str = "sqlbuild.compiler.planner.models";
 const SPLIT_SELECTORS_MODULE: &str = "sqlbuild._native";
-const PLANNER_SCOPES_MODULE: &str =
-    "sqlbuild.compiler.planner.main.selection._resolve_planner_scopes";
+const PLANNER_SCOPES_MODULE: &str = "sqlbuild._native";
 const STATIC_SCOPE_MODULE: &str = "sqlbuild._native";
 const STATIC_RELATIONS_MODULE: &str = "sqlbuild._native";
 const DATACLASSES_MODULE: &str = "dataclasses";

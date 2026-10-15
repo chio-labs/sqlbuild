@@ -8,6 +8,8 @@ from unittest.mock import Mock
 import pytest
 
 import sqlbuild._native as _native
+import sqlbuild._native as model_chain_module
+import sqlbuild._native as plan_artifacts_module
 from sqlbuild._native import (
     build_manifest,
     compiled_model_record,
@@ -26,10 +28,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     DiagnosticPhase,
 )
-from sqlbuild.compiler.planner.main.execution import (
-    _plan_compiled_sql_test_artifacts as plan_artifacts_module,
-)
-from sqlbuild.compiler.planner.main.execution import sql_test_model_chain as model_chain_module
 from sqlbuild.compiler.planner.models import ChainStep, PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (

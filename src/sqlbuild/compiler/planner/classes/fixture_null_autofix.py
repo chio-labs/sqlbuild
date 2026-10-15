@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild._native import format_redundant_fixture_nulls
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.planner._helpers.sql_tests.fixture_formatting import (
-    format_redundant_fixture_nulls,
-)
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 

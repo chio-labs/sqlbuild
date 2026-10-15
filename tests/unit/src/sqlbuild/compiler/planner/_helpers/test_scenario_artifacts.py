@@ -7,6 +7,7 @@ from sqlbuild._native import (
     build_scenario_hash_index,
     build_scenario_relation_map,
     compute_scenario_hash_prefix,
+    is_scenario_artifact_physical_name,
     parse_scenario_artifact_physical_name,
 )
 from sqlbuild.compiler.planner.constants import (
@@ -14,9 +15,6 @@ from sqlbuild.compiler.planner.constants import (
     SCENARIO_PLAN_RELATION_COLLISION,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.scenarios.is_scenario_artifact_physical_name import (
-    is_scenario_artifact_physical_name,
-)
 from sqlbuild.compiler.planner.models import (
     ParsedScenarioArtifactName,
     ScenarioArtifactIdentity,

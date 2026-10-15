@@ -795,6 +795,26 @@ fn plan_selected_sql_tests_into<'py>(
     Ok(())
 }
 
+/// Return model closures resolved natively in one project batch, keyed by SQL test key.
+#[pyfunction]
+#[pyo3(signature = (*, project, tests))]
+fn sql_test_model_chain_names_by_key<'py>(
+    project: &Bound<'py, PyAny>,
+    tests: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let py = project.py();
+    let chains = native(
+        py,
+        "resolve_sql_test_model_chains",
+        &[("project", project.clone()), ("tests", tests.clone())],
+    )?;
+    let by_key = PyDict::new(py);
+    for (test, chain) in tests.try_iter()?.zip(chains.try_iter()?) {
+        by_key.set_item(test?.getattr("key")?, chain?)?;
+    }
+    Ok(by_key)
+}
+
 /// Whether a test is named by the selection or covers a selected resource, and not excluded.
 #[pyfunction]
 #[pyo3(signature = (*, test, selected_keys, sql_test_selection))]
@@ -840,5 +860,6 @@ pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(plan_selected_sql_tests, module)?)?;
     module.add_function(wrap_pyfunction!(plan_selected_sql_tests_into, module)?)?;
     module.add_function(wrap_pyfunction!(sql_test_is_selected, module)?)?;
+    module.add_function(wrap_pyfunction!(sql_test_model_chain_names_by_key, module)?)?;
     module.add_function(wrap_pyfunction!(build_selected_test_entries, module)?)
 }

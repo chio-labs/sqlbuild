@@ -212,6 +212,7 @@ from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     BackfillResult,
     ChangeDetectionResult,
+    CloneSourcePlanEntry,
     ColumnMigrationPlanEntry,
     ColumnMigrationPlanning,
     ColumnRenameHint,
@@ -4931,6 +4932,43 @@ def build_relation_command_plan(
 def read_selected_seed_fingerprints(
     *, adapter: BaseAdapter, connection: Any, seeds: tuple[CompiledSeedView, ...]
 ) -> dict[str, Fingerprint]: ...
+def run_clone_planning(
+    *,
+    project: CompiledProjectView,
+    select: tuple[str, ...],
+    exclude: tuple[str, ...],
+    adapter: BaseAdapter,
+    connection: Any,
+    origin_project: CompiledProjectView,
+    origin_source_project: CompiledProjectView,
+    destination_source_project: CompiledProjectView,
+) -> tuple[
+    PlanOutput,
+    tuple[CloneSourcePlanEntry, ...],
+    tuple[ModelPlanEntry, ...],
+    tuple[SeedPlanEntry, ...],
+    tuple[FunctionPlanEntry, ...],
+    tuple[ModelPlanEntry, ...],
+    tuple[SeedPlanEntry, ...],
+    tuple[CloneSourcePlanEntry, ...],
+]: ...
+def resolve_clone_boundary[K](
+    *,
+    selected: frozenset[K],
+    upstream: Mapping[K, tuple[K, ...]],
+    is_clonable: Callable[[K], bool],
+    is_view: Callable[[K], bool],
+) -> frozenset[K]: ...
+def resolve_skipped_view_chain[K](
+    *,
+    selected: frozenset[K],
+    upstream: Mapping[K, tuple[K, ...]],
+    is_clonable: Callable[[K], bool],
+    is_view: Callable[[K], bool],
+) -> frozenset[K]: ...
+def sql_test_model_chain_names_by_key(
+    *, project: CompiledProjectView, tests: tuple[CompiledSqlTest, ...]
+) -> dict[CompiledObjectKey, tuple[str, ...]]: ...
 def resolve_future_cursor_config(
     *, model: CompiledModelView, project_config: FutureCursorsConfig | None
 ) -> FutureCursorsConfig | None: ...

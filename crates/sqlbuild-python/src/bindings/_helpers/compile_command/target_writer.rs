@@ -48,9 +48,8 @@ const OUTPUT_MODELS_MODULE: &str = "sqlbuild.cli.output.models";
 const CLI_EXCEPTIONS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
-const MODEL_CHAIN_MODULE: &str = "sqlbuild.compiler.planner.main.execution.sql_test_model_chain";
-const PLAN_ARTIFACTS_MODULE: &str =
-    "sqlbuild.compiler.planner.main.execution._plan_compiled_sql_test_artifacts";
+const MODEL_CHAIN_MODULE: &str = "sqlbuild._native";
+const PLAN_ARTIFACTS_MODULE: &str = "sqlbuild._native";
 const COMPARISON_SQL_MODULE: &str = "sqlbuild.executor.testing.main.comparison_sql";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const TARGET_OPTIONS: (&[&str], &[&str]) = (&["target_dir", "adapter", "project"], &["manifest"]);

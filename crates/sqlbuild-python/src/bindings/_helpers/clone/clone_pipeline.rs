@@ -11,7 +11,7 @@ use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const PIPELINE_MODELS_MODULE: &str = "sqlbuild.compiler.pipeline.models";
-const CLONE_PLANNING_MODULE: &str = "sqlbuild.compiler.planner.main.clone._clone";
+const CLONE_PLANNING_MODULE: &str = "sqlbuild._native";
 /// The `ClonePipelineResult` fields after the two projects, in `run_clone_planning` order.
 const PLANNED_FIELDS: [&str; 8] = [
     "clone_plan",
