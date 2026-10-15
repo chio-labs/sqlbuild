@@ -14,7 +14,9 @@ use sqlbuild_core::cost_report::models::BreakdownOptions;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::cost_report::records::cost_run;
 use crate::bindings::_helpers::cost_report::store;
+use crate::bindings::_helpers::cost_telemetry::values::cost_aware;
 
+const NATIVE_RECORDS: &str = "sqlbuild._native";
 const LOGGER_NAME: &str = "sqlbuild.cli.commands._helpers.cost.collection";
 const COLLECTION_LOGGER_NAME: &str = "sqlbuild.cost";
 const COST_TYPES: &str = "sqlbuild.cost.types";
@@ -160,7 +162,7 @@ fn cost_record<'py>(
         "had_executable_work",
         finalization.getattr("had_executable_work")?,
     ));
-    call_with(&imported(py, COST_MODELS, "CostRunRecord")?, &fields)
+    call_with(&imported(py, NATIVE_RECORDS, "CostRunRecord")?, &fields)
 }
 
 fn summary<'py>(
@@ -268,7 +270,7 @@ pub(crate) fn finalize_build_cost<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = finalization.py();
     let adapter: Bound<'py, PyAny> = finalization.getattr("adapter")?;
-    if !adapter.is_instance(&imported(py, COST_TYPES, "CostAwareAdapter")?)? {
+    if !cost_aware(&adapter)? {
         return Ok(py.None().into_bound(py));
     }
     let config: Bound<'py, PyAny> = finalization.getattr("config")?;

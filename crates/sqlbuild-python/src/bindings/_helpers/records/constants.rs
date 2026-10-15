@@ -27,6 +27,7 @@ pub(crate) const RECORDS: &[&[RecordSpec]] = &[
     COMPILE_RECORDS,
     DBT_RECORDS,
     FRESHNESS_RECORDS,
+    COST_RECORDS,
 ];
 
 /// Records whose bound values are normalized before the record is created.
@@ -1266,3 +1267,79 @@ const SOURCE_FRESHNESS_UNKNOWN_REASON: EnumSpec = EnumSpec {
 /// Source freshness age statuses and unknown reasons.
 const FRESHNESS_ENUMS: &[EnumSpec] =
     &[SOURCE_FRESHNESS_AGE_STATUS, SOURCE_FRESHNESS_UNKNOWN_REASON];
+
+const QUERY_COST_OBSERVATION: RecordSpec = RecordSpec {
+    name: "QueryCostObservation",
+    doc: "",
+    fields: &[
+        FieldSpec::required("query_id"),
+        FieldSpec::required("warehouse_name"),
+        FieldSpec::required("warehouse_size"),
+        FieldSpec::required("warehouse_type"),
+        FieldSpec::required("cluster_number"),
+        FieldSpec::required("started_at"),
+        FieldSpec::required("completed_at"),
+        FieldSpec::required("execution_ms"),
+        FieldSpec::required("bytes_scanned"),
+        FieldSpec::required("execution_status"),
+        FieldSpec::new("run_id", FieldDefault::None),
+        FieldSpec::new("resource_type", FieldDefault::None),
+        FieldSpec::new("resource_name", FieldDefault::None),
+    ],
+};
+const RESOURCE_COST: RecordSpec = RecordSpec {
+    name: "ResourceCost",
+    doc: "",
+    fields: &[
+        FieldSpec::required("resource_type"),
+        FieldSpec::required("resource_name"),
+        FieldSpec::required("warehouse_name"),
+        FieldSpec::required("warehouse_size"),
+        FieldSpec::required("warehouse_type"),
+        FieldSpec::required("cluster_number"),
+        FieldSpec::required("query_count"),
+        FieldSpec::required("attributed_seconds"),
+        FieldSpec::required("bytes_scanned"),
+        FieldSpec::required("estimated_compute_credits"),
+        FieldSpec::required("estimated_usd"),
+    ],
+};
+const COST_RUN_RECORD: RecordSpec = RecordSpec {
+    name: "CostRunRecord",
+    doc: "",
+    fields: &[
+        FieldSpec::required("run_id"),
+        FieldSpec::required("adapter_name"),
+        FieldSpec::required("target_name"),
+        FieldSpec::required("build_status"),
+        FieldSpec::required("started_at"),
+        FieldSpec::required("completed_at"),
+        FieldSpec::required("cost"),
+        FieldSpec::new("version", FieldDefault::Int(1)),
+        FieldSpec::new("had_executable_work", FieldDefault::None),
+    ],
+};
+const STATEMENT_LEDGER_ENTRY: RecordSpec = RecordSpec {
+    name: "StatementLedgerEntry",
+    doc: "",
+    fields: &[
+        FieldSpec::required("statement_id"),
+        FieldSpec::required("run_id"),
+        FieldSpec::required("resource_type"),
+        FieldSpec::required("resource_name"),
+        FieldSpec::required("phase"),
+        FieldSpec::required("attempt"),
+        FieldSpec::required("query_id"),
+        FieldSpec::required("status"),
+        FieldSpec::required("started_at"),
+        FieldSpec::required("completed_at"),
+    ],
+};
+
+/// Run-cost observations, allocations, run records and statement ledger entries.
+const COST_RECORDS: &[RecordSpec] = &[
+    QUERY_COST_OBSERVATION,
+    RESOURCE_COST,
+    COST_RUN_RECORD,
+    STATEMENT_LEDGER_ENTRY,
+];

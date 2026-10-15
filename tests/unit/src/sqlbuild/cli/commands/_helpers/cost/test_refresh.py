@@ -11,11 +11,12 @@ import pytest
 
 from sqlbuild._native import (
     CostCommandRequest,
+    CostRunRecord,
     read_cost_run,
     refresh_pending_cost_run,
     write_cost_run,
 )
-from sqlbuild.cost.models import CostRunRecord, RunCostSummary
+from sqlbuild.cost.models import RunCostSummary
 from sqlbuild.cost.types import CostCapability, CostStatus
 from tests.unit.src.sqlbuild.cli.commands._helpers.cost._test_types import (
     CostRefreshDegradationTestCase,

@@ -5,13 +5,13 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence, Set
 from concurrent.futures import Future
 from contextlib import AbstractContextManager
 from contextvars import Token
+from dataclasses import Field
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 from pathlib import Path, PurePath
 from threading import Event
 from typing import Any, ClassVar, Literal, Protocol, TextIO, TypedDict
-from typing import Any, Literal, Protocol, TextIO, TypedDict
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
@@ -287,11 +287,8 @@ from sqlbuild.compiler.sql_test_glue.models import (
 )
 from sqlbuild.cost.models import (
     CostResourceContext,
-    CostRunRecord,
-    QueryCostObservation,
     RunCostSummary,
     StatementExecutionTelemetry,
-    StatementLedgerEntry,
 )
 from sqlbuild.cost.types import CostStatus
 from sqlbuild.cursor_algebra.models import (
@@ -7374,7 +7371,7 @@ def render_snowflake_query_history_sql(
 def snowflake_statement_is_metadata_only(*, query_type: object, query_text: object) -> bool: ...
 def parse_sqlbuild_query_tag(value: object) -> dict[str, str | None] | None: ...
 
-class NestedProgressChildRow:
+class NestedProgressChildRow(NativeRecord):
     """One child row rendered below a completed nested progress item."""
 
     label: str
@@ -7389,7 +7386,7 @@ class NestedProgressChildRow:
         detail: str = "",
     ) -> None: ...
 
-class AuditCommandRequest:
+class AuditCommandRequest(NativeRecord):
     """CLI inputs for one audit command invocation."""
 
     project_dir: Path | None
@@ -7418,7 +7415,7 @@ class AuditCommandRequest:
         json_output_path: Path | None = None,
     ) -> None: ...
 
-class AuditInvocation:
+class AuditInvocation(NativeRecord):
     """Resolved project, adapter, and reporter context for the audit command."""
 
     effective_project_dir: Path
@@ -7443,7 +7440,7 @@ class AuditInvocation:
         planning_progress: PlanningProgressReporter,
     ) -> None: ...
 
-class BuildCommandRequest:
+class BuildCommandRequest(NativeRecord):
     """CLI inputs for one build command invocation."""
 
     project_dir: Path | None
@@ -7518,7 +7515,7 @@ class BuildCommandRequest:
         selector_files: tuple[SelectorFileSummary, ...] = (),
     ) -> None: ...
 
-class BuildInvocation:
+class BuildInvocation(NativeRecord):
     """Resolved project, adapter, and reporter context for the build command."""
 
     effective_project_dir: Path
@@ -7551,7 +7548,7 @@ class BuildInvocation:
         execution_limits: ExecutionLimitsConfig = ...,
     ) -> None: ...
 
-class CheckCommandRequest:
+class CheckCommandRequest(NativeRecord):
     """CLI inputs for one check command invocation."""
 
     project_dir: Path | None
@@ -7576,7 +7573,7 @@ class CheckCommandRequest:
         json_output_path: Path | None = None,
     ) -> None: ...
 
-class CheckInvocation:
+class CheckInvocation(NativeRecord):
     """Resolved project, adapter, and reporter context for the check command."""
 
     effective_project_dir: Path
@@ -7601,7 +7598,7 @@ class CheckInvocation:
         planning_progress: PlanningProgressReporter,
     ) -> None: ...
 
-class CloneCommandRequest:
+class CloneCommandRequest(NativeRecord):
     """CLI inputs for one clone command invocation."""
 
     project_dir: Path | None
@@ -7632,7 +7629,7 @@ class CloneCommandRequest:
         event_output_path: Path | None = None,
     ) -> None: ...
 
-class DbtSqlbuildWorkContext:
+class DbtSqlbuildWorkContext(NativeRecord):
     """Shared execution context for one dbt interop SQLBuild work run."""
 
     plan_output: PlanOutput
@@ -7655,7 +7652,7 @@ class DbtSqlbuildWorkContext:
         execution_limits: ExecutionLimitsConfig,
     ) -> None: ...
 
-class PlanSafetyGates:
+class PlanSafetyGates(NativeRecord):
     """Pre-confirmed plan safety gates and the guidance shown when one needs a terminal."""
 
     allow_missing_migration_origin: bool
@@ -7680,7 +7677,7 @@ class PlanSafetyGates:
         execution_limit_note: str,
     ) -> None: ...
 
-class DbtInitCommandRequest:
+class DbtInitCommandRequest(NativeRecord):
     """CLI inputs for one dbt init command invocation."""
 
     cwd: Path
@@ -7705,7 +7702,7 @@ class DbtInitCommandRequest:
         skip_dbt_debug: bool,
     ) -> None: ...
 
-class DiffCommandRequest:
+class DiffCommandRequest(NativeRecord):
     """CLI inputs for one diff command invocation."""
 
     project_dir: Path | None
@@ -7782,7 +7779,7 @@ class DiffCommandRequest:
         full_example_values: bool = False,
     ) -> None: ...
 
-class QueryDiffPreparation:
+class QueryDiffPreparation(NativeRecord):
     """Resolved raw-query diff adapter, connection, SQL, and limits."""
 
     adapter: BaseAdapter
@@ -7815,7 +7812,7 @@ class QueryDiffPreparation:
         effective_max_row_only_examples: int,
     ) -> None: ...
 
-class FreshnessCommandRequest:
+class FreshnessCommandRequest(NativeRecord):
     """CLI inputs for one `sqb freshness` invocation."""
 
     project_dir: Path | None
@@ -7846,7 +7843,7 @@ class FreshnessCommandRequest:
         fail_on_stale: bool = False,
     ) -> None: ...
 
-class JanitorCommandRequest:
+class JanitorCommandRequest(NativeRecord):
     """CLI inputs for one janitor command invocation."""
 
     project_dir: Path | None
@@ -7869,7 +7866,7 @@ class JanitorCommandRequest:
         as_target: str | None = None,
     ) -> None: ...
 
-class JanitorInvocation:
+class JanitorInvocation(NativeRecord):
     """Resolved project discovery and output context for janitor."""
 
     effective_project_dir: Path
@@ -7888,7 +7885,7 @@ class JanitorInvocation:
         as_target: str | None = None,
     ) -> None: ...
 
-class JanitorSettings:
+class JanitorSettings(NativeRecord):
     """Validated effective janitor settings."""
 
     retention_days: int
@@ -7903,7 +7900,7 @@ class JanitorSettings:
         drop_old_name_views: tuple[str, ...] = (),
     ) -> None: ...
 
-class LoadCommandRequest:
+class LoadCommandRequest(NativeRecord):
     """CLI inputs for one load command invocation."""
 
     project_dir: Path | None
@@ -7932,7 +7929,7 @@ class LoadCommandRequest:
         json_output_path: Path | None = None,
     ) -> None: ...
 
-class PlanCommandRequest:
+class PlanCommandRequest(NativeRecord):
     """CLI inputs for one plan command invocation."""
 
     project_dir: Path | None
@@ -7977,7 +7974,7 @@ class PlanCommandRequest:
         selection_diagnostics: bool = False,
     ) -> None: ...
 
-class PlaygroundCommandRequest:
+class PlaygroundCommandRequest(NativeRecord):
     """CLI inputs for one playground command invocation."""
 
     project_dir: Path | None
@@ -7990,7 +7987,7 @@ class PlaygroundCommandRequest:
         template: str = ...,
     ) -> None: ...
 
-class AdapterConnectionContext:
+class AdapterConnectionContext(NativeRecord):
     """Resolved adapter and connection configuration for one CLI command."""
 
     adapter_name: str
@@ -8003,7 +8000,7 @@ class AdapterConnectionContext:
         connection_config: dict[str, object],
     ) -> None: ...
 
-class ScenarioSnapshotLimitInputs:
+class ScenarioSnapshotLimitInputs(NativeRecord):
     """CLI snapshot capture-limit overrides for one scenario run."""
 
     max_snapshot_rows: int | None
@@ -8020,7 +8017,7 @@ class ScenarioSnapshotLimitInputs:
         force: bool = False,
     ) -> None: ...
 
-class ScenarioTestCommandRequest:
+class ScenarioTestCommandRequest(NativeRecord):
     """CLI inputs for one `sqb scenario test` invocation."""
 
     project_dir: Path | None
@@ -8057,7 +8054,7 @@ class ScenarioTestCommandRequest:
         json_output_path: Path | None = None,
     ) -> None: ...
 
-class ScenarioCaptureCommandRequest:
+class ScenarioCaptureCommandRequest(NativeRecord):
     """CLI inputs for one `sqb scenario capture` invocation."""
 
     project_dir: Path | None
@@ -8080,7 +8077,7 @@ class ScenarioCaptureCommandRequest:
         limit_inputs: ScenarioSnapshotLimitInputs = ...,
     ) -> None: ...
 
-class SeedCommandRequest:
+class SeedCommandRequest(NativeRecord):
     """CLI inputs for one seed command invocation."""
 
     project_dir: Path | None
@@ -8105,7 +8102,7 @@ class SeedCommandRequest:
         json_output_path: Path | None = None,
     ) -> None: ...
 
-class SeedInvocation:
+class SeedInvocation(NativeRecord):
     """Resolved project, adapter, connection, and output context for seed."""
 
     effective_project_dir: Path
@@ -8126,7 +8123,7 @@ class SeedInvocation:
         progress_stream: TextIO,
     ) -> None: ...
 
-class TestCommandRequest:
+class TestCommandRequest(NativeRecord):
     """CLI inputs for one test command invocation."""
 
     project_dir: Path | None
@@ -8157,7 +8154,7 @@ class TestCommandRequest:
         inspect: bool = False,
     ) -> None: ...
 
-class RefactorCommandRequest:
+class RefactorCommandRequest(NativeRecord):
     """CLI inputs for one `sqb rename` or `sqb mv` invocation."""
 
     command: str
@@ -8182,7 +8179,7 @@ class RefactorCommandRequest:
         no_color: bool = False,
     ) -> None: ...
 
-class ScopeCommandRequest:
+class ScopeCommandRequest(NativeRecord):
     """CLI inputs for one offline declaration-scope inspection."""
 
     project_dir: Path | None
@@ -8233,7 +8230,7 @@ class ScopeCommandRequest:
         no_color: bool = False,
     ) -> None: ...
 
-class TestInvocation:
+class TestInvocation(NativeRecord):
     """Resolved project, adapter, and reporter context for the test command."""
 
     effective_project_dir: Path
@@ -8258,7 +8255,7 @@ class TestInvocation:
         planning_progress: PlanningProgressReporter,
     ) -> None: ...
 
-class RulesCommandRequest:
+class RulesCommandRequest(NativeRecord):
     """Inputs for focused rule execution, inspection, or skill generation."""
 
     project_dir: Path | None
@@ -8279,7 +8276,7 @@ class RulesCommandRequest:
         exclude: tuple[str, ...] = (),
     ) -> None: ...
 
-class CostCommandRequest:
+class CostCommandRequest(NativeRecord):
     """Inputs for local run-cost history and drill-down."""
 
     project_dir: Path | None
@@ -8308,7 +8305,7 @@ class CostCommandRequest:
         json_output_path: Path | None,
     ) -> None: ...
 
-class BuildCostFinalization:
+class BuildCostFinalization(NativeRecord):
     """Inputs for nonfatal automatic build-cost finalization."""
 
     project_dir: Path
@@ -8351,7 +8348,7 @@ class BuildCostFinalization:
         had_executable_work: bool | None = True,
     ) -> None: ...
 
-class ContractCommandRequest:
+class ContractCommandRequest(NativeRecord):
     """CLI inputs for physical contract comparison and repository adoption."""
 
     action: str
@@ -8378,7 +8375,7 @@ class ContractCommandRequest:
         cli_vars: dict[str, object] | None = None,
     ) -> None: ...
 
-class LineageCommandRequest:
+class LineageCommandRequest(NativeRecord):
     """CLI inputs for dependency and column lineage inspection."""
 
     project_dir: Path | None
@@ -8407,7 +8404,7 @@ class LineageCommandRequest:
         cli_vars: dict[str, object] | None = None,
     ) -> None: ...
 
-class CompileProfileFlags:
+class CompileProfileFlags(NativeRecord):
     """Profiling toggles that skip compile phases for benchmarking."""
 
     skip_discovery_sql_analysis: bool
@@ -8422,7 +8419,7 @@ class CompileProfileFlags:
         skip_write: bool = False,
     ) -> None: ...
 
-class CompileCommandRequest:
+class CompileCommandRequest(NativeRecord):
     """CLI inputs for one `sqb compile` invocation."""
 
     project_dir: Path | None
@@ -8459,7 +8456,7 @@ class CompileCommandRequest:
         debug: bool = False,
     ) -> None: ...
 
-class SelectorFileSummary:
+class SelectorFileSummary(NativeRecord):
     """Non-expanded provenance for one selector file."""
 
     path: Path
@@ -8470,7 +8467,7 @@ class SelectorFileSummary:
         selector_count: int,
     ) -> None: ...
 
-class ParsedCliInvocation:
+class ParsedCliInvocation(NativeRecord):
     """Outcome of parsing CLI arguments: either a namespace or an exit code."""
 
     args: CliNamespace | None
@@ -8481,7 +8478,7 @@ class ParsedCliInvocation:
         exit_code: int | None,
     ) -> None: ...
 
-class CliEntrypointHandlers:
+class CliEntrypointHandlers(NativeRecord):
     """Injected command handlers for the CLI entrypoint."""
 
     run_compile: Callable[[CompileCommandRequest], int]
@@ -8552,7 +8549,7 @@ class CliEntrypointHandlers:
         run_refactor: Callable[..., int] | None = None,
     ) -> None: ...
 
-class CommandWarehouseScope:
+class CommandWarehouseScope(NativeRecord):
     """The warehouse group and CLI override active for one command invocation."""
 
     group: WarehouseGroup | None
@@ -8565,7 +8562,7 @@ class CommandWarehouseScope:
         cli_vars: dict[str, object] = ...,
     ) -> None: ...
 
-class ResolvedWarehouse:
+class ResolvedWarehouse(NativeRecord):
     """The warehouse one command connects with and where that value came from."""
 
     warehouse: str | None
@@ -8576,7 +8573,7 @@ class ResolvedWarehouse:
         source: str,
     ) -> None: ...
 
-class WrittenTarget:
+class WrittenTarget(NativeRecord):
     """Result of writing compiled output to target/."""
 
     model_count: int
@@ -8597,7 +8594,7 @@ class WrittenTarget:
         diagnostics: tuple[CompilerDiagnostic, ...] = ...,
     ) -> None: ...
 
-class SkillMaintenanceResult:
+class SkillMaintenanceResult(NativeRecord):
     """Non-blocking generated-skill maintenance result."""
 
     message: str
@@ -8606,7 +8603,7 @@ class SkillMaintenanceResult:
         message: str = "",
     ) -> None: ...
 
-class SkillUpdateResult:
+class SkillUpdateResult(NativeRecord):
     """Result of installing or updating skill files."""
 
     written_paths: tuple[Path, ...]
@@ -8615,7 +8612,7 @@ class SkillUpdateResult:
         written_paths: tuple[Path, ...],
     ) -> None: ...
 
-class CompileAnalysis:
+class CompileAnalysis(NativeRecord):
     """Compiled project analysis shared by compile output phases."""
 
     discovered_inputs: DiscoveredProjectInputs
@@ -8658,7 +8655,7 @@ class CompileAnalysis:
         skipped_type_proof_rules: tuple[str, ...] = (),
     ) -> None: ...
 
-class DbtManifestModel:
+class DbtManifestModel(NativeRecord):
     """One dbt model node needed for SQLBuild dbt_ref resolution."""
 
     unique_id: str
@@ -8689,7 +8686,7 @@ class DbtManifestModel:
         payload: dict[str, object] = ...,
     ) -> None: ...
 
-class DbtManifestSource:
+class DbtManifestSource(NativeRecord):
     """One dbt source node needed for graph and lineage resolution."""
 
     unique_id: str
@@ -8714,7 +8711,7 @@ class DbtManifestSource:
         payload: dict[str, object] = ...,
     ) -> None: ...
 
-class DbtManifestSeed:
+class DbtManifestSeed(NativeRecord):
     """One dbt seed node, a leaf data relation used for column lineage."""
 
     unique_id: str
@@ -8737,7 +8734,7 @@ class DbtManifestSeed:
         payload: dict[str, object] = ...,
     ) -> None: ...
 
-class DbtManifestIndex:
+class DbtManifestIndex(NativeRecord):
     """Lookup indexes for dbt model and source nodes in a manifest."""
 
     models_by_unique_id: dict[str, DbtManifestModel]
@@ -8756,7 +8753,7 @@ class DbtManifestIndex:
         validation_depends_on_nodes_by_unique_id: dict[str, tuple[str, ...]] = ...,
     ) -> None: ...
 
-class DbtCliConfigOverrides:
+class DbtCliConfigOverrides(NativeRecord):
     """dbt config values supplied by CLI flags."""
 
     project_dir: str | None
@@ -8771,7 +8768,7 @@ class DbtCliConfigOverrides:
         target_path: str | None = None,
     ) -> None: ...
 
-class ResolvedDbtConfig:
+class ResolvedDbtConfig(NativeRecord):
     """Resolved dbt config after applying CLI overrides."""
 
     project_dir: Path | None
@@ -8786,7 +8783,7 @@ class ResolvedDbtConfig:
         target_path: Path | None,
     ) -> None: ...
 
-class DbtNodeMessage:
+class DbtNodeMessage(NativeRecord):
     """One dbt log message attached to a dbt node."""
 
     level: str
@@ -8797,7 +8794,7 @@ class DbtNodeMessage:
         message: str,
     ) -> None: ...
 
-class DbtCommandExecutionResult:
+class DbtCommandExecutionResult(NativeRecord):
     """dbt command execution output from streamed JSON events."""
 
     returncode: int
@@ -8808,7 +8805,7 @@ class DbtCommandExecutionResult:
         node_results: tuple[DbtNodeExecutionResult, ...] = ...,
     ) -> None: ...
 
-class DbtLsNode:
+class DbtLsNode(NativeRecord):
     """One node returned by `dbt ls --output json`."""
 
     unique_id: str
@@ -8827,7 +8824,7 @@ class DbtLsNode:
         original_file_path: str | None = None,
     ) -> None: ...
 
-class DbtInteropParsedArgs:
+class DbtInteropParsedArgs(NativeRecord):
     """Declared `sqb dbt` flags parsed by argparse, before routing to buckets."""
 
     select: tuple[str, ...]
@@ -8880,7 +8877,7 @@ class DbtInteropParsedArgs:
         dbt_passthrough: tuple[str, ...] = ...,
     ) -> None: ...
 
-class DbtInteropRoutedArgs:
+class DbtInteropRoutedArgs(NativeRecord):
     """Arguments split for a future `sqb dbt` command execution."""
 
     command: DbtInteropCommand
@@ -8897,7 +8894,7 @@ class DbtInteropRoutedArgs:
         sqlbuild_args: tuple[str, ...] = ...,
     ) -> None: ...
 
-class DbtInteropSelectionResult:
+class DbtInteropSelectionResult(NativeRecord):
     """SQLBuild-side selection produced from `sqb dbt` selectors."""
 
     sqlbuild_model_names: tuple[str, ...]
@@ -8914,7 +8911,7 @@ class DbtInteropSelectionResult:
         path_translations: tuple[tuple[str, str], ...] = ...,
     ) -> None: ...
 
-class DbtInteropPlan:
+class DbtInteropPlan(NativeRecord):
     """Plan output for one future `sqb dbt` command."""
 
     command: DbtInteropCommand
@@ -8945,7 +8942,7 @@ class DbtInteropPlan:
         warnings: tuple[str, ...] = ...,
     ) -> None: ...
 
-class DbtInteropExecutionRequest:
+class DbtInteropExecutionRequest(NativeRecord):
     """Caller inputs for one dbt interop execution command."""
 
     command: DbtInteropCommand
@@ -8980,7 +8977,7 @@ class DbtInteropExecutionRequest:
         json_output: bool = False,
     ) -> None: ...
 
-class DbtInteropInvocation:
+class DbtInteropInvocation(NativeRecord):
     """Resolved execution environment for one dbt interop command."""
 
     dbt_executable: str
@@ -9005,7 +9002,7 @@ class DbtInteropInvocation:
         runner: Any,
     ) -> None: ...
 
-class DbtInteropCompiledProject:
+class DbtInteropCompiledProject(NativeRecord):
     """Adapter and compiled SQLBuild project for dbt interop planning."""
 
     adapter_name: str
@@ -9018,7 +9015,7 @@ class DbtInteropCompiledProject:
         project: CompiledProjectView,
     ) -> None: ...
 
-class DbtInteropPlanResolution:
+class DbtInteropPlanResolution(NativeRecord):
     """Combined dbt graph and the resolved interop plan."""
 
     graph: DbtCombinedGraph
@@ -9029,7 +9026,7 @@ class DbtInteropPlanResolution:
         plan: DbtInteropPlan,
     ) -> None: ...
 
-class DbtInteropCommandArgs:
+class DbtInteropCommandArgs(NativeRecord):
     """Selection, passthrough args, and executables for a dbt interop command."""
 
     select: tuple[str, ...]
@@ -9048,7 +9045,7 @@ class DbtInteropCommandArgs:
         sqlbuild_executable: str = "sqb",
     ) -> None: ...
 
-class DbtPlanEnvironment:
+class DbtPlanEnvironment(NativeRecord):
     """Compiled project and adapter environment for dbt plan-output builds."""
 
     project_dir: Path
@@ -9065,7 +9062,7 @@ class DbtPlanEnvironment:
         adapter_name: str,
     ) -> None: ...
 
-class DbtSqlbuildPlanRequest:
+class DbtSqlbuildPlanRequest(NativeRecord):
     """Selection and native planner inputs for a SQLBuild plan-output build."""
 
     selected_model_names: tuple[str, ...]
@@ -9099,7 +9096,7 @@ class SourceFreshnessUnknownReason(StrEnum):
     ERROR = "error"
     NO_FRESHNESS_CONFIG = "no_freshness_config"
 
-class SourceFreshnessRenderers:
+class SourceFreshnessRenderers(NativeRecord):
     """Adapter SQL renderers used when writing source freshness rows."""
 
     render_qualified_name: Callable[..., str | None]
@@ -9116,7 +9113,7 @@ class SourceFreshnessRenderers:
         render_create_index_sqls: Callable[..., tuple[str, ...]] | None = None,
     ) -> None: ...
 
-class SourceFreshnessObservation:
+class SourceFreshnessObservation(NativeRecord):
     """One comparable observation whose datetime values are always aware UTC."""
 
     source_name: str
@@ -9133,7 +9130,7 @@ class SourceFreshnessObservation:
         observed_at: datetime,
     ) -> None: ...
 
-class SourceFreshnessUnknown:
+class SourceFreshnessUnknown(NativeRecord):
     """One source whose freshness could not be observed, with the reason."""
 
     source_name: str
@@ -9146,7 +9143,7 @@ class SourceFreshnessUnknown:
         message: str,
     ) -> None: ...
 
-class AdapterSourceFreshnessBatch:
+class AdapterSourceFreshnessBatch(NativeRecord):
     """Per-source outcomes of one batched adapter metadata observation."""
 
     observations: dict[str, SourceFreshnessObservation]
@@ -9157,7 +9154,7 @@ class AdapterSourceFreshnessBatch:
         unknown: dict[str, SourceFreshnessUnknown] = ...,
     ) -> None: ...
 
-class SourceFreshnessIdentity:
+class SourceFreshnessIdentity(NativeRecord):
     """Stable identity for one source freshness stream in direct state."""
 
     source_name: str
@@ -9172,7 +9169,7 @@ class SourceFreshnessIdentity:
         target_name: str | None,
     ) -> None: ...
 
-class SourceFreshnessSet:
+class SourceFreshnessSet(NativeRecord):
     """Latest direct source freshness records for one target schema."""
 
     schema: str
@@ -9183,7 +9180,7 @@ class SourceFreshnessSet:
         records: dict[SourceFreshnessIdentity, SourceFreshnessRecord],
     ) -> None: ...
 
-class DirectSourceFreshnessPropagationResult:
+class DirectSourceFreshnessPropagationResult(NativeRecord):
     """Downstream model impact derived from direct source freshness roots."""
 
     changed_source_model_names: dict[SourceFreshnessIdentity, frozenset[str]]
@@ -9199,3 +9196,115 @@ class DirectSourceFreshnessPropagationResult:
         stale_model_names: frozenset[str] = ...,
         blocked_model_names: frozenset[str] = ...,
     ) -> None: ...
+
+class QueryCostObservation(NativeRecord):
+    query_id: str
+    warehouse_name: str
+    warehouse_size: str
+    warehouse_type: str | None
+    cluster_number: int | None
+    started_at: datetime
+    completed_at: datetime
+    execution_ms: int
+    bytes_scanned: int
+    execution_status: str
+    run_id: str | None
+    resource_type: str | None
+    resource_name: str | None
+    def __init__(
+        self,
+        query_id: str,
+        warehouse_name: str,
+        warehouse_size: str,
+        warehouse_type: str | None,
+        cluster_number: int | None,
+        started_at: datetime,
+        completed_at: datetime,
+        execution_ms: int,
+        bytes_scanned: int,
+        execution_status: str,
+        run_id: str | None = None,
+        resource_type: str | None = None,
+        resource_name: str | None = None,
+    ) -> None: ...
+
+class ResourceCost(NativeRecord):
+    resource_type: str
+    resource_name: str
+    warehouse_name: str
+    warehouse_size: str
+    warehouse_type: str | None
+    cluster_number: int | None
+    query_count: int
+    attributed_seconds: Decimal
+    bytes_scanned: int
+    estimated_compute_credits: Decimal
+    estimated_usd: Decimal
+    def __init__(
+        self,
+        resource_type: str,
+        resource_name: str,
+        warehouse_name: str,
+        warehouse_size: str,
+        warehouse_type: str | None,
+        cluster_number: int | None,
+        query_count: int,
+        attributed_seconds: Decimal,
+        bytes_scanned: int,
+        estimated_compute_credits: Decimal,
+        estimated_usd: Decimal,
+    ) -> None: ...
+
+class CostRunRecord(NativeRecord):
+    run_id: str
+    adapter_name: str
+    target_name: str | None
+    build_status: str
+    started_at: datetime
+    completed_at: datetime
+    cost: RunCostSummary
+    version: int
+    had_executable_work: bool | None
+    def __init__(
+        self,
+        run_id: str,
+        adapter_name: str,
+        target_name: str | None,
+        build_status: str,
+        started_at: datetime,
+        completed_at: datetime,
+        cost: RunCostSummary,
+        version: int = 1,
+        had_executable_work: bool | None = None,
+    ) -> None: ...
+
+class StatementLedgerEntry(NativeRecord):
+    statement_id: str
+    run_id: str
+    resource_type: str
+    resource_name: str
+    phase: str
+    attempt: int
+    query_id: str | None
+    status: str
+    started_at: datetime
+    completed_at: datetime
+    def __init__(
+        self,
+        statement_id: str,
+        run_id: str,
+        resource_type: str,
+        resource_name: str,
+        phase: str,
+        attempt: int,
+        query_id: str | None,
+        status: str,
+        started_at: datetime,
+        completed_at: datetime,
+    ) -> None: ...
+
+class NativeRecord:
+    """Base of every native frozen record, built, compared, shown and pickled as a dataclass."""
+
+    __dataclass_fields__: ClassVar[dict[str, Field[Any]]]
+    __match_args__: ClassVar[tuple[str, ...]]

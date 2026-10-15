@@ -7,8 +7,8 @@ from typing import Any
 
 import pytest
 
-from sqlbuild._native import finalize_build_cost, read_cost_run
-from sqlbuild.cost.models import CostRunRecord, RunCostSummary
+from sqlbuild._native import CostRunRecord, finalize_build_cost, read_cost_run
+from sqlbuild.cost.models import RunCostSummary
 from sqlbuild.cost.types import CostCapability, CostStatus
 from tests.unit.src.sqlbuild.cli.commands._helpers.cost._test_types import (
     CostCollectionTestCase,
