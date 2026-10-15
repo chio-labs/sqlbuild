@@ -4,11 +4,13 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 
 use crate::bindings::_helpers::records::constants::{
-    DATACLASS_FIELD_KIND, DATACLASS_FIELDS_ATTRIBUTE, DATACLASSES_MODULE, NATIVE_MODULE,
-    RECORD_SPEC_ATTRIBUTE,
+    DATACLASS_FIELD_KIND, DATACLASS_FIELDS_ATTRIBUTE, DATACLASSES_MODULE, ENUM_MODULE, ENUMS,
+    NATIVE_MODULE, RECORD_SPEC_ATTRIBUTE, STR_ENUM,
 };
 use crate::bindings::_helpers::records::fields::all_specs;
-use crate::bindings::_helpers::records::models::{NativeRecord, RecordAttribute, RecordSpec};
+use crate::bindings::_helpers::records::models::{
+    EnumSpec, NativeRecord, RecordAttribute, RecordSpec,
+};
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     let py: Python<'_> = module.py();
@@ -16,6 +18,10 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<RecordAttribute>()?;
     let base: Bound<'_, PyAny> = py.get_type::<NativeRecord>().into_any();
     let metaclass: Bound<'_, PyAny> = base.get_type().into_any();
+    let str_enum: Bound<'_, PyAny> = py.import(ENUM_MODULE)?.getattr(STR_ENUM)?;
+    for spec in ENUMS.iter().flat_map(|group| group.iter()) {
+        module.add(spec.name, string_enum(&str_enum, spec)?)?;
+    }
     let dataclasses: Bound<'_, PyModule> = py.import(DATACLASSES_MODULE)?;
     for (index, spec) in all_specs().enumerate() {
         let class: Bound<'_, PyAny> = record_class(&metaclass, &base, (index, spec))?;
@@ -26,6 +32,20 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add(spec.name, class)?;
     }
     Ok(())
+}
+
+/// `StrEnum(name, members)` living in `sqlbuild._native`.
+fn string_enum<'py>(str_enum: &Bound<'py, PyAny>, spec: &EnumSpec) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = str_enum.py();
+    let options: Bound<'py, PyDict> = PyDict::new(py);
+    options.set_item("module", NATIVE_MODULE)?;
+    options.set_item("qualname", spec.name)?;
+    let members: Vec<(&str, &str)> = spec.members.to_vec();
+    let enum_class: Bound<'py, PyAny> = str_enum.call((spec.name, members), Some(&options))?;
+    if !spec.doc.is_empty() {
+        enum_class.setattr("__doc__", spec.doc)?;
+    }
+    Ok(enum_class)
 }
 
 /// The `dataclasses.Field` table that lets `dataclasses.replace` and `fields` read a record.

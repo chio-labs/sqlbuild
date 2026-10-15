@@ -2,79 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlbuild._native import require_aware_utc_datetime
-from sqlbuild.adapter.contract.types import FrameworkType
-from sqlbuild.compiler.source_freshness.types import (
+from sqlbuild._native import (
+    DirectSourceFreshnessPropagationResult,
     SourceFreshnessAgeStatus,
-    SourceFreshnessUnknownReason,
+    SourceFreshnessIdentity,
+    SourceFreshnessUnknown,
+    require_aware_utc_datetime,
 )
-from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
-
-
-@dataclass(frozen=True)
-class SourceFreshnessRenderers:
-    """Adapter SQL renderers used when writing source freshness rows."""
-
-    render_qualified_name: Callable[..., str | None]
-    render_framework_type: Callable[[FrameworkType], str]
-    render_insert_records_sql: Callable[..., str]
-    render_create_table_sql: Callable[..., str] | None = None
-    render_create_index_sqls: Callable[..., tuple[str, ...]] | None = None
-
-
-@dataclass(frozen=True)
-class SourceFreshnessObservation:
-    """One comparable observation whose datetime values are always aware UTC."""
-
-    source_name: str
-    strategy: SourceFreshnessStrategy
-    data_version: object
-    value_kind: SourceFreshnessValueKind
-    observed_at: datetime
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "observed_at",
-            require_aware_utc_datetime(value=self.observed_at, field_name="observed_at"),
-        )
-        if isinstance(self.data_version, datetime):
-            object.__setattr__(
-                self,
-                "data_version",
-                require_aware_utc_datetime(value=self.data_version, field_name="data_version"),
-            )
-
-
-@dataclass(frozen=True)
-class SourceFreshnessUnknown:
-    """One source whose freshness could not be observed, with the reason."""
-
-    source_name: str
-    reason: SourceFreshnessUnknownReason
-    message: str
-
-
-@dataclass(frozen=True)
-class AdapterSourceFreshnessBatch:
-    """Per-source outcomes of one batched adapter metadata observation."""
-
-    observations: dict[str, SourceFreshnessObservation] = field(default_factory=dict)
-    unknown: dict[str, SourceFreshnessUnknown] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class SourceFreshnessIdentity:
-    """Stable identity for one source freshness stream in direct state."""
-
-    source_name: str
-    target_database: str | None
-    target_schema: str | None
-    target_name: str | None
 
 
 @dataclass(frozen=True)
@@ -107,29 +44,6 @@ class SourceFreshnessRecord:
             target_schema=self.target_schema,
             target_name=self.target_name,
         )
-
-
-@dataclass(frozen=True)
-class SourceFreshnessSet:
-    """Latest direct source freshness records for one target schema."""
-
-    schema: str
-    records: dict[SourceFreshnessIdentity, SourceFreshnessRecord]
-
-
-@dataclass(frozen=True)
-class DirectSourceFreshnessPropagationResult:
-    """Downstream model impact derived from direct source freshness roots."""
-
-    changed_source_model_names: dict[SourceFreshnessIdentity, frozenset[str]] = field(
-        default_factory=dict
-    )
-    unknown_source_model_names: dict[str, frozenset[str]] = field(default_factory=dict)
-    error_source_model_names: dict[SourceFreshnessIdentity, frozenset[str]] = field(
-        default_factory=dict
-    )
-    stale_model_names: frozenset[str] = frozenset()
-    blocked_model_names: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)

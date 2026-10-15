@@ -23,8 +23,8 @@ use crate::bindings::_helpers::state_rows::timestamps::{
     date_time_typed, in_utc, offset_aware, presumed_utc,
 };
 
+const NATIVE_RECORDS: &str = "sqlbuild._native";
 const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
-const TYPES_MODULE: &str = "sqlbuild.compiler.source_freshness.types";
 const TIMESTAMP_KIND: &str = "timestamp";
 const INTEGER_KIND: &str = "integer";
 const STRING_KIND: &str = "string";
@@ -206,7 +206,7 @@ pub(crate) fn age_policy<'py>(
     if policy.is_none() {
         return Ok(None);
     }
-    let statuses: Bound<'py, PyAny> = imported(py, TYPES_MODULE, "SourceFreshnessAgeStatus")?;
+    let statuses: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS, "SourceFreshnessAgeStatus")?;
     if !date_time_typed(data_version)? {
         return statuses.getattr("UNKNOWN").map(Some);
     }

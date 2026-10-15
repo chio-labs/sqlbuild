@@ -12,6 +12,7 @@ from sqlbuild._native import (
     PlannerChangeResults,
     PlannerScopeResolution,
     PlanWarning,
+    SourceFreshnessIdentity,
     WarehouseFingerprints,
     WarehouseSnapshot,
     build_stale_out_of_selection_warnings,
@@ -31,6 +32,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerScope,
     PlannerSelection,
 )
+from sqlbuild.compiler.planner.types import ChangeKind
 from sqlbuild.compiler.source_freshness.models import (
     DirectSourceFreshnessPlanningResult,
     SourceFreshnessIdentity,

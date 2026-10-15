@@ -4,12 +4,13 @@ use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyAttributeError, PyTypeError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{
-    PyBool, PyDict, PyDictMethods, PyString, PyTuple, PyTupleMethods, PyType, PyTypeMethods,
+    PyBool, PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple, PyTupleMethods, PyType,
+    PyTypeMethods,
 };
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::records::constants::{
-    FROZEN_INSTANCE_ERROR, RECORD_SPEC_ATTRIBUTE, RECORDS,
+    FROZEN_INSTANCE_ERROR, RECORD_FINISHERS, RECORD_SPEC_ATTRIBUTE, RECORDS,
 };
 use crate::bindings::_helpers::records::models::{FieldDefault, NativeRecord, RecordSpec};
 
@@ -80,7 +81,10 @@ pub(crate) fn build_values(
         };
         values.push(value.unbind());
     }
-    Ok(values)
+    match RECORD_FINISHERS.iter().find(|(record, _)| *record == name) {
+        Some((_, finish)) => finish(py, values),
+        None => Ok(values),
+    }
 }
 
 fn default_value<'py>(
@@ -100,6 +104,7 @@ fn default_value<'py>(
         FieldDefault::Text(value) => Ok(PyString::new(py, value).into_any()),
         FieldDefault::EmptyTuple => Ok(PyTuple::empty(py).into_any()),
         FieldDefault::EmptyDict => Ok(PyDict::new(py).into_any()),
+        FieldDefault::EmptyFrozenset => Ok(PyFrozenSet::empty(py)?.into_any()),
         FieldDefault::Member(module, class, member) => imported(py, module, class)?.getattr(member),
         FieldDefault::Call(module, name) => imported(py, module, name)?.call0(),
     }

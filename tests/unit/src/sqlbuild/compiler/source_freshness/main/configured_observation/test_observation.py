@@ -6,13 +6,13 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import (
+    SourceFreshnessObservation,
     SourceFreshnessObservationError,
     normalize_source_freshness_data_version,
     observe_configured_source_freshness,
 )
 from sqlbuild.adapter.contract.models import TableFreshnessMetadata
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
 from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 from tests.unit.src.sqlbuild.compiler.source_freshness.main.configured_observation._test_types import (

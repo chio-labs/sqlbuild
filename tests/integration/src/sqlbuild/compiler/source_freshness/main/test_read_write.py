@@ -6,16 +6,17 @@ from typing import Any
 
 import pytest
 
-from sqlbuild._native import read_latest_source_freshness, write_source_freshness_records
+from sqlbuild._native import (
+    SourceFreshnessIdentity,
+    SourceFreshnessRenderers,
+    SourceFreshnessSet,
+    read_latest_source_freshness,
+    write_source_freshness_records,
+)
 from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
-from sqlbuild.compiler.source_freshness.models import (
-    SourceFreshnessIdentity,
-    SourceFreshnessRecord,
-    SourceFreshnessRenderers,
-    SourceFreshnessSet,
-)
+from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from tests.integration.src.sqlbuild.compiler.source_freshness.main._test_types import (
     SourceFreshnessLatestResolutionTestCase,
     SourceFreshnessPruneHistoryTestCase,

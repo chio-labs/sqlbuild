@@ -1,6 +1,8 @@
 //! The layouts of every native record class.
 
-use crate::bindings::_helpers::records::models::{FieldDefault, FieldSpec, RecordSpec};
+use crate::bindings::_helpers::freshness::observation::normalize_observation;
+use crate::bindings::_helpers::records::models::{EnumSpec, FieldDefault, FieldSpec, RecordSpec};
+use crate::bindings::_helpers::records::types::RecordFinish;
 
 pub(crate) const NATIVE_MODULE: &str = "sqlbuild._native";
 /// The class attribute holding a record class's index into `RECORDS`.
@@ -11,6 +13,12 @@ pub(crate) const DATACLASS_FIELDS_ATTRIBUTE: &str = "__dataclass_fields__";
 /// The marker `dataclasses` gives ordinary (not class or init-only) fields.
 pub(crate) const DATACLASS_FIELD_KIND: &str = "_FIELD";
 
+pub(crate) const ENUM_MODULE: &str = "enum";
+pub(crate) const STR_ENUM: &str = "StrEnum";
+
+/// Every native string enum group, registered before the records.
+pub(crate) const ENUMS: &[&[EnumSpec]] = &[FRESHNESS_ENUMS];
+
 /// Every native record group, in registration order.
 pub(crate) const RECORDS: &[&[RecordSpec]] = &[
     COMMAND_RECORDS,
@@ -18,7 +26,15 @@ pub(crate) const RECORDS: &[&[RecordSpec]] = &[
     OUTPUT_RECORDS,
     COMPILE_RECORDS,
     DBT_RECORDS,
+    FRESHNESS_RECORDS,
 ];
+
+/// Records whose bound values are normalized before the record is created.
+pub(crate) const RECORD_FINISHERS: &[(&str, RecordFinish)] =
+    &[("SourceFreshnessObservation", normalize_observation)];
+/// `SourceFreshnessObservation` field positions.
+pub(crate) const DATA_VERSION_FIELD: usize = 2;
+pub(crate) const OBSERVED_AT_FIELD: usize = 4;
 
 const NESTED_PROGRESS_CHILD_ROW: RecordSpec = RecordSpec {
     name: "NestedProgressChildRow",
@@ -1146,3 +1162,107 @@ const DBT_RECORDS: &[RecordSpec] = &[
     DBT_PLAN_ENVIRONMENT,
     DBT_SQLBUILD_PLAN_REQUEST,
 ];
+
+const SOURCE_FRESHNESS_RENDERERS: RecordSpec = RecordSpec {
+    name: "SourceFreshnessRenderers",
+    doc: "Adapter SQL renderers used when writing source freshness rows.",
+    fields: &[
+        FieldSpec::required("render_qualified_name"),
+        FieldSpec::required("render_framework_type"),
+        FieldSpec::required("render_insert_records_sql"),
+        FieldSpec::new("render_create_table_sql", FieldDefault::None),
+        FieldSpec::new("render_create_index_sqls", FieldDefault::None),
+    ],
+};
+const SOURCE_FRESHNESS_OBSERVATION: RecordSpec = RecordSpec {
+    name: "SourceFreshnessObservation",
+    doc: "One comparable observation whose datetime values are always aware UTC.",
+    fields: &[
+        FieldSpec::required("source_name"),
+        FieldSpec::required("strategy"),
+        FieldSpec::required("data_version"),
+        FieldSpec::required("value_kind"),
+        FieldSpec::required("observed_at"),
+    ],
+};
+const SOURCE_FRESHNESS_UNKNOWN: RecordSpec = RecordSpec {
+    name: "SourceFreshnessUnknown",
+    doc: "One source whose freshness could not be observed, with the reason.",
+    fields: &[
+        FieldSpec::required("source_name"),
+        FieldSpec::required("reason"),
+        FieldSpec::required("message"),
+    ],
+};
+const ADAPTER_SOURCE_FRESHNESS_BATCH: RecordSpec = RecordSpec {
+    name: "AdapterSourceFreshnessBatch",
+    doc: "Per-source outcomes of one batched adapter metadata observation.",
+    fields: &[
+        FieldSpec::new("observations", FieldDefault::EmptyDict),
+        FieldSpec::new("unknown", FieldDefault::EmptyDict),
+    ],
+};
+const SOURCE_FRESHNESS_IDENTITY: RecordSpec = RecordSpec {
+    name: "SourceFreshnessIdentity",
+    doc: "Stable identity for one source freshness stream in direct state.",
+    fields: &[
+        FieldSpec::required("source_name"),
+        FieldSpec::required("target_database"),
+        FieldSpec::required("target_schema"),
+        FieldSpec::required("target_name"),
+    ],
+};
+const SOURCE_FRESHNESS_SET: RecordSpec = RecordSpec {
+    name: "SourceFreshnessSet",
+    doc: "Latest direct source freshness records for one target schema.",
+    fields: &[
+        FieldSpec::required("schema"),
+        FieldSpec::required("records"),
+    ],
+};
+const DIRECT_SOURCE_FRESHNESS_PROPAGATION_RESULT: RecordSpec = RecordSpec {
+    name: "DirectSourceFreshnessPropagationResult",
+    doc: "Downstream model impact derived from direct source freshness roots.",
+    fields: &[
+        FieldSpec::new("changed_source_model_names", FieldDefault::EmptyDict),
+        FieldSpec::new("unknown_source_model_names", FieldDefault::EmptyDict),
+        FieldSpec::new("error_source_model_names", FieldDefault::EmptyDict),
+        FieldSpec::new("stale_model_names", FieldDefault::EmptyFrozenset),
+        FieldSpec::new("blocked_model_names", FieldDefault::EmptyFrozenset),
+    ],
+};
+
+/// Source freshness observations, identities and planning results.
+const FRESHNESS_RECORDS: &[RecordSpec] = &[
+    SOURCE_FRESHNESS_RENDERERS,
+    SOURCE_FRESHNESS_OBSERVATION,
+    SOURCE_FRESHNESS_UNKNOWN,
+    ADAPTER_SOURCE_FRESHNESS_BATCH,
+    SOURCE_FRESHNESS_IDENTITY,
+    SOURCE_FRESHNESS_SET,
+    DIRECT_SOURCE_FRESHNESS_PROPAGATION_RESULT,
+];
+
+const SOURCE_FRESHNESS_AGE_STATUS: EnumSpec = EnumSpec {
+    name: "SourceFreshnessAgeStatus",
+    doc: "",
+    members: &[
+        ("PASS", "pass"),
+        ("WARN", "warn"),
+        ("ERROR", "error"),
+        ("UNKNOWN", "unknown"),
+    ],
+};
+const SOURCE_FRESHNESS_UNKNOWN_REASON: EnumSpec = EnumSpec {
+    name: "SourceFreshnessUnknownReason",
+    doc: "Why one source's freshness could not be observed.",
+    members: &[
+        ("UNAVAILABLE", "unavailable"),
+        ("ERROR", "error"),
+        ("NO_FRESHNESS_CONFIG", "no_freshness_config"),
+    ],
+};
+
+/// Source freshness age statuses and unknown reasons.
+const FRESHNESS_ENUMS: &[EnumSpec] =
+    &[SOURCE_FRESHNESS_AGE_STATUS, SOURCE_FRESHNESS_UNKNOWN_REASON];

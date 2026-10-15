@@ -11,6 +11,7 @@ from enum import StrEnum
 from pathlib import Path, PurePath
 from threading import Event
 from typing import Any, ClassVar, Literal, Protocol, TextIO, TypedDict
+from typing import Any, Literal, Protocol, TextIO, TypedDict
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
@@ -271,18 +272,8 @@ from sqlbuild.compiler.scopes.types import (
     DeclarationKind,
 )
 from sqlbuild.compiler.source_freshness.models import (
-    AdapterSourceFreshnessBatch,
     DirectSourceFreshnessPlanningResult,
-    DirectSourceFreshnessPropagationResult,
-    SourceFreshnessIdentity,
-    SourceFreshnessObservation,
     SourceFreshnessRecord,
-    SourceFreshnessRenderers,
-    SourceFreshnessSet,
-)
-from sqlbuild.compiler.source_freshness.types import (
-    SourceFreshnessAgeStatus,
-    SourceFreshnessComparableRecord,
 )
 from sqlbuild.compiler.sql_analysis.models import (
     SqlBindingResult,
@@ -9085,4 +9076,126 @@ class DbtSqlbuildPlanRequest:
         selected_model_names: tuple[str, ...],
         sqlbuild_args: tuple[str, ...],
         external_blocked_model_names: tuple[str, ...] = (),
+    ) -> None: ...
+
+class SourceFreshnessComparableRecord(Protocol):
+    @property
+    def data_version_hash(self) -> str: ...
+    @property
+    def value_kind(self) -> str: ...
+    @property
+    def data_version(self) -> str | None: ...
+
+class SourceFreshnessAgeStatus(StrEnum):
+    PASS = "pass"
+    WARN = "warn"
+    ERROR = "error"
+    UNKNOWN = "unknown"
+
+class SourceFreshnessUnknownReason(StrEnum):
+    """Why one source's freshness could not be observed."""
+
+    UNAVAILABLE = "unavailable"
+    ERROR = "error"
+    NO_FRESHNESS_CONFIG = "no_freshness_config"
+
+class SourceFreshnessRenderers:
+    """Adapter SQL renderers used when writing source freshness rows."""
+
+    render_qualified_name: Callable[..., str | None]
+    render_framework_type: Callable[[FrameworkType], str]
+    render_insert_records_sql: Callable[..., str]
+    render_create_table_sql: Callable[..., str] | None
+    render_create_index_sqls: Callable[..., tuple[str, ...]] | None
+    def __init__(
+        self,
+        render_qualified_name: Callable[..., str | None],
+        render_framework_type: Callable[[FrameworkType], str],
+        render_insert_records_sql: Callable[..., str],
+        render_create_table_sql: Callable[..., str] | None = None,
+        render_create_index_sqls: Callable[..., tuple[str, ...]] | None = None,
+    ) -> None: ...
+
+class SourceFreshnessObservation:
+    """One comparable observation whose datetime values are always aware UTC."""
+
+    source_name: str
+    strategy: SourceFreshnessStrategy
+    data_version: object
+    value_kind: SourceFreshnessValueKind
+    observed_at: datetime
+    def __init__(
+        self,
+        source_name: str,
+        strategy: SourceFreshnessStrategy,
+        data_version: object,
+        value_kind: SourceFreshnessValueKind,
+        observed_at: datetime,
+    ) -> None: ...
+
+class SourceFreshnessUnknown:
+    """One source whose freshness could not be observed, with the reason."""
+
+    source_name: str
+    reason: SourceFreshnessUnknownReason
+    message: str
+    def __init__(
+        self,
+        source_name: str,
+        reason: SourceFreshnessUnknownReason,
+        message: str,
+    ) -> None: ...
+
+class AdapterSourceFreshnessBatch:
+    """Per-source outcomes of one batched adapter metadata observation."""
+
+    observations: dict[str, SourceFreshnessObservation]
+    unknown: dict[str, SourceFreshnessUnknown]
+    def __init__(
+        self,
+        observations: dict[str, SourceFreshnessObservation] = ...,
+        unknown: dict[str, SourceFreshnessUnknown] = ...,
+    ) -> None: ...
+
+class SourceFreshnessIdentity:
+    """Stable identity for one source freshness stream in direct state."""
+
+    source_name: str
+    target_database: str | None
+    target_schema: str | None
+    target_name: str | None
+    def __init__(
+        self,
+        source_name: str,
+        target_database: str | None,
+        target_schema: str | None,
+        target_name: str | None,
+    ) -> None: ...
+
+class SourceFreshnessSet:
+    """Latest direct source freshness records for one target schema."""
+
+    schema: str
+    records: dict[SourceFreshnessIdentity, SourceFreshnessRecord]
+    def __init__(
+        self,
+        schema: str,
+        records: dict[SourceFreshnessIdentity, SourceFreshnessRecord],
+    ) -> None: ...
+
+class DirectSourceFreshnessPropagationResult:
+    """Downstream model impact derived from direct source freshness roots."""
+
+    changed_source_model_names: dict[SourceFreshnessIdentity, frozenset[str]]
+    unknown_source_model_names: dict[str, frozenset[str]]
+    error_source_model_names: dict[SourceFreshnessIdentity, frozenset[str]]
+    stale_model_names: frozenset[str]
+    blocked_model_names: frozenset[str]
+    def __init__(
+        self,
+        changed_source_model_names: dict[SourceFreshnessIdentity, frozenset[str]] = ...,
+        unknown_source_model_names: dict[str, frozenset[str]] = ...,
+        error_source_model_names: dict[SourceFreshnessIdentity, frozenset[str]] = ...,
+        stale_model_names: frozenset[str] = ...,
+        blocked_model_names: frozenset[str] = ...,
     ) -> None: ...

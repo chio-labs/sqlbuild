@@ -20,6 +20,7 @@ pub(crate) enum FieldDefault {
     Text(&'static str),
     EmptyTuple,
     EmptyDict,
+    EmptyFrozenset,
     /// `getattr(getattr(import(module), class), member)`.
     Member(&'static str, &'static str, &'static str),
     /// `getattr(import(module), name)()`, evaluated for every instance.
@@ -40,6 +41,14 @@ pub(crate) struct RecordSpec {
     pub(crate) name: &'static str,
     pub(crate) doc: &'static str,
     pub(crate) fields: &'static [FieldSpec],
+}
+
+/// The members of one native string enum, in declaration order.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct EnumSpec {
+    pub(crate) name: &'static str,
+    pub(crate) doc: &'static str,
+    pub(crate) members: &'static [(&'static str, &'static str)],
 }
 
 /// Base of every native frozen record, built, compared, shown and pickled as a dataclass.
