@@ -26,7 +26,7 @@ fn given_log_record_fields_when_formatting_then_matches_console_line() {
                 subject: Some("model".to_owned()),
                 name: Some("orders".to_owned()),
                 tokens: vec![("phase", "run".to_owned())],
-                duration_ms: Some(1005),
+                duration_seconds: Some(1.005),
                 ..DiagnosticRecordText::default()
             },
             use_color: true,

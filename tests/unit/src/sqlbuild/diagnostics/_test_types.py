@@ -29,3 +29,11 @@ class ProcessResourceTestCase:
     expected_user_cpu_seconds: float
     expected_system_cpu_seconds: float
     expected_max_rss_bytes: int | None
+
+
+@dataclass(frozen=True)
+class ConsoleDurationTestCase:
+    description: str
+    subject: object
+    duration_ms: object
+    expected_line: str

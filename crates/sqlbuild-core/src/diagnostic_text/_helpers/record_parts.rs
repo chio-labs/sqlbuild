@@ -27,8 +27,8 @@ fn context_message(record: &DiagnosticRecordText, style: CliStyle) -> Option<Str
     for (label, value) in &record.tokens {
         parts.push(format!("{label}={value}"));
     }
-    if let Some(duration_ms) = record.duration_ms {
-        parts.push(format!("duration={:.2}s", duration_ms as f64 / 1000.0));
+    if let Some(duration_seconds) = record.duration_seconds {
+        parts.push(format!("duration={duration_seconds:.2}s"));
     }
     let message: String = normalized_message(&record.message);
     if !message.is_empty() {

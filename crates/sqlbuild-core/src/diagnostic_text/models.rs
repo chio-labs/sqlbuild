@@ -12,8 +12,8 @@ pub struct DiagnosticRecordText {
     pub event: Option<String>,
     /// Each `label=value` context token whose record field is a string, in display order.
     pub tokens: Vec<(&'static str, String)>,
-    /// `sqlbuild_duration_ms` when it is an integer.
-    pub duration_ms: Option<i64>,
+    /// `sqlbuild_duration_ms / 1000` when the field is an integer, as Python divides it.
+    pub duration_seconds: Option<f64>,
     /// `sqlbuild_sql` when it is a string.
     pub sql: Option<String>,
 }
