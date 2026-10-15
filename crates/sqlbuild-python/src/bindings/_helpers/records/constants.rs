@@ -1,5 +1,8 @@
 //! The layouts of every native record class.
 
+use crate::bindings::_helpers::compiler_records::constants::{
+    COMPILER_ENUMS, COMPILER_ERRORS, COMPILER_RECORDS,
+};
 use crate::bindings::_helpers::freshness::observation::normalize_observation;
 use crate::bindings::_helpers::records::models::{
     ClassValue, EnumSpec, ErrorSpec, FieldDefault, FieldSpec, RecordSpec,
@@ -24,9 +27,15 @@ pub(crate) const ERROR_SPEC_ATTRIBUTE: &str = "__native_error__";
 pub(crate) const EXCEPTION_PARENT: &str = "Exception";
 /// The `parent` of an error class deriving directly from `ValueError`.
 pub(crate) const VALUE_ERROR_PARENT: &str = "ValueError";
+/// Prefix of a `parent` naming a builtin exception kept with its own constructor.
+pub(crate) const BUILTIN_PARENT_PREFIX: &str = "builtins.";
+pub(crate) const BUILTINS_MODULE: &str = "builtins";
 
-/// Every native expected-error class, each after its parent.
-pub(crate) const ERRORS: &[ErrorSpec] = &[
+/// Every native error group, in registration order.
+pub(crate) const ERRORS: &[&[ErrorSpec]] = &[CLI_ERRORS, COMPILER_ERRORS];
+
+/// The expected CLI and migration-state error classes, each after its parent.
+const CLI_ERRORS: &[ErrorSpec] = &[
     ErrorSpec {
         name: "CliUserError",
         parent: EXCEPTION_PARENT,
@@ -106,8 +115,13 @@ pub(crate) const ERRORS: &[ErrorSpec] = &[
 ];
 
 /// Every native string enum group, registered before the records.
-pub(crate) const ENUMS: &[&[EnumSpec]] =
-    &[FRESHNESS_ENUMS, CLI_ENUMS, DBT_ENUMS, PRESENTATION_ENUMS];
+pub(crate) const ENUMS: &[&[EnumSpec]] = &[
+    FRESHNESS_ENUMS,
+    CLI_ENUMS,
+    DBT_ENUMS,
+    PRESENTATION_ENUMS,
+    COMPILER_ENUMS,
+];
 
 /// Every native record group, in registration order.
 pub(crate) const RECORDS: &[&[RecordSpec]] = &[
@@ -120,6 +134,7 @@ pub(crate) const RECORDS: &[&[RecordSpec]] = &[
     COST_RECORDS,
     SQL_VALUE_RECORDS,
     DIAGNOSTIC_RECORDS,
+    COMPILER_RECORDS,
 ];
 
 /// Records whose bound values are normalized before the record is created.

@@ -221,7 +221,7 @@ fn fast_lineage<'py>(
             Some(FastLineageOutcome::Built { columns, has_star }) => {
                 let lineage_columns: Vec<Bound<'py, PyAny>> = columns
                     .iter()
-                    .map(|column| classes.column(column, &classes.unknown_nullability, false))
+                    .map(|column| classes.column(column, &classes.unknown_nullability))
                     .collect::<PyResult<_>>()?;
                 built.set_item(
                     &model.name,
@@ -307,7 +307,7 @@ fn rich_lineage<'py>(
                 for column in &columns {
                     let nullability: Bound<'py, PyAny> =
                         classes.nullability.call1((column.nullability.as_str(),))?;
-                    lineage_columns.push(classes.column(&column.column, &nullability, true)?);
+                    lineage_columns.push(classes.column(&column.column, &nullability)?);
                 }
                 built.set_item(&name, classes.model(&name, lineage_columns, has_star)?)?;
             }
