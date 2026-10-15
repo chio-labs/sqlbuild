@@ -14,7 +14,6 @@ from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.pipeline._helpers import materializations
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
-from sqlbuild.compiler.planner.main.execution import execution
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.diagnostics.models import PartialBuildPhaseTimings
 from sqlbuild.rule_engine._helpers.run import rule_threads
@@ -66,7 +65,7 @@ def test_given_slow_planning_connection_when_compiling_then_direct_phases_are_di
     adapter: Mock = Mock()
     monkeypatch.setattr(time, "monotonic", monotonic)
     monkeypatch.setattr(_native, "build_compiled_project", Mock(return_value=project))
-    monkeypatch.setattr(execution, "build_execution_plan", Mock(return_value=PlanOutput()))
+    monkeypatch.setattr(_native, "build_execution_plan", Mock(return_value=PlanOutput()))
     monkeypatch.setattr(materializations, "load_custom_materializations", Mock(return_value={}))
     monkeypatch.setattr(
         _native,
