@@ -1,13 +1,15 @@
 //! The per-invocation compile reuse state carried from the reuse check into a full compile.
 
-use pyo3::prelude::{Bound, Py, PyAny, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyResult, Python};
 use pyo3::types::PyDict;
 use pyo3::{IntoPyObjectExt, pyclass, pymethods};
 
+use crate::bindings::_helpers::compile_command::constants::REUSE_ATTEMPT_FIELDS;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 
 /// Result of checking for a reusable compile, carried into a full compile on a miss.
 #[pyclass(module = "sqlbuild._native", frozen, get_all)]
+#[derive(Debug)]
 pub(crate) struct CompileReuseAttempt {
     /// `hit`, `miss` or `bypass`.
     outcome: Py<PyAny>,
@@ -22,25 +24,13 @@ pub(crate) struct CompileReuseAttempt {
     json_output: Py<PyAny>,
 }
 
-const FIELDS: (&[&str], &[&str]) = (
-    &["outcome", "project_dir", "started"],
-    &[
-        "check_ms",
-        "exit_code",
-        "entry_path",
-        "native",
-        "selected_target",
-        "json_output",
-    ],
-);
-
 #[pymethods]
 impl CompileReuseAttempt {
     #[new]
     #[pyo3(signature = (**options))]
     fn new(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<Self> {
         let fields: KeywordArguments<'_> =
-            KeywordArguments::read(py, "CompileReuseAttempt", options, FIELDS)?;
+            KeywordArguments::read(py, "CompileReuseAttempt", options, REUSE_ATTEMPT_FIELDS)?;
         let field = |name: &str| -> PyResult<Py<PyAny>> { Ok(fields.value(name)?.unbind()) };
         Ok(Self {
             outcome: field("outcome")?,
@@ -58,8 +48,4 @@ impl CompileReuseAttempt {
             json_output: fields.value_or_false("json_output")?.unbind(),
         })
     }
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_class::<CompileReuseAttempt>()
 }

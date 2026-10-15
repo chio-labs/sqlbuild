@@ -67,3 +67,15 @@ pub(crate) const REUSE_STORE_SKIPPED_PREFIX: &str =
     "Did not record compile for reuse: files changed while it ran (";
 pub(crate) const COMPUTE_LOG_DIRECTORY_NAME: &str = "logs";
 pub(crate) const COMPILE_COMMAND_NAME: &str = "compile";
+/// The required and optional keyword fields of `CompileReuseAttempt`.
+pub(crate) const REUSE_ATTEMPT_FIELDS: (&[&str], &[&str]) = (
+    &["outcome", "project_dir", "started"],
+    &[
+        "check_ms",
+        "exit_code",
+        "entry_path",
+        "native",
+        "selected_target",
+        "json_output",
+    ],
+);

@@ -1,13 +1,15 @@
 //! Register the `sqb compile` report, artifact writing and reuse recording.
 
-use pyo3::prelude::{Bound, PyModule, PyResult};
+use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult};
+
+use crate::bindings::_helpers::compile_command::models::CompileReuseAttempt;
 
 use crate::bindings::_helpers::compile_command::{
-    models, prepared_artifacts, report, reuse_attempt, reuse_recording, target_writer,
+    prepared_artifacts, report, reuse_attempt, reuse_recording, target_writer,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    models::register(module)?;
+    module.add_class::<CompileReuseAttempt>()?;
     report::register(module)?;
     reuse_attempt::register(module)?;
     reuse_recording::register(module)?;
