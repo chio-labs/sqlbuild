@@ -4,6 +4,10 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import (
+    apply_configured_microbatch_limits,
+    apply_microbatch_limit,
+)
 from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
@@ -11,10 +15,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner._helpers.output.plan_entry import (
-    _apply_configured_microbatch_limits,
-    _apply_microbatch_limit,
-)
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
     CursorInputRelation,
@@ -87,7 +87,7 @@ def test_given_nested_model_policy_when_applying_outer_limit_then_precedence_is_
         declared_microbatch_limit_action=MicrobatchLimitAction.CAP_FROM_END,
     )
 
-    limited_entry, warnings = _apply_configured_microbatch_limits(
+    limited_entry, warnings = apply_configured_microbatch_limits(
         entry=entry,
         inputs=PlanEntryBuildInputs(
             max_microbatches=test_case.configured_limit,
@@ -153,7 +153,7 @@ def test_given_coarse_effective_grain_when_applying_limit_then_authored_batch_se
         microbatch_range=CursorBounds(start="2026-01-01", end="2026-04-01"),
     )
 
-    limited_entry, warning = _apply_microbatch_limit(
+    limited_entry, warning = apply_microbatch_limit(
         entry=entry,
         max_batches=3,
         action=MicrobatchLimitAction.WARN,
@@ -272,7 +272,7 @@ def test_given_planner_owned_range_when_applying_limit_then_expected_decision_is
     )
     action: MicrobatchLimitAction = MicrobatchLimitAction(test_case.action)
 
-    limited_entry, warning = _apply_microbatch_limit(
+    limited_entry, warning = apply_microbatch_limit(
         entry=entry, max_batches=test_case.max_batches, action=action
     )
 
@@ -323,7 +323,7 @@ def test_given_excess_planner_owned_range_when_action_is_error_then_planning_fai
     )
 
     with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
-        _apply_microbatch_limit(
+        apply_microbatch_limit(
             entry=entry,
             max_batches=test_case.max_batches,
             action=MicrobatchLimitAction(test_case.action),

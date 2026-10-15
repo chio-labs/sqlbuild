@@ -5,6 +5,8 @@ from unittest.mock import Mock
 
 import pytest
 
+import sqlbuild._native as sql_test_assembly
+from sqlbuild import _native as fixture_completion
 from sqlbuild._native import (
     compiled_model_record,
     project_with,
@@ -19,10 +21,8 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.planner._helpers.fixtures import completion as fixture_completion
 from sqlbuild.compiler.planner._helpers.output import plan_output
 from sqlbuild.compiler.planner._helpers.output.plan_output import build_selected_test_entries
-from sqlbuild.compiler.planner._helpers.sql_tests import assembly as sql_test_assembly
 from sqlbuild.compiler.planner.classes import fixture_column_inferences as fixture_inferences
 from sqlbuild.compiler.planner.models import (
     FixtureColumnMetadata,
@@ -102,13 +102,7 @@ def test_given_many_tests_when_building_entries_then_project_fixture_metadata_is
     )
     metadata_builder: Mock = Mock(wraps=fixture_completion.build_relation_fixture_context)
     monkeypatch.setattr(plan_output, "build_relation_fixture_context", metadata_builder)
-    fixture_completion._cached_resolved_column_reads.cache_clear()
-    fallback_analyzer: Mock = Mock(wraps=fixture_completion.analyze_resolved_column_reads)
-    monkeypatch.setattr(
-        fixture_completion,
-        "analyze_resolved_column_reads",
-        fallback_analyzer,
-    )
+    fixture_completion.fixture_read_cache_info(reset=True)
     topology_builder: Mock = Mock(wraps=sql_test_assembly.resolve_sql_test_model_chains)
     monkeypatch.setattr(sql_test_assembly, "resolve_sql_test_model_chains", topology_builder)
 
@@ -124,7 +118,7 @@ def test_given_many_tests_when_building_entries_then_project_fixture_metadata_is
     assert len(entries) == test_case.test_count
     assert warnings == []
     assert metadata_builder.call_count == test_case.expected_metadata_builds
-    assert fallback_analyzer.call_count == test_case.expected_analysis_calls
+    assert fixture_completion.fixture_read_cache_info()[0] == test_case.expected_analysis_calls
     assert topology_builder.call_count == test_case.expected_topology_builds
 
 
@@ -239,14 +233,7 @@ def test_given_complete_authoritative_fixture_when_completing_then_skips_column_
             (CompiledResourceType.MODEL, model.name): {},
         },
     )
-    fallback_analyzer: Mock = Mock(
-        side_effect=AssertionError("complete fixtures must not trigger model analysis")
-    )
-    monkeypatch.setattr(
-        fixture_completion,
-        "analyze_resolved_column_reads",
-        fallback_analyzer,
-    )
+    fixture_completion.fixture_read_cache_info(reset=True)
     fixture_inference: Mock = Mock(wraps=fixture_inferences.infer_fixture_column_facts)
     monkeypatch.setattr(
         fixture_inferences,
@@ -257,14 +244,16 @@ def test_given_complete_authoritative_fixture_when_completing_then_skips_column_
     completed: RelationFixtureCompletion = fixture_completion.build_relation_fixture_completion(
         project=project_with(project=project, models=(model,)),
         adapter=PlannerTestAdapter(),
-        ordered_model_names=(model.name,),
-        fixture_groups=((CompiledResourceType.SOURCE, {"raw_orders": test_case.fixture_sql}),),
+        request=(
+            (model.name,),
+            ((CompiledResourceType.SOURCE, {"raw_orders": test_case.fixture_sql}),),
+        ),
         planning_context=context,
     )
 
     assert completed.diagnostics == ()
     assert completed.fixture_sql_by_key[source_key] == test_case.expected_fixture_sql
-    assert fallback_analyzer.call_count == test_case.expected_analysis_calls
+    assert fixture_completion.fixture_read_cache_info()[0] == test_case.expected_analysis_calls
     assert fixture_inference.call_count == test_case.expected_inference_calls
 
 

@@ -5,14 +5,15 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import build_compiled_project, discover_project_inputs
+from sqlbuild._native import (
+    build_compiled_project,
+    build_relation_fixture_completion,
+    build_relation_fixture_context,
+    discover_project_inputs,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.planner._helpers.fixtures.completion import (
-    build_relation_fixture_completion,
-    build_relation_fixture_context,
-)
 from sqlbuild.compiler.planner._helpers.output.plan_output import build_selected_test_entries
 from sqlbuild.compiler.planner.models import (
     RelationFixtureCompletion,
@@ -33,6 +34,21 @@ from tests.integration.src.sqlbuild.compiler.planner._helpers._test_types import
             description="partial source fixture",
             expected_sql_fragment='CAST(NULL AS VARCHAR) AS "status"',
         ),
+        FixturePlanningIntegrationTestCase(
+            description="qualified star through alias",
+            query_sql='SELECT o.* FROM __source("raw_orders") AS o',
+            expected_sql_fragment='CAST(NULL AS VARCHAR) AS "status"',
+        ),
+        FixturePlanningIntegrationTestCase(
+            description="CTE and quoted column reads",
+            query_sql='WITH selected AS (SELECT "order_id", "status" FROM __source("raw_orders")) SELECT * FROM selected',
+            expected_sql_fragment='CAST(NULL AS VARCHAR) AS "status"',
+        ),
+        FixturePlanningIntegrationTestCase(
+            description="marker-looking strings and comments",
+            query_sql='SELECT order_id, status, \'__ref("unused")\' AS note FROM __source("raw_orders") /* __source("missing") */',
+            expected_sql_fragment='CAST(NULL AS VARCHAR) AS "status"',
+        ),
     ),
     ids=lambda case: case.description,
 )
@@ -51,7 +67,7 @@ def test_given_partial_fixture_when_compiling_and_planning_then_completes_requir
                 'database = ":memory:"\n'
             ),
             "models/orders.sql": (
-                'MODEL (description "Test model orders.");\n\nSELECT order_id, status FROM __source("raw_orders")\n'
+                f'MODEL (description "Test model orders.");\n\n{test_case.query_sql}\n'
             ),
             "sources/raw_orders.yml": (
                 "sources:\n"
@@ -206,9 +222,9 @@ def test_given_source_contract_when_completing_fixture_then_respects_authoritati
     completed: RelationFixtureCompletion = build_relation_fixture_completion(
         project=project,
         adapter=adapter,
-        ordered_model_names=("orders",),
-        fixture_groups=(
-            (CompiledResourceType.SOURCE, {"raw_orders": "SELECT 1 AS ORDER_ID, 2 AS extra"}),
+        request=(
+            ("orders",),
+            ((CompiledResourceType.SOURCE, {"raw_orders": "SELECT 1 AS ORDER_ID, 2 AS extra"}),),
         ),
         planning_context=context,
     )

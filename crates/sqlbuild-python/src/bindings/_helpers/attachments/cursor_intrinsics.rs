@@ -31,7 +31,7 @@ pub(crate) fn reserved_cursor_markers() -> Vec<String> {
 }
 
 /// A `CompileInputError` carrying `message`.
-fn compile_input_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
+pub(crate) fn compile_input_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
         imported(py, COMPILE_ERRORS_MODULE, "CompileInputError")?.call1((message,))?,
     ))
@@ -128,7 +128,7 @@ fn cursor_intrinsics_analysis_sql(
 /// Whether `sql` uses cursor intrinsics, and `sql` with both bounds rendered when given.
 #[pyfunction]
 #[pyo3(signature = (*, sql, start_sql=None, end_sql=None))]
-fn resolve_cursor_intrinsics(
+pub(crate) fn resolve_cursor_intrinsics(
     py: Python<'_>,
     sql: &str,
     start_sql: Option<&str>,

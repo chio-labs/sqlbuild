@@ -679,12 +679,11 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
 
     def render_create_migration_state_table_sql(self, *, database: str | None, schema: str) -> str:
-        from sqlbuild.compiler.migrations.main.create_table_sql import (
-            build_migration_state_create_table_sql,
-        )
+        from sqlbuild._native import render_migration_state_create_sql
 
         return self._with_state_table_retention(
-            create_sql=build_migration_state_create_table_sql(
+            create_sql=render_migration_state_create_sql(
+                kind="model",
                 database=database,
                 schema=schema,
                 render_qualified_name=self.render_qualified_name,
@@ -697,12 +696,11 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def render_create_old_name_view_state_table_sql(
         self, *, database: str | None, schema: str
     ) -> str:
-        from sqlbuild.compiler.migrations.main.old_name_view_create_table_sql import (
-            build_old_name_view_state_create_table_sql,
-        )
+        from sqlbuild._native import render_migration_state_create_sql
 
         return self._with_state_table_retention(
-            create_sql=build_old_name_view_state_create_table_sql(
+            create_sql=render_migration_state_create_sql(
+                kind="old_name",
                 database=database,
                 schema=schema,
                 render_qualified_name=self.render_qualified_name,
@@ -715,12 +713,11 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def render_create_column_migration_state_table_sql(
         self, *, database: str | None, schema: str
     ) -> str:
-        from sqlbuild.compiler.migrations.main.column_create_table_sql import (
-            build_column_migration_state_create_table_sql,
-        )
+        from sqlbuild._native import render_migration_state_create_sql
 
         return self._with_state_table_retention(
-            create_sql=build_column_migration_state_create_table_sql(
+            create_sql=render_migration_state_create_sql(
+                kind="column",
                 database=database,
                 schema=schema,
                 render_qualified_name=self.render_qualified_name,

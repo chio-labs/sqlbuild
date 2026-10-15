@@ -13,7 +13,7 @@ from sqlbuild.compiler.planner.models import SqlTestPlanEntry
 from sqlbuild.diagnostics.classes.diagnostic_record_redactor import DiagnosticRecordRedactor
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.executor.testing._helpers.native_requests import comparison_request
-from sqlbuild.executor.testing.main.missing_expected_columns import (
+from sqlbuild.executor.testing.main._missing_expected_columns import (
     describe_missing_expected_columns,
 )
 from sqlbuild.executor.testing.types import NativeSqlTestRenderingModule

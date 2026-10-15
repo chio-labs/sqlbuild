@@ -5,7 +5,7 @@ from contextlib import AbstractContextManager
 from contextvars import Token
 from datetime import date, datetime
 from pathlib import Path, PurePath
-from typing import Any, TextIO, TypedDict
+from typing import Any, Literal, TextIO, TypedDict
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
@@ -182,7 +182,13 @@ from sqlbuild.compiler.lineage.models import (
     ModelColumnLineage,
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
-from sqlbuild.compiler.migrations.models import MigrationRelation
+from sqlbuild.compiler.migrations.models import (
+    ColumnMigrationEvent,
+    MigrationEvent,
+    MigrationRelation,
+    OldNameViewEvent,
+    OldNameViewHistory,
+)
 from sqlbuild.compiler.migrations.types import (
     MigrationDecision,
     MigrationPromotion,
@@ -201,18 +207,17 @@ from sqlbuild.compiler.pipeline.models import (
     StaticCommandContext,
 )
 from sqlbuild.compiler.planner.classes.migration_fingerprint_cache import MigrationFingerprintCache
-from sqlbuild.compiler.planner.classes.migration_state_inspection import (
-    MigrationStateInspection,
-)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     BackfillResult,
     ChangeDetectionResult,
+    ColumnMigrationPlanEntry,
     ColumnMigrationPlanning,
     ColumnRenameHint,
     CursorBounds,
     CursorInputEvidence,
+    CursorInputRelation,
     CursorOverridePair,
     CursorOverrides,
     DeferralInputs,
@@ -232,11 +237,18 @@ from sqlbuild.compiler.planner.models import (
     ModelMigrationRequest,
     ModelPlanContext,
     ModelPlanEntry,
+    NativeSqlTestArtifact,
+    NativeSqlTestPlan,
     OldNameView,
+    OldNameViewPlanEntry,
+    OldNameViewPlanning,
+    ParsedScenarioArtifactName,
     ParsedSelector,
     PathSelector,
+    PlanEntryBuildInputs,
     PlannerChangeResults,
     PlannerOverrides,
+    PlannerRelationsContext,
     PlannerResolvedActions,
     PlannerRuntime,
     PlannerScope,
@@ -247,19 +259,24 @@ from sqlbuild.compiler.planner.models import (
     RelationFixtureCompletion,
     RelationFixtureDiagnostic,
     RelationFixturePlanningContext,
+    ScenarioArtifactIdentity,
     ScenarioExecutionPlan,
+    ScenarioFixturePlan,
     ScenarioGraphPlan,
     ScenarioRelationMap,
     ScenarioRelationPlan,
     SchemaAction,
     SchemaFinding,
+    SeedPlanEntry,
     SelectionStalenessGraph,
     SelectionStalenessWarning,
     SelectorExpansion,
     SourceLoadPlanEntry,
     SqlTestPlanEntry,
+    SqlTestPlanResult,
     SqlTestSelection,
     UnitTestSelectorSplit,
+    WarehouseFingerprints,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import (
@@ -434,6 +451,7 @@ from sqlbuild.spec.contracts.models import (
     SourceEntry,
     SourceFreshnessAgePolicy,
     SourceLocation,
+    StartCursorsConfig,
     TargetConfig,
 )
 from sqlbuild.spec.contracts.types import (
@@ -447,6 +465,39 @@ from sqlbuild.sql_values.models import SqlValue, SqlValueLimits
 from sqlbuild.sql_values.types import CollectionRendering, StateSqlValueType
 
 BUILD_IDENTITY: str
+
+def plan_sql_tests(
+    *,
+    tests: tuple[CompiledSqlTest, ...],
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    sql_analysis_enabled: bool = False,
+    validate_fixtures: bool = False,
+    fixture_planning_context: RelationFixturePlanningContext | None = None,
+) -> tuple[SqlTestPlanResult, ...]: ...
+def plan_sql_tests_natively(
+    *,
+    project: CompiledProjectView,
+    tests: tuple[CompiledSqlTest, ...],
+    adapter: BaseAdapter,
+    sql_analysis_enabled: bool,
+    render_sql: bool,
+    include_plan: bool = True,
+) -> tuple[NativeSqlTestPlan, ...]: ...
+def plan_compiled_sql_test_artifacts(
+    *,
+    project: CompiledProjectView,
+    tests: tuple[CompiledSqlTest, ...],
+    adapter: BaseAdapter,
+    sql_analysis_enabled: bool,
+) -> tuple[NativeSqlTestArtifact, ...]: ...
+def resolve_sql_test_model_chains(
+    *,
+    project: CompiledProjectView,
+    tests: tuple[CompiledSqlTest, ...],
+) -> tuple[tuple[str, ...], ...]: ...
+def sql_test_plan_error_messages(*, warnings: tuple[PlanWarning, ...]) -> tuple[str, ...]: ...
+
 STAGE_CAPTURE_OMITTED_ATTRIBUTES: dict[str, frozenset[str]]
 
 def migration_planning_database(*, runtime: PlannerRuntime) -> str | None: ...
@@ -2502,6 +2553,20 @@ def expected_fixture_types(
     ordered_model_names: tuple[str, ...],
     model_map: dict[str, CompiledModelView],
 ) -> Mapping[tuple[CompiledResourceType, str], dict[str, str]]: ...
+def fixture_read_cache_info(*, reset: bool = False) -> tuple[int, int]: ...
+def required_fixture_columns(
+    *,
+    model_inputs: tuple[tuple[str, ...], dict[str, CompiledModelView]],
+    fixture_inputs: tuple[
+        frozenset[tuple[CompiledResourceType, str]],
+        dict[tuple[CompiledResourceType, str], FixtureRelationMetadata],
+        dict[tuple[CompiledResourceType, str], frozenset[str]],
+    ],
+    adapter: BaseAdapter,
+) -> tuple[
+    dict[tuple[CompiledResourceType, str], dict[str, set[str]]],
+    frozenset[tuple[CompiledResourceType, str]],
+]: ...
 def build_relation_fixture_context(
     *, project: CompiledProjectView, models_by_name: dict[str, CompiledModelView] | None = None
 ) -> RelationFixturePlanningContext: ...
@@ -3957,6 +4022,74 @@ def build_cli_scenario_plan(
     source_lexical_syntax: SqlLexicalSyntax,
 ) -> ScenarioExecutionPlan: ...
 def run_scenario_test_command(*, request: ScenarioTestCommandRequest) -> int: ...
+def compute_scenario_hash_prefix(
+    *,
+    project_name: str,
+    scenario_name: str,
+    run_namespace: str | None = None,
+    prefix_length: int = 12,
+) -> str: ...
+def build_scenario_hash_index(
+    *,
+    project_name: str,
+    scenarios: tuple[CompiledSqlScenario, ...],
+    run_namespace: str | None = None,
+    prefix_length: int = 12,
+) -> dict[str, str]: ...
+def build_scenario_artifact_name(
+    *, hash_prefix: str, kind: str, logical_name: str, identifier_limit: int = 63
+) -> str: ...
+def build_scenario_artifact_physical_name(
+    *, hash_prefix: str, kind: str, logical_name: str, identifier_limit: int
+) -> str: ...
+def fit_scenario_artifact_logical_name(
+    *, logical_name: str, fixed_prefix: str, identifier_limit: int
+) -> str: ...
+def parse_scenario_artifact_physical_name(name: str) -> ParsedScenarioArtifactName | None: ...
+def is_scenario_artifact_physical_name(name: str) -> bool: ...
+def build_scenario_relation_map(
+    *,
+    scenario_name: str,
+    hash_prefix: str,
+    artifacts: tuple[ScenarioArtifactIdentity, ...],
+    identifier_limit: int = 63,
+    normalize_identifier: Callable[[str], str] | None = None,
+) -> ScenarioRelationMap: ...
+def resolve_scenario_check_sql(
+    *,
+    sql: str,
+    relation_plan: ScenarioRelationPlan,
+    adapter: BaseAdapter,
+    source_label: str,
+    source_lexical_syntax: SqlLexicalSyntax,
+) -> str: ...
+def build_scenario_fixture_plans(
+    *,
+    scenario: CompiledSqlScenario,
+    graph_plan: ScenarioGraphPlan,
+    relation_plan: ScenarioRelationPlan,
+    adapter: BaseAdapter,
+    source_lexical_syntax: SqlLexicalSyntax,
+    fixture_sql_overrides: dict[tuple[CompiledResourceType, str], str] | None = None,
+) -> tuple[ScenarioFixturePlan, ...]: ...
+def build_scenario_seed_entries(
+    *,
+    project: CompiledProjectView,
+    graph_plan: ScenarioGraphPlan,
+    relation_plan: ScenarioRelationPlan,
+) -> tuple[SeedPlanEntry, ...]: ...
+def build_scenario_execution_plan(
+    *,
+    scenario: CompiledSqlScenario,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    graph_plan: ScenarioGraphPlan,
+    relation_plan: ScenarioRelationPlan,
+    source_lexical_syntax: SqlLexicalSyntax,
+    snapshot: WarehouseSnapshot | None = None,
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]] | None = None,
+    sql_analysis_enabled: bool = True,
+) -> tuple[ScenarioExecutionPlan, tuple[PlanWarning, ...]]: ...
 def run_scenario_capture_command(*, request: ScenarioCaptureCommandRequest) -> int: ...
 def sql_analysis_off_guidance(
     *, discovered_inputs: DiscoveredProjectInputs, purpose: str
@@ -4303,14 +4436,105 @@ def deterministic_column_migration_event_id(
 def deterministic_old_name_view_event_id(
     *, event_type: OldNameViewEventType, migration_event_id: str
 ) -> str: ...
-def render_event_exists_sql(*, table: str, event_id: str) -> str: ...
-def render_event_insert_sql(
+def render_migration_state_create_sql(
     *,
-    table: str,
-    columns: tuple[str, ...],
-    column_types: Mapping[str, StateSqlValueType],
-    values: tuple[object | None, ...],
+    kind: Literal["model", "column", "old_name"],
+    database: str | None,
+    schema: str,
+    render_qualified_name: Callable[..., str | None],
+    render_framework_type: Callable[[FrameworkType], str],
 ) -> str: ...
+def read_migration_state_events(
+    *,
+    kind: Literal["model", "column", "old_name"],
+    connection: Any,
+    execute: AdapterExecute[Any, Any],
+    database: str | None,
+    schema: str,
+    render_qualified_name: Callable[..., str | None],
+    stored_columns: Iterable[str] | None = None,
+) -> tuple[Any, ...]: ...
+def read_old_name_view_histories(
+    *,
+    connection: Any,
+    execute: AdapterExecute[Any, Any],
+    database: str | None,
+    schema: str,
+    stored_columns: Iterable[str],
+    render_qualified_name: Callable[..., str | None],
+) -> tuple[OldNameViewHistory, ...]: ...
+def read_recorded_column_renames(
+    *,
+    connection: Any,
+    execute: AdapterExecute[Any, Any],
+    relation: MigrationRelation,
+    since: datetime,
+    render_qualified_name: Callable[..., str | None],
+) -> tuple[ColumnMigrationEvent, ...]: ...
+def stored_old_name_view_columns(
+    *, adapter: BaseAdapter, connection: Any, database: str | None, schema: str
+) -> tuple[str, ...]: ...
+def write_migration_state_event(
+    *,
+    kind: Literal["model", "column", "old_name"],
+    connection: Any,
+    execute: AdapterExecute[Any, Any],
+    event: MigrationEvent | ColumnMigrationEvent | OldNameViewEvent,
+    render_qualified_name: Callable[..., str | None],
+    create_table_sql: str | None,
+    attempts: int = 3,
+) -> None: ...
+
+class MigrationStateInspection:
+    """Relations, fingerprints, and migration events for one planning database."""
+
+    def __init__(
+        self,
+        *,
+        adapter: BaseAdapter,
+        connection: Any,
+        database: str | None,
+        known_fingerprints: WarehouseFingerprints | None = None,
+    ) -> None: ...
+    @property
+    def database(self) -> str | None: ...
+    @property
+    def events(self) -> tuple[MigrationEvent, ...]: ...
+    @property
+    def column_events(self) -> tuple[ColumnMigrationEvent, ...]: ...
+    @property
+    def old_name_histories(self) -> tuple[OldNameViewHistory, ...]: ...
+    def inspect_column_events(self, *, schemas: set[str]) -> None: ...
+    def inspect_old_name_views(self, *, schemas: set[str]) -> None: ...
+    def inspect_migration_events(self, *, schemas: set[str]) -> None: ...
+    def inspect_schemas(self, *, schemas: set[str]) -> None: ...
+    def inspect_relations(self, *, locations: tuple[CompiledRelationLocation, ...]) -> None: ...
+    def relation(self, location: CompiledRelationLocation) -> RelationInfo | None: ...
+    def relation_columns(self, location: CompiledRelationLocation) -> tuple[ColumnInfo, ...]: ...
+    def model_fingerprint(
+        self, *, location: CompiledRelationLocation, model_name: str | None
+    ) -> Fingerprint | None: ...
+    def named_fingerprint(self, *, model_name: str) -> Fingerprint | None: ...
+    def orphan_fingerprints(
+        self, *, project_model_names: frozenset[str]
+    ) -> tuple[Fingerprint, ...]: ...
+
+def newest_migration_event_mentioning(
+    *, events: Iterable[MigrationEvent], relation: MigrationRelation
+) -> MigrationEvent | None: ...
+def newest_column_migration_event_mentioning(
+    *,
+    events: Iterable[ColumnMigrationEvent],
+    relation: MigrationRelation,
+    origin_column: str,
+    destination_column: str,
+) -> ColumnMigrationEvent | None: ...
+def project_old_name_views(
+    *, moves: Iterable[MigrationEvent], facts: Iterable[OldNameViewEvent]
+) -> tuple[OldNameViewHistory, ...]: ...
+def resolve_old_name_view_retention(
+    *, config_values: Mapping[str, object], project_retention: str | None
+) -> str | None: ...
 def source_freshness_data_version_hash(
     *,
     source_name: str,
@@ -4667,6 +4891,14 @@ def migration_destination_fingerprints(
 ) -> dict[str, tuple[str, ...]]: ...
 def stored_migration_fingerprint(fingerprint: Fingerprint) -> str | None: ...
 def declared_column_aliases(model: CompiledModelView) -> tuple[tuple[str, str], ...]: ...
+def plan_old_name_views(
+    *,
+    runtime: PlannerRuntime,
+    scope: PlannerScope,
+    snapshot: WarehouseSnapshot,
+    migration_entries: tuple[ModelMigrationPlanEntry, ...],
+    column_entries: tuple[ColumnMigrationPlanEntry, ...],
+) -> OldNameViewPlanning: ...
 def manual_migration_requests(*, scope: PlannerScope) -> tuple[ModelMigrationRequest, ...]: ...
 def discover_model_migrations(
     *,
@@ -4793,6 +5025,83 @@ def build_model_warnings(
     on_schema_change: OnSchemaChange | None,
     type_enforcement: bool,
 ) -> tuple[PlanWarning, ...]: ...
+def validate_source_cursor_input_columns(
+    *,
+    model: CompiledModelView,
+    cursor_column: str | None,
+    models_by_name: dict[str, CompiledModelView] | None = None,
+    functions_by_name: dict[str, CompiledFunctionView] | None = None,
+    source_map: dict[str, SourceEntry] | None = None,
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
+) -> None: ...
+def build_cursor_input_relations(
+    *,
+    model: CompiledModelView,
+    adapter: BaseAdapter,
+    model_locations: dict[str, CompiledRelationLocation],
+    models_by_name: dict[str, CompiledModelView],
+    functions_by_name: dict[str, CompiledFunctionView] | None = None,
+    seed_locations: dict[str, CompiledRelationLocation],
+    source_map: dict[str, SourceEntry],
+    cursor_column: str | None,
+    runtime_cursor_producer_names: frozenset[str],
+) -> tuple[CursorInputRelation, ...]: ...
+def runtime_cursor_producer_names(
+    *, scope: PlannerScope, source_map: dict[str, SourceEntry]
+) -> frozenset[str]: ...
+def resolve_microbatch_lookback(
+    *, model: CompiledModelView, effective_grain: str | None = None
+) -> str | None: ...
+def extract_seed_columns(seed: CompiledSeedView) -> tuple[ColumnInfo, ...]: ...
+def assemble_model_plan_entry(
+    *,
+    model: CompiledModelView,
+    adapter: BaseAdapter,
+    snapshot: WarehouseSnapshot,
+    change_result: ChangeDetectionResult,
+    action: PlanAction,
+    reason: PlanReason,
+    materialization_type: MaterializationType,
+    resolved_sql: str,
+    sql_analysis_enabled: bool,
+    pre_hooks: object,
+    post_hooks: object,
+    cursor_column: str | None,
+    cursor_input_relations: tuple[CursorInputRelation, ...],
+    runtime_owned_cursor_bounds: bool,
+    cursor_bounds: CursorBounds | None,
+    microbatch_range: CursorBounds | None,
+    empty_cursor_inputs: tuple[str, ...],
+    waiting_on_empty_inputs: bool,
+    backfill: BackfillResult,
+    start_cursor_override: str | None,
+    end_cursor_override: str | None,
+    future_cursor_config: FutureCursorsConfig | None,
+    start_cursor_config: StartCursorsConfig | None,
+    invocation_time: datetime | None,
+) -> tuple[ModelPlanEntry, tuple[PlanWarning, ...]]: ...
+def plan_audit(
+    *,
+    audit: CompiledAuditView,
+    model_locations: dict[str, CompiledRelationLocation],
+    seed_locations: dict[str, CompiledRelationLocation],
+    source_map: dict[str, SourceEntry],
+    adapter: BaseAdapter,
+    lineage_upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    lineage_downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    model_materializations: dict[str, str],
+) -> AuditPlanEntry: ...
+def audit_is_selected(
+    *, audit: CompiledAuditView, selected_keys: frozenset[CompiledObjectKey]
+) -> bool: ...
+def build_selected_audit_entries(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    scope: PlannerScope,
+    relations: PlannerRelationsContext,
+    model_materializations: dict[str, str],
+) -> list[AuditPlanEntry]: ...
 def resolve_attachment_kind(
     *,
     audit: CompiledAuditView,
@@ -4815,21 +5124,12 @@ def check_cursor_type_consistency(
     warehouse_columns: tuple[ColumnInfo, ...],
     sql_analysis_enabled: bool,
 ) -> PlanWarning | None: ...
-def count_microbatches(
-    *,
-    bounds: CursorBounds,
-    batch_size: str,
-    cursor_type: str,
-    equal_bounds_are_batch: bool = False,
-) -> int: ...
-def cap_microbatch_bounds(
-    *,
-    bounds: CursorBounds,
-    batch_size: str,
-    cursor_type: str,
-    max_batches: int,
-    action: MicrobatchLimitAction,
-) -> CursorBounds: ...
+def apply_microbatch_limit(
+    *, entry: ModelPlanEntry, max_batches: int | None, action: MicrobatchLimitAction
+) -> tuple[ModelPlanEntry, PlanWarning | None]: ...
+def apply_configured_microbatch_limits(
+    *, entry: ModelPlanEntry, inputs: PlanEntryBuildInputs
+) -> tuple[ModelPlanEntry, tuple[PlanWarning, ...]]: ...
 def microbatch_limit_warning(
     *, model_name: str, max_batches: int | None, batch_count: int, action: MicrobatchLimitAction
 ) -> str | None: ...
@@ -5021,3 +5321,7 @@ def build_source_load_entries(
     source_map: dict[str, SourceEntry],
     is_reload: bool,
 ) -> tuple[SourceLoadPlanEntry, ...]: ...
+def format_model_migrations(
+    *, lines: list[str], plan: PlanOutput, display_options: DisplayOptions
+) -> list[str]: ...
+def old_name_rows(*, entry: OldNameViewPlanEntry, style: CliStyle) -> list[str]: ...

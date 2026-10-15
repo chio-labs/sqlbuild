@@ -117,6 +117,9 @@ ISO_TIMESTAMP_PATTERN: re.Pattern[str] = re.compile(
 )
 COMPACT_TIMESTAMP_PATTERN: re.Pattern[str] = re.compile(r"(?<!\d)(\d{8})[Tt]\d{6}[Zz](?!\d)")
 RECENT_TIMESTAMP_DAYS: int = 2
+DATE_PATTERN: re.Pattern[str] = re.compile(r"(?<![\d-])(\d{4}-\d{2}-\d{2})(?![\d:Tt-])")
+RUN_RELATIVE_PAST_DAYS: int = 7
+RUN_RELATIVE_FUTURE_DAYS: int = 400
 MAPPING_MARKER: str = "__mapping__"
 VOLATILE_KEY_SUFFIXES: tuple[str, ...] = ("event_id",)
 VOLATILE_KEYS: frozenset[str] = frozenset(

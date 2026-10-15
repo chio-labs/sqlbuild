@@ -657,12 +657,11 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
 
     def render_create_migration_state_table_sql(self, *, database: str | None, schema: str) -> str:
+        from sqlbuild._native import render_migration_state_create_sql
         from sqlbuild.compiler.migrations.constants import MIGRATION_TABLE_NAME
-        from sqlbuild.compiler.migrations.main.create_table_sql import (
-            build_migration_state_create_table_sql,
-        )
 
-        create_sql: str = build_migration_state_create_table_sql(
+        create_sql: str = render_migration_state_create_sql(
+            kind="model",
             database=database,
             schema=schema,
             render_qualified_name=self.render_qualified_name,
@@ -678,12 +677,11 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def render_create_old_name_view_state_table_sql(
         self, *, database: str | None, schema: str
     ) -> str:
+        from sqlbuild._native import render_migration_state_create_sql
         from sqlbuild.compiler.migrations.constants import OLD_NAME_VIEW_TABLE_NAME
-        from sqlbuild.compiler.migrations.main.old_name_view_create_table_sql import (
-            build_old_name_view_state_create_table_sql,
-        )
 
-        create_sql: str = build_old_name_view_state_create_table_sql(
+        create_sql: str = render_migration_state_create_sql(
+            kind="old_name",
             database=database,
             schema=schema,
             render_qualified_name=self.render_qualified_name,
@@ -699,12 +697,11 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def render_create_column_migration_state_table_sql(
         self, *, database: str | None, schema: str
     ) -> str:
+        from sqlbuild._native import render_migration_state_create_sql
         from sqlbuild.compiler.migrations.constants import COLUMN_MIGRATION_TABLE_NAME
-        from sqlbuild.compiler.migrations.main.column_create_table_sql import (
-            build_column_migration_state_create_table_sql,
-        )
 
-        create_sql: str = build_column_migration_state_create_table_sql(
+        create_sql: str = render_migration_state_create_sql(
+            kind="column",
             database=database,
             schema=schema,
             render_qualified_name=self.render_qualified_name,

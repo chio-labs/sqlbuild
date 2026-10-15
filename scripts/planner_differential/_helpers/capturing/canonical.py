@@ -9,12 +9,15 @@ from datetime import date, timedelta
 from scripts.compiler_differential.classes.capture_file import expand_capture_text
 from scripts.planner_differential.constants import (
     COMPACT_TIMESTAMP_PATTERN,
+    DATE_PATTERN,
     ELAPSED_TIME_MASK,
     ELAPSED_TIME_PATTERN,
     ISO_TIMESTAMP_PATTERN,
     MAPPING_MARKER,
     RECENT_TIMESTAMP_DAYS,
     RECENT_TIMESTAMP_MASK,
+    RUN_RELATIVE_FUTURE_DAYS,
+    RUN_RELATIVE_PAST_DAYS,
     VOLATILE_KEY_SUFFIXES,
     VOLATILE_KEYS,
     VOLATILE_VALUE_MASK,
@@ -24,7 +27,7 @@ from sqlbuild._native import mask_capture_noise
 
 
 def mask_text(*, text: str, masks: TextMasks) -> str:
-    """Mask invocation ids, run paths and timestamps near the run date."""
+    """Mask invocation ids, run paths, timestamps near the run date and run-relative dates."""
 
     masked: str = mask_capture_noise(text)
     for prefix, replacement in masks.replacements:
@@ -32,8 +35,11 @@ def mask_text(*, text: str, masks: TextMasks) -> str:
     masked = ISO_TIMESTAMP_PATTERN.sub(
         lambda match: _recent_or_kept(match=match, today=masks.today, iso=True), masked
     )
-    return COMPACT_TIMESTAMP_PATTERN.sub(
+    masked = COMPACT_TIMESTAMP_PATTERN.sub(
         lambda match: _recent_or_kept(match=match, today=masks.today, iso=False), masked
+    )
+    return DATE_PATTERN.sub(
+        lambda match: _run_relative_date(match=match, today=masks.today), masked
     )
 
 
@@ -93,3 +99,16 @@ def _recent_or_kept(*, match: re.Match[str], today: date, iso: bool) -> str:
         return match.group(0)
     recent: bool = day >= today - timedelta(days=RECENT_TIMESTAMP_DAYS)
     return RECENT_TIMESTAMP_MASK if recent else match.group(0)
+
+
+def _run_relative_date(*, match: re.Match[str], today: date) -> str:
+    """Write dates the planner derives from the run date, such as replay ranges, as offsets."""
+
+    try:
+        day: date = date.fromisoformat(match.group(1))
+    except ValueError:
+        return match.group(0)
+    offset: int = (day - today).days
+    if -RUN_RELATIVE_PAST_DAYS <= offset <= RUN_RELATIVE_FUTURE_DAYS:
+        return f"<run-date{offset:+d}d>"
+    return match.group(0)

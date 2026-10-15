@@ -6,9 +6,8 @@ from datetime import UTC, datetime
 
 import pytest
 
+from sqlbuild._native import read_migration_state_events, write_migration_state_event
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
-from sqlbuild.compiler.migrations.main._read_events import read_migration_events
-from sqlbuild.compiler.migrations.main.write_event import write_migration_event
 from sqlbuild.compiler.migrations.models import MigrationEvent, MigrationRelation
 from sqlbuild.compiler.migrations.types import MigrationDecision, MigrationDiscovery
 from tests.unit.src.sqlbuild.adapters.sqlserver._test_types import (
@@ -92,7 +91,8 @@ def test_given_sqlserver_when_writing_migration_event_then_statements_are_tsql(
         rows=test_case.existing_rows
     )
 
-    write_migration_event(
+    write_migration_state_event(
+        kind="model",
         connection=connection,
         execute=adapter.execute,
         event=_EVENT,
@@ -151,7 +151,8 @@ def test_given_sqlserver_datetime2_rows_when_reading_events_then_decodes_utc_eve
         )
     )
 
-    events: tuple[MigrationEvent, ...] = read_migration_events(
+    events: tuple[MigrationEvent, ...] = read_migration_state_events(
+        kind="model",
         connection=connection,
         execute=adapter.execute,
         database=None,

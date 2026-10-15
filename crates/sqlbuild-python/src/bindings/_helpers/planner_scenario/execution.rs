@@ -1,0 +1,336 @@
+//! Assemble scenario execution plans through existing planner and adapter APIs.
+
+use crate::bindings::_helpers::compile_driver::python_calls::{
+    KeywordArguments, call_with, imported,
+};
+use crate::bindings::_helpers::compiled_project::loop_classes::by_attribute;
+use crate::bindings::_helpers::planner_scenario::{
+    entries::{function_entry, seed_entries},
+    fixtures::{extract_fixtures, fixture_plans},
+    models::SqlContext,
+    sql::{required_target, resolve_model_dbt_refs, resolve_sql, source_label},
+    values::{MODELS, error, string},
+};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
+use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
+
+#[pyfunction]
+#[pyo3(signature = (**kwargs))]
+pub(crate) fn build_scenario_execution_plan<'py>(
+    py: Python<'py>,
+    kwargs: Option<Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let args = KeywordArguments::read(
+        py,
+        "build_scenario_execution_plan",
+        kwargs,
+        (
+            &[
+                "scenario",
+                "project",
+                "adapter",
+                "graph_plan",
+                "relation_plan",
+                "source_lexical_syntax",
+            ],
+            &[
+                "snapshot",
+                "source_warehouse_columns",
+                "sql_analysis_enabled",
+            ],
+        ),
+    )?;
+    let scenario = args.value("scenario")?;
+    let project = args.value("project")?;
+    let graph = args.value("graph_plan")?;
+    let context = SqlContext {
+        adapter: args.value("adapter")?,
+        relations: args.value("relation_plan")?,
+        syntax: args.value("source_lexical_syntax")?,
+        label: source_label(&scenario)?,
+    };
+    let snapshot = args.value("snapshot")?;
+    let snapshot = if snapshot.is_truthy()? {
+        snapshot
+    } else {
+        imported(py, MODELS, "WarehouseSnapshot")?.call0()?
+    };
+    let columns = args.value("source_warehouse_columns")?;
+    let columns = if columns.is_truthy()? {
+        columns
+    } else {
+        PyDict::new(py).into_any()
+    };
+    let analysis = args.value("sql_analysis_enabled")?;
+    let analysis = if analysis.is_none() {
+        true
+    } else {
+        analysis.is_truthy()?
+    };
+    let models = by_attribute(&project.getattr("models")?, "name")?;
+    let functions = by_attribute(&project.getattr("functions")?, "key")?;
+    let locations = imported(py, "sqlbuild._native", "build_function_locations")?
+        .call1((project.getattr("functions")?,))?;
+    let upstream =
+        imported(py, "sqlbuild._native", "build_execution_upstream_deps")?.call1((&project,))?;
+    let ordered = call_with(
+        &imported(py, "sqlbuild._native", "topologically_order_keys")?,
+        &[("upstream", upstream)],
+    )?;
+    let mut model_keys: Vec<Bound<'py, PyAny>> = Vec::new();
+    for key in ordered.try_iter()? {
+        let key = key?;
+        if key.getattr("resource_type")?.eq("model")?
+            && graph
+                .getattr("model_names")?
+                .contains(key.getattr("name")?)?
+        {
+            model_keys.push(key);
+        }
+    }
+    let overrides = if analysis {
+        complete_fixtures(&scenario, &project, (&context, &model_keys))?
+    } else {
+        py.None().into_bound(py)
+    };
+    let fixtures = fixture_plans(&scenario, &graph, &context, &overrides)?;
+    let seeds = seed_entries(&project, &graph, &context.relations)?;
+    let mut function_entries: Vec<Bound<'py, PyAny>> = Vec::new();
+    for key in ordered.try_iter()? {
+        let key = key?;
+        if graph.getattr("function_deps")?.contains(&key)?
+            && let Some(function) = functions.get_item(key)?
+        {
+            function_entries.push(function_entry(&function, &context, &locations, &columns)?);
+        }
+    }
+    let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
+    let mut warnings: Vec<Bound<'py, PyAny>> = Vec::new();
+    for key in model_keys {
+        let model = models
+            .get_item(key.getattr("name")?)?
+            .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("scenario model"))?;
+        let destination = required_target(
+            &context.relations,
+            "model_locations",
+            &model.getattr("name")?.extract::<String>()?,
+            "model",
+        )?;
+        let query = resolve_model_dbt_refs(
+            &model.getattr("query_sql")?.extract::<String>()?,
+            &context.relations,
+        )?;
+        let record = imported(py, "sqlbuild._native", "compiled_model_record")?.call1((&model,))?;
+        let changes = PyDict::new(py);
+        changes.set_item("destination", destination)?;
+        changes.set_item("query_sql", query)?;
+        let model = imported(py, "dataclasses", "replace")?.call((record,), Some(&changes))?;
+        let model_context = model_context(&project, &context, (&models, &locations, &columns))?;
+        let result = call_with(
+            &imported(
+                py,
+                "sqlbuild.compiler.planner._helpers.output.plan_entry",
+                "plan_model",
+            )?,
+            &[
+                ("model", model),
+                ("snapshot", snapshot.clone()),
+                ("adapter", context.adapter.clone()),
+                ("context", model_context),
+                (
+                    "sql_analysis_enabled",
+                    PyBool::new(py, analysis).to_owned().into_any(),
+                ),
+                (
+                    "query_change_tracking",
+                    PyBool::new(py, false).to_owned().into_any(),
+                ),
+                ("full_refresh", PyBool::new(py, true).to_owned().into_any()),
+                (
+                    "cursor_overrides",
+                    imported(py, MODELS, "CursorOverridePair")?.call0()?,
+                ),
+            ],
+        )?;
+        entries.push(result.get_item(0)?);
+        for warning in result.get_item(1)?.try_iter()? {
+            warnings.push(warning?);
+        }
+    }
+    let (expected, assertions) = expectations(&scenario, &context)?;
+    let plan = call_with(
+        &imported(py, MODELS, "ScenarioExecutionPlan")?,
+        &[
+            ("key", scenario.getattr("key")?),
+            ("name", scenario.getattr("name")?),
+            ("graph_plan", graph),
+            ("relation_plan", context.relations),
+            ("fixture_plans", fixtures.into_any()),
+            ("seed_entries", seeds.into_any()),
+            (
+                "function_entries",
+                PyTuple::new(py, function_entries)?.into_any(),
+            ),
+            ("model_entries", PyTuple::new(py, entries)?.into_any()),
+            ("hook_functions", project.getattr("hook_functions")?),
+            ("expected_expectations", expected),
+            ("assertion_expectations", assertions),
+        ],
+    )?;
+    Ok(PyTuple::new(py, [plan, PyTuple::new(py, warnings)?.into_any()])?.into_any())
+}
+
+fn complete_fixtures<'py>(
+    scenario: &Bound<'py, PyAny>,
+    project: &Bound<'py, PyAny>,
+    inputs: (&SqlContext<'py>, &[Bound<'py, PyAny>]),
+) -> PyResult<Bound<'py, PyAny>> {
+    let (context, keys) = inputs;
+    let py = scenario.py();
+    let mut groups: Vec<Bound<'py, PyTuple>> = Vec::new();
+    for (kind, prefix) in [
+        ("SOURCE", "__source__"),
+        ("MODEL", "__ref__"),
+        ("SEED", "__seed__"),
+    ] {
+        let kind = imported(
+            py,
+            "sqlbuild.compiler.compile.types",
+            "CompiledResourceType",
+        )?
+        .getattr(kind)?;
+        groups.push(PyTuple::new(
+            py,
+            [kind, extract_fixtures(scenario, prefix)?.into_any()],
+        )?);
+    }
+    let names = keys
+        .iter()
+        .map(|key| key.getattr("name"))
+        .collect::<PyResult<Vec<_>>>()?;
+    let completion = call_with(
+        &imported(py, "sqlbuild._native", "build_relation_fixture_completion")?,
+        &[
+            ("project", project.clone()),
+            ("adapter", context.adapter.clone()),
+            (
+                "request",
+                PyTuple::new(
+                    py,
+                    [
+                        PyTuple::new(py, names)?.into_any(),
+                        PyTuple::new(py, groups)?.into_any(),
+                    ],
+                )?
+                .into_any(),
+            ),
+        ],
+    )?;
+    let diagnostics = completion.getattr("diagnostics")?;
+    if diagnostics.is_truthy()? {
+        let mut details: Vec<String> = Vec::new();
+        for diagnostic in diagnostics.try_iter()? {
+            details.push(format!(
+                "- {}",
+                diagnostic?.getattr("message")?.extract::<String>()?
+            ));
+        }
+        let name: String = scenario.getattr("name")?.extract()?;
+        return Err(error(
+            py,
+            &format!(
+                "Scenario '{name}' has invalid relation fixtures in {}:\n{}",
+                context.label,
+                details.join("\n")
+            ),
+            "SCENARIO_PLAN_INVALID_FIXTURE",
+            None,
+        )?);
+    }
+    completion.getattr("fixture_sql_by_key")
+}
+
+fn model_context<'py>(
+    project: &Bound<'py, PyAny>,
+    context: &SqlContext<'py>,
+    inputs: (&Bound<'py, PyDict>, &Bound<'py, PyAny>, &Bound<'py, PyAny>),
+) -> PyResult<Bound<'py, PyAny>> {
+    let (models, locations, columns) = inputs;
+    let py = project.py();
+    call_with(
+        &imported(py, MODELS, "ModelPlanContext")?,
+        &[
+            (
+                "model_locations",
+                context.relations.getattr("model_locations")?,
+            ),
+            ("models_by_name", models.clone().into_any()),
+            (
+                "functions_by_name",
+                by_attribute(&project.getattr("functions")?, "name")?.into_any(),
+            ),
+            (
+                "seed_locations",
+                context.relations.getattr("seed_locations")?,
+            ),
+            ("function_locations", locations.clone()),
+            ("source_map", context.relations.getattr("source_map")?),
+            ("source_warehouse_columns", columns.clone()),
+            (
+                "star_exclude_keyword",
+                context.adapter.call_method0("star_exclude_keyword")?,
+            ),
+        ],
+    )
+}
+
+fn expectations<'py>(
+    scenario: &Bound<'py, PyAny>,
+    context: &SqlContext<'py>,
+) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
+    let py = scenario.py();
+    let mut expected: Vec<Bound<'py, PyAny>> = Vec::new();
+    for cte in scenario.getattr("expected_ctes")?.try_iter()? {
+        let cte = cte?;
+        let name: String = cte.getattr("name")?.extract()?;
+        let name = name.strip_prefix("__expected__").unwrap_or(&name);
+        let target = required_target(&context.relations, "model_locations", name, "model")?;
+        let sql = resolve_sql(
+            context,
+            &cte.getattr("sql_body")?.extract::<String>()?,
+            false,
+        )?;
+        expected.push(call_with(
+            &imported(py, MODELS, "ScenarioExpectedExpectationPlan")?,
+            &[
+                ("model_name", string(py, name)),
+                ("actual_destination", target),
+                ("expected_sql", string(py, &sql)),
+            ],
+        )?);
+    }
+    let mut assertions: Vec<Bound<'py, PyAny>> = Vec::new();
+    for cte in scenario.getattr("assertion_ctes")?.try_iter()? {
+        let cte = cte?;
+        let name: String = cte.getattr("name")?.extract()?;
+        let sql = resolve_sql(
+            context,
+            &cte.getattr("sql_body")?.extract::<String>()?,
+            false,
+        )?;
+        assertions.push(call_with(
+            &imported(py, MODELS, "ScenarioAssertionExpectationPlan")?,
+            &[
+                (
+                    "name",
+                    string(py, name.strip_prefix("__assert__").unwrap_or(&name)),
+                ),
+                ("sql", string(py, &sql)),
+            ],
+        )?);
+    }
+    Ok((
+        PyTuple::new(py, expected)?.into_any(),
+        PyTuple::new(py, assertions)?.into_any(),
+    ))
+}

@@ -7,6 +7,7 @@ use crate::bindings::_helpers::planner_migrations::column_objects::{
 };
 use crate::bindings::_helpers::planner_migrations::constants::{AUTOMATIC, DONE, MIGRATION_TYPES};
 use crate::bindings::_helpers::planner_migrations::models::{CheckedColumns, ColumnCandidate};
+use crate::bindings::_helpers::state_rows::migration_projections::newest_column;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyListMethods, PyTuple};
 use sqlbuild_analysis::planner_migrations::main::column_decision::column_decision;
@@ -60,24 +61,18 @@ pub(super) fn decide<'py>(
         "migration_relation_for_location",
     )?
     .call1((candidate.model.getattr("destination")?,))?;
-    let newest_event = imported(
-        py,
-        "sqlbuild.compiler.migrations.main._newest_column_event",
-        "newest_column_migration_event_mentioning",
-    )?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
     for (origin_name, destination, discovery) in pairs {
         let origin_key = lower(&origin_name)?;
         let origin = candidate.warehouse.get_item(&origin_key)?;
         let has_destination = candidate.warehouse.contains(lower(&destination)?)?;
-        let newest = call_with(
-            &newest_event,
-            &[
-                ("events", events.clone()),
-                ("relation", relation.clone()),
-                ("origin_column", origin_name.clone()),
-                ("destination_column", destination.clone()),
-            ],
+        let newest = newest_column(
+            events,
+            &relation,
+            (
+                &origin_name.extract::<String>()?,
+                &destination.extract::<String>()?,
+            ),
         )?;
         let recorded = !newest.is_none()
             && call_with(

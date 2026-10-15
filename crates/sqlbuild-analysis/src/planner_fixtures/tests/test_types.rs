@@ -26,3 +26,35 @@ pub(crate) struct AlignmentTestCase {
     pub(crate) expected_completed: Option<Vec<usize>>,
     pub(crate) expected_diagnostics: &'static [&'static str],
 }
+#[derive(Debug)]
+pub(super) struct FixtureReadCacheTestCase {
+    pub description: &'static str,
+    pub sql: &'static str,
+    pub package: Option<&'static str>,
+    pub argument_count: Option<i64>,
+    pub dialect: Option<&'static str>,
+    pub expected_misses: u64,
+}
+
+#[derive(Debug)]
+pub(super) struct FixtureMarkerTestCase {
+    pub description: &'static str,
+    pub sql: &'static str,
+    pub expected_sql: &'static str,
+}
+
+#[derive(Debug)]
+pub(crate) struct FixtureLineTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) contents: &'static str,
+    pub(crate) cte_name: &'static str,
+    pub(crate) expected_line: usize,
+}
+
+#[derive(Debug)]
+pub(crate) struct CollectionMismatchTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) expected_type: Option<&'static str>,
+    pub(crate) inferred_type: Option<&'static str>,
+    pub(crate) expected_mismatch: bool,
+}

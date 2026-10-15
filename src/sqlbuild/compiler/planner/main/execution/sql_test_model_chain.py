@@ -1,10 +1,10 @@
 """Public planner entrypoint for batched SQL-test model closure discovery."""
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledSqlTest
-from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.planner._helpers.sql_tests.native_planning import (
+from sqlbuild._native import (
     resolve_sql_test_model_chains,
 )
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledSqlTest
+from sqlbuild.compiler.compile.types import CompiledProjectView
 
 
 def sql_test_model_chain_names_by_key(

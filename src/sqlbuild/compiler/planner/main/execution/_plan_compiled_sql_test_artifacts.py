@@ -1,11 +1,11 @@
 """Planner entrypoint for SQL-test artifacts planned natively from the compiled objects."""
 
+from sqlbuild._native import (
+    plan_compiled_sql_test_artifacts as _plan_compiled_sql_test_artifacts,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledSqlTest
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.planner._helpers.sql_tests.native_planning import (
-    plan_compiled_sql_test_artifacts as _plan_compiled_sql_test_artifacts,
-)
 from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
 
 

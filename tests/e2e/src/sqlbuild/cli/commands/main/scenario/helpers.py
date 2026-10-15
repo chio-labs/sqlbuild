@@ -200,6 +200,31 @@ def build_scenario_python_hooks_project_files() -> dict[str, str]:
     return repo_files
 
 
+def build_scenario_dependency_chain_project_files() -> dict[str, str]:
+    """Build a three-model scenario with partial source fixtures and final checks."""
+
+    repo_files: dict[str, str] = build_partial_fixture_scenario_project_files()
+    repo_files["models/orders_summary.sql"] = (
+        'MODEL (description "Summarize fixture orders.", materialized table);\n'
+        'SELECT order_id, status FROM __ref("orders")\n'
+    )
+    repo_files["models/orders_final.sql"] = (
+        'MODEL (description "Final scenario output.", materialized table);\n'
+        'SELECT order_id, status FROM __ref("orders_summary")\n'
+    )
+    repo_files["tests/scenarios/partial_orders.sql"] = (
+        "SCENARIO (description 'Check a dependency chain.');\n"
+        "WITH helper AS (SELECT 1 AS order_id),\n"
+        "__source__raw_orders AS (SELECT order_id FROM helper),\n"
+        "__expected__orders_final AS (\n"
+        "  SELECT 1 AS order_id, CAST(NULL AS VARCHAR) AS status\n"
+        "),\n"
+        '__assert__positive_ids AS (SELECT * FROM __ref("orders_final") WHERE order_id < 1)\n'
+        "SELECT 1\n"
+    )
+    return repo_files
+
+
 def build_capture_safety_project_files(*, use_project_row_limit: bool) -> dict[str, str]:
     """Build scenario e2e files with optional project snapshot limit config."""
 

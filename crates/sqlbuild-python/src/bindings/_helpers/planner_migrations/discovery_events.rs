@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::planner_migrations::column_objects::config;
+use crate::bindings::_helpers::state_rows::migration_projections::newest_move;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 
@@ -25,14 +26,7 @@ pub(super) fn newest<'py>(
         "migration_relation_for_location",
     )?
     .call1((location,))?;
-    call_with(
-        &imported(
-            location.py(),
-            "sqlbuild.compiler.migrations.main._newest_event",
-            "newest_migration_event_mentioning",
-        )?,
-        &[("events", events.clone()), ("relation", relation)],
-    )
+    newest_move(events, &relation)
 }
 
 pub(super) fn relation<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {

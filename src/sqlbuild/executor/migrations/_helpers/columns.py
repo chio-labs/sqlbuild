@@ -5,13 +5,12 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlbuild._native import deterministic_column_migration_event_id
+from sqlbuild._native import deterministic_column_migration_event_id, write_migration_state_event
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.migrations.constants import MIGRATION_WRITE_ATTEMPTS
 from sqlbuild.compiler.migrations.main.relation_for_location import migration_relation_for_location
-from sqlbuild.compiler.migrations.main.write_column_event import write_column_migration_event
 from sqlbuild.compiler.migrations.models import ColumnMigrationEvent, MigrationRelation
 from sqlbuild.compiler.migrations.types import ColumnMigrationDecision
 from sqlbuild.compiler.planner.models import ColumnMigrationPlanEntry
@@ -90,7 +89,8 @@ def _rename_and_record(
     event: ColumnMigrationEvent = column_migration_event(
         entry=entry, decision=decision, run_id=run_id
     )
-    write_column_migration_event(
+    write_migration_state_event(
+        kind="column",
         connection=connection,
         execute=adapter.execute,
         event=event,

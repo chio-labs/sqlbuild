@@ -1,4 +1,10 @@
+pub(crate) mod constants;
 pub(crate) mod events;
 pub(crate) mod freshness;
+pub(crate) mod migration_io;
+pub(crate) mod migration_objects;
+pub(crate) mod migration_projections;
+pub(crate) mod migration_rows;
+pub(crate) mod models;
 pub(crate) mod registration;
 pub(crate) mod timestamps;

@@ -24,3 +24,12 @@ pub(crate) const GRAIN_BATCH_SIZE: [(&str, &str); 6] = [
     ("month", "1mo"),
     ("year", "1y"),
 ];
+pub(crate) const OLD_NAME_NONE: &str = "none";
+pub(crate) const OLD_NAME_LIVE: &str = "live";
+pub(crate) const OLD_NAME_VIEW_ONLY: &str = "view_only";
+pub(crate) const MIGRATION_DONE: &str = "done";
+pub(crate) const MIGRATION_RENAMED: &str = "renamed";
+pub(crate) const MIGRATION_MANUAL: &str = "manual";
+pub(crate) const MIGRATION_AUTOMATIC: &str = "automatic";
+pub(crate) const MIGRATION_INCOMPATIBLE: &str = "incompatible";
+pub(crate) const WATERMARK_STRATEGY: &str = "watermark";

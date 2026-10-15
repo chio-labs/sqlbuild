@@ -178,3 +178,30 @@ pub enum CappedBound<T> {
     End(T),
     Start(T),
 }
+
+/// Which declaration a cursor input column is checked against.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CursorInputColumnOwner {
+    ModelContract,
+    SourceContract,
+    SourceWarehouse,
+}
+
+/// One authored cursor input column and the columns its input is known to expose.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CursorInputColumnCheck {
+    pub model_name: String,
+    pub owner: CursorInputColumnOwner,
+    pub input_name: String,
+    pub column: String,
+    pub known_columns: Vec<String>,
+}
+
+/// The configuration a microbatch model's default lookback is resolved from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LookbackConfig {
+    pub lookback: Option<String>,
+    pub incremental_strategy: Option<String>,
+    pub batch_size: Option<String>,
+    pub grain: Option<String>,
+}

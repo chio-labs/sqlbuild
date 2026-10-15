@@ -9,7 +9,7 @@ use crate::bindings::_helpers::planner_scenario::values::{CONSTANTS, MODELS, TYP
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
-const ARTIFACTS: &str = "sqlbuild.compiler.planner._helpers.scenario.artifacts";
+const ARTIFACTS: &str = "sqlbuild._native";
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
@@ -98,11 +98,7 @@ pub(crate) fn build_cli_scenario_plan<'py>(
     }
     let relations = build_scenario_relation_plan(py, Some(relation_args))?;
     let result = call_with(
-        &imported(
-            py,
-            "sqlbuild.compiler.planner._helpers.scenario.relations",
-            "build_scenario_execution_plan",
-        )?,
+        &imported(py, "sqlbuild._native", "build_scenario_execution_plan")?,
         &[
             ("scenario", scenario),
             ("project", project),

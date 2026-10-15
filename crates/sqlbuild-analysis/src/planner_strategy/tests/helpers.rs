@@ -3,7 +3,8 @@ use std::collections::BTreeMap;
 use crate::planner_changes::models::{SchemaChangeKind, SchemaColumnSource, SchemaFindingRow};
 use crate::planner_strategy::errors::LineageFailure;
 use crate::planner_strategy::models::{
-    ChangeFacts, PlanChangeKind, ProducerFacts, ReferenceIdentity, WarningRow, WarningSeverity,
+    ChangeFacts, CursorInputColumnCheck, CursorInputColumnOwner, LookbackConfig, PlanChangeKind,
+    ProducerFacts, ReferenceIdentity, WarningRow, WarningSeverity,
 };
 use crate::planner_strategy::tests::test_types::{Lineage, Steps};
 use crate::planner_strategy::types::{ReferenceGraph, Timeline};
@@ -112,4 +113,30 @@ impl ReferenceGraph for Lineage {
 
 pub(super) fn failure_text(failure: LineageFailure<()>) -> String {
     format!("{failure:?}")
+}
+
+pub(super) fn column_check(
+    owner: CursorInputColumnOwner,
+    known: &[&str],
+) -> CursorInputColumnCheck {
+    CursorInputColumnCheck {
+        model_name: "daily_orders".to_owned(),
+        owner,
+        input_name: "orders".to_owned(),
+        column: "Updated_At".to_owned(),
+        known_columns: known.iter().map(|name| (*name).to_owned()).collect(),
+    }
+}
+
+pub(super) fn lookback_config(
+    lookback: Option<&str>,
+    strategy: Option<&str>,
+    grain: Option<&str>,
+) -> LookbackConfig {
+    LookbackConfig {
+        lookback: lookback.map(str::to_owned),
+        incremental_strategy: strategy.map(str::to_owned),
+        batch_size: Some("effective".to_owned()),
+        grain: grain.map(str::to_owned),
+    }
 }

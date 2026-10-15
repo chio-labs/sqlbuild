@@ -391,7 +391,7 @@ fn pruned_models(metadata: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     Ok(kept)
 }
 
-fn display_limit(options: &Bound<'_, PyAny>) -> PyResult<DisplayLimit> {
+pub(crate) fn display_limit(options: &Bound<'_, PyAny>) -> PyResult<DisplayLimit> {
     Ok(DisplayLimit {
         max_entries: options.getattr("max_entries_per_section")?.extract()?,
         overflow_flag: text(&options.getattr("overflow_flag")?)?,

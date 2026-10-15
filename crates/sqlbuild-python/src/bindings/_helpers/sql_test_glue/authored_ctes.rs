@@ -3,7 +3,7 @@
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::compiled_project::main::text_position::text_position;
 use sqlbuild_analysis::compiled_project::models::TextPosition;
@@ -17,6 +17,22 @@ use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const COMPILE_INPUT_ERROR: &str = "CompileInputError";
 const MODEL_MODE: &str = "model";
+
+/// Extract fixture bodies from authored test or scenario CTEs in authored order.
+pub(crate) fn prefixed_ctes<'py>(
+    ctes: &Bound<'py, PyAny>,
+    prefix: &str,
+) -> PyResult<Bound<'py, PyDict>> {
+    let result = PyDict::new(ctes.py());
+    for cte in ctes.try_iter()? {
+        let cte = cte?;
+        let name: String = cte.getattr("name")?.extract()?;
+        if let Some(name) = name.strip_prefix(prefix) {
+            result.set_item(name, cte.getattr("sql_body")?)?;
+        }
+    }
+    Ok(result)
+}
 
 /// One authored SQL body to read: its text, file contents, relative path and body span.
 struct AuthoredBody {

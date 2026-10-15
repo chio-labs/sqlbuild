@@ -5,8 +5,8 @@ from __future__ import annotations
 import duckdb
 import pytest
 
+from sqlbuild._native import read_migration_state_events
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.migrations.main._read_column_events import read_column_migration_events
 from sqlbuild.compiler.migrations.models import ColumnMigrationEvent
 from sqlbuild.executor.migrations._helpers.columns import apply_model_column_renames
 from tests.unit.src.sqlbuild.executor.migrations._helpers._test_types import (
@@ -57,7 +57,8 @@ def test_given_overlapping_build_between_renames_when_applying_then_reconciles_f
         ),
         run_id="run-1",
     )
-    events: tuple[ColumnMigrationEvent, ...] = read_column_migration_events(
+    events: tuple[ColumnMigrationEvent, ...] = read_migration_state_events(
+        kind="column",
         connection=connection,
         execute=adapter.execute,
         database=None,

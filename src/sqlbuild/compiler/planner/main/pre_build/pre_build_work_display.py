@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild._native import append_overflow_line, visible_entries
-from sqlbuild.compiler.planner._helpers.migrations.display import format_model_migrations
+from sqlbuild._native import append_overflow_line, format_model_migrations, visible_entries
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.presentation.models import DisplayOptions
 

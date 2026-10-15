@@ -5,12 +5,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlbuild._native import deterministic_migration_event_id
+from sqlbuild._native import deterministic_migration_event_id, write_migration_state_event
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.migrations.constants import MIGRATION_WRITE_ATTEMPTS
 from sqlbuild.compiler.migrations.main.relation_for_location import migration_relation_for_location
-from sqlbuild.compiler.migrations.main.write_event import write_migration_event
 from sqlbuild.compiler.migrations.models import MigrationEvent, MigrationRelation, OldNameViewEvent
 from sqlbuild.compiler.migrations.types import MigrationDecision, OldNameViewEventType
 from sqlbuild.compiler.planner.models import ModelMigrationPlanEntry, OldNameViewPlanEntry
@@ -89,7 +88,8 @@ def record_event(
 ) -> None:
     """Append one migration event through the adapter's state-table rendering."""
 
-    write_migration_event(
+    write_migration_state_event(
+        kind="model",
         connection=connection,
         execute=adapter.execute,
         event=event,

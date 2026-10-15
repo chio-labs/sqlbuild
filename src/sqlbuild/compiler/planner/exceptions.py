@@ -23,14 +23,6 @@ class NativeSqlTestPlanningError(PlannerInputError):
     """Raised when the native SQL-test planning boundary returns invalid data."""
 
 
-class SqlTestFixtureValidationError(PlannerInputError):
-    """Raised with every invalid fixture diagnostic for one SQL test."""
-
-    def __init__(self, diagnostics: tuple[str, ...]) -> None:
-        self.diagnostics = diagnostics
-        super().__init__("\n- ".join(diagnostics))
-
-
 class FutureCursorSafetyError(PlannerInputError):
     """Raised when an effective cursor exceeds the configured future limit."""
 

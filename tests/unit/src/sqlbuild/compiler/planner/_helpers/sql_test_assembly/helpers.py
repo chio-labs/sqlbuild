@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-from sqlbuild._native import expand_sql_macros
+from sqlbuild._native import (
+    expand_sql_macros,
+    extract_sql_references,
+    plan_compiled_sql_test_artifacts,
+    plan_sql_tests,
+    plan_sql_tests_natively,
+    sql_test_plan_error_messages,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
@@ -44,20 +50,15 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
-from sqlbuild.compiler.planner._helpers.sql_tests.assembly import plan_sql_tests
-from sqlbuild.compiler.planner._helpers.sql_tests.comments import uncommented_pattern_matches
-from sqlbuild.compiler.planner._helpers.sql_tests.native_planning import (
-    plan_compiled_sql_test_artifacts,
-    plan_sql_tests_natively,
-    sql_test_plan_error_messages,
-)
 from sqlbuild.compiler.planner.models import (
     NativeSqlTestPlan,
     PlanWarning,
     SqlTestPlanEntry,
     SqlTestPlanResult,
 )
+from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     PlanTestChainTestCase,
@@ -380,25 +381,24 @@ def build_test_and_project(
 
 
 def _model_dependencies(*, query_sql: str) -> tuple[str, ...]:
-    return tuple(
-        dict.fromkeys(
-            match.group(1)
-            for match in uncommented_pattern_matches(
-                pattern=re.compile(r'__ref\("([^"]+)"\)'), sql=query_sql
-            )
-        )
-    )
+    return _reference_names(query_sql=query_sql, kind=SqlReferenceKind.REF)
 
 
 def _table_function_dependencies(*, query_sql: str) -> tuple[str, ...]:
-    return tuple(
-        dict.fromkeys(
-            match.group(1)
-            for match in uncommented_pattern_matches(
-                pattern=re.compile(r'__table_fn\("([^"]+)"\)'), sql=query_sql
-            )
-        )
-    )
+    return _reference_names(query_sql=query_sql, kind=SqlReferenceKind.TABLE_FUNCTION)
+
+
+def _reference_names(*, query_sql: str, kind: SqlReferenceKind) -> tuple[str, ...]:
+    return reference_names_by_kind(query_sql=query_sql)[kind]
+
+
+def reference_names_by_kind(*, query_sql: str) -> dict[SqlReferenceKind, tuple[str, ...]]:
+    """Return distinct logical reference names in authored order, grouped by reference kind."""
+
+    names: dict[SqlReferenceKind, dict[str, None]] = {kind: {} for kind in SqlReferenceKind}
+    for reference in extract_sql_references(sql=query_sql, syntax=SqlLexicalSyntax()):
+        names[SqlReferenceKind(reference.ref_kind)][reference.ref_name] = None
+    return {kind: tuple(kind_names) for kind, kind_names in names.items()}
 
 
 def _build_model_query_overrides(
@@ -541,7 +541,9 @@ def build_windowed_sql_test(*, cursor_start: str | None, cursor_end: str | None)
 
     return CompiledSqlTest(
         key=CompiledObjectKey(resource_type=CompiledResourceType.SQL_TEST, name="orders_case"),
-        scope_deps=(),
+        scope_deps=(
+            CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="daily_orders"),
+        ),
         name="orders_case",
         test_file=DiscoveredSqlTestFile(
             file_path=Path("tests/unit/orders_case.sql"),
@@ -556,5 +558,34 @@ def build_windowed_sql_test(*, cursor_start: str | None, cursor_end: str | None)
             cursor_start=cursor_start,
             cursor_end=cursor_end,
         ),
-        sql_body="",
+        sql_body=(
+            f"WITH {EXPECTED_TEST_CTE_PREFIX}daily_orders AS "
+            "(SELECT TIMESTAMP '2026-02-01' AS order_date) SELECT 1"
+        ),
+        payload=CompiledModelSqlTestPayload(
+            expected_model_names=("daily_orders",),
+            expected_ctes=(
+                CompileSqlTestCte(
+                    name=f"{EXPECTED_TEST_CTE_PREFIX}daily_orders",
+                    sql_body="SELECT TIMESTAMP '2026-02-01' AS order_date",
+                ),
+            ),
+        ),
     )
+
+
+def plan_cursor_window_model_sql(
+    *, model: CompiledModelView, test: CompiledSqlTest, adapter: BaseAdapter
+) -> str:
+    """Plan one windowed SQL test and return the rendered SQL of its cursor model step."""
+
+    project: CompiledProjectView = CompiledProject(
+        run_id="test_run",
+        effective_target_name=None,
+        effective_connection={},
+        effective_vars={},
+        models=(model,),
+    )
+    entry, _ = plan_single_test(test=test, project=project, adapter=adapter)
+    (step,) = entry.chain
+    return step.resolved_sql

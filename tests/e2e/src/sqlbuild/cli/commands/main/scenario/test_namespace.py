@@ -11,8 +11,8 @@ from typing import Any
 
 import pytest
 
+from sqlbuild._native import compute_scenario_hash_prefix
 from sqlbuild.cli.entry.main.entry import main
-from sqlbuild.compiler.planner._helpers.scenario.artifacts import compute_scenario_hash_prefix
 from sqlbuild.executor.scenario._helpers.execution import run as scenario_execution
 from tests.e2e.src.sqlbuild.cli.commands.main.scenario._test_types import (
     ScenarioNamespaceE2ETestCase,

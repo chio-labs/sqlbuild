@@ -1,5 +1,17 @@
+pub mod column_aliases_json;
 pub mod column_migration_event_id;
+pub mod decoded_column_aliases;
+pub mod decoded_grants;
+pub mod event_cells;
 pub mod event_exists_sql;
 pub mod event_insert_sql;
+pub mod event_read_sql;
+pub mod grants_json;
 pub mod migration_event_id;
+pub mod newest_column_event;
+pub mod newest_fingerprint;
+pub mod newest_move_event;
+pub mod old_name_histories;
 pub mod old_name_view_event_id;
+pub mod readable_columns;
+pub mod recorded_renames;

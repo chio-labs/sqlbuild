@@ -48,11 +48,7 @@ fn plan_column_migrations<'py>(
         &[("runtime", runtime.clone())],
     )?;
     let state = call_with(
-        &imported(
-            py,
-            "sqlbuild.compiler.planner.classes.migration_state_inspection",
-            "MigrationStateInspection",
-        )?,
+        &imported(py, "sqlbuild._native", "MigrationStateInspection")?,
         &[
             ("adapter", adapter),
             ("connection", runtime.getattr("connection")?),

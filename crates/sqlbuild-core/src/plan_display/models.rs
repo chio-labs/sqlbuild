@@ -23,3 +23,12 @@ pub struct ParsedBound {
     /// Hour, minute, second and microsecond are all zero.
     pub midnight: bool,
 }
+
+/// A cursor's type, strategy, declared grain and its inputs' grains, as the replay grain reads them.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TimestampGrainFacts {
+    pub cursor_type: Option<String>,
+    pub microbatch_strategy: Option<String>,
+    pub downstream_grain: Option<String>,
+    pub input_grains: Vec<Option<String>>,
+}

@@ -1,4 +1,4 @@
-use crate::plan_display::models::{ModelLabelFacts, ParsedBound};
+use crate::plan_display::models::{ModelLabelFacts, ParsedBound, TimestampGrainFacts};
 
 pub(super) struct LabelTestCase {
     pub(super) description: &'static str,
@@ -28,4 +28,10 @@ pub(super) struct BatchSizeTestCase {
     pub(super) batch_size: &'static str,
     pub(super) grain: &'static str,
     pub(super) expected_size: Result<&'static str, &'static str>,
+}
+
+pub(super) struct TimestampGrainTestCase {
+    pub(super) description: &'static str,
+    pub(super) facts: TimestampGrainFacts,
+    pub(super) expected_grain: Result<Option<&'static str>, &'static str>,
 }

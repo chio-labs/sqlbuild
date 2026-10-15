@@ -56,6 +56,11 @@ impl CliStyle {
     }
 
     #[must_use]
+    pub fn accent_strong(self, text: &str) -> String {
+        self.title(text)
+    }
+
+    #[must_use]
     pub fn plan_section(self, text: &str) -> String {
         self.apply(BOLD, text)
     }
@@ -546,4 +551,68 @@ pub struct DbtInteropPlanText {
     pub anchors: Vec<(String, Vec<String>)>,
     pub path_translations: Vec<(String, String)>,
     pub warnings: Vec<String>,
+}
+/// Migration decisions already resolved by the planner's model boundary.
+#[derive(Clone, Debug, Default)]
+pub struct MigrationDecisionText {
+    pub value: String,
+    pub label: String,
+    pub blocks_build: bool,
+    pub origin_missing: bool,
+    pub decision_blocks_build: bool,
+    pub checks_compatibility: bool,
+}
+
+/// One model identity handover's presentation facts.
+#[derive(Clone, Debug, Default)]
+pub struct MigrationText {
+    pub model_name: String,
+    pub origin: String,
+    pub destination: String,
+    pub decision: MigrationDecisionText,
+    pub compatibility: String,
+    pub discovery: String,
+    pub completed_at: Option<String>,
+    pub target_label: String,
+    pub transfer: Option<String>,
+    pub transfer_fallback: Option<String>,
+    pub storage_transition: Option<String>,
+    pub promotion: Option<String>,
+    pub findings: Vec<String>,
+    pub materialization: Option<String>,
+}
+
+/// One old-name compatibility view's presentation facts.
+#[derive(Clone, Debug, Default)]
+pub struct OldNameText {
+    pub model_name: String,
+    pub origin: String,
+    pub destination: String,
+    pub action: String,
+    pub expires_date: Option<String>,
+    pub column_aliases: Vec<(String, String)>,
+    pub grants_supported: bool,
+    pub grants_copied: Option<String>,
+    pub reason: Option<String>,
+}
+
+/// One column rename's presentation facts.
+#[derive(Clone, Debug, Default)]
+pub struct ColumnMigrationText {
+    pub model_name: String,
+    pub origin_column: String,
+    pub destination_column: String,
+    pub decision: MigrationDecisionText,
+    pub discovery: String,
+    pub completed_at: Option<String>,
+}
+
+/// Ordered migration sections appended to pre-build work.
+#[derive(Clone, Debug)]
+pub struct MigrationTextReport {
+    pub migrations: Vec<MigrationText>,
+    pub old_names: Vec<OldNameText>,
+    pub columns: Vec<ColumnMigrationText>,
+    pub display: DisplayLimit,
+    pub manual_rename_hint: String,
 }

@@ -1,6 +1,7 @@
 //! Locate planner reference markers with their historical lexical policy.
 
 use crate::resolution::constants::EXTERNAL_REFERENCE;
+use crate::resolution::main::quoted_name::quoted_name;
 use crate::resolution::models::ReferenceSpan;
 
 /// Locate exact reference markers, retaining the external-reference whitespace grammar.
@@ -48,13 +49,4 @@ pub fn reference_spans(sql: &str, kind: &str) -> Vec<ReferenceSpan> {
         consumed = end;
     }
     spans
-}
-
-fn quoted_name(text: &str) -> Option<(&str, &str)> {
-    let text = text.strip_prefix('"')?;
-    let end = text.find('"')?;
-    if end == 0 {
-        return None;
-    }
-    Some((&text[..end], &text[end + 1..]))
 }

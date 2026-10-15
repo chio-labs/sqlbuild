@@ -6,6 +6,11 @@ from typing import Any, ClassVar
 
 import pytest
 
+from sqlbuild._native import (
+    build_cursor_input_relations,
+    runtime_cursor_producer_names,
+    validate_source_cursor_input_columns,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
@@ -19,12 +24,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.planner._helpers.output.plan_entry import (
-    _build_cursor_input_relations,
-    _runtime_cursor_producer_names,
-    build_planner_relations_context,
-    validate_source_cursor_input_columns,
-)
+from sqlbuild.compiler.planner._helpers.output.plan_entry import build_planner_relations_context
 from sqlbuild.compiler.planner._helpers.warehouse.source_columns import gather_source_columns
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
@@ -447,7 +447,7 @@ def test_given_view_filter_and_transitive_watermark_when_planning_then_relation_
     )
     view_model: CompiledModelView = models_by_name["orders_view"]
 
-    relations: tuple[CursorInputRelation, ...] = _build_cursor_input_relations(
+    relations: tuple[CursorInputRelation, ...] = build_cursor_input_relations(
         model=model,
         adapter=DuckDbAdapter(),
         model_locations={view_model.name: view_model.destination},
@@ -608,7 +608,7 @@ def test_given_table_function_and_transitive_watermark_when_planning_then_source
         source_map={"raw_orders": SourceEntry(name="raw_orders", schema="raw")},
         source_warehouse_columns={"raw_orders": (ColumnInfo(name="loaded_at", type="TIMESTAMP"),)},
     )
-    relations: tuple[CursorInputRelation, ...] = _build_cursor_input_relations(
+    relations: tuple[CursorInputRelation, ...] = build_cursor_input_relations(
         model=model,
         adapter=DuckDbAdapter(),
         model_locations={name: upstream.destination for name, upstream in models_by_name.items()},
@@ -716,7 +716,7 @@ def test_given_selected_relations_when_classifying_runtime_watermarks_then_only_
         execution_order=(),
     )
 
-    names: frozenset[str] = _runtime_cursor_producer_names(
+    names: frozenset[str] = runtime_cursor_producer_names(
         scope=scope,
         source_map=test_case.source_map,
     )

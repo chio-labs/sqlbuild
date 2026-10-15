@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sqlbuild.compiler.migrations.models import MigrationRelation
-from sqlbuild.compiler.migrations.types import OldNameViewEventType
+from sqlbuild.compiler.migrations.types import OldNameViewDropReason, OldNameViewEventType
 
 
 @dataclass(frozen=True)
@@ -100,3 +100,21 @@ class PinnedOldNameEventIdTestCase:
     event_type: OldNameViewEventType
     migration_event_id: str
     expected_event_id: str
+
+
+@dataclass(frozen=True)
+class StoredOldNameRowTestCase:
+    description: str
+    column_aliases_sql: str
+    grants_copied_sql: str
+    drop_reason_sql: str
+    expected_aliases: tuple[tuple[str, str], ...]
+    expected_grants: tuple[str, ...] | None
+    expected_drop_reason: OldNameViewDropReason | None
+
+
+@dataclass(frozen=True)
+class StoredColumnRowTestCase:
+    description: str
+    decisions: tuple[str, ...]
+    expected_decisions: tuple[str, ...]

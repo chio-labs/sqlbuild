@@ -116,7 +116,7 @@ fn lineage_error(py: Python<'_>, failure: LineageFailure<PyErr>) -> PyErr {
 /// The reference one named input resolves to through model and SQL function references.
 #[pyfunction]
 #[pyo3(signature = (*, model, input_name, models_by_name, functions_by_name))]
-fn resolve_lineage_reference<'py>(
+pub(crate) fn resolve_lineage_reference<'py>(
     model: &Bound<'py, PyAny>,
     input_name: &str,
     models_by_name: Bound<'py, PyAny>,

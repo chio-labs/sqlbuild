@@ -1,5 +1,17 @@
 pub(crate) mod assembly;
 pub(crate) mod authored_ctes;
 mod compiled_tests;
+mod constants;
+mod cursor_window;
+mod fixture_validation;
+mod plan_assembly;
+mod plan_driver;
+mod plan_entries;
+mod plan_errors;
+mod plan_fixtures;
+mod plan_rendering;
+mod plan_rows;
+mod plan_values;
 pub(crate) mod planning;
 pub(crate) mod registration;
+mod types;

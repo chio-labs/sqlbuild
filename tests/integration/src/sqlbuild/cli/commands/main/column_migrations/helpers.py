@@ -378,6 +378,6 @@ def fail_non_transactional_record(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(DuckDbAdapter, "supports_transactional_ddl", lambda self: False)
     monkeypatch.setattr(
-        "sqlbuild.executor.migrations._helpers.columns.write_column_migration_event",
+        "sqlbuild.executor.migrations._helpers.columns.write_migration_state_event",
         _raise_interruption,
     )

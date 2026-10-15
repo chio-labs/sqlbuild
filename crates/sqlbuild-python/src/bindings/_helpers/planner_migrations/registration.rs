@@ -1,12 +1,13 @@
 //! Register pure migration helpers.
 
-use pyo3::prelude::{Bound, PyModule, PyResult};
+use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult};
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     super::discovery::register(module)?;
     super::compatibility::register(module)?;
     super::matching::register(module)?;
     super::old_names::register(module)?;
+    super::old_name_planning::register(module)?;
     super::columns::register(module)?;
     super::column_planning::register(module)?;
     super::model_planning::register(module)?;
@@ -14,5 +15,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     super::planning_origin::register(module)?;
     super::planning_execution::register(module)?;
     super::projections::register(module)?;
+    module.add_class::<super::state_inspection::MigrationStateInspection>()?;
     super::fingerprint::register(module)
 }
