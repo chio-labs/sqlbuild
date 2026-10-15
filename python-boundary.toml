@@ -2,7 +2,7 @@
 # migration work that moves to Rust. `remaining_lines` must equal the current count of that work:
 # a PR that moves code lowers it, and adding movable Python fails the check.
 # Native failures must surface as errors; `handled_native_errors` lists the reviewed exceptions.
-remaining_lines = 287
+remaining_lines = 0
 
 [[stays]]
 path = "executor"
@@ -803,3 +803,53 @@ note = "Shape rule: data constants only (INTEGRATION_RESULT_PATH_ENV), no logic;
 path = "compiler/compile/types.py"
 reason = "executor"
 note = "Shape rule: typing protocols, enums and aliases only (CompiledProjectView, CompiledModelView, CompiledResourceType, AuditInput, ...), no logic; consumed by executor/janitor/_helpers/plan.py, executor/pipeline/_helpers/testing.py, executor/scenario/_helpers/local/execution.py and project audit factories that annotate AuditInput."
+
+[[stays]]
+path = "rule_engine/types.py"
+reason = "public-api"
+note = "Shape rule: data protocol and aliases only (RuleContext, RuleCheck, RuleOptionValue, FactKey, CustomRulePlan), no logic; re-exported by rules/__init__.py and consumed by rule_engine/main/define.py, rule_engine/_helpers/host/custom_host.py, rule_engine/_helpers/engine/fact_replay.py and 4 more."
+
+[[stays]]
+path = "rule_engine/constants.py"
+reason = "user-code"
+note = "Shape rule: data constants only (CUSTOM_HOST_PROTOCOL_VERSION, CUSTOM_HOST_RUNTIME_VERSION, CUSTOM_RULE_IMPORT_ROOTS, FACT_PROJECT_MODELS, ...), no logic; consumed by rule_engine/_helpers/host/custom_host.py, rule_engine/_helpers/host/tracked_facts.py, rule_engine/_helpers/engine/fact_replay.py and 10 more."
+
+[[stays]]
+path = "compiler/discovery/constants.py"
+reason = "executor"
+note = "Shape rule: data constants only (PROJECT_CONFIG_FILENAME, SETTINGS_SECTION, TABLE_PROMOTION_MODE_SETTING_KEY, PYTHON_NODE_ROOT, ...), no logic; consumed by executor/run/main/_execute.py, compiler/discovery/_helpers/filesystem/core.py."
+
+[[stays]]
+path = "compiler/compile/constants.py"
+reason = "executor"
+note = "Shape rule: data constants only (MIGRATE_FROM_CONFIG_KEY), no logic; consumed by executor/janitor/_helpers/plan.py."
+
+[[stays]]
+path = "compiler/compile/exceptions.py"
+reason = "user-code"
+note = "Shape rule: data exceptions only (MacroDeclarationLookupError, a CompileInputError that is also a KeyError, which a native error class with one parent cannot express), no logic; consumed by compiler/compile/_helpers/render/user_macros.py."
+
+[[stays]]
+path = "cursor_algebra/constants.py"
+reason = "executor"
+note = "Shape rule: data constants only (GRAIN_ORDER), no logic; consumed by executor/run/_helpers/validation/cursor_bounds.py."
+
+[[stays]]
+path = "compiler/sql_analysis/constants.py"
+reason = "public-api"
+note = "Shape rule: data constants only (POLYGLOT_ANALYZE_QUERY_ENTRY_POINT, POLYGLOT_COMPLEXITY_GUARD_OPTION, POLYGLOT_MAX_FUNCTION_CALL_DEPTH, ...), no logic; consumed by compiler/sql_analysis/_helpers/polyglot.py."
+
+[[stays]]
+path = "compiler/planner/constants.py"
+reason = "executor"
+note = "Shape rule: data constants only (MICROBATCH_START_SENTINEL, MICROBATCH_END_SENTINEL, MIGRATION_FINGERPRINT_METADATA_KEY, SNAPSHOT_DEFAULT_VALID_FROM_COLUMN, ...), no logic; consumed by executor/build/_helpers/scheduler.py, executor/run/_helpers/validation/cursor_bounds.py, executor/run/_helpers/reuse/fingerprint_metadata.py and 1 more."
+
+[[stays]]
+path = "compiler/frontier/constants.py"
+reason = "user-code"
+note = "Shape rule: data constants only (STAGE_CAPTURE_DIR_ENV_VAR, COMPILE_REUSE_DISABLE_ENV_VAR), no logic; consumed by compiler/macro_bridge/constants.py."
+
+[[stays]]
+path = "cost/constants.py"
+reason = "adapter"
+note = "Shape rule: data constants only (SQLBUILD_QUERY_TAG_APP), no logic; consumed by adapters/snowflake/classes/snowflake_cursor.py."

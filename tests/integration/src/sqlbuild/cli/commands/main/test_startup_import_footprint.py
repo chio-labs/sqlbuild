@@ -41,7 +41,6 @@ COMPILE_ONLY_MODULES: tuple[str, ...] = (
     "pydantic",
     "yaml",
     "sqlbuild.adapter.contract.classes.base_adapter",
-    "sqlbuild.lint",
     "sqlbuild.rule_engine",
     "sqlbuild.runtime.compute_logs",
 )
