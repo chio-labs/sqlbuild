@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import infer_native_query_columns, substitute_placeholder_defaults
+from sqlbuild._native import (
+    NativeColumnQuery,
+    NativeQueryColumns,
+    infer_native_query_columns,
+    substitute_placeholder_defaults,
+)
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeQueryColumns
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,

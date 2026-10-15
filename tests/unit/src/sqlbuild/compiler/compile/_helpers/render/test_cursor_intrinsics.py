@@ -3,13 +3,13 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
+    NativeColumnQuery,
     cursor_intrinsics_analysis_sql,
     infer_native_query_columns,
     resolve_cursor_intrinsics,
     validated_model_cursor_intrinsics,
 )
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.analysis_session.models import NativeColumnQuery
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.lineage.types import InferredNullability

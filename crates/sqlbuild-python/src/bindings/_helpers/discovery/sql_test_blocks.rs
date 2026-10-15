@@ -11,7 +11,7 @@ use sqlbuild_model_config::sql_values::models::{RawKey, RawSqlValue};
 use crate::bindings::_helpers::contracts::sql_values::{SqlValueClasses, raw_value, sql_value};
 
 const MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
-const ERRORS_MODULE: &str = "sqlbuild.compiler.discovery.exceptions";
+const ERRORS_MODULE: &str = "sqlbuild._native";
 const TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const SQL_VALUE_TYPES_MODULE: &str = "sqlbuild.sql_values.types";
 

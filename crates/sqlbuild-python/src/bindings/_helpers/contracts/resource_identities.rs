@@ -7,7 +7,7 @@ use pyo3::types::{PyDict, PyString, PyStringMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_model_config::resource_identities::main::resource_identity_failure::resource_identity_failure;
 
-const RESOURCE_NAME_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.resource_names.exceptions";
+const RESOURCE_NAME_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const TABLE_FUNCTION_NODE_TYPE: &str = "table_fn";
 const UDF_NODE_TYPE: &str = "udf";
 

@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import LintBody, LintConfig, LintViolation
 from sqlbuild.compiler.compile.models import ExpansionSpan
-from sqlbuild.lint.models import LintBody, LintConfig, LintViolation
 from tests.unit.src.sqlbuild.lint._helpers._test_types import (
     ManyViolationLocationTestCase,
     NativeSqlFindingTestCase,

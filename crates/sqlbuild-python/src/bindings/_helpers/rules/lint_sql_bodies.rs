@@ -12,8 +12,8 @@ use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::types::CompilerDetach;
 
-const LINT_MODELS_MODULE: &str = "sqlbuild.lint.models";
-const LINT_TYPES_MODULE: &str = "sqlbuild.lint.types";
+const LINT_MODELS_MODULE: &str = "sqlbuild._native";
+const LINT_TYPES_MODULE: &str = "sqlbuild._native";
 const NATIVE_ENGINE: &str = "native";
 
 fn spans(passes: &Bound<'_, PyAny>) -> PyResult<Vec<Vec<ExpansionSpan>>> {

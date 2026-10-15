@@ -6,9 +6,9 @@ from typing import cast
 
 import pytest
 
+from sqlbuild._native import ConfigValueTypeError
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileModelConfig
-from sqlbuild.spec.contracts.exceptions import ConfigValueTypeError
 from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention
 from sqlbuild.spec.contracts.types import TimeTravelRetentionSource
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (

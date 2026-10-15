@@ -6,9 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import apply_lint_suppressions, run_lint
-from sqlbuild.lint.constants import VIOLATION_SEVERITY_FAULT
-from sqlbuild.lint.models import LintConfig, LintRunResult, LintViolation
+from sqlbuild._native import (
+    LintConfig,
+    LintRunResult,
+    LintSeverity,
+    LintViolation,
+    apply_lint_suppressions,
+    run_lint,
+)
 from tests.unit.src.sqlbuild.lint._test_types import (
     FixtureCeremonyFormatTestCase,
     FormatDescriptionResolutionTestCase,
@@ -528,7 +533,7 @@ def test_given_header_fault_suppression_when_linting_then_mandatory_fault_remain
         column=1,
         code="description-present",
         message="MODEL header must include a description",
-        severity=VIOLATION_SEVERITY_FAULT,
+        severity=LintSeverity.FAULT,
         engine=LINT_ENGINE_SQLBUILD,
     )
 

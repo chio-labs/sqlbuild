@@ -7,9 +7,9 @@ from typing import cast
 import pytest
 
 from sqlbuild._native import (
+    SqlHookParseError,
     discover_sql_hook_files,
 )
-from sqlbuild.compiler.discovery.exceptions import SqlHookParseError
 from sqlbuild.compiler.discovery.models import DiscoveredSqlHookFile
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DiscoverSqlHooksTestCase,

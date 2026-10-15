@@ -8,11 +8,10 @@ from functools import cached_property
 from typing import Any
 
 import sqlbuild._native as _native
-from sqlbuild._native import lineage_graph_views
+from sqlbuild._native import LineageGraphViews, lineage_graph_views
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
-from sqlbuild.compiler.graph.models import LineageGraphViews
 from sqlbuild.compiler.planner.models import (
     CloneSourcePlanEntry,
     CursorOverrides,

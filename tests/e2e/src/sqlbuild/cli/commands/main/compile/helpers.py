@@ -40,12 +40,11 @@ from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
     semantic_compile_fingerprint,
 )
 from scripts.compiler_differential.constants import FAILURE_BASE_FILES
-from sqlbuild._native import compiler_cache_directory
+from sqlbuild._native import ContractValidationResult, compiler_cache_directory
 from sqlbuild._native import run_cli as main
 from sqlbuild.adapter.contract.classes.duckdb_backed_adapter import DuckDbBackedAdapter
 from sqlbuild.adapter.contract.types import TypeDialect
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.frontier.constants import (
     COMPILE_REUSE_DISABLE_ENV_VAR as REUSE_DISABLE_ENV_VAR,
 )

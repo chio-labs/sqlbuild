@@ -7,8 +7,8 @@ use sqlbuild_config::project::main::unsupported_target_warehouse::unsupported_ta
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild.compiler.discovery.exceptions";
-const SPEC_ERRORS_MODULE: &str = "sqlbuild.spec.contracts.exceptions";
+const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
+const SPEC_ERRORS_MODULE: &str = "sqlbuild._native";
 const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const SESSION_WAREHOUSE_MODULE: &str = "sqlbuild.adapter.discovery.main._session_warehouse_support";

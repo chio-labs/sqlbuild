@@ -57,7 +57,6 @@ if TYPE_CHECKING:
     from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
     from sqlbuild.compiler.scopes.models import ScopeIndex, UsageRecord
     from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-    from sqlbuild.lint.types import RelationKeyRow
     from sqlbuild.spec.contracts.models import (
         LocalConfig,
         ProjectConfig,
@@ -69,6 +68,19 @@ if TYPE_CHECKING:
         SourceLocation,
         TargetConfig,
     )
+
+
+type RelationKeyRow = tuple[
+    str,
+    str,
+    str,
+    str,
+    str,
+    bool,
+    list[str] | None,
+    list[tuple[str, list[str], bool]],
+    list[tuple[str, str | None]],
+]
 
 
 class SourceInput(Protocol):

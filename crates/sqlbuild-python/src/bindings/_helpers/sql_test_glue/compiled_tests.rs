@@ -11,7 +11,7 @@ use crate::bindings::_helpers::sql_test_glue::assembly::{
 
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const GLUE_MODELS_MODULE: &str = "sqlbuild.compiler.sql_test_glue.models";
+const GLUE_MODELS_MODULE: &str = "sqlbuild._native";
 const SPEC_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
 /// Fields a direct-logic compiled payload copies from its input payload, in order.
 const DIRECT_PAYLOAD_FIELDS: [&str; 5] = [

@@ -14,6 +14,7 @@ import pytest
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    DiscoveryError,
     build_declaration_scope,
     discover_project_inputs,
     resolve_declaration_context,
@@ -29,7 +30,6 @@ from sqlbuild.compiler.compile.models import (
     DeclarationScopeResolver,
     LoadedMacro,
 )
-from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredProjectInputs,

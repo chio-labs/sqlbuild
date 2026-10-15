@@ -15,6 +15,9 @@ from typing import TYPE_CHECKING, Any, get_type_hints
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    EventExporterDiscoveryError,
+    ProviderDiscoveryError,
+    PythonNodeDiscoveryError,
     project_relative_path,
     record_settings_class_read,
     validate_resource_identity,
@@ -22,11 +25,6 @@ from sqlbuild._native import (
 from sqlbuild.compiler.discovery.constants import (
     PYTHON_INIT_MODULE_STEM,
     PYTHON_NODE_ROOT,
-)
-from sqlbuild.compiler.discovery.exceptions import (
-    EventExporterDiscoveryError,
-    ProviderDiscoveryError,
-    PythonNodeDiscoveryError,
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAssetFunction,

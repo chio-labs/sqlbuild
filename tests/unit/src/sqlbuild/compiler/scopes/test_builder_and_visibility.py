@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    ScopeValidationError,
     build_scope_index,
     build_scope_lookup,
     normalize_sql_value,
@@ -31,7 +32,6 @@ from sqlbuild.compiler.discovery.models import (
     EnumDeclaration,
     EnumMember,
 )
-from sqlbuild.compiler.scopes.exceptions import ScopeValidationError
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,

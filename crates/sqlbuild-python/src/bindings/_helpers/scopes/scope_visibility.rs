@@ -19,7 +19,7 @@ use crate::bindings::_helpers::scopes::scope_objects::{
 
 type PyObject = Py<PyAny>;
 
-const EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
+const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const CURRENT_PATH: &str = ".";
 
 fn native_lookup(lookup: &Bound<'_, PyAny>) -> PyResult<Py<NativeScopeLookup>> {

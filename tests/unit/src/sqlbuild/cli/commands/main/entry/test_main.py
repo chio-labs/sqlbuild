@@ -25,21 +25,21 @@ from sqlbuild._native import (
     LoadCommandRequest,
     PlanCommandRequest,
     PlaygroundCommandRequest,
+    ProjectConfigError,
     RulesCommandRequest,
     ScenarioCaptureCommandRequest,
     ScenarioTestCommandRequest,
+    SpecConfigError,
 )
 from sqlbuild._native import run_cli as _main_with_dependencies
 from sqlbuild._native import run_cli as main
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.executor.pipeline.exceptions import AuditExecutionError
 from sqlbuild.executor.pipeline.models import AuditExecutionFailure
 from sqlbuild.observability import EventDispatcher, ExecutionIdentity, current_execution_identity
 from sqlbuild.runtime.observability.models import LifecycleEvent
-from sqlbuild.spec.contracts.exceptions import SpecConfigError
 from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
     AuditAggregateRenderingTestCase,
     CompileJsonErrorRenderingTestCase,

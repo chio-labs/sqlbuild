@@ -9,6 +9,7 @@ from typing import Protocol
 import pytest
 
 from sqlbuild._native import (
+    DeclarationParseError,
     discover_audit_files,
     discover_macro_files,
     discover_project_inputs,
@@ -20,7 +21,6 @@ from sqlbuild._native import (
     discover_test_files,
 )
 from sqlbuild.compiler.discovery._helpers.filesystem.core import discover_hook_functions
-from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
 from sqlbuild.compiler.discovery.models import (
     DiscoveredConstantFile,
     DiscoveredEnumFile,

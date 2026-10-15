@@ -16,7 +16,7 @@ use crate::bindings::_helpers::format_command::files::{
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const FIXES_MODULE: &str = "sqlbuild._native";
 const FIXTURE_AUTOFIX_MODULE: &str = "sqlbuild._native";
-const LINT_ERRORS_MODULE: &str = "sqlbuild.lint.exceptions";
+const LINT_ERRORS_MODULE: &str = "sqlbuild._native";
 const DESCRIPTION_PRESENT: &str = "description-present";
 
 /// What one format run formats and how.

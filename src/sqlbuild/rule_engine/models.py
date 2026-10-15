@@ -8,10 +8,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from sqlbuild._native import LintRunResult
 from sqlbuild.compiler.compile.models import DeclarationScopeBuild, SqlExpansionContext
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.lint.models import LintRunResult
 from sqlbuild.rule_engine.types import RuleCheck, RuleOptionValue, RuleSubject
 
 

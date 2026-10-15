@@ -8,6 +8,9 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    EventExporterDiscoveryError,
+    ProviderDiscoveryError,
+    PythonNodeDiscoveryError,
     discover_audit_files,
     discover_constant_files,
     discover_enum_files,
@@ -23,11 +26,6 @@ from sqlbuild.compiler.discovery._helpers.filesystem.core import (
     discover_event_exporter_declarations,
     discover_materialization_files,
     discover_provider_classes,
-)
-from sqlbuild.compiler.discovery.exceptions import (
-    EventExporterDiscoveryError,
-    ProviderDiscoveryError,
-    PythonNodeDiscoveryError,
 )
 from sqlbuild.compiler.discovery.models import DiscoveryFileFault
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (

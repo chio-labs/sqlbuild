@@ -16,9 +16,9 @@ use sqlbuild_refactor::refactoring::types::PhysicalColumn;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 
-const ADOPTION_ERRORS_MODULE: &str = "sqlbuild.compiler.contract_adoption.exceptions";
-const ADOPTION_MODELS_MODULE: &str = "sqlbuild.compiler.contract_adoption.models";
-const ADOPTION_TYPES_MODULE: &str = "sqlbuild.compiler.contract_adoption.types";
+const ADOPTION_ERRORS_MODULE: &str = "sqlbuild._native";
+const ADOPTION_MODELS_MODULE: &str = "sqlbuild._native";
+const ADOPTION_TYPES_MODULE: &str = "sqlbuild._native";
 /// Finding kinds an edit resolves without overwrite, then the ones overwrite also resolves.
 const RESOLVED_KINDS: ([&str; 1], [&str; 2]) = (
     ["missing_declaration"],

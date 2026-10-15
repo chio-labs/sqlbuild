@@ -7,7 +7,7 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.compiler.discovery.exceptions import ModelSqlParseError
+from sqlbuild._native import ModelSqlParseError
 from sqlbuild.compiler.discovery.models import (
     DiscoveredPythonFunctionFile,
     DiscoveredSqlFunctionFile,

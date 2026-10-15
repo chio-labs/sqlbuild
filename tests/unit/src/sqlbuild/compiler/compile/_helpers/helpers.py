@@ -6,6 +6,8 @@ from types import MappingProxyType
 from typing import cast
 
 from sqlbuild._native import (
+    NativeColumnQuery,
+    NativeQueryColumns,
     assemble_project,
     build_compile_inputs,
     build_execution_upstream_deps,
@@ -26,7 +28,6 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
-from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeQueryColumns
 from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,

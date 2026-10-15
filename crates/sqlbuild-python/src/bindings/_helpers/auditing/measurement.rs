@@ -10,7 +10,7 @@ use sqlbuild_analysis::auditing::models::{MeasurementOutcome, Thresholds};
 use crate::bindings::_helpers::auditing::identity::thresholds as read_thresholds;
 
 const AUDITING_TYPES_MODULE: &str = "sqlbuild.compiler.auditing.types";
-const AUDITING_ERRORS_MODULE: &str = "sqlbuild.compiler.auditing.exceptions";
+const AUDITING_ERRORS_MODULE: &str = "sqlbuild._native";
 
 fn measurement_error(py: Python<'_>, message: &str) -> PyErr {
     match py

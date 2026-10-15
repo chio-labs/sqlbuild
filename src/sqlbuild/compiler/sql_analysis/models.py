@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from sqlbuild._native import UnsupportedLexicalSyntaxError
 from sqlbuild.compiler.sql_analysis.constants import (
     SQL_BLOCK_COMMENT_OPEN,
     SQL_ESCAPABLE_QUOTE_CHARACTERS,
@@ -14,7 +15,6 @@ from sqlbuild.compiler.sql_analysis.constants import (
     SQL_TRIPLE_QUOTE_LENGTH,
     SUPPORTED_SQL_LINE_COMMENT_PREFIXES,
 )
-from sqlbuild.compiler.sql_analysis.exceptions import UnsupportedLexicalSyntaxError
 
 
 @dataclass(frozen=True)

@@ -4,13 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import evaluate_model_contracts
+from sqlbuild._native import ContractValidationResult, evaluate_model_contracts
 from sqlbuild.adapter.contract.types import TypeDialect
 from sqlbuild.compiler.compile.models import (
     DynamicColumnContractProof,
     DynamicColumnFamilyProof,
 )
-from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily, SourceLocation
 from tests.unit.src.sqlbuild.compiler.contracts._test_types import (

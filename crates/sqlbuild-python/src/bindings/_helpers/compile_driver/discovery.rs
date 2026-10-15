@@ -29,7 +29,7 @@ use crate::bindings::_helpers::discovery::yaml_records::{
 };
 
 const FRONTIER_MODULE: &str = "sqlbuild._native";
-const FRONTIER_TYPES_MODULE: &str = "sqlbuild.compiler.frontier.types";
+const FRONTIER_TYPES_MODULE: &str = "sqlbuild._native";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const VALIDATION_MODULE: &str = "sqlbuild.compiler.discovery._helpers.validation.discovery";
 const NATIVE_MODULE: &str = "sqlbuild._native";

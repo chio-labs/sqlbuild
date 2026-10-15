@@ -15,7 +15,7 @@ const SCOPE_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
 const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
-const SCOPE_ERRORS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
+const SCOPE_ERRORS_MODULE: &str = "sqlbuild._native";
 const BUILTINS_MODULE: &str = "builtins";
 const NO_DECLARATION_KIND: u8 = 255;
 /// Declaration kinds by their native code: enum 0, constant 1, macro 2.

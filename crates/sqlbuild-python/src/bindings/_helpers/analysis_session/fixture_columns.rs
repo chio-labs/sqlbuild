@@ -16,7 +16,7 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::types::CompilerDetach;
 
-const ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.analysis_session.models";
+const ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const PROJECTION_FACTS_CONTEXT: &str = "native fixture projection facts";

@@ -29,7 +29,7 @@ const ERRORS_MODULE: &str = "sqlbuild._native";
 const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
 const GRAPH_SELECTION_MODULE: &str = "sqlbuild._native";
-const ADOPTION_MODELS: &str = "sqlbuild.compiler.contract_adoption.models";
+const ADOPTION_MODELS: &str = "sqlbuild._native";
 const GENERATE_ACTION: &str = "generate";
 
 /// A `CliUserError` with its code.

@@ -13,6 +13,7 @@ import pytest
 
 import sqlbuild._native as native_module
 from sqlbuild._native import (
+    ContractValidationResult,
     build_project_graph,
     compiled_model_record,
     compiled_project_record,
@@ -27,7 +28,6 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
-from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.planner.types import ContractPolicy, IncrementalMode, MaterializationType
 from sqlbuild.spec.contracts.models import (

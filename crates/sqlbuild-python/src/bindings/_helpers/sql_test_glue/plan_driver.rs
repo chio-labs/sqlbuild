@@ -17,11 +17,7 @@ pub(super) fn chains<'py>(
         return Ok(PyTuple::empty(py).into_any());
     }
     let request = call_with(
-        &imported(
-            py,
-            "sqlbuild.compiler.sql_test_glue.models",
-            "NativeSqlTestChainRequest",
-        )?,
+        &imported(py, "sqlbuild._native", "NativeSqlTestChainRequest")?,
         &[
             ("models", project.getattr("models")?),
             ("tests", tests.clone()),
@@ -79,11 +75,7 @@ fn planned<'py>(args: &KeywordArguments<'py>, artifact: bool) -> PyResult<Bound<
     let functions = super::plan_rendering::functions(&project, &adapter)?;
     let overrides = super::plan_rendering::overrides(&project, &tests, &adapter)?;
     let request = call_with(
-        &imported(
-            py,
-            "sqlbuild.compiler.sql_test_glue.models",
-            "NativeSqlTestPlanningRequest",
-        )?,
+        &imported(py, "sqlbuild._native", "NativeSqlTestPlanningRequest")?,
         &[
             ("models", project.getattr("models")?),
             ("rendered_model_sql", model_sql.into_any()),

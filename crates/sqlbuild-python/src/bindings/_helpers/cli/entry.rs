@@ -36,7 +36,7 @@ const DIAGNOSTICS_MODULE: &str = "sqlbuild.diagnostics.main.diagnostics_context"
 const TRANSIENT_LINE_MODULE: &str = "sqlbuild._native";
 const SKILLS_MODULE: &str = "sqlbuild._native";
 const RULES_ERRORS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
-const LINT_ERRORS_MODULE: &str = "sqlbuild.lint.exceptions";
+const LINT_ERRORS_MODULE: &str = "sqlbuild._native";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const CLI_LOGGER: &str = "sqlbuild.cli";
@@ -50,12 +50,12 @@ const EXPECTED_COMMAND_FAILURES: [(&str, &str); 4] = [
         "sqlbuild.executor.pipeline.exceptions",
         "AuditExecutionError",
     ),
-    ("sqlbuild.compiler.discovery.exceptions", "DiscoveryError"),
+    ("sqlbuild._native", "DiscoveryError"),
     (
         "sqlbuild.runtime.execution_limits.exceptions",
         "ExecutionDurationLimitError",
     ),
-    ("sqlbuild.spec.contracts.exceptions", "SpecConfigError"),
+    ("sqlbuild._native", "SpecConfigError"),
 ];
 
 /// One parsed invocation: its namespace, injected handlers and error colour.

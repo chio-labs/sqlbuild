@@ -18,7 +18,7 @@ use sqlbuild_config::project::models::{Built, ConfigFile, ConfigPaths};
 use crate::bindings::_helpers::boundary::config_values::config_value_to_python;
 
 const MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
-const ERRORS_MODULE: &str = "sqlbuild.compiler.discovery.exceptions";
+const ERRORS_MODULE: &str = "sqlbuild._native";
 const PROJECT_CONFIG_ERROR: &str = "ProjectConfigError";
 const FILE_NAMES: [&str; 4] = [
     "sqlbuild_project.toml",

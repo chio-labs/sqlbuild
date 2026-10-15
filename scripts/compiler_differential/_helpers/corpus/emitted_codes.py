@@ -39,10 +39,9 @@ from scripts.compiler_differential.models import (
     FailureCase,
     ProjectRun,
 )
+from sqlbuild._native import DiscoveryError, ResourceIdentityError
 from sqlbuild.compiler.compile import constants as compile_constants
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.discovery.exceptions import DiscoveryError
-from sqlbuild.compiler.resource_names.exceptions import ResourceIdentityError
 from sqlbuild.compiler.scopes.types import ScopeDiagnosticCode
 
 _SOURCE_DIRECTORY: str = "source"

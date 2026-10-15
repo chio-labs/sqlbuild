@@ -30,7 +30,9 @@ use crate::bindings::_helpers::scopes::scope_objects::{
 use crate::bindings::_helpers::scopes::scope_validation::replace;
 use crate::bindings::types::CompilerDetach;
 
-const EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
+/// Why `UnindexableScopeError` is raised; discovery only yields normalized project paths.
+const UNINDEXABLE_SCOPE_MESSAGE: &str = "Native scope indexing could not place a discovered path or resource kind. Discovery always yields normalized project-relative paths, so this is a SQLBuild bug; please file an issue with the project layout";
+const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const INSPECT_MODULE: &str = "inspect";
 const CODE_TYPE_MODULE: &str = "types";
 const PATHLIB_MODULE: &str = "pathlib";
@@ -603,7 +605,7 @@ fn unindexable(py: Python<'_>) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
         py.import(EXCEPTIONS_MODULE)?
             .getattr("UnindexableScopeError")?
-            .call0()?,
+            .call1((UNINDEXABLE_SCOPE_MESSAGE,))?,
     ))
 }
 

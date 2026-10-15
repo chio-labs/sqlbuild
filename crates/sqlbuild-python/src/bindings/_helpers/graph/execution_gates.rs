@@ -9,8 +9,8 @@ use crate::bindings::_helpers::analysis::explicit_references::{
 };
 use crate::bindings::_helpers::graph::keys::KeyCache;
 
-const GRAPH_MODELS_MODULE: &str = "sqlbuild.compiler.graph.models";
-const GRAPH_TYPES_MODULE: &str = "sqlbuild.compiler.graph.types";
+const GRAPH_MODELS_MODULE: &str = "sqlbuild._native";
+const GRAPH_TYPES_MODULE: &str = "sqlbuild._native";
 const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
+from sqlbuild._native import ProjectConfigError
 from sqlbuild.runtime.event_exporting.types import LifecycleEventKind
 from sqlbuild.spec.contracts.models import (
     AuthoredTimeTravelRetention,

@@ -12,7 +12,7 @@ use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::dag_artifact::rows::{project_input, python_graph_input};
 use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
 
-const SPEC_EXCEPTIONS_MODULE: &str = "sqlbuild.spec.contracts.exceptions";
+const SPEC_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 
 fn python_error(error: DagArtifactError, py: pyo3::Python<'_>) -> PyErr {
     match error {

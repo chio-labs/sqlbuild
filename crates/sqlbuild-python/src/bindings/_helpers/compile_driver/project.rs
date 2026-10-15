@@ -19,7 +19,7 @@ use crate::bindings::_helpers::compile_driver::targets::{
 };
 
 const FRONTIER_MODULE: &str = "sqlbuild._native";
-const FRONTIER_TYPES_MODULE: &str = "sqlbuild.compiler.frontier.types";
+const FRONTIER_TYPES_MODULE: &str = "sqlbuild._native";
 const BUILD_INPUTS_MODULE: &str = "sqlbuild._native";
 const ASSEMBLE_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";

@@ -28,7 +28,7 @@ const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const COLLECTION_RENDERING_MODULE: &str = "sqlbuild._native";
 const RESOLVE_ADAPTER_MODULE: &str = "sqlbuild.adapter.discovery.main.resolve_adapter";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
-const FRONTIER_TYPES_MODULE: &str = "sqlbuild.compiler.frontier.types";
+const FRONTIER_TYPES_MODULE: &str = "sqlbuild._native";
 const MACRO_INVENTORY_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.user_macros";
 
 /// Where the scope index cache file of a project lives: `(directory, file name)`.

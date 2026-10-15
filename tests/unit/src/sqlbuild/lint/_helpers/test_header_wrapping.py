@@ -6,8 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import format_native_headers
-from sqlbuild.lint.models import LintConfig
+from sqlbuild._native import LintConfig, format_native_headers
 from tests.unit.src.sqlbuild.lint._helpers._test_types import HeaderAuditWrapTestCase
 
 _BODY: str = "\nSELECT 1 AS status\n"

@@ -13,10 +13,10 @@ use crate::bindings::_helpers::rules::lint_headers::{lint_body_ranges, lint_file
 use crate::bindings::_helpers::rules::lint_stop::check_stop;
 
 const NATIVE: &str = "sqlbuild._native";
-const MODELS: &str = "sqlbuild.lint.models";
+const MODELS: &str = "sqlbuild._native";
 const EXPANSION_MODELS: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_ERRORS: &str = "sqlbuild.compiler.compile.exceptions";
-const LINT_ERRORS: &str = "sqlbuild.lint.exceptions";
+const LINT_ERRORS: &str = "sqlbuild._native";
 
 /// Expand a single body and finish its native SQL preparation.
 #[pyfunction]

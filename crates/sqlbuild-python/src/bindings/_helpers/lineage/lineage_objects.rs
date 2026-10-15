@@ -4,7 +4,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyResult, Python};
 use pyo3::types::{PyDict, PyTuple};
 use sqlbuild_analysis::lineage::models::{LineageColumn, LineageSource};
 
-const LINEAGE_MODELS_MODULE: &str = "sqlbuild.compiler.lineage.models";
+const LINEAGE_MODELS_MODULE: &str = "sqlbuild._native";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
@@ -72,12 +72,11 @@ impl<'py> LineageClasses<'py> {
         resource_name: &str,
         column_name: &str,
     ) -> PyResult<Bound<'py, PyAny>> {
-        self.qualified_column
-            .call1((
-                self.resource_type.call1((resource_type,))?,
-                resource_name,
-                column_name,
-            ))
+        self.qualified_column.call1((
+            self.resource_type.call1((resource_type,))?,
+            resource_name,
+            column_name,
+        ))
     }
 
     /// `ColumnLineageEdge(source, target, transform_kind, confidence)`.

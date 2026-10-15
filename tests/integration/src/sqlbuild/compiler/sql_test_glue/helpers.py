@@ -13,13 +13,17 @@ from typing import cast
 import pytest
 
 import sqlbuild._native as native_module
-from sqlbuild._native import build_project_graph, discover_project_inputs
+from sqlbuild._native import (
+    NativeSqlTestAssembly,
+    NativeSqlTestFailure,
+    build_project_graph,
+    discover_project_inputs,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledSqlTest,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
-from sqlbuild.compiler.sql_test_glue.models import NativeSqlTestAssembly, NativeSqlTestFailure
 from tests.integration.src.sqlbuild.compiler.helpers import GoldenEntry, golden_entry
 
 

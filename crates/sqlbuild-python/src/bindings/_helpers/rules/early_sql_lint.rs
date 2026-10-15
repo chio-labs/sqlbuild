@@ -15,8 +15,10 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const RULE_THREADS_MODULE: &str = "sqlbuild._native";
 const RULES_MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
-const LINT_MODELS_MODULE: &str = "sqlbuild.lint.models";
-const LINT_CONSTANTS_MODULE: &str = "sqlbuild.lint.constants";
+const LINT_MODELS_MODULE: &str = "sqlbuild._native";
+/// The lint thresholds used when the project leaves them unset.
+const DEFAULT_MAX_LITERAL_LENGTH: i64 = 100;
+const DEFAULT_MAX_RANKING_ORDER_BY: i64 = 5;
 const FUTURES_MODULE: &str = "concurrent.futures";
 const THREADING_MODULE: &str = "threading";
 const LINT_THREAD_PREFIX: &str = "sqlbuild-lint";
@@ -40,8 +42,8 @@ pub(crate) fn sql_lint_config<'py>(
     (relation_keys, allow_suppressions): (Bound<'py, PyAny>, Bound<'py, PyAny>),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = dialect.py();
-    let threshold = |key: &str, default: &str| -> PyResult<Bound<'py, PyAny>> {
-        thresholds.call_method1("get", (key, imported(py, LINT_CONSTANTS_MODULE, default)?))
+    let threshold = |key: &str, default: i64| -> PyResult<Bound<'py, PyAny>> {
+        thresholds.call_method1("get", (key, default))
     };
     call_with(
         &imported(py, LINT_MODELS_MODULE, "LintConfig")?,
@@ -51,11 +53,11 @@ pub(crate) fn sql_lint_config<'py>(
             ("header_rules_enabled", false.into_bound_py_any(py)?),
             (
                 "max_literal_length",
-                threshold("max_literal_length", "DEFAULT_MAX_LITERAL_LENGTH")?,
+                threshold("max_literal_length", DEFAULT_MAX_LITERAL_LENGTH)?,
             ),
             (
                 "max_ranking_order_by",
-                threshold("max_ranking_order_by", "DEFAULT_MAX_RANKING_ORDER_BY")?,
+                threshold("max_ranking_order_by", DEFAULT_MAX_RANKING_ORDER_BY)?,
             ),
             ("relation_keys", relation_keys),
             ("allow_suppressions", allow_suppressions),

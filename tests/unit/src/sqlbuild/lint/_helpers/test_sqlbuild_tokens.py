@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 import sqlbuild._native as _native
-from sqlbuild.lint.models import InterpolationSite
+from sqlbuild._native import InterpolationSite
 from tests.unit.src.sqlbuild.lint._helpers._test_types import (
     DialectNeutralizeInterpolationTestCase,
     DollarQuotePreparationTestCase,

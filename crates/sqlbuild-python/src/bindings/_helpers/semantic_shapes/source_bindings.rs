@@ -20,7 +20,7 @@ use crate::bindings::_helpers::semantic_shapes::shapes::{
 };
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.analysis_session.models";
+const ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";

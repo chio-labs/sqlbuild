@@ -25,7 +25,7 @@ use crate::bindings::_helpers::lineage::project_schema::{
 use crate::bindings::models::ProjectCatalog;
 use crate::bindings::types::CompilerDetach;
 
-const EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.lineage.exceptions";
+const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const FAST_MODE: &str = "fast";
 const RICH_MODE: &str = "rich";
 const GENERIC_DIALECT: &str = "generic";
@@ -331,7 +331,12 @@ fn rich_lineage<'py>(
             let transform: Bound<'py, PyAny> = column.getattr("transform_kind")?;
             let confidence: Bound<'py, PyAny> = column.getattr("confidence")?;
             for upstream in column.getattr("upstream_columns")?.try_iter()? {
-                let source: Bound<'py, PyAny> = upstream?.call_method0("as_qualified_column")?;
+                let upstream: Bound<'py, PyAny> = upstream?;
+                let source: Bound<'py, PyAny> = classes.qualified_column.call1((
+                    upstream.getattr("resource_type")?,
+                    upstream.getattr("resource_name")?,
+                    upstream.getattr("column_name")?,
+                ))?;
                 edges.push(classes.edge(source, &target, &transform, &confidence)?);
             }
         }

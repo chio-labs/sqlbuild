@@ -26,7 +26,7 @@ use crate::bindings::types::CompilerDetach;
 
 const DATACLASSES_MODULE: &str = "dataclasses";
 const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
-const SCOPE_ERRORS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
+const SCOPE_ERRORS_MODULE: &str = "sqlbuild._native";
 const RUNTIME_USAGE: usize = 2;
 /// Compile input groups whose items carry declaration usages, after the model inputs.
 const COMPILE_USAGE_GROUPS: [&str; 5] = [
@@ -391,10 +391,18 @@ pub(crate) fn validate_scope_index(index: &Bound<'_, PyAny>) -> Result<(), PyErr
     if errors.is_empty() {
         return Ok(());
     }
+    let mut message: String = String::from("Invalid declaration scope index:");
+    for item in &errors {
+        let code: String = item.getattr("code")?.getattr("value")?.extract()?;
+        let text: String = item.getattr("message")?.extract()?;
+        message.push_str(&format!("\n[{code}] {text}"));
+    }
+    let options: Bound<'_, PyDict> = PyDict::new(py);
+    options.set_item("diagnostics", PyTuple::new(py, errors)?)?;
     Err(PyErr::from_value(
         py.import(SCOPE_ERRORS_MODULE)?
             .getattr("ScopeValidationError")?
-            .call1((PyTuple::new(py, errors)?,))?,
+            .call((message,), Some(&options))?,
     ))
 }
 

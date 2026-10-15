@@ -25,7 +25,7 @@ use crate::bindings::_helpers::discovery::snapshot::{in_snapshot, project_root, 
 use crate::bindings::models::NativeProjectTree;
 
 const MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
-const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild.compiler.discovery.exceptions";
+const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
 const PARSE_ERROR_CLASS: &str = "ModelSqlParseError";
 const AST_MODULE: &str = "ast";
 const DESCRIPTION_KEY: &str = "description";

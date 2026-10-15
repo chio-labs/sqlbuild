@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from math import isfinite
 from typing import cast
 
-from sqlbuild.compiler.auditing.exceptions import MeasurementAuditError
+from sqlbuild._native import MeasurementAuditError
 from sqlbuild.compiler.auditing.types import AuditSeverity, ThresholdOperator
 
 

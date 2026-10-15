@@ -6,12 +6,12 @@ use pyo3::{Py, PyErr, pymethods};
 use sqlbuild_model_config::errors::{ConfigError, ErrorClass};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::model_config::config_values::config_value_type_error;
 use crate::bindings::_helpers::model_config::errors::NativeConfigError;
 
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
-const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild.compiler.discovery.exceptions";
-const IDENTITY_ERRORS_MODULE: &str = "sqlbuild.compiler.resource_names.exceptions";
-const CONTRACT_ERRORS_MODULE: &str = "sqlbuild.spec.contracts.exceptions";
+const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
+const IDENTITY_ERRORS_MODULE: &str = "sqlbuild._native";
 const EXPECTED_STRING: &str = "a string";
 
 const COMPILE_INPUT_CLASS: &str = "compile_input";
@@ -74,12 +74,11 @@ impl NativeConfigError {
         if self.class_name == CONFIG_VALUE_TYPE_CLASS
             && let (Some(key), Some(values)) = (&self.key, values)
         {
-            let keywords: Bound<'py, PyDict> = PyDict::new(py);
-            keywords.set_item("key", key)?;
-            keywords.set_item("expected", EXPECTED_STRING)?;
-            keywords.set_item("actual_type", values.get_item(key)?.get_type())?;
-            return imported(py, CONTRACT_ERRORS_MODULE, "ConfigValueTypeError")?
-                .call((), Some(&keywords));
+            return config_value_type_error(
+                key,
+                EXPECTED_STRING,
+                &values.get_item(key)?.get_type().into_any(),
+            );
         }
         let keywords: Bound<'py, PyDict> = PyDict::new(py);
         keywords.set_item("help", &self.help)?;

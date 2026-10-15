@@ -11,8 +11,8 @@ use sqlbuild_discovery::tree::models::ProjectTree;
 
 use crate::bindings::_helpers::discovery::project_files::path_object;
 
-const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild.compiler.discovery.exceptions";
-const IDENTITY_ERRORS_MODULE: &str = "sqlbuild.compiler.resource_names.exceptions";
+const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
+const IDENTITY_ERRORS_MODULE: &str = "sqlbuild._native";
 const BUILTINS_MODULE: &str = "builtins";
 const OS_MODULE: &str = "os";
 const DECODE_ENCODING: &str = "utf-8";

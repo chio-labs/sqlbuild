@@ -2,27 +2,25 @@
 
 from __future__ import annotations
 
+from dataclasses import astuple
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from sqlbuild._native import (
+    HeaderSpan,
+    InterpolationSite,
+    LintBody,
+    LintConfig,
+    LintViolation,
     lint_native_sql_bodies,
     neutralize_lint_interpolation,
     restore_lint_interpolation,
     scan_headers,
     sql_body_ranges,
 )
-from sqlbuild.lint.models import (
-    HeaderSpan,
-    InterpolationSite,
-    LintBody,
-    LintConfig,
-    LintViolation,
-)
 
 if TYPE_CHECKING:
-    from sqlbuild._native import NativePreparedSql
-    from sqlbuild.lint.types import NativeLintPreparationRequest
+    from sqlbuild._native import NativeLintPreparationRequest, NativePreparedSql
 
 
 def lint_bodies_for(*, file_path: Path, contents: str) -> tuple[LintBody, ...]:
@@ -161,7 +159,7 @@ def neutralize_interpolation(
 def restore_interpolation(*, fixed: str, sites: tuple[InterpolationSite, ...]) -> tuple[bool, str]:
     """Restore neutralized interpolation natively; returns whether it succeeded and the text."""
 
-    return restore_lint_interpolation(fixed, [tuple(vars(site).values()) for site in sites])
+    return restore_lint_interpolation(fixed, [astuple(site) for site in sites])
 
 
 def run_native_sql_lint(

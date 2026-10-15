@@ -4,6 +4,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import sqlbuild._native as _native
+from sqlbuild._native import ProjectConfigError
 from sqlbuild.compiler.discovery._helpers.filesystem.command_output_sinks import (
     bind_command_output_sink_declarations,
     discover_command_output_sink_declarations,
@@ -13,7 +14,6 @@ from sqlbuild.compiler.discovery._helpers.filesystem.core import (
     discover_event_exporter_declarations,
     discover_provider_classes,
 )
-from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.compiler.discovery.models import (
     DiscoveredCommandOutputSink,
     DiscoveredCommandOutputSinkDeclaration,

@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    SqlTestParseError,
     discover_test_files,
     omitted_ceremonial_select,
 )
-from sqlbuild.compiler.discovery.exceptions import SqlTestParseError
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestCase,

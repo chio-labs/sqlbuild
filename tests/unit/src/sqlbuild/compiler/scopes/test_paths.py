@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import normalize_scope_path
-from sqlbuild.compiler.scopes.exceptions import InvalidScopePathError
+from sqlbuild._native import InvalidScopePathError, normalize_scope_path
 from tests.unit.src.sqlbuild.compiler.scopes._test_types import PathNormalizationCase
 
 

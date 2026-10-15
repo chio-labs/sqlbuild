@@ -30,6 +30,7 @@ from sqlbuild.compiler.compile.types import (
     FunctionInput,
     FunctionLanguage,
     ModelInput,
+    RelationKeyRow,
     SeedInput,
     SourceInput,
     SqlTestMode,
@@ -72,7 +73,6 @@ from sqlbuild.compiler.scopes.models import (
     VisibilityRecord,
 )
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic, SqlLexicalSyntax
-from sqlbuild.lint.types import RelationKeyRow
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
     ProjectConfig,

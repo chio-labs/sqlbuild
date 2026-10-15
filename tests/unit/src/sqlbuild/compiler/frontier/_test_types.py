@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from sqlbuild.compiler.frontier.types import CompilerStage
+from sqlbuild._native import CompilerStage
 
 
 @dataclass(frozen=True)

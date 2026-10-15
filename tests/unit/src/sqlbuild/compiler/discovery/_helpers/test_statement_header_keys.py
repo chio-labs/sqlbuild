@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery.exceptions import DiscoveryError, ProjectConfigError
+from sqlbuild._native import DiscoveryError, ProjectConfigError
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     StatementHeaderKeysTestCase,
 )

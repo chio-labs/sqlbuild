@@ -18,7 +18,7 @@ use crate::bindings::_helpers::contracts::effective_config::{
 };
 
 const MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
-const ERRORS_MODULE: &str = "sqlbuild.spec.contracts.exceptions";
+const ERRORS_MODULE: &str = "sqlbuild._native";
 const TARGET_GROUPS: [(&str, &str); 4] = [
     ("clone", "ClonePolicy"),
     ("execution_limits", "ExecutionLimitsConfig"),

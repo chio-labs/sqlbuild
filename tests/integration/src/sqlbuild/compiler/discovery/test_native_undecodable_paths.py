@@ -8,8 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import discover_project_inputs
-from sqlbuild.compiler.discovery.exceptions import ProjectPathError
+from sqlbuild._native import ProjectPathError, discover_project_inputs
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     UndecodableDeclarationNameTestCase,
     UndecodablePathToleranceTestCase,

@@ -13,7 +13,7 @@ use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::graph::keys::{KeyCache, native_key};
 use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
 
-const GRAPH_MODELS_MODULE: &str = "sqlbuild.compiler.graph.models";
+const GRAPH_MODELS_MODULE: &str = "sqlbuild._native";
 
 /// The native graph's `(resource type, name)` pair for `key`.
 #[pyfunction]

@@ -7,7 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import build_compile_inputs, discover_project_inputs, resolve_target_config
+from sqlbuild._native import (
+    ResourceIdentityError,
+    SpecConfigError,
+    build_compile_inputs,
+    discover_project_inputs,
+    resolve_target_config,
+)
 from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
 )
@@ -17,8 +23,6 @@ from sqlbuild.compiler.discovery.models import (
     PythonHookEntry,
     SqlHookEntry,
 )
-from sqlbuild.compiler.resource_names.exceptions import ResourceIdentityError
-from sqlbuild.spec.contracts.exceptions import SpecConfigError
 from sqlbuild.spec.contracts.models import (
     AuthoredTimeTravelRetention,
     ClonePolicy,

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import ConfigValueTypeError
 from sqlbuild.adapter.contract.models import CursorValue
 from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.diff._helpers.bounds import resolve_bounded_cursors
-from sqlbuild.spec.contracts.exceptions import ConfigValueTypeError
 from tests.unit.src.sqlbuild.executor.diff._test_types import (
     ResolveBoundedCursorsErrorTestCase,
     ResolveBoundedCursorsTestCase,

@@ -27,7 +27,7 @@ const RICH_COLUMN_LINEAGE: &str = "RICH";
 const FAST_COLUMN_LINEAGE: &str = "FAST";
 
 const CONTRACTS_MODULE: &str = "sqlbuild._native";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild.compiler.contracts.models";
+const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
 const SELECTION_MODULE: &str = "sqlbuild._native";
 const RULE_THREADS_MODULE: &str = "sqlbuild._native";
 const RULE_MODELS_MODULE: &str = "sqlbuild.rule_engine.models";

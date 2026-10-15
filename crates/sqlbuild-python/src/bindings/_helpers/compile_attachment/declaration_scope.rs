@@ -15,7 +15,7 @@ const NATIVE_MODULE: &str = "sqlbuild._native";
 const SCAN_CACHE_MODULE: &str = "sqlbuild._native";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
-const SCOPE_ERRORS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
+const SCOPE_ERRORS_MODULE: &str = "sqlbuild._native";
 
 fn compile_error(py: Python<'_>, message: Bound<'_, PyAny>) -> PyResult<PyErr> {
     Ok(PyErr::from_value(

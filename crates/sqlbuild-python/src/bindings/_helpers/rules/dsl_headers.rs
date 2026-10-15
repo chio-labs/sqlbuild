@@ -22,9 +22,9 @@ use sqlbuild_rules::dsl_headers::types::HeaderParser;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const LINT_MODELS_MODULE: &str = "sqlbuild.lint.models";
-const LINT_TYPES_MODULE: &str = "sqlbuild.lint.types";
-const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild.compiler.discovery.exceptions";
+const LINT_MODELS_MODULE: &str = "sqlbuild._native";
+const LINT_TYPES_MODULE: &str = "sqlbuild._native";
+const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
 const PATHLIB_MODULE: &str = "pathlib";
 const SENTINEL_PATH: &str = "<lint>";
 const ENGINE: &str = "sqlbuild";

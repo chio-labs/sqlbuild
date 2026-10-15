@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import build_scope_lookup, explain_scope_declaration, query_scope_report
-from sqlbuild.compiler.scopes.exceptions import InvalidQualifiedIdentityError
+from sqlbuild._native import (
+    InvalidQualifiedIdentityError,
+    build_scope_lookup,
+    explain_scope_declaration,
+    query_scope_report,
+)
 from sqlbuild.compiler.scopes.models import (
     DeclarationExplanation,
     DeclarationIdentity,

@@ -8,6 +8,7 @@ import pytest
 
 from sqlbuild._native import (
     ColumnRenameHint,
+    DisplayOptions,
     GraphResourceKind,
     SchemaChangeKind,
     WarningSeverity,
@@ -31,7 +32,6 @@ from sqlbuild.compiler.python_nodes.types import (
     PythonNodeKind,
     PythonRunPhase,
 )
-from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.cli.output.main.plan._test_types import (
     FormatPlanColorTestCase,

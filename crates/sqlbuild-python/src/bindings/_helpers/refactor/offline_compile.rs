@@ -14,10 +14,10 @@ const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
 const COMPILE_ERRORS: &str = "sqlbuild.compiler.compile.exceptions";
 const PLANNER_ERRORS: &str = "sqlbuild.compiler.planner.exceptions";
 const RULES_ERRORS: &str = "sqlbuild.rule_engine.exceptions";
-const SPEC_ERRORS: &str = "sqlbuild.spec.contracts.exceptions";
+const SPEC_ERRORS: &str = "sqlbuild._native";
 const ENTRY_MODELS: &str = "sqlbuild._native";
 const COMMAND_TYPES: &str = "sqlbuild._native";
-const REFACTOR_MODELS: &str = "sqlbuild.compiler.refactoring.models";
+const REFACTOR_MODELS: &str = "sqlbuild._native";
 const DEFAULT_ERROR_CODE: &str = "E001";
 
 /// One offline compile's project facts, or `None`, and every error that stopped or followed it.

@@ -20,8 +20,8 @@ use crate::bindings::_helpers::contracts::sql_values::{
 };
 
 const MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
-const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild.compiler.discovery.exceptions";
-const IDENTITY_ERRORS_MODULE: &str = "sqlbuild.compiler.resource_names.exceptions";
+const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
+const IDENTITY_ERRORS_MODULE: &str = "sqlbuild._native";
 const RENDERING_MODULE: &str = "sqlbuild.sql_values.types";
 
 fn declaration_error(py: Python<'_>, failure: DeclarationFailure) -> PyResult<PyErr> {

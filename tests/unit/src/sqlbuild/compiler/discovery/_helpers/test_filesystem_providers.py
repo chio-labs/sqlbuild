@@ -5,10 +5,9 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import ProviderDiscoveryError, ResourceIdentityError
 from sqlbuild.compiler.discovery._helpers.filesystem.core import discover_provider_classes
-from sqlbuild.compiler.discovery.exceptions import ProviderDiscoveryError
 from sqlbuild.compiler.discovery.models import DiscoveredProvider
-from sqlbuild.compiler.resource_names.exceptions import ResourceIdentityError
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DiscoverProviderCacheIsolationTestCase,
     DiscoverProviderClassesErrorTestCase,

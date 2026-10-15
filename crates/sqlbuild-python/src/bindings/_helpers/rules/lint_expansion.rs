@@ -15,8 +15,8 @@ const NATIVE_MODULE: &str = "sqlbuild._native";
 const RESOLVE_ADAPTER_MODULE: &str = "sqlbuild.adapter.discovery.main.resolve_adapter";
 const ADAPTER_EXCEPTIONS_MODULE: &str = "sqlbuild.adapter.contract.exceptions";
 const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
-const DISCOVERY_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.discovery.exceptions";
-const LINT_EXCEPTIONS_MODULE: &str = "sqlbuild.lint.exceptions";
+const DISCOVERY_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
+const LINT_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const COMPILE_FIRST_MESSAGE: &str = "compiler-integrated Rules check the SQL your project \
     actually produces, so the project must compile first";
 

@@ -8,6 +8,8 @@ from typing import cast
 import pytest
 
 from sqlbuild._native import (
+    DeclarationParseError,
+    ResourceIdentityError,
     assemble_project,
     build_compile_inputs,
     build_model_version_identity_metadata_json,
@@ -21,9 +23,7 @@ from sqlbuild.compiler.compile.types import (
     CompileInputsView,
     ModelInput,
 )
-from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, SqlHookEntry
-from sqlbuild.compiler.resource_names.exceptions import ResourceIdentityError
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     CompileDeclarationsErrorTestCase,
     CompileDeclarationsTestCase,

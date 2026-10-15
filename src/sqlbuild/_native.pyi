@@ -1,6 +1,7 @@
 """Private SQLBuild native engine bindings."""
 
 import threading
+from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence, Set
 from concurrent.futures import Executor, Future
 from contextlib import AbstractContextManager
@@ -14,8 +15,12 @@ from threading import Event
 from types import TracebackType
 from typing import Any, ClassVar, Literal, Protocol, Self, TextIO, TypedDict
 
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import (
+    BaseAdapter,
+)
+from sqlbuild.adapter.contract.classes.strict_adapter import (
+    StrictAdapter,
+)
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     ExpressionInferenceProfile,
@@ -103,12 +108,11 @@ from sqlbuild.compiler.compile.types import (
     FunctionInput,
     FunctionLanguage,
     ModelInput,
+    RelationKeyRow,
     SeedInput,
     SourceInput,
     TypedSqlValueRenderer,
 )
-from sqlbuild.compiler.contract_adoption.models import ContractEvidence, ContractFinding
-from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredAdapterFile,
@@ -139,14 +143,12 @@ from sqlbuild.compiler.discovery.models import (
     TolerantScopeDiscovery,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
-from sqlbuild.compiler.frontier.types import CompilerStage
-from sqlbuild.compiler.graph.models import AttachedAuditGateEdge, HookReadEdge, LineageGraphViews
-from sqlbuild.compiler.lineage.models import (
-    ColumnLineageEdge,
-    DirectSemanticColumnUse,
-    ModelColumnLineage,
+from sqlbuild.compiler.lineage.types import (
+    ColumnLineageConfidence,
+    ColumnLineageMode,
+    ColumnTransformKind,
+    InferredNullability,
 )
-from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.compiler.migrations.models import (
     ColumnMigrationEvent,
     MigrationEvent,
@@ -230,7 +232,6 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonSqlRunLifecyclePlan,
     PythonSqlRunSelection,
 )
-from sqlbuild.compiler.refactoring.models import ManualLocation
 from sqlbuild.compiler.references.models import (
     LiteralSqlRelation,
     ProjectRelation,
@@ -275,28 +276,48 @@ from sqlbuild.compiler.sql_test_glue.models import (
     NativeSqlTestPlanningRequest,
 )
 from sqlbuild.cost.models import CostResourceContext, RunCostSummary, StatementExecutionTelemetry
+from sqlbuild.cost.models import (
+    CostResourceContext,
+    RunCostSummary,
+    StatementExecutionTelemetry,
+)
 from sqlbuild.cost.types import CostStatus
 from sqlbuild.cursor_algebra.models import AlignedInterval, DateValue, Duration, TimestampValue
 from sqlbuild.cursor_algebra.types import Bound, BoundSentinel, CursorScalar
 from sqlbuild.diagnostics.models import ProcessResourceUsage
-from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.auditing.models import (
+    AuditExecutionResult,
+)
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
     FunctionExecutionResult,
     SchedulerState,
     SeedExecutionResult,
 )
-from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
+from sqlbuild.executor.clone.models import (
+    CloneExecutionResult,
+    CloneItemResult,
+)
 from sqlbuild.executor.diff.models import DiffExecutionResult, RowDiffSamplingOverride
 from sqlbuild.executor.janitor.models import JanitorExecutionResult, JanitorPlan
-from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.load.models import (
+    LoadExecutionResult,
+)
 from sqlbuild.executor.python_nodes.models import (
     PythonCheckExecutionResult,
     PythonNodeExecutionResult,
 )
-from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotCaptureRunResult
-from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
+from sqlbuild.executor.run.models import (
+    ModelExecutionResult,
+)
+from sqlbuild.executor.scenario.models import (
+    ScenarioRunResult,
+    ScenarioSnapshotCaptureRunResult,
+)
+from sqlbuild.executor.testing.models import (
+    SqlTestExecutionResult,
+    StepResult,
+)
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCommandResult,
@@ -321,13 +342,15 @@ from sqlbuild.lint.models import (
     PendingLintBody,
     PreparedLintFiles,
     RuleFixResult,
+from sqlbuild.integrations.dbt.types import (
+    DbtInvoker,
 )
-from sqlbuild.lint.types import RelationKeyRow
 from sqlbuild.microbatches.models import MicrobatchInterval
-from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.presentation.types import TransientLineOwner
 from sqlbuild.provider.classes.container import ProviderContainer
-from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.python_nodes.models import (
+    SqlResourceRef,
+)
 from sqlbuild.rule_engine.models import (
     CustomRulesOutcome,
     Finding,
@@ -9896,3 +9919,860 @@ class MigrationStateError(ValueError):
     def __init__(
         self, message: str, *, code: str | None = None, help: str | None = None
     ) -> None: ...
+
+class ContractFindingKind(StrEnum):
+    """Stable physical-to-authored contract difference categories."""
+
+    MISSING_DECLARATION = "missing_declaration"
+    MISSING_PHYSICAL_COLUMN = "missing_physical_column"
+    TYPE_MISMATCH = "type_mismatch"
+    RELATION_MISSING = "relation_missing"
+    INSPECTION_UNAVAILABLE = "inspection_unavailable"
+    OWNERSHIP_CONFLICT = "ownership_conflict"
+
+class CompilerStage(StrEnum):
+    """Frontier objects handed from one compiler stage to the next, in pipeline order."""
+
+    DISCOVERED_PROJECT_INPUTS = "discovered_project_inputs"
+    COMPILE_PROJECT_INPUTS = "compile_project_inputs"
+    COMPILED_PROJECT = "compiled_project"
+
+class HookReadType(StrEnum):
+    """Kind of model hook that declares or writes a read."""
+
+    PYTHON = "Python"
+    SQL = "SQL"
+    INLINE_SQL = "inline SQL"
+
+class LintSeverity(StrEnum):
+    """Severity assigned to one lint violation."""
+
+    FAULT = "fault"
+    WARNING = "warning"
+
+class DiscoveryError(ValueError):
+    """Base error for expected discovery failures."""
+
+    code: str
+    message: str
+    help: str | None
+    def __init__(
+        self, message: str, *, code: str | None = None, help: str | None = None
+    ) -> None: ...
+
+class ProjectConfigError(DiscoveryError):
+    """Raised when shared or local project config files are invalid."""
+
+class ModelSqlParseError(DiscoveryError):
+    """Raised when an authored SQL model file has an invalid shape."""
+
+class SqlTestParseError(DiscoveryError):
+    """Raised when an authored SQL-native test file has an invalid shape."""
+
+class SqlAuditParseError(DiscoveryError):
+    """Raised when an authored SQL audit file has an invalid shape."""
+
+class SchemaParseError(DiscoveryError):
+    """Raised when a schema.yml file has an invalid shape."""
+
+class SourceParseError(DiscoveryError):
+    """Raised when a sources/*.yml file has an invalid shape."""
+
+class DiscoveryConflictError(DiscoveryError):
+    """Raised when discovered project inputs conflict across files."""
+
+class SeedDiscoveryError(DiscoveryError):
+    """Raised when declared seed metadata does not match local seed files."""
+
+class SqlScenarioParseError(DiscoveryError):
+    """Raised when an authored SQL scenario file has an invalid shape."""
+
+class PythonNodeDiscoveryError(DiscoveryError):
+    """Raised when project Python nodes cannot be discovered."""
+
+class ProviderDiscoveryError(DiscoveryError):
+    """Raised when project providers cannot be discovered."""
+
+class DeclarationParseError(DiscoveryError):
+    """Raised when an authored public SQL declaration is invalid."""
+
+class SqlHookParseError(DiscoveryError):
+    """Raised when an authored SQL hook resource has an invalid shape."""
+
+class EventExporterDiscoveryError(DiscoveryError):
+    """Raised when project lifecycle event exporters are invalid."""
+
+class ProjectPythonPathError(DiscoveryError):
+    """Raised when project-owned Python lives outside a supported extension root."""
+
+class ProjectPathError(DiscoveryError):
+    """Raised when an authored project path cannot be read as valid UTF-8."""
+
+class ResourceIdentityError(DiscoveryError):
+    """Raised when an authored resource identity is not canonical snake_case."""
+
+class MeasurementAuditError(ValueError):
+    """Raised when a measurement audit contract or value is invalid."""
+
+class ContractAdoptionError(RuntimeError):
+    """Raised when safe contract source editing cannot continue."""
+
+class FingerprintInputError(ValueError):
+    """Raised when fingerprint storage inputs or rows are invalid."""
+
+    code: str
+    message: str
+    help: str | None
+    def __init__(
+        self, message: str, *, code: str | None = None, help: str | None = None
+    ) -> None: ...
+
+class QueryFingerprintError(ValueError):
+    """Raised when SQL cannot be tokenized into a change fingerprint."""
+
+class NativeStageMismatchError(RuntimeError):
+    """Raised when native state the compiler replays is inconsistent with its inputs."""
+
+class UnknownLineageDialectError(ValueError):
+    """Raised, as Python's parser raised `ValueError`, for a dialect Polyglot does not know."""
+
+class RefactorValueError(ValueError):
+    """An unhandled value failure the Python planner also leaves to the caller."""
+
+class RefactorIOError(OSError):
+    """A file read or write failure the Python planner also leaves to the caller."""
+
+class ScopeError(ValueError):
+    """Base error for invalid scope-domain input."""
+
+    code: str
+    message: str
+    help: str | None
+    def __init__(
+        self, message: str, *, code: str | None = None, help: str | None = None
+    ) -> None: ...
+
+class InvalidScopePathError(ScopeError):
+    """Raised when a project-relative scope path is invalid."""
+
+class InvalidQualifiedIdentityError(ScopeError):
+    """Raised when a qualified scope identity cannot be parsed."""
+
+class UnindexableScopeError(ScopeError):
+    """Raised when the native scope index cannot place a discovered path or resource kind."""
+
+class ScopeValidationError(ScopeError):
+    """Aggregate error raised only when strict scope validation is requested."""
+
+    diagnostics: Any
+
+class UnsupportedLexicalSyntaxError(ValueError):
+    """Raised when an adapter declares lexical rules the native SQL scanners do not support."""
+
+class LintError(Exception):
+    """A lint or format run could not proceed."""
+
+    code: str
+    message: str
+    help: str | None
+    def __init__(
+        self, message: str, *, code: str | None = None, help: str | None = None
+    ) -> None: ...
+
+class NativeLintError(LintError):
+    """The SQLBuild-owned native lint engine rejected a request or response."""
+
+class ProjectCompileError(LintError):
+    """The project could not be compiled, so its SQL cannot be linted."""
+
+class LintStoppedError(Exception):
+    """A speculative lint run was stopped because its result is no longer needed."""
+
+class SpecConfigError(RuntimeError):
+    """Raised when project specification configuration is invalid."""
+
+class ConfigValueTypeError(ValueError):
+    """Raised when an authored config value has the wrong runtime type."""
+
+    code: str
+    message: str
+    help: str | None
+    def __init__(
+        self, message: str, *, code: str | None = None, help: str | None = None
+    ) -> None: ...
+    key: Any
+    expected: Any
+    actual_type: Any
+
+class NativeModelAnalysisRequest(NativeRecord):
+    """The Python model analysis's arguments plus the facts dynamic pivot proofs need."""
+
+    known_functions: tuple[str, ...]
+    known_types: tuple[str, ...]
+    model_inputs: tuple[ModelInput, ...]
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]]
+    column_types_by_table: dict[str, dict[str, str]]
+    inference_profile: ExpressionInferenceProfile
+    allow_compact_analysis: bool
+    rich_type_inference: bool
+    analysis_cache: AnalysisCacheContext | None
+    complete_binding_schemas: dict[str, dict[str, str]]
+    dynamic_families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]]
+    def __init__(
+        self,
+        known_functions: tuple[str, ...],
+        known_types: tuple[str, ...],
+        model_inputs: tuple[ModelInput, ...],
+        column_nullability_by_table: dict[str, dict[str, InferredNullability]],
+        column_types_by_table: dict[str, dict[str, str]],
+        inference_profile: ExpressionInferenceProfile,
+        allow_compact_analysis: bool,
+        rich_type_inference: bool,
+        analysis_cache: AnalysisCacheContext | None,
+        complete_binding_schemas: dict[str, dict[str, str]],
+        dynamic_families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]],
+    ) -> None: ...
+
+class NativeModelAnalyses(NativeRecord):
+    """Each analysed model's position in the finished session that keeps its outcome."""
+
+    positions: dict[str, int]
+    succeeded: frozenset[str]
+    session: Any | None
+    def __init__(
+        self,
+        positions: dict[str, int],
+        succeeded: frozenset[str],
+        session: Any | None,
+    ) -> None: ...
+
+class NativePivotTables(NativeRecord):
+    """The relation facts Python's dynamic pivot proofs read, for proofs outside a session."""
+
+    dialect: str | None
+    column_types_by_table: dict[str, dict[str, str]]
+    authoritative_column_types_by_table: dict[str, dict[str, str]]
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]]
+    dynamic_families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]]
+    def __init__(
+        self,
+        dialect: str | None,
+        column_types_by_table: dict[str, dict[str, str]],
+        authoritative_column_types_by_table: dict[str, dict[str, str]],
+        column_nullability_by_table: dict[str, dict[str, InferredNullability]],
+        dynamic_families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]],
+    ) -> None: ...
+
+class NativeColumnQuery(NativeRecord):
+    """One query outside the session whose output columns Python's analysis inferred."""
+
+    sql: str
+    mode: Literal["batch", "reanalysis", "parse", "legacy"]
+    placeholders: dict[str, str] | None
+    references: tuple[CompileSqlReference, ...]
+    recover_cte_facts: bool
+    def __init__(
+        self,
+        sql: str,
+        mode: Literal["batch", "reanalysis", "parse", "legacy"],
+        placeholders: dict[str, str] | None = ...,
+        references: tuple[CompileSqlReference, ...] = ...,
+        recover_cte_facts: bool = ...,
+    ) -> None: ...
+
+class NativeQueryColumns(NativeRecord):
+    """One query's analysis: whether it succeeded, its columns and whether it projects a star."""
+
+    succeeded: bool
+    columns: tuple[InferredColumn, ...] | None
+    has_star: bool
+    def __init__(
+        self,
+        succeeded: bool,
+        columns: tuple[InferredColumn, ...] | None,
+        has_star: bool,
+    ) -> None: ...
+
+class ContractFinding(NativeRecord):
+    resource_type: CompiledResourceType
+    resource_name: str
+    kind: ContractFindingKind
+    message: str
+    column_name: str | None
+    declared_type: str | None
+    physical_type: str | None
+    def __init__(
+        self,
+        resource_type: CompiledResourceType,
+        resource_name: str,
+        kind: ContractFindingKind,
+        message: str,
+        column_name: str | None = ...,
+        declared_type: str | None = ...,
+        physical_type: str | None = ...,
+    ) -> None: ...
+
+class ContractEvidence(NativeRecord):
+    resource_type: CompiledResourceType
+    resource_name: str
+    database: str | None
+    schema: str | None
+    relation: str
+    declared_columns: tuple[ColumnInfo, ...]
+    physical_columns: tuple[ColumnInfo, ...] | None
+    source_path: Path | None
+    dynamic_columns: tuple[SchemaDynamicColumnFamily, ...]
+    findings: tuple[ContractFinding, ...]
+    def __init__(
+        self,
+        resource_type: CompiledResourceType,
+        resource_name: str,
+        database: str | None,
+        schema: str | None,
+        relation: str,
+        declared_columns: tuple[ColumnInfo, ...],
+        physical_columns: tuple[ColumnInfo, ...] | None,
+        source_path: Path | None,
+        dynamic_columns: tuple[SchemaDynamicColumnFamily, ...] = ...,
+        findings: tuple[ContractFinding, ...] = ...,
+    ) -> None: ...
+
+class ContractAdoptionResult(NativeRecord):
+    from_target: str
+    evidence: tuple[ContractEvidence, ...]
+    written_paths: tuple[Path, ...]
+    def __init__(
+        self,
+        from_target: str,
+        evidence: tuple[ContractEvidence, ...],
+        written_paths: tuple[Path, ...] = ...,
+    ) -> None: ...
+
+class ContractValidationResult(NativeRecord):
+    """Diagnostics emitted by model contract validation."""
+
+    diagnostics: tuple[CompilerDiagnostic, ...]
+    def __init__(
+        self,
+        diagnostics: tuple[CompilerDiagnostic, ...] = ...,
+    ) -> None: ...
+
+class LineageGraphViews(NativeRecord):
+    """A native project graph's lineage edges and selector indexes as Python dicts."""
+
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
+    downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
+    tag_index: dict[str, frozenset[CompiledObjectKey]]
+    path_index: dict[CompiledObjectKey, str]
+    all_keys: dict[str, CompiledObjectKey]
+    def __init__(
+        self,
+        upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+        downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+        tag_index: dict[str, frozenset[CompiledObjectKey]],
+        path_index: dict[CompiledObjectKey, str],
+        all_keys: dict[str, CompiledObjectKey],
+    ) -> None: ...
+
+class AttachedAuditGateEdge(NativeRecord):
+    """One ordering edge: the gated node waits for a resource its attached audit reads."""
+
+    audit_name: str
+    target: CompiledObjectKey
+    gated: CompiledObjectKey
+    read: CompiledObjectKey
+    def __init__(
+        self,
+        audit_name: str,
+        target: CompiledObjectKey,
+        gated: CompiledObjectKey,
+        read: CompiledObjectKey,
+    ) -> None: ...
+
+class HookReadEdge(NativeRecord):
+    """One ordering edge: a model waits for a resource one of its hooks reads."""
+
+    hook_name: str
+    gated: CompiledObjectKey
+    read: CompiledObjectKey
+    hook_type: HookReadType
+    hook_path: Path | None
+    def __init__(
+        self,
+        hook_name: str,
+        gated: CompiledObjectKey,
+        read: CompiledObjectKey,
+        hook_type: HookReadType = ...,
+        hook_path: Path | None = ...,
+    ) -> None: ...
+
+class QualifiedLineageColumn(NativeRecord):
+    """A resource-qualified column in the collapsed SQLBuild lineage graph."""
+
+    resource_type: CompiledResourceType | str
+    resource_name: str
+    column_name: str
+    def __init__(
+        self,
+        resource_type: CompiledResourceType | str,
+        resource_name: str,
+        column_name: str,
+    ) -> None: ...
+
+class ColumnLineageSource(NativeRecord):
+    """One upstream column dependency for an output column."""
+
+    resource_type: CompiledResourceType | str
+    resource_name: str
+    column_name: str
+    def __init__(
+        self,
+        resource_type: CompiledResourceType | str,
+        resource_name: str,
+        column_name: str,
+    ) -> None: ...
+
+class ColumnLineageEdge(NativeRecord):
+    """One collapsed SQLBuild lineage graph edge."""
+
+    source: QualifiedLineageColumn
+    target: QualifiedLineageColumn
+    transform_kind: ColumnTransformKind
+    confidence: ColumnLineageConfidence
+    def __init__(
+        self,
+        source: QualifiedLineageColumn,
+        target: QualifiedLineageColumn,
+        transform_kind: ColumnTransformKind = ...,
+        confidence: ColumnLineageConfidence = ...,
+    ) -> None: ...
+
+class DirectSemanticColumnUse(NativeRecord):
+    """One direct non-projection use of a resolved resource column."""
+
+    consumer_model: str
+    context: str
+    expression_sql: str
+    source: QualifiedLineageColumn
+    confidence: ColumnLineageConfidence
+    line: int | None
+    column: int | None
+    def __init__(
+        self,
+        consumer_model: str,
+        context: str,
+        expression_sql: str,
+        source: QualifiedLineageColumn,
+        confidence: ColumnLineageConfidence = ...,
+        line: int | None = ...,
+        column: int | None = ...,
+    ) -> None: ...
+
+class ColumnLineage(NativeRecord):
+    """Lineage for one output column in one model."""
+
+    output_column: str
+    transform_kind: ColumnTransformKind
+    expression_sql: str | None
+    upstream_columns: tuple[ColumnLineageSource, ...]
+    nullability: InferredNullability
+    confidence: ColumnLineageConfidence
+    def __init__(
+        self,
+        output_column: str,
+        transform_kind: ColumnTransformKind,
+        expression_sql: str | None,
+        upstream_columns: tuple[ColumnLineageSource, ...],
+        nullability: InferredNullability = ...,
+        confidence: ColumnLineageConfidence = ...,
+    ) -> None: ...
+
+class ModelColumnLineage(NativeRecord):
+    """Column lineage extracted for one compiled model."""
+
+    model_name: str
+    columns: tuple[ColumnLineage, ...]
+    has_star: bool
+    def __init__(
+        self,
+        model_name: str,
+        columns: tuple[ColumnLineage, ...],
+        has_star: bool = ...,
+    ) -> None: ...
+
+class RefactorProject(NativeRecord):
+    """Compiler facts of one project, as the refactoring planner reads them."""
+
+    project_dir: Path
+    graph: ProjectGraph
+    discovered: DiscoveredProjectInputs
+    def __init__(
+        self,
+        project_dir: Path,
+        graph: ProjectGraph,
+        discovered: DiscoveredProjectInputs,
+    ) -> None: ...
+
+class ManualLocation(NativeRecord):
+    """A location a refactoring cannot rewrite safely."""
+
+    path: str
+    line: int | None
+    column: int | None
+    reason: str
+    def __init__(
+        self,
+        path: str,
+        line: int | None,
+        column: int | None,
+        reason: str,
+    ) -> None: ...
+
+class NativeSqlTestPlanningRequest(NativeRecord):
+    """Compiled models and tests to plan, with the adapter facts native planning cannot derive."""
+
+    models: tuple[CompiledModelView, ...]
+    rendered_model_sql: dict[int, str]
+    functions: tuple[tuple[str, str, str, str, str], ...]
+    tests: tuple[CompiledSqlTest, ...]
+    rendered_test_overrides: dict[int, dict[str, str]]
+    sql_analysis_enabled: bool
+    sql_analysis_dialect: str | None
+    set_difference_operator: str
+    requires_derived_table_aliases: bool
+    lexical_syntax: dict[str, object]
+    render_sql: bool
+    include_plan: bool
+    def __init__(
+        self,
+        models: tuple[CompiledModelView, ...],
+        rendered_model_sql: dict[int, str],
+        functions: tuple[tuple[str, str, str, str, str], ...],
+        tests: tuple[CompiledSqlTest, ...],
+        rendered_test_overrides: dict[int, dict[str, str]],
+        sql_analysis_enabled: bool,
+        sql_analysis_dialect: str | None,
+        set_difference_operator: str,
+        requires_derived_table_aliases: bool,
+        lexical_syntax: dict[str, object],
+        render_sql: bool,
+        include_plan: bool,
+    ) -> None: ...
+
+class NativeSqlTestChainRequest(NativeRecord):
+    """Compiled models and the tests whose unmocked model chains to resolve."""
+
+    models: tuple[CompiledModelView, ...]
+    tests: tuple[CompiledSqlTest, ...]
+    lexical_syntax: dict[str, object]
+    def __init__(
+        self,
+        models: tuple[CompiledModelView, ...],
+        tests: tuple[CompiledSqlTest, ...],
+        lexical_syntax: dict[str, object],
+    ) -> None: ...
+
+class NativeSqlTestFailure(NativeRecord):
+    """The error one test's assembly raises: its kind and message."""
+
+    kind: Literal["input", "internal", "decimal_overflow"]
+    message: str
+    def __init__(
+        self,
+        kind: Literal["input", "internal", "decimal_overflow"],
+        message: str,
+    ) -> None: ...
+
+class NativeSqlTestAssembly(NativeRecord):
+    """One natively assembled test, its keyed diagnostics, and the error its assembly raises."""
+
+    test: CompiledSqlTest | None
+    diagnostics: tuple[tuple[tuple[str, ...], CompilerDiagnostic], ...]
+    failure: NativeSqlTestFailure | None
+    def __init__(
+        self,
+        test: CompiledSqlTest | None,
+        diagnostics: tuple[tuple[tuple[str, ...], CompilerDiagnostic], ...],
+        failure: NativeSqlTestFailure | None = ...,
+    ) -> None: ...
+
+class HeaderSpan(NativeRecord):
+    """A located DSL header region inside one file."""
+
+    kind: str
+    start: int
+    end: int
+    def __init__(
+        self,
+        kind: str,
+        start: int,
+        end: int,
+    ) -> None: ...
+
+class LintFileRole(NativeRecord):
+    """Path-derived classification of one lint input, derived once per file."""
+
+    declaration_kind: DeclarationKind | None
+    in_project: bool
+    in_hook_directory: bool
+    def __init__(
+        self,
+        declaration_kind: DeclarationKind | None = ...,
+        in_project: bool = ...,
+        in_hook_directory: bool = ...,
+    ) -> None: ...
+
+class InterpolationSite(NativeRecord):
+    """One sqlbuild interpolation occurrence replaced by a unique sentinel."""
+
+    sentinel: str
+    neutralized_start: int
+    neutralized_end: int
+    original_start: int
+    original_end: int
+    original_text: str
+    def __init__(
+        self,
+        sentinel: str,
+        neutralized_start: int,
+        neutralized_end: int,
+        original_start: int,
+        original_end: int,
+        original_text: str,
+    ) -> None: ...
+
+class LintBody(NativeRecord):
+    """One authored SQL body prepared for linting, with its expansion spans."""
+
+    file_path: Path
+    body_start: int
+    body_end: int
+    lint_text: str
+    passes: tuple[tuple[ExpansionSpan, ...], ...]
+    external_identifiers: tuple[str, ...]
+    dependency_identifiers: tuple[str, ...]
+    externally_referenced_ctes: tuple[str, ...]
+    allows_ceremonial_select: bool
+    allows_dynamic_output_star: bool
+    allows_empty_fixture_star: bool
+    dependency_relations: tuple[tuple[str, str], ...]
+    def __init__(
+        self,
+        file_path: Path,
+        body_start: int,
+        body_end: int,
+        lint_text: str,
+        passes: tuple[tuple[ExpansionSpan, ...], ...],
+        external_identifiers: tuple[str, ...] = ...,
+        dependency_identifiers: tuple[str, ...] = ...,
+        externally_referenced_ctes: tuple[str, ...] = ...,
+        allows_ceremonial_select: bool = ...,
+        allows_dynamic_output_star: bool = ...,
+        allows_empty_fixture_star: bool = ...,
+        dependency_relations: tuple[tuple[str, str], ...] = ...,
+    ) -> None: ...
+
+class PendingLintBody(NativeRecord):
+    """One expanded authored body awaiting its native lexical preparation."""
+
+    file_path: Path
+    body_start: int
+    body_end: int
+    expansion_input: str
+    expanded: str
+    expansion_passes: tuple[tuple[ExpansionSpan, ...], ...]
+    pre_expansion_sites: tuple[InterpolationSite, ...]
+    external_identifiers: tuple[str, ...]
+    allows_ceremonial_select: bool
+    allows_dynamic_output_star: bool
+    allows_empty_fixture_star: bool
+    request: NativeLintPreparationRequest
+    def __init__(
+        self,
+        file_path: Path,
+        body_start: int,
+        body_end: int,
+        expansion_input: str,
+        expanded: str,
+        expansion_passes: tuple[tuple[ExpansionSpan, ...], ...],
+        pre_expansion_sites: tuple[InterpolationSite, ...],
+        external_identifiers: tuple[str, ...],
+        allows_ceremonial_select: bool,
+        allows_dynamic_output_star: bool,
+        allows_empty_fixture_star: bool,
+        request: NativeLintPreparationRequest,
+    ) -> None: ...
+
+class ExpandedLintFile(NativeRecord):
+    """The expanded bodies of one file, up to the first body that could not be expanded."""
+
+    file_path: Path
+    bodies: tuple[PendingLintBody, ...]
+    failure: ProjectCompileError | None
+    def __init__(
+        self,
+        file_path: Path,
+        bodies: tuple[PendingLintBody, ...],
+        failure: ProjectCompileError | None,
+    ) -> None: ...
+
+class PreparedLintFiles(NativeRecord):
+    """Lint bodies of every expandable file, and why the skipped files could not expand."""
+
+    bodies: tuple[LintBody, ...]
+    unexpandable: dict[Path, str]
+    def __init__(
+        self,
+        bodies: tuple[LintBody, ...],
+        unexpandable: dict[Path, str],
+    ) -> None: ...
+
+class LintEdit(NativeRecord):
+    """One deterministic authored-source edit proposed by a lint rule."""
+
+    file_path: Path
+    code: str
+    start: int
+    end: int
+    replacement: str
+    def __init__(
+        self,
+        file_path: Path,
+        code: str,
+        start: int,
+        end: int,
+        replacement: str,
+    ) -> None: ...
+
+class LintViolation(NativeRecord):
+    """One lint diagnostic reported against an authored file."""
+
+    file_path: Path
+    line: int
+    column: int
+    code: str
+    message: str
+    severity: LintSeverity
+    engine: str
+    end_line: int | None
+    end_column: int | None
+    remediation: str | None
+    fix: LintEdit | None
+    fix_unavailable_reason: str | None
+    def __init__(
+        self,
+        file_path: Path,
+        line: int,
+        column: int,
+        code: str,
+        message: str,
+        severity: LintSeverity,
+        engine: str,
+        end_line: int | None = ...,
+        end_column: int | None = ...,
+        remediation: str | None = ...,
+        fix: LintEdit | None = ...,
+        fix_unavailable_reason: str | None = ...,
+    ) -> None: ...
+
+class RuleFixResult(NativeRecord):
+    """One applied, refused, or unavailable semantic Rule fix."""
+
+    file_path: Path
+    code: str
+    line: int
+    status: RuleFixStatus
+    reason: str
+    def __init__(
+        self,
+        file_path: Path,
+        code: str,
+        line: int,
+        status: RuleFixStatus,
+        reason: str,
+    ) -> None: ...
+
+class LintConfig(NativeRecord):
+    """Resolved lint and format configuration for one run."""
+
+    native_enabled: bool
+    max_description_lines: int
+    line_width: int
+    dialect: str
+    enabled_native_rules: tuple[str, ...] | None
+    ignored_native_rules: tuple[str, ...]
+    header_rules_enabled: bool
+    max_literal_length: int
+    max_ranking_order_by: int
+    allow_suppressions: bool
+    relation_keys: Mapping[str, tuple[tuple[str, ...], ...]]
+    def __init__(
+        self,
+        native_enabled: bool = ...,
+        max_description_lines: int = ...,
+        line_width: int = ...,
+        dialect: str = ...,
+        enabled_native_rules: tuple[str, ...] | None = ...,
+        ignored_native_rules: tuple[str, ...] = ...,
+        header_rules_enabled: bool = ...,
+        max_literal_length: int = ...,
+        max_ranking_order_by: int = ...,
+        allow_suppressions: bool = ...,
+        relation_keys: Mapping[str, tuple[tuple[str, ...], ...]] = ...,
+    ) -> None: ...
+
+class LintRunResult(NativeRecord):
+    """Aggregated outcome of one lint or format run."""
+
+    files_checked: int
+    violations: tuple[LintViolation, ...]
+    formatted_files: tuple[Path, ...]
+    source_texts: Mapping[Path, str]
+    unexpandable: Mapping[Path, str]
+    def __init__(
+        self,
+        files_checked: int,
+        violations: tuple[LintViolation, ...],
+        formatted_files: tuple[Path, ...],
+        source_texts: Mapping[Path, str] = ...,
+        unexpandable: Mapping[Path, str] = ...,
+    ) -> None: ...
+
+class CompileFacts(NativeRecord):
+    """Per-model outputs and per-owner diagnostics of one compilation."""
+
+    models: dict[CompiledObjectKey, CompiledModelView]
+    model_paths: dict[CompiledObjectKey, Path]
+    diagnostics: dict[Path, Counter[DiagnosticIdentity]]
+    def __init__(
+        self,
+        models: dict[CompiledObjectKey, CompiledModelView],
+        model_paths: dict[CompiledObjectKey, Path],
+        diagnostics: dict[Path, Counter[DiagnosticIdentity]],
+    ) -> None: ...
+
+class FixVerdict(NativeRecord):
+    """Edited files that fail verification, and whether any change is unattributable."""
+
+    failing: dict[Path, str]
+    unattributed: bool
+    def __init__(
+        self,
+        failing: dict[Path, str],
+        unattributed: bool,
+    ) -> None: ...
+
+class DisplayOptions(NativeRecord):
+    """Options controlling bounded human output."""
+
+    max_entries_per_section: int | None
+    overflow_flag: str
+    def __init__(
+        self,
+        max_entries_per_section: int | None = ...,
+        overflow_flag: str = ...,
+    ) -> None: ...
+
+type RuleFixStatus = Literal["applied", "refused", "unavailable"]
+type DiagnosticIdentity = tuple[str, str, str, str]
+type NativeLintPreparationRequest = LintPreparationRequest

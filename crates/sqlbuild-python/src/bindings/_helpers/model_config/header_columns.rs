@@ -17,7 +17,7 @@ use crate::bindings::_helpers::model_config::config_errors::native_config_error;
 use crate::bindings::_helpers::model_config::contract_classes::contract_classes;
 use crate::bindings::_helpers::model_config::header_metadata::{ContractClasses, column_tuple};
 
-const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild.compiler.discovery.exceptions";
+const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
 const DECLARATION_ERROR_CLASS: &str = "DeclarationParseError";
 
 /// `(file_path, label)`: the path and label every message names.
