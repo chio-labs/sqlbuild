@@ -225,9 +225,29 @@ reason = "public-api"
 note = "Documented observability API used throughout the executor."
 
 [[stays]]
-path = "runtime/execution_history"
+path = "runtime/execution_history/__init__.py"
 reason = "public-api"
-note = "Documented SQLite and Postgres execution-history backends."
+note = "Package marker of the public execution history shapes below; storage, projection and validation are native (sqlbuild-state execution_history)."
+
+[[stays]]
+path = "runtime/execution_history/models.py"
+reason = "public-api"
+note = "Rule 3 shapes: StoredEvent, filter, page and RunRecord dataclasses re-exported by sqlbuild.execution_history; __post_init__ delegates validation to native validate_history_* functions."
+
+[[stays]]
+path = "runtime/execution_history/types.py"
+reason = "public-api"
+note = "Rule 3 shapes: EventFamily, RunStatus, cursor aliases and the storage protocols re-exported by sqlbuild.execution_history."
+
+[[stays]]
+path = "runtime/execution_history/exceptions.py"
+reason = "public-api"
+note = "Rule 3 shapes: public storage errors re-exported by sqlbuild.execution_history and raised by the native backends."
+
+[[stays]]
+path = "runtime/execution_history/constants.py"
+reason = "public-api"
+note = "Rule 3 shapes: page limit and schema version constants re-exported by sqlbuild.execution_history."
 
 [[stays]]
 path = "runtime/execution_limits"

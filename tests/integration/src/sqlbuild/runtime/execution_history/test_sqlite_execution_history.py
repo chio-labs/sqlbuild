@@ -11,7 +11,6 @@ from unittest.mock import Mock
 
 import pytest
 
-import sqlbuild.runtime.execution_history.classes.sqlite_execution_history as sqlite_history_module
 from sqlbuild.execution_history import (
     EventFilter,
     EventPage,
@@ -48,16 +47,21 @@ class _TransactionFailureConnection:
         *,
         fail_commit_once: bool = False,
         fail_rollback_once: bool = False,
+        fail_projection_once: bool = False,
     ) -> None:
         self._connection: sqlite3.Connection = connection
         self._fail_commit_once: bool = fail_commit_once
         self._fail_rollback_once: bool = fail_rollback_once
+        self._fail_projection_once: bool = fail_projection_once
 
     @property
     def in_transaction(self) -> bool:
         return self._connection.in_transaction
 
     def execute(self, sql: str, parameters: Any = ()) -> sqlite3.Cursor:
+        if sql == "DELETE FROM run_projection" and self._fail_projection_once:
+            self._fail_projection_once = False
+            raise sqlite3.OperationalError("controlled body failure")
         if sql == "COMMIT" and self._fail_commit_once:
             self._fail_commit_once = False
             raise sqlite3.OperationalError("controlled commit failure")
@@ -317,12 +321,14 @@ def test_given_body_and_rollback_failures_when_transaction_exits_then_body_error
     storage: SQLiteExecutionHistory = SQLiteExecutionHistory(path=tmp_path / "history.sqlite3")
     storage._connection = cast(
         sqlite3.Connection,
-        _TransactionFailureConnection(storage._connection, fail_rollback_once=True),
+        _TransactionFailureConnection(
+            storage._connection, fail_rollback_once=True, fail_projection_once=True
+        ),
     )
 
-    with pytest.raises(ValueError, match="controlled body failure"):
-        with storage._transaction():
-            raise ValueError("controlled body failure")
+    with pytest.raises(ExecutionHistoryStorageError) as raised:
+        storage.append_and_project((lifecycle_event("failed-body"),))
+    assert str(raised.value.__cause__) == "controlled body failure"
 
     _ = storage.append_and_project((lifecycle_event("after-rollback-failure"),))
     events: EventPage = storage.get_events(event_filter=EventFilter())
@@ -607,7 +613,7 @@ def test_given_post_connect_setup_failure_when_constructing_then_open_connection
         opened.append(connection)
         return connection
 
-    monkeypatch.setattr(sqlite_history_module.sqlite3, "connect", tracked_connect)
+    monkeypatch.setattr(sqlite3, "connect", tracked_connect)
     monkeypatch.setattr(
         SQLiteExecutionHistory,
         "_migrate",

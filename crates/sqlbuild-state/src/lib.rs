@@ -3,4 +3,5 @@
 #![forbid(unsafe_code)]
 
 pub mod events;
+pub mod execution_history;
 pub mod freshness;

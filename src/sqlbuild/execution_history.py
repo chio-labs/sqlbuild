@@ -2,6 +2,11 @@
 
 from collections.abc import Iterable
 
+from sqlbuild._native import append_and_project as _append_and_project
+from sqlbuild._native import canonical_event_content as _canonical_event_content
+from sqlbuild._native import canonical_event_id as _canonical_event_id
+from sqlbuild._native import project_execution_runs as _project_execution_runs
+from sqlbuild._native import validate_history_page_limit as _validate_history_page_limit
 from sqlbuild.runtime.execution_history.constants import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
 from sqlbuild.runtime.execution_history.exceptions import (
     ExecutionHistoryStorageError,
@@ -12,19 +17,6 @@ from sqlbuild.runtime.execution_history.exceptions import (
     InvalidLimitError,
     ProjectionConsistencyError,
     UnsupportedSchemaVersionError,
-)
-from sqlbuild.runtime.execution_history.main.append_and_project import (
-    append_and_project as _append_and_project,
-)
-from sqlbuild.runtime.execution_history.main.canonical_event_content import (
-    canonical_event_content as _canonical_event_content,
-)
-from sqlbuild.runtime.execution_history.main.canonical_event_id import (
-    canonical_event_id as _canonical_event_id,
-)
-from sqlbuild.runtime.execution_history.main.project_runs import project_runs as _project_runs
-from sqlbuild.runtime.execution_history.main.validate_page_limit import (
-    validate_page_limit as _validate_page_limit,
 )
 from sqlbuild.runtime.execution_history.models import (
     EventFilter,
@@ -104,10 +96,10 @@ def project_runs(
 ) -> tuple[RunRecord, ...]:
     """Apply durable event facts in storage order to immutable run projections."""
 
-    return _project_runs(stored_events=stored_events, current_runs=current_runs)
+    return _project_execution_runs(stored_events=stored_events, current_runs=current_runs)
 
 
 def validate_page_limit(limit: int) -> None:
     """Validate a positive page limit no greater than the public maximum."""
 
-    _validate_page_limit(limit)
+    _validate_history_page_limit(limit)

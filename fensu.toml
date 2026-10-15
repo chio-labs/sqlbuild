@@ -80,6 +80,11 @@ reason = "Native bindings own the compile-and-plan pipeline; this package declar
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
+path = "src/sqlbuild/runtime/execution_history/__init__.py"
+reason = "The native SQLite and PostgreSQL backends and sqlbuild-state own execution history storage, projection and validation; this package only declares the history models, types, constants and errors the public facades re-export."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
 path = "src/sqlbuild/runtime/contracts/__init__.py"
 reason = "Native bindings open planning connections and report their lifecycle; this package only declares the connection hook models and types callers pass."
 

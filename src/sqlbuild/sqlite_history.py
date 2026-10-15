@@ -1,11 +1,9 @@
 """Typed public SQLite execution history API."""
 
-from sqlbuild.runtime.execution_history.classes.sqlite_execution_history import (
-    SQLiteExecutionHistory as _SQLiteExecutionHistory,
-)
+from sqlbuild._native import SQLiteExecutionHistory as _NativeSQLiteExecutionHistory
 
 __all__ = ("SQLiteExecutionHistory",)
 
 
-class SQLiteExecutionHistory(_SQLiteExecutionHistory):
+class SQLiteExecutionHistory(_NativeSQLiteExecutionHistory):
     """Supported project-local SQLite execution history backend."""

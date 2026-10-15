@@ -42,7 +42,6 @@ from scripts.fensu_policy.constants import (
     LIFECYCLE_EVENT_CLASS_NAME,
     LIFECYCLE_EVENT_FACTORY_NAME,
     LIFECYCLE_FACTORY_OWNER_PATHS,
-    NON_RECURSIVE_EXECUTION_HISTORY_PATH,
     OBSERVABILITY_DEFINITION_MODULES,
     OBSERVABILITY_FACTORY_MODULES,
     OBSERVABILITY_LIFECYCLE_EVENT_MODULES,
@@ -97,7 +96,7 @@ def raw_driver_execution_boundary(*, module: object, ctx: RuleContext) -> list[F
     if ctx.scope() != ROOT_SCOPE_NAME or ctx.repo_relative_parts()[:2] != RUNTIME_ROOT_PARTS:
         return []
     path: str = "/".join(ctx.repo_relative_parts())
-    if path == NON_RECURSIVE_EXECUTION_HISTORY_PATH or path in APPROVED_RAW_STATEMENT_MODULES:
+    if path in APPROVED_RAW_STATEMENT_MODULES:
         return []
     tree: ast.Module = module if isinstance(module, ast.Module) else ast.parse(ctx.text.source)
     return [
