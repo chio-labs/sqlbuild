@@ -176,9 +176,6 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     ChainStep,
-    BackfillResult,
-    ChainStep,
-    ChangeDetectionResult,
     CloneSourcePlanEntry,
     ColumnMigrationPlanEntry,
     CursorBounds,
@@ -332,10 +329,7 @@ from sqlbuild.lint.models import (
     PreparedLintFiles,
     RuleFixResult,
 )
-from sqlbuild.lint.types import (
-    RelationKeyRow,
-)
-from sqlbuild.lint.types import RelationKeyRow, RelationKeys
+from sqlbuild.lint.types import RelationKeyRow
 from sqlbuild.microbatches.models import MicrobatchInterval
 from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.presentation.types import TransientLineOwner
