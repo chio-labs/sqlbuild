@@ -6,10 +6,10 @@ use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyListMethods, PyTuple};
 
 use crate::bindings::_helpers::compile_driver::assembly_analysis::AnalysisContext;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::project_assembly::models::{NativeModelFacts, NativeProjectFacts};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.analysis_session.models";
-const PROJECT_ASSEMBLY_MODELS_MODULE: &str = "sqlbuild.compiler.project_assembly.models";
 
 /// `NativeProjectFacts` of `inputs`: resources, syntax validity, deps and standalone pivot proofs.
 pub(crate) fn native_project_facts<'py>(
@@ -60,8 +60,6 @@ pub(crate) fn native_project_facts<'py>(
         context,
         session,
     )?;
-    let model_facts: Bound<'py, PyAny> =
-        imported(py, PROJECT_ASSEMBLY_MODELS_MODULE, "NativeModelFacts")?;
     let deps: Bound<'py, PyAny> = resources.getattr("model_deps")?;
     let syntax_valid: Bound<'py, PyAny> = resources.getattr("model_syntax_valid")?;
     let mut models: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -70,22 +68,26 @@ pub(crate) fn native_project_facts<'py>(
             Some(proof) => proof,
             None => py.None().into_bound(py),
         };
-        models.push(call_with(
-            &model_facts,
-            &[
-                ("deps", deps.get_item(index)?),
-                ("dynamic_contract", proof),
-                ("syntax_valid", syntax_valid.get_item(index)?),
-            ],
-        )?);
+        models.push(
+            Bound::new(
+                py,
+                NativeModelFacts {
+                    deps: deps.get_item(index)?.unbind(),
+                    dynamic_contract: proof.unbind(),
+                    syntax_valid: syntax_valid.get_item(index)?.unbind(),
+                },
+            )?
+            .into_any(),
+        );
     }
-    call_with(
-        &imported(py, PROJECT_ASSEMBLY_MODELS_MODULE, "NativeProjectFacts")?,
-        &[
-            ("models", PyTuple::new(py, models)?.into_any()),
-            ("resources", resources),
-        ],
-    )
+    Ok(Bound::new(
+        py,
+        NativeProjectFacts {
+            models: PyTuple::new(py, models)?.into_any().unbind(),
+            resources: resources.unbind(),
+        },
+    )?
+    .into_any())
 }
 
 /// Each standalone pivot model's dynamic contract proof, by model position.

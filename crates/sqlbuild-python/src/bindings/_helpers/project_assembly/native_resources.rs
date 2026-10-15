@@ -18,12 +18,14 @@ use sqlbuild_model_config::templates::models::Scalar;
 
 use crate::bindings::_helpers::authored_values::project_vars::project_var_text;
 use crate::bindings::_helpers::boundary::panics::{NativeCompilerError, compiler_error};
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
 use crate::bindings::_helpers::model_config::template_data::record_reads;
+use crate::bindings::_helpers::project_assembly::models::{
+    NativeProjectResources, NativeResourceFailure,
+};
 use crate::bindings::types::CompilerDetach;
 
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
-const ASSEMBLY_MODELS_MODULE: &str = "sqlbuild.compiler.project_assembly.models";
 const OS_MODULE: &str = "os";
 const PROJECT_ASSEMBLY_CONTEXT: &str = "native project assembly";
 const GENERIC_DIALECT: &str = "generic";
@@ -379,14 +381,15 @@ fn failure_object<'py>(
         ResourceSlot::Seed => SEED_SLOT,
         ResourceSlot::Audit => AUDIT_SLOT,
     };
-    call_with(
-        &imported(py, ASSEMBLY_MODELS_MODULE, "NativeResourceFailure")?,
-        &[
-            ("slot", PyString::new(py, slot).into_any()),
-            ("index", failure.index.into_pyobject(py)?.into_any()),
-            ("error", failure_error(py, failure.error, held)?),
-        ],
-    )
+    Ok(Bound::new(
+        py,
+        NativeResourceFailure {
+            slot: PyString::new(py, slot).into_any().unbind(),
+            index: failure.index.into_pyobject(py)?.into_any().unbind(),
+            error: failure_error(py, failure.error, held)?.unbind(),
+        },
+    )?
+    .into_any())
 }
 
 fn namespace_row(
@@ -426,36 +429,20 @@ fn resources_object<'py>(
         None => py.None().into_bound(py),
     };
     let seeds: Vec<_> = resources.seeds.into_iter().map(namespace_row).collect();
-    call_with(
-        &imported(py, ASSEMBLY_MODELS_MODULE, "NativeProjectResources")?,
-        &[
-            (
-                "model_deps",
-                tuple(resources.model_deps.into_pyobject(py)?.into_any())?,
-            ),
-            (
-                "model_syntax_valid",
-                tuple(resources.model_syntax_valid.into_pyobject(py)?.into_any())?,
-            ),
-            (
-                "source_namespaces",
-                tuple(resources.sources.into_pyobject(py)?.into_any())?,
-            ),
-            (
-                "seed_namespaces",
-                tuple(seeds.into_pyobject(py)?.into_any())?,
-            ),
-            (
-                "function_deps",
-                tuple(resources.function_deps.into_pyobject(py)?.into_any())?,
-            ),
-            (
-                "audit_scope_deps",
-                tuple(resources.audit_deps.into_pyobject(py)?.into_any())?,
-            ),
-            ("failure", failure),
-        ],
-    )
+    Ok(Bound::new(
+        py,
+        NativeProjectResources {
+            model_deps: tuple(resources.model_deps.into_pyobject(py)?.into_any())?.unbind(),
+            model_syntax_valid: tuple(resources.model_syntax_valid.into_pyobject(py)?.into_any())?
+                .unbind(),
+            source_namespaces: tuple(resources.sources.into_pyobject(py)?.into_any())?.unbind(),
+            seed_namespaces: tuple(seeds.into_pyobject(py)?.into_any())?.unbind(),
+            function_deps: tuple(resources.function_deps.into_pyobject(py)?.into_any())?.unbind(),
+            audit_scope_deps: tuple(resources.audit_deps.into_pyobject(py)?.into_any())?.unbind(),
+            failure: failure.unbind(),
+        },
+    )?
+    .into_any())
 }
 
 /// Return the resource facts and the resource Python's assembly raises at, if any.

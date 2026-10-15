@@ -303,7 +303,6 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
-from sqlbuild.compiler.project_assembly.models import NativeProjectResources
 from sqlbuild.compiler.python_nodes.models import (
     PythonNodeGraph,
     PythonSqlRunLifecyclePlan,
@@ -697,6 +696,58 @@ type NativePreparedSql = tuple[str, list[tuple[str, int, int, int, int, str]], l
 type ObjectKeyRow = tuple[str, str]
 
 type NamespaceRow = tuple[str | None, str | None, str | None, str | None]
+
+class NativeProjectResources:
+    @property
+    def model_deps(self) -> tuple[list[tuple[str, str]], ...]: ...
+    @property
+    def model_syntax_valid(self) -> tuple[bool, ...]: ...
+    @property
+    def source_namespaces(self) -> tuple[tuple[str | None, str | None] | None, ...]: ...
+    @property
+    def seed_namespaces(
+        self,
+    ) -> tuple[tuple[str | None, str | None, str | None, str | None], ...]: ...
+    @property
+    def function_deps(self) -> tuple[list[tuple[str, str]], ...]: ...
+    @property
+    def audit_scope_deps(self) -> tuple[list[tuple[str, str]], ...]: ...
+    @property
+    def failure(self) -> NativeResourceFailure | None: ...
+
+class NativeResourceFailure:
+    @property
+    def slot(self) -> str: ...
+    @property
+    def index(self) -> int: ...
+    @property
+    def error(self) -> Exception: ...
+
+class NativeModelFacts:
+    @property
+    def deps(self) -> list[tuple[str, str]]: ...
+    @property
+    def dynamic_contract(
+        self,
+    ) -> (
+        tuple[
+            bool,
+            list[tuple[str, str | None, str]],
+            list[tuple[str, str | None]],
+            list[str],
+            str | None,
+            bool,
+        ]
+        | None
+    ): ...
+    @property
+    def syntax_valid(self) -> bool: ...
+
+class NativeProjectFacts:
+    @property
+    def models(self) -> tuple[NativeModelFacts, ...]: ...
+    @property
+    def resources(self) -> NativeProjectResources: ...
 
 type _GraphKey = tuple[str, str]
 type _GraphEdges = list[tuple[_GraphKey, list[_GraphKey]]]
