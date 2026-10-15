@@ -238,14 +238,7 @@ pub(crate) fn python_node_graph<'py>(
         .zip(upstream_names(py, &nodes, &vocabulary.sql_ref)?)
         .map(|(node, upstream)| inventory_node(node, upstream))
         .collect::<PyResult<_>>()?;
-    let InventoryIndexes {
-        edges,
-        upstream,
-        downstream,
-        tags,
-        paths,
-    } = graph_indexes(&inventory);
-    graph_record(py, &nodes, (edges, upstream, downstream, tags, paths))
+    graph_record(py, &nodes, graph_indexes(&inventory))
 }
 
 type NameRows = Vec<(String, Vec<String>)>;
@@ -253,14 +246,15 @@ type NameRows = Vec<(String, Vec<String>)>;
 fn graph_record<'py>(
     py: Python<'py>,
     nodes: &[Bound<'py, PyAny>],
-    (edges, upstream, downstream, tags, paths): (
-        Vec<(String, String)>,
-        NameRows,
-        NameRows,
-        NameRows,
-        Vec<(String, String)>,
-    ),
+    indexes: InventoryIndexes,
 ) -> PyResult<Bound<'py, PyAny>> {
+    let InventoryIndexes {
+        edges,
+        upstream,
+        downstream,
+        tags,
+        paths,
+    } = indexes;
     let edge_class: Bound<'py, PyAny> =
         imported(py, NODE_MODELS_MODULE, "PythonNodeDependencyEdge")?;
     let dependency_edges: Vec<Bound<'py, PyAny>> = edges

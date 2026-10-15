@@ -58,11 +58,8 @@ pub(crate) fn pipeline_result<'py>(
             &native.getattr("build_project_graph_from_compiled_project")?,
             &[("project", project.clone())],
         )?;
-        run_selection = run_selection_from_inputs(
-            (select.extract()?, exclude.extract()?),
-            &graph,
-            &discovered,
-        )?;
+        run_selection =
+            run_selection_from_inputs((select.extract()?, exclude.extract()?), &graph, discovered)?;
         selected_sql_keys = run_selection.getattr("sql_keys")?;
         selected_python_node_names = run_selection.getattr("python_node_names")?;
         python_read_source_names = call_with(
