@@ -26,6 +26,7 @@ use sqlbuild_cli::compute_logs::main::read_capture_document::read_capture_docume
 use sqlbuild_cli::compute_logs::main::read_stream_chunk::read_stream_chunk;
 use sqlbuild_cli::compute_logs::main::stream_byte_counts::stream_byte_counts;
 use sqlbuild_cli::compute_logs::main::validate_capture_id::validate_capture_id;
+use sqlbuild_cli::compute_logs::models::CaptureDocument;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
@@ -55,9 +56,9 @@ pub(crate) struct LocalFilesystemComputeLogStorage {
 }
 
 /// The stdout, stderr and diagnostics byte counts of open streams, as `tell()` reports them.
-fn stream_positions(streams: &mut [File; 3]) -> PyResult<[i64; 3]> {
+fn stream_positions(streams: &[File; 3]) -> std::io::Result<[i64; 3]> {
     let mut counts: [i64; 3] = [0; 3];
-    for (count, stream) in counts.iter_mut().zip(streams.iter_mut()) {
+    for (count, mut stream) in counts.iter_mut().zip(streams.iter()) {
         *count = i64::try_from(stream.stream_position()?).unwrap_or(i64::MAX);
     }
     Ok(counts)
@@ -108,12 +109,35 @@ impl LocalFilesystemComputeLogStorage {
         stream: usize,
         data: &[u8],
     ) -> PyResult<()> {
-        let mut state = self.locked()?;
-        let Some(writers) = state.writers.get_mut(invocation_id) else {
-            return Err(not_active(py));
+        let written: Option<std::io::Result<()>> = {
+            let mut state = self.locked()?;
+            state
+                .writers
+                .get_mut(invocation_id)
+                .map(|writers| writers[stream].write_all(data))
         };
-        writers[stream].write_all(data)?;
-        Ok(())
+        match written {
+            Some(result) => Ok(result?),
+            None => Err(not_active(py)),
+        }
+    }
+
+    /// The capture directory once final metadata matches the open, synced streams.
+    fn checked_completion(
+        &self,
+        state: &StorageState,
+        document: &CaptureDocument,
+    ) -> Result<PathBuf, ComputeLogError> {
+        let streams = state.writers.get(&document.invocation_id);
+        let counts = match streams {
+            Some(streams) => Some(stream_positions(streams)?),
+            None => None,
+        };
+        let directory = check_completion(&self.root, document, counts)?;
+        for stream in streams.into_iter().flatten() {
+            stream.sync_all()?;
+        }
+        Ok(directory)
     }
 
     fn byte_counts(&self, py: Python<'_>, invocation_id: &Bound<'_, PyAny>) -> PyResult<[u64; 3]> {
@@ -153,10 +177,17 @@ impl LocalFilesystemComputeLogStorage {
     fn start_capture(&self, py: Python<'_>, metadata: &Bound<'_, PyAny>) -> PyResult<()> {
         self.ensure_open(py)?;
         let document = document(metadata)?;
-        let mut state = self.locked()?;
-        let writers = checked(py, publish_capture(&self.root, &document))?;
-        state.writers.insert(document.invocation_id, writers);
-        Ok(())
+        let published = {
+            let mut state = self.locked()?;
+            publish_capture(&self.root, &document).map(|writers| {
+                drop(
+                    state
+                        .writers
+                        .insert(document.invocation_id.clone(), writers),
+                )
+            })
+        };
+        checked(py, published)
     }
 
     /// Append exact raw bytes and make them visible to concurrent readers.
@@ -311,22 +342,20 @@ impl LocalFilesystemComputeLogStorage {
     fn mark_complete(&self, py: Python<'_>, metadata: &Bound<'_, PyAny>) -> PyResult<()> {
         self.ensure_open(py)?;
         let document = document(metadata)?;
-        let mut state = self.locked()?;
-        let counts = match state.writers.get_mut(&document.invocation_id) {
-            Some(streams) => Some(stream_positions(streams)?),
-            None => None,
+        let checked_streams = {
+            let mut state = self.locked()?;
+            self.checked_completion(&state, &document)
+                .and_then(
+                    |directory| match state.writers.remove(&document.invocation_id) {
+                        Some(streams) => Ok((directory, streams)),
+                        None => Err(ComputeLogError::rejected(
+                            ComputeLogErrorKind::State,
+                            "capture is not active in this storage instance",
+                        )),
+                    },
+                )
         };
-        let directory = checked(py, check_completion(&self.root, &document, counts))?;
-        let Some(streams) = state.writers.get(&document.invocation_id) else {
-            return Err(not_active(py));
-        };
-        for stream in streams {
-            stream.sync_all()?;
-        }
-        let Some(streams) = state.writers.remove(&document.invocation_id) else {
-            return Err(not_active(py));
-        };
-        drop(state);
+        let (directory, streams) = checked(py, checked_streams)?;
         checked(py, complete_capture(&directory, &document, streams))
     }
 
