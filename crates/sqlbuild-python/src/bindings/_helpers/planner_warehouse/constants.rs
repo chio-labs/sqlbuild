@@ -39,10 +39,7 @@ pub(crate) const CURSOR_POLICIES: (&str, &str) =
 pub(crate) const MAXIMUM_START: (&str, &str) = ("sqlbuild._native", "maximum_allowed_start");
 pub(crate) const RENDER_SOURCE_READ: (&str, &str) =
     ("sqlbuild._native", "render_source_read_relation");
-pub(crate) const YAML_ENTRY_LINE: (&str, &str) = (
-    "sqlbuild.compiler.discovery.main._yaml_entry_line",
-    "yaml_entry_line",
-);
+pub(crate) const YAML_ENTRY_LINE: (&str, &str) = ("sqlbuild._native", "yaml_entry_line");
 pub(crate) const RUN_SCOPE: (&str, &str) =
     ("sqlbuild.runtime.observability.main.run_scope", "run_scope");
 pub(crate) const SQL_HOOK_ENTRY: (&str, &str) =

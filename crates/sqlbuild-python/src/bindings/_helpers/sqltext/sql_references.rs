@@ -176,7 +176,10 @@ fn scan_sql_reference_calls<'py>(
 /// Logical SQL refs outside comments and quotes, reporting rejected calls as P012.
 #[pyfunction(name = "extract_sql_references")]
 #[pyo3(signature = (*, sql, syntax))]
-fn extract_references<'py>(sql: &str, syntax: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
+pub(crate) fn extract_references<'py>(
+    sql: &str,
+    syntax: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = syntax.py();
     let (references, invalid_calls) = scanned(py, sql, syntax)?;
     let report: Bound<'py, PyAny> = imported(py, COLLECTOR_MODULE, "report_compile_diagnostic")?;

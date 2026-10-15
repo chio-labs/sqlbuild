@@ -28,6 +28,7 @@ use crate::bindings::_helpers::compile_command::models::CompileReuseAttempt;
 use crate::bindings::_helpers::compile_driver::phases::{elapsed_ms, monotonic};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::compile_outputs::json_report::plain_json;
+use crate::bindings::_helpers::frontier::cache_directory::cache_directory;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
@@ -35,7 +36,6 @@ const REUSE_REQUEST: (&str, &str) = ("sqlbuild.cli.compile_reuse.models", "Compi
 const COMPILE_CONSTANTS: &str = "sqlbuild.compiler.compile.constants";
 const RUNTIME_IDENTITY_MODULE: &str = "sqlbuild.cli.compile_reuse._helpers.runtime_identity";
 const STARTUP_INPUTS_MODULE: &str = "sqlbuild.cli.compile_reuse._helpers.startup_inputs";
-const CACHE_DIRECTORY_MODULE: &str = "sqlbuild.compiler.frontier.main.compiler_cache_directory";
 const COMPUTE_LOG_TEE_MODULE: &str = "sqlbuild.runtime.compute_logs.classes.text_tee";
 const OUTPUT_CAPTURE_CONSTANTS: &str = "sqlbuild.runtime.output_capture.constants";
 const HIT: &str = "hit";
@@ -268,8 +268,7 @@ fn reuse_check<'py>(
     check.set_item("project_dir", project_dir)?;
     check.set_item(
         "store_directory",
-        imported(py, CACHE_DIRECTORY_MODULE, "compiler_cache_directory")?
-            .call1((imported(py, "pathlib", "Path")?.call1((project_dir,))?,))?
+        cache_directory(&imported(py, "pathlib", "Path")?.call1((project_dir,))?)?
             .call_method1("__truediv__", (NATIVE_REUSE_DIRECTORY_NAME,))?,
     )?;
     check.set_item("selected_target", request.getattr("selected_target")?)?;

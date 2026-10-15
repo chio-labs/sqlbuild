@@ -8,13 +8,13 @@ use crate::bindings::_helpers::compile_attachment::effective_config::project_var
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::frontier::cache_directory::cache_directory;
 use crate::bindings::_helpers::model_config::template_data::{early_model_templates, run_id};
 
 const TARGET_NAME_MODULE: &str = "sqlbuild._native";
 const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
 const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";
 const FRONTIER_CONSTANTS_MODULE: &str = "sqlbuild.compiler.frontier.constants";
-const CACHE_DIRECTORY_MODULE: &str = "sqlbuild.compiler.frontier.main.compiler_cache_directory";
 const DATABASE_KEY: &str = "database";
 const SCHEMA_KEY: &str = "schema";
 
@@ -92,8 +92,7 @@ fn compile_cache_root<'py>(
     {
         return Ok(py.None().into_bound(py));
     }
-    let root: Bound<'py, PyAny> =
-        imported(py, CACHE_DIRECTORY_MODULE, "compiler_cache_directory")?.call1((project_dir,))?;
+    let root: Bound<'py, PyAny> = cache_directory(&project_dir)?;
     remove_retired_caches(&root)?;
     Ok(root)
 }

@@ -27,14 +27,13 @@ use crate::bindings::_helpers::discovery::snapshot::{
     escaped, in_snapshot, project_root, project_tree,
 };
 use crate::bindings::_helpers::discovery::yaml_entries::{
-    YamlClasses, parse_schema_document, parse_sources_document,
+    parse_schema_document, parse_sources_document,
 };
 use crate::bindings::models::{NativeProjectTree, YamlDiscoveryRequest};
 
 const MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 /// The most YAML bytes one native load reads before its files are built and released.
 const YAML_BATCH_BYTES: u64 = 4 * 1024 * 1024;
-const YAML_CLASSES_MODULE: &str = "sqlbuild.compiler.discovery._helpers.yml.yaml_classes";
 const PATHLIB_MODULE: &str = "pathlib";
 const PROJECT_PATH_KIND: &str = "project_path";
 const SCHEMA_KIND: &str = "schema";
@@ -204,12 +203,6 @@ fn unnamed_error(project_dir: &Bound<'_, PyAny>, relative: &Bound<'_, PyAny>) ->
     ))
 }
 
-fn yaml_classes(py: Python<'_>) -> PyResult<YamlClasses<'_>> {
-    imported(py, YAML_CLASSES_MODULE, "yaml_entry_classes")?
-        .call0()?
-        .extract()
-}
-
 /// Discover source YAML files natively, reporting failing files to `on_fault`.
 #[pyfunction]
 #[pyo3(signature = (*, project_dir, on_fault=None))]
@@ -245,8 +238,7 @@ pub(crate) fn discover_source_files<'py>(
                             ("contents", contents.into_bound_py_any(py)?),
                             (
                                 "source_entries",
-                                parse_sources_document(py, loaded, &shown, yaml_classes(py)?)?
-                                    .into_any(),
+                                parse_sources_document(py, loaded, &shown)?.into_any(),
                             ),
                         ],
                     )
@@ -307,8 +299,7 @@ pub(crate) fn discover_schema_files<'py>(
                         ("model_entries", PyTuple::empty(py).into_any()),
                         (
                             "seed_entries",
-                            parse_schema_document(py, loaded, &shown, yaml_classes(py)?)?
-                                .into_any(),
+                            parse_schema_document(py, loaded, &shown)?.into_any(),
                         ),
                     ],
                 )?);

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.sql_analysis.main._normalize_analysis import normalize_analysis_sql
 from tests.unit.src.sqlbuild.compiler.sql_analysis.main._test_types import (
     PolyglotSqlNormalizationTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.sql_analysis.main.helpers import normalize_analysis_sql
 
 
 @pytest.mark.parametrize(

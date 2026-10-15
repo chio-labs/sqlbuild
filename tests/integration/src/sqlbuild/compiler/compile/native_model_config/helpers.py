@@ -15,7 +15,6 @@ from sqlbuild.compiler.compile.models import (
     NativeModelConfigSession,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
-from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import ProjectConfig
 
@@ -83,10 +82,7 @@ def validation_outcome(*, values: dict[str, object]) -> object:
     )
     return [
         _ACCEPTED,
-        *(
-            raised_error_shape(native_config_error(error=error, values=values))
-            for error in filter(None, (outcome,))
-        ),
+        *(raised_error_shape(error.exception(values=values)) for error in filter(None, (outcome,))),
     ][-1]
 
 

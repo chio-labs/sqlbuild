@@ -11,6 +11,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::compiled_project::loop_classes::model_loop_classes;
+use crate::bindings::_helpers::model_config::contract_classes::contract_classes;
 use crate::bindings::_helpers::render::declaration_values::constant_declaration_sql;
 use crate::bindings::_helpers::render::macro_expansion_result::macro_expansion_classes;
 
@@ -26,8 +27,6 @@ const COLLECTOR_MODULE: &str = "sqlbuild.compiler.compile._helpers.diagnostics.c
 const UNICODE_ENVIRONMENT_MODULE: &str = "sqlbuild.compiler.compile.classes.unicode_environment";
 const PROJECT_VARS_MODULE: &str = "sqlbuild._native";
 const MACRO_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.main.active_macro_bridge";
-const CONTRACT_CLASSES_MODULE: &str =
-    "sqlbuild.compiler.model_config.main._native_contract_classes";
 const SQL_ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.sql_analysis.models";
 const PYTHON_NODE_MODELS_MODULE: &str = "sqlbuild.python_nodes.models";
 
@@ -276,11 +275,7 @@ pub(crate) fn build_model_inputs<'py>(
     let syntax: Bound<'py, PyAny> = context.getattr("sql_lexical_syntax")?;
     let native_loop: Bound<'py, PyAny> =
         imported(py, NATIVE_MODULE, "NativeModelLoop")?.call1((
-            (
-                validator,
-                imported(py, CONTRACT_CLASSES_MODULE, "native_contract_classes")?.call0()?,
-                classes,
-            ),
+            (validator, contract_classes(py)?.into_any(), classes),
             syntax.getattr("native_mapping")?,
             reserved_cursor_markers(),
             (

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.discovery.main._yaml_entry_line import yaml_entry_line
+from sqlbuild._native import yaml_entry_line
 from tests.unit.src.sqlbuild.compiler.discovery.main._test_types import YamlEntryLineTestCase
 
 _SOURCES: str = (

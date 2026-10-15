@@ -14,11 +14,8 @@ from types import ModuleType
 from typing import TYPE_CHECKING, Any, get_type_hints
 
 import sqlbuild._native as _native
-from sqlbuild._native import validate_resource_identity
+from sqlbuild._native import project_relative_path, validate_resource_identity
 from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
-from sqlbuild.compiler.discovery._helpers.filesystem.scoped_paths import (
-    project_relative_path,
-)
 from sqlbuild.compiler.discovery.constants import (
     PYTHON_INIT_MODULE_STEM,
     PYTHON_NODE_ROOT,

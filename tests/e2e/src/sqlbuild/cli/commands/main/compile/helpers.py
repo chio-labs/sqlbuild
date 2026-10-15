@@ -41,6 +41,7 @@ from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
     semantic_compile_fingerprint,
 )
 from scripts.compiler_differential.constants import FAILURE_BASE_FILES
+from sqlbuild._native import compiler_cache_directory
 from sqlbuild._native import run_cli as main
 from sqlbuild.adapter.contract.classes.duckdb_backed_adapter import DuckDbBackedAdapter
 from sqlbuild.adapter.contract.types import TypeDialect
@@ -58,7 +59,6 @@ from sqlbuild.compiler.frontier.constants import (
     COMPILER_CACHE_DIRECTORY_NAME,
     RETIRED_CACHE_NAMESPACE_SUFFIXES,
 )
-from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from sqlbuild.compiler.macro_bridge.constants import MACRO_CALL_STORE_FILE_NAME
 from sqlbuild.observability import EventDispatcher, LifecycleEvent
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (

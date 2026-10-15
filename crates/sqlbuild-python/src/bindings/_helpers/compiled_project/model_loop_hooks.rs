@@ -152,7 +152,7 @@ pub(crate) fn expanded_hooks<'py>(
         .validator
         .bind(py)
         .call_method1(REFERENCES_METHOD, ((model.name, model.relative_path), rows))?;
-    validation_outcome(context, &outcome, external, &PyDict::new(py))?;
+    validation_outcome(&outcome, external, &PyDict::new(py))?;
     reject_hook_intrinsics(model_loop, context, model.name, &expanded)?;
     Ok(ExpandedHooks {
         values: expanded,

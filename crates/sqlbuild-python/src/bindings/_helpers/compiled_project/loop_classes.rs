@@ -12,7 +12,6 @@ const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const AUDITING_TYPES_MODULE: &str = "sqlbuild.compiler.auditing.types";
 const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
-const CONFIG_ERROR_MODULE: &str = "sqlbuild.compiler.model_config.main._native_config_error";
 const PLANNER_TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
 const REFERENCE_TYPES_MODULE: &str = "sqlbuild.compiler.references.types";
 const SCOPE_ERRORS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
@@ -442,10 +441,6 @@ pub(crate) fn model_loop_classes<'py>(
             (
                 "sql_hook_entry",
                 class(py, DISCOVERY_MODELS_MODULE, "SqlHookEntry")?,
-            ),
-            (
-                "config_error",
-                imported(py, CONFIG_ERROR_MODULE, "native_config_error")?,
             ),
             (
                 "audit_factories",

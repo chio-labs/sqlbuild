@@ -1,8 +1,39 @@
 //! Project native planning failures into existing located diagnostic exceptions.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::sql_test_glue::plan_values::string;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::types::{PyDict, PyDictMethods};
+use sqlbuild_analysis::sql_test_attachment::main::sql_test_cte_location::sql_test_cte_location;
+use sqlbuild_analysis::sql_test_attachment::models::CteLocation;
+
+const SOURCE_LOCATION_MODULE: &str = "sqlbuild.spec.contracts.models";
+
+/// The location of `call` inside one CTE of a SQL test block, else the CTE header, else the block.
+fn cte_call_location<'py>(
+    py: Python<'py>,
+    test: &Bound<'py, PyAny>,
+    (cte, call): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+) -> PyResult<Bound<'py, PyAny>> {
+    let test_file: Bound<'py, PyAny> = test.getattr("test_file")?;
+    let call: Option<String> = call.extract()?;
+    let located: CteLocation = sql_test_cte_location(
+        &test_file.getattr("contents")?.extract::<String>()?,
+        &test
+            .getattr("test_block")?
+            .getattr("sql_body")?
+            .extract::<String>()?,
+        &cte.extract::<String>()?,
+        call.as_deref(),
+    );
+    let arguments: Bound<'py, PyDict> = PyDict::new(py);
+    arguments.set_item("path", test_file.getattr("relative_path")?)?;
+    arguments.set_item("line", located.line)?;
+    arguments.set_item("column", located.column)?;
+    arguments.set_item("end_line", located.end_line)?;
+    arguments.set_item("end_column", located.end_column)?;
+    imported(py, SOURCE_LOCATION_MODULE, "SourceLocation")?.call((), Some(&arguments))
+}
 
 pub(super) fn planning_error(
     py: Python<'_>,
@@ -38,27 +69,10 @@ pub(super) fn planning_error(
             "Mock it in the test, for example {} AS (SELECT ...), or call __ref(\"<model>\") on a model the test runs.",
             payload.get_item("mockCte")?.extract::<String>()?
         );
-        let kwargs = pyo3::types::PyDict::new(py);
-        use pyo3::types::PyDictMethods;
+        let kwargs = PyDict::new(py);
         kwargs.set_item("help", help)?;
         let class = if let Some(test) = found {
-            kwargs.set_item(
-                "location",
-                call_with(
-                    &imported(
-                        py,
-                        "sqlbuild.compiler.compile.classes.sql_test_cte_locator",
-                        "SqlTestCteLocator",
-                    )?
-                    .getattr("locate")?,
-                    &[
-                        ("test_file", test.getattr("test_file")?),
-                        ("test_block", test.getattr("test_block")?),
-                        ("cte_name", cte),
-                        ("call", call),
-                    ],
-                )?,
-            )?;
+            kwargs.set_item("location", cte_call_location(py, &test, (&cte, &call))?)?;
             "SqlTestReferenceError"
         } else {
             kwargs.set_item(

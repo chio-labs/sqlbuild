@@ -75,3 +75,22 @@ def normalize_sql_for_polyglot(*, sql: str, dialect: str | None) -> str:
     return cast(NativePositionsModule, _native).normalize_dialect_sql(
         sql=sql, dialect=dialect or "generic"
     )
+
+
+def normalize_analysis_sql(
+    *,
+    sql: str,
+    dialect: str | None,
+    stubs: Mapping[str, str] | None = None,
+    placeholders: Mapping[str, str] | None = None,
+) -> str:
+    """Normalize one analysis SQL natively."""
+
+    return cast(NativePositionsModule, _native).normalize_analysis_sql(
+        {
+            "sql": sql,
+            "dialect": dialect or "generic",
+            "stubs": dict(stubs or {}),
+            "placeholders": dict(placeholders or {}),
+        }
+    )

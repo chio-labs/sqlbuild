@@ -11,6 +11,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::discovery::scope_snapshot::discover_scope_snapshot;
+use crate::bindings::_helpers::frontier::cache_directory::cache_directory;
 use crate::bindings::_helpers::scopes::scope_cache::{
     project_fingerprint, read_scope_index_cache, write_scope_index_cache,
 };
@@ -19,7 +20,6 @@ use crate::bindings::_helpers::scopes::scope_tolerant::scope_tolerant_index;
 use crate::bindings::_helpers::scopes::scope_validation::scope_index_with_compile_usages;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const CACHE_DIRECTORY_MODULE: &str = "sqlbuild.compiler.frontier.main.compiler_cache_directory";
 const SCOPE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.scopes.constants";
 const SQL_ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.sql_analysis.models";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
@@ -33,14 +33,11 @@ const MACRO_INVENTORY_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.
 /// Where the scope index cache file of a project lives: `(directory, file name)`.
 fn cache_location(project_dir: &Bound<'_, PyAny>) -> PyResult<(PathBuf, String)> {
     let py: Python<'_> = project_dir.py();
-    let directory: Bound<'_, PyAny> =
-        imported(py, CACHE_DIRECTORY_MODULE, "compiler_cache_directory")?
-            .call1((project_dir,))?
-            .div(imported(
-                py,
-                SCOPE_CONSTANTS_MODULE,
-                "SCOPE_CACHE_DIRECTORY_NAME",
-            )?)?;
+    let directory: Bound<'_, PyAny> = cache_directory(project_dir)?.div(imported(
+        py,
+        SCOPE_CONSTANTS_MODULE,
+        "SCOPE_CACHE_DIRECTORY_NAME",
+    )?)?;
     Ok((
         directory.extract()?,
         imported(py, SCOPE_CONSTANTS_MODULE, "SCOPE_CACHE_FILENAME")?.extract()?,

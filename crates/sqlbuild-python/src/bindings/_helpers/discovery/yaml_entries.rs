@@ -14,6 +14,7 @@ use sqlbuild_discovery::yaml_entries::models::{
 use sqlbuild_model_config::errors::{ConfigError, ErrorClass};
 
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
+use crate::bindings::_helpers::model_config::contract_classes::yaml_entry_classes;
 use crate::bindings::_helpers::model_config::header_metadata::{ContractClasses, audit_tuple};
 
 const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild.compiler.discovery.exceptions";
@@ -161,8 +162,8 @@ pub(crate) fn parse_schema_document<'py>(
     py: Python<'py>,
     loaded: Bound<'py, PyAny>,
     path: &str,
-    classes: YamlClasses<'py>,
 ) -> PyResult<Bound<'py, PyTuple>> {
+    let classes: YamlClasses<'py> = yaml_entry_classes(py)?.extract()?;
     let in_seeds_directory: bool = std::path::Path::new(path)
         .components()
         .any(|component| component.as_os_str() == SEEDS_DIRECTORY);
@@ -343,8 +344,8 @@ pub(crate) fn parse_sources_document<'py>(
     py: Python<'py>,
     loaded: Bound<'py, PyAny>,
     path: &str,
-    classes: YamlClasses<'py>,
 ) -> PyResult<Bound<'py, PyTuple>> {
+    let classes: YamlClasses<'py> = yaml_entry_classes(py)?.extract()?;
     let sources: Vec<ParsedSourceEntry<PyNode<'py>>> = parse_sources(&PyNode(loaded), path)
         .map_err(|error| {
             parse_error(py, error, SOURCE_PARSE_ERROR).unwrap_or_else(|error| error)

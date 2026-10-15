@@ -1,10 +1,18 @@
 //! Native config errors handed to Python, which raises them as the Python stages would.
 
-use pyo3::Py;
-use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::{PyDict, PyDictMethods};
+use pyo3::{Py, PyErr, pymethods};
 use sqlbuild_model_config::errors::{ConfigError, ErrorClass};
 
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::model_config::errors::NativeConfigError;
+
+const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
+const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild.compiler.discovery.exceptions";
+const IDENTITY_ERRORS_MODULE: &str = "sqlbuild.compiler.resource_names.exceptions";
+const CONTRACT_ERRORS_MODULE: &str = "sqlbuild.spec.contracts.exceptions";
+const EXPECTED_STRING: &str = "a string";
 
 const COMPILE_INPUT_CLASS: &str = "compile_input";
 const CONFIG_VALUE_TYPE_CLASS: &str = "config_value_type";
@@ -32,6 +40,59 @@ pub(crate) fn native_config_error(
             key: error.key,
         },
     )
+}
+
+/// The Python exception a native config error raises as, given the values it names.
+pub(crate) fn config_exception<'py>(
+    error: &Bound<'py, PyAny>,
+    values: Option<&Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let error: Bound<'py, NativeConfigError> = error.cast::<NativeConfigError>()?.clone();
+    error.get().exception(error.py(), values)
+}
+
+/// `config_exception` as the raised error, or the failure building it.
+pub(crate) fn raised_config_exception(
+    error: &Bound<'_, PyAny>,
+    values: Option<&Bound<'_, PyAny>>,
+) -> PyErr {
+    match config_exception(error, values) {
+        Ok(instance) => PyErr::from_value(instance),
+        Err(failure) => failure,
+    }
+}
+
+#[pymethods]
+impl NativeConfigError {
+    /// The exception this error raises as: its class, message, code and help.
+    #[pyo3(signature = (values = None))]
+    fn exception<'py>(
+        &self,
+        py: Python<'py>,
+        values: Option<&Bound<'py, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        if self.class_name == CONFIG_VALUE_TYPE_CLASS
+            && let (Some(key), Some(values)) = (&self.key, values)
+        {
+            let keywords: Bound<'py, PyDict> = PyDict::new(py);
+            keywords.set_item("key", key)?;
+            keywords.set_item("expected", EXPECTED_STRING)?;
+            keywords.set_item("actual_type", values.get_item(key)?.get_type())?;
+            return imported(py, CONTRACT_ERRORS_MODULE, "ConfigValueTypeError")?
+                .call((), Some(&keywords));
+        }
+        let keywords: Bound<'py, PyDict> = PyDict::new(py);
+        keywords.set_item("help", &self.help)?;
+        let (module, class) = match self.class_name {
+            RESOURCE_IDENTITY_CLASS => (IDENTITY_ERRORS_MODULE, "ResourceIdentityError"),
+            DISCOVERY_CONFLICT_CLASS => (DISCOVERY_ERRORS_MODULE, "DiscoveryConflictError"),
+            _ => {
+                keywords.set_item("code", self.code)?;
+                (COMPILE_ERRORS_MODULE, "CompileInputError")
+            }
+        };
+        imported(py, module, class)?.call((&self.message,), Some(&keywords))
+    }
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

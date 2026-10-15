@@ -11,7 +11,8 @@ use sqlbuild_core::scenario_command::main::format_captured_at::format_captured_a
 use sqlbuild_model_config::templates::models::TemplateOptions;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
+use crate::bindings::_helpers::model_config::config_errors::config_exception;
 use crate::bindings::_helpers::model_config::config_templates::{
     TemplateOutcome, TemplateSources, expand_config_templates, lone_surrogate_site,
     resolve_effective_vars,
@@ -20,7 +21,6 @@ use crate::bindings::_helpers::model_config::config_templates::{
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";
 const UNICODE_ENVIRONMENT_MODULE: &str = "sqlbuild.compiler.compile.classes.unicode_environment";
-const CONFIG_ERROR_MODULE: &str = "sqlbuild.compiler.model_config.main._native_config_error";
 const UUID_MODULE: &str = "uuid";
 const ENVIRONMENT_READ: &str = "env";
 const RUN_ID_KEY: &str = "run.id";
@@ -52,9 +52,9 @@ fn applied<'py>(py: Python<'py>, outcome: TemplateOutcome<'py>) -> PyResult<Boun
     record_reads(py, reads.iter().map(|(kind, name)| (*kind, name.as_str())))?;
     match value {
         Ok(value) => Ok(value),
-        Err(error) => Err(PyErr::from_value(call_with(
-            &imported(py, CONFIG_ERROR_MODULE, "native_config_error")?,
-            &[("error", error.into_bound(py).into_any())],
+        Err(error) => Err(PyErr::from_value(config_exception(
+            error.bind(py).as_any(),
+            None,
         )?)),
     }
 }
