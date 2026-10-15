@@ -92,6 +92,14 @@ impl DbtCompileReferenceResolver {
         Self::new(dbt_manifest)
     }
 
+    #[getter(_dbt_manifest)]
+    fn dbt_manifest<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
+        self.dbt_manifest.as_ref().map_or_else(
+            || py.None().into_bound(py),
+            |manifest| manifest.bind(py).clone(),
+        )
+    }
+
     #[pyo3(signature = (*, known_model_names))]
     fn validate_model_names(
         &self,
