@@ -161,6 +161,14 @@ class SemanticCompileBenchmarkResult(NamedTuple):
     warm: CompileBenchmarkMeasurement
 
 
+_RETAINED_BENCHMARK_PAYLOAD_KEYS: tuple[str, ...] = (
+    "compile_timings",
+    "has_errors",
+    "diagnostics",
+    "summary",
+)
+
+
 class FreshProcessCompileBenchmarkResult(NamedTuple):
     elapsed_seconds: float
     peak_rss_bytes: int
@@ -660,6 +668,7 @@ def _run_fresh_process_compile_benchmark(
     label: str,
     expected_max_wall_seconds: float,
     compile_args: tuple[str, ...],
+    retained_payload_keys: tuple[str, ...] = _RETAINED_BENCHMARK_PAYLOAD_KEYS,
 ) -> FreshProcessCompileBenchmarkResult:
     run: _TimedSqbRun = _run_timed_sqb(
         project_dir=project_dir,
@@ -677,7 +686,7 @@ def _run_fresh_process_compile_benchmark(
         elapsed_seconds=run.elapsed_seconds,
         peak_rss_bytes=run.peak_rss_bytes,
         semantic_fingerprint=semantic_fingerprint,
-        payload=payload,
+        payload={key: payload.get(key) for key in retained_payload_keys},
         cpu_seconds=run.cpu_seconds,
         major_page_faults=run.major_page_faults,
         minor_page_faults=run.minor_page_faults,
