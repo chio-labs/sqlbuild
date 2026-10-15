@@ -5,10 +5,12 @@ from __future__ import annotations
 import duckdb
 import pytest
 
-from sqlbuild._native import newest_column_migration_event_mentioning
+from sqlbuild._native import (
+    newest_column_migration_event_mentioning,
+    read_migration_state_events,
+    write_migration_state_event,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.migrations.main._read_column_events import read_column_migration_events
-from sqlbuild.compiler.migrations.main.write_column_event import write_column_migration_event
 from sqlbuild.compiler.migrations.models import ColumnMigrationEvent
 from tests.unit.src.sqlbuild.compiler.migrations.main._test_types import (
     ColumnEventStorageTestCase,
@@ -48,7 +50,8 @@ def test_given_column_events_when_writing_and_reading_then_rows_are_idempotent(
     )
 
     for _ in range(test_case.write_count):
-        write_column_migration_event(
+        write_migration_state_event(
+            kind="column",
             connection=connection,
             execute=adapter.execute,
             event=event,
@@ -64,7 +67,8 @@ def test_given_column_events_when_writing_and_reading_then_rows_are_idempotent(
             f"('future', 'fct_orders', 'fct_orders', 'tax', 'levy', 'manual', "
             f"'{foreign_decision}', 'run-9', TIMESTAMP '2026-01-09')"
         )
-    stored: tuple[ColumnMigrationEvent, ...] = read_column_migration_events(
+    stored: tuple[ColumnMigrationEvent, ...] = read_migration_state_events(
+        kind="column",
         connection=connection,
         execute=adapter.execute,
         database=None,

@@ -7,14 +7,8 @@ from datetime import UTC, datetime
 import duckdb
 import pytest
 
+from sqlbuild._native import read_migration_state_events, stored_old_name_view_columns
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.migrations.main._read_column_events import read_column_migration_events
-from sqlbuild.compiler.migrations.main.read_old_name_view_events import (
-    read_old_name_view_events,
-)
-from sqlbuild.compiler.migrations.main.stored_old_name_view_columns import (
-    stored_old_name_view_columns,
-)
 from sqlbuild.compiler.migrations.models import ColumnMigrationEvent, OldNameViewEvent
 from sqlbuild.compiler.migrations.types import OldNameViewDropReason
 from tests.unit.src.sqlbuild.compiler.migrations.main._test_types import (
@@ -73,7 +67,8 @@ def test_given_persisted_old_name_row_when_reading_then_codecs_decode_stored_tex
         f"{test_case.drop_reason_sql}, 'run-1', '2026-01-02T03:04:05+00:00')"
     )
 
-    stored: tuple[OldNameViewEvent, ...] = read_old_name_view_events(
+    stored: tuple[OldNameViewEvent, ...] = read_migration_state_events(
+        kind="old_name",
         connection=connection,
         execute=adapter.execute,
         database=None,
@@ -120,7 +115,8 @@ def test_given_persisted_column_rows_when_reading_then_unknown_rows_are_skipped_
             f"'total', 'manual', '{decision}', 'run-{index}', '2026-01-0{index + 1}')"
         )
 
-    stored: tuple[ColumnMigrationEvent, ...] = read_column_migration_events(
+    stored: tuple[ColumnMigrationEvent, ...] = read_migration_state_events(
+        kind="column",
         connection=connection,
         execute=adapter.execute,
         database=None,

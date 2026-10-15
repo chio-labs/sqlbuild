@@ -26,6 +26,7 @@ pub(crate) fn layout(kind: &str) -> PyResult<EventTableLayout> {
             relation_attribute: "destination",
             state_message: "model migration state requires a target schema",
             event_message: "model migration events require a destination schema",
+            read_subject: "model migration events",
         }),
         COLUMN_KIND => Ok(EventTableLayout {
             table: EventTable::Column,
@@ -34,6 +35,7 @@ pub(crate) fn layout(kind: &str) -> PyResult<EventTableLayout> {
             relation_attribute: "relation",
             state_message: "column migration state requires a target schema",
             event_message: "column migration events require a relation schema",
+            read_subject: "column migration events",
         }),
         OLD_NAME_KIND => Ok(EventTableLayout {
             table: EventTable::OldName,
@@ -42,6 +44,7 @@ pub(crate) fn layout(kind: &str) -> PyResult<EventTableLayout> {
             relation_attribute: "new",
             state_message: "old-name view state requires a target schema",
             event_message: "old-name view facts require a destination schema",
+            read_subject: "old-name view facts",
         }),
         _ => Err(PyValueError::new_err(format!(
             "unknown migration state table kind: {kind}"

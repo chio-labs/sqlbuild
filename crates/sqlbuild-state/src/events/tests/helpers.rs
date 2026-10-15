@@ -1,8 +1,8 @@
 use sqlbuild_cursor::algebra::models::{CivilDate, LocalDateTime};
 
 use crate::events::models::{
-    ColumnEventKey, EventOrder, EventRelation, MoveEventKey, OldNameFactKey, OldNameStep,
-    StateCell, StateColumnType, StateValue,
+    ColumnEventKey, EventOrder, EventRelation, FingerprintKey, FingerprintOrder, MoveEventKey,
+    OldNameFactKey, OldNameStep, RecordedRenameKey, StateCell, StateColumnType, StateValue,
 };
 
 pub(crate) fn cell(column: &str, column_type: StateColumnType, value: StateValue) -> StateCell {
@@ -72,4 +72,31 @@ pub(crate) fn pairs(items: &[(&str, &str)]) -> Vec<(String, String)> {
         .iter()
         .map(|(old, new)| ((*old).to_owned(), (*new).to_owned()))
         .collect()
+}
+
+pub(crate) fn recorded(
+    order: EventOrder,
+    relation: EventRelation,
+    records_event: bool,
+) -> RecordedRenameKey {
+    RecordedRenameKey {
+        order,
+        relation,
+        records_event,
+    }
+}
+
+pub(crate) fn fingerprint(
+    (timestamp, run_id): (&str, &str),
+    node_name: &str,
+    target: Option<EventRelation>,
+) -> FingerprintKey {
+    FingerprintKey {
+        order: FingerprintOrder {
+            timestamp: timestamp.to_owned(),
+            run_id: run_id.to_owned(),
+        },
+        node_name: node_name.to_owned(),
+        target,
+    }
 }

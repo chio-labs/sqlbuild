@@ -5,7 +5,7 @@ from contextlib import AbstractContextManager
 from contextvars import Token
 from datetime import date, datetime
 from pathlib import Path, PurePath
-from typing import Any, Literal, TextIO, TypedDict, overload
+from typing import Any, Literal, TextIO, TypedDict
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
@@ -207,9 +207,6 @@ from sqlbuild.compiler.pipeline.models import (
     StaticCommandContext,
 )
 from sqlbuild.compiler.planner.classes.migration_fingerprint_cache import MigrationFingerprintCache
-from sqlbuild.compiler.planner.classes.migration_state_inspection import (
-    MigrationStateInspection,
-)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
@@ -277,6 +274,7 @@ from sqlbuild.compiler.planner.models import (
     SqlTestPlanResult,
     SqlTestSelection,
     UnitTestSelectorSplit,
+    WarehouseFingerprints,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import (
@@ -4443,32 +4441,81 @@ def render_migration_state_create_sql(
     render_qualified_name: Callable[..., str | None],
     render_framework_type: Callable[[FrameworkType], str],
 ) -> str: ...
-def render_migration_event_read_sql(
+def read_migration_state_events(
     *,
     kind: Literal["model", "column", "old_name"],
+    connection: Any,
+    execute: AdapterExecute[Any, Any],
     database: str | None,
     schema: str,
     render_qualified_name: Callable[..., str | None],
-    stored_columns: tuple[str, ...] | None = None,
-) -> tuple[str, tuple[str, ...]]: ...
-def render_migration_event_write_sql(
+    stored_columns: Iterable[str] | None = None,
+) -> tuple[Any, ...]: ...
+def read_old_name_view_histories(
+    *,
+    connection: Any,
+    execute: AdapterExecute[Any, Any],
+    database: str | None,
+    schema: str,
+    stored_columns: Iterable[str],
+    render_qualified_name: Callable[..., str | None],
+) -> tuple[OldNameViewHistory, ...]: ...
+def read_recorded_column_renames(
+    *,
+    connection: Any,
+    execute: AdapterExecute[Any, Any],
+    relation: MigrationRelation,
+    since: datetime,
+    render_qualified_name: Callable[..., str | None],
+) -> tuple[ColumnMigrationEvent, ...]: ...
+def stored_old_name_view_columns(
+    *, adapter: BaseAdapter, connection: Any, database: str | None, schema: str
+) -> tuple[str, ...]: ...
+def write_migration_state_event(
     *,
     kind: Literal["model", "column", "old_name"],
+    connection: Any,
+    execute: AdapterExecute[Any, Any],
     event: MigrationEvent | ColumnMigrationEvent | OldNameViewEvent,
     render_qualified_name: Callable[..., str | None],
-) -> tuple[str, str]: ...
-@overload
-def decode_migration_event_rows(
-    *, kind: Literal["model"], rows: Iterable[Sequence[object]], columns: tuple[str, ...]
-) -> tuple[MigrationEvent, ...]: ...
-@overload
-def decode_migration_event_rows(
-    *, kind: Literal["column"], rows: Iterable[Sequence[object]], columns: tuple[str, ...]
-) -> tuple[ColumnMigrationEvent, ...]: ...
-@overload
-def decode_migration_event_rows(
-    *, kind: Literal["old_name"], rows: Iterable[Sequence[object]], columns: tuple[str, ...]
-) -> tuple[OldNameViewEvent, ...]: ...
+    create_table_sql: str | None,
+    attempts: int = 3,
+) -> None: ...
+
+class MigrationStateInspection:
+    """Relations, fingerprints, and migration events for one planning database."""
+
+    def __init__(
+        self,
+        *,
+        adapter: BaseAdapter,
+        connection: Any,
+        database: str | None,
+        known_fingerprints: WarehouseFingerprints | None = None,
+    ) -> None: ...
+    @property
+    def database(self) -> str | None: ...
+    @property
+    def events(self) -> tuple[MigrationEvent, ...]: ...
+    @property
+    def column_events(self) -> tuple[ColumnMigrationEvent, ...]: ...
+    @property
+    def old_name_histories(self) -> tuple[OldNameViewHistory, ...]: ...
+    def inspect_column_events(self, *, schemas: set[str]) -> None: ...
+    def inspect_old_name_views(self, *, schemas: set[str]) -> None: ...
+    def inspect_migration_events(self, *, schemas: set[str]) -> None: ...
+    def inspect_schemas(self, *, schemas: set[str]) -> None: ...
+    def inspect_relations(self, *, locations: tuple[CompiledRelationLocation, ...]) -> None: ...
+    def relation(self, location: CompiledRelationLocation) -> RelationInfo | None: ...
+    def relation_columns(self, location: CompiledRelationLocation) -> tuple[ColumnInfo, ...]: ...
+    def model_fingerprint(
+        self, *, location: CompiledRelationLocation, model_name: str | None
+    ) -> Fingerprint | None: ...
+    def named_fingerprint(self, *, model_name: str) -> Fingerprint | None: ...
+    def orphan_fingerprints(
+        self, *, project_model_names: frozenset[str]
+    ) -> tuple[Fingerprint, ...]: ...
+
 def newest_migration_event_mentioning(
     *, events: Iterable[MigrationEvent], relation: MigrationRelation
 ) -> MigrationEvent | None: ...

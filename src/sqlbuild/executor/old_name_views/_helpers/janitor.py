@@ -6,7 +6,12 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlbuild._native import deterministic_old_name_view_event_id
+from sqlbuild._native import (
+    deterministic_old_name_view_event_id,
+    read_old_name_view_histories,
+    stored_old_name_view_columns,
+    write_migration_state_event,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import RelationInfo
@@ -20,13 +25,6 @@ from sqlbuild.compiler.migrations.constants import (
     MIGRATION_TABLE_NAME,
     OLD_NAME_VIEW_TABLE_NAME,
 )
-from sqlbuild.compiler.migrations.main.read_old_name_view_histories import (
-    read_old_name_view_histories,
-)
-from sqlbuild.compiler.migrations.main.stored_old_name_view_columns import (
-    stored_old_name_view_columns,
-)
-from sqlbuild.compiler.migrations.main.write_old_name_view_event import write_old_name_view_event
 from sqlbuild.compiler.migrations.models import OldNameViewEvent, OldNameViewHistory
 from sqlbuild.compiler.migrations.types import (
     OldNameViewDropReason,
@@ -165,7 +163,8 @@ def _record_drop(
     *, adapter: BaseAdapter, connection: Any, view: JanitorOldNameView, run_id: str
 ) -> None:
     required: OldNameViewEvent = view.history.required
-    write_old_name_view_event(
+    write_migration_state_event(
+        kind="old_name",
         connection=connection,
         execute=adapter.execute,
         event=OldNameViewEvent(

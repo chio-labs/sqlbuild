@@ -86,3 +86,26 @@ pub struct OldNameHistoryIndexes {
     pub created: Option<usize>,
     pub dropped: Option<usize>,
 }
+
+/// The fields of a recorded column rename that the since-filter reads.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecordedRenameKey {
+    pub order: EventOrder,
+    pub relation: EventRelation,
+    pub records_event: bool,
+}
+
+/// The order of a stored fingerprint: its ISO timestamp text, then its run ID.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct FingerprintOrder {
+    pub timestamp: String,
+    pub run_id: String,
+}
+
+/// The fields of a stored model fingerprint that the newest-fingerprint lookup reads.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FingerprintKey {
+    pub order: FingerprintOrder,
+    pub node_name: String,
+    pub target: Option<EventRelation>,
+}

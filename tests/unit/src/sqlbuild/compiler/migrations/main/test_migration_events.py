@@ -5,10 +5,12 @@ from __future__ import annotations
 import duckdb
 import pytest
 
-from sqlbuild._native import newest_migration_event_mentioning
+from sqlbuild._native import (
+    newest_migration_event_mentioning,
+    read_migration_state_events,
+    write_migration_state_event,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.migrations.main._read_events import read_migration_events
-from sqlbuild.compiler.migrations.main.write_event import write_migration_event
 from sqlbuild.compiler.migrations.models import MigrationEvent
 from tests.unit.src.sqlbuild.compiler.migrations.main._test_types import (
     NewestEventTestCase,
@@ -87,7 +89,8 @@ def test_given_repeated_event_write_when_reading_then_event_is_stored_once(
     )
 
     for _ in range(test_case.write_count):
-        write_migration_event(
+        write_migration_state_event(
+            kind="model",
             connection=connection,
             execute=adapter.execute,
             event=event,
@@ -96,7 +99,8 @@ def test_given_repeated_event_write_when_reading_then_event_is_stored_once(
                 database=None, schema="main"
             ),
         )
-    stored: tuple[MigrationEvent, ...] = read_migration_events(
+    stored: tuple[MigrationEvent, ...] = read_migration_state_events(
+        kind="model",
         connection=connection,
         execute=adapter.execute,
         database=None,

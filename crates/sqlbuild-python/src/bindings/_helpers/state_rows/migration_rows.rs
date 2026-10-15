@@ -66,27 +66,20 @@ fn create_sql<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py, 
 }
 
 /// The SQL reading every stored event of one schema, and the columns it selects.
-#[pyfunction(name = "render_migration_event_read_sql")]
-#[pyo3(signature = (**request))]
-fn read_sql<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<(String, Bound<'py, PyTuple>)> {
-    let request = Request::new("render_migration_event_read_sql", request)?;
-    let layout: EventTableLayout = layout(&request.get("kind")?.extract::<String>()?)?;
-    let stored: Option<Vec<String>> = match request.optional("stored_columns")? {
-        Some(stored) if !stored.is_none() => Some(stored.extract()?),
-        _ => None,
-    };
-    let columns: Vec<&str> = match &stored {
+pub(crate) fn read_statement<'py>(
+    layout: &EventTableLayout,
+    render_qualified_name: &Bound<'py, PyAny>,
+    location: (Bound<'py, PyAny>, Bound<'py, PyAny>),
+    stored: Option<&[String]>,
+) -> PyResult<(String, Vec<String>)> {
+    let columns: Vec<&str> = match stored {
         Some(stored) => readable_columns(layout.columns, stored),
         None => layout.columns.to_vec(),
     };
-    let table: String = qualified_table(
-        &layout,
-        &request.get("render_qualified_name")?,
-        (request.get("database")?, request.get("schema")?),
-    )?;
+    let table: String = qualified_table(layout, render_qualified_name, location)?;
     Ok((
         event_read_sql(&table, &columns),
-        PyTuple::new(request.py(), columns)?,
+        columns.into_iter().map(str::to_owned).collect(),
     ))
 }
 
@@ -170,22 +163,19 @@ fn json_error(error: sqlbuild_core::json::errors::JsonEmitError) -> PyErr {
 }
 
 /// The idempotency lookup and the insert that append one event to its schema's state table.
-#[pyfunction(name = "render_migration_event_write_sql")]
-#[pyo3(signature = (*, kind, event, render_qualified_name))]
-fn write_sql<'py>(
-    kind: &str,
+pub(crate) fn write_statements<'py>(
+    layout: &EventTableLayout,
     event: &Bound<'py, PyAny>,
     render_qualified_name: &Bound<'py, PyAny>,
 ) -> PyResult<(String, String)> {
     let py: Python<'py> = event.py();
-    let layout: EventTableLayout = layout(kind)?;
     let relation: Bound<'py, PyAny> = event.getattr(layout.relation_attribute)?;
     let schema: Bound<'py, PyAny> = relation.getattr("schema")?;
     if schema.is_none() {
         return Err(state_error(py, layout.event_message));
     }
     let table: String = qualified_table(
-        &layout,
+        layout,
         render_qualified_name,
         (relation.getattr("database")?, schema),
     )?;
@@ -398,22 +388,16 @@ fn old_name_event<'py>(
 }
 
 /// Stored rows of the selected `columns` as events; rows this version cannot read are skipped.
-#[pyfunction(name = "decode_migration_event_rows")]
-#[pyo3(signature = (*, kind, rows, columns))]
-fn decode_rows<'py>(
-    kind: &str,
+pub(crate) fn decoded_events<'py>(
+    table: EventTable,
     rows: &Bound<'py, PyAny>,
-    columns: Vec<String>,
+    columns: &[String],
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = rows.py();
-    let table: EventTable = layout(kind)?.table;
     let mut events: Vec<Bound<'py, PyAny>> = Vec::new();
     for row in rows.try_iter()? {
         let values: Vec<Bound<'py, PyAny>> = row?.try_iter()?.collect::<PyResult<_>>()?;
-        let stored = StoredRow {
-            columns: &columns,
-            values,
-        };
+        let stored = StoredRow { columns, values };
         let decoded: Option<Bound<'py, PyAny>> = match table {
             EventTable::Model => Some(model_event(py, &stored)?),
             EventTable::Column => match column_event(py, &stored) {
@@ -430,8 +414,5 @@ fn decode_rows<'py>(
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(create_sql, module)?)?;
-    module.add_function(wrap_pyfunction!(read_sql, module)?)?;
-    module.add_function(wrap_pyfunction!(write_sql, module)?)?;
-    module.add_function(wrap_pyfunction!(decode_rows, module)?)?;
     Ok(())
 }

@@ -21,10 +21,10 @@ pub(crate) fn relations_match(left: &EventRelation, right: &EventRelation) -> bo
 }
 
 /// The index of the greatest order among the selected items, keeping the first of equal ones.
-pub(crate) fn newest_index<'a>(
-    orders: impl Iterator<Item = (usize, &'a crate::events::models::EventOrder)>,
+pub(crate) fn newest_index<'a, T: Ord + 'a>(
+    orders: impl Iterator<Item = (usize, &'a T)>,
 ) -> Option<usize> {
-    let mut newest: Option<(usize, &crate::events::models::EventOrder)> = None;
+    let mut newest: Option<(usize, &T)> = None;
     for (index, order) in orders {
         if newest.is_none_or(|(_, current)| order > current) {
             newest = Some((index, order));

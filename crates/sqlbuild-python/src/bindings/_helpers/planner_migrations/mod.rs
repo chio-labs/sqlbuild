@@ -30,3 +30,4 @@ mod planning_execution;
 mod planning_origin;
 mod projections;
 pub(crate) mod registration;
+mod state_inspection;

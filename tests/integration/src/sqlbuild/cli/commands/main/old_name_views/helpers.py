@@ -197,7 +197,7 @@ def fail_janitor_drop_fact(monkeypatch: pytest.MonkeyPatch) -> None:
     """Crash after the janitor drops a view but before the drop is recorded."""
 
     monkeypatch.setattr(
-        "sqlbuild.executor.old_name_views._helpers.janitor.write_old_name_view_event",
+        "sqlbuild.executor.old_name_views._helpers.janitor.write_migration_state_event",
         _raise_interruption,
     )
 

@@ -513,7 +513,7 @@ def fail_record(monkeypatch: pytest.MonkeyPatch) -> None:
     """Crash after the clone but before the migration event is recorded."""
 
     monkeypatch.setattr(
-        "sqlbuild.executor.migrations._helpers.promotion.write_migration_event",
+        "sqlbuild.executor.migrations._helpers.promotion.write_migration_state_event",
         _raise_interruption,
     )
 

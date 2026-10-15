@@ -4,6 +4,8 @@ mod codecs;
 mod helpers;
 #[path = "tests/test_insert_sql.rs"]
 mod insert_sql;
+#[path = "tests/test_lookups.rs"]
+mod lookups;
 #[path = "tests/test_projections.rs"]
 mod projections;
 #[path = "tests/test_types.rs"]

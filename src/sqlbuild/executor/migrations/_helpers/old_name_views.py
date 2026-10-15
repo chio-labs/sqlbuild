@@ -8,7 +8,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlbuild._native import deterministic_migration_event_id
+from sqlbuild._native import deterministic_migration_event_id, read_recorded_column_renames
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.main.grants_for_columns import grants_for_columns
@@ -20,9 +20,6 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
 from sqlbuild.adapter.type_system.main.normalize_relation_type import normalize_relation_type
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.migrations.constants import COLUMN_MIGRATION_TABLE_NAME
-from sqlbuild.compiler.migrations.main.read_recorded_column_renames import (
-    read_recorded_column_renames,
-)
 from sqlbuild.compiler.migrations.main.relation_for_location import migration_relation_for_location
 from sqlbuild.compiler.migrations.models import (
     ColumnMigrationEvent,

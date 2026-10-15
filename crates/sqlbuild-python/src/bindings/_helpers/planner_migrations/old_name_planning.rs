@@ -108,11 +108,7 @@ fn plan_old_name_views<'py>(
         }
     }
     let state = call_with(
-        &imported(
-            py,
-            "sqlbuild.compiler.planner.classes.migration_state_inspection",
-            "MigrationStateInspection",
-        )?,
+        &imported(py, "sqlbuild._native", "MigrationStateInspection")?,
         &[
             ("adapter", runtime.getattr("adapter")?),
             ("connection", runtime.getattr("connection")?),

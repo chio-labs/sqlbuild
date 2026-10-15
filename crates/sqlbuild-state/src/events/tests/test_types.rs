@@ -1,7 +1,9 @@
 use crate::events::errors::StateSqlError;
+use sqlbuild_cursor::algebra::models::LocalDateTime;
+
 use crate::events::models::{
-    ColumnEventKey, EventOrder, EventRelation, MoveEventKey, OldNameFactKey, OldNameHistoryIndexes,
-    StateCell,
+    ColumnEventKey, EventOrder, EventRelation, FingerprintKey, MoveEventKey, OldNameFactKey,
+    OldNameHistoryIndexes, RecordedRenameKey, StateCell,
 };
 
 pub(crate) struct InsertTestCase {
@@ -59,4 +61,20 @@ pub(crate) struct GrantsTestCase {
     pub(crate) description: &'static str,
     pub(crate) grants: Option<Vec<String>>,
     pub(crate) expected_json: Option<String>,
+}
+
+pub(crate) struct RecordedRenamesTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) events: Vec<RecordedRenameKey>,
+    pub(crate) relation: EventRelation,
+    pub(crate) since: LocalDateTime,
+    pub(crate) expected_indexes: Vec<usize>,
+}
+
+pub(crate) struct NewestFingerprintTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) fingerprints: Vec<FingerprintKey>,
+    pub(crate) target: Option<EventRelation>,
+    pub(crate) model_name: Option<&'static str>,
+    pub(crate) expected_index: Option<usize>,
 }

@@ -7,25 +7,20 @@ from datetime import UTC, datetime, timedelta
 import duckdb
 import pytest
 
-from sqlbuild._native import project_old_name_views
-from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.migrations.main.read_old_name_view_events import (
-    read_old_name_view_events,
-)
-from sqlbuild.compiler.migrations.main.stored_old_name_view_columns import (
+from sqlbuild._native import (
+    MigrationStateInspection,
+    project_old_name_views,
+    read_migration_state_events,
     stored_old_name_view_columns,
+    write_migration_state_event,
 )
-from sqlbuild.compiler.migrations.main.write_event import write_migration_event
-from sqlbuild.compiler.migrations.main.write_old_name_view_event import write_old_name_view_event
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.migrations.models import (
     MigrationEvent,
     OldNameViewEvent,
     OldNameViewHistory,
 )
 from sqlbuild.compiler.migrations.types import OldNameViewEventType
-from sqlbuild.compiler.planner.classes.migration_state_inspection import (
-    MigrationStateInspection,
-)
 from tests.unit.src.sqlbuild.compiler.migrations.main._test_types import (
     OldNameViewAbsentColumnsTestCase,
     OldNameViewProjectionTestCase,
@@ -71,7 +66,8 @@ def test_given_old_name_facts_when_writing_and_reading_then_rows_are_idempotent(
     )
 
     for _ in range(test_case.write_count):
-        write_old_name_view_event(
+        write_migration_state_event(
+            kind="old_name",
             connection=connection,
             execute=adapter.execute,
             event=fact,
@@ -87,7 +83,8 @@ def test_given_old_name_facts_when_writing_and_reading_then_rows_are_idempotent(
             f"VALUES ('future', '{foreign}', 'm', 'daily_revenue', 'revenue', 'daily_revenue', "
             "'run-9', TIMESTAMP '2026-01-09')"
         )
-    stored: tuple[OldNameViewEvent, ...] = read_old_name_view_events(
+    stored: tuple[OldNameViewEvent, ...] = read_migration_state_events(
+        kind="old_name",
         connection=connection,
         execute=adapter.execute,
         database=None,
@@ -203,7 +200,8 @@ def test_given_state_table_without_optional_columns_when_planning_then_absent_co
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
     move: MigrationEvent = migration_event(origin="revenue", destination="daily_revenue", day=1)
-    write_migration_event(
+    write_migration_state_event(
+        kind="model",
         connection=connection,
         execute=adapter.execute,
         event=move,
@@ -218,7 +216,8 @@ def test_given_state_table_without_optional_columns_when_planning_then_absent_co
         OldNameViewEventType.ORIGIN_ARCHIVED,
         OldNameViewEventType.VIEW_CREATED,
     ):
-        write_old_name_view_event(
+        write_migration_state_event(
+            kind="old_name",
             connection=connection,
             execute=adapter.execute,
             event=old_name_fact(
