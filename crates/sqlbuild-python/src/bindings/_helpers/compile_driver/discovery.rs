@@ -27,6 +27,7 @@ use crate::bindings::_helpers::discovery::sql_test_records::{
 use crate::bindings::_helpers::discovery::yaml_records::{
     discover_schema_files, discover_source_files,
 };
+use crate::bindings::_helpers::event_exporting::scope::configure_discovered_event_exporters;
 
 const FRONTIER_MODULE: &str = "sqlbuild._native";
 const FRONTIER_TYPES_MODULE: &str = "sqlbuild._native";
@@ -34,8 +35,6 @@ const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation
 const VALIDATION_MODULE: &str = "sqlbuild.compiler.discovery._helpers.validation.discovery";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const SQL_ANALYSIS_SETTING_KEY: &str = "sql_analysis";
-const EVENT_EXPORTERS_MODULE: &str =
-    "sqlbuild.runtime.event_exporting.main._configure_discovered_event_exporters";
 const FILESYSTEM_MODULE: &str = "sqlbuild.compiler.discovery._helpers.filesystem.core";
 const SINKS_MODULE: &str = "sqlbuild.compiler.discovery._helpers.filesystem.command_output_sinks";
 const INGESTR_LOADERS_MODULE: &str = "sqlbuild.integrations.ingestr.main.loaders";
@@ -243,12 +242,7 @@ fn assembled_inputs<'py>(
         ),
     )?;
     imported(py, VALIDATION_MODULE, "validate_discovered_inputs")?.call1((&discovered,))?;
-    imported(
-        py,
-        EVENT_EXPORTERS_MODULE,
-        "configure_discovered_event_exporters",
-    )?
-    .call1((&discovered,))?;
+    configure_discovered_event_exporters(&discovered)?;
     Ok(discovered)
 }
 

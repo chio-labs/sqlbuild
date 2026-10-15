@@ -1,0 +1,30 @@
+//! Register native lifecycle-event export and stop its threads at interpreter exit.
+
+use pyo3::prelude::{Bound, PyAnyMethods, PyModule, PyModuleMethods, PyResult, wrap_pyfunction};
+
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::event_exporting::dispatcher::{
+    EventExporterDispatcher, stop_event_exporter_threads,
+};
+use crate::bindings::_helpers::event_exporting::models::{
+    BoundEventExporter, EventExportSummary, EventExporterAccounting, EventExporterCounts,
+    EventExporterFailure,
+};
+use crate::bindings::_helpers::event_exporting::workers::{DispatcherWorker, InvocationCompletion};
+use crate::bindings::_helpers::event_exporting::{policy, scope};
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<EventExporterCounts>()?;
+    module.add_class::<EventExporterAccounting>()?;
+    module.add_class::<EventExportSummary>()?;
+    module.add_class::<EventExporterFailure>()?;
+    module.add_class::<BoundEventExporter>()?;
+    module.add_class::<EventExporterDispatcher>()?;
+    module.add_class::<DispatcherWorker>()?;
+    module.add_class::<InvocationCompletion>()?;
+    let hook = wrap_pyfunction!(stop_event_exporter_threads, module)?;
+    module.add_function(hook.clone())?;
+    imported(module.py(), "atexit", "register")?.call1((hook,))?;
+    policy::register(module)?;
+    scope::register(module)
+}

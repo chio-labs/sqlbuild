@@ -200,10 +200,6 @@ def discover_hook_functions(
 def discover_provider_classes(*, project_dir: Path) -> tuple[DiscoveredProvider, ...]:
     """Discover provider classes under providers/."""
 
-    from sqlbuild.runtime.event_exporting.main.cached_event_exporter_extensions import (
-        cached_event_exporter_extensions,
-    )
-
     cached: (
         tuple[
             tuple[DiscoveredProvider, ...],
@@ -211,7 +207,7 @@ def discover_provider_classes(*, project_dir: Path) -> tuple[DiscoveredProvider,
             tuple[DiscoveredCommandOutputSink, ...],
         ]
         | None
-    ) = cached_event_exporter_extensions(project_dir=project_dir)
+    ) = _native.cached_event_exporter_extensions(project_dir=project_dir)
     if cached is not None:
         for cached_provider in cached[0]:
             record_settings_class_read(cached_provider.provider_class)
@@ -270,10 +266,6 @@ def discover_event_exporter_functions(
 ) -> tuple[DiscoveredEventExporter, ...]:
     """Discover validated lifecycle-event sink declarations under sinks/."""
 
-    from sqlbuild.runtime.event_exporting.main.cached_event_exporter_extensions import (
-        cached_event_exporter_extensions,
-    )
-
     cached: (
         tuple[
             tuple[DiscoveredProvider, ...],
@@ -281,7 +273,7 @@ def discover_event_exporter_functions(
             tuple[DiscoveredCommandOutputSink, ...],
         ]
         | None
-    ) = cached_event_exporter_extensions(project_dir=project_dir)
+    ) = _native.cached_event_exporter_extensions(project_dir=project_dir)
     if cached is not None:
         return cached[1]
     declarations: tuple[DiscoveredEventExporterDeclaration, ...] = (

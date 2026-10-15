@@ -87,12 +87,20 @@ from sqlbuild.compiler.compile.types import (
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredCheckFunction,
+    DiscoveredCommandOutputSink,
+    DiscoveredConstantFile,
+    DiscoveredEnumFile,
+    DiscoveredEventExporter,
     DiscoveredHookFunction,
     DiscoveredLoaderFunction,
     DiscoveredMacroFile,
     DiscoveredMaterializationFile,
     DiscoveredProjectInputs,
     DiscoveredProviderUsage,
+    DiscoveredProvider,
+    DiscoveredPythonFunctionFile,
+    DiscoveredSchemaFile,
+    DiscoveredSeedFile,
     DiscoveredSourceFile,
     DiscoveredSqlScenarioFile,
     DiscoveredSqlTestFile,
@@ -257,6 +265,8 @@ from sqlbuild.python_nodes.models import (
     SqlResourceRef,
 )
 from sqlbuild.python_nodes.types import PythonCheckSeverity
+from sqlbuild.provider.classes.session import ProviderSession
+from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.rule_engine.models import (
     Finding,
     Rule,
@@ -290,6 +300,7 @@ from sqlbuild.runtime.execution_history.types import (
 from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
 from sqlbuild.runtime.observability.models import DiagnosticLog, LifecycleEvent
 from sqlbuild.runtime.output_capture.models import (
+    BoundCommandOutputSink,
     CommandOutputCaptureSummary,
     CommandOutputRecord,
     OutputCaptureContext,
@@ -323,6 +334,7 @@ from sqlbuild.spec.contracts.models import (
     TargetConfig,
 )
 from sqlbuild.spec.contracts.types import (
+    EventExportSeverity,
     MicrobatchLimitAction,
     MissingMigrationOriginPolicy,
     SourceFreshnessStrategy,
@@ -3569,6 +3581,188 @@ class CliObservabilityScope:
     def __exit__(self, *exc_info: object) -> bool: ...
 
 def cli_observability_scope(*, args: CliNamespace, project_dir: Path) -> CliObservabilityScope: ...
+
+class EventExporterCounts:
+    """Frozen attempt counters for one exporter or their aggregate."""
+
+    @property
+    def accepted(self) -> int: ...
+    @property
+    def filtered(self) -> int: ...
+    @property
+    def delivered(self) -> int: ...
+    @property
+    def failed(self) -> int: ...
+    @property
+    def dropped(self) -> int: ...
+
+class EventExporterAccounting:
+    """Frozen accounting snapshot for one named exporter."""
+
+    @property
+    def exporter_name(self) -> str: ...
+    @property
+    def counts(self) -> EventExporterCounts: ...
+
+class EventExportSummary:
+    """Final or point-in-time best-effort delivery accounting."""
+
+    @property
+    def aggregate(self) -> EventExporterCounts: ...
+    @property
+    def per_exporter(self) -> tuple[EventExporterAccounting, ...]: ...
+    @property
+    def queue_depth(self) -> int: ...
+    @property
+    def queue_capacity(self) -> int: ...
+    @property
+    def flush_complete(self) -> bool: ...
+    @property
+    def accepted(self) -> int: ...
+    @property
+    def filtered(self) -> int: ...
+    @property
+    def delivered(self) -> int: ...
+    @property
+    def failed(self) -> int: ...
+    @property
+    def dropped(self) -> int: ...
+
+class EventExporterFailure:
+    """Sanitized exporter failure information safe for diagnostics."""
+
+    @property
+    def exporter_name(self) -> str: ...
+    @property
+    def error_type(self) -> str: ...
+    @property
+    def event_kind(self) -> str: ...
+    @property
+    def event_severity(self) -> EventExportSeverity: ...
+
+class BoundEventExporter:
+    """One lifecycle-event sink bound to command-scoped provider instances."""
+
+    def __init__(
+        self,
+        name: str,
+        function: Callable[..., object],
+        provider_arguments: Mapping[str, object],
+        event_kinds: Iterable[str] | None = None,
+        min_severity: EventExportSeverity | str | None = None,
+    ) -> None: ...
+    @property
+    def name(self) -> str: ...
+    @property
+    def function(self) -> Callable[..., object]: ...
+    @property
+    def provider_arguments(self) -> Mapping[str, object]: ...
+    @property
+    def event_kinds(self) -> frozenset[str]: ...
+    @property
+    def min_severity(self) -> EventExportSeverity: ...
+
+class EventExporterDispatcher:
+    """Deliver filtered lifecycle events off execution threads with bounded memory."""
+
+    def __init__(
+        self,
+        *,
+        exporters: Iterable[BoundEventExporter] | None = None,
+        queue_capacity: int = 1024,
+        shutdown_timeout_seconds: float = 2.0,
+        invocation_timeout_seconds: float = 1.0,
+        notification_queue_capacity: int = 256,
+        health_interval_seconds: float | None = None,
+        failure_callback: Callable[[EventExporterFailure], object] | None = None,
+        summary_callback: Callable[[EventExportSummary], object] | None = None,
+    ) -> None: ...
+    @property
+    def thread(self) -> threading.Thread: ...
+    @property
+    def notification_thread(self) -> threading.Thread | None: ...
+    def enqueue(self, event: LifecycleEvent, /) -> None: ...
+    def bind(self, exporters: Iterable[BoundEventExporter], /) -> None: ...
+    def bind_command_output_sinks(self, sinks: Iterable[BoundCommandOutputSink], /) -> None: ...
+    def export_output(self, records: Iterable[CommandOutputRecord]) -> None: ...
+    def shutdown(self) -> EventExportSummary: ...
+    def finalize_when_idle(self, finalizer: Callable[[], object], /) -> None: ...
+    def summary(self) -> EventExportSummary: ...
+
+class DispatcherWorker:
+    def __call__(self) -> None: ...
+
+class InvocationCompletion:
+    def __call__(self, error: BaseException | None, /) -> None: ...
+
+def stop_event_exporter_threads() -> None: ...
+
+class EventExporterCommandScope:
+    """Bind discovered typed sinks and own their command-scoped provider session."""
+
+    def __init__(self, *, dispatcher: EventExporterDispatcher) -> None: ...
+    @property
+    def dispatcher(self) -> EventExporterDispatcher: ...
+    @property
+    def provider_session(self) -> ProviderSession | None: ...
+    @property
+    def project_dir(self) -> Path | None: ...
+    @property
+    def providers(self) -> tuple[DiscoveredProvider, ...]: ...
+    @property
+    def event_exporters(self) -> tuple[DiscoveredEventExporter, ...]: ...
+    @property
+    def command_output_sinks(self) -> tuple[DiscoveredCommandOutputSink, ...]: ...
+    def configure(self, discovered_inputs: DiscoveredProjectInputs, /) -> None: ...
+    def configure_extensions(
+        self,
+        *,
+        project_dir: Path | None = None,
+        providers: tuple[DiscoveredProvider, ...],
+        event_exporters: tuple[DiscoveredEventExporter, ...],
+        command_output_sinks: tuple[DiscoveredCommandOutputSink, ...] | None = None,
+    ) -> None: ...
+    def cached_extensions(
+        self, *, project_dir: Path
+    ) -> (
+        tuple[
+            tuple[DiscoveredProvider, ...],
+            tuple[DiscoveredEventExporter, ...],
+            tuple[DiscoveredCommandOutputSink, ...],
+        ]
+        | None
+    ): ...
+    def close(self) -> EventExportSummary: ...
+    def export_output(self, records: tuple[CommandOutputRecord, ...]) -> None: ...
+
+class ProviderSessionCloser:
+    def __call__(self) -> None: ...
+
+class EventExporterScopeContext:
+    def __enter__(self) -> EventExporterCommandScope: ...
+    def __exit__(self, *exc_info: object) -> bool: ...
+
+def event_exporter_command_scope(
+    scope: EventExporterCommandScope, /
+) -> EventExporterScopeContext: ...
+def current_event_exporter_command_scope() -> EventExporterCommandScope | None: ...
+def cached_event_exporter_extensions(
+    *, project_dir: Path
+) -> (
+    tuple[
+        tuple[DiscoveredProvider, ...],
+        tuple[DiscoveredEventExporter, ...],
+        tuple[DiscoveredCommandOutputSink, ...],
+    ]
+    | None
+): ...
+def lifecycle_export_policy_catalog() -> dict[str, tuple[str, EventExportSeverity, int]]: ...
+def event_export_severity_at_least(
+    *, severity: EventExportSeverity | str, minimum: EventExportSeverity | str
+) -> bool: ...
+def stricter_event_export_severity(
+    *, first: EventExportSeverity | str, second: EventExportSeverity | str | None
+) -> EventExportSeverity: ...
 
 class OutputCaptureDispatcher:
     """Turn stream fragments into bounded text chunks and export them off execution threads."""

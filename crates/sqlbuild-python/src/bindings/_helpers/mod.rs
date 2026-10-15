@@ -34,6 +34,7 @@ pub(crate) mod debug_command;
 pub(crate) mod diagnostics;
 pub(crate) mod diff_report;
 pub(crate) mod discovery;
+pub(crate) mod event_exporting;
 pub(crate) mod execution_history;
 pub(crate) mod fingerprints;
 pub(crate) mod format_command;

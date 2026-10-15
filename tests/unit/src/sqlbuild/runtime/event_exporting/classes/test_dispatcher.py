@@ -8,14 +8,14 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.observability import LifecycleEvent
-from sqlbuild.runtime.event_exporting.classes.dispatcher import EventExporterDispatcher
-from sqlbuild.runtime.event_exporting.exceptions import EventExporterInputError
-from sqlbuild.runtime.event_exporting.models import (
+from sqlbuild._native import (
     BoundEventExporter,
     EventExporterCounts,
+    EventExporterDispatcher,
     EventExportSummary,
 )
+from sqlbuild.observability import LifecycleEvent
+from sqlbuild.runtime.event_exporting.exceptions import EventExporterInputError
 from sqlbuild.runtime.output_capture.constants import COMMAND_OUTPUT_LOSS_RECORD_TYPE
 from sqlbuild.runtime.output_capture.models import BoundCommandOutputSink
 from sqlbuild.sinks import CommandOutputRecord, CommandOutputStream

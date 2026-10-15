@@ -295,9 +295,64 @@ reason = "public-api"
 note = "Rule 3 shapes: format version, retention and read-limit constants re-exported by sqlbuild.compute_logs."
 
 [[stays]]
-path = "runtime/event_exporting"
-reason = "executor"
-note = "Exports execution events while the executor runs."
+path = "runtime/event_exporting/__init__.py"
+reason = "public-api"
+note = "Package marker of the public sink declarations below; the dispatcher, queue, accounting and command scope are native EventExporterDispatcher/EventExporterCommandScope."
+
+[[stays]]
+path = "runtime/event_exporting/main/__init__.py"
+reason = "public-api"
+note = "Package marker of the public sink decorators and the user-sink invocation shims below."
+
+[[stays]]
+path = "runtime/event_exporting/main/lifecycle_event_sink.py"
+reason = "public-api"
+note = "Rule 3 facade: the @lifecycle_event_sink decorator re-exported by sqlbuild.sinks, run when user sink modules are imported."
+
+[[stays]]
+path = "runtime/event_exporting/main/command_output_sink.py"
+reason = "public-api"
+note = "Rule 3 facade: the @command_output_sink decorator re-exported by sqlbuild.sinks, run when user sink modules are imported."
+
+[[stays]]
+path = "runtime/event_exporting/main/get_lifecycle_event_sink_definition.py"
+reason = "public-api"
+note = "Rule 3 facade: reads the decorator's definition off a user function; re-exported by sqlbuild.sinks."
+
+[[stays]]
+path = "runtime/event_exporting/main/get_command_output_sink_definition.py"
+reason = "public-api"
+note = "Rule 3 facade: reads the decorator's definition off a user function; re-exported by sqlbuild.sinks."
+
+[[stays]]
+path = "runtime/event_exporting/main/_invoke_lifecycle_event_sink.py"
+reason = "user-code"
+note = "Rule 2 shim: the daemon delivery thread's target that calls one user lifecycle sink and reports how it ended to the native dispatcher, so user code never runs above native frames that interpreter finalization would abort (event_exporting/workers.rs)."
+
+[[stays]]
+path = "runtime/event_exporting/main/_invoke_command_output_sink.py"
+reason = "user-code"
+note = "Rule 2 shim: calls one user command-output sink with its bound providers for the native dispatcher's export_output (event_exporting/dispatcher.rs)."
+
+[[stays]]
+path = "runtime/event_exporting/models.py"
+reason = "public-api"
+note = "Rule 3 shape: LifecycleEventSinkDefinition re-exported by sqlbuild.sinks."
+
+[[stays]]
+path = "runtime/event_exporting/types.py"
+reason = "public-api"
+note = "Rule 3 shape: LifecycleEventKind re-exported by sqlbuild.sinks."
+
+[[stays]]
+path = "runtime/event_exporting/exceptions.py"
+reason = "public-api"
+note = "Rule 3 shapes: errors the public decorators raise and the native dispatcher raises."
+
+[[stays]]
+path = "runtime/event_exporting/constants.py"
+reason = "public-api"
+note = "Rule 3 shapes: decorator attribute names, sink kinds and severities the public decorators and discovery read."
 
 [[stays]]
 path = "runtime/output_capture/classes"

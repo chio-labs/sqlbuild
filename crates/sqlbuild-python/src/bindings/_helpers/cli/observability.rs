@@ -11,6 +11,7 @@ use pyo3::types::{PyBool, PyString, PyTuple, PyTupleMethods};
 use pyo3::{IntoPyObjectExt, pyclass, pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_cli::dispatch::main::event_export_warning::event_export_warning;
 use sqlbuild_cli::dispatch::models::{ExportSummary, ExporterLoss};
+use sqlbuild_core::event_export::constants::DEFAULT_EVENT_EXPORT_SHUTDOWN_TIMEOUT_SECONDS;
 
 use crate::bindings::_helpers::cli::launch_state::withhold_launch_record;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
@@ -21,11 +22,6 @@ const EVENT_DISPATCHER_MODULE: &str = "sqlbuild.runtime.observability.classes.ev
 const DISPATCHER_SCOPE_MODULE: &str = "sqlbuild.runtime.observability.main.dispatcher_scope";
 const IDENTITY_MODULE: &str = "sqlbuild.runtime.observability.main.current_execution_identity";
 const EXTENSIONS_MODULE: &str = "sqlbuild.compiler.discovery.main.runtime_extensions";
-const EXPORTER_DISPATCHER_MODULE: &str = "sqlbuild.runtime.event_exporting.classes.dispatcher";
-const EXPORTER_SCOPE_CLASS_MODULE: &str = "sqlbuild.runtime.event_exporting.classes.command_scope";
-const EXPORTER_SCOPE_MODULE: &str =
-    "sqlbuild.runtime.event_exporting.main._event_exporter_command_scope";
-const EXPORTING_CONSTANTS_MODULE: &str = "sqlbuild.runtime.event_exporting.constants";
 const OUTPUT_CAPTURE_MODULE: &str =
     "sqlbuild.runtime.output_capture.main.configured_output_capture_scope";
 const DEBUG_EVENT_MODULE: &str = "sqlbuild.diagnostics.main.log_debug_event";
@@ -343,17 +339,14 @@ impl Observed {
                 withhold_launch_record(py)?;
                 let timeout: Bound<'_, PyAny> =
                     extensions.getattr("lifecycle_shutdown_timeout_seconds")?;
-                let timeout: Bound<'_, PyAny> = if timeout.is_none() {
-                    imported(
-                        py,
-                        EXPORTING_CONSTANTS_MODULE,
-                        "DEFAULT_EVENT_EXPORT_SHUTDOWN_TIMEOUT_SECONDS",
-                    )?
+                let timeout: f64 = if timeout.is_none() {
+                    DEFAULT_EVENT_EXPORT_SHUTDOWN_TIMEOUT_SECONDS
                 } else {
-                    timeout.extract::<f64>()?.into_bound_py_any(py)?
+                    timeout.extract::<f64>()?
                 };
+                let timeout: Bound<'_, PyAny> = timeout.into_bound_py_any(py)?;
                 let delivery: Bound<'_, PyAny> = call_with(
-                    &imported(py, EXPORTER_DISPATCHER_MODULE, "EventExporterDispatcher")?,
+                    &imported(py, NATIVE_MODULE, "EventExporterDispatcher")?,
                     &[
                         ("shutdown_timeout_seconds", timeout),
                         (
@@ -367,7 +360,7 @@ impl Observed {
                     ],
                 )?;
                 let scope: Bound<'_, PyAny> = call_with(
-                    &imported(py, EXPORTER_SCOPE_CLASS_MODULE, "EventExporterCommandScope")?,
+                    &imported(py, NATIVE_MODULE, "EventExporterCommandScope")?,
                     &[("dispatcher", delivery.clone())],
                 )?;
                 self.exporter_scope = Some(scope.clone().unbind());
@@ -400,10 +393,7 @@ impl Observed {
         else {
             return Ok(());
         };
-        self.enter(
-            imported(py, EXPORTER_SCOPE_MODULE, "event_exporter_command_scope")?
-                .call1((&scope,))?,
-        )?;
+        self.enter(imported(py, NATIVE_MODULE, "event_exporter_command_scope")?.call1((&scope,))?)?;
         let identity: Bound<'_, PyAny> =
             imported(py, IDENTITY_MODULE, "current_execution_identity")?.call0()?;
         if !identity.is_none() && command_output_sinks {

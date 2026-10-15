@@ -34,10 +34,6 @@ def discover_command_output_sink_functions(
 ) -> tuple[DiscoveredCommandOutputSink, ...]:
     """Discover validated command-output sink declarations under sinks/."""
 
-    from sqlbuild.runtime.event_exporting.main.cached_event_exporter_extensions import (
-        cached_event_exporter_extensions,
-    )
-
     cached: (
         tuple[
             tuple[DiscoveredProvider, ...],
@@ -45,7 +41,7 @@ def discover_command_output_sink_functions(
             tuple[DiscoveredCommandOutputSink, ...],
         ]
         | None
-    ) = cached_event_exporter_extensions(project_dir=project_dir)
+    ) = _native.cached_event_exporter_extensions(project_dir=project_dir)
     if cached is not None:
         return cached[2]
     declarations: tuple[DiscoveredCommandOutputSinkDeclaration, ...] = (

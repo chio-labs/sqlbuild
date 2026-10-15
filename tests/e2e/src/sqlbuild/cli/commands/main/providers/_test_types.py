@@ -114,3 +114,13 @@ class ProviderPlanOutputE2ETestCase:
     expected_text_fragments: tuple[str, ...]
     expected_provider_name: str
     expected_used_by: tuple[tuple[str, str, str], ...]
+
+
+@dataclass(frozen=True)
+class FilteredSinkFailureE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_runs_only: tuple[str, ...]
+    expected_errors_only: tuple[str, ...]
+    expected_warning: str

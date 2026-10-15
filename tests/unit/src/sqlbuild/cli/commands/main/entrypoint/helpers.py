@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.runtime.event_exporting.classes.command_scope import EventExporterCommandScope
-from sqlbuild.runtime.event_exporting.classes.dispatcher import EventExporterDispatcher
+from sqlbuild._native import EventExporterCommandScope, EventExporterDispatcher
 from sqlbuild.runtime.output_capture.models import (
     BoundCommandOutputSink,
     CommandOutputRecord,

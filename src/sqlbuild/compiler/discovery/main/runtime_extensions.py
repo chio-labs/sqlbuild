@@ -22,7 +22,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProvider,
     DiscoveredRuntimeExtensions,
 )
-from sqlbuild.runtime.event_exporting.main.stricter_severity import stricter_severity
 from sqlbuild.spec.contracts.models import (
     LifecycleEventSinkFilterConfig,
     LifecycleEventSinksConfig,
@@ -89,5 +88,7 @@ def _apply_runtime_filter(
     for runtime_filter in filters:
         if runtime_filter.event_kinds is not None:
             kinds = kinds & runtime_filter.event_kinds
-        severity = stricter_severity(first=severity, second=runtime_filter.min_severity)
+        severity = _native.stricter_event_export_severity(
+            first=severity, second=runtime_filter.min_severity
+        )
     return replace(exporter, event_kinds=kinds, min_severity=severity)

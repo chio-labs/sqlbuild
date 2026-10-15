@@ -22,17 +22,17 @@ class SharedSinkProviderTestCase:
 @dataclass(frozen=True)
 class PriorityPairTestCase:
     description: str
-    queued_priority: int
-    incoming_priority: int
-    expected_inserted: bool
-    expected_displaced_sequence: int | None
-    expected_retained_sequence: int
+    queued_type: str
+    incoming_type: str
+    expected_delivered: tuple[str, ...]
+    expected_dropped: int
 
 
 @dataclass(frozen=True)
 class PriorityQueueTestCase:
     description: str
-    expected_sequences: tuple[int, ...]
+    event_types: tuple[str, ...]
+    expected_delivered: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -40,3 +40,10 @@ class HealthIntervalTestCase:
     description: str
     interval: object
     expected_error: str
+
+
+@dataclass(frozen=True)
+class InterpreterExitTestCase:
+    description: str
+    script: str
+    expected_returncode: int
