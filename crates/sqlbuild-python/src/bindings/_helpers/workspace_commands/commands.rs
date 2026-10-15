@@ -24,7 +24,7 @@ use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_colo
 
 const SKILLS_DIRECTORY: &str = ".agents/skills/sqlbuild";
 const TEMPLATES_DIRECTORY: &str = "playground_templates";
-const EXCEPTIONS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
+const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const OUTPUT_MODELS: &str = "sqlbuild._native";
 const SKILLS_OPTIONS: (&[&str], &[&str]) =
     (&["project_dir"], &["global_install", "targets", "force"]);

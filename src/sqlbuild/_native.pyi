@@ -9485,3 +9485,75 @@ class PartialBuildPhaseTimings(NativeRecord):
         cost_collection_seconds: float | None = None,
         total_seconds: float | None = None,
     ) -> None: ...
+
+class CliUserError(Exception):
+    """Expected CLI-facing error that should be rendered without a traceback."""
+
+    code: str
+    message: str
+    help: str | None
+    def __init__(
+        self, message: str, *, code: str | None = None, help: str | None = None
+    ) -> None: ...
+
+class StagedArtifactsChangedError(CliUserError):
+    """Staged compile artifacts changed before publication, so nothing stale is deleted."""
+
+class QueryExecutionError(CliUserError):
+    """The warehouse rejected or failed an ad hoc query."""
+
+    exit_code: int
+
+class QueryDiffOutcomeError(CliUserError):
+    """Expected query-diff failure with an explicit outcome and exit code."""
+
+    status: str
+    exit_code: int
+    def __init__(
+        self,
+        message: str,
+        *,
+        status: str,
+        exit_code: int,
+        code: str | None = None,
+        help: str | None = None,
+    ) -> None: ...
+
+class QueryDiffIncompleteError(QueryDiffOutcomeError):
+    """Safety or preflight prevented complete value evidence."""
+
+    def __init__(
+        self, message: str, *, code: str | None = None, help: str | None = None
+    ) -> None: ...
+
+class QueryDiffExecutionError(QueryDiffOutcomeError):
+    """Setup, execution, ownership publication, or cleanup failed."""
+
+    def __init__(
+        self, message: str, *, code: str | None = None, help: str | None = None
+    ) -> None: ...
+
+class DiffSizeGuardError(CliUserError):
+    """A default full model diff stopped before reading data because of table sizes."""
+
+    status: str
+    exit_code: int
+    details: dict[str, object]
+    def __init__(
+        self,
+        message: str,
+        *,
+        details: dict[str, object],
+        code: str | None = None,
+        help: str | None = None,
+    ) -> None: ...
+
+class MigrationStateError(ValueError):
+    """Raised when model migration state inputs or rows are invalid."""
+
+    code: str
+    message: str
+    help: str | None
+    def __init__(
+        self, message: str, *, code: str | None = None, help: str | None = None
+    ) -> None: ...

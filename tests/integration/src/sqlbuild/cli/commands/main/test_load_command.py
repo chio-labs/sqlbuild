@@ -16,6 +16,7 @@ from duckdb import DuckDBPyConnection
 from sqlbuild._native import (
     AuditCommandRequest,
     BuildCommandRequest,
+    CliUserError,
     LoadCommandRequest,
     PlanCommandRequest,
     ScenarioTestCommandRequest,
@@ -32,7 +33,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import CursorOverrides

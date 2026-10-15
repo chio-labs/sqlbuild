@@ -51,6 +51,27 @@ pub(crate) struct EnumSpec {
     pub(crate) members: &'static [(&'static str, &'static str)],
 }
 
+/// A class-level constant of a native error class.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum ClassValue {
+    Text(&'static str),
+    Int(i64),
+}
+
+/// One native expected-error class: its parent, class constants and keyword fields.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ErrorSpec {
+    pub(crate) name: &'static str,
+    /// A native error base or an earlier error in `ERRORS`.
+    pub(crate) parent: &'static str,
+    pub(crate) doc: &'static str,
+    pub(crate) class_attributes: &'static [(&'static str, ClassValue)],
+    /// Keyword-only constructor fields stored as attributes.
+    pub(crate) required: &'static [&'static str],
+    /// Attributes every instance is given.
+    pub(crate) fixed: &'static [(&'static str, ClassValue)],
+}
+
 /// Base of every native frozen record, built, compared, shown and pickled as a dataclass.
 #[derive(Debug)]
 #[pyclass(module = "sqlbuild._native", subclass, frozen)]

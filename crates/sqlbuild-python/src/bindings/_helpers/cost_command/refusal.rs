@@ -6,7 +6,7 @@ use sqlbuild_core::cost_command::errors::CostCommandError;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 
-const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
+const ERRORS_MODULE: &str = "sqlbuild._native";
 
 /// The `CliUserError` for a refused cost request.
 pub(crate) fn cost_error(py: Python<'_>, error: &CostCommandError) -> PyErr {

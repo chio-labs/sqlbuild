@@ -14,7 +14,7 @@ use sqlbuild_core::dbt_command::models::DbtInitSummary;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, flag, path, stream};
 
-const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
+const ERRORS_MODULE: &str = "sqlbuild._native";
 const PROGRESS_REPORTER_MODULE: &str = "sqlbuild._native";
 const PROFILE_INIT_MODULE: &str = "sqlbuild.integrations.dbt._helpers.profile.init";
 const DBT_MODELS: &str = "sqlbuild.integrations.dbt.models";

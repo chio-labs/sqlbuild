@@ -13,7 +13,7 @@ from tests.unit.scripts.native_module_paths._helpers._test_types import (
 )
 from tests.unit.scripts.native_module_paths._helpers.helpers import native_source_errors
 
-EXCEPTIONS_MODULE: str = "sqlbuild.cli.commands.exceptions"
+EXCEPTIONS_MODULE: str = "sqlbuild._native"
 
 
 @pytest.mark.parametrize(

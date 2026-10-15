@@ -2,8 +2,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild._native import CompileLineageMode
-from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild._native import CliUserError, CompileLineageMode
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.compiler.lineage.types import ColumnLineageMode

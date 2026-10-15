@@ -1,7 +1,9 @@
 //! The layouts of every native record class.
 
 use crate::bindings::_helpers::freshness::observation::normalize_observation;
-use crate::bindings::_helpers::records::models::{EnumSpec, FieldDefault, FieldSpec, RecordSpec};
+use crate::bindings::_helpers::records::models::{
+    ClassValue, EnumSpec, ErrorSpec, FieldDefault, FieldSpec, RecordSpec,
+};
 use crate::bindings::_helpers::records::types::RecordFinish;
 
 pub(crate) const NATIVE_MODULE: &str = "sqlbuild._native";
@@ -15,6 +17,93 @@ pub(crate) const DATACLASS_FIELD_KIND: &str = "_FIELD";
 
 pub(crate) const ENUM_MODULE: &str = "enum";
 pub(crate) const STR_ENUM: &str = "StrEnum";
+
+/// The class attribute holding an error class's index into `ERRORS`.
+pub(crate) const ERROR_SPEC_ATTRIBUTE: &str = "__native_error__";
+/// The `parent` of an error class deriving directly from `Exception`.
+pub(crate) const EXCEPTION_PARENT: &str = "Exception";
+/// The `parent` of an error class deriving directly from `ValueError`.
+pub(crate) const VALUE_ERROR_PARENT: &str = "ValueError";
+
+/// Every native expected-error class, each after its parent.
+pub(crate) const ERRORS: &[ErrorSpec] = &[
+    ErrorSpec {
+        name: "CliUserError",
+        parent: EXCEPTION_PARENT,
+        doc: "Expected CLI-facing error that should be rendered without a traceback.",
+        class_attributes: &[("code", ClassValue::Text("C000"))],
+        required: &[],
+        fixed: &[],
+    },
+    ErrorSpec {
+        name: "StagedArtifactsChangedError",
+        parent: "CliUserError",
+        doc: "Staged compile artifacts changed before publication, so nothing stale is deleted.",
+        class_attributes: &[],
+        required: &[],
+        fixed: &[],
+    },
+    ErrorSpec {
+        name: "QueryExecutionError",
+        parent: "CliUserError",
+        doc: "The warehouse rejected or failed an ad hoc query.",
+        class_attributes: &[
+            ("code", ClassValue::Text("C108")),
+            ("exit_code", ClassValue::Int(2)),
+        ],
+        required: &[],
+        fixed: &[],
+    },
+    ErrorSpec {
+        name: "QueryDiffOutcomeError",
+        parent: "CliUserError",
+        doc: "Expected query-diff failure with an explicit outcome and exit code.",
+        class_attributes: &[],
+        required: &["status", "exit_code"],
+        fixed: &[],
+    },
+    ErrorSpec {
+        name: "QueryDiffIncompleteError",
+        parent: "QueryDiffOutcomeError",
+        doc: "Safety or preflight prevented complete value evidence.",
+        class_attributes: &[],
+        required: &[],
+        fixed: &[
+            ("status", ClassValue::Text("incomplete")),
+            ("exit_code", ClassValue::Int(2)),
+        ],
+    },
+    ErrorSpec {
+        name: "QueryDiffExecutionError",
+        parent: "QueryDiffOutcomeError",
+        doc: "Setup, execution, ownership publication, or cleanup failed.",
+        class_attributes: &[],
+        required: &[],
+        fixed: &[
+            ("status", ClassValue::Text("execution_failed")),
+            ("exit_code", ClassValue::Int(3)),
+        ],
+    },
+    ErrorSpec {
+        name: "DiffSizeGuardError",
+        parent: "CliUserError",
+        doc: "A default full model diff stopped before reading data because of table sizes.",
+        class_attributes: &[
+            ("status", ClassValue::Text("incomplete")),
+            ("exit_code", ClassValue::Int(2)),
+        ],
+        required: &["details"],
+        fixed: &[],
+    },
+    ErrorSpec {
+        name: "MigrationStateError",
+        parent: VALUE_ERROR_PARENT,
+        doc: "Raised when model migration state inputs or rows are invalid.",
+        class_attributes: &[("code", ClassValue::Text("M000"))],
+        required: &[],
+        fixed: &[],
+    },
+];
 
 /// Every native string enum group, registered before the records.
 pub(crate) const ENUMS: &[&[EnumSpec]] =

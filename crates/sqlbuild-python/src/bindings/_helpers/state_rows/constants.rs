@@ -2,7 +2,7 @@
 
 pub(crate) const MIGRATION_MODELS: &str = "sqlbuild.compiler.migrations.models";
 pub(crate) const MIGRATION_TYPES: &str = "sqlbuild.compiler.migrations.types";
-pub(crate) const MIGRATION_EXCEPTIONS: &str = "sqlbuild.compiler.migrations.exceptions";
+pub(crate) const MIGRATION_EXCEPTIONS: &str = "sqlbuild._native";
 pub(crate) const STATE_TABLE_DDL: &str =
     "sqlbuild.adapter.state_sql.main.render_state_table_create_sql";
 pub(crate) const SQL_VALUE_TYPES: &str = "sqlbuild.sql_values.types";

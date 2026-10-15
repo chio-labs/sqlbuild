@@ -18,7 +18,7 @@ use crate::bindings::_helpers::init_command::scaffold::scaffold_blank_project;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
+const ERRORS_MODULE: &str = "sqlbuild._native";
 const EXISTS_MESSAGE: &str = "sqlbuild_project.toml already exists in this directory";
 
 fn exists_error(py: Python<'_>) -> PyErr {

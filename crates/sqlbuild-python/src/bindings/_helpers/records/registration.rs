@@ -1,15 +1,20 @@
 //! Register the native record base, its field descriptor and every record class.
 
+use pyo3::exceptions::{PyException, PyValueError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 
 use crate::bindings::_helpers::records::constants::{
     DATACLASS_FIELD_KIND, DATACLASS_FIELDS_ATTRIBUTE, DATACLASSES_MODULE, ENUM_MODULE, ENUMS,
-    NATIVE_MODULE, RECORD_SPEC_ATTRIBUTE, STR_ENUM,
+    ERROR_SPEC_ATTRIBUTE, ERRORS, EXCEPTION_PARENT, NATIVE_MODULE, RECORD_SPEC_ATTRIBUTE, STR_ENUM,
+    VALUE_ERROR_PARENT,
+};
+use crate::bindings::_helpers::records::error_classes::{
+    BoundErrorInitializer, ErrorInitializer, class_value,
 };
 use crate::bindings::_helpers::records::fields::all_specs;
 use crate::bindings::_helpers::records::models::{
-    EnumSpec, NativeRecord, RecordAttribute, RecordSpec,
+    EnumSpec, ErrorSpec, NativeRecord, RecordAttribute, RecordSpec,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -22,6 +27,16 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     for spec in ENUMS.iter().flat_map(|group| group.iter()) {
         module.add(spec.name, string_enum(&str_enum, spec)?)?;
     }
+    module.add_class::<ErrorInitializer>()?;
+    module.add_class::<BoundErrorInitializer>()?;
+    for (index, spec) in ERRORS.iter().enumerate() {
+        let parent: Bound<'_, PyAny> = match spec.parent {
+            EXCEPTION_PARENT => py.get_type::<PyException>().into_any(),
+            VALUE_ERROR_PARENT => py.get_type::<PyValueError>().into_any(),
+            parent => module.getattr(parent)?,
+        };
+        module.add(spec.name, error_class(&parent, (index, spec))?)?;
+    }
     let dataclasses: Bound<'_, PyModule> = py.import(DATACLASSES_MODULE)?;
     for (index, spec) in all_specs().enumerate() {
         let class: Bound<'_, PyAny> = record_class(&metaclass, &base, (index, spec))?;
@@ -32,6 +47,26 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add(spec.name, class)?;
     }
     Ok(())
+}
+
+/// A subclass of `parent` laid out as `spec`.
+fn error_class<'py>(
+    parent: &Bound<'py, PyAny>,
+    (index, spec): (usize, &ErrorSpec),
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = parent.py();
+    let namespace: Bound<'py, PyDict> = PyDict::new(py);
+    namespace.set_item("__module__", NATIVE_MODULE)?;
+    namespace.set_item("__qualname__", spec.name)?;
+    namespace.set_item("__doc__", spec.doc)?;
+    namespace.set_item(ERROR_SPEC_ATTRIBUTE, index)?;
+    for (name, value) in spec.class_attributes {
+        namespace.set_item(*name, class_value(py, *value)?)?;
+    }
+    if matches!(spec.parent, EXCEPTION_PARENT | VALUE_ERROR_PARENT) {
+        namespace.set_item("__init__", Py::new(py, ErrorInitializer {})?)?;
+    }
+    parent.get_type().call1((spec.name, (parent,), namespace))
 }
 
 /// `StrEnum(name, members)` living in `sqlbuild._native`.

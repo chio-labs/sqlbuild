@@ -16,7 +16,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 
-const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
+const ERRORS_MODULE: &str = "sqlbuild._native";
 const CONTRACT_MODELS: &str = "sqlbuild.spec.contracts.models";
 const DESTINATION_MODULE: &str = "sqlbuild._native";
 const CONNECTION_CONFIG_MODULE: &str = "sqlbuild._native";

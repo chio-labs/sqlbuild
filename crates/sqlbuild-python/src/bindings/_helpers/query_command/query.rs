@@ -22,7 +22,7 @@ use crate::bindings::_helpers::query_command::query_values::{
 };
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
+const ERRORS_MODULE: &str = "sqlbuild._native";
 const ADAPTER_ERRORS_MODULE: &str = "sqlbuild.adapter.contract.exceptions";
 const LONG_FORMAT: &str = "long";
 const TABLE_FORMAT: &str = "table";

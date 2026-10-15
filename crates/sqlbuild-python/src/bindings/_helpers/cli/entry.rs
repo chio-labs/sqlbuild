@@ -23,7 +23,7 @@ use sqlbuild_core::cli_text::main::format_coded_error::format_coded_error;
 use sqlbuild_core::cli_text::models::CliStyle;
 
 const NO_COLOR_OPTION: &str = "--no-color";
-const EXCEPTIONS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
+const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const COMPUTE_LOGS_MODULE: &str =
     "sqlbuild.cli.commands.main.entrypoint._dispatch_with_compute_logs";
 const LIFECYCLE_EVENT_MODULE: &str = "sqlbuild.runtime.observability.main.create_lifecycle_event";

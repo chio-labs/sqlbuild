@@ -10,7 +10,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 
 const REGISTRY_MODULE: &str = "sqlbuild.adapter.discovery.main.resolve_adapter";
 const ADAPTER_ERRORS_MODULE: &str = "sqlbuild.adapter.contract.exceptions";
-const CLI_ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
+const CLI_ERRORS_MODULE: &str = "sqlbuild._native";
 const ADAPTER_CONFIGURATION_CODE: &str = "C601";
 
 /// `CliUserError(error.message, code="C601", help=error.help)` raised from `error`.

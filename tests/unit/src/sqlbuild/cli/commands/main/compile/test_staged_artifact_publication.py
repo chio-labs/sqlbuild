@@ -11,9 +11,8 @@ from typing import Any
 import pytest
 from filelock import FileLock, Timeout
 
-from sqlbuild._native import PreparedCompileArtifacts, WrittenTarget
+from sqlbuild._native import PreparedCompileArtifacts, StagedArtifactsChangedError, WrittenTarget
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.cli.commands.exceptions import StagedArtifactsChangedError
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     StagedPublishTestCase,
     StagingInterleavingTestCase,

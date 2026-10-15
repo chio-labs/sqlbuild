@@ -8,6 +8,7 @@ import pytest
 
 from sqlbuild._native import (
     CliCommand,
+    CliUserError,
     ParsedCliInvocation,
     ResolvedWarehouse,
     command_warehouse_scope,
@@ -16,7 +17,6 @@ from sqlbuild._native import (
     parse_cli_invocation,
     resolve_project_connection_config,
 )
-from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.contracts.models import LocalTargetConfig, TargetWarehousesConfig
 from sqlbuild.spec.contracts.types import WarehouseGroup
