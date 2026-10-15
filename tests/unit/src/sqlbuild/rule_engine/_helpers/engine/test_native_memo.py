@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.rule_engine.models import RulesResult
+from sqlbuild._native import RulesResult
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import NativeMemoTestCase
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine.helpers import evaluate_contract_rule
 

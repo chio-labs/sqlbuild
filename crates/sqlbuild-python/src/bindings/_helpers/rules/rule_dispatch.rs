@@ -18,6 +18,7 @@ use crate::bindings::_helpers::cache::native_store::current_code_identity;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, within,
 };
+use crate::bindings::_helpers::rules::constants::TYPE_PROOF_RULE_CODES;
 use crate::bindings::_helpers::rules::custom_evaluation::{
     CustomRun, evaluate_custom_rules_cached, outcome,
 };
@@ -26,8 +27,7 @@ use crate::bindings::_helpers::rules::custom_hosts::HostCancel;
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const RULES_MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
-const RULES_CONSTANTS_MODULE: &str = "sqlbuild.rule_engine.constants";
+const RULES_MODELS_MODULE: &str = "sqlbuild._native";
 const CUSTOM_PAYLOADS_MODULE: &str = "sqlbuild.rule_engine._helpers.engine.custom_payloads";
 const HERMETICITY_MODULE: &str = "sqlbuild.rule_engine._helpers.engine.hermeticity";
 const CUSTOM_THREAD: &str = "sqlbuild-custom-rules";
@@ -532,11 +532,14 @@ fn native_request<'py>(
         )?,
     };
     let mut include_type_proof: bool = false;
-    for code in imported(py, RULES_CONSTANTS_MODULE, "TYPE_PROOF_RULE_CODES")?.try_iter()? {
+    for code in TYPE_PROOF_RULE_CODES {
         include_type_proof = include_type_proof
             || call_with(
                 &native(py, "rule_selected")?,
-                &[("config", run.config.clone()), ("code", code?)],
+                &[
+                    ("config", run.config.clone()),
+                    ("code", pyo3::types::PyString::new(py, code).into_any()),
+                ],
             )?
             .is_truthy()?;
     }

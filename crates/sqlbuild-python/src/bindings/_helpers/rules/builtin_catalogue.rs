@@ -12,8 +12,8 @@ use sqlbuild_rules::rules::models::{BuiltinOption, BuiltinOptionKind};
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 
-const MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
-const TYPES_MODULE: &str = "sqlbuild.rule_engine.types";
+const MODELS_MODULE: &str = "sqlbuild._native";
+const TYPES_MODULE: &str = "sqlbuild._native";
 const FAMILY_SUFFIX_LENGTH: usize = 3;
 
 fn keywords<'py>(

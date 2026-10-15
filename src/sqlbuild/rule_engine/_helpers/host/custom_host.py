@@ -14,7 +14,17 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, BinaryIO
 
-from sqlbuild._native import CompiledProject, HostCancelledError, RulesError, build_rule_catalogue
+from sqlbuild._native import (
+    CompiledProject,
+    CustomHostPartition,
+    CustomRuleRun,
+    Finding,
+    HostCancelledError,
+    Rule,
+    RulesConfig,
+    RulesError,
+    build_rule_catalogue,
+)
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine._helpers.engine.fact_replay import fact_key_payload
 from sqlbuild.rule_engine._helpers.host.custom_evaluation import evaluate_custom_rules
@@ -31,13 +41,6 @@ from sqlbuild.rule_engine.constants import (
     CUSTOM_HOST_MAX_TRACKED_READS,
     CUSTOM_HOST_PROTOCOL_VERSION,
     CUSTOM_HOST_RUNTIME_VERSION,
-)
-from sqlbuild.rule_engine.models import (
-    CustomHostPartition,
-    CustomRuleRun,
-    Finding,
-    Rule,
-    RulesConfig,
 )
 from sqlbuild.rule_engine.types import CustomRulePlan
 

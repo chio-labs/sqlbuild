@@ -5,9 +5,8 @@ from pathlib import Path
 import pytest
 
 import sqlbuild._native as native
-from sqlbuild._native import RulesCacheConfig, RulesError
+from sqlbuild._native import RulesCacheConfig, RulesConfig, RulesError, RulesResult
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.rule_engine.models import RulesConfig, RulesResult
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine.helpers import evaluate_contract_rule
 from tests.unit.src.sqlbuild.rule_engine._helpers.run._test_types import (
     NativeRowsEncodeErrorTestCase,

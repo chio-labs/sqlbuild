@@ -15,5 +15,6 @@ pub(crate) mod migrations;
 pub(crate) mod planner;
 pub(crate) mod python_nodes;
 pub(crate) mod references;
+pub(crate) mod rule_shapes;
 pub(crate) mod scopes;
 pub(crate) mod values;

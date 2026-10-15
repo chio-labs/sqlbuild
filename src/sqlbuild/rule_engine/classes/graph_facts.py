@@ -2,9 +2,9 @@
 
 from functools import cached_property
 
+from sqlbuild._native import Model
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.rule_engine.classes.project_tree import public_model
-from sqlbuild.rule_engine.models import Model
 
 
 class GraphFacts:

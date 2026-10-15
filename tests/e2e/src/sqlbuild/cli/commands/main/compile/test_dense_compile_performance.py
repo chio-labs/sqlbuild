@@ -14,8 +14,13 @@ from scripts.cold_compile_performance._helpers.dense_project import (
 from scripts.cold_compile_performance.main.assert_required_cgroup_memory_limit import (
     assert_required_cgroup_memory_limit,
 )
-from sqlbuild._native import build_rule_catalogue, load_rules_config, select_catalogue_rules
-from sqlbuild.rule_engine.models import Rule, RulesConfig
+from sqlbuild._native import (
+    Rule,
+    RulesConfig,
+    build_rule_catalogue,
+    load_rules_config,
+    select_catalogue_rules,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     DenseCompileGuardTestCase,
     DenseWarmEditCompileGuardTestCase,

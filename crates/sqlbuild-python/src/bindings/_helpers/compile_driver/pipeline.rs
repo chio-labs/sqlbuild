@@ -28,7 +28,7 @@ const ANALYSIS_SELECTION_MODULE: &str = "sqlbuild._native";
 const TIMING_TRACKER_MODULE: &str = "sqlbuild._native";
 const RULE_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const RULE_THREADS_MODULE: &str = "sqlbuild._native";
-const RULE_MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
+const RULE_MODELS_MODULE: &str = "sqlbuild._native";
 const RUNTIME_MODELS_MODULE: &str = "sqlbuild.runtime.contracts.models";
 const GENERIC_DIALECT: &str = "generic";
 

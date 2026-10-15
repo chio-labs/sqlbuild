@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from sqlbuild.rule_engine.models import Model
+from sqlbuild._native import Model
 
 
 class FactReads:

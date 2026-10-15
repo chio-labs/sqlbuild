@@ -60,6 +60,11 @@ use crate::bindings::_helpers::record_behaviours::references::{
     reference_example_call, reference_fixture_cte_prefix, reference_function_name,
     reference_placeholder_call,
 };
+use crate::bindings::_helpers::record_behaviours::rule_shapes::{
+    project_path_depth, project_path_name, project_path_parts, rule_option_boolean,
+    rule_option_class_getitem, rule_option_integer, rule_option_integer_list, rule_option_string,
+    rule_option_string_list, rule_project_wide, rule_result_finding_count,
+};
 use crate::bindings::_helpers::record_behaviours::scopes::{
     completeness_complete, target_query_unknown,
 };
@@ -250,6 +255,11 @@ pub(crate) const BEHAVIOUR_PROPERTIES: &[(&str, &str, ClassProperty)] = &[
         "output_column_count",
         model_output_column_count,
     ),
+    ("ProjectPath", "parts", project_path_parts),
+    ("ProjectPath", "name", project_path_name),
+    ("ProjectPath", "depth", project_path_depth),
+    ("Rule", "project_wide", rule_project_wide),
+    ("RuleResult", "finding_count", rule_result_finding_count),
 ];
 /// Computed attributes of compiler shapes that a record computes once and keeps.
 pub(crate) const BEHAVIOUR_CACHED_PROPERTIES: &[(&str, &str, ClassProperty)] = &[
@@ -319,9 +329,19 @@ pub(crate) const BEHAVIOUR_METHODS: &[(&str, &str, ClassMethod)] = &[
     ("CompactLineageFacts", "__iter__", facts_iter),
     ("CompactLineageFacts", "__eq__", facts_eq),
     ("CompactLineageFacts", "resource_name", facts_resource_name),
+    ("RuleOption", "__class_getitem__", rule_option_class_getitem),
+    ("RuleOption", "boolean", rule_option_boolean),
+    ("RuleOption", "integer", rule_option_integer),
+    ("RuleOption", "string", rule_option_string),
+    ("RuleOption", "string_list", rule_option_string_list),
+    ("RuleOption", "integer_list", rule_option_integer_list),
 ];
 /// Compiler records registered as `collections.abc.Sequence` virtual subclasses.
 pub(crate) const BEHAVIOUR_SEQUENCES: &[&str] = &["CompactLineageFacts"];
 /// Compiler records ordered by their compared fields.
-pub(crate) const BEHAVIOUR_ORDERED: &[&str] =
-    &["ResourceIdentity", "DeclarationIdentity", "OwnershipRoot"];
+pub(crate) const BEHAVIOUR_ORDERED: &[&str] = &[
+    "ResourceIdentity",
+    "DeclarationIdentity",
+    "OwnershipRoot",
+    "ProjectPath",
+];

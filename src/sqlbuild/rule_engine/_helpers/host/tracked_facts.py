@@ -12,6 +12,10 @@ from sqlbuild._native import (
     EnumDeclaration,
     FactDigestError,
     InferredColumn,
+    Model,
+    ModelSql,
+    ProjectPath,
+    RuleFactViews,
 )
 from sqlbuild.compiler.compile.types import CompiledAuditView
 from sqlbuild.rule_engine._helpers.engine.fact_replay import fact_error_digest, fact_value_digest
@@ -47,7 +51,6 @@ from sqlbuild.rule_engine.constants import (
     FACT_TREE_RELATIVE_PARTS,
     FACT_TREE_RESOURCES_UNDER,
 )
-from sqlbuild.rule_engine.models import Model, ModelSql, ProjectPath, RuleFactViews
 
 
 class _TrackedView:

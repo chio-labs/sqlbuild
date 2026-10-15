@@ -14,7 +14,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine._helpers.host import custom_host
-from sqlbuild.rule_engine.constants import CUSTOM_RULES_CACHE_FILE
 from tests.unit.src.sqlbuild.rule_engine._helpers.host._test_types import (
     AwaitInputsTestCase,
     AwaitPublishedInputsTestCase,
@@ -83,9 +82,7 @@ def test_given_partitioned_hosts_when_evaluating_then_findings_and_cache_match_o
         detects_duplicates=test_case.detects_duplicates,
     )
     project: CompiledProjectView = orders_project(model_count=test_case.model_count)
-    cache_path: Path = rules_bulk_cache_path(
-        project_dir=tmp_path, file_name=CUSTOM_RULES_CACHE_FILE
-    )
+    cache_path: Path = rules_bulk_cache_path(project_dir=tmp_path, file_name="custom-rules.json")
     cache_glob: str = cache_path.relative_to(tmp_path).as_posix()
     cache_enabled: bool = test_case.cache_enabled
 

@@ -4,14 +4,11 @@ CUSTOM_HOST_PROTOCOL_VERSION: int = 1
 CUSTOM_HOST_RUNTIME_VERSION: str = "sqlbuild-rules-custom-v2"
 CUSTOM_HOST_MAX_TRACKED_READS: int = 100_000
 CUSTOM_RULE_PROJECT_SUBJECT: str = ""
-CUSTOM_RULES_CACHE_FILE: str = "custom-rules.json"
 CUSTOM_HOST_INPUT_TUPLE_SIZE: int = 2
 SHARED_FACT_DATACLASS_TAG: str = "\0dataclass"
-CUSTOM_HOST_ABANDONED_SUFFIX: str = ".abandoned"
 CUSTOM_HOST_INPUT_POLL_SECONDS: float = 0.002
 CUSTOM_HOST_INPUT_WAIT_SECONDS: float = 120.0
 CUSTOM_HOST_MODULE: str = "sqlbuild.rule_engine._helpers.host.custom_host"
-CUSTOM_HOST_CANCELLED_MARKER: str = "cancelled"
 CUSTOM_HOST_CANCELLED_EXIT_CODE: int = 75
 CUSTOM_HOST_CANCELLED_MESSAGE: str = "custom host cancelled after another host failed"
 CUSTOM_HOST_LAUNCH_MODULE: str = "sqlbuild.rule_engine._helpers.host.custom_host_launch"
@@ -62,7 +59,6 @@ CUSTOM_RULE_IMPORT_ROOTS: frozenset[str] = frozenset(
 
 AST_CTE_KIND: str = "cte"
 CONTRACT_ENFORCED: str = "enforced"
-TYPE_PROOF_RULE_CODES: frozenset[str] = frozenset({"SQBRCONTRACT105"})
 
 
 RULE_DECORATOR_TOKEN: str = "@rule"

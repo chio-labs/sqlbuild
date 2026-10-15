@@ -14,7 +14,7 @@ use sqlbuild_rules::models::RulesConfig;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 
-const MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
+const MODELS_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild._native";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 /// The rules configuration models that stay Python for the custom-rule API.

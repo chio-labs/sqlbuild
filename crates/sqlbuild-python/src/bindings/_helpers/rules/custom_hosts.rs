@@ -26,6 +26,9 @@ use sqlbuild_rules::custom_host_pool::types::{HostInvocation, HostPlan};
 use sqlbuild_rules::engine::main::custom_host::run_custom_host_json;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::rules::constants::{
+    CUSTOM_HOST_ABANDONED_SUFFIX, CUSTOM_HOST_CANCELLED_MARKER,
+};
 use crate::bindings::_helpers::rules::custom_host_observation::{
     LaunchLog, ObservedHosts, before_publish, observed_hosts, record_launch,
 };
@@ -118,10 +121,7 @@ pub(crate) fn run_custom_hosts(
     let input_dir: PathBuf = input_dir.canonicalize()?;
     let stem: String = format!("project-{}", uuid_hex(py)?);
     let input_path: PathBuf = input_dir.join(format!("{stem}.pickle"));
-    let abandoned: PathBuf = input_dir.join(format!(
-        "{stem}{}",
-        constant::<String>(py, "CUSTOM_HOST_ABANDONED_SUFFIX")?
-    ));
+    let abandoned: PathBuf = input_dir.join(format!("{stem}{}", CUSTOM_HOST_ABANDONED_SUFFIX));
     let mut payload: Map<String, Value> = Map::new();
     payload.insert("project_pickle_path".to_owned(), json!(text(&input_path)));
     payload.insert("abandoned_marker".to_owned(), json!(text(&abandoned)));
@@ -221,7 +221,7 @@ fn run_partitions<'py>(
             .collect();
     }
     let cancel_dir: PathBuf = unique_directory(input_dir, "hosts-")?;
-    let marker: PathBuf = cancel_dir.join(constant::<String>(py, "CUSTOM_HOST_CANCELLED_MARKER")?);
+    let marker: PathBuf = cancel_dir.join(CUSTOM_HOST_CANCELLED_MARKER);
     let specs: Vec<String> = plans
         .iter()
         .map(|partition| launch.spec(partition, Some(&marker)))

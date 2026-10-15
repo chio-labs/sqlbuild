@@ -5,9 +5,8 @@ from stat import S_IMODE
 
 import pytest
 
-from sqlbuild._native import RuleExemption, RulesError
+from sqlbuild._native import RuleExemption, RulesConfig, RulesError
 from sqlbuild._native import install_rules_skills as install_skills
-from sqlbuild.rule_engine.models import RulesConfig
 from tests.unit.src.sqlbuild.rule_engine.main.skills._test_types import (
     SkillDivergenceTestCase,
     SkillFreshnessTestCase,

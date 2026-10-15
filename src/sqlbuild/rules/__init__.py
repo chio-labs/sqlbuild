@@ -2,9 +2,7 @@
 
 from collections.abc import Callable
 
-from sqlbuild.rule_engine.main.define import rule as _rule
-from sqlbuild.rule_engine.main.evaluate_rule import evaluate_rule
-from sqlbuild.rule_engine.models import (
+from sqlbuild._native import (
     Finding,
     Model,
     Project,
@@ -15,6 +13,8 @@ from sqlbuild.rule_engine.models import (
     RuleResult,
     SqlNode,
 )
+from sqlbuild.rule_engine.main.define import rule as _rule
+from sqlbuild.rule_engine.main.evaluate_rule import evaluate_rule
 from sqlbuild.rule_engine.types import RuleCheck, RuleContext
 
 __all__ = (

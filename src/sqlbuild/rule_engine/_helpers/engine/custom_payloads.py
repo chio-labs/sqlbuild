@@ -6,11 +6,11 @@ import inspect
 from pathlib import Path
 
 from sqlbuild._native import (
+    Rule,
     custom_rule_implementation_fingerprint,
     custom_rule_import_closure,
     custom_rule_test_evidence,
 )
-from sqlbuild.rule_engine.models import Rule
 
 
 def custom_rule_payloads(

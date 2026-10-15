@@ -10,8 +10,7 @@ from typing import Any, cast
 import pytest
 
 import sqlbuild._native as native
-from sqlbuild._native import SqlRulesEvaluation
-from sqlbuild.rule_engine.models import Finding
+from sqlbuild._native import Finding, SqlRulesEvaluation
 from tests.integration.src.sqlbuild.rule_engine.native_rows._test_types import (
     SqlRulePublicationTestCase,
 )

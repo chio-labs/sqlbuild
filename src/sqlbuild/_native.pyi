@@ -18101,3 +18101,396 @@ class CompiledSqlTest(NativeRecord):
         target_model_names: tuple[str, ...] = ...,
         tested_resources: tuple[CompiledSqlTestResource, ...] = ...,
     ) -> None: ...
+
+class RuleSubject(StrEnum):
+    """Compiler-owned unit used to invoke and cache one custom rule."""
+
+    MODEL = "model"
+    PROJECT = "project"
+
+class Model(NativeRecord):
+    """Stable identity and common metadata for one compiled SQL model."""
+
+    name: str
+    path: Path
+    materialization: str | None
+    def __init__(
+        self,
+        name: str,
+        path: Path,
+        materialization: str | None,
+    ) -> None: ...
+
+class Project(NativeRecord):
+    """Stable summary for one compiled project invocation."""
+
+    model_count: int
+    target_name: str | None
+    def __init__(
+        self,
+        model_count: int,
+        target_name: str | None,
+    ) -> None: ...
+
+class ProjectPath(NativeRecord):
+    """One normalized project-relative file or directory."""
+
+    value: str
+    is_file: bool
+    is_dir: bool
+    def __init__(
+        self,
+        value: str,
+        is_file: bool,
+        is_dir: bool,
+    ) -> None: ...
+    @property
+    def parts(self) -> tuple[str, ...]: ...
+    @property
+    def name(self) -> str: ...
+    @property
+    def depth(self) -> int: ...
+
+class SqlNode(NativeRecord):
+    """Stable source location for one common SQL structure fact."""
+
+    kind: str
+    line: int
+    column: int
+    def __init__(
+        self,
+        kind: str,
+        line: int,
+        column: int,
+    ) -> None: ...
+
+class ModelSql(NativeRecord):
+    """Authored and compiler-expanded SQL documents for one model."""
+
+    authored: Any
+    expanded: Any
+    def __init__(
+        self,
+        authored: Any,
+        expanded: Any,
+    ) -> None: ...
+
+class RuleFactViews(NativeRecord):
+    """Views shared by every invocation in one custom-rule host evaluation."""
+
+    project: Any
+    sql: Any
+    graph: Any
+    columns: Any
+    contracts: Any
+    tests: Any
+    audits: Any
+    declarations: Any
+    def __init__(
+        self,
+        project: Any,
+        sql: Any,
+        graph: Any,
+        columns: Any,
+        contracts: Any,
+        tests: Any,
+        audits: Any,
+        declarations: Any,
+    ) -> None: ...
+
+class RuleOption[T](NativeRecord):
+    """One typed configuration option declared by a rule."""
+
+    @property
+    def name(self) -> str: ...
+    @property
+    def value_type(self) -> type[T]: ...
+    @property
+    def default(self) -> T: ...
+    @property
+    def description(self) -> str: ...
+    @property
+    def choices(self) -> tuple[T, ...]: ...
+    @property
+    def minimum(self) -> int | None: ...
+    @property
+    def maximum(self) -> int | None: ...
+    @property
+    def minimum_items(self) -> int | None: ...
+    @property
+    def item_type(self) -> type[object] | None: ...
+    def __init__(
+        self,
+        name: str,
+        value_type: type[T],
+        default: T,
+        description: str,
+        choices: tuple[T, ...] = ...,
+        minimum: int | None = ...,
+        maximum: int | None = ...,
+        minimum_items: int | None = ...,
+        item_type: type[object] | None = ...,
+    ) -> None: ...
+    @classmethod
+    def boolean(cls, *, name: str, default: bool, description: str) -> RuleOption[bool]: ...
+    @classmethod
+    def integer(
+        cls,
+        *,
+        name: str,
+        default: int,
+        description: str,
+        minimum: int | None = None,
+        maximum: int | None = None,
+    ) -> RuleOption[int]: ...
+    @classmethod
+    def string(
+        cls, *, name: str, default: str, description: str, choices: tuple[str, ...] = ()
+    ) -> RuleOption[str]: ...
+    @classmethod
+    def string_list(
+        cls,
+        *,
+        name: str,
+        default: tuple[str, ...],
+        description: str,
+        minimum_items: int | None = None,
+    ) -> RuleOption[tuple[str, ...]]: ...
+    @classmethod
+    def integer_list(
+        cls,
+        *,
+        name: str,
+        default: tuple[int, ...],
+        description: str,
+        minimum_items: int | None = None,
+    ) -> RuleOption[tuple[int, ...]]: ...
+
+class Rule(NativeRecord):
+    """Immutable metadata and implementation for one rule."""
+
+    code: str
+    family: str
+    slug: str
+    message: str
+    remediation: str
+    check: RuleCheck
+    options: tuple[RuleOption[object], ...]
+    enabled_by_default: bool
+    custom: bool
+    source: str | None
+    subject: RuleSubject | None
+    subject_parameter: str | None
+    context_parameter: str | None
+    guidance: RuleGuidance | None
+    def __init__(
+        self,
+        code: str,
+        family: str,
+        slug: str,
+        message: str,
+        remediation: str,
+        check: RuleCheck,
+        options: tuple[RuleOption[object], ...] = ...,
+        enabled_by_default: bool = ...,
+        custom: bool = ...,
+        source: str | None = ...,
+        subject: RuleSubject | None = ...,
+        subject_parameter: str | None = ...,
+        context_parameter: str | None = ...,
+        guidance: RuleGuidance | None = ...,
+    ) -> None: ...
+    @property
+    def project_wide(self) -> bool: ...
+
+class Finding(NativeRecord):
+    """One deterministic compiler rules violation."""
+
+    code: str
+    path: Path
+    line: int
+    column: int
+    message: str
+    remediation: str
+    unevaluated: bool
+    affected_rules: tuple[str, ...]
+    fixable: bool
+    def __init__(
+        self,
+        code: str,
+        path: Path,
+        line: int,
+        column: int,
+        message: str,
+        remediation: str,
+        unevaluated: bool = ...,
+        affected_rules: tuple[str, ...] = ...,
+        fixable: bool = ...,
+    ) -> None: ...
+
+class LayoutConfig(NativeRecord):
+    levels: tuple[str, ...]
+    domain_roots: tuple[str, ...]
+    def __init__(
+        self,
+        levels: tuple[str, ...] = ...,
+        domain_roots: tuple[str, ...] = ...,
+    ) -> None: ...
+
+class RulesConfig(NativeRecord):
+    select: tuple[str, ...]
+    ignore: tuple[str, ...]
+    thresholds: dict[str, int]
+    threshold_overrides: tuple[ThresholdOverride, ...]
+    rule_options: dict[str, dict[str, RuleOptionValue]]
+    rule_exceptions: tuple[RuleExemption, ...]
+    graph_edge_exceptions: tuple[GraphEdgeExclusion, ...]
+    rule_ignores: tuple[RuleIgnore, ...]
+    allow_exceptions: bool
+    select_star_allow: tuple[SelectStarAllow, ...]
+    domains: tuple[str, ...]
+    approved_source_tokens: tuple[str, ...]
+    retired_source_tokens: dict[str, str]
+    sql_tests: SqlTestRulesConfig
+    layout: LayoutConfig
+    cache: RulesCacheConfig
+    def __init__(
+        self,
+        select: tuple[str, ...] = ...,
+        ignore: tuple[str, ...] = ...,
+        thresholds: dict[str, int] = ...,
+        threshold_overrides: tuple[ThresholdOverride, ...] = ...,
+        rule_options: dict[str, dict[str, RuleOptionValue]] = ...,
+        rule_exceptions: tuple[RuleExemption, ...] = ...,
+        graph_edge_exceptions: tuple[GraphEdgeExclusion, ...] = ...,
+        rule_ignores: tuple[RuleIgnore, ...] = ...,
+        allow_exceptions: bool = ...,
+        select_star_allow: tuple[SelectStarAllow, ...] = ...,
+        domains: tuple[str, ...] = ...,
+        approved_source_tokens: tuple[str, ...] = ...,
+        retired_source_tokens: dict[str, str] = ...,
+        sql_tests: SqlTestRulesConfig = ...,
+        layout: LayoutConfig = ...,
+        cache: RulesCacheConfig = ...,
+    ) -> None: ...
+
+class RulesResult(NativeRecord):
+    findings: tuple[Finding, ...]
+    evaluated_models: int
+    unevaluated_resources: int
+    cache_hits: int
+    cache_misses: int
+    built_in_ms: int
+    custom_ms: int
+    custom_cpu_ms: int
+    def __init__(
+        self,
+        findings: tuple[Finding, ...],
+        evaluated_models: int,
+        unevaluated_resources: int = ...,
+        cache_hits: int = ...,
+        cache_misses: int = ...,
+        built_in_ms: int = ...,
+        custom_ms: int = ...,
+        custom_cpu_ms: int = ...,
+    ) -> None: ...
+
+class RuleFile(NativeRecord):
+    path: str
+    source: str
+    def __init__(
+        self,
+        path: str,
+        source: str,
+    ) -> None: ...
+
+class RuleCase(NativeRecord):
+    description: str
+    source: str
+    expected_finding_count: int
+    path: str
+    files: tuple[RuleFile, ...]
+    config: dict[str, object]
+    def __init__(
+        self,
+        description: str,
+        source: str,
+        expected_finding_count: int,
+        path: str = ...,
+        files: tuple[RuleFile, ...] = ...,
+        config: dict[str, object] = ...,
+    ) -> None: ...
+
+class RuleResult(NativeRecord):
+    findings: tuple[Finding, ...]
+    def __init__(
+        self,
+        findings: tuple[Finding, ...],
+    ) -> None: ...
+    @property
+    def finding_count(self) -> int: ...
+
+class CustomRuleEvaluation(NativeRecord):
+    """Findings and observed fact reads of one rule invocation for one subject."""
+
+    code: str
+    subject: str | None
+    findings: tuple[Finding, ...]
+    reads: frozenset[tuple[object, ...]] | None
+    def __init__(
+        self,
+        code: str,
+        subject: str | None,
+        findings: tuple[Finding, ...],
+        reads: frozenset[tuple[object, ...]] | None,
+    ) -> None: ...
+
+class ModuleStateTrace(NativeRecord):
+    """What exact module-state walks touched: object and type identities and their decisions."""
+
+    touched: dict[int, int]
+    descended_types: frozenset[int]
+    checked_instances: frozenset[int]
+    def __init__(
+        self,
+        touched: dict[int, int],
+        descended_types: frozenset[int],
+        checked_instances: frozenset[int],
+    ) -> None: ...
+
+class ModuleStateFingerprint(NativeRecord):
+    """One exact custom-rule module-state fingerprint and the trace of the walk behind it."""
+
+    token: str
+    trace: ModuleStateTrace
+    def __init__(
+        self,
+        token: str,
+        trace: ModuleStateTrace,
+    ) -> None: ...
+
+class CustomRuleRun(NativeRecord):
+    """Every invocation of one host run plus rules whose reads could not be attributed."""
+
+    evaluations: tuple[CustomRuleEvaluation, ...]
+    untracked_codes: frozenset[str]
+    uncacheable_codes: frozenset[str]
+    observed: tuple[tuple[tuple[str, ...], str | None], ...]
+    stateful_codes: frozenset[str]
+    def __init__(
+        self,
+        evaluations: tuple[CustomRuleEvaluation, ...],
+        untracked_codes: frozenset[str],
+        uncacheable_codes: frozenset[str] = ...,
+        observed: tuple[tuple[tuple[str, ...], str | None], ...] = ...,
+        stateful_codes: frozenset[str] = ...,
+    ) -> None: ...
+
+class CustomHostPartition(NativeRecord):
+    """How one host of a split run detects module state and learns the run was cancelled."""
+
+    cancelled: Callable[[], bool]
+    def __init__(
+        self,
+        cancelled: Callable[[], bool],
+    ) -> None: ...

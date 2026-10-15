@@ -8,7 +8,12 @@ from tempfile import TemporaryDirectory
 
 from sqlbuild._native import (
     DiscoveredProjectInputs,
+    Rule,
     RuleAssertionError,
+    RuleCase,
+    RuleResult,
+    RulesConfig,
+    RulesResult,
     RuleUsageError,
     build_compiled_project,
     discover_project_inputs,
@@ -22,13 +27,6 @@ from sqlbuild.rule_engine._helpers.engine.definition import (
     rule_from_value,
 )
 from sqlbuild.rule_engine.constants import MIN_CUSTOM_RULE_TEST_CASES
-from sqlbuild.rule_engine.models import (
-    Rule,
-    RuleCase,
-    RuleResult,
-    RulesConfig,
-    RulesResult,
-)
 from sqlbuild.rule_engine.types import RuleCheck
 
 

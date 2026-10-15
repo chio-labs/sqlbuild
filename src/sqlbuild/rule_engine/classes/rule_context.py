@@ -5,7 +5,17 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, cast
 
-from sqlbuild._native import RuleUsageError
+from sqlbuild._native import (
+    Finding,
+    Model,
+    ProjectPath,
+    Rule,
+    RuleFactViews,
+    RuleOption,
+    RulesConfig,
+    RuleUsageError,
+    SqlNode,
+)
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.rule_engine.classes.audit_facts import AuditFacts
 from sqlbuild.rule_engine.classes.column_facts import ColumnFacts
@@ -17,16 +27,6 @@ from sqlbuild.rule_engine.classes.model_test_facts import TestFacts
 from sqlbuild.rule_engine.classes.project_facts import ProjectFacts
 from sqlbuild.rule_engine.classes.sql_facts import SqlFacts
 from sqlbuild.rule_engine.constants import PARENT_DIRECTORY_TOKEN
-from sqlbuild.rule_engine.models import (
-    Finding,
-    Model,
-    ProjectPath,
-    Rule,
-    RuleFactViews,
-    RuleOption,
-    RulesConfig,
-    SqlNode,
-)
 
 
 def build_rule_fact_views(

@@ -3,7 +3,7 @@
 /// The extension module hosting the shapes.
 pub const NATIVE_MODULE: &str = "sqlbuild._native";
 /// The Python model type a natively hosted compiler shape is captured as.
-pub const HOSTED_SHAPE_TYPES: [(&str, &str); 470] = [
+pub const HOSTED_SHAPE_TYPES: [(&str, &str); 491] = [
     (
         "sqlbuild._native:AlignedInterval",
         "sqlbuild.cursor_algebra.models:AlignedInterval",
@@ -327,6 +327,18 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 470] = [
     (
         "sqlbuild._native:CursorsConfig",
         "sqlbuild.spec.contracts.models:CursorsConfig",
+    ),
+    (
+        "sqlbuild._native:CustomHostPartition",
+        "sqlbuild.rule_engine.models:CustomHostPartition",
+    ),
+    (
+        "sqlbuild._native:CustomRuleEvaluation",
+        "sqlbuild.rule_engine.models:CustomRuleEvaluation",
+    ),
+    (
+        "sqlbuild._native:CustomRuleRun",
+        "sqlbuild.rule_engine.models:CustomRuleRun",
     ),
     (
         "sqlbuild._native:CustomRulesOutcome",
@@ -689,6 +701,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 470] = [
         "sqlbuild.rule_engine.exceptions:FactDigestError",
     ),
     (
+        "sqlbuild._native:Finding",
+        "sqlbuild.rule_engine.models:Finding",
+    ),
+    (
         "sqlbuild._native:Fingerprint",
         "sqlbuild.compiler.fingerprints.models:Fingerprint",
     ),
@@ -827,6 +843,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 470] = [
     (
         "sqlbuild._native:JanitorConfig",
         "sqlbuild.spec.contracts.models:JanitorConfig",
+    ),
+    (
+        "sqlbuild._native:LayoutConfig",
+        "sqlbuild.rule_engine.models:LayoutConfig",
     ),
     (
         "sqlbuild._native:LifecycleEventSinkFilterConfig",
@@ -1015,6 +1035,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 470] = [
         "sqlbuild.spec.contracts.types:MissingMigrationOriginPolicy",
     ),
     (
+        "sqlbuild._native:Model",
+        "sqlbuild.rule_engine.models:Model",
+    ),
+    (
         "sqlbuild._native:ModelColumnLineage",
         "sqlbuild.compiler.lineage.models:ModelColumnLineage",
     ),
@@ -1039,6 +1063,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 470] = [
         "sqlbuild.compiler.discovery.models:ModelSchemaDeclaration",
     ),
     (
+        "sqlbuild._native:ModelSql",
+        "sqlbuild.rule_engine.models:ModelSql",
+    ),
+    (
         "sqlbuild._native:ModelSqlAnalysis",
         "sqlbuild.compiler.compile.models:ModelSqlAnalysis",
     ),
@@ -1049,6 +1077,14 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 470] = [
     (
         "sqlbuild._native:ModelValidationRequest",
         "sqlbuild.compiler.compile.models:ModelValidationRequest",
+    ),
+    (
+        "sqlbuild._native:ModuleStateFingerprint",
+        "sqlbuild.rule_engine.models:ModuleStateFingerprint",
+    ),
+    (
+        "sqlbuild._native:ModuleStateTrace",
+        "sqlbuild.rule_engine.models:ModuleStateTrace",
     ),
     (
         "sqlbuild._native:MovePreview",
@@ -1243,6 +1279,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 470] = [
         "sqlbuild.rule_engine.models:PreparedSqlLintResult",
     ),
     (
+        "sqlbuild._native:Project",
+        "sqlbuild.rule_engine.models:Project",
+    ),
+    (
         "sqlbuild._native:ProjectCompileError",
         "sqlbuild.lint.exceptions:ProjectCompileError",
     ),
@@ -1257,6 +1297,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 470] = [
     (
         "sqlbuild._native:ProjectGraph",
         "sqlbuild.compiler.pipeline.models:ProjectGraph",
+    ),
+    (
+        "sqlbuild._native:ProjectPath",
+        "sqlbuild.rule_engine.models:ProjectPath",
     ),
     (
         "sqlbuild._native:ProjectPathError",
@@ -1394,13 +1438,26 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 470] = [
         "sqlbuild._native:RetentionPlanPhase",
         "sqlbuild.compiler.planner.types:RetentionPlanPhase",
     ),
+    ("sqlbuild._native:Rule", "sqlbuild.rule_engine.models:Rule"),
     (
         "sqlbuild._native:RuleAssertionError",
         "sqlbuild.rule_engine.exceptions:RuleAssertionError",
     ),
     (
+        "sqlbuild._native:RuleCase",
+        "sqlbuild.rule_engine.models:RuleCase",
+    ),
+    (
         "sqlbuild._native:RuleExemption",
         "sqlbuild.rule_engine.models:RuleExemption",
+    ),
+    (
+        "sqlbuild._native:RuleFactViews",
+        "sqlbuild.rule_engine.models:RuleFactViews",
+    ),
+    (
+        "sqlbuild._native:RuleFile",
+        "sqlbuild.rule_engine.models:RuleFile",
     ),
     (
         "sqlbuild._native:RuleFixResult",
@@ -1415,8 +1472,20 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 470] = [
         "sqlbuild.rule_engine.models:RuleIgnore",
     ),
     (
+        "sqlbuild._native:RuleOption",
+        "sqlbuild.rule_engine.models:RuleOption",
+    ),
+    (
+        "sqlbuild._native:RuleResult",
+        "sqlbuild.rule_engine.models:RuleResult",
+    ),
+    (
         "sqlbuild._native:RuleRunPlan",
         "sqlbuild.rule_engine.models:RuleRunPlan",
+    ),
+    (
+        "sqlbuild._native:RuleSubject",
+        "sqlbuild.rule_engine.types:RuleSubject",
     ),
     (
         "sqlbuild._native:RuleUsageError",
@@ -1427,12 +1496,20 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 470] = [
         "sqlbuild.rule_engine.models:RulesCacheConfig",
     ),
     (
+        "sqlbuild._native:RulesConfig",
+        "sqlbuild.rule_engine.models:RulesConfig",
+    ),
+    (
         "sqlbuild._native:RulesConfigError",
         "sqlbuild.rule_engine.exceptions:RulesConfigError",
     ),
     (
         "sqlbuild._native:RulesError",
         "sqlbuild.rule_engine.exceptions:RulesError",
+    ),
+    (
+        "sqlbuild._native:RulesResult",
+        "sqlbuild.rule_engine.models:RulesResult",
     ),
     (
         "sqlbuild._native:RulesRunResult",
@@ -1709,6 +1786,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 470] = [
     (
         "sqlbuild._native:SqlLogicalType",
         "sqlbuild.sql_values.models:SqlLogicalType",
+    ),
+    (
+        "sqlbuild._native:SqlNode",
+        "sqlbuild.rule_engine.models:SqlNode",
     ),
     (
         "sqlbuild._native:SqlReferenceKind",

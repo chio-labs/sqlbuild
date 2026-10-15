@@ -9,7 +9,7 @@ from pathlib import Path, PurePath
 
 import orjson
 
-from sqlbuild._native import FactDigestError
+from sqlbuild._native import FactDigestError, Model, RuleFactViews
 from sqlbuild.rule_engine.classes.shared_fact_encoder import SharedFactEncoder
 from sqlbuild.rule_engine.classes.sql_document import SqlDocument
 from sqlbuild.rule_engine.constants import (
@@ -43,7 +43,6 @@ from sqlbuild.rule_engine.constants import (
     FACT_TREE_RELATIVE_PARTS,
     FACT_TREE_RESOURCES_UNDER,
 )
-from sqlbuild.rule_engine.models import Model, RuleFactViews
 from sqlbuild.rule_engine.types import FactKey
 
 _TRACKED_TEXT_SUFFIXES: frozenset[str] = frozenset({".py", ".sql", ".toml", ".yaml", ".yml"})

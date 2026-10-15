@@ -9,7 +9,20 @@ from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
 
-from sqlbuild._native import HostCancelledError, NonHermeticRuleError, RulesError
+from sqlbuild._native import (
+    CustomHostPartition,
+    CustomRuleEvaluation,
+    CustomRuleRun,
+    Finding,
+    HostCancelledError,
+    Model,
+    NonHermeticRuleError,
+    Project,
+    Rule,
+    RulesConfig,
+    RulesError,
+    RuleSubject,
+)
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.rule_engine._helpers.host.module_state import rule_namespaces
 from sqlbuild.rule_engine._helpers.host.tracked_facts import tracked_fact_views
@@ -26,17 +39,7 @@ from sqlbuild.rule_engine.constants import (
     CUSTOM_HOST_CANCELLED_MESSAGE,
     CUSTOM_RULE_PROJECT_SUBJECT,
 )
-from sqlbuild.rule_engine.models import (
-    CustomHostPartition,
-    CustomRuleEvaluation,
-    CustomRuleRun,
-    Finding,
-    Model,
-    Project,
-    Rule,
-    RulesConfig,
-)
-from sqlbuild.rule_engine.types import CustomRulePlan, RuleSubject
+from sqlbuild.rule_engine.types import CustomRulePlan
 
 type _FindingKey = tuple[str, str, int, int, str, str]
 

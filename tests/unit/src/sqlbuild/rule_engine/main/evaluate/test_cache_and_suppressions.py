@@ -8,13 +8,14 @@ import pytest
 from sqlbuild._native import (
     RuleExemption,
     RuleIgnore,
+    RulesConfig,
     RulesError,
+    RulesResult,
     compiled_model_record,
     project_with,
 )
 from sqlbuild._native import evaluate_project_rules as evaluate
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.rule_engine.models import RulesConfig, RulesResult
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate._test_types import PolicyBehaviorTestCase
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_project
 

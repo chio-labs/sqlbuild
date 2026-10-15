@@ -698,6 +698,11 @@ const E_LOADER_CONNECTION_MODE: EnumSpec = EnumSpec {
     doc: "How a source loader owns the destination warehouse connection.",
     members: &[("SQLBUILD", "sqlbuild"), ("EXTERNAL", "external")],
 };
+const E_RULE_SUBJECT: EnumSpec = EnumSpec {
+    name: "RuleSubject",
+    doc: "Compiler-owned unit used to invoke and cache one custom rule.",
+    members: &[("MODEL", "model"), ("PROJECT", "project")],
+};
 
 /// Compiler, rule, lint and config string enums.
 pub(crate) const COMPILER_ENUMS: &[EnumSpec] = &[
@@ -771,4 +776,5 @@ pub(crate) const COMPILER_ENUMS: &[EnumSpec] = &[
     E_SQL_REFERENCE_KIND,
     E_HARD_CODED_RELATION_OWNER_KIND,
     E_LOADER_CONNECTION_MODE,
+    E_RULE_SUBJECT,
 ];

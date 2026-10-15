@@ -19,6 +19,7 @@ use sqlbuild_rules::custom_rule_cache::types::ReadSet;
 
 use crate::bindings::_helpers::cache::native_store::current_code_identity;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::rules::constants::CUSTOM_RULES_CACHE_FILE;
 use crate::bindings::_helpers::rules::custom_hosts::{
     HostCancel, HostRequest, host_payload_project, run_custom_hosts,
 };
@@ -112,7 +113,7 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
                     ("project_dir", run.project_dir.clone()),
                     (
                         "file_name",
-                        imported(py, RULES_CONSTANTS_MODULE, "CUSTOM_RULES_CACHE_FILE")?,
+                        pyo3::types::PyString::new(py, CUSTOM_RULES_CACHE_FILE).into_any(),
                     ),
                 ],
             )?

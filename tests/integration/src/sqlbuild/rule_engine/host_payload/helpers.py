@@ -10,6 +10,7 @@ import sqlbuild._native as compile_models
 from sqlbuild._native import (
     CompiledModel,
     CompiledProject,
+    Model,
     build_compiled_project,
     discover_project_inputs,
 )
@@ -22,7 +23,6 @@ from sqlbuild.rule_engine._helpers.engine.fact_replay import (
 )
 from sqlbuild.rule_engine.classes.project_tree import public_model
 from sqlbuild.rule_engine.classes.rule_context import RuleFactViews, build_rule_fact_views
-from sqlbuild.rule_engine.models import Model
 from sqlbuild.rule_engine.types import FactKey
 
 _TREE_ARGUMENTS: tuple[str, ...] = ("models/marts/order_totals.sql", "models")

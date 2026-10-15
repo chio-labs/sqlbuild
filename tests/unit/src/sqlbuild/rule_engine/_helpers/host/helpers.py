@@ -19,7 +19,9 @@ from sqlbuild._native import (
     CustomHostObserver,
     CustomRulesOutcome,
     OpaqueModuleStateError,
+    Rule,
     RulesCacheConfig,
+    RulesConfig,
     build_rule_catalogue,
     project_with,
 )
@@ -27,7 +29,6 @@ from sqlbuild._native import evaluate_custom_rules as evaluate_custom_rules_cach
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine._helpers.host.module_state import module_state_token, rule_namespaces
 from sqlbuild.rule_engine.classes.module_state_monitor import ModuleStateMonitor
-from sqlbuild.rule_engine.models import Rule, RulesConfig
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_project
 
 _MODEL_RULE: str = "XSQBRT101"

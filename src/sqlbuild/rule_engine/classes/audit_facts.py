@@ -4,10 +4,10 @@ from functools import cached_property
 
 from sqlbuild._native import (
     CompiledAudit,
+    Model,
     compiled_audit_record,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.rule_engine.models import Model
 
 
 class AuditFacts:

@@ -5,9 +5,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from sqlbuild._native import NonHermeticRuleError, RulesError, custom_rule_import_closure
+from sqlbuild._native import NonHermeticRuleError, Rule, RulesError, custom_rule_import_closure
 from sqlbuild.rule_engine.constants import CUSTOM_RULE_IMPORT_ROOTS
-from sqlbuild.rule_engine.models import Rule
 
 
 def verify_custom_rules(*, rules: tuple[Rule, ...], project_dir: Path) -> None:

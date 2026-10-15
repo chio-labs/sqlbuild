@@ -5,7 +5,7 @@ use pyo3::types::{PyDict, PyDictMethods};
 use serde_json::Value;
 use sqlbuild_rules::models::Fault;
 
-const MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
+const MODELS_MODULE: &str = "sqlbuild._native";
 const FINDING_CLASS: &str = "Finding";
 const PATHLIB_MODULE: &str = "pathlib";
 const PATH_CLASS: &str = "Path";

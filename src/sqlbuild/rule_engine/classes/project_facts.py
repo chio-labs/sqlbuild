@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from sqlbuild._native import (
+    Model,
     compiled_audit_record,
     compiled_function_record,
     compiled_seed_record,
@@ -10,7 +11,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine.classes.project_tree import ProjectTree, public_model
-from sqlbuild.rule_engine.models import Model
 
 
 class ProjectFacts:
