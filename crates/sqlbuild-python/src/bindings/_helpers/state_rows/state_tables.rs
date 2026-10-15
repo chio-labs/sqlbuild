@@ -6,7 +6,7 @@ use pyo3::prelude::{
 };
 use pyo3::types::{PyDict, PyString, PyStringMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
-use sqlbuild_state::freshness::constants::SOURCE_FRESHNESS_TABLE_NAME;
+use sqlbuild_core::constants::SOURCE_FRESHNESS_TABLE_NAME;
 use sqlbuild_state::state_tables::main::create_table_sql::create_table_sql;
 use sqlbuild_state::state_tables::main::values_insert_sql::values_insert_sql;
 use sqlbuild_state::state_tables::models::TableColumn;
