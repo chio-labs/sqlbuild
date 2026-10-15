@@ -15,6 +15,7 @@ from sqlbuild._native import (
     build_manifest,
     compiled_model_record,
     project_with,
+    render_sql_test_comparison_sql,
     write_compile_target,
     write_static_compile_target,
 )
@@ -27,7 +28,6 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticPhase,
 )
 from sqlbuild.compiler.planner.models import ChainStep, PlanOutput, SqlTestPlanEntry
-from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     ExpectedMessageTestCase,
     TargetWriterCacheTestCase,
@@ -74,7 +74,7 @@ def test_given_plan_output_when_writing_target_then_expected_files_are_written(
 ) -> None:
     plan_output: PlanOutput = build_target_writer_plan_output()
     expected_test_sql: str = (
-        build_sql_test_comparison_sql(test_entry=plan_output.test_entries[0]) + "\n"
+        render_sql_test_comparison_sql((plan_output.test_entries[0],))[0] + "\n"
     )
     manifest: _native.NativeManifest = build_manifest(
         project=build_test_project(),

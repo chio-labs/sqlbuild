@@ -7,12 +7,12 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::text::main::python_casefold::python_casefold;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::type_system::equality::types_equal as native_types_equal;
 
 const ADOPTION_MODELS_MODULE: &str = "sqlbuild.compiler.contract_adoption.models";
 const ADOPTION_TYPES_MODULE: &str = "sqlbuild.compiler.contract_adoption.types";
 const ADAPTER_MODELS_MODULE: &str = "sqlbuild.adapter.contract.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const TYPES_EQUAL_MODULE: &str = "sqlbuild.adapter.type_system.main.types_equal";
 const DYNAMIC_FAMILIES_MODULE: &str = "sqlbuild._native";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const MODEL_RESOURCE: &str = "model";
@@ -241,16 +241,11 @@ fn types_equal(
     adapter: &Bound<'_, PyAny>,
     (left, right): (&Bound<'_, PyAny>, &Bound<'_, PyAny>),
 ) -> PyResult<bool> {
-    let py: Python<'_> = adapter.py();
-    keyword_call(
-        &py.import(TYPES_EQUAL_MODULE)?.getattr("types_equal")?,
-        vec![
-            ("left", left.clone()),
-            ("right", right.clone()),
-            ("dialect", adapter.call_method0("sql_analysis_dialect")?),
-        ],
-    )?
-    .is_truthy()
+    native_types_equal(
+        &adapter.call_method0("sql_analysis_dialect")?,
+        &left.extract::<String>()?,
+        &right.extract::<String>()?,
+    )
 }
 
 /// The finding for a physical column no declared column names, if any.

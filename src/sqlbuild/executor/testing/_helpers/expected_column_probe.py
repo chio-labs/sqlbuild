@@ -3,20 +3,13 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, cast
+from typing import Any
 
-import orjson
-
-import sqlbuild._native as _native
+from sqlbuild._native import describe_missing_expected_columns, render_sql_test_comparison_sql
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import SqlTestPlanEntry
 from sqlbuild.diagnostics.classes.diagnostic_record_redactor import DiagnosticRecordRedactor
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
-from sqlbuild.executor.testing._helpers.native_requests import comparison_request
-from sqlbuild.executor.testing.main._missing_expected_columns import (
-    describe_missing_expected_columns,
-)
-from sqlbuild.executor.testing.types import NativeSqlTestRenderingModule
 
 _LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 
@@ -47,20 +40,13 @@ def missing_expected_columns_message(
 def _probe_actual_columns(
     *, test_entry: SqlTestPlanEntry, step_index: int, adapter: BaseAdapter, connection: Any
 ) -> frozenset[str] | None:
-    request: dict[str, object] = comparison_request(
-        test_entry=test_entry,
+    (sql,) = render_sql_test_comparison_sql(
+        (test_entry,),
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
+        probe_step_index=step_index,
     )
-    request["probeStepIndex"] = step_index
-    response: object = orjson.loads(
-        cast(NativeSqlTestRenderingModule, _native).render_sql_test_comparisons_json(
-            orjson.dumps({"requests": [request]}, option=orjson.OPT_SORT_KEYS).decode()
-        )
-    )
-    item: object = response[0] if isinstance(response, list) and response else None
-    sql: object = item.get("sql") if isinstance(item, dict) else None
-    if not isinstance(sql, str) or not sql:
+    if not sql:
         return None
     try:
         cursor: Any = adapter.execute(

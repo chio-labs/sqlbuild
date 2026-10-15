@@ -30,6 +30,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::compile_outputs::runtime_target::write_test_runtime_target;
 use crate::bindings::_helpers::result_output::integration_values::json_value;
+use crate::bindings::_helpers::result_output::resource_ids::sql_test_identity;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
@@ -39,7 +40,6 @@ const TEST_PLAN_MODULE: &str = "sqlbuild._native";
 const PLANNER_ERRORS: &str = "sqlbuild.compiler.planner.exceptions";
 const EXECUTOR_PIPELINE_MODELS: &str = "sqlbuild.executor.pipeline.models";
 const EXECUTOR_RUN_MODULE: &str = "sqlbuild.executor.pipeline.main.run";
-const RESOURCE_ID_MODULE: &str = "sqlbuild.executor.testing.main._resource_id";
 const DECIMAL_KIND: &str = "decimal";
 const PASS_OUTCOME: &str = "pass";
 const EXPECT_LABEL: &str = "expect";
@@ -218,15 +218,7 @@ impl TestCallbackRelay {
         if group.is_empty() {
             group = UNKNOWN_GROUP.to_owned();
         }
-        let resource_id: Bound<'_, PyAny> = call_with(
-            &imported(py, RESOURCE_ID_MODULE, "sql_test_resource_id")?,
-            &[
-                ("test_name", result.getattr("test_name")?),
-                ("source_path", result.getattr("source_path")?),
-                ("block_index", result.getattr("block_index")?),
-                ("case_name", result.getattr("case_name")?),
-            ],
-        )?;
+        let resource_id: Bound<'_, PyAny> = text(py, &sql_test_identity(result, "test_name")?);
         call_with(
             &self.progress.bind(py).getattr("on_item_complete")?,
             &[

@@ -13,3 +13,7 @@ pub(crate) const FUNCTION_TYPE_DIALECTS: [(&str, &str, DialectType); 4] = [
 pub(crate) const CTES_FIELD: &str = "ctes";
 pub(crate) const ALIAS_FIELD: &str = "alias";
 pub(crate) const NAME_FIELD: &str = "name";
+
+/// Opening and closing quotes of identifiers SQL tests list as expected columns.
+pub(crate) const SQL_TEST_IDENTIFIER_QUOTES: [(char, char); 3] =
+    [('"', '"'), ('`', '`'), ('[', ']')];

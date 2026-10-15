@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.executor.scenario.main.expected_comparison_sql import (
-    build_scenario_expected_comparison_sql,
-)
+from sqlbuild._native import build_scenario_expected_comparison_sql
 from tests.unit.src.sqlbuild.executor.scenario.main._test_types import (
     ScenarioExpectedComparisonSqlTestCase,
 )

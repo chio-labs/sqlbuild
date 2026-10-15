@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild._native import audit_resource_id
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
@@ -14,7 +15,6 @@ from sqlbuild.executor.auditing.main._execute_reporting_errors import (
 from sqlbuild.executor.auditing.main.publish_completed_audit_results import (
     publish_completed_audit_results,
 )
-from sqlbuild.executor.auditing.main.resource_id import audit_resource_id
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
     ResourceAttemptLifecycle,

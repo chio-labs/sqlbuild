@@ -13,6 +13,7 @@ use sqlbuild_cache::artifacts::main::new_sql_test_record::new_sql_test_record;
 use sqlbuild_cache::artifacts::main::reusable_sql_test_record::reusable_sql_test_record;
 use sqlbuild_cache::artifacts::models::SqlTestArtifactRecord;
 
+use crate::bindings::_helpers::analysis::sql_test_comparisons::single_comparison_sql;
 use crate::bindings::_helpers::compile_command::artifact_batch::{ArtifactBatch, timed};
 use crate::bindings::_helpers::compile_command::reuse_recording::{
     ArtifactRecorder, CompileArtifactWrites, artifact_kept, artifact_moved, artifact_tree_moved,
@@ -50,7 +51,6 @@ const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
 const MODEL_CHAIN_MODULE: &str = "sqlbuild._native";
 const PLAN_ARTIFACTS_MODULE: &str = "sqlbuild._native";
-const COMPARISON_SQL_MODULE: &str = "sqlbuild.executor.testing.main.comparison_sql";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const TARGET_OPTIONS: (&[&str], &[&str]) = (&["target_dir", "adapter", "project"], &["manifest"]);
 const STAGING_CHANGED_HELP: &str =
@@ -271,21 +271,7 @@ fn write_planned_target<'py>(
             .div(TESTS_DIR)?
             .div(planned_sql_test_path(&entry)?)?;
         let comparison_sql: String = timed(py, "comparison_render_ms", || {
-            call_with(
-                &imported(py, COMPARISON_SQL_MODULE, "build_sql_test_comparison_sql")?,
-                &[
-                    ("test_entry", entry.clone()),
-                    (
-                        "set_difference_operator",
-                        adapter.call_method0("render_set_difference_operator")?,
-                    ),
-                    (
-                        "sql_analysis_dialect",
-                        adapter.call_method0("sql_analysis_dialect")?,
-                    ),
-                ],
-            )?
-            .extract()
+            single_comparison_sql(&entry, adapter)
         })?;
         batch.queue_sql(&path, &comparison_sql)?;
         managed.push(path);

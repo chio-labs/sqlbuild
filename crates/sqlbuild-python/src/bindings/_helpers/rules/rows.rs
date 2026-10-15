@@ -8,7 +8,7 @@ use pyo3::exceptions::{PyOSError, PyTypeError, PyValueError};
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyDict, PyDictMethods, PyStringMethods, PyTuple};
+use pyo3::types::{PyDict, PyStringMethods, PyTuple};
 use pyo3::{
     FromPyObject, IntoPyObject, IntoPyObjectExt, pyclass, pyfunction, pymethods, wrap_pyfunction,
 };
@@ -34,15 +34,12 @@ use crate::bindings::_helpers::compiled_project::values::plain_value;
 use crate::bindings::_helpers::rules::findings::{FindingClasses, finding_fault};
 use crate::bindings::_helpers::rules::selection::rules_error;
 use crate::bindings::_helpers::rules::sql_test_objects::{scenario_fact, sql_test_fact};
+use crate::bindings::_helpers::type_system::equality::types_equal;
 use crate::bindings::types::CompilerDetach;
 
-const LEFT_ARGUMENT: &str = "left";
-const RIGHT_ARGUMENT: &str = "right";
-const DIALECT_ARGUMENT: &str = "dialect";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
 const CODE_IDENTITY_MODULE: &str = "sqlbuild.compiler.frontier.main.compiled_code_identity";
-const TYPES_EQUAL_MODULE: &str = "sqlbuild.adapter.type_system.main.types_equal";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const NATIVE_RULES_CACHE_FILE: &str = "native.json";
 const NATIVE_RULES_MEMO_FILE: &str = "native-response.json";
@@ -67,7 +64,6 @@ struct ProjectRows<'py> {
     public_enums: Vec<DeclarationRowPy<'py>>,
     public_constants: Vec<DeclarationRowPy<'py>>,
     initial_findings: Vec<Bound<'py, PyAny>>,
-    types_equal: Bound<'py, PyAny>,
     dialect: Bound<'py, PyAny>,
 }
 
@@ -166,7 +162,6 @@ fn built_request(options: &Request<'_, '_>) -> PyResult<NativeRulesRequest> {
             .get("initial_findings")?
             .try_iter()?
             .collect::<PyResult<_>>()?,
-        types_equal: imported(py, TYPES_EQUAL_MODULE, "types_equal")?,
         dialect,
     };
     let facts: Bound<'_, NativeCompiledProject> =
@@ -349,19 +344,6 @@ fn as_rules_error<T>(py: Python<'_>, result: PyResult<T>) -> PyResult<T> {
     })
 }
 
-/// `left=`, `right=` and `dialect=`: `types_equal` takes keyword-only arguments.
-fn type_arguments<'py>(
-    dialect: &Bound<'py, PyAny>,
-    left: &str,
-    right: &str,
-) -> PyResult<Bound<'py, PyDict>> {
-    let arguments: Bound<'py, PyDict> = PyDict::new(dialect.py());
-    arguments.set_item(LEFT_ARGUMENT, left)?;
-    arguments.set_item(RIGHT_ARGUMENT, right)?;
-    arguments.set_item(DIALECT_ARGUMENT, dialect)?;
-    Ok(arguments)
-}
-
 fn built_models(
     project: &ProjectRows<'_>,
     request: &EvaluateRequest,
@@ -369,10 +351,7 @@ fn built_models(
 ) -> PyResult<Vec<Model>> {
     let mut python_error: Option<PyErr> = None;
     let fallback = |left: &str, right: &str| -> Result<bool, String> {
-        match type_arguments(&project.dialect, left, right)
-            .and_then(|arguments| project.types_equal.call((), Some(&arguments)))
-            .and_then(|equal| equal.extract::<bool>())
-        {
+        match types_equal(&project.dialect, left, right) {
             Ok(equal) => Ok(equal),
             Err(error) => {
                 let message: String = error.to_string();

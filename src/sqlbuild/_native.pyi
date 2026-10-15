@@ -174,6 +174,9 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     ChainStep,
+    BackfillResult,
+    ChainStep,
+    ChangeDetectionResult,
     CloneSourcePlanEntry,
     ColumnMigrationPlanEntry,
     CursorBounds,
@@ -4910,6 +4913,39 @@ def scope_test_ctes(
 ) -> list[tuple[str | None, list[tuple[str, str]]]]: ...
 def omitted_ceremonial_select(sql: str, syntax: dict[str, object]) -> int | None: ...
 def extract_sql_tests_json(request_json: str) -> str: ...
+def render_sql_test_comparison_sql(
+    test_entries: Sequence[SqlTestPlanEntry],
+    *,
+    set_difference_operator: str = "EXCEPT",
+    sql_analysis_dialect: str | None = None,
+    probe_step_index: int | None = None,
+) -> list[str]: ...
+def render_sql_test_difference_sample_sql(
+    *,
+    test_entry: SqlTestPlanEntry,
+    step: ChainStep,
+    direction: str,
+    sample_limit: int,
+    set_difference_operator: str = "EXCEPT",
+    sql_analysis_dialect: str | None = None,
+) -> str: ...
+def describe_missing_expected_columns(
+    *, model_name: str, expected_columns: Sequence[str], available_columns: Iterable[str]
+) -> str | None: ...
+def build_scenario_expected_comparison_sql(
+    *, actual_sql: str, expected_sql: str, set_difference_operator: str
+) -> str: ...
+def sql_test_resource_id(
+    *, test_name: str, source_path: PurePath | None, block_index: int | None, case_name: str | None
+) -> str: ...
+def audit_resource_id(
+    *,
+    audit_name: str,
+    attachment_kind: AuditAttachmentKind,
+    attached_target_kind: AttachedAuditTargetKind | None = None,
+    attached_target_name: str | None,
+    attached_column_name: str | None,
+) -> str: ...
 def validated_model_cursor_intrinsics(
     *, sql: str, config_values: Mapping[str, object], model_name: str
 ) -> str: ...

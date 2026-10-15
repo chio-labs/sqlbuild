@@ -35,10 +35,10 @@ use crate::bindings::_helpers::planner_identity::metadata::{
     compiled_function_fingerprint_sql, function_local_hashes, model_declared_columns_hash,
     model_version_identity_metadata_json,
 };
+use crate::bindings::_helpers::type_system::equality::types_equal as native_types_equal;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const HOOK_IDENTITIES_MODULE: &str = "sqlbuild.compiler.python_nodes.main._hook_identities";
-const TYPES_EQUAL_MODULE: &str = "sqlbuild.adapter.type_system.main.types_equal";
 const DYNAMIC_FAMILIES_MODULE: &str = "sqlbuild._native";
 const DEBUG_EVENT_MODULE: &str = "sqlbuild.diagnostics.main.log_debug_event";
 const LOG_SQL_MODULE: &str = "sqlbuild.diagnostics.main.log_sql";
@@ -594,18 +594,8 @@ fn schema_findings_of<'py>(
 ) -> PyResult<Vec<SchemaFindingRow>> {
     let py: Python<'py> = dialect.py();
     let dialect_name: Option<String> = dialect.extract()?;
-    let types_equal_function: Bound<'py, PyAny> = imported(py, TYPES_EQUAL_MODULE, "types_equal")?;
-    let mut types_equal = |left: &str, right: &str| -> PyResult<bool> {
-        call_with(
-            &types_equal_function,
-            &[
-                ("left", PyString::new(py, left).into_any()),
-                ("right", PyString::new(py, right).into_any()),
-                ("dialect", dialect.clone()),
-            ],
-        )?
-        .is_truthy()
-    };
+    let mut types_equal =
+        |left: &str, right: &str| -> PyResult<bool> { native_types_equal(dialect, left, right) };
     let matching_function: Bound<'py, PyAny> =
         imported(py, DYNAMIC_FAMILIES_MODULE, "matching_dynamic_families")?;
     let mut single_family_type = |name: &str| -> PyResult<Option<String>> {

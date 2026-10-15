@@ -13,6 +13,7 @@ from sqlbuild._native import (
     build_test_command_plan,
     plan_compiled_sql_test_artifacts,
     project_with,
+    render_sql_test_comparison_sql,
     resolve_static_command_scope,
     resolve_static_relation_context,
     sql_test_plan_error_messages,
@@ -41,6 +42,7 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     SqlTestPlanEntry,
 )
+from sqlbuild.compiler.planner.types import WarningSeverity
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     AssertionChainCteErrorTestCase,
@@ -1472,11 +1474,11 @@ def test_given_adapter_function_when_resolving_with_analysis_then_keeps_authored
     entry, _ = plan_single_test(
         test=compiled_test, project=project, adapter=adapter, sql_analysis_enabled=True
     )
-    comparison_sql: str = build_sql_test_comparison_sql(
-        test_entry=entry,
+    comparison_sql: str = render_sql_test_comparison_sql(
+        (entry,),
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
-    )
+    )[0]
 
     assert test_case.expected_sql_fragment in entry.chain[0].resolved_sql
     assert test_case.expected_sql_fragment in comparison_sql
@@ -1523,11 +1525,11 @@ def test_given_tsql_shared_cte_name_when_planning_then_helper_and_model_cte_stay
     entry, _ = plan_single_test(
         test=compiled_test, project=project, adapter=adapter, sql_analysis_enabled=True
     )
-    comparison_sql: str = build_sql_test_comparison_sql(
-        test_entry=entry,
+    comparison_sql: str = render_sql_test_comparison_sql(
+        (entry,),
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
-    )
+    )[0]
 
     for expected_fragment in test_case.expected_sql_fragments.values():
         assert expected_fragment in comparison_sql, comparison_sql

@@ -16,6 +16,7 @@ from sqlbuild._native import (
     plan_compiled_sql_test_artifacts,
     plan_sql_tests,
     plan_sql_tests_natively,
+    render_sql_test_comparison_sql,
     sql_test_plan_error_messages,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -50,7 +51,6 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     PlanTestChainTestCase,
 )
@@ -142,11 +142,11 @@ def assert_native_artifact_matches_runtime_plan(
     """Assert the compiled artifact matches the runtime comparison SQL for the same plan."""
 
     adapter: DuckDbAdapter = DuckDbAdapter()
-    expected_sql: str = build_sql_test_comparison_sql(
-        test_entry=entry,
+    expected_sql: str = render_sql_test_comparison_sql(
+        (entry,),
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
-    )
+    )[0]
     (artifact,) = plan_compiled_sql_test_artifacts(
         project=project,
         tests=(sql_test,),

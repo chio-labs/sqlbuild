@@ -1,5 +1,6 @@
 //! Scenario executor results read into plain rows and runtime artifact inputs.
 
+use sqlbuild_analysis::compiler::main::scenario_expected_comparison_sql::scenario_expected_comparison_sql;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -15,7 +16,6 @@ use sqlbuild_core::scenario_command::models::{
 };
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::scenario_command::setup::text;
 
 const SUCCESS_STATUS: &str = "success";
 const FAILED_STATUS: &str = "failed";
@@ -28,7 +28,6 @@ const LOCAL_DIR: &str = "local";
 const PLANNER_TYPES: &str = "sqlbuild.compiler.planner.types";
 const QUALIFIED_NAME_MODULE: &str =
     "sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name";
-const COMPARISON_SQL_MODULE: &str = "sqlbuild.executor.scenario.main.expected_comparison_sql";
 
 fn items<'py>(value: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {
     value.try_iter()?.collect()
@@ -262,25 +261,13 @@ fn expectation_sql(
             ],
         )?
         .extract()?;
-        let sql: String = call_with(
-            &imported(
-                py,
-                COMPARISON_SQL_MODULE,
-                "build_scenario_expected_comparison_sql",
-            )?,
-            &[
-                (
-                    "actual_sql",
-                    text(py, &format!("SELECT * FROM {actual_relation}")),
-                ),
-                ("expected_sql", expected.getattr("expected_sql")?),
-                (
-                    "set_difference_operator",
-                    adapter.call_method0("render_set_difference_operator")?,
-                ),
-            ],
-        )?
-        .extract()?;
+        let sql: String = scenario_expected_comparison_sql(
+            &format!("SELECT * FROM {actual_relation}"),
+            &expected.getattr("expected_sql")?.extract::<String>()?,
+            &adapter
+                .call_method0("render_set_difference_operator")?
+                .extract::<String>()?,
+        );
         expectations
             .expected
             .push((expected.getattr("model_name")?.extract()?, sql));

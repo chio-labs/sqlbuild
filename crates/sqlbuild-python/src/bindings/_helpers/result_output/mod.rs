@@ -7,4 +7,5 @@ pub(crate) mod integration_records;
 pub(crate) mod integration_values;
 pub(crate) mod projection;
 pub(crate) mod registration;
+pub(crate) mod resource_ids;
 pub(crate) mod terminal_index;

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild._native import render_sql_test_comparison_sql
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.planner.models import SqlTestPlanEntry
@@ -20,7 +21,6 @@ from sqlbuild.executor.testing.constants import (
 from sqlbuild.executor.testing.main._sql_length import (
     validate_unit_test_sql_length,
 )
-from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
@@ -36,8 +36,8 @@ def execute_sql_test(
 ) -> SqlTestExecutionResult:
     """Execute one SQL unit test and collect bounded diagnostics for failed comparisons."""
 
-    comparison_sql: str = build_sql_test_comparison_sql(
-        test_entry=test_entry,
+    (comparison_sql,) = render_sql_test_comparison_sql(
+        (test_entry,),
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
     )

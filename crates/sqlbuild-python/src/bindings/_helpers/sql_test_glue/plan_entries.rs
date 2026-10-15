@@ -3,7 +3,8 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyListMethods, PyTuple};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::analysis::sql_test_comparisons::describe_missing_expected_columns;
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::sql_test_glue::constants::{COMPILE_TYPES, PLAN_MODELS};
 use crate::bindings::_helpers::sql_test_glue::constants::{TABLE_FN, UDF};
 use crate::bindings::_helpers::sql_test_glue::plan_values::model_payload;
@@ -147,21 +148,14 @@ pub(super) fn expected_diagnostics(
         if expected.is_none() || available.is_none() {
             continue;
         }
-        let message = call_with(
-            &imported(
-                py,
-                "sqlbuild.executor.testing.main._missing_expected_columns",
-                "describe_missing_expected_columns",
-            )?,
-            &[
-                ("model_name", name.clone()),
-                ("expected_columns", expected),
-                ("available_columns", available),
-            ],
-        )?;
-        if message.is_none() {
+        let Some(message) = describe_missing_expected_columns(
+            &name.extract::<String>()?,
+            expected.extract()?,
+            available,
+        )?
+        else {
             continue;
-        }
+        };
         let location = super::fixture_validation::fixture_location(
             test,
             &resource_types.getattr("SQL_TEST")?,
@@ -171,7 +165,7 @@ pub(super) fn expected_diagnostics(
             "SQL test '{}': {}: {}",
             test.getattr("name")?.extract::<String>()?,
             location,
-            message.extract::<String>()?
+            message
         ));
     }
     Ok(result)
