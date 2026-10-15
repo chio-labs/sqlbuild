@@ -4,7 +4,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use sqlbuild_analysis::planner_fixtures::models::FixtureColumn;
 
-pub(crate) const MODELS: &str = "sqlbuild.compiler.planner.models";
+pub(crate) const MODELS: &str = "sqlbuild._native";
 
 pub(crate) fn folded(value: &Bound<'_, PyAny>) -> PyResult<String> {
     value.call_method0("casefold")?.extract()

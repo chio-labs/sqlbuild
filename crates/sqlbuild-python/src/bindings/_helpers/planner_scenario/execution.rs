@@ -54,7 +54,7 @@ pub(crate) fn build_scenario_execution_plan<'py>(
     let snapshot = if snapshot.is_truthy()? {
         snapshot
     } else {
-        imported(py, MODELS, "WarehouseSnapshot")?.call0()?
+        imported(py, "sqlbuild._native", "WarehouseSnapshot")?.call0()?
     };
     let columns = args.value("source_warehouse_columns")?;
     let columns = if columns.is_truthy()? {
@@ -145,7 +145,7 @@ pub(crate) fn build_scenario_execution_plan<'py>(
                 ("full_refresh", PyBool::new(py, true).to_owned().into_any()),
                 (
                     "cursor_overrides",
-                    imported(py, MODELS, "CursorOverridePair")?.call0()?,
+                    imported(py, "sqlbuild._native", "CursorOverridePair")?.call0()?,
                 ),
             ],
         )?;
@@ -255,7 +255,7 @@ fn model_context<'py>(
     let (models, locations, columns) = inputs;
     let py = project.py();
     call_with(
-        &imported(py, MODELS, "ModelPlanContext")?,
+        &imported(py, "sqlbuild._native", "ModelPlanContext")?,
         &[
             (
                 "model_locations",

@@ -9,6 +9,7 @@ import pytest
 
 import sqlbuild._native as identity_planning
 from sqlbuild._native import (
+    PlanWarning,
     compiled_model_record,
     format_plan,
     project_with,
@@ -21,7 +22,6 @@ from sqlbuild.compiler.planner.models import (
     CursorBounds,
     ModelPlanEntry,
     PlanOutput,
-    PlanWarning,
 )
 from sqlbuild.compiler.planner.types import (
     BackfillAction,

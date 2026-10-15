@@ -6,7 +6,7 @@ use crate::bindings::_helpers::freshness::planning::{
     build_direct_source_freshness_planning_result, build_direct_source_freshness_propagation_result,
 };
 use crate::bindings::_helpers::planner_phases::objects::{
-    model_key_names, planner_model, replace, text, tuple,
+    model_key_names, native, replace, text, tuple,
 };
 use crate::bindings::_helpers::planner_warehouse::constants::RUN_SCOPE;
 use crate::bindings::_helpers::planner_warehouse::snapshot::{destination_nodes, lower};
@@ -45,7 +45,7 @@ pub(crate) fn source_freshness_unknown_warnings<'py>(
     let mut warnings: Vec<_> = Vec::new();
     for (reason, names) in reasons {
         if let Some(message) = freshness_unknown_message(&reason, &names) {
-            warnings.push(planner_model(
+            warnings.push(native(
                 py,
                 "PlanWarning",
                 &[

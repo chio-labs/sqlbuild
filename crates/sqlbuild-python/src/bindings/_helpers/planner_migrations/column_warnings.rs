@@ -1,7 +1,8 @@
 //! Preserve column-migration diagnostic codes and public messages.
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
-use crate::bindings::_helpers::planner_migrations::column_objects::{model, text};
+use crate::bindings::_helpers::planner_migrations::column_objects::native;
+use crate::bindings::_helpers::planner_migrations::column_objects::text;
 use crate::bindings::_helpers::planner_migrations::constants::{
     DONE, MISSING_ORIGIN_ALLOW_OUTCOME, MISSING_ORIGIN_CONFIRMATION_OUTCOME,
     MISSING_ORIGIN_DENY_OUTCOME,
@@ -18,7 +19,7 @@ pub(super) fn warning<'py>(
     error: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = entry.py();
-    model(
+    native(
         py,
         "PlanWarning",
         &[

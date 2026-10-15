@@ -8,6 +8,7 @@ from types import MappingProxyType
 from typing import cast
 
 from sqlbuild._native import (
+    BackfillResult,
     DbtCombinedGraph,
     DbtEventStream,
     DbtEventStreamUpdate,
@@ -30,7 +31,9 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSqlModelFile,
 )
-from sqlbuild.compiler.planner.models import BackfillResult, ModelPlanEntry
+from sqlbuild.compiler.planner.models import (
+    ModelPlanEntry,
+)
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
     MaterializationType,

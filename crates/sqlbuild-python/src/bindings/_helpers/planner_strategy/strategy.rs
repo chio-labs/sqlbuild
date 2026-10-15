@@ -15,7 +15,7 @@ use sqlbuild_analysis::planner_strategy::models::{
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
-use crate::bindings::_helpers::planner_changes::results::{MODELS_MODULE, planner_enum};
+use crate::bindings::_helpers::planner_changes::results::planner_enum;
 use crate::bindings::_helpers::planner_strategy::values::{
     PLANNER_EXCEPTIONS_MODULE, change_facts, config_value, finding_rows, input_error,
     materialization_value, model_materialization, optional_string, plan_warning, text,
@@ -112,7 +112,7 @@ fn resolve_schema_actions<'py>(
     on_schema_change: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = schema_findings.py();
-    let class: Bound<'py, PyAny> = imported(py, MODELS_MODULE, "SchemaAction")?;
+    let class: Bound<'py, PyAny> = imported(py, "sqlbuild._native", "SchemaAction")?;
     let policy: Option<String> = schema_policy(on_schema_change)?;
     let mut actions: Vec<Bound<'py, PyAny>> = Vec::new();
     for row in schema_actions(&finding_rows(schema_findings)?, policy.as_deref()) {

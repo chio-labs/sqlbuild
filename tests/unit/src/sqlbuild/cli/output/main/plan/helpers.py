@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild._native import (
+    BackfillResult,
+    ColumnRenameHint,
+    PlanProviderUsage,
+    PlanWarning,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
@@ -11,15 +17,11 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
 from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
 from sqlbuild.compiler.planner.models import (
-    BackfillResult,
-    ColumnRenameHint,
     CursorBounds,
     CursorInputRelation,
     FunctionPlanEntry,
     ModelPlanEntry,
     PlanOutput,
-    PlanProviderUsage,
-    PlanWarning,
     SchemaFinding,
     SeedPlanEntry,
     SourceLoadPlanEntry,

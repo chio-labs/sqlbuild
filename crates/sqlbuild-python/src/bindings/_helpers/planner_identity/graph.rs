@@ -27,7 +27,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::graph::algorithms::{closure, inverted};
 use crate::bindings::_helpers::graph::keys::KeyCache;
-use crate::bindings::_helpers::planner_changes::results::MODELS_MODULE;
 use crate::bindings::_helpers::planner_identity::hashing::graph_key;
 
 const EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
@@ -370,7 +369,7 @@ fn check_buildability<'py>(
             Some(name_set(&deferred_relations)?)
         },
     };
-    let entry_class: Bound<'py, PyAny> = imported(py, MODELS_MODULE, "MissingUpstream")?;
+    let entry_class: Bound<'py, PyAny> = imported(py, "sqlbuild._native", "MissingUpstream")?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
     for missing in missing_upstreams(&selected, &deps, &available) {
         entries.push(call_with(

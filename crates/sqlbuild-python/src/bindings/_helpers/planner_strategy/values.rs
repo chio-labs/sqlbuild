@@ -13,7 +13,7 @@ use sqlbuild_analysis::planner_strategy::models::{
 };
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::planner_changes::results::{MODELS_MODULE, planner_enum};
+use crate::bindings::_helpers::planner_changes::results::planner_enum;
 
 pub(crate) const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
 pub(crate) const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
@@ -137,7 +137,7 @@ pub(crate) fn plan_warning<'py>(
         WarningSeverity::Info => "info",
     };
     call_with(
-        &imported(py, MODELS_MODULE, "PlanWarning")?,
+        &imported(py, "sqlbuild._native", "PlanWarning")?,
         &[
             ("model_name", model_name.clone()),
             ("severity", planner_enum(py, "WarningSeverity", severity)?),

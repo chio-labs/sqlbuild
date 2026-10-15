@@ -3,7 +3,7 @@
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::planner_entries::values::{
     COMPILE_EXCEPTIONS, COMPILE_TYPES, MICROBATCH_CONCURRENCY_MESSAGE, PLANNER_EXCEPTIONS,
-    PLANNER_TYPES, boolean, error_of, native, none, planner_model, planner_type, replaced, string,
+    PLANNER_TYPES, boolean, error_of, native, none, planner_type, replaced, string,
 };
 use crate::bindings::_helpers::planner_resolution::cursor_ranges::{
     CursorWindowInputs, config_str, cursor_safety_configs, empty_cursor_inputs, microbatch_range,
@@ -39,7 +39,7 @@ fn plan_model_from_change<'py>(
     let py = model.py();
     let full_refresh = boolean(py, request.full_refresh)?;
     let backfill = if request.full_refresh {
-        planner_model(
+        native(
             py,
             "BackfillResult",
             &[("action", planner_type(py, "BackfillAction", "FULL")?)],
@@ -106,7 +106,7 @@ fn plan_model_from_change<'py>(
             ],
         )?;
     }
-    let pair = planner_model(
+    let pair = native(
         py,
         "CursorOverridePair",
         &[
@@ -371,7 +371,7 @@ fn check_microbatch_concurrency<'py>(
         return Ok(None);
     }
     let count = concurrent.len();
-    planner_model(
+    native(
         py,
         "PlanWarning",
         &[
@@ -414,7 +414,7 @@ fn plan_entries<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>
     let full_refresh = args.value("full_refresh")?;
     let inputs = args.value("build_inputs")?;
     let inputs = if inputs.is_none() {
-        planner_model(py, "PlanEntryBuildInputs", &[])?
+        native(py, "PlanEntryBuildInputs", &[])?
     } else {
         inputs
     };
@@ -439,7 +439,7 @@ fn plan_entries<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>
     }
     let settings = project.getattr("settings")?;
     let models_by_name = scope.getattr("models_by_name")?;
-    let context = planner_model(
+    let context = native(
         py,
         "ModelPlanContext",
         &[
@@ -567,7 +567,7 @@ fn plan_entries<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>
     if let Some(warning) = check_microbatch_concurrency(&project, &adapter, &entries)? {
         warnings.push(warning);
     }
-    planner_model(
+    native(
         py,
         "PlannerModelEntryResults",
         &[

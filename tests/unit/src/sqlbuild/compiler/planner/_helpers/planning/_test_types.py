@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild._native import (
+    ChangeDetectionResult,
+)
 from sqlbuild.adapter.contract.models import RetentionState
-from sqlbuild.compiler.planner.models import ChangeDetectionResult
 from sqlbuild.compiler.planner.types import RetentionDirection, RetentionPlanPhase
 from sqlbuild.spec.contracts.types import TableType, TableTypeDowngradePolicy
 

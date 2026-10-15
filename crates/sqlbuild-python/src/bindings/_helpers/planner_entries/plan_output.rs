@@ -157,7 +157,7 @@ fn provider_usages<'py>(
     let mut usages: Vec<Bound<'py, PyAny>> = Vec::new();
     for usage in provider_usages.try_iter()? {
         let usage = usage?;
-        usages.push(planner_model(
+        usages.push(native(
             py,
             "PlanProviderUsage",
             &[
@@ -527,7 +527,7 @@ fn planned_sql_tests<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = project.py();
     let selected = selected_test_entries((project, adapter), selected_keys, selection, &none(py))?;
-    planner_model(
+    native(
         py,
         "PlannedSqlTests",
         &[
@@ -549,7 +549,7 @@ fn plan_output<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>>
     let model_entry_results = args.value("model_entry_results")?;
     let extras = args.value("extras")?;
     let extras = if extras.is_none() {
-        planner_model(py, "PlanOutputExtras", &[])?
+        native(py, "PlanOutputExtras", &[])?
     } else {
         extras
     };

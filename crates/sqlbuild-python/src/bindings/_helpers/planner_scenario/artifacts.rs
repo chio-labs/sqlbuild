@@ -173,7 +173,7 @@ pub(crate) fn parse_scenario_artifact_physical_name<'py>(
         return Ok(py.None().into_bound(py));
     };
     call_with(
-        &imported(py, MODELS, "ParsedScenarioArtifactName")?,
+        &imported(py, "sqlbuild._native", "ParsedScenarioArtifactName")?,
         &[
             ("hash_prefix", string(py, hash)),
             ("kind", string(py, kind)),
@@ -249,7 +249,7 @@ pub(crate) fn build_scenario_relation_map<'py>(
         }
         seen.set_item(normalized, &artifact)?;
         artifacts.push(call_with(
-            &imported(py, MODELS, "ScenarioArtifactName")?,
+            &imported(py, "sqlbuild._native", "ScenarioArtifactName")?,
             &[
                 ("identity", artifact),
                 ("physical_name", string(py, &physical)),

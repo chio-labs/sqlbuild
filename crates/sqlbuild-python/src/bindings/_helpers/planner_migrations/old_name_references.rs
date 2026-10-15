@@ -1,7 +1,7 @@
 //! Diagnose literal references to compatibility-only old names.
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::planner_migrations::column_objects::{model, native, text};
+use crate::bindings::_helpers::planner_migrations::column_objects::{native, text};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyStringMethods, PyTuple};
 
@@ -121,7 +121,7 @@ pub(super) fn errors<'py>(
             .to_str()?
             .to_owned();
         let line = literal.getattr("line")?.str()?.to_str()?.to_owned();
-        errors.push(model(
+        errors.push(native(
             py,
             "PlanWarning",
             &[

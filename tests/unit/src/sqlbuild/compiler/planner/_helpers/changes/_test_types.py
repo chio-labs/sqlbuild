@@ -1,8 +1,14 @@
 from dataclasses import dataclass, field
 
+from sqlbuild._native import (
+    BackfillResult,
+    ReferenceRename,
+)
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import InferredColumn
-from sqlbuild.compiler.planner.models import BackfillResult, ReferenceRename, SchemaFinding
+from sqlbuild.compiler.planner.models import (
+    SchemaFinding,
+)
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanAction, PlanReason
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 

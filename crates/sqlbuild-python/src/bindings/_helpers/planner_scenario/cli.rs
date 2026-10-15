@@ -6,7 +6,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_GRAPH_VALIDATION;
 use crate::bindings::_helpers::planner_scenario::graph::plan_scenario_graph;
 use crate::bindings::_helpers::planner_scenario::relations::build_scenario_relation_plan;
-use crate::bindings::_helpers::planner_scenario::values::{MODELS, TYPES, string};
+use crate::bindings::_helpers::planner_scenario::values::{TYPES, string};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
@@ -59,7 +59,7 @@ pub(crate) fn build_cli_scenario_plan<'py>(
     ] {
         for name in graph.getattr(field)?.try_iter()? {
             identities.push(call_with(
-                &imported(py, MODELS, "ScenarioArtifactIdentity")?,
+                &imported(py, "sqlbuild._native", "ScenarioArtifactIdentity")?,
                 &[
                     (
                         "kind",

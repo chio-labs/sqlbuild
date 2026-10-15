@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild._native import (
+    ModelPlanContext,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
@@ -12,7 +15,6 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
-from sqlbuild.compiler.planner.models import ModelPlanContext
 
 
 def build_cursor_intrinsic_model(*, config_values: dict[str, object]) -> CompiledModelView:

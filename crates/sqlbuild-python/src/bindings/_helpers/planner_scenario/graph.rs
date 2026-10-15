@@ -3,7 +3,7 @@
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::graph::keys::{KeyCache, native_key};
 use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_GRAPH_VALIDATION;
-use crate::bindings::_helpers::planner_scenario::values::{MODELS, TYPES, string};
+use crate::bindings::_helpers::planner_scenario::values::{TYPES, string};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, pyfunction};
 use pyo3::types::PyTuple;
 use sqlbuild_analysis::planner_scenario::main::graph::graph;
@@ -55,7 +55,7 @@ pub(crate) fn plan_scenario_graph<'py>(
     input.targets.sort();
     input.assertions.sort();
     let plan = call_with(
-        &imported(py, MODELS, "ScenarioGraphPlan")?,
+        &imported(py, "sqlbuild._native", "ScenarioGraphPlan")?,
         &[
             ("key", scenario.getattr("key")?),
             ("name", scenario.getattr("name")?),
@@ -104,7 +104,10 @@ pub(crate) fn plan_scenario_graph<'py>(
         if coded {
             values.push(("code", string(py, SCENARIO_PLAN_GRAPH_VALIDATION)));
         }
-        warnings.push(call_with(&imported(py, MODELS, "PlanWarning")?, &values)?);
+        warnings.push(call_with(
+            &imported(py, "sqlbuild._native", "PlanWarning")?,
+            &values,
+        )?);
     }
     Ok((plan, PyTuple::new(py, warnings)?))
 }

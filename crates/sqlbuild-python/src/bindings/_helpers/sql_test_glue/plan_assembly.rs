@@ -6,7 +6,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
-use crate::bindings::_helpers::sql_test_glue::constants::{NATIVE_PLANNING, PLAN_MODELS};
+use crate::bindings::_helpers::sql_test_glue::constants::NATIVE_PLANNING;
 
 #[pyfunction(name = "plan_sql_tests")]
 #[pyo3(signature = (**kwargs))]
@@ -77,7 +77,7 @@ pub(crate) fn assemble_sql_test_plans<'py>(
         let model = model?;
         models.set_item(model.getattr("name")?, model)?;
     }
-    let result_class = imported(py, PLAN_MODELS, "SqlTestPlanResult")?;
+    let result_class = imported(py, "sqlbuild._native", "SqlTestPlanResult")?;
     let mut results: Vec<Bound<'py, PyAny>> = Vec::new();
     for (index, test) in tests.iter().enumerate() {
         if let Some(diagnostic) = diagnostics.get(&index) {

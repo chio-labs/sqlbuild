@@ -7,7 +7,6 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-const MODELS: &str = "sqlbuild.compiler.planner.models";
 const TYPES: &str = "sqlbuild.compiler.planner.types";
 const FUTURE_CAPPED_CODE: &str = "FUTURE_CURSOR_CAPPED";
 const START_CAPPED_CODE: &str = "AUTOMATIC_START_CAPPED";
@@ -80,7 +79,7 @@ pub(crate) fn with_cursor_safety_warnings<'py>(
     ] {
         let Some(message) = message else { continue };
         all.push(call_with(
-            &imported(py, MODELS, "PlanWarning")?,
+            &imported(py, "sqlbuild._native", "PlanWarning")?,
             &[
                 ("model_name", model_name.clone()),
                 (

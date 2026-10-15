@@ -13,6 +13,11 @@ from unittest.mock import Mock
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    BackfillResult,
+    ChangeDetectionResult,
+    PlannerChangeResults,
+    ScenarioArtifactIdentity,
+    WarehouseSnapshot,
     build_downstream_deps,
     build_scenario_relation_map,
     compiled_model_record,
@@ -68,13 +73,8 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import (
-    BackfillResult,
-    ChangeDetectionResult,
-    PlannerChangeResults,
     PlanOutput,
-    ScenarioArtifactIdentity,
     ScenarioRelationMap,
-    WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import (
     BackfillAction,

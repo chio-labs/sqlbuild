@@ -14,9 +14,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::compiled_project::records::replace;
 use crate::bindings::_helpers::plan_output::display::resolve_effective_microbatch_batch_size;
 use crate::bindings::_helpers::planner_changes::results::planner_enum;
-use crate::bindings::_helpers::planner_strategy::constants::{
-    PLAN_MODELS_MODULE, PLANNER_TYPES_MODULE,
-};
+use crate::bindings::_helpers::planner_strategy::constants::PLANNER_TYPES_MODULE;
 use crate::bindings::_helpers::planner_strategy::microbatches::{
     CAP_ACTIONS, CONTRACT_TYPES_MODULE, capped_microbatch_bounds, count_microbatches,
 };
@@ -159,7 +157,7 @@ fn limited<'py>(
         ));
     }
     let plan_warning: Bound<'py, PyAny> = call_with(
-        &imported(py, PLAN_MODELS_MODULE, "PlanWarning")?,
+        &imported(py, "sqlbuild._native", "PlanWarning")?,
         &[
             ("model_name", name),
             ("severity", planner_enum(py, "WarningSeverity", "warning")?),

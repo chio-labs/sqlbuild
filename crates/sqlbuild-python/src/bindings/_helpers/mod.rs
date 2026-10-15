@@ -50,6 +50,7 @@ pub(crate) mod planner_changes;
 pub(crate) mod planner_entries;
 pub(crate) mod planner_identity;
 pub(crate) mod planner_migrations;
+pub(crate) mod planner_models;
 pub(crate) mod planner_phases;
 pub(crate) mod planner_registration;
 pub(crate) mod planner_resolution;

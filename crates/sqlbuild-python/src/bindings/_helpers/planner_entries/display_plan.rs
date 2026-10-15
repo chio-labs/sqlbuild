@@ -104,7 +104,7 @@ fn display_entry<'py>(
             ("cursor_type", config(model, "cursor_type")?),
             (
                 "backfill",
-                planner_model(
+                native(
                     py,
                     "BackfillResult",
                     &[(

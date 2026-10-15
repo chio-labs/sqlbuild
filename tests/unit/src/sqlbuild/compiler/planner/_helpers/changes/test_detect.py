@@ -6,6 +6,12 @@ from datetime import datetime
 import pytest
 
 from sqlbuild._native import (
+    BackfillResult,
+    ChangeDetectionResult,
+    PlannerChangeResults,
+    PlanWarning,
+    WarehouseFingerprints,
+    WarehouseSnapshot,
     build_model_warnings,
     build_version_identity_metadata_json,
     compute_query_hash,
@@ -19,13 +25,7 @@ from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import (
-    BackfillResult,
-    ChangeDetectionResult,
-    PlannerChangeResults,
     PlannerScope,
-    PlanWarning,
-    WarehouseFingerprints,
-    WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import (
     BackfillAction,

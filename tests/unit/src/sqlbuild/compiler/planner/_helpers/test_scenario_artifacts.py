@@ -3,6 +3,9 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
+    ParsedScenarioArtifactName,
+    ScenarioArtifactIdentity,
+    ScenarioArtifactName,
     build_scenario_artifact_name,
     build_scenario_hash_index,
     build_scenario_relation_map,
@@ -12,9 +15,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
-    ParsedScenarioArtifactName,
-    ScenarioArtifactIdentity,
-    ScenarioArtifactName,
     ScenarioRelationMap,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (

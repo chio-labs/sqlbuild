@@ -3,7 +3,6 @@
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
-use crate::bindings::_helpers::sql_test_glue::constants::PLAN_MODELS;
 use crate::bindings::_helpers::sql_test_glue::plan_values::tuple;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python, pyfunction};
 use pyo3::types::{PyBool, PyDict, PyTuple};
@@ -184,7 +183,7 @@ fn planned<'py>(args: &KeywordArguments<'py>, artifact: bool) -> PyResult<Bound<
                 ));
             }
             plans.push(call_with(
-                &imported(py, PLAN_MODELS, "NativeSqlTestArtifact")?,
+                &imported(py, "sqlbuild._native", "NativeSqlTestArtifact")?,
                 &[
                     ("sql", sql),
                     ("model_names", plan.getattr("model_names")?),

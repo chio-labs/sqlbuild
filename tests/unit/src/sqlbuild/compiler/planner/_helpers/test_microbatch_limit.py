@@ -5,6 +5,8 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    PlanEntryBuildInputs,
+    PlanWarning,
     apply_configured_microbatch_limits,
     apply_microbatch_limit,
 )
@@ -19,8 +21,6 @@ from sqlbuild.compiler.planner.models import (
     CursorBounds,
     CursorInputRelation,
     ModelPlanEntry,
-    PlanEntryBuildInputs,
-    PlanWarning,
 )
 from sqlbuild.compiler.planner.types import (
     IncrementalMode,

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import build_model_warnings
-from sqlbuild.compiler.planner.models import (
+from sqlbuild._native import (
     ChangeDetectionResult,
     PlanWarning,
     SchemaAction,
+    build_model_warnings,
+)
+from sqlbuild.compiler.planner.models import (
     SchemaFinding,
 )
 from sqlbuild.compiler.planner.types import (

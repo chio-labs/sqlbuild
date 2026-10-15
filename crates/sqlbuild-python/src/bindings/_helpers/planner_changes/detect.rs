@@ -25,7 +25,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::planner_changes::renames::origin_names;
 use crate::bindings::_helpers::planner_changes::results::{
-    MODELS_MODULE, backfill_result, change_kind, planner_enum, replay_policy_error, schema_findings,
+    backfill_result, change_kind, planner_enum, replay_policy_error, schema_findings,
 };
 use crate::bindings::_helpers::planner_identity::hashing::{
     function_definition_hash, model_query_hash,
@@ -86,7 +86,7 @@ fn detect_changes<'py>(
         ),
     )?;
     let functions: Bound<'py, PyDict> = PyDict::new(py);
-    let result_class: Bound<'py, PyAny> = imported(py, MODELS_MODULE, "FunctionChangeResult")?;
+    let result_class: Bound<'py, PyAny> = imported(py, "sqlbuild._native", "FunctionChangeResult")?;
     let selected: Bound<'py, PyAny> = scope.getattr("selected_keys")?;
     let recorded: Bound<'py, PyAny> = snapshot.getattr("fingerprints")?.getattr("functions")?;
     let query_change_tracking: bool = project
@@ -132,7 +132,7 @@ fn detect_changes<'py>(
         functions.set_item(name, call_with(&result_class, &arguments)?)?;
     }
     call_with(
-        &imported(py, MODELS_MODULE, "PlannerChangeResults")?,
+        &imported(py, "sqlbuild._native", "PlannerChangeResults")?,
         &[
             ("models", models.into_any()),
             ("functions", functions.into_any()),
@@ -758,7 +758,7 @@ impl<'py> ChangeResult<'py> {
                 .map(|flag| flag.to_owned().into_any())
         };
         call_with(
-            &imported(py, MODELS_MODULE, "ChangeDetectionResult")?,
+            &imported(py, "sqlbuild._native", "ChangeDetectionResult")?,
             &[
                 ("model_name", self.model_name),
                 ("change_kind", kind),

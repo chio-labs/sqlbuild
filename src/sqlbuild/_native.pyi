@@ -10,6 +10,7 @@ from decimal import Decimal
 from pathlib import Path, PurePath
 from threading import Event
 from typing import Any, Literal, Protocol, TextIO, TypedDict
+from typing import Any, ClassVar, Literal, TextIO, TypedDict
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
@@ -189,7 +190,9 @@ from sqlbuild.compiler.migrations.models import (
     OldNameViewHistory,
 )
 from sqlbuild.compiler.migrations.types import (
+    MigrationCompatibility,
     MigrationDecision,
+    MigrationDiscovery,
     MigrationPromotion,
     OldNameViewEventType,
 )
@@ -205,101 +208,61 @@ from sqlbuild.compiler.pipeline.models import (
     PythonRunPlanOutputs,
     StaticCommandContext,
 )
+from sqlbuild.compiler.planner.classes.fixture_column_inferences import FixtureColumnInferences
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
-    BackfillResult,
-    ChangeDetectionResult,
+    ChainStep,
     CloneSourcePlanEntry,
     ColumnMigrationPlanEntry,
-    ColumnMigrationPlanning,
-    ColumnRenameHint,
     CursorBounds,
     CursorInputEvidence,
     CursorInputRelation,
-    CursorOverridePair,
     CursorOverrides,
-    CursorSnapshotScope,
     DeferralInputs,
-    DirectModelVersionIdentities,
     EmptyCursorInputDecision,
-    FixtureRelationMetadata,
     FunctionPlanEntry,
     FutureCursorSafetyEvidence,
     MaximumStartPolicyInputs,
     MaximumStartSafetyEvidence,
-    MigrationCompatibilityResult,
-    MissingUpstream,
     ModelCursorSnapshot,
-    ModelMigrationDeclaration,
-    ModelMigrationDiscovery,
     ModelMigrationPlanEntry,
-    ModelMigrationPlanning,
-    ModelMigrationRequest,
-    ModelPlanContext,
     ModelPlanEntry,
-    NativeSqlTestArtifact,
-    NativeSqlTestPlan,
     OldNameView,
     OldNameViewPlanEntry,
-    OldNameViewPlanning,
-    ParsedScenarioArtifactName,
     ParsedSelector,
     PathSelector,
-    PlanEntryBuildInputs,
-    PlannedSqlTests,
-    PlannerChangeReconciliation,
-    PlannerChangeResults,
-    PlannerEntryResults,
-    PlannerIdentityContext,
-    PlannerModelEntryResults,
     PlannerOverrides,
     PlannerPolicies,
     PlannerRelationsContext,
-    PlannerResolvedActions,
-    PlannerRuntime,
     PlannerScope,
-    PlannerScopePruningResult,
-    PlannerScopeResolution,
     PlannerSelection,
-    PlannerWarehouseState,
     PlanOutput,
-    PlanOutputExtras,
-    PlanWarning,
-    QueryShape,
-    ReferenceRename,
-    RelationFixtureCompletion,
-    RelationFixtureDiagnostic,
-    RelationFixturePlanningContext,
     RetentionPlanEntry,
-    ScenarioArtifactIdentity,
     ScenarioExecutionPlan,
     ScenarioFixturePlan,
-    ScenarioGraphPlan,
     ScenarioRelationMap,
     ScenarioRelationPlan,
-    SchemaAction,
     SchemaFinding,
     SeedPlanEntry,
-    SelectionStalenessGraph,
-    SelectionStalenessWarning,
-    SelectorExpansion,
     SourceLoadPlanEntry,
+    SqlTestAssertionStep,
     SqlTestPlanEntry,
-    SqlTestPlanResult,
     SqlTestSelection,
     TableTypePlanEntry,
-    UnitTestSelectorSplit,
-    WarehouseFingerprints,
-    WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import (
+    BackfillAction,
+    ChangeKind,
     CursorGrain,
     CursorType,
     MaterializationType,
     OnSchemaChange,
     PlanAction,
     PlanReason,
+    ScenarioArtifactKind,
+    SchemaActionKind,
+    WarningSeverity,
 )
 from sqlbuild.compiler.python_nodes.models import (
     PythonNodeGraph,
@@ -761,6 +724,945 @@ type _GraphIndexes = tuple[
 ]
 type _SelectorFailure = tuple[str, str, str | None]
 type _SelectorKeys = tuple[list[_GraphKey] | None, _SelectorFailure | None]
+
+class NativeSqlTestArtifact:
+    """One native-planned SQL-test artifact and its distinct planning error messages."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    sql: str
+    model_names: tuple[str, ...]
+    error_messages: tuple[str, ...]
+    def __init__(
+        self, sql: str, model_names: tuple[str, ...], error_messages: tuple[str, ...] = ...
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> NativeSqlTestArtifact: ...
+
+class RelationFixtureDiagnostic:
+    """One statically provable invalid fixture condition."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    key: FixtureKey
+    message: str
+    def __init__(self, key: FixtureKey, message: str) -> None: ...
+    def __replace__(self, **changes: Any) -> RelationFixtureDiagnostic: ...
+
+class RelationFixtureCompletion:
+    """Completed fixture SQL plus metadata reused by SQL-test validation."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    fixture_sql_by_key: dict[FixtureKey, str]
+    inferred_by_fixture: dict[FixtureKey, tuple[InferredColumn, ...]]
+    expected_types: Mapping[FixtureKey, dict[str, str]]
+    diagnostics: tuple[RelationFixtureDiagnostic, ...]
+    def __init__(
+        self,
+        fixture_sql_by_key: dict[FixtureKey, str],
+        inferred_by_fixture: dict[FixtureKey, tuple[InferredColumn, ...]],
+        expected_types: Mapping[FixtureKey, dict[str, str]],
+        diagnostics: tuple[RelationFixtureDiagnostic, ...],
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> RelationFixtureCompletion: ...
+
+class FixtureColumnMetadata:
+    """Known type and nullability for one relation fixture column."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    name: str
+    type: str | None
+    nullable: bool | None
+    def __init__(self, name: str, type: str | None, nullable: bool | None) -> None: ...
+    def __replace__(self, **changes: Any) -> FixtureColumnMetadata: ...
+
+class FixtureRelationMetadata:
+    """Known columns and whether they form an authoritative relation shape."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    columns: tuple[FixtureColumnMetadata, ...]
+    authoritative_names: bool
+    def __init__(
+        self, columns: tuple[FixtureColumnMetadata, ...], authoritative_names: bool
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> FixtureRelationMetadata: ...
+
+class RelationFixturePlanningContext:
+    """Project-wide fixture metadata shared across test and scenario planning."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    models_by_name: dict[str, CompiledModelView]
+    relations: dict[FixtureKey, FixtureRelationMetadata]
+    authoritative_columns: dict[FixtureKey, frozenset[str]]
+    expected_types: dict[FixtureKey, dict[str, str]]
+    fixture_inferences: FixtureColumnInferences
+    def __init__(
+        self,
+        models_by_name: dict[str, CompiledModelView],
+        relations: dict[FixtureKey, FixtureRelationMetadata],
+        authoritative_columns: dict[FixtureKey, frozenset[str]],
+        expected_types: dict[FixtureKey, dict[str, str]],
+        fixture_inferences: FixtureColumnInferences = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> RelationFixturePlanningContext: ...
+
+class SelectorExpansion:
+    """One selector split into graph expansion flags and core text."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    core: str
+    upstream: bool
+    downstream: bool
+    def __init__(self, core: str, upstream: bool = ..., downstream: bool = ...) -> None: ...
+    def __replace__(self, **changes: Any) -> SelectorExpansion: ...
+
+class ParsedScenarioArtifactName:
+    """Parsed physical name for one planner-owned scenario artifact."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    hash_prefix: str
+    kind: str
+    logical_name: str
+    def __init__(self, hash_prefix: str, kind: str, logical_name: str) -> None: ...
+    def __replace__(self, **changes: Any) -> ParsedScenarioArtifactName: ...
+
+class MissingUpstream:
+    """One upstream dependency missing from both scope and warehouse."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    key: CompiledObjectKey
+    required_by: tuple[CompiledObjectKey, ...]
+    def __init__(
+        self, key: CompiledObjectKey, required_by: tuple[CompiledObjectKey, ...]
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> MissingUpstream: ...
+
+class WarehouseFingerprints:
+    """Latest direct fingerprints grouped by node type."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    models: dict[str, Fingerprint]
+    functions: dict[str, Fingerprint]
+    seeds: dict[str, Fingerprint]
+    python_nodes: dict[tuple[str, str], Fingerprint]
+    unfiltered_schemas: dict[str, tuple[Fingerprint, ...]]
+    unfiltered_database: str | None
+    def __init__(
+        self,
+        models: dict[str, Fingerprint] = ...,
+        functions: dict[str, Fingerprint] = ...,
+        seeds: dict[str, Fingerprint] = ...,
+        python_nodes: dict[tuple[str, str], Fingerprint] = ...,
+        unfiltered_schemas: dict[str, tuple[Fingerprint, ...]] = ...,
+        unfiltered_database: str | None = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> WarehouseFingerprints: ...
+
+class CursorSnapshotScope:
+    """Execution selection used for cursor validation and runtime producer resolution."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    model_keys: frozenset[CompiledObjectKey]
+    runtime_producer_keys: frozenset[CompiledObjectKey]
+    invocation_time: datetime | None
+    start_cursor_config: StartCursorsConfig | None
+    cursor_overrides: CursorOverrides | None
+    def __init__(
+        self,
+        model_keys: frozenset[CompiledObjectKey],
+        runtime_producer_keys: frozenset[CompiledObjectKey],
+        invocation_time: datetime | None = ...,
+        start_cursor_config: StartCursorsConfig | None = ...,
+        cursor_overrides: CursorOverrides | None = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> CursorSnapshotScope: ...
+
+class ReferenceRename:
+    """One model rename that downstream references may have been rewritten for."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    new_name: str
+    origin_name: str
+    recorded_at: datetime | None
+    def __init__(
+        self, new_name: str, origin_name: str, recorded_at: datetime | None = ...
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> ReferenceRename: ...
+
+class WarehouseSnapshot:
+    """Frozen point-in-time picture of warehouse state for planning."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    existing_relations: dict[str, RelationInfo]
+    existing_columns: dict[str, tuple[ColumnInfo, ...]]
+    fingerprints: WarehouseFingerprints
+    cursor_snapshots: dict[str, ModelCursorSnapshot]
+    source_freshness_state_schemas: frozenset[str]
+    column_dialect: str | None
+    renamed_models: frozenset[str]
+    reference_renames: tuple[ReferenceRename, ...]
+    migration_state_schemas: frozenset[str]
+    old_name_view_state_schemas: frozenset[str]
+    listed_state_schemas: frozenset[str] | None
+    def __init__(
+        self,
+        existing_relations: dict[str, RelationInfo] = ...,
+        existing_columns: dict[str, tuple[ColumnInfo, ...]] = ...,
+        fingerprints: WarehouseFingerprints = ...,
+        cursor_snapshots: dict[str, ModelCursorSnapshot] = ...,
+        source_freshness_state_schemas: frozenset[str] = ...,
+        column_dialect: str | None = ...,
+        renamed_models: frozenset[str] = ...,
+        reference_renames: tuple[ReferenceRename, ...] = ...,
+        migration_state_schemas: frozenset[str] = ...,
+        old_name_view_state_schemas: frozenset[str] = ...,
+        listed_state_schemas: frozenset[str] | None = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> WarehouseSnapshot: ...
+
+class SelectionStalenessNodeKey:
+    """Neutral node identity for shared selection-aware staleness classification."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    resource_type: str
+    name: str
+    def __init__(self, resource_type: str, name: str) -> None: ...
+    def __replace__(self, **changes: Any) -> SelectionStalenessNodeKey: ...
+
+class SelectionStalenessGraph:
+    """Neutral graph inputs for selected-model stale warning classification."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    upstream_deps: dict[SelectionStalenessNodeKey, tuple[SelectionStalenessNodeKey, ...]]
+    selected_model_names: frozenset[str]
+    run_model_names: frozenset[str]
+    run_seed_names: frozenset[str]
+    run_source_names: frozenset[str]
+    changed_model_names: frozenset[str]
+    changed_seed_names: frozenset[str]
+    changed_source_names: frozenset[str]
+    def __init__(
+        self,
+        upstream_deps: dict[SelectionStalenessNodeKey, tuple[SelectionStalenessNodeKey, ...]],
+        selected_model_names: frozenset[str],
+        run_model_names: frozenset[str],
+        run_seed_names: frozenset[str],
+        run_source_names: frozenset[str],
+        changed_model_names: frozenset[str],
+        changed_seed_names: frozenset[str],
+        changed_source_names: frozenset[str],
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> SelectionStalenessGraph: ...
+
+class SelectionStalenessWarning:
+    """Neutral stale warning classification for one selected model."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    model_name: str
+    trigger_names: tuple[str, ...]
+    def __init__(self, model_name: str, trigger_names: tuple[str, ...]) -> None: ...
+    def __replace__(self, **changes: Any) -> SelectionStalenessWarning: ...
+
+class BackfillResult:
+    """Resolved backfill action from a change detection policy."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    action: BackfillAction
+    duration: str | None
+    def __init__(self, action: BackfillAction, duration: str | None = ...) -> None: ...
+    def __replace__(self, **changes: Any) -> BackfillResult: ...
+
+class ChangeDetectionResult:
+    """Per-model output from change detection and policy resolution."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    model_name: str
+    change_kind: ChangeKind
+    query_changed: bool
+    config_changed: bool
+    fingerprint_metadata_json: str | None
+    previous_metadata_json: str | None
+    fingerprint_version_hash: str | None
+    previous_version_hash: str | None
+    schema_findings: tuple[SchemaFinding, ...]
+    backfill: BackfillResult
+    recorded_build_relation_missing: bool
+    changed_functions: tuple[str, ...]
+    def __init__(
+        self,
+        model_name: str,
+        change_kind: ChangeKind,
+        query_changed: bool = ...,
+        config_changed: bool = ...,
+        fingerprint_metadata_json: str | None = ...,
+        previous_metadata_json: str | None = ...,
+        fingerprint_version_hash: str | None = ...,
+        previous_version_hash: str | None = ...,
+        schema_findings: tuple[SchemaFinding, ...] = ...,
+        backfill: BackfillResult = ...,
+        recorded_build_relation_missing: bool = ...,
+        changed_functions: tuple[str, ...] = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> ChangeDetectionResult: ...
+
+class UnitTestSelectorSplit:
+    """Resource selectors left after unit-test selectors moved into a test selection."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    sql_test_selection: SqlTestSelection
+    def __init__(
+        self,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+        sql_test_selection: SqlTestSelection,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> UnitTestSelectorSplit: ...
+
+class ModelPlanContext:
+    """Relation lookups and source columns for building one model plan entry."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    model_locations: dict[str, CompiledRelationLocation]
+    models_by_name: dict[str, CompiledModelView]
+    seed_locations: dict[str, CompiledRelationLocation]
+    function_locations: dict[str, CompiledRelationLocation]
+    source_map: dict[str, SourceEntry]
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]]
+    star_exclude_keyword: str
+    functions_by_name: dict[str, CompiledFunctionView]
+    runtime_cursor_producer_names: frozenset[str]
+    future_cursor_config: FutureCursorsConfig | None
+    start_cursor_config: StartCursorsConfig | None
+    invocation_time: datetime | None
+    def __init__(
+        self,
+        model_locations: dict[str, CompiledRelationLocation],
+        models_by_name: dict[str, CompiledModelView],
+        seed_locations: dict[str, CompiledRelationLocation],
+        function_locations: dict[str, CompiledRelationLocation],
+        source_map: dict[str, SourceEntry],
+        source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
+        star_exclude_keyword: str,
+        functions_by_name: dict[str, CompiledFunctionView] = ...,
+        runtime_cursor_producer_names: frozenset[str] = ...,
+        future_cursor_config: FutureCursorsConfig | None = ...,
+        start_cursor_config: StartCursorsConfig | None = ...,
+        invocation_time: datetime | None = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> ModelPlanContext: ...
+
+class CursorOverridePair:
+    """Resolved per-model cursor start/end overrides for plan entry construction."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    start_cursor_override: str | None
+    end_cursor_override: str | None
+    def __init__(
+        self, start_cursor_override: str | None = ..., end_cursor_override: str | None = ...
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> CursorOverridePair: ...
+
+class PlanEntryBuildInputs:
+    """Blocked models and cursor overrides for plan entry building."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    source_freshness_blocked_model_names: frozenset[str]
+    external_blocked_model_names: frozenset[str]
+    start_cursor_override: str | None
+    end_cursor_override: str | None
+    future_cursor_config: FutureCursorsConfig | None
+    start_cursor_config: StartCursorsConfig | None
+    invocation_time: datetime | None
+    max_microbatches: int | None
+    max_microbatches_is_override: bool
+    microbatch_limit_action: MicrobatchLimitAction
+    def __init__(
+        self,
+        source_freshness_blocked_model_names: frozenset[str] = ...,
+        external_blocked_model_names: frozenset[str] = ...,
+        start_cursor_override: str | None = ...,
+        end_cursor_override: str | None = ...,
+        future_cursor_config: FutureCursorsConfig | None = ...,
+        start_cursor_config: StartCursorsConfig | None = ...,
+        invocation_time: datetime | None = ...,
+        max_microbatches: int | None = ...,
+        max_microbatches_is_override: bool = ...,
+        microbatch_limit_action: MicrobatchLimitAction = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlanEntryBuildInputs: ...
+
+class FunctionChangeResult:
+    """Per-function output from change detection."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    fingerprint_sql: str
+    reason: PlanReason
+    def __init__(self, fingerprint_sql: str, reason: PlanReason = ...) -> None: ...
+    def __replace__(self, **changes: Any) -> FunctionChangeResult: ...
+
+class PlannerChangeResults:
+    """Change detection output for selected planner resources."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    models: dict[str, ChangeDetectionResult]
+    functions: dict[str, FunctionChangeResult]
+    def __init__(
+        self, models: dict[str, ChangeDetectionResult], functions: dict[str, FunctionChangeResult]
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlannerChangeResults: ...
+
+class ResolvedModelAction:
+    """Effective model change and backfill decided from the model's own change."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    change: ChangeDetectionResult
+    backfill: BackfillResult
+    def __init__(self, change: ChangeDetectionResult, backfill: BackfillResult) -> None: ...
+    def __replace__(self, **changes: Any) -> ResolvedModelAction: ...
+
+class PlannerResolvedActions:
+    """Per-model planning decisions keyed by model name."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    models: dict[str, ResolvedModelAction]
+    def __init__(self, models: dict[str, ResolvedModelAction]) -> None: ...
+    def __replace__(self, **changes: Any) -> PlannerResolvedActions: ...
+
+class DirectModelVersionIdentities:
+    """Current direct model version identity values by model name."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    function_local_hashes: dict[str, str]
+    seed_version_hashes: dict[str, str]
+    seed_metadata_jsons: dict[str, str]
+    model_metadata_jsons: dict[str, str]
+    model_local_hashes: dict[str, str]
+    model_version_hashes: dict[str, str]
+    def __init__(
+        self,
+        function_local_hashes: dict[str, str],
+        seed_version_hashes: dict[str, str],
+        seed_metadata_jsons: dict[str, str],
+        model_metadata_jsons: dict[str, str],
+        model_local_hashes: dict[str, str],
+        model_version_hashes: dict[str, str],
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> DirectModelVersionIdentities: ...
+
+class PlannerModelEntryResults:
+    """Model plan-entry phase output."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    entries: tuple[ModelPlanEntry, ...]
+    warnings: tuple[PlanWarning, ...]
+    def __init__(
+        self, entries: tuple[ModelPlanEntry, ...], warnings: tuple[PlanWarning, ...] = ...
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlannerModelEntryResults: ...
+
+class SchemaAction:
+    """One concrete schema change action to apply to a target table."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    kind: SchemaActionKind
+    column_name: str
+    column_type: str | None
+    def __init__(
+        self, kind: SchemaActionKind, column_name: str, column_type: str | None = ...
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> SchemaAction: ...
+
+class PlanWarning:
+    """One warning or error produced during plan resolution."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    model_name: str | None
+    severity: WarningSeverity
+    message: str
+    code: str | None
+    def __init__(
+        self,
+        model_name: str | None,
+        severity: WarningSeverity,
+        message: str,
+        code: str | None = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlanWarning: ...
+
+class ColumnRenameHint:
+    """A removed column that an added column may have been renamed from."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    model_name: str
+    added_column: str
+    candidate_columns: tuple[str, ...]
+    identical: bool
+    def __init__(
+        self,
+        model_name: str,
+        added_column: str,
+        candidate_columns: tuple[str, ...],
+        identical: bool = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> ColumnRenameHint: ...
+    @property
+    def message(self) -> str:
+        """The one-line hint shown beside the added column."""
+
+class QueryProjection:
+    """One named top-level output column of a query and its canonical expression."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    name: str
+    expression: str
+    references: frozenset[str]
+    passthrough: bool
+    def __init__(
+        self, name: str, expression: str, references: frozenset[str], passthrough: bool = ...
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> QueryProjection: ...
+    @property
+    def key(self) -> str:
+        """The case-insensitive output name."""
+
+class QueryShape:
+    """Canonical top-level projections and the rest of one query, ignoring formatting."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    projections: tuple[QueryProjection, ...]
+    body: str
+    alias_clauses: str
+    positional: bool
+    input_relations: tuple[tuple[str, str], ...] | None
+    local_input_columns: frozenset[str]
+    clause_references: frozenset[str]
+    def __init__(
+        self,
+        projections: tuple[QueryProjection, ...],
+        body: str,
+        alias_clauses: str = ...,
+        positional: bool = ...,
+        input_relations: tuple[tuple[str, str], ...] | None = ...,
+        local_input_columns: frozenset[str] = ...,
+        clause_references: frozenset[str] = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> QueryShape: ...
+
+class PlanOutputExtras:
+    """Optional supplemental seed fingerprints and precomputed SQL tests for plan assembly."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    seed_version_hashes: dict[str, str] | None
+    seed_metadata_jsons: dict[str, str] | None
+    seed_plan_reasons: dict[str, PlanReason] | None
+    planned_sql_tests: PlannedSqlTests | None
+    def __init__(
+        self,
+        seed_version_hashes: dict[str, str] | None = ...,
+        seed_metadata_jsons: dict[str, str] | None = ...,
+        seed_plan_reasons: dict[str, PlanReason] | None = ...,
+        planned_sql_tests: PlannedSqlTests | None = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlanOutputExtras: ...
+
+class PlannedSqlTests:
+    """SQL test entries planned for one selection; reusable only for the same selection."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    selected_keys: frozenset[CompiledObjectKey]
+    sql_test_selection: SqlTestSelection
+    entries: tuple[SqlTestPlanEntry, ...]
+    warnings: tuple[PlanWarning, ...]
+    def __init__(
+        self,
+        selected_keys: frozenset[CompiledObjectKey],
+        sql_test_selection: SqlTestSelection = ...,
+        entries: tuple[SqlTestPlanEntry, ...] = ...,
+        warnings: tuple[PlanWarning, ...] = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlannedSqlTests: ...
+
+class NativeSqlTestPlan:
+    """Native chain and assertion steps for one SQL test, with SQL when rendered."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    chain: tuple[ChainStep, ...]
+    assertions: tuple[SqlTestAssertionStep, ...]
+    model_names: tuple[str, ...]
+    warnings: tuple[PlanWarning, ...]
+    error_messages: tuple[str, ...]
+    sql: str | None
+    def __init__(
+        self,
+        chain: tuple[ChainStep, ...],
+        assertions: tuple[SqlTestAssertionStep, ...],
+        model_names: tuple[str, ...],
+        warnings: tuple[PlanWarning, ...],
+        error_messages: tuple[str, ...],
+        sql: str | None = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> NativeSqlTestPlan: ...
+
+class SqlTestPlanResult:
+    """One SQL test's plan entry and warnings, or the fixture diagnostics preventing it."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    entry: SqlTestPlanEntry | None
+    warnings: tuple[PlanWarning, ...]
+    fixture_diagnostics: tuple[str, ...]
+    def __init__(
+        self,
+        entry: SqlTestPlanEntry | None,
+        warnings: tuple[PlanWarning, ...] = ...,
+        fixture_diagnostics: tuple[str, ...] = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> SqlTestPlanResult: ...
+
+class ScenarioGraphPlan:
+    """Inferred graph slice and fixture boundaries for one SQL scenario."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    key: CompiledObjectKey
+    name: str
+    target_model_names: tuple[str, ...]
+    assertion_target_model_names: tuple[str, ...]
+    model_names: tuple[str, ...]
+    source_fixture_names: tuple[str, ...]
+    ref_fixture_names: tuple[str, ...]
+    seed_names: tuple[str, ...]
+    seed_fixture_names: tuple[str, ...]
+    dbt_ref_fixture_names: tuple[str, ...]
+    function_deps: tuple[CompiledObjectKey, ...]
+    def __init__(
+        self,
+        key: CompiledObjectKey,
+        name: str,
+        target_model_names: tuple[str, ...] = ...,
+        assertion_target_model_names: tuple[str, ...] = ...,
+        model_names: tuple[str, ...] = ...,
+        source_fixture_names: tuple[str, ...] = ...,
+        ref_fixture_names: tuple[str, ...] = ...,
+        seed_names: tuple[str, ...] = ...,
+        seed_fixture_names: tuple[str, ...] = ...,
+        dbt_ref_fixture_names: tuple[str, ...] = ...,
+        function_deps: tuple[CompiledObjectKey, ...] = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> ScenarioGraphPlan: ...
+
+class ScenarioArtifactIdentity:
+    """Logical identity for one scenario-owned physical artifact."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    kind: ScenarioArtifactKind | str
+    logical_name: str
+    def __init__(self, kind: ScenarioArtifactKind | str, logical_name: str) -> None: ...
+    def __replace__(self, **changes: Any) -> ScenarioArtifactIdentity: ...
+
+class ScenarioArtifactName:
+    """Resolved physical relation name for one scenario artifact."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    identity: ScenarioArtifactIdentity
+    physical_name: str
+    def __init__(self, identity: ScenarioArtifactIdentity, physical_name: str) -> None: ...
+    def __replace__(self, **changes: Any) -> ScenarioArtifactName: ...
+
+class PlanProviderUsage:
+    """Provider usage metadata scoped to planned work."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    provider_name: str
+    consumer_kind: str
+    consumer_name: str
+    parameter_name: str
+    annotation_class_name: str | None
+    annotation_module: str | None
+    def __init__(
+        self,
+        provider_name: str,
+        consumer_kind: str,
+        consumer_name: str,
+        parameter_name: str,
+        annotation_class_name: str | None = ...,
+        annotation_module: str | None = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlanProviderUsage: ...
+
+class PlannerRuntime:
+    """Resolved execution environment shared by planner phases."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    project: CompiledProjectView
+    adapter: BaseAdapter
+    connection: Any
+    project_config: ProjectConfig | None
+    local_config: LocalConfig | None
+    on_progress: Callable[[str], None] | None
+    invocation_time: datetime
+    def __init__(
+        self,
+        project: CompiledProjectView,
+        adapter: BaseAdapter,
+        connection: Any,
+        project_config: ProjectConfig | None = ...,
+        local_config: LocalConfig | None = ...,
+        on_progress: Callable[[str], None] | None = ...,
+        invocation_time: datetime = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlannerRuntime: ...
+
+class PlannerScopeResolution:
+    """Resolved planner scopes for one plan build."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    selected_scope: PlannerScope
+    stale_warning_scope: PlannerScope
+    inspection_scope: PlannerScope
+    def __init__(
+        self,
+        selected_scope: PlannerScope,
+        stale_warning_scope: PlannerScope,
+        inspection_scope: PlannerScope,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlannerScopeResolution: ...
+
+class PlannerWarehouseState:
+    """Warehouse snapshot and inspection relations gathered once per plan."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    snapshot: WarehouseSnapshot
+    inspection_relations: PlannerRelationsContext
+    migration_entries: tuple[ModelMigrationPlanEntry, ...]
+    migration_warnings: tuple[PlanWarning, ...]
+    column_migration_entries: tuple[ColumnMigrationPlanEntry, ...]
+    column_rename_hints: tuple[ColumnRenameHint, ...]
+    old_name_view_entries: tuple[OldNameViewPlanEntry, ...]
+    old_name_views: tuple[OldNameView, ...]
+    migration_fingerprints: MigrationFingerprintCache
+    def __init__(
+        self,
+        snapshot: WarehouseSnapshot,
+        inspection_relations: PlannerRelationsContext,
+        migration_entries: tuple[ModelMigrationPlanEntry, ...] = ...,
+        migration_warnings: tuple[PlanWarning, ...] = ...,
+        column_migration_entries: tuple[ColumnMigrationPlanEntry, ...] = ...,
+        column_rename_hints: tuple[ColumnRenameHint, ...] = ...,
+        old_name_view_entries: tuple[OldNameViewPlanEntry, ...] = ...,
+        old_name_views: tuple[OldNameView, ...] = ...,
+        migration_fingerprints: MigrationFingerprintCache = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlannerWarehouseState: ...
+
+class ModelMigrationRequest:
+    """One destination model whose data should come from an earlier relation."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    model: CompiledModelView
+    discovery: MigrationDiscovery
+    raw_origin: str | None
+    origin_location: CompiledRelationLocation | None
+    origin_model: str | None
+    force: bool
+    identity_only: bool
+    def __init__(
+        self,
+        model: CompiledModelView,
+        discovery: MigrationDiscovery,
+        raw_origin: str | None = ...,
+        origin_location: CompiledRelationLocation | None = ...,
+        origin_model: str | None = ...,
+        force: bool = ...,
+        identity_only: bool = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> ModelMigrationRequest: ...
+
+class ModelMigrationDeclaration:
+    """One project model's explicit migrate_from, resolved to a relation."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    model_name: str
+    origin_location: CompiledRelationLocation
+    origin_model: str | None
+    def __init__(
+        self, model_name: str, origin_location: CompiledRelationLocation, origin_model: str | None
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> ModelMigrationDeclaration: ...
+
+class ModelMigrationDiscovery:
+    """Manual and automatically discovered migration requests for one plan."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    requests: tuple[ModelMigrationRequest, ...]
+    warnings: tuple[PlanWarning, ...]
+    destination_fingerprints: dict[str, tuple[str, ...]]
+    def __init__(
+        self,
+        requests: tuple[ModelMigrationRequest, ...] = ...,
+        warnings: tuple[PlanWarning, ...] = ...,
+        destination_fingerprints: dict[str, tuple[str, ...]] = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> ModelMigrationDiscovery: ...
+
+class MigrationCompatibilityResult:
+    """Compatibility status plus human-readable blocking findings."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    status: MigrationCompatibility
+    findings: tuple[str, ...]
+    def __init__(self, status: MigrationCompatibility, findings: tuple[str, ...] = ...) -> None: ...
+    def __replace__(self, **changes: Any) -> MigrationCompatibilityResult: ...
+
+class ModelMigrationPlanning:
+    """Migration decisions plus the warehouse snapshot as it will look after moves."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    snapshot: WarehouseSnapshot
+    entries: tuple[ModelMigrationPlanEntry, ...]
+    warnings: tuple[PlanWarning, ...]
+    def __init__(
+        self,
+        snapshot: WarehouseSnapshot,
+        entries: tuple[ModelMigrationPlanEntry, ...] = ...,
+        warnings: tuple[PlanWarning, ...] = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> ModelMigrationPlanning: ...
+
+class OldNameViewPlanning:
+    """Old-name steps for this build plus every compatibility view still recorded."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    entries: tuple[OldNameViewPlanEntry, ...]
+    views: tuple[OldNameView, ...]
+    warnings: tuple[PlanWarning, ...]
+    def __init__(
+        self,
+        entries: tuple[OldNameViewPlanEntry, ...] = ...,
+        views: tuple[OldNameView, ...] = ...,
+        warnings: tuple[PlanWarning, ...] = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> OldNameViewPlanning: ...
+
+class ColumnMigrationPlanning:
+    """Column rename decisions plus the warehouse snapshot as it will look after renames."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    snapshot: WarehouseSnapshot
+    entries: tuple[ColumnMigrationPlanEntry, ...]
+    hints: tuple[ColumnRenameHint, ...]
+    warnings: tuple[PlanWarning, ...]
+    def __init__(
+        self,
+        snapshot: WarehouseSnapshot,
+        entries: tuple[ColumnMigrationPlanEntry, ...] = ...,
+        hints: tuple[ColumnRenameHint, ...] = ...,
+        warnings: tuple[PlanWarning, ...] = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> ColumnMigrationPlanning: ...
+
+class PlannerIdentityContext:
+    """Expected version identities for inspection and stale-warning scopes."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    version_identities: DirectModelVersionIdentities
+    stale_warning_identities: DirectModelVersionIdentities
+    def __init__(
+        self,
+        version_identities: DirectModelVersionIdentities,
+        stale_warning_identities: DirectModelVersionIdentities,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlannerIdentityContext: ...
+
+class PlannerScopePruningResult:
+    """Scope pruning outcome with pruned scopes, actions, and staleness state."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    inspection_scope: PlannerScope
+    execution_scope: PlannerScope
+    resolved_actions: PlannerResolvedActions
+    pruned_direct_model_names: tuple[str, ...]
+    direct_identity_stale_model_names: frozenset[str]
+    def __init__(
+        self,
+        inspection_scope: PlannerScope,
+        execution_scope: PlannerScope,
+        resolved_actions: PlannerResolvedActions,
+        pruned_direct_model_names: tuple[str, ...],
+        direct_identity_stale_model_names: frozenset[str],
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlannerScopePruningResult: ...
+
+class PlannerChangeReconciliation:
+    """Write-hash-honest changes merged back into resolved actions."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    changes: PlannerChangeResults
+    resolved_actions: PlannerResolvedActions
+    def __init__(
+        self, changes: PlannerChangeResults, resolved_actions: PlannerResolvedActions
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlannerChangeReconciliation: ...
+
+class PlannerEntryResults:
+    """Model plan entries for one plan build."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    model_entry_results: PlannerModelEntryResults
+    def __init__(self, model_entry_results: PlannerModelEntryResults) -> None: ...
+    def __replace__(self, **changes: Any) -> PlannerEntryResults: ...
 
 class NativeModelInput:
     @property

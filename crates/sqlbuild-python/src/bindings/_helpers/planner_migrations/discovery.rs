@@ -1,7 +1,7 @@
 //! Native migration discovery over existing inspection and fingerprint cache boundaries.
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
-use crate::bindings::_helpers::planner_migrations::column_objects::{model, native};
+use crate::bindings::_helpers::planner_migrations::column_objects::native;
 use crate::bindings::_helpers::planner_migrations::{
     discovery_events, discovery_models, discovery_requests,
 };
@@ -46,7 +46,7 @@ fn discover_model_migrations<'py>(
     let triggered =
         discovery_models::triggered(&models, &scope, &args.value("snapshot")?, &declared_names)?;
     if !triggered && !manual.is_truthy()? {
-        return model(py, "ModelMigrationDiscovery", &[]);
+        return native(py, "ModelMigrationDiscovery", &[]);
     }
     let metadata = discovery_models::metadata(&runtime, &models)?;
     let dialect = runtime
@@ -79,7 +79,7 @@ fn discover_model_migrations<'py>(
                 ("fingerprints", cache),
             ],
         )?;
-        return model(
+        return native(
             py,
             "ModelMigrationDiscovery",
             &[("requests", manual), ("destination_fingerprints", hashes)],
@@ -140,7 +140,7 @@ fn discover_model_migrations<'py>(
             ("fingerprints", cache),
         ],
     )?;
-    model(
+    native(
         py,
         "ModelMigrationDiscovery",
         &[

@@ -8,6 +8,9 @@ from types import MappingProxyType
 from typing import Any
 
 from sqlbuild._native import (
+    NativeSqlTestPlan,
+    PlanWarning,
+    SqlTestPlanResult,
     expand_sql_macros,
     extract_sql_references,
     plan_compiled_sql_test_artifacts,
@@ -42,10 +45,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.planner.models import (
-    NativeSqlTestPlan,
-    PlanWarning,
     SqlTestPlanEntry,
-    SqlTestPlanResult,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql

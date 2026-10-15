@@ -7,12 +7,14 @@ from typing import Any
 
 import pytest
 
-from sqlbuild._native import compute_cursor_bounds
+from sqlbuild._native import (
+    BackfillResult,
+    compute_cursor_bounds,
+)
 from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.planner.models import (
-    BackfillResult,
     CursorBounds,
     ModelCursorSnapshot,
     ModelPlanEntry,

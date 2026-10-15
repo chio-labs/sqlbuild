@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild._native import (
+    SelectionStalenessGraph,
+    SelectionStalenessNodeKey,
     build_execution_plan,
     build_version_identity_metadata_json,
     compute_query_hash,
@@ -31,8 +33,6 @@ from sqlbuild.compiler.planner.models import (
     PlannerPolicies,
     PlannerSelection,
     PlanOutput,
-    SelectionStalenessGraph,
-    SelectionStalenessNodeKey,
 )
 from sqlbuild.spec.contracts.models import SchemaColumn, SchemaModelEntry
 

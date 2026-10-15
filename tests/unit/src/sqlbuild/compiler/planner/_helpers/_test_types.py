@@ -2,6 +2,13 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlbuild._native import (
+    MissingUpstream,
+    PlanWarning,
+    ScenarioArtifactIdentity,
+    ScenarioGraphPlan,
+    SchemaAction,
+)
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditRunScope,
@@ -15,14 +22,9 @@ from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledPro
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
-    MissingUpstream,
     ParsedSelector,
     PathSelector,
-    PlanWarning,
-    ScenarioArtifactIdentity,
-    ScenarioGraphPlan,
     ScenarioRelationMap,
-    SchemaAction,
     SchemaFinding,
     SourceLoadPlanEntry,
 )

@@ -3,9 +3,7 @@
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
-use crate::bindings::_helpers::planner_migrations::column_objects::{
-    config, model, native, replace,
-};
+use crate::bindings::_helpers::planner_migrations::column_objects::{config, native, replace};
 use crate::bindings::_helpers::planner_migrations::constants::MIGRATION_TYPES;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{
@@ -21,7 +19,7 @@ fn declared<'py>(item: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>
         return Ok(None);
     }
     let materialization = config(item, "materialized")?;
-    Ok(Some(model(
+    Ok(Some(native(
         py,
         "ModelMigrationRequest",
         &[
@@ -181,7 +179,7 @@ fn discover<'py>(
                 ("state", state.clone()),
             ],
         )?;
-        declarations.push(model(
+        declarations.push(native(
             py,
             "ModelMigrationDeclaration",
             &[
@@ -341,7 +339,7 @@ fn finish<'py>(
     if !entries.is_empty() {
         fields.push(("renamed_models", PyFrozenSet::new(py, renamed)?.into_any()));
     }
-    model(
+    native(
         py,
         "ModelMigrationPlanning",
         &[

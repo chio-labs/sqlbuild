@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.planner.models import (
+from sqlbuild._native import (
     BackfillResult,
     ChangeDetectionResult,
     PlannerResolvedActions,

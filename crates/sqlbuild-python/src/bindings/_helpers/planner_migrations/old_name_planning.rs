@@ -3,7 +3,7 @@
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
-use crate::bindings::_helpers::planner_migrations::column_objects::{model, native};
+use crate::bindings::_helpers::planner_migrations::column_objects::native;
 use crate::bindings::_helpers::planner_migrations::old_name_objects::recorded_view;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PySet, PySetMethods, PyTuple};
@@ -179,7 +179,7 @@ fn plan_old_name_views<'py>(
     warnings.extend(super::old_name_references::errors(
         &runtime, &views, &entries,
     )?);
-    model(
+    native(
         py,
         "OldNameViewPlanning",
         &[

@@ -14,7 +14,6 @@ use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
-use crate::bindings::_helpers::planner_changes::results::MODELS_MODULE;
 use crate::bindings::_helpers::planner_identity::hashing::model_query_hash;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
@@ -187,7 +186,7 @@ fn plan_reference_renames<'py>(
     let target_name: Bound<'py, PyAny> = runtime
         .getattr("project")?
         .getattr("effective_target_name")?;
-    let rename_class: Bound<'py, PyAny> = imported(py, MODELS_MODULE, "ReferenceRename")?;
+    let rename_class: Bound<'py, PyAny> = imported(py, "sqlbuild._native", "ReferenceRename")?;
     let mut renames: Vec<Bound<'py, PyAny>> = Vec::new();
     for item in planned.call_method0("items")?.try_iter()? {
         let item: Bound<'py, PyAny> = item?;

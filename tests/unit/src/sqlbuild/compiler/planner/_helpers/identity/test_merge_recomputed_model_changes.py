@@ -2,13 +2,13 @@
 
 import pytest
 
-from sqlbuild._native import merge_recomputed_model_changes
-from sqlbuild.compiler.planner.models import (
+from sqlbuild._native import (
     BackfillResult,
     ChangeDetectionResult,
     PlannerChangeResults,
     PlannerResolvedActions,
     ResolvedModelAction,
+    merge_recomputed_model_changes,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
 from tests.unit.src.sqlbuild.compiler.planner._helpers.identity._test_types import (

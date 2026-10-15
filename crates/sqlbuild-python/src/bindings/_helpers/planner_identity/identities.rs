@@ -17,7 +17,6 @@ use sqlbuild_analysis::planner_identity::models::{GraphKey, IdentityGraph, Ident
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
-use crate::bindings::_helpers::planner_changes::results::MODELS_MODULE;
 use crate::bindings::_helpers::planner_identity::hashing::{graph_key, model_query_hash};
 use crate::bindings::_helpers::planner_identity::metadata::{
     function_local_hashes, model_version_identity_metadata_json, seed_identity,
@@ -183,7 +182,7 @@ fn build_direct_model_version_identities<'py>(
         }
     }
     call_with(
-        &imported(py, MODELS_MODULE, "DirectModelVersionIdentities")?,
+        &imported(py, "sqlbuild._native", "DirectModelVersionIdentities")?,
         &[
             ("function_local_hashes", function_hashes.into_any()),
             ("seed_version_hashes", seed_hashes.into_any()),

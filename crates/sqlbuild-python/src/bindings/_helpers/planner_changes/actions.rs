@@ -5,7 +5,6 @@ use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::planner_changes::results::MODELS_MODULE;
 
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const INCREMENTAL_MATERIALIZATION: &str = "incremental";
@@ -21,7 +20,7 @@ fn resolve_model_actions<'py>(
     let py: Python<'py> = scope.py();
     let model_kind: Bound<'py, PyAny> =
         imported(py, COMPILE_TYPES_MODULE, "CompiledResourceType")?.getattr("MODEL")?;
-    let action_class: Bound<'py, PyAny> = imported(py, MODELS_MODULE, "ResolvedModelAction")?;
+    let action_class: Bound<'py, PyAny> = imported(py, "sqlbuild._native", "ResolvedModelAction")?;
     let selected: Bound<'py, PyAny> = scope.getattr("selected_keys")?;
     let models_by_name: Bound<'py, PyAny> = scope.getattr("models_by_name")?;
     let model_changes: Bound<'py, PyAny> = changes.getattr("models")?;
@@ -43,7 +42,7 @@ fn resolve_model_actions<'py>(
         )?;
     }
     call_with(
-        &imported(py, MODELS_MODULE, "PlannerResolvedActions")?,
+        &imported(py, "sqlbuild._native", "PlannerResolvedActions")?,
         &[("models", resolved.into_any())],
     )
 }

@@ -4,7 +4,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::planner_phases::full_refresh::effectively_full_refreshed_model_names;
 use crate::bindings::_helpers::planner_phases::objects::{
-    by_name, frozenset, model_key, native, planner_model, text, tuple,
+    by_name, frozenset, model_key, native, text, tuple,
 };
 use crate::bindings::_helpers::planner_warehouse::constants::{
     ACTIVE_CATALOG, FINGERPRINT_TABLE_NAME, FUNCTION_NODE_TYPES, METADATA_NAME_FILTER_LIMIT,
@@ -482,7 +482,7 @@ fn gather_fingerprints<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = request.project.py();
     let Some(schemas) = schemas else {
-        return planner_model(py, "WarehouseFingerprints", &[]);
+        return native(py, "WarehouseFingerprints", &[]);
     };
     let node_names: Option<BTreeSet<String>> = if relevant.is_none() {
         None
@@ -599,7 +599,7 @@ fn gather_fingerprints<'py>(
             }
         }
     }
-    planner_model(
+    native(
         py,
         "WarehouseFingerprints",
         &[
@@ -632,7 +632,7 @@ pub(crate) fn warehouse_snapshot<'py>(
     let schemas = target_schemas(project, &relevant)?;
     let metadata_names = metadata_name_filter(project, &relevant)?;
     if schemas.is_empty() && metadata_names.is_none() {
-        return planner_model(py, "WarehouseSnapshot", &[]);
+        return native(py, "WarehouseSnapshot", &[]);
     }
     let query_schemas = (!schemas.is_empty()).then_some(&schemas);
     prefetch_schemas(request, &database, &schemas, &relevant)?;
@@ -686,7 +686,7 @@ pub(crate) fn warehouse_snapshot<'py>(
             names_set(py, &lowered)?
         }
     };
-    planner_model(
+    native(
         py,
         "WarehouseSnapshot",
         &[

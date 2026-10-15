@@ -45,7 +45,7 @@ pub(crate) fn backfill_result<'py>(
         BackfillAction::ForwardOnly => "forward",
     };
     call_with(
-        &imported(py, MODELS_MODULE, "BackfillResult")?,
+        &imported(py, "sqlbuild._native", "BackfillResult")?,
         &[
             ("action", planner_enum(py, "BackfillAction", action)?),
             (

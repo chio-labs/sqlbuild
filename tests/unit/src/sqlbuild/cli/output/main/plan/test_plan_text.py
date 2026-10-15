@@ -6,11 +6,13 @@ import json
 
 import pytest
 
-from sqlbuild._native import format_plan
+from sqlbuild._native import (
+    ColumnRenameHint,
+    format_plan,
+)
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
-    ColumnRenameHint,
     CursorBounds,
     CursorInputRelation,
     PlanOutput,

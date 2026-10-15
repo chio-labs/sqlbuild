@@ -40,7 +40,7 @@ pub(super) fn handover<'py>(
     };
     let key = MIGRATION_MODEL_NAME_METADATA_KEY;
     if let Ok(payload) = payload.cast::<PyDict>()
-        && payload.contains(&key)?
+        && payload.contains(key)?
     {
         payload.set_item(key, model.getattr("name")?)?;
         let kwargs = PyDict::new(py);

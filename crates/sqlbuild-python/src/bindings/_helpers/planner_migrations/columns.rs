@@ -15,8 +15,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 
-const MODELS_MODULE: &str = "sqlbuild.compiler.planner.models";
-
 fn projections(shape: &Bound<'_, PyAny>) -> PyResult<Vec<Projection>> {
     let mut result: Vec<Projection> = Vec::new();
     for item in shape.getattr("projections")?.try_iter()? {
@@ -121,7 +119,7 @@ fn rename_hints<'py>(
     let mut result: Vec<Bound<'py, PyAny>> = Vec::new();
     for hint in hints {
         result.push(call_with(
-            &imported(py, MODELS_MODULE, "ColumnRenameHint")?,
+            &imported(py, "sqlbuild._native", "ColumnRenameHint")?,
             &[
                 ("model_name", arguments.value("model_name")?),
                 (

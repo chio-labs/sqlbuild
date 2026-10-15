@@ -8,6 +8,11 @@ import pytest
 import sqlbuild._native as sql_test_assembly
 from sqlbuild import _native as fixture_completion
 from sqlbuild._native import (
+    FixtureColumnMetadata,
+    FixtureRelationMetadata,
+    PlanWarning,
+    RelationFixtureCompletion,
+    RelationFixturePlanningContext,
     build_selected_test_entries,
     compiled_model_record,
     project_with,
@@ -24,11 +29,6 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.planner.classes import fixture_column_inferences as fixture_inferences
 from sqlbuild.compiler.planner.models import (
-    FixtureColumnMetadata,
-    FixtureRelationMetadata,
-    PlanWarning,
-    RelationFixtureCompletion,
-    RelationFixturePlanningContext,
     SqlTestPlanEntry,
     SqlTestSelection,
 )
