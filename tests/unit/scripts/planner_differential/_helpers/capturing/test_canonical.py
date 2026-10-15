@@ -58,6 +58,21 @@ from tests.unit.scripts.planner_differential._helpers.capturing.helpers import (
             raw="_sqb_archive__20261014t004426z__migration_origin__orders",
             expected_text="_sqb_archive__<recent-timestamp>__migration_origin__orders",
         ),
+        MaskTextTestCase(
+            description="replay_range_date_relative_to_the_run_date",
+            raw="range 2026-10-11 → 2026-10-14",
+            expected_text="range <run-date-3d> → <run-date+0d>",
+        ),
+        MaskTextTestCase(
+            description="retention_date_relative_to_the_run_date",
+            raw="live until 2026-11-13",
+            expected_text="live until <run-date+30d>",
+        ),
+        MaskTextTestCase(
+            description="fixed_data_date_is_kept",
+            raw="partition 2026-04-02",
+            expected_text="partition 2026-04-02",
+        ),
     ],
     ids=lambda case: case.description,
 )
