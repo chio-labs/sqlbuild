@@ -111,11 +111,7 @@ fn execute_dbt_commands<'py>(
         &imported(py, "sqlbuild._native", "CliStyle")?,
         &[("use_color", arguments.value("use_color")?)],
     )?;
-    let result_type = imported(
-        py,
-        "sqlbuild.integrations.dbt.models",
-        "DbtCommandExecutionResult",
-    )?;
+    let result_type = imported(py, "sqlbuild._native", "DbtCommandExecutionResult")?;
     if argv.is_none() {
         let message = arguments.value("skip_message")?;
         let message = if message.is_none() {

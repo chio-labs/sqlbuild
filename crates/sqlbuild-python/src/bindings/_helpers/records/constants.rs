@@ -17,6 +17,7 @@ pub(crate) const RECORDS: &[&[RecordSpec]] = &[
     ENTRY_RECORDS,
     OUTPUT_RECORDS,
     COMPILE_RECORDS,
+    DBT_RECORDS,
 ];
 
 const NESTED_PROGRESS_CHILD_ROW: RecordSpec = RecordSpec {
@@ -863,3 +864,285 @@ const COMPILE_ANALYSIS: RecordSpec = RecordSpec {
 
 /// The compiled project analysis shared by compile output phases.
 const COMPILE_RECORDS: &[RecordSpec] = &[COMPILE_ANALYSIS];
+
+const DBT_MANIFEST_MODEL: RecordSpec = RecordSpec {
+    name: "DbtManifestModel",
+    doc: "One dbt model node needed for SQLBuild dbt_ref resolution.",
+    fields: &[
+        FieldSpec::required("unique_id"),
+        FieldSpec::required("package_name"),
+        FieldSpec::required("name"),
+        FieldSpec::required("relation_name"),
+        FieldSpec::new("database", FieldDefault::None),
+        FieldSpec::new("schema", FieldDefault::None),
+        FieldSpec::new("alias", FieldDefault::None),
+        FieldSpec::new("node_checksum", FieldDefault::None),
+        FieldSpec::new("fqn", FieldDefault::EmptyTuple),
+        FieldSpec::new("query_sql", FieldDefault::Text("")),
+        FieldSpec::new("depends_on_nodes", FieldDefault::EmptyTuple),
+        FieldSpec::new("payload", FieldDefault::EmptyDict),
+    ],
+};
+const DBT_MANIFEST_SOURCE: RecordSpec = RecordSpec {
+    name: "DbtManifestSource",
+    doc: "One dbt source node needed for graph and lineage resolution.",
+    fields: &[
+        FieldSpec::required("unique_id"),
+        FieldSpec::required("package_name"),
+        FieldSpec::required("source_name"),
+        FieldSpec::required("name"),
+        FieldSpec::required("relation_name"),
+        FieldSpec::new("database", FieldDefault::None),
+        FieldSpec::new("schema", FieldDefault::None),
+        FieldSpec::new("identifier", FieldDefault::None),
+        FieldSpec::new("payload", FieldDefault::EmptyDict),
+    ],
+};
+const DBT_MANIFEST_SEED: RecordSpec = RecordSpec {
+    name: "DbtManifestSeed",
+    doc: "One dbt seed node, a leaf data relation used for column lineage.",
+    fields: &[
+        FieldSpec::required("unique_id"),
+        FieldSpec::required("package_name"),
+        FieldSpec::required("name"),
+        FieldSpec::required("relation_name"),
+        FieldSpec::new("database", FieldDefault::None),
+        FieldSpec::new("schema", FieldDefault::None),
+        FieldSpec::new("alias", FieldDefault::None),
+        FieldSpec::new("payload", FieldDefault::EmptyDict),
+    ],
+};
+const DBT_MANIFEST_INDEX: RecordSpec = RecordSpec {
+    name: "DbtManifestIndex",
+    doc: "Lookup indexes for dbt model and source nodes in a manifest.",
+    fields: &[
+        FieldSpec::required("models_by_unique_id"),
+        FieldSpec::required("models_by_name"),
+        FieldSpec::required("models_by_package_and_name"),
+        FieldSpec::new("sources_by_unique_id", FieldDefault::EmptyDict),
+        FieldSpec::new("seeds_by_unique_id", FieldDefault::EmptyDict),
+        FieldSpec::new(
+            "validation_depends_on_nodes_by_unique_id",
+            FieldDefault::EmptyDict,
+        ),
+    ],
+};
+const DBT_CLI_CONFIG_OVERRIDES: RecordSpec = RecordSpec {
+    name: "DbtCliConfigOverrides",
+    doc: "dbt config values supplied by CLI flags.",
+    fields: &[
+        FieldSpec::new("project_dir", FieldDefault::None),
+        FieldSpec::new("profiles_dir", FieldDefault::None),
+        FieldSpec::new("target", FieldDefault::None),
+        FieldSpec::new("target_path", FieldDefault::None),
+    ],
+};
+const RESOLVED_DBT_CONFIG: RecordSpec = RecordSpec {
+    name: "ResolvedDbtConfig",
+    doc: "Resolved dbt config after applying CLI overrides.",
+    fields: &[
+        FieldSpec::required("project_dir"),
+        FieldSpec::required("profiles_dir"),
+        FieldSpec::required("target"),
+        FieldSpec::required("target_path"),
+    ],
+};
+const DBT_NODE_MESSAGE: RecordSpec = RecordSpec {
+    name: "DbtNodeMessage",
+    doc: "One dbt log message attached to a dbt node.",
+    fields: &[FieldSpec::required("level"), FieldSpec::required("message")],
+};
+const DBT_COMMAND_EXECUTION_RESULT: RecordSpec = RecordSpec {
+    name: "DbtCommandExecutionResult",
+    doc: "dbt command execution output from streamed JSON events.",
+    fields: &[
+        FieldSpec::required("returncode"),
+        FieldSpec::new("node_results", FieldDefault::EmptyTuple),
+    ],
+};
+const DBT_LS_NODE: RecordSpec = RecordSpec {
+    name: "DbtLsNode",
+    doc: "One node returned by `dbt ls --output json`.",
+    fields: &[
+        FieldSpec::required("unique_id"),
+        FieldSpec::new("resource_type", FieldDefault::None),
+        FieldSpec::new("package_name", FieldDefault::None),
+        FieldSpec::new("name", FieldDefault::None),
+        FieldSpec::new("fqn", FieldDefault::EmptyTuple),
+        FieldSpec::new("original_file_path", FieldDefault::None),
+    ],
+};
+const DBT_INTEROP_PARSED_ARGS: RecordSpec = RecordSpec {
+    name: "DbtInteropParsedArgs",
+    doc: "Declared `sqb dbt` flags parsed by argparse, before routing to buckets.",
+    fields: &[
+        FieldSpec::new("select", FieldDefault::EmptyTuple),
+        FieldSpec::new("exclude", FieldDefault::EmptyTuple),
+        FieldSpec::new("vars", FieldDefault::None),
+        FieldSpec::new("threads", FieldDefault::None),
+        FieldSpec::new("full_refresh", FieldDefault::False),
+        FieldSpec::new("event_time_start", FieldDefault::None),
+        FieldSpec::new("event_time_end", FieldDefault::None),
+        FieldSpec::new("project_dir", FieldDefault::None),
+        FieldSpec::new("profiles_dir", FieldDefault::None),
+        FieldSpec::new("profile", FieldDefault::None),
+        FieldSpec::new("target", FieldDefault::None),
+        FieldSpec::new("target_path", FieldDefault::None),
+        FieldSpec::new("state", FieldDefault::None),
+        FieldSpec::new("indirect_selection", FieldDefault::None),
+        FieldSpec::new("defer", FieldDefault::False),
+        FieldSpec::new("start_cursor_ts", FieldDefault::None),
+        FieldSpec::new("end_cursor_ts", FieldDefault::None),
+        FieldSpec::new("start_cursor_int", FieldDefault::None),
+        FieldSpec::new("end_cursor_int", FieldDefault::None),
+        FieldSpec::new("defer_to", FieldDefault::None),
+        FieldSpec::new("fail_fast", FieldDefault::False),
+        FieldSpec::new("hard_copy", FieldDefault::False),
+        FieldSpec::new("dbt_passthrough", FieldDefault::EmptyTuple),
+    ],
+};
+const DBT_INTEROP_ROUTED_ARGS: RecordSpec = RecordSpec {
+    name: "DbtInteropRoutedArgs",
+    doc: "Arguments split for a future `sqb dbt` command execution.",
+    fields: &[
+        FieldSpec::required("command"),
+        FieldSpec::new("select", FieldDefault::EmptyTuple),
+        FieldSpec::new("exclude", FieldDefault::EmptyTuple),
+        FieldSpec::new("dbt_args", FieldDefault::EmptyTuple),
+        FieldSpec::new("sqlbuild_args", FieldDefault::EmptyTuple),
+    ],
+};
+const DBT_INTEROP_SELECTION_RESULT: RecordSpec = RecordSpec {
+    name: "DbtInteropSelectionResult",
+    doc: "SQLBuild-side selection produced from `sqb dbt` selectors.",
+    fields: &[
+        FieldSpec::new("sqlbuild_model_names", FieldDefault::EmptyTuple),
+        FieldSpec::new("dbt_required_unique_ids", FieldDefault::EmptyTuple),
+        FieldSpec::new("dbt_anchor_terms", FieldDefault::EmptyTuple),
+        FieldSpec::new("dbt_anchor_unique_ids_by_term", FieldDefault::EmptyDict),
+        FieldSpec::new("path_translations", FieldDefault::EmptyTuple),
+    ],
+};
+const DBT_INTEROP_PLAN: RecordSpec = RecordSpec {
+    name: "DbtInteropPlan",
+    doc: "Plan output for one future `sqb dbt` command.",
+    fields: &[
+        FieldSpec::required("command"),
+        FieldSpec::required("dbt_command_argv"),
+        FieldSpec::required("dbt_selected_nodes"),
+        FieldSpec::required("dbt_selected_unique_ids"),
+        FieldSpec::required("sqlbuild_command_argvs"),
+        FieldSpec::required("selection"),
+        FieldSpec::new("sqlbuild_plan_output", FieldDefault::None),
+        FieldSpec::new("dbt_required_selector_terms", FieldDefault::EmptyTuple),
+        FieldSpec::new("supplemental_dbt_command_argvs", FieldDefault::EmptyTuple),
+        FieldSpec::new("dbt_skip_reason", FieldDefault::None),
+        FieldSpec::new("sqlbuild_skip_reason", FieldDefault::None),
+        FieldSpec::new("warnings", FieldDefault::EmptyTuple),
+    ],
+};
+const DBT_INTEROP_EXECUTION_REQUEST: RecordSpec = RecordSpec {
+    name: "DbtInteropExecutionRequest",
+    doc: "Caller inputs for one dbt interop execution command.",
+    fields: &[
+        FieldSpec::required("command"),
+        FieldSpec::required("project_dir"),
+        FieldSpec::required("args"),
+        FieldSpec::new("dbt_runner", FieldDefault::None),
+        FieldSpec::new("dbt_executable", FieldDefault::None),
+        FieldSpec::new("sqlbuild_executable", FieldDefault::Text("sqb")),
+        FieldSpec::new("no_sql_validation", FieldDefault::False),
+        FieldSpec::new("fail_fast", FieldDefault::False),
+        FieldSpec::new("on_progress", FieldDefault::None),
+        FieldSpec::new("progress_stream", FieldDefault::None),
+        FieldSpec::new("dbt_stdout_stream", FieldDefault::None),
+        FieldSpec::new("use_color", FieldDefault::False),
+        FieldSpec::new("verbose", FieldDefault::False),
+        FieldSpec::new("json_output", FieldDefault::False),
+    ],
+};
+const DBT_INTEROP_INVOCATION: RecordSpec = RecordSpec {
+    name: "DbtInteropInvocation",
+    doc: "Resolved execution environment for one dbt interop command.",
+    fields: &[
+        FieldSpec::required("dbt_executable"),
+        FieldSpec::required("output_stream"),
+        FieldSpec::required("dbt_output_stream"),
+        FieldSpec::required("routed"),
+        FieldSpec::required("discovered_inputs"),
+        FieldSpec::required("effective_sqlbuild_args"),
+        FieldSpec::required("dbt_options"),
+        FieldSpec::required("dbt_vars"),
+        FieldSpec::required("runner"),
+    ],
+};
+const DBT_INTEROP_COMPILED_PROJECT: RecordSpec = RecordSpec {
+    name: "DbtInteropCompiledProject",
+    doc: "Adapter and compiled SQLBuild project for dbt interop planning.",
+    fields: &[
+        FieldSpec::required("adapter_name"),
+        FieldSpec::required("adapter"),
+        FieldSpec::required("project"),
+    ],
+};
+const DBT_INTEROP_PLAN_RESOLUTION: RecordSpec = RecordSpec {
+    name: "DbtInteropPlanResolution",
+    doc: "Combined dbt graph and the resolved interop plan.",
+    fields: &[FieldSpec::required("graph"), FieldSpec::required("plan")],
+};
+const DBT_INTEROP_COMMAND_ARGS: RecordSpec = RecordSpec {
+    name: "DbtInteropCommandArgs",
+    doc: "Selection, passthrough args, and executables for a dbt interop command.",
+    fields: &[
+        FieldSpec::required("select"),
+        FieldSpec::new("exclude", FieldDefault::EmptyTuple),
+        FieldSpec::new("dbt_command_args", FieldDefault::EmptyTuple),
+        FieldSpec::new("sqlbuild_command_args", FieldDefault::EmptyTuple),
+        FieldSpec::new("dbt_executable", FieldDefault::Text("dbt")),
+        FieldSpec::new("sqlbuild_executable", FieldDefault::Text("sqb")),
+    ],
+};
+const DBT_PLAN_ENVIRONMENT: RecordSpec = RecordSpec {
+    name: "DbtPlanEnvironment",
+    doc: "Compiled project and adapter environment for dbt plan-output builds.",
+    fields: &[
+        FieldSpec::required("project_dir"),
+        FieldSpec::required("discovered_inputs"),
+        FieldSpec::required("project"),
+        FieldSpec::required("adapter"),
+        FieldSpec::required("adapter_name"),
+    ],
+};
+const DBT_SQLBUILD_PLAN_REQUEST: RecordSpec = RecordSpec {
+    name: "DbtSqlbuildPlanRequest",
+    doc: "Selection and native planner inputs for a SQLBuild plan-output build.",
+    fields: &[
+        FieldSpec::required("selected_model_names"),
+        FieldSpec::required("sqlbuild_args"),
+        FieldSpec::new("external_blocked_model_names", FieldDefault::EmptyTuple),
+    ],
+};
+
+/// dbt manifest indexes, interop arguments, plans and invocations.
+const DBT_RECORDS: &[RecordSpec] = &[
+    DBT_MANIFEST_MODEL,
+    DBT_MANIFEST_SOURCE,
+    DBT_MANIFEST_SEED,
+    DBT_MANIFEST_INDEX,
+    DBT_CLI_CONFIG_OVERRIDES,
+    RESOLVED_DBT_CONFIG,
+    DBT_NODE_MESSAGE,
+    DBT_COMMAND_EXECUTION_RESULT,
+    DBT_LS_NODE,
+    DBT_INTEROP_PARSED_ARGS,
+    DBT_INTEROP_ROUTED_ARGS,
+    DBT_INTEROP_SELECTION_RESULT,
+    DBT_INTEROP_PLAN,
+    DBT_INTEROP_EXECUTION_REQUEST,
+    DBT_INTEROP_INVOCATION,
+    DBT_INTEROP_COMPILED_PROJECT,
+    DBT_INTEROP_PLAN_RESOLUTION,
+    DBT_INTEROP_COMMAND_ARGS,
+    DBT_PLAN_ENVIRONMENT,
+    DBT_SQLBUILD_PLAN_REQUEST,
+];

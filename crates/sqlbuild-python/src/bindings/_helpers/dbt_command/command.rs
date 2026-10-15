@@ -17,7 +17,6 @@ use crate::bindings::_helpers::dbt_interop::runtime_config::validate_dbt_executi
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const PLAN_MODULE: &str = "sqlbuild._native";
 const EXECUTE_MODULE: &str = "sqlbuild._native";
-const DBT_MODELS: &str = "sqlbuild.integrations.dbt.models";
 const PRESENTATION_MODELS: &str = "sqlbuild.presentation.models";
 const PLAN_COMMAND: &str = "plan";
 const DEBUG_COMMAND: &str = "debug";
@@ -117,7 +116,7 @@ fn run_execution(
     let progress: Progress<'_> = Progress::new(py, &options, no_color)?;
     progress.blank_line()?;
     let request: Bound<'_, PyAny> = call_with(
-        &imported(py, DBT_MODELS, "DbtInteropExecutionRequest")?,
+        &imported(py, NATIVE_MODULE, "DbtInteropExecutionRequest")?,
         &[
             ("command", command.clone()),
             ("project_dir", project_dir.clone()),

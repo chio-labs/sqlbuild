@@ -28,7 +28,6 @@ use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_colo
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
-const NATIVE_RECORDS: &str = "sqlbuild._native";
 const PREVIEW_TARGET_MODULE: &str = "sqlbuild._native";
 const TARGET_NAME_MODULE: &str = "sqlbuild._native";
 const RETENTION_MODULE: &str = "sqlbuild.executor.janitor.main.resolve_retention_days";
@@ -117,7 +116,7 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Bou
         ],
     )?;
     options.set_item("use_color", use_color)?;
-    imported(py, NATIVE_RECORDS, "JanitorInvocation")?.call((), Some(&options))
+    imported(py, NATIVE_MODULE, "JanitorInvocation")?.call((), Some(&options))
 }
 
 /// Effective retention settings, validated.
@@ -161,7 +160,7 @@ fn settings<'py>(
             ),
         ],
     )?;
-    imported(py, NATIVE_RECORDS, "JanitorSettings")?.call((), Some(&options))
+    imported(py, NATIVE_MODULE, "JanitorSettings")?.call((), Some(&options))
 }
 
 /// Ask for the exact confirmation phrase; an interrupt cancels.

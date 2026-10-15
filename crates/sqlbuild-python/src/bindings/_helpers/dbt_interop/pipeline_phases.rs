@@ -11,7 +11,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::dbt_interop::pipeline_prologue::progress;
 use crate::bindings::_helpers::dbt_interop::plan_output::{connection_config, connection_hooks};
 
-const MODELS: &str = "sqlbuild.integrations.dbt.models";
+const NATIVE_RECORDS: &str = "sqlbuild._native";
 const OPTIONS: (&[&str], &[&str]) = (
     &["request", "invocation"],
     &[
@@ -31,7 +31,7 @@ fn environment<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>>
     let request = args.value("request")?;
     let compiled = args.value("compiled")?;
     call_with(
-        &imported(request.py(), MODELS, "DbtPlanEnvironment")?,
+        &imported(request.py(), NATIVE_RECORDS, "DbtPlanEnvironment")?,
         &[
             ("project_dir", request.getattr("project_dir")?),
             (
@@ -203,7 +203,7 @@ fn resolve_sqlbuild_execution_plan_output<'py>(
         ],
     )?;
     let request = call_with(
-        &imported(py, MODELS, "DbtSqlbuildPlanRequest")?,
+        &imported(py, NATIVE_RECORDS, "DbtSqlbuildPlanRequest")?,
         &[
             ("selected_model_names", selected),
             (

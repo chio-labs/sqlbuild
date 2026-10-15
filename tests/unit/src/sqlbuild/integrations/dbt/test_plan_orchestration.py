@@ -6,6 +6,9 @@ import pytest
 
 from sqlbuild._native import (
     DbtCombinedGraph,
+    DbtInteropCommandArgs,
+    DbtInteropPlan,
+    DbtManifestIndex,
     build_dbt_combined_graph,
     build_dbt_ls_argv,
     build_dbt_manifest_index,
@@ -14,13 +17,7 @@ from sqlbuild._native import (
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.models import (
-    DbtCliOptions,
-    DbtCommandResult,
-    DbtInteropCommandArgs,
-    DbtInteropPlan,
-    DbtManifestIndex,
-)
+from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtPlanOrchestrationErrorTestCase,
     DbtPlanOrchestrationTestCase,

@@ -22,7 +22,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 
-const DBT_MODELS: &str = "sqlbuild.integrations.dbt.models";
+const NATIVE_RECORDS: &str = "sqlbuild._native";
 const DBT_TYPES: &str = "sqlbuild.integrations.dbt.types";
 const DBT_EXCEPTIONS: &str = "sqlbuild.integrations.dbt.exceptions";
 const DBT_EXECUTABLE_ENV_VAR: &str = "DBT_EXECUTABLE";
@@ -219,7 +219,7 @@ fn ls_node<'py>(
 #[pyfunction]
 #[pyo3(signature = (*, stdout))]
 fn parse_dbt_ls_json_lines<'py>(py: Python<'py>, stdout: &str) -> PyResult<Bound<'py, PyTuple>> {
-    let node_class: Bound<'py, PyAny> = imported(py, DBT_MODELS, "DbtLsNode")?;
+    let node_class: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS, "DbtLsNode")?;
     let mut nodes: Vec<Bound<'py, PyAny>> = Vec::new();
     for line in python_splitlines(stdout) {
         let stripped: &str = python_strip(line);
@@ -297,7 +297,7 @@ fn route_dbt_interop_args<'py>(
     let command: Bound<'py, PyAny> =
         imported(py, DBT_TYPES, "DbtInteropCommand")?.call1((kind.name(),))?;
     call_with(
-        &imported(py, DBT_MODELS, "DbtInteropRoutedArgs")?,
+        &imported(py, NATIVE_RECORDS, "DbtInteropRoutedArgs")?,
         &[
             ("command", command),
             ("select", PyTuple::new(py, flags.select)?.into_any()),
@@ -378,7 +378,7 @@ fn resolve_dbt_config<'py>(
         |target| PyString::new(py, &target).into_any(),
     );
     call_with(
-        &imported(py, DBT_MODELS, "ResolvedDbtConfig")?,
+        &imported(py, NATIVE_RECORDS, "ResolvedDbtConfig")?,
         &[
             (
                 "project_dir",

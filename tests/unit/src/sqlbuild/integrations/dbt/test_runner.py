@@ -5,14 +5,16 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    DbtLsNode,
     build_dbt_compile_argv,
     build_dbt_debug_argv,
     build_dbt_deps_argv,
     build_dbt_ls_argv,
+    dbt_fqn_selector_term,
     parse_dbt_ls_json_lines,
 )
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
-from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult, DbtLsNode, DbtLsResult
+from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult, DbtLsResult
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtArgvTestCase,
     DbtLsParseTestCase,
@@ -233,7 +235,13 @@ def test_given_dbt_ls_output_when_parsing_then_returns_unique_id_nodes(
 
     assert tuple(node.unique_id for node in result) == test_case.expected_unique_ids
     assert tuple(node.resource_type for node in result) == test_case.expected_resource_types
-    assert tuple(node.selector_term for node in result) == test_case.expected_selector_terms
+    assert (
+        tuple(
+            dbt_fqn_selector_term(fqn=node.fqn, fallback=node.name or node.unique_id)
+            for node in result
+        )
+        == test_case.expected_selector_terms
+    )
 
 
 @pytest.mark.parametrize(

@@ -8,7 +8,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const NATIVE_RECORDS: &str = "sqlbuild._native";
 
 /// The project directory, discovered inputs, adapter context, colour and progress stream.
 type InvocationContext<'py> = (
@@ -50,7 +49,7 @@ pub(crate) fn resolve_adapter_connection_context<'py>(
         ],
     )?;
     call_with(
-        &imported(py, NATIVE_RECORDS, "AdapterConnectionContext")?,
+        &imported(py, NATIVE_MODULE, "AdapterConnectionContext")?,
         &[
             ("adapter_name", adapter_name),
             ("adapter", adapter),

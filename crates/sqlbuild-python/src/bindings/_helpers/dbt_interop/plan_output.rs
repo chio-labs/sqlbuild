@@ -13,7 +13,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
 
-const MODELS: &str = "sqlbuild.integrations.dbt.models";
+const NATIVE_RECORDS: &str = "sqlbuild._native";
 const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
 const HOOKS: &str = "sqlbuild.runtime.contracts.models";
 const BUILD_OPTIONS: (&[&str], &[&str]) = (&["environment", "request", "hooks"], &[]);
@@ -240,7 +240,7 @@ fn attach_sqlbuild_plan_output<'py>(
     let compiled = args.value("compiled")?;
     let plan = args.value("plan")?;
     let environment = call_with(
-        &imported(py, MODELS, "DbtPlanEnvironment")?,
+        &imported(py, NATIVE_RECORDS, "DbtPlanEnvironment")?,
         &[
             ("project_dir", args.value("project_dir")?),
             ("discovered_inputs", args.value("discovered_inputs")?),
@@ -250,7 +250,7 @@ fn attach_sqlbuild_plan_output<'py>(
         ],
     )?;
     let request = call_with(
-        &imported(py, MODELS, "DbtSqlbuildPlanRequest")?,
+        &imported(py, NATIVE_RECORDS, "DbtSqlbuildPlanRequest")?,
         &[
             (
                 "selected_model_names",

@@ -15,6 +15,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::dbt_interop::pipeline_prologue::progress;
 use crate::bindings::_helpers::dbt_interop::runtime_config::config_overrides;
 
+const NATIVE_RECORDS: &str = "sqlbuild._native";
 const MODELS: &str = "sqlbuild.integrations.dbt.models";
 const PLAN_OPTIONS: (&[&str], &[&str]) = (
     &["project_dir", "args"],
@@ -240,7 +241,7 @@ fn plan_dbt_interop_from_project<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let args = KeywordArguments::read(py, "plan_dbt_interop_from_project", options, PLAN_OPTIONS)?;
     let request = call_with(
-        &imported(py, MODELS, "DbtInteropExecutionRequest")?,
+        &imported(py, NATIVE_RECORDS, "DbtInteropExecutionRequest")?,
         &[
             (
                 "command",

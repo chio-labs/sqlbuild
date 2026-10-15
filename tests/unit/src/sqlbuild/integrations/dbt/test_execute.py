@@ -13,18 +13,6 @@ from sqlbuild import _native as phases_module
 from sqlbuild import _native as plan_module
 from sqlbuild._native import (
     DbtCombinedGraph,
-    build_dbt_interop_plan,
-    build_failed_sqlbuild_model_names,
-    build_merged_dbt_execution_argv,
-    execute_dbt_commands,
-)
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
-from sqlbuild.integrations.dbt.main.runtime import _execute_json_event_stream as event_module
-from sqlbuild.integrations.dbt.models import (
-    DbtCliOptions,
     DbtCommandExecutionResult,
     DbtInteropCompiledProject,
     DbtInteropExecutionRequest,
@@ -35,8 +23,17 @@ from sqlbuild.integrations.dbt.models import (
     DbtInteropSelectionResult,
     DbtLsNode,
     DbtManifestIndex,
-    DbtNodeExecutionResult,
+    build_dbt_interop_plan,
+    build_failed_sqlbuild_model_names,
+    build_merged_dbt_execution_argv,
+    execute_dbt_commands,
 )
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
+from sqlbuild.integrations.dbt.main.runtime import _execute_json_event_stream as event_module
+from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtNodeExecutionResult
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtCompileFullRefreshPipelineTestCase,

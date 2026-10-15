@@ -7,6 +7,7 @@ use sqlbuild_core::dbt_events::models::{DbtNodeMessage, DbtNodeResult};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
+const NATIVE_RECORDS: &str = "sqlbuild._native";
 const DBT_MODELS: &str = "sqlbuild.integrations.dbt.models";
 
 fn optional<'py, T: pyo3::IntoPyObject<'py>>(
@@ -32,7 +33,7 @@ pub(crate) fn python_result<'py>(
     py: Python<'py>,
     result: &DbtNodeResult,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let message_class: Bound<'py, PyAny> = imported(py, DBT_MODELS, "DbtNodeMessage")?;
+    let message_class: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS, "DbtNodeMessage")?;
     let messages: Vec<Bound<'py, PyAny>> = result
         .messages
         .iter()

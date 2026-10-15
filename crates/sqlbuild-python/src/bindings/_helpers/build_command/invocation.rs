@@ -14,7 +14,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const NATIVE_RECORDS: &str = "sqlbuild._native";
 const SETTINGS_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
@@ -196,7 +195,7 @@ pub(crate) fn resolve_build_context<'py>(
             load_sources.is_truthy()?
         };
     let invocation: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_RECORDS, "BuildInvocation")?,
+        &imported(py, NATIVE_MODULE, "BuildInvocation")?,
         &[
             ("effective_project_dir", project_dir),
             ("discovered_inputs", discovered),

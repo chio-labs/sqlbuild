@@ -8,6 +8,7 @@ use pyo3::types::{
 };
 use std::collections::HashSet;
 
+const NATIVE_RECORDS: &str = "sqlbuild._native";
 const MODELS: &str = "sqlbuild.integrations.dbt.models";
 
 pub(crate) fn result_ids(results: &Bound<'_, PyAny>) -> PyResult<HashSet<String>> {
@@ -48,7 +49,7 @@ fn messages<'py>(raw: &Bound<'py, PyDict>) -> PyResult<Bound<'py, PyTuple>> {
     PyTuple::new(
         py,
         [call_with(
-            &imported(py, MODELS, "DbtNodeMessage")?,
+            &imported(py, NATIVE_RECORDS, "DbtNodeMessage")?,
             &[
                 ("level", PyString::new(py, "error").into_any()),
                 ("message", text),

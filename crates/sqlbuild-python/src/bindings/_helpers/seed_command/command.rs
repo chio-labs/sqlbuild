@@ -19,7 +19,6 @@ use crate::bindings::_helpers::compile_driver::plan_result::connection_with_hook
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const NATIVE_RECORDS: &str = "sqlbuild._native";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
 const STATIC_COMMAND_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
@@ -416,7 +415,7 @@ fn load_seeds<'py>(
 #[pyo3(signature = (*, request))]
 fn run_seed_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let invocation: Bound<'_, PyAny> =
-        resolve_command_invocation(request, &imported(py, NATIVE_RECORDS, "SeedInvocation")?)?;
+        resolve_command_invocation(request, &imported(py, NATIVE_MODULE, "SeedInvocation")?)?;
     let pipeline: Bound<'_, PyAny> = compile_seeds(request, &invocation)?;
     let requested: Bound<'_, PyAny> = request.getattr("concurrency")?;
     let concurrency: i64 = if requested.is_none() {

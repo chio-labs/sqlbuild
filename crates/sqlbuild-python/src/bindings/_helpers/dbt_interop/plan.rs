@@ -13,7 +13,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const DBT_MODELS: &str = "sqlbuild.integrations.dbt.models";
 const DBT_TYPES: &str = "sqlbuild.integrations.dbt.types";
 const PRESENTATION_MODELS: &str = "sqlbuild.presentation.models";
 const BUILD_OPTIONS: (&[&str], &[&str]) = (
@@ -153,7 +152,7 @@ pub(crate) fn build_dbt_interop_plan<'py>(
         dbt_has_work || sqlbuild_has_work,
     );
     call_with(
-        &imported(py, DBT_MODELS, "DbtInteropPlan")?,
+        &imported(py, NATIVE_MODULE, "DbtInteropPlan")?,
         &[
             ("command", command),
             (

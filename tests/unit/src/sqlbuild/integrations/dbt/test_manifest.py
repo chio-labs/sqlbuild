@@ -3,15 +3,13 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
+    DbtManifestIndex,
+    DbtManifestModel,
+    DbtManifestSource,
     build_dbt_manifest_index,
     resolve_dbt_manifest_model,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.integrations.dbt.models import (
-    DbtManifestIndex,
-    DbtManifestModel,
-    DbtManifestSource,
-)
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtManifestIndexErrorTestCase,
     DbtManifestResolutionErrorTestCase,

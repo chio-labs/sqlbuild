@@ -329,30 +329,13 @@ from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapsho
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.models import (
-    DbtCliConfigOverrides,
     DbtCliOptions,
-    DbtCommandExecutionResult,
     DbtCommandResult,
-    DbtInteropCommandArgs,
-    DbtInteropCompiledProject,
-    DbtInteropExecutionRequest,
-    DbtInteropInvocation,
-    DbtInteropParsedArgs,
-    DbtInteropPlan,
-    DbtInteropPlanResolution,
-    DbtInteropRoutedArgs,
-    DbtInteropSelectionResult,
-    DbtLsNode,
-    DbtManifestIndex,
-    DbtManifestModel,
     DbtNodeExecutionResult,
-    DbtPlanEnvironment,
-    DbtSqlbuildPlanRequest,
     NormalizedDbtProfileConnection,
-    ResolvedDbtConfig,
     ResolvedDbtProfileOutput,
 )
-from sqlbuild.integrations.dbt.types import DbtInteropCommand
+from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSkipReason
 from sqlbuild.lint.models import (
     CompileFacts,
     ExpandedLintFile,
@@ -8682,4 +8665,424 @@ class CompileAnalysis:
         rule_cache_hits: int = 0,
         rule_cache_misses: int = 0,
         skipped_type_proof_rules: tuple[str, ...] = (),
+    ) -> None: ...
+
+class DbtManifestModel:
+    """One dbt model node needed for SQLBuild dbt_ref resolution."""
+
+    unique_id: str
+    package_name: str
+    name: str
+    relation_name: str
+    database: str | None
+    schema: str | None
+    alias: str | None
+    node_checksum: str | None
+    fqn: tuple[str, ...]
+    query_sql: str
+    depends_on_nodes: tuple[str, ...]
+    payload: dict[str, object]
+    def __init__(
+        self,
+        unique_id: str,
+        package_name: str,
+        name: str,
+        relation_name: str,
+        database: str | None = None,
+        schema: str | None = None,
+        alias: str | None = None,
+        node_checksum: str | None = None,
+        fqn: tuple[str, ...] = ...,
+        query_sql: str = "",
+        depends_on_nodes: tuple[str, ...] = ...,
+        payload: dict[str, object] = ...,
+    ) -> None: ...
+
+class DbtManifestSource:
+    """One dbt source node needed for graph and lineage resolution."""
+
+    unique_id: str
+    package_name: str
+    source_name: str
+    name: str
+    relation_name: str
+    database: str | None
+    schema: str | None
+    identifier: str | None
+    payload: dict[str, object]
+    def __init__(
+        self,
+        unique_id: str,
+        package_name: str,
+        source_name: str,
+        name: str,
+        relation_name: str,
+        database: str | None = None,
+        schema: str | None = None,
+        identifier: str | None = None,
+        payload: dict[str, object] = ...,
+    ) -> None: ...
+
+class DbtManifestSeed:
+    """One dbt seed node, a leaf data relation used for column lineage."""
+
+    unique_id: str
+    package_name: str
+    name: str
+    relation_name: str
+    database: str | None
+    schema: str | None
+    alias: str | None
+    payload: dict[str, object]
+    def __init__(
+        self,
+        unique_id: str,
+        package_name: str,
+        name: str,
+        relation_name: str,
+        database: str | None = None,
+        schema: str | None = None,
+        alias: str | None = None,
+        payload: dict[str, object] = ...,
+    ) -> None: ...
+
+class DbtManifestIndex:
+    """Lookup indexes for dbt model and source nodes in a manifest."""
+
+    models_by_unique_id: dict[str, DbtManifestModel]
+    models_by_name: dict[str, tuple[DbtManifestModel, ...]]
+    models_by_package_and_name: dict[tuple[str, str], DbtManifestModel]
+    sources_by_unique_id: dict[str, DbtManifestSource]
+    seeds_by_unique_id: dict[str, DbtManifestSeed]
+    validation_depends_on_nodes_by_unique_id: dict[str, tuple[str, ...]]
+    def __init__(
+        self,
+        models_by_unique_id: dict[str, DbtManifestModel],
+        models_by_name: dict[str, tuple[DbtManifestModel, ...]],
+        models_by_package_and_name: dict[tuple[str, str], DbtManifestModel],
+        sources_by_unique_id: dict[str, DbtManifestSource] = ...,
+        seeds_by_unique_id: dict[str, DbtManifestSeed] = ...,
+        validation_depends_on_nodes_by_unique_id: dict[str, tuple[str, ...]] = ...,
+    ) -> None: ...
+
+class DbtCliConfigOverrides:
+    """dbt config values supplied by CLI flags."""
+
+    project_dir: str | None
+    profiles_dir: str | None
+    target: str | None
+    target_path: str | None
+    def __init__(
+        self,
+        project_dir: str | None = None,
+        profiles_dir: str | None = None,
+        target: str | None = None,
+        target_path: str | None = None,
+    ) -> None: ...
+
+class ResolvedDbtConfig:
+    """Resolved dbt config after applying CLI overrides."""
+
+    project_dir: Path | None
+    profiles_dir: Path | None
+    target: str | None
+    target_path: Path | None
+    def __init__(
+        self,
+        project_dir: Path | None,
+        profiles_dir: Path | None,
+        target: str | None,
+        target_path: Path | None,
+    ) -> None: ...
+
+class DbtNodeMessage:
+    """One dbt log message attached to a dbt node."""
+
+    level: str
+    message: str
+    def __init__(
+        self,
+        level: str,
+        message: str,
+    ) -> None: ...
+
+class DbtCommandExecutionResult:
+    """dbt command execution output from streamed JSON events."""
+
+    returncode: int
+    node_results: tuple[DbtNodeExecutionResult, ...]
+    def __init__(
+        self,
+        returncode: int,
+        node_results: tuple[DbtNodeExecutionResult, ...] = ...,
+    ) -> None: ...
+
+class DbtLsNode:
+    """One node returned by `dbt ls --output json`."""
+
+    unique_id: str
+    resource_type: str | None
+    package_name: str | None
+    name: str | None
+    fqn: tuple[str, ...]
+    original_file_path: str | None
+    def __init__(
+        self,
+        unique_id: str,
+        resource_type: str | None = None,
+        package_name: str | None = None,
+        name: str | None = None,
+        fqn: tuple[str, ...] = ...,
+        original_file_path: str | None = None,
+    ) -> None: ...
+
+class DbtInteropParsedArgs:
+    """Declared `sqb dbt` flags parsed by argparse, before routing to buckets."""
+
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    vars: str | None
+    threads: str | None
+    full_refresh: bool
+    event_time_start: str | None
+    event_time_end: str | None
+    project_dir: str | None
+    profiles_dir: str | None
+    profile: str | None
+    target: str | None
+    target_path: str | None
+    state: str | None
+    indirect_selection: str | None
+    defer: bool
+    start_cursor_ts: str | None
+    end_cursor_ts: str | None
+    start_cursor_int: str | None
+    end_cursor_int: str | None
+    defer_to: str | None
+    fail_fast: bool
+    hard_copy: bool
+    dbt_passthrough: tuple[str, ...]
+    def __init__(
+        self,
+        select: tuple[str, ...] = ...,
+        exclude: tuple[str, ...] = ...,
+        vars: str | None = None,
+        threads: str | None = None,
+        full_refresh: bool = False,
+        event_time_start: str | None = None,
+        event_time_end: str | None = None,
+        project_dir: str | None = None,
+        profiles_dir: str | None = None,
+        profile: str | None = None,
+        target: str | None = None,
+        target_path: str | None = None,
+        state: str | None = None,
+        indirect_selection: str | None = None,
+        defer: bool = False,
+        start_cursor_ts: str | None = None,
+        end_cursor_ts: str | None = None,
+        start_cursor_int: str | None = None,
+        end_cursor_int: str | None = None,
+        defer_to: str | None = None,
+        fail_fast: bool = False,
+        hard_copy: bool = False,
+        dbt_passthrough: tuple[str, ...] = ...,
+    ) -> None: ...
+
+class DbtInteropRoutedArgs:
+    """Arguments split for a future `sqb dbt` command execution."""
+
+    command: DbtInteropCommand
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    dbt_args: tuple[str, ...]
+    sqlbuild_args: tuple[str, ...]
+    def __init__(
+        self,
+        command: DbtInteropCommand,
+        select: tuple[str, ...] = ...,
+        exclude: tuple[str, ...] = ...,
+        dbt_args: tuple[str, ...] = ...,
+        sqlbuild_args: tuple[str, ...] = ...,
+    ) -> None: ...
+
+class DbtInteropSelectionResult:
+    """SQLBuild-side selection produced from `sqb dbt` selectors."""
+
+    sqlbuild_model_names: tuple[str, ...]
+    dbt_required_unique_ids: tuple[str, ...]
+    dbt_anchor_terms: tuple[str, ...]
+    dbt_anchor_unique_ids_by_term: dict[str, tuple[str, ...]]
+    path_translations: tuple[tuple[str, str], ...]
+    def __init__(
+        self,
+        sqlbuild_model_names: tuple[str, ...] = ...,
+        dbt_required_unique_ids: tuple[str, ...] = ...,
+        dbt_anchor_terms: tuple[str, ...] = ...,
+        dbt_anchor_unique_ids_by_term: dict[str, tuple[str, ...]] = ...,
+        path_translations: tuple[tuple[str, str], ...] = ...,
+    ) -> None: ...
+
+class DbtInteropPlan:
+    """Plan output for one future `sqb dbt` command."""
+
+    command: DbtInteropCommand
+    dbt_command_argv: tuple[str, ...]
+    dbt_selected_nodes: tuple[DbtLsNode, ...]
+    dbt_selected_unique_ids: tuple[str, ...]
+    sqlbuild_command_argvs: tuple[tuple[str, ...], ...]
+    selection: DbtInteropSelectionResult
+    sqlbuild_plan_output: PlanOutput | None
+    dbt_required_selector_terms: tuple[str, ...]
+    supplemental_dbt_command_argvs: tuple[tuple[str, ...], ...]
+    dbt_skip_reason: DbtInteropSkipReason | None
+    sqlbuild_skip_reason: DbtInteropSkipReason | None
+    warnings: tuple[str, ...]
+    def __init__(
+        self,
+        command: DbtInteropCommand,
+        dbt_command_argv: tuple[str, ...],
+        dbt_selected_nodes: tuple[DbtLsNode, ...],
+        dbt_selected_unique_ids: tuple[str, ...],
+        sqlbuild_command_argvs: tuple[tuple[str, ...], ...],
+        selection: DbtInteropSelectionResult,
+        sqlbuild_plan_output: PlanOutput | None = None,
+        dbt_required_selector_terms: tuple[str, ...] = ...,
+        supplemental_dbt_command_argvs: tuple[tuple[str, ...], ...] = ...,
+        dbt_skip_reason: DbtInteropSkipReason | None = None,
+        sqlbuild_skip_reason: DbtInteropSkipReason | None = None,
+        warnings: tuple[str, ...] = ...,
+    ) -> None: ...
+
+class DbtInteropExecutionRequest:
+    """Caller inputs for one dbt interop execution command."""
+
+    command: DbtInteropCommand
+    project_dir: Path
+    args: tuple[str, ...]
+    dbt_runner: Any | None
+    dbt_executable: str | None
+    sqlbuild_executable: str
+    no_sql_validation: bool
+    fail_fast: bool
+    on_progress: Callable[[str], None] | None
+    progress_stream: TextIO | None
+    dbt_stdout_stream: TextIO | None
+    use_color: bool
+    verbose: bool
+    json_output: bool
+    def __init__(
+        self,
+        command: DbtInteropCommand,
+        project_dir: Path,
+        args: tuple[str, ...],
+        dbt_runner: Any | None = None,
+        dbt_executable: str | None = None,
+        sqlbuild_executable: str = "sqb",
+        no_sql_validation: bool = False,
+        fail_fast: bool = False,
+        on_progress: Callable[[str], None] | None = None,
+        progress_stream: TextIO | None = None,
+        dbt_stdout_stream: TextIO | None = None,
+        use_color: bool = False,
+        verbose: bool = False,
+        json_output: bool = False,
+    ) -> None: ...
+
+class DbtInteropInvocation:
+    """Resolved execution environment for one dbt interop command."""
+
+    dbt_executable: str
+    output_stream: TextIO
+    dbt_output_stream: TextIO
+    routed: DbtInteropRoutedArgs
+    discovered_inputs: DiscoveredProjectInputs
+    effective_sqlbuild_args: tuple[str, ...]
+    dbt_options: DbtCliOptions
+    dbt_vars: dict[str, object]
+    runner: Any
+    def __init__(
+        self,
+        dbt_executable: str,
+        output_stream: TextIO,
+        dbt_output_stream: TextIO,
+        routed: DbtInteropRoutedArgs,
+        discovered_inputs: DiscoveredProjectInputs,
+        effective_sqlbuild_args: tuple[str, ...],
+        dbt_options: DbtCliOptions,
+        dbt_vars: dict[str, object],
+        runner: Any,
+    ) -> None: ...
+
+class DbtInteropCompiledProject:
+    """Adapter and compiled SQLBuild project for dbt interop planning."""
+
+    adapter_name: str
+    adapter: BaseAdapter
+    project: CompiledProjectView
+    def __init__(
+        self,
+        adapter_name: str,
+        adapter: BaseAdapter,
+        project: CompiledProjectView,
+    ) -> None: ...
+
+class DbtInteropPlanResolution:
+    """Combined dbt graph and the resolved interop plan."""
+
+    graph: DbtCombinedGraph
+    plan: DbtInteropPlan
+    def __init__(
+        self,
+        graph: DbtCombinedGraph,
+        plan: DbtInteropPlan,
+    ) -> None: ...
+
+class DbtInteropCommandArgs:
+    """Selection, passthrough args, and executables for a dbt interop command."""
+
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    dbt_command_args: tuple[str, ...]
+    sqlbuild_command_args: tuple[str, ...]
+    dbt_executable: str
+    sqlbuild_executable: str
+    def __init__(
+        self,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...] = (),
+        dbt_command_args: tuple[str, ...] = (),
+        sqlbuild_command_args: tuple[str, ...] = (),
+        dbt_executable: str = "dbt",
+        sqlbuild_executable: str = "sqb",
+    ) -> None: ...
+
+class DbtPlanEnvironment:
+    """Compiled project and adapter environment for dbt plan-output builds."""
+
+    project_dir: Path
+    discovered_inputs: DiscoveredProjectInputs
+    project: CompiledProjectView
+    adapter: BaseAdapter
+    adapter_name: str
+    def __init__(
+        self,
+        project_dir: Path,
+        discovered_inputs: DiscoveredProjectInputs,
+        project: CompiledProjectView,
+        adapter: BaseAdapter,
+        adapter_name: str,
+    ) -> None: ...
+
+class DbtSqlbuildPlanRequest:
+    """Selection and native planner inputs for a SQLBuild plan-output build."""
+
+    selected_model_names: tuple[str, ...]
+    sqlbuild_args: tuple[str, ...]
+    external_blocked_model_names: tuple[str, ...]
+    def __init__(
+        self,
+        selected_model_names: tuple[str, ...],
+        sqlbuild_args: tuple[str, ...],
+        external_blocked_model_names: tuple[str, ...] = (),
     ) -> None: ...
