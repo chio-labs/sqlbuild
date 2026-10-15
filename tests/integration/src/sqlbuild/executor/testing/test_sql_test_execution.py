@@ -7,18 +7,12 @@ from typing import Any
 
 import pytest
 
+from sqlbuild._native import render_sql_test_comparison_sql, render_sql_test_difference_sample_sql
 from sqlbuild.adapter.contract.types import StatementSizeLimit
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
-from sqlbuild.executor.testing._helpers.difference_samples import (
-    build_sql_test_difference_sample_sql,
-)
 from sqlbuild.executor.testing.main._execute import execute_sql_test
-from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
-from sqlbuild.executor.testing.main.comparison_sql_batch import (
-    build_sql_test_comparison_sql_batch,
-)
 from sqlbuild.executor.testing.models import (
     SqlTestColumnDifference,
     SqlTestExecutionResult,
@@ -113,12 +107,14 @@ class DescriptionlessDifferenceSampleDuckDbAdapter(DuckDbAdapter):
 def test_given_sql_test_chain_when_building_comparison_sql_then_uses_readable_ctes(
     test_case: SqlTestComparisonSqlTestCase,
 ) -> None:
-    comparison_sql: str = build_sql_test_comparison_sql(
-        test_entry=build_sql_test_plan_entry(
-            name="test_model",
-            chain_steps=test_case.chain_steps,
+    comparison_sql: str = render_sql_test_comparison_sql(
+        (
+            build_sql_test_plan_entry(
+                name="test_model",
+                chain_steps=test_case.chain_steps,
+            ),
         )
-    )
+    )[0]
 
     expected_fragment: str
     for expected_fragment in test_case.expected_fragments:
@@ -196,10 +192,12 @@ def test_given_conflicting_preanalyzed_ctes_when_executing_then_each_step_uses_i
         adapter=adapter,
         connection=connection,
     )
-    (native_sql,) = build_sql_test_comparison_sql_batch(
-        test_entries=(entry,),
-        set_difference_operator=adapter.render_set_difference_operator(),
-        sql_analysis_dialect=adapter.sql_analysis_dialect(),
+    (native_sql,) = tuple(
+        render_sql_test_comparison_sql(
+            (entry,),
+            set_difference_operator=adapter.render_set_difference_operator(),
+            sql_analysis_dialect=adapter.sql_analysis_dialect(),
+        )
     )
     native_rows: list[tuple[object, ...]] = connection.execute(native_sql).fetchall()
 
@@ -229,7 +227,7 @@ def test_given_sqlserver_dialect_when_building_sample_sql_then_uses_bounded_top_
 
     dialect: str | None = SqlServerAdapter().sql_analysis_dialect()
     assert dialect == test_case.dialect
-    sample_sql: str = build_sql_test_difference_sample_sql(
+    sample_sql: str = render_sql_test_difference_sample_sql(
         test_entry=entry,
         step=entry.chain[0],
         direction=SqlTestDifferenceDirection.UNEXPECTED,

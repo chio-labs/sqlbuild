@@ -12,24 +12,28 @@ use sqlbuild_cli::diff_report::main::read_only_query_problem::read_only_query_pr
 use sqlbuild_cli::diff_report::models::QueryShapeFacts;
 use sqlbuild_cli::diff_report::types::PhaseSeconds;
 
+use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::diff_report::support::{
     call, cli_error, error_text, none, object, progress_line,
 };
+use crate::bindings::_helpers::diff_report::tolerances::cli_tolerance_overrides;
+use crate::bindings::types::CompilerDetach;
+use sqlbuild_analysis::diff_selection::main::raw_query_shape::raw_query_shape;
+use sqlbuild_analysis::diff_selection::models::RawQueryShape;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const NAMESPACE_MODULE: &str = "sqlbuild._native";
 const RUNTIME_MODULE: &str = "sqlbuild._native";
-const POLYGLOT_MODULE: &str = "sqlbuild.compiler.sql_analysis.main.import_polyglot_sql";
+const GENERIC_DIALECT: &str = "generic";
 const COMMAND_MODELS_MODULE: &str = "sqlbuild._native";
 const LIFECYCLE_MODULE: &str = "sqlbuild.executor.diff.classes.query_artifact_lifecycle";
 const RELATION_LOOKUP_MODULE: &str = "sqlbuild.adapter.relations.main.relation_lookup";
 const CURSOR_MODELS_MODULE: &str = "sqlbuild.cursor_algebra.models";
 const EXECUTE_QUERY_MODULE: &str = "sqlbuild.executor.diff.main._execute_query";
 const DIFF_MODELS_MODULE: &str = "sqlbuild.executor.diff.models";
-const DIFF_CONFIG_MODULE: &str = "sqlbuild.executor.diff.main._config";
 const NAMESPACELESS_ADAPTERS: [&str; 2] = ["duckdb", "motherduck"];
 
 fn failure(py: Python<'_>, message: String, code: &str, help: Option<&str>) -> PyErr {
@@ -114,13 +118,6 @@ fn query_input(
     }
 }
 
-fn node_key(node: &Bound<'_, PyAny>) -> PyResult<String> {
-    match node.getattr_opt("key")? {
-        Some(key) => Ok(key.str()?.to_string().to_lowercase()),
-        None => Ok(String::new()),
-    }
-}
-
 fn read_only_query(
     py: Python<'_>,
     sql: &str,
@@ -139,69 +136,29 @@ fn read_only_query(
             None,
         ));
     }
-    let polyglot: Bound<'_, PyAny> =
-        imported(py, POLYGLOT_MODULE, "import_polyglot_sql")?.call0()?;
-    if polyglot.is_none() {
-        return Err(failure(
-            py,
-            "raw-query diff requires the bundled SQL parser".to_owned(),
-            "C233",
-            None,
-        ));
-    }
     let dialect: Bound<'_, PyAny> = adapter.call_method0("sql_analysis_dialect")?;
-    let dialect: Bound<'_, PyAny> = if dialect.is_truthy()? {
-        dialect
+    let dialect: String = if dialect.is_truthy()? {
+        dialect.extract()?
     } else {
-        object(py, "generic")?
+        GENERIC_DIALECT.to_owned()
     };
-    let keywords: Bound<'_, PyDict> = PyDict::new(py);
-    keywords.set_item("dialect", dialect)?;
-    let expression: Bound<'_, PyAny> =
-        match polyglot.call_method("parse_one", (normalized,), Some(&keywords)) {
-            Ok(expression) => expression,
-            Err(error) if error.is_instance_of::<PyException>(py) => {
-                let replacement: PyErr = failure(
-                    py,
-                    format!(
-                        "{label} query is not one valid SQL statement: {}",
-                        error_text(py, &error)?
-                    ),
-                    "C234",
-                    None,
-                );
-                replacement.set_cause(py, Some(error));
-                return Err(replacement);
-            }
-            Err(error) => return Err(error),
-        };
-    let mut node_keys: Vec<String> = Vec::new();
-    let root_key: String = node_key(&expression)?;
-    let read_only_root: bool =
-        ["except", "intersect", "select", "union", "values"].contains(&root_key.as_str());
-    if read_only_root {
-        for node in expression.call_method0("walk")?.try_iter()? {
-            node_keys.push(node_key(&node?)?);
-        }
-    }
-    let arguments: Bound<'_, PyAny> = expression.getattr_opt("args")?.unwrap_or_else(|| none(py));
-    let writes_or_locks: bool = match arguments.downcast::<PyDict>() {
-        Ok(arguments) => {
-            arguments
-                .get_item("into")?
-                .is_some_and(|into| !into.is_none())
-                || arguments
-                    .get_item("locks")?
-                    .map_or(Ok(false), |locks| locks.is_truthy())?
-        }
-        Err(_) => false,
-    };
+    let shape: RawQueryShape = py
+        .compiler_detach(|| Ok::<_, String>(raw_query_shape(normalized, &dialect)))
+        .map_err(value_error)?
+        .map_err(|message| {
+            failure(
+                py,
+                format!("{label} query is not one valid SQL statement: {message}"),
+                "C234",
+                None,
+            )
+        })?;
     read_only_query_problem(
         label,
         &QueryShapeFacts {
-            root_key,
-            node_keys,
-            writes_or_locks,
+            root_key: shape.root_key,
+            node_keys: shape.node_keys,
+            writes_or_locks: shape.writes_or_locks,
         },
     )
     .map_err(|error| user_failure(py, error))?;
@@ -358,9 +315,9 @@ pub(crate) fn execution_options<'py>(
             ("exhaustive", &attribute("exhaustive")?),
         ],
     )?;
-    let tolerances: Bound<'py, PyAny> = call(
-        &imported(py, DIFF_CONFIG_MODULE, "parse_cli_tolerance_overrides")?,
-        &[("values", &attribute("tolerance_overrides")?)],
+    let tolerances: Bound<'py, PyAny> = cli_tolerance_overrides(
+        py,
+        &attribute("tolerance_overrides")?.extract::<Vec<String>>()?,
     )?;
     let schema_only: Bound<'py, PyAny> = attribute("schema_only")?;
     let collect: Bound<'py, PyAny> = object(py, !schema_only.is_truthy()?)?;

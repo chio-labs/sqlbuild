@@ -4,7 +4,7 @@ import hashlib
 
 import pytest
 
-from sqlbuild.adapter.relations.main.fit_artifact_logical_name import fit_artifact_logical_name
+from sqlbuild._native import fit_artifact_logical_name
 from sqlbuild.errors.contracts.exceptions import SharedInputError
 from tests.unit.src.sqlbuild.adapter.relations.main.fit_artifact_logical_name._test_types import (
     FitArtifactLogicalNameErrorTestCase,

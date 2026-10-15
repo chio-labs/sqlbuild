@@ -4,28 +4,19 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
-from typing import Any, Final, cast
+from typing import Any, Final
 
-import orjson
-
-import sqlbuild._native as _native
+from sqlbuild._native import render_sql_test_difference_sample_sql
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.types import TypeDialect
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
 from sqlbuild.diagnostics.classes.diagnostic_record_redactor import DiagnosticRecordRedactor
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
-from sqlbuild.executor.testing._helpers.native_requests import chain_step_request
-from sqlbuild.executor.testing.exceptions import SqlTestRenderingError
 from sqlbuild.executor.testing.models import (
     SqlTestColumnDifference,
     SqlTestDifferenceSample,
     StepResult,
 )
-from sqlbuild.executor.testing.types import (
-    NativeSqlTestRenderingModule,
-    SqlTestDifferenceDirection,
-    SqlTestOutcome,
-)
+from sqlbuild.executor.testing.types import SqlTestDifferenceDirection, SqlTestOutcome
 
 _ROW_LIMIT: Final[int] = 3
 _COLUMN_LIMIT: Final[int] = 12
@@ -110,39 +101,6 @@ def _align_single_difference(
     )
 
 
-def build_sql_test_difference_sample_sql(
-    *,
-    test_entry: SqlTestPlanEntry,
-    step: ChainStep,
-    direction: SqlTestDifferenceDirection,
-    sample_limit: int,
-    set_difference_operator: str = "EXCEPT",
-    sql_analysis_dialect: str | None = None,
-) -> str:
-    """Build a bounded query for one direction of an expected-output difference."""
-
-    if step.expected_cte_sql is None:
-        return ""
-    request: dict[str, object] = {
-        "step": chain_step_request(step=step),
-        "sqlAnalysisEnabled": test_entry.sql_analysis_enabled,
-        "setDifferenceOperator": set_difference_operator,
-        "sqlAnalysisDialect": sql_analysis_dialect,
-        "direction": direction.value,
-        "sampleLimit": sample_limit,
-        "useTopClause": sql_analysis_dialect == TypeDialect.TSQL,
-    }
-    response: object = orjson.loads(
-        cast(NativeSqlTestRenderingModule, _native).render_sql_test_difference_sample_json(
-            orjson.dumps(request, option=orjson.OPT_SORT_KEYS).decode()
-        )
-    )
-    sql: object = response.get("sql") if isinstance(response, dict) else None
-    if not isinstance(sql, str):
-        raise SqlTestRenderingError("native SQL-test difference rendering returned invalid SQL")
-    return sql
-
-
 def _fetch_difference_samples(
     *,
     test_entry: SqlTestPlanEntry,
@@ -151,7 +109,7 @@ def _fetch_difference_samples(
     adapter: BaseAdapter,
     connection: Any,
 ) -> tuple[SqlTestDifferenceSample, ...]:
-    sql: str = build_sql_test_difference_sample_sql(
+    sql: str = render_sql_test_difference_sample_sql(
         test_entry=test_entry,
         step=step,
         direction=direction,

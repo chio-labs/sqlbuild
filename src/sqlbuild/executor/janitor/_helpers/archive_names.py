@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from datetime import UTC, datetime
 
-from sqlbuild.adapter.relations.main.fit_artifact_logical_name import fit_artifact_logical_name
+from sqlbuild._native import fit_artifact_logical_name
 from sqlbuild.executor.janitor.constants import (
     ARCHIVE_ARTIFACT_LABEL,
     ARCHIVE_LOOKALIKE_PREFIX,

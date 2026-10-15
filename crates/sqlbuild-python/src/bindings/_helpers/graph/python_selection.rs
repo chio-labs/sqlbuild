@@ -160,7 +160,7 @@ fn resolve_python_check_excludes<'py>(
 /// `(sql keys, python node names)` run selectors resolve to across SQL resources and Python nodes.
 #[pyfunction]
 #[pyo3(signature = (*, project_graph, python_graph, select, exclude))]
-fn resolve_python_sql_run_selection(
+pub(crate) fn resolve_python_sql_run_selection(
     project_graph: &Bound<'_, PyAny>,
     python_graph: &Bound<'_, PyAny>,
     select: Vec<String>,

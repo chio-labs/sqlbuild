@@ -20,6 +20,7 @@ use crate::bindings::_helpers::check::check_core::{
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 use crate::bindings::_helpers::cursor::overrides::{cursor_integer, cursor_timestamp};
+use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const CURSOR_OVERRIDES_MODULE: &str = "sqlbuild._native";
@@ -28,7 +29,6 @@ const BUILD_MODELS: &str = "sqlbuild.executor.build.models";
 const PIPELINE_RUN_MODULE: &str = "sqlbuild.executor.pipeline.main.run";
 const FRESHNESS_MODULE: &str = "sqlbuild.cli.commands._helpers.freshness.source_freshness";
 const COST_CONTEXT_MODULE: &str = "sqlbuild._native";
-const GRAPH_MODULE: &str = "sqlbuild.compiler.python_nodes.main._graph";
 const CHECKS_MODULE: &str = "sqlbuild.executor.python_nodes.main._checks";
 const EXECUTOR_PYTHON_MODELS: &str = "sqlbuild.executor.python_nodes.models";
 const EXECUTION_COMMAND: &str = "sqb build";
@@ -493,10 +493,7 @@ pub(crate) fn run_post_build_python_checks<'py>(
     let discovered: Bound<'py, PyAny> = context.get("discovered_inputs")?;
     let plan: Bound<'py, PyAny> = pipeline.getattr("plan_output")?;
     let load_results: Bound<'py, PyAny> = result.getattr("load_results")?;
-    let graph: Bound<'py, PyAny> = call_with(
-        &imported(py, GRAPH_MODULE, "build_discovered_python_node_graph")?,
-        &[("discovered_inputs", discovered.clone())],
-    )?;
+    let graph: Bound<'py, PyAny> = python_node_graph(&discovered)?;
     let by_loader = || -> PyResult<Bound<'py, PyAny>> {
         Ok(load_results_by_loader_name(&plan.getattr("source_map")?, &load_results)?.into_any())
     };

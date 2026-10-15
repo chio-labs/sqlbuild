@@ -15,7 +15,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, cast
 
-from sqlbuild._native import CostContext
+from sqlbuild._native import CostContext, sql_test_resource_id
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import RelationInfo
@@ -108,7 +108,6 @@ from sqlbuild.executor.seed.constants import SEED_ENTRY_MISSING_CODE
 from sqlbuild.executor.seed.main._execute import execute_seed
 from sqlbuild.executor.testing.constants import SQL_TEST_ENTRY_MISSING_CODE
 from sqlbuild.executor.testing.main._execute import execute_sql_test
-from sqlbuild.executor.testing.main._resource_id import sql_test_resource_id
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.microbatches.classes.direct_store import (

@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import ast
-import hashlib
-import heapq
 import inspect
 import sys
 import threading
@@ -42,7 +40,6 @@ from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
 
-_SYNTHETIC_PACKAGE_PREFIX: str = "_sqlbuild_project_macros_"
 _OBJECT_ENTRY_LENGTH: int = 2
 _MACRO_MODULE_LOAD_LOCK: threading.RLock = threading.RLock()
 
@@ -268,25 +265,22 @@ def _load_macro_modules(*, analyses: dict[str, _MacroModuleLoad]) -> dict[str, M
 
 
 def _load_macro_modules_locked(*, analyses: dict[str, _MacroModuleLoad]) -> dict[str, ModuleType]:
-    digest: str = hashlib.sha256(
-        "\0".join(
-            f"{name}\0{analyses[name].file.file_path}\0{analyses[name].file.contents}"
-            for name in sorted(analyses)
-        ).encode()
-    ).hexdigest()[:16]
-    root: str = f"{_SYNTHETIC_PACKAGE_PREFIX}{digest}"
+    root, package_names, load_order = _native.macro_module_load_plan(
+        [
+            (
+                name,
+                str(analysis.file.file_path),
+                analysis.file.contents,
+                list(analysis.module_dependencies),
+            )
+            for name, analysis in analyses.items()
+        ]
+    )
     synthetic_names: list[str] = []
     previous_modules: dict[str, ModuleType] = {}
     modules: dict[str, ModuleType] = {}
     try:
-        package_names: set[str] = {root}
-        for name in analyses:
-            parts: list[str] = name.split(".")[:-1]
-            package_names.update(
-                f"{root}.{'/'.join(parts[:index]).replace('/', '.')}"
-                for index in range(1, len(parts) + 1)
-            )
-        for package_name in sorted(package_names, key=lambda item: item.count(".")):
+        for package_name in package_names:
             package: ModuleType = ModuleType(package_name)
             package.__package__ = package_name
             package.__path__ = []  # type: ignore[attr-defined]
@@ -296,21 +290,8 @@ def _load_macro_modules_locked(*, analyses: dict[str, _MacroModuleLoad]) -> dict
             sys.modules[package_name] = package
             synthetic_names.append(package_name)
 
-        remaining_dependencies: dict[str, int] = {
-            name: len(analysis.module_dependencies) for name, analysis in analyses.items()
-        }
-        dependents: dict[str, list[str]] = {}
-        for name, analysis in analyses.items():
-            for dependency in analysis.module_dependencies:
-                dependents.setdefault(dependency, []).append(name)
-        ready: list[str] = [
-            name
-            for name, dependency_count in remaining_dependencies.items()
-            if dependency_count == 0
-        ]
-        heapq.heapify(ready)
-        while ready:
-            name: str = heapq.heappop(ready)
+        name: str
+        for name in load_order:
             analysis: _MacroModuleLoad = analyses[name]
             synthetic_name: str = f"{root}.{name}"
             module: ModuleType = ModuleType(synthetic_name)
@@ -331,10 +312,6 @@ def _load_macro_modules_locked(*, analyses: dict[str, _MacroModuleLoad]) -> dict
                     f"Failed to load macros from '{analysis.file.file_path}': {error}"
                 ) from error
             modules[name] = module
-            for dependent in dependents.get(name, ()):
-                remaining_dependencies[dependent] -= 1
-                if remaining_dependencies[dependent] == 0:
-                    heapq.heappush(ready, dependent)
         return modules
     finally:
         for synthetic_name in reversed(synthetic_names):

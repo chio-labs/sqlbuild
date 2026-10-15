@@ -20,6 +20,8 @@ from sqlbuild.adapter.contract.models import (
     ExpressionInferenceProfile,
     QueryResult,
     RelationInfo,
+    RowDiffSampling,
+    RowDiffTolerances,
 )
 from sqlbuild.adapter.contract.types import (
     AdapterExecute,
@@ -290,17 +292,19 @@ from sqlbuild.diagnostics.models import ProcessResourceUsage
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
+    FunctionExecutionResult,
     SchedulerState,
     SeedExecutionResult,
 )
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
-from sqlbuild.executor.diff.models import DiffExecutionResult
+from sqlbuild.executor.diff.models import DiffExecutionResult, RowDiffSamplingOverride
 from sqlbuild.executor.janitor.models import JanitorExecutionResult, JanitorPlan
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.models import (
     PythonCheckExecutionResult,
     PythonNodeExecutionResult,
 )
+from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotCaptureRunResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
@@ -325,9 +329,8 @@ from sqlbuild.lint.models import (
     PreparedLintFiles,
     RuleFixResult,
 )
-from sqlbuild.lint.types import (
-    RelationKeyRow,
-)
+from sqlbuild.lint.types import RelationKeyRow
+from sqlbuild.microbatches.models import MicrobatchInterval
 from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.presentation.types import TransientLineOwner
 from sqlbuild.provider.classes.container import ProviderContainer
@@ -4910,6 +4913,76 @@ def scope_test_ctes(
 ) -> list[tuple[str | None, list[tuple[str, str]]]]: ...
 def omitted_ceremonial_select(sql: str, syntax: dict[str, object]) -> int | None: ...
 def extract_sql_tests_json(request_json: str) -> str: ...
+def parse_row_diff_tolerances(
+    *, raw: object, label: str = "row_diff_tolerances"
+) -> RowDiffTolerances: ...
+def parse_cli_tolerance_overrides(*, values: Sequence[str]) -> RowDiffTolerances: ...
+def resolve_row_diff_sampling(
+    *, raw_row_limit: object, raw_seed: object, override: RowDiffSamplingOverride, label: str
+) -> RowDiffSampling | None: ...
+def merge_row_diff_tolerances(
+    *, base: RowDiffTolerances, override: RowDiffTolerances | None
+) -> RowDiffTolerances: ...
+def aggregate_build_result(
+    *,
+    model_results: tuple[ModelExecutionResult, ...],
+    seed_results: tuple[SeedExecutionResult, ...],
+    function_results: tuple[FunctionExecutionResult, ...],
+    load_results: tuple[LoadExecutionResult, ...],
+    test_results: tuple[SqlTestExecutionResult, ...],
+    source_audit_results: tuple[AuditExecutionResult, ...],
+    end_audit_results: tuple[AuditExecutionResult, ...],
+) -> BuildExecutionResult: ...
+def resolve_dag_selection(
+    *, dag: Mapping[str, Any], select: str, exclude: str | None = None
+) -> frozenset[str]: ...
+def load_sqlbuild_dag(
+    dag: Mapping[str, Any] | str | Path, *, error_class: type[Exception]
+) -> Mapping[str, Any]: ...
+def build_python_node_graph(*, discovered_inputs: DiscoveredProjectInputs) -> PythonNodeGraph: ...
+def macro_module_load_plan(
+    modules: Sequence[tuple[str, str, str, Sequence[str]]],
+) -> tuple[str, list[str], list[str]]: ...
+def fit_artifact_logical_name(
+    *, logical_name: str, fixed_prefix: str, identifier_limit: int, artifact_label: str
+) -> str: ...
+def fit_auxiliary_relation_name(*, base_name: str, suffix: str, identifier_limit: int) -> str: ...
+def merge_microbatch_intervals(
+    *, intervals: Sequence[MicrobatchInterval], cursor_type: str
+) -> tuple[MicrobatchInterval, ...]: ...
+def render_sql_test_comparison_sql(
+    test_entries: Sequence[SqlTestPlanEntry],
+    *,
+    set_difference_operator: str = "EXCEPT",
+    sql_analysis_dialect: str | None = None,
+    probe_step_index: int | None = None,
+) -> list[str]: ...
+def render_sql_test_difference_sample_sql(
+    *,
+    test_entry: SqlTestPlanEntry,
+    step: ChainStep,
+    direction: str,
+    sample_limit: int,
+    set_difference_operator: str = "EXCEPT",
+    sql_analysis_dialect: str | None = None,
+) -> str: ...
+def describe_missing_expected_columns(
+    *, model_name: str, expected_columns: Sequence[str], available_columns: Iterable[str]
+) -> str | None: ...
+def build_scenario_expected_comparison_sql(
+    *, actual_sql: str, expected_sql: str, set_difference_operator: str
+) -> str: ...
+def sql_test_resource_id(
+    *, test_name: str, source_path: PurePath | None, block_index: int | None, case_name: str | None
+) -> str: ...
+def audit_resource_id(
+    *,
+    audit_name: str,
+    attachment_kind: AuditAttachmentKind,
+    attached_target_kind: AttachedAuditTargetKind | None = None,
+    attached_target_name: str | None,
+    attached_column_name: str | None,
+) -> str: ...
 def validated_model_cursor_intrinsics(
     *, sql: str, config_values: Mapping[str, object], model_name: str
 ) -> str: ...

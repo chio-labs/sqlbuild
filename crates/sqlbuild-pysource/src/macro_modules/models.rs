@@ -64,3 +64,20 @@ pub struct MacroModuleInventory {
     /// Every module in discovery order, present only when the strict analysis passed.
     pub modules: Option<Vec<MacroModuleLoad>>,
 }
+
+/// One macro module to load: its module name, file path text, contents and module dependencies.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MacroModuleSpec {
+    pub name: String,
+    pub file_path: String,
+    pub contents: String,
+    pub dependencies: Vec<String>,
+}
+
+/// The synthetic package root, its packages shallowest first, and the module execution order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MacroLoadPlan {
+    pub root: String,
+    pub packages: Vec<String>,
+    pub order: Vec<String>,
+}

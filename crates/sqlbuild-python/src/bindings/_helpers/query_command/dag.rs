@@ -9,11 +9,11 @@ use sqlbuild_core::query_command::main::render_dag_summary::render_dag_summary;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::query_command::project::{ProjectAdapter, project_adapter};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
-const PYTHON_GRAPH_MODULE: &str = "sqlbuild.compiler.python_nodes.main._graph";
 
 fn array_length(document: &serde_json::Value, key: &str) -> PyResult<usize> {
     document
@@ -69,14 +69,7 @@ fn run_dag_command<'py>(py: Python<'py>, options: Option<Bound<'py, PyDict>>) ->
             ("external_sql_reference_resolver", resolver),
         ],
     )?;
-    let python_graph: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            PYTHON_GRAPH_MODULE,
-            "build_discovered_python_node_graph",
-        )?,
-        &[("discovered_inputs", discovered.clone())],
-    )?;
+    let python_graph: Bound<'py, PyAny> = python_node_graph(&discovered)?;
     let dag_json: String = call_with(
         &imported(py, NATIVE_MODULE, "build_dag_json")?,
         &[

@@ -1,11 +1,10 @@
 //! Source contract validation and adapter-controlled projection rendering.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_resolution::values::{cursor_wrap, method, string};
 use crate::bindings::_helpers::planner_strategy::values::{PLANNER_EXCEPTIONS_MODULE, input_error};
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
+use crate::bindings::_helpers::type_system::equality::types_equal;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
@@ -15,8 +14,6 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_sqltext::resolution::main::{
     reference_spans::reference_spans, source_alias::source_alias,
 };
-
-const TYPES_MODULE: &str = "sqlbuild.adapter.type_system.main.types_equal";
 
 fn source_error(py: Python<'_>, message: &str, code: &str) -> PyErr {
     input_error(
@@ -86,15 +83,11 @@ fn check_columns(
         if actual.is_empty() {
             continue;
         }
-        let equal = call_with(
-            &imported(py, TYPES_MODULE, "types_equal")?,
-            &[
-                ("left", string(py, actual)),
-                ("right", string(py, &kind)),
-                ("dialect", adapter.getattr("sql_analysis_dialect_name")?),
-            ],
-        )?
-        .is_truthy()?;
+        let equal: bool = types_equal(
+            &adapter.getattr("sql_analysis_dialect_name")?,
+            actual,
+            &kind,
+        )?;
         if !equal {
             return Err(source_error(
                 py,

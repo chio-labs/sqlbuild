@@ -10,12 +10,12 @@ from sqlbuild._native import (
     ExecutionEventWriter,
     IntegrationResultEnvelope,
     TerminalEventIndex,
+    audit_resource_id,
     format_audit_execution_json,
     format_build_execution_json,
     format_test_execution_json,
     terminal_event_index_scope,
 )
-from sqlbuild.executor.auditing.main.resource_id import audit_resource_id
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus

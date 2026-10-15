@@ -9,9 +9,9 @@ from typing import Any
 
 import pytest
 
+from sqlbuild._native import render_sql_test_comparison_sql
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.planner.models import SqlTestPlanEntry
-from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.integration.src.sqlbuild.executor.testing._test_types import (
     ExpectedBooleanTestCase,
     SqlTestBuildParityTestCase,
@@ -124,8 +124,8 @@ def test_given_shared_cte_name_in_chain_when_rendering_tsql_then_rename_runs_lik
 ) -> None:
     entry: SqlTestPlanEntry = build_shared_cte_name_chain_entry()
 
-    renamed_sql: str = build_sql_test_comparison_sql(test_entry=entry, sql_analysis_dialect="tsql")
-    nested_sql: str = build_sql_test_comparison_sql(test_entry=entry, sql_analysis_dialect="duckdb")
+    renamed_sql: str = render_sql_test_comparison_sql((entry,), sql_analysis_dialect="tsql")[0]
+    nested_sql: str = render_sql_test_comparison_sql((entry,), sql_analysis_dialect="duckdb")[0]
 
     assert "__sqb_cte_0 AS (SELECT id + 1 AS id FROM __ref__stg)" in renamed_sql
     assert "__ref__mart AS (SELECT __sqb_cte_0.id FROM __sqb_cte_0)" in renamed_sql

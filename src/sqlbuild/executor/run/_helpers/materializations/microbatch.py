@@ -16,9 +16,11 @@ from sqlbuild._native import (
     compute_query_hash,
     cursor_bound_display,
     empty_cursor_window,
+    fit_auxiliary_relation_name,
     future_cursor_cap_warning,
     inclusive_cursor_end,
     maximum_start_cap_warning,
+    merge_microbatch_intervals,
     microbatch_limit_warning,
     resolve_effective_microbatch_batch_size,
 )
@@ -38,7 +40,6 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapter.relations.main.cached_relation_exists import cached_relation_exists
-from sqlbuild.adapter.relations.main.fit_auxiliary_relation_name import fit_auxiliary_relation_name
 from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
@@ -130,7 +131,6 @@ from sqlbuild.microbatches.main.deterministic_event_id import (
 from sqlbuild.microbatches.main.latest_replay_requirement import (
     latest_active_replay_requirement,
 )
-from sqlbuild.microbatches.main.merge_intervals import merge_intervals
 from sqlbuild.microbatches.main.project_coverage import project_microbatch_coverage
 from sqlbuild.microbatches.main.project_replay import project_replay_requirement
 from sqlbuild.microbatches.models import (
@@ -415,7 +415,7 @@ def execute_microbatch_entry(
     if isinstance(reconciliation, ModelExecutionResult):
         return reconciliation
     state, history_context, reconciled_batches = reconciliation
-    resolved_intervals: tuple[MicrobatchInterval, ...] = merge_intervals(
+    resolved_intervals: tuple[MicrobatchInterval, ...] = merge_microbatch_intervals(
         intervals=tuple(
             MicrobatchInterval(start=render(value=batch.start), end=render(value=batch.end))
             for batch in reconciled_batches
@@ -1234,7 +1234,7 @@ def _microbatch_lifecycle(
 def _microbatch_lifecycle_plan(
     *, batch_plan: _MicrobatchPlan, cursor_type: str
 ) -> _MicrobatchLifecyclePlan:
-    selected_intervals: tuple[MicrobatchInterval, ...] = merge_intervals(
+    selected_intervals: tuple[MicrobatchInterval, ...] = merge_microbatch_intervals(
         intervals=tuple(
             MicrobatchInterval(start=render(value=batch.start), end=render(value=batch.end))
             for batch in batch_plan.batches
@@ -3296,7 +3296,7 @@ def _plan_microbatch_windows(
             batch_size=batch_size,
             effective_grain=effective_grain,
         )
-    work_intervals: tuple[MicrobatchInterval, ...] = merge_intervals(
+    work_intervals: tuple[MicrobatchInterval, ...] = merge_microbatch_intervals(
         intervals=(
             (
                 MicrobatchInterval(

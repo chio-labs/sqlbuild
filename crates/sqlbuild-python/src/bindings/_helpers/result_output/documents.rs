@@ -4,11 +4,10 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::compile_outputs::json_report::indented_json;
 use crate::bindings::_helpers::plan_output::values::{any, dict, items, text};
+use crate::bindings::_helpers::result_output::aggregation::aggregated_from_lists;
 use crate::bindings::_helpers::result_output::assets::{
     clone_asset, function_assets, load_assets, model_assets, python_node_assets, seed_assets,
     without_none,
@@ -19,7 +18,6 @@ use crate::bindings::_helpers::result_output::checks::{
 use crate::bindings::_helpers::result_output::projection::{Projection, rounded};
 
 const JSON_VERSION: i64 = 1;
-const AGGREGATE_MODULE: &str = "sqlbuild.executor.build.main._aggregate_result";
 const FAILED: &str = "failed";
 const SUCCESS: &str = "success";
 const SKIPPED: &str = "skipped";
@@ -332,15 +330,7 @@ fn build_json<'py>(
     assets.extend(load_assets(&projection, &retained[3])?);
     assets.extend(python_node_assets(&projection, &nodes)?);
     let counted: Bound<'py, PyAny> = if partial {
-        let keywords: Vec<(&str, Bound<'py, PyAny>)> = BUILD_RESULT_FIELDS
-            .iter()
-            .zip(&retained)
-            .map(|(field, kept)| Ok((*field, PyTuple::new(py, kept)?.into_any())))
-            .collect::<PyResult<_>>()?;
-        call_with(
-            &imported(py, AGGREGATE_MODULE, "aggregate_build_result")?,
-            &keywords,
-        )?
+        aggregated_from_lists(py, &retained)?
     } else {
         result.clone()
     };

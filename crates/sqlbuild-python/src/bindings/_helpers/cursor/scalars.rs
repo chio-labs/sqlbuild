@@ -170,7 +170,7 @@ pub(crate) fn parse_value<'py>(
 }
 
 /// `raw` unchanged when it is already a typed value, else parsed.
-fn as_scalar<'py>(
+pub(crate) fn as_scalar<'py>(
     session: &CursorSession<'py>,
     raw: &Bound<'py, PyAny>,
     cursor_type: &Bound<'py, PyAny>,

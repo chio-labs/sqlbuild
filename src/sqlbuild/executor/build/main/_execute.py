@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
+from sqlbuild._native import aggregate_build_result
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.relations.main.relation_metadata_cache_scope import (
     relation_metadata_cache_scope,
@@ -24,7 +25,6 @@ from sqlbuild.executor.build._helpers.retention import (
     reconcile_retention_after_build,
 )
 from sqlbuild.executor.build.classes.build_scheduler import BuildScheduler
-from sqlbuild.executor.build.main._aggregate_result import aggregate_build_result
 from sqlbuild.executor.build.models import (
     BuildCallbacks,
     BuildCustomizations,

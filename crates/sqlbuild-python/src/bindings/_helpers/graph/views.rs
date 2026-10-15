@@ -29,7 +29,7 @@ fn native_graph_keys(keys: &Bound<'_, PyAny>) -> PyResult<Vec<ObjectKey>> {
 
 /// `CompiledObjectKey`s for native graph key pairs.
 #[pyfunction]
-fn compiled_graph_keys<'py>(
+pub(crate) fn compiled_graph_keys<'py>(
     py: Python<'py>,
     keys: Vec<ObjectKey>,
 ) -> PyResult<Bound<'py, PyFrozenSet>> {

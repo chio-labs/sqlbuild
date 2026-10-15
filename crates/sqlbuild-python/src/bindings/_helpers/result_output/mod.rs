@@ -1,3 +1,4 @@
+pub(crate) mod aggregation;
 pub(crate) mod assets;
 pub(crate) mod checks;
 pub(crate) mod documents;
@@ -7,4 +8,5 @@ pub(crate) mod integration_records;
 pub(crate) mod integration_values;
 pub(crate) mod projection;
 pub(crate) mod registration;
+pub(crate) mod resource_ids;
 pub(crate) mod terminal_index;

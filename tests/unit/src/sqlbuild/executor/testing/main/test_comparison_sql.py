@@ -4,12 +4,9 @@ from dataclasses import replace
 
 import pytest
 
+from sqlbuild._native import render_sql_test_comparison_sql
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
-from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
-from sqlbuild.executor.testing.main.comparison_sql_batch import (
-    build_sql_test_comparison_sql_batch,
-)
 from tests.unit.src.sqlbuild.executor.testing.main._test_types import (
     BuildComparisonSqlTestCase,
     ExpectedBooleanTestCase,
@@ -72,11 +69,11 @@ def test_given_adapter_when_building_comparison_sql_then_it_uses_expected_set_di
 ) -> None:
     adapter: BaseAdapter = build_comparison_test_adapter(test_case.adapter_name)
 
-    comparison_sql: str = build_sql_test_comparison_sql(
-        test_entry=build_comparison_test_entry(),
+    comparison_sql: str = render_sql_test_comparison_sql(
+        (build_comparison_test_entry(),),
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
-    )
+    )[0]
 
     expected_fragment: str
     for expected_fragment in test_case.expected_fragments:
@@ -119,11 +116,11 @@ def test_given_snowflake_function_when_lifting_comparison_ctes_then_keeps_author
         ),
     )
 
-    comparison_sql: str = build_sql_test_comparison_sql(
-        test_entry=entry,
+    comparison_sql: str = render_sql_test_comparison_sql(
+        (entry,),
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
-    )
+    )[0]
 
     for expected_fragment in test_case.expected_fragments:
         assert expected_fragment in comparison_sql
@@ -161,11 +158,11 @@ def test_given_sql_analysis_disabled_when_building_comparison_sql_then_step_sql_
         ),
     )
 
-    comparison_sql: str = build_sql_test_comparison_sql(
-        test_entry=entry,
+    comparison_sql: str = render_sql_test_comparison_sql(
+        (entry,),
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
-    )
+    )[0]
 
     expected_fragment: str
     for expected_fragment in test_case.expected_fragments:
@@ -193,11 +190,11 @@ def test_given_assertion_step_when_building_comparison_sql_then_it_counts_failin
 ) -> None:
     adapter: BaseAdapter = build_comparison_test_adapter(test_case.adapter_name)
 
-    comparison_sql: str = build_sql_test_comparison_sql(
-        test_entry=build_assertion_test_entry(),
+    comparison_sql: str = render_sql_test_comparison_sql(
+        (build_assertion_test_entry(),),
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
-    )
+    )[0]
 
     expected_fragment: str
     for expected_fragment in test_case.expected_fragments:
@@ -224,11 +221,11 @@ def test_given_matching_helper_ctes_when_building_comparison_sql_then_lifts_them
 ) -> None:
     adapter: BaseAdapter = build_comparison_test_adapter(test_case.adapter_name)
 
-    comparison_sql: str = build_sql_test_comparison_sql(
-        test_entry=build_comparison_test_entry_with_helper_ctes(),
+    comparison_sql: str = render_sql_test_comparison_sql(
+        (build_comparison_test_entry_with_helper_ctes(),),
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
-    )
+    )[0]
 
     expected_fragment: str
     for expected_fragment in test_case.expected_fragments:
@@ -250,9 +247,9 @@ def test_given_matching_helper_ctes_when_building_comparison_sql_then_lifts_them
 def test_given_unasserted_transitive_steps_when_building_comparison_then_emits_only_expected_model(
     test_case: BuildComparisonSqlTestCase,
 ) -> None:
-    comparison_sql: str = build_sql_test_comparison_sql(
-        test_entry=build_transitive_comparison_test_entry(),
-    )
+    comparison_sql: str = render_sql_test_comparison_sql(
+        (build_transitive_comparison_test_entry(),)
+    )[0]
 
     for expected_fragment in test_case.expected_fragments:
         assert expected_fragment in comparison_sql
@@ -276,11 +273,11 @@ def test_given_databricks_table_fn_when_building_comparison_sql_then_preserves_c
 ) -> None:
     adapter: BaseAdapter = build_comparison_test_adapter(test_case.adapter_name)
 
-    comparison_sql: str = build_sql_test_comparison_sql(
-        test_entry=build_table_function_test_entry(),
+    comparison_sql: str = render_sql_test_comparison_sql(
+        (build_table_function_test_entry(),),
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
-    )
+    )[0]
 
     expected_fragment: str
     for expected_fragment in test_case.expected_fragments:
@@ -305,13 +302,17 @@ def test_given_bigquery_table_fn_when_building_comparison_sql_then_preserves_bac
 ) -> None:
     adapter: BaseAdapter = build_comparison_test_adapter(test_case.adapter_name)
 
-    comparison_sql: str = build_sql_test_comparison_sql(
-        test_entry=build_table_function_test_entry(
-            resolved_sql=("SELECT * FROM `project-d5f92072-d107-4987-9ef.test.customer_orders`(1)")
+    comparison_sql: str = render_sql_test_comparison_sql(
+        (
+            build_table_function_test_entry(
+                resolved_sql=(
+                    "SELECT * FROM `project-d5f92072-d107-4987-9ef.test.customer_orders`(1)"
+                )
+            ),
         ),
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
-    )
+    )[0]
 
     expected_fragment: str
     for expected_fragment in test_case.expected_fragments:
@@ -346,10 +347,7 @@ def test_given_preanalyzed_step_with_authored_cte_when_building_comparison_then_
         ),
     )
 
-    comparison_sql: str = build_sql_test_comparison_sql(
-        test_entry=entry,
-        sql_analysis_dialect="tsql",
-    )
+    comparison_sql: str = render_sql_test_comparison_sql((entry,), sql_analysis_dialect="tsql")[0]
 
     assert (
         comparison_sql.index("__ref__raw_orders AS") < comparison_sql.index("picked AS")
@@ -373,13 +371,12 @@ def test_given_representative_plans_when_rendering_batch_then_matches_single_ren
         build_assertion_test_entry(),
     )
     expected: tuple[str, ...] = tuple(
-        build_sql_test_comparison_sql(test_entry=entry, sql_analysis_dialect="duckdb")
+        render_sql_test_comparison_sql((entry,), sql_analysis_dialect="duckdb")[0]
         for entry in entries
     )
 
-    actual: tuple[str, ...] = build_sql_test_comparison_sql_batch(
-        test_entries=entries,
-        sql_analysis_dialect="duckdb",
+    actual: tuple[str, ...] = tuple(
+        render_sql_test_comparison_sql(entries, sql_analysis_dialect="duckdb")
     )
 
     assert (actual == expected) is test_case.expected_result
@@ -397,16 +394,18 @@ def test_given_quoted_table_function_when_rendering_batch_then_matches_single_re
         resolved_sql="SELECT * FROM `project-d5f92072-d107-4987-9ef.test.customer_orders`(1)"
     )
     adapter: BaseAdapter = build_comparison_test_adapter("bigquery")
-    expected: str = build_sql_test_comparison_sql(
-        test_entry=entry,
+    expected: str = render_sql_test_comparison_sql(
+        (entry,),
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
-    )
+    )[0]
 
-    (actual,) = build_sql_test_comparison_sql_batch(
-        test_entries=(entry,),
-        set_difference_operator=adapter.render_set_difference_operator(),
-        sql_analysis_dialect=adapter.sql_analysis_dialect(),
+    (actual,) = tuple(
+        render_sql_test_comparison_sql(
+            (entry,),
+            set_difference_operator=adapter.render_set_difference_operator(),
+            sql_analysis_dialect=adapter.sql_analysis_dialect(),
+        )
     )
 
     assert (actual == expected) is test_case.expected_result

@@ -17,6 +17,7 @@ use crate::bindings::_helpers::diff_report::command::{
     execute_prepared_query_diff, run_diff_command,
 };
 use crate::bindings::_helpers::diff_report::facts::{diff_facts, json_of};
+use crate::bindings::_helpers::diff_report::tolerances;
 use crate::bindings::_helpers::frontier::encoder::emit_error;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use sqlbuild_cli::diff_report::types::PhaseSeconds;
@@ -216,5 +217,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(render_diff_output, module)?)?;
     module.add_function(wrap_pyfunction!(render_diff_error_json, module)?)?;
     module.add_function(wrap_pyfunction!(run_diff_command, module)?)?;
-    module.add_function(wrap_pyfunction!(execute_prepared_query_diff, module)?)
+    module.add_function(wrap_pyfunction!(execute_prepared_query_diff, module)?)?;
+    tolerances::register(module)
 }

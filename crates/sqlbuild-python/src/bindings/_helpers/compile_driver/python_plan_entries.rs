@@ -12,9 +12,9 @@ use sqlbuild_analysis::python_plan::main::upstream_closure::upstream_closure;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
+use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 
 const PIPELINE_MODELS_MODULE: &str = "sqlbuild.compiler.pipeline.models";
-const NODE_GRAPH_MODULE: &str = "sqlbuild.compiler.python_nodes.main._graph";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const PYTHON_NODE_MODELS_MODULE: &str = "sqlbuild.compiler.python_nodes.models";
 const PYTHON_NODE_TYPES_MODULE: &str = "sqlbuild.compiler.python_nodes.types";
@@ -63,14 +63,7 @@ fn upstream_names(graph: &Bound<'_, PyAny>) -> PyResult<HashMap<String, Vec<Stri
 
 /// The discovered Python node graph.
 fn node_graph<'py>(discovered: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    call_with(
-        &imported(
-            discovered.py(),
-            NODE_GRAPH_MODULE,
-            "build_discovered_python_node_graph",
-        )?,
-        &[("discovered_inputs", discovered.clone())],
-    )
+    python_node_graph(discovered)
 }
 
 /// Return sources declared by the selected Python nodes and their Python upstreams.

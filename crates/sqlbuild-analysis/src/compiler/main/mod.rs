@@ -1,4 +1,6 @@
 pub mod function_type_validation;
+pub mod missing_expected_columns;
+pub mod scenario_expected_comparison_sql;
 pub mod sql_scenario_classification;
 pub mod sql_test_assembly;
 pub mod sql_test_chains;

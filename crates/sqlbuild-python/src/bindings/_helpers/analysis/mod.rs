@@ -11,4 +11,5 @@ pub(crate) mod reference_facts;
 pub(crate) mod relation_names;
 mod required_columns;
 pub(crate) mod schema_request;
+pub(crate) mod sql_test_comparisons;
 pub(crate) mod sql_tests;

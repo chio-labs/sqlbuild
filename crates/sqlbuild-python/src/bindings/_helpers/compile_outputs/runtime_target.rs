@@ -14,10 +14,10 @@ use sqlbuild_analysis::target_paths::main::sql_test_output_path::sql_test_output
 use sqlbuild_analysis::target_paths::models::SqlTestPathFacts;
 use sqlbuild_core::text::main::python_isspace::python_isspace;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::analysis::sql_test_comparisons::single_comparison_sql;
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 
 const LIFECYCLE_TYPES: &str = "sqlbuild.adapter.contract.types";
-const COMPARISON_SQL_MODULE: &str = "sqlbuild.executor.testing.main.comparison_sql";
 const RUN_DIR: &str = "run";
 const TESTS_DIR: &str = "tests";
 const CHECKS_DIR: &str = "checks";
@@ -172,7 +172,6 @@ pub(crate) fn write_test_runtime_target(
     plan: &Bound<'_, PyAny>,
     results: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
-    let py: Python<'_> = target_dir.py();
     let mut executed: HashSet<TestKey> = HashSet::new();
     for result in results.try_iter()? {
         executed.insert(test_key(&result?, "test_name")?);
@@ -183,21 +182,7 @@ pub(crate) fn write_test_runtime_target(
         if !executed.contains(&test_key(&entry, "name")?) {
             continue;
         }
-        let sql: String = call_with(
-            &imported(py, COMPARISON_SQL_MODULE, "build_sql_test_comparison_sql")?,
-            &[
-                ("test_entry", entry.clone()),
-                (
-                    "set_difference_operator",
-                    adapter.call_method0("render_set_difference_operator")?,
-                ),
-                (
-                    "sql_analysis_dialect",
-                    adapter.call_method0("sql_analysis_dialect")?,
-                ),
-            ],
-        )?
-        .extract()?;
+        let sql: String = single_comparison_sql(&entry, adapter)?;
         write_text(
             &tests_dir.div(planned_sql_test_path(&entry)?)?,
             &format!("{}\n", sql.trim_end_matches(python_isspace)),

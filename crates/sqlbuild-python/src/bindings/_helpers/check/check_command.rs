@@ -22,6 +22,7 @@ use crate::bindings::_helpers::check::check_results::{
 use crate::bindings::_helpers::command_runtime::invocation::resolve_reported_command_invocation;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::compile_outputs::runtime_target::write_python_check_runtime_target;
+use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::graph::python_selection::python_node_names;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
@@ -35,7 +36,6 @@ const SELECTOR_PARSE_MODULE: &str = "sqlbuild._native";
 const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
 const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
-const PYTHON_GRAPH_MODULE: &str = "sqlbuild.compiler.python_nodes.main._graph";
 const PYTHON_NODE_MODELS: &str = "sqlbuild.compiler.python_nodes.models";
 const PYTHON_NODE_TYPES: &str = "sqlbuild.compiler.python_nodes.types";
 const EXECUTOR_MODELS: &str = "sqlbuild.executor.python_nodes.models";
@@ -291,14 +291,7 @@ fn python_selection<'py>(
     discovered: &Bound<'py, PyAny>,
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyFrozenSet>)> {
     let py: Python<'py> = request.py();
-    let python_graph: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            PYTHON_GRAPH_MODULE,
-            "build_discovered_python_node_graph",
-        )?,
-        &[("discovered_inputs", discovered.clone())],
-    )?;
+    let python_graph: Bound<'py, PyAny> = python_node_graph(discovered)?;
     call_with(
         &imported(py, REJECT_UNIT_TESTS_MODULE, "reject_unit_test_selectors")?,
         &[

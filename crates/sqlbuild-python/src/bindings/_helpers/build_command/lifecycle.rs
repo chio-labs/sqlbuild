@@ -15,9 +15,9 @@ use crate::bindings::_helpers::build_command::support::{
     boolean, emit, frozenset, or_none, text, tuple,
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const GRAPH_MODULE: &str = "sqlbuild.compiler.python_nodes.main._graph";
 const PYTHON_NODE_MODELS: &str = "sqlbuild.compiler.python_nodes.models";
 const LOADER_DAG_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
@@ -299,10 +299,7 @@ fn lifecycle_plan<'py>(
 ) -> PyResult<LifecyclePlan<'py>> {
     let py: Python<'py> = discovered.py();
     let plan_output: Bound<'py, PyAny> = pipeline.getattr("plan_output")?;
-    let graph: Bound<'py, PyAny> = call_with(
-        &imported(py, GRAPH_MODULE, "build_discovered_python_node_graph")?,
-        &[("discovered_inputs", discovered.clone())],
-    )?;
+    let graph: Bound<'py, PyAny> = python_node_graph(discovered)?;
     let selection: Bound<'py, PyAny> = call_with(
         &imported(py, PYTHON_NODE_MODELS, "PythonSqlRunSelection")?,
         &[

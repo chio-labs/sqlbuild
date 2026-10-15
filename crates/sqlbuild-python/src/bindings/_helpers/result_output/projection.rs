@@ -3,8 +3,9 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyRef, PyResult, Python};
 use pyo3::types::{PyFloat, PyInt};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::plan_output::values::text;
+use crate::bindings::_helpers::result_output::resource_ids::{audit_identity, sql_test_identity};
 use crate::bindings::_helpers::result_output::terminal_index::{TerminalEventIndex, current_index};
 
 const RUN_MODELS: &str = "sqlbuild.executor.run.models";
@@ -14,8 +15,6 @@ const PYTHON_NODE_MODELS: &str = "sqlbuild.executor.python_nodes.models";
 const TESTING_MODELS: &str = "sqlbuild.executor.testing.models";
 const AUDITING_MODELS: &str = "sqlbuild.executor.auditing.models";
 const CLONE_MODELS: &str = "sqlbuild.executor.clone.models";
-const SQL_TEST_ID_MODULE: &str = "sqlbuild.executor.testing.main._resource_id";
-const AUDIT_ID_MODULE: &str = "sqlbuild.executor.auditing.main.resource_id";
 
 /// The executor result types that result output distinguishes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -72,35 +71,12 @@ pub(crate) fn result_kind(result: &Bound<'_, PyAny>) -> PyResult<ResultKind> {
 
 /// `sql_test_resource_id` of one SQL test result.
 pub(crate) fn sql_test_check_id(result: &Bound<'_, PyAny>) -> PyResult<String> {
-    let fields: Vec<(&str, Bound<'_, PyAny>)> =
-        ["test_name", "source_path", "block_index", "case_name"]
-            .into_iter()
-            .map(|name| Ok((name, result.getattr(name)?)))
-            .collect::<PyResult<_>>()?;
-    call_with(
-        &imported(result.py(), SQL_TEST_ID_MODULE, "sql_test_resource_id")?,
-        &fields,
-    )?
-    .extract()
+    sql_test_identity(result, "test_name")
 }
 
 /// `audit_resource_id` of one audit result.
 pub(crate) fn audit_check_id(result: &Bound<'_, PyAny>) -> PyResult<String> {
-    let fields: Vec<(&str, Bound<'_, PyAny>)> = [
-        ("audit_name", "audit_name"),
-        ("attachment_kind", "attachment_kind"),
-        ("attached_target_kind", "attached_target_kind"),
-        ("attached_target_name", "attached_target_name"),
-        ("attached_column_name", "attached_column_name"),
-    ]
-    .into_iter()
-    .map(|(keyword, name)| Ok((keyword, result.getattr(name)?)))
-    .collect::<PyResult<_>>()?;
-    call_with(
-        &imported(result.py(), AUDIT_ID_MODULE, "audit_resource_id")?,
-        &fields,
-    )?
-    .extract()
+    audit_identity(result)
 }
 
 /// The canonical resource name and identifier of an executor result.

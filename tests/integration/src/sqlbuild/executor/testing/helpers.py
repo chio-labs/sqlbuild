@@ -6,13 +6,13 @@ import re
 from pathlib import Path
 from typing import Any
 
+from sqlbuild._native import render_sql_test_comparison_sql
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
 from sqlbuild.executor.testing.main._execute import execute_sql_test
-from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
@@ -148,11 +148,11 @@ def _project_test_step(
     ]
     step: ChainStep = {item.model_name: item for item in entry.chain}[model_name]
     build_sql: str = {model.name: model.query_sql for model in result.project.models}[model_name]
-    rendered_sql: str = build_sql_test_comparison_sql(
-        test_entry=entry,
+    rendered_sql: str = render_sql_test_comparison_sql(
+        (entry,),
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
-    )
+    )[0]
     return build_sql, step.comparison_body_sql or step.resolved_sql, rendered_sql
 
 

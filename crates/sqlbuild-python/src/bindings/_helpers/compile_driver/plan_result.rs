@@ -9,12 +9,12 @@ use crate::bindings::_helpers::compile_driver::phases::monotonic;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::graph::python_node_graph::run_selection_from_inputs;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const EXECUTION_PLAN_MODULE: &str = "sqlbuild._native";
 const PLANNER_MODELS_MODULE: &str = "sqlbuild.compiler.planner.models";
 const MATERIALIZATIONS_MODULE: &str = "sqlbuild.compiler.pipeline._helpers.materializations";
-const RUN_SELECTION_MODULE: &str = "sqlbuild.compiler.python_nodes.main._run_selection";
 const PIPELINE_MODELS_MODULE: &str = "sqlbuild.compiler.pipeline.models";
 const SINGLE_CONNECTION: i64 = 1;
 
@@ -58,19 +58,8 @@ pub(crate) fn pipeline_result<'py>(
             &native.getattr("build_project_graph_from_compiled_project")?,
             &[("project", project.clone())],
         )?;
-        run_selection = call_with(
-            &imported(
-                py,
-                RUN_SELECTION_MODULE,
-                "resolve_python_sql_run_selection_from_inputs",
-            )?,
-            &[
-                ("select", select.clone()),
-                ("exclude", exclude.clone()),
-                ("project_graph", graph),
-                ("discovered_inputs", discovered.clone()),
-            ],
-        )?;
+        run_selection =
+            run_selection_from_inputs((select.extract()?, exclude.extract()?), &graph, discovered)?;
         selected_sql_keys = run_selection.getattr("sql_keys")?;
         selected_python_node_names = run_selection.getattr("python_node_names")?;
         python_read_source_names = call_with(
