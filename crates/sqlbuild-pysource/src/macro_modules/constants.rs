@@ -12,3 +12,7 @@ pub(crate) const PRIVATE_PREFIX: &str = "_";
 pub(crate) const PATH_ROOTS: [char; 2] = ['/', '\\'];
 /// Separator of the names in a reported call or import cycle.
 pub(crate) const CYCLE_SEPARATOR: &str = " -> ";
+/// Prefix of the synthetic package macro modules are executed under.
+pub(crate) const SYNTHETIC_PACKAGE_PREFIX: &str = "_sqlbuild_project_macros_";
+/// Hex digits of the content digest naming the synthetic package.
+pub(crate) const SYNTHETIC_DIGEST_LENGTH: usize = 16;

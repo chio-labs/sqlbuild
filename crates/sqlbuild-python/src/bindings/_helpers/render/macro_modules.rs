@@ -3,10 +3,12 @@
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_pysource::macro_modules::main::inventory_macro_modules::inventory_macro_modules as inventory;
+use sqlbuild_pysource::macro_modules::main::macro_load_plan::macro_load_plan;
 use sqlbuild_pysource::macro_modules::models::{
     MacroExport, MacroFault, MacroModuleInventory, MacroModuleLoad, MacroModulePath,
     MacroModuleSource,
 };
+use sqlbuild_pysource::macro_modules::models::{MacroLoadPlan, MacroModuleSpec};
 use sqlbuild_pysource::macro_modules::types::MacroScopeKind;
 
 use crate::bindings::_helpers::boundary::panics::{NativeCompilerError, compiler_error};
@@ -108,7 +110,32 @@ pub(crate) fn inventory_macro_modules(
     ))
 }
 
+/// `(synthetic root, packages shallowest first, module execution order)` of `(name, path, contents, dependencies)` rows.
+#[pyfunction]
+fn macro_module_load_plan(
+    modules: Vec<(String, String, String, Vec<String>)>,
+) -> (String, Vec<String>, Vec<String>) {
+    let specs: Vec<MacroModuleSpec> = modules
+        .into_iter()
+        .map(
+            |(name, file_path, contents, dependencies)| MacroModuleSpec {
+                name,
+                file_path,
+                contents,
+                dependencies,
+            },
+        )
+        .collect();
+    let MacroLoadPlan {
+        root,
+        packages,
+        order,
+    } = macro_load_plan(&specs);
+    (root, packages, order)
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(inventory_macro_modules, module)?)?;
+    module.add_function(wrap_pyfunction!(macro_module_load_plan, module)?)?;
     Ok(())
 }
