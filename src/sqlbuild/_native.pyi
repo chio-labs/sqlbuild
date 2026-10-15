@@ -88,19 +88,14 @@ from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredCheckFunction,
     DiscoveredCommandOutputSink,
-    DiscoveredConstantFile,
-    DiscoveredEnumFile,
     DiscoveredEventExporter,
     DiscoveredHookFunction,
     DiscoveredLoaderFunction,
     DiscoveredMacroFile,
     DiscoveredMaterializationFile,
     DiscoveredProjectInputs,
-    DiscoveredProviderUsage,
     DiscoveredProvider,
-    DiscoveredPythonFunctionFile,
-    DiscoveredSchemaFile,
-    DiscoveredSeedFile,
+    DiscoveredProviderUsage,
     DiscoveredSourceFile,
     DiscoveredSqlScenarioFile,
     DiscoveredSqlTestFile,
@@ -259,14 +254,13 @@ from sqlbuild.integrations.dbt.types import DbtInvoker
 from sqlbuild.microbatches.models import MicrobatchInterval
 from sqlbuild.presentation.types import TransientLineOwner
 from sqlbuild.provider.classes.container import ProviderContainer
+from sqlbuild.provider.classes.session import ProviderSession
 from sqlbuild.python_nodes.models import (
     ColumnLineageRef,
     RetryPolicy,
     SqlResourceRef,
 )
 from sqlbuild.python_nodes.types import PythonCheckSeverity
-from sqlbuild.provider.classes.session import ProviderSession
-from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.rule_engine.models import (
     Finding,
     Rule,
