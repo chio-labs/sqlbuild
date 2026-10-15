@@ -15,7 +15,7 @@ use crate::bindings::_helpers::command_runtime::invocation::resolve_reported_com
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
+const NATIVE_RECORDS: &str = "sqlbuild._native";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
 const STATIC_COMMAND_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
@@ -484,7 +484,7 @@ fn complete(
 fn run_audit_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let invocation: Bound<'_, PyAny> = resolve_reported_command_invocation(
         request,
-        &imported(py, COMMAND_MODELS, "AuditInvocation")?,
+        &imported(py, NATIVE_RECORDS, "AuditInvocation")?,
         true,
     )?;
     let pipeline: Bound<'_, PyAny> = compile_audits(request, &invocation)?;

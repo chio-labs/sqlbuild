@@ -9,10 +9,7 @@ from unittest.mock import patch
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild._native import run_cli as _main_with_dependencies
-from sqlbuild._native import run_cli as main
-from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.models import (
+from sqlbuild._native import (
     AuditCommandRequest,
     BuildCommandRequest,
     CloneCommandRequest,
@@ -29,6 +26,9 @@ from sqlbuild.cli.commands.models import (
     ScenarioCaptureCommandRequest,
     ScenarioTestCommandRequest,
 )
+from sqlbuild._native import run_cli as _main_with_dependencies
+from sqlbuild._native import run_cli as main
+from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.entry.models import CompileCommandRequest
 from sqlbuild.compiler.compile.exceptions import CompileInputError

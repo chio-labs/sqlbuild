@@ -14,6 +14,12 @@ from _pytest.monkeypatch import MonkeyPatch
 from duckdb import DuckDBPyConnection
 
 from sqlbuild._native import (
+    AuditCommandRequest,
+    BuildCommandRequest,
+    LoadCommandRequest,
+    PlanCommandRequest,
+    ScenarioTestCommandRequest,
+    TestCommandRequest,
     discover_project_inputs,
     format_load_execution_json,
     run_audit_command,
@@ -27,14 +33,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.models import (
-    AuditCommandRequest,
-    BuildCommandRequest,
-    LoadCommandRequest,
-    PlanCommandRequest,
-    ScenarioTestCommandRequest,
-    TestCommandRequest,
-)
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import CursorOverrides

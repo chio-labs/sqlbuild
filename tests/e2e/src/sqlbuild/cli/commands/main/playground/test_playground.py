@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import PlaygroundCommandRequest
 from sqlbuild._native import run_playground_command as run_playground
-from sqlbuild.cli.commands.models import PlaygroundCommandRequest
 from tests.e2e.src.sqlbuild.cli.commands.main.playground._test_types import (
     PlaygroundCompileBuildTestCase,
     PythonNodesPlaygroundLifecycleTestCase,

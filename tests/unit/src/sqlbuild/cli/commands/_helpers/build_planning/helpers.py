@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
+from sqlbuild._native import PlanSafetyGates
 from sqlbuild.adapter.contract.models import RetentionRequest
 from sqlbuild.adapter.contract.types import RetentionScope
-from sqlbuild.cli.commands.models import PlanSafetyGates
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (

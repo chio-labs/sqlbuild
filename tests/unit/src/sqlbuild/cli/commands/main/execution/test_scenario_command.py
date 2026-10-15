@@ -7,8 +7,11 @@ from unittest.mock import Mock
 
 import pytest
 
-from sqlbuild._native import NativeProgressProjector, run_scenario_test_command
-from sqlbuild.cli.commands.models import ScenarioTestCommandRequest
+from sqlbuild._native import (
+    NativeProgressProjector,
+    ScenarioTestCommandRequest,
+    run_scenario_test_command,
+)
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.observability import EventDispatcher, LifecycleEvent, dispatcher_scope
 from tests.unit.src.sqlbuild.cli.commands.main.execution._test_types import (

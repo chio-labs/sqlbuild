@@ -32,7 +32,7 @@ use crate::bindings::_helpers::compile_outputs::runtime_target::write_test_runti
 use crate::bindings::_helpers::result_output::integration_values::json_value;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
+const NATIVE_RECORDS: &str = "sqlbuild._native";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
 const STATIC_COMMAND_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
@@ -153,7 +153,7 @@ fn outcome_status(outcome: &Bound<'_, PyAny>) -> PyResult<&'static str> {
 /// Nested `expect` rows of a completed test, one per step.
 fn expectation_rows<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = result.py();
-    let row_class: Bound<'py, PyAny> = imported(py, COMMAND_MODELS, "NestedProgressChildRow")?;
+    let row_class: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS, "NestedProgressChildRow")?;
     let name: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "format_expectation_name")?;
     let detail: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "format_expectation_detail")?;
     let mut rows: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -636,7 +636,7 @@ fn run_test_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32>
     let inspect_only: bool = request.getattr("inspect")?.is_truthy()?;
     let invocation: Bound<'_, PyAny> = resolve_reported_command_invocation(
         request,
-        &imported(py, COMMAND_MODELS, "TestInvocation")?,
+        &imported(py, NATIVE_RECORDS, "TestInvocation")?,
         !inspect_only,
     )?;
     let pipeline: Bound<'_, PyAny> = compile_tests(request, &invocation)?;

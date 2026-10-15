@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from sqlbuild.cli.commands.models import LineageCommandRequest, ScopeCommandRequest
+    from sqlbuild._native import LineageCommandRequest, ScopeCommandRequest
     from sqlbuild.compiler.scopes.models import ScopeIndex
 
 

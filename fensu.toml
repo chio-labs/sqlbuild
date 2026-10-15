@@ -24,11 +24,6 @@ exclude = ["tests/e2e/fixtures/**"]
 max_positional_args = 1
 
 [[targets.python.rule_exceptions]]
-rule = "FFR001"
-path = "src/sqlbuild/cli/commands/models.py"
-reason = "The TYPE_CHECKING block contains annotation-only imports, avoiding executor and integration imports for read-only commands; runtime declarations remain structured models."
-
-[[targets.python.rule_exceptions]]
 rule = "FFR309"
 path = "src/sqlbuild/lint/__init__.py"
 reason = "Native bindings own lint entry points, expansion preparation and compiler-verified fix planning; this package retains boundary models, custom-rule and macro callbacks."

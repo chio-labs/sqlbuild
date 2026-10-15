@@ -264,7 +264,7 @@ fn run_dbt_sqlbuild_work<'py>(
     let project = compiled.getattr("project")?;
     let discovered = invocation.getattr("discovered_inputs")?;
     let context = call_with(
-        &imported(py, "sqlbuild.cli.commands.models", "DbtSqlbuildWorkContext")?,
+        &imported(py, "sqlbuild._native", "DbtSqlbuildWorkContext")?,
         &[
             ("plan_output", args.value("plan_output")?),
             ("connection_config", args.value("connection_config")?),

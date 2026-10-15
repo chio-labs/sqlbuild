@@ -11,7 +11,6 @@ from typing import cast
 import pytest
 
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
-    ExpectedBooleanTestCase,
     ExpectedCountTestCase,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
@@ -58,55 +57,6 @@ raise SystemExit(exit_code)
     assert json.loads(import_status_path.read_text(encoding="utf-8")) == {
         "aggregate_models": False,
     }
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        ExpectedBooleanTestCase(
-            description="compatibility exports retain identity", expected_result=True
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_legacy_model_imports_when_loading_focused_models_then_exports_keep_identity(
-    test_case: ExpectedBooleanTestCase,
-) -> None:
-    script = """
-import json
-from sqlbuild.cli.commands import models
-from sqlbuild.cli.compile import models as compile_models
-from sqlbuild.cli.entry import models as entry_models
-from sqlbuild.cli.output import models as output_models
-
-expected_modules = {
-    "CompileAnalysis": compile_models,
-    "CompileCommandRequest": entry_models,
-    "CompileProfileFlags": entry_models,
-    "CompileWriteResult": compile_models,
-    "SqlTestArtifactCacheRecord": compile_models,
-    "SqlTestArtifactIdentityContext": compile_models,
-    "CliEntrypointHandlers": entry_models,
-    "ParsedCliInvocation": entry_models,
-    "SelectorFileSummary": entry_models,
-    "SkillMaintenanceResult": output_models,
-    "SkillUpdateResult": output_models,
-    "WrittenTarget": output_models,
-}
-print(json.dumps({
-    name: getattr(models, name) is getattr(module, name)
-    for name, module in expected_modules.items()
-}))
-"""
-
-    result: subprocess.CompletedProcess[str] = subprocess.run(
-        [sys.executable, "-c", script],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-
-    assert all(json.loads(result.stdout).values()) is test_case.expected_result
 
 
 @pytest.mark.parametrize(

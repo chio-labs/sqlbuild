@@ -11,7 +11,7 @@ pub(crate) const DBT_COMMAND_NAME: &str = "dbt";
 pub(crate) const DBT_INIT_SUBCOMMAND: &str = "init";
 pub(crate) const DIFF_COMMAND_NAME: &str = "diff";
 
-const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
+const NATIVE_RECORDS: &str = "sqlbuild._native";
 const ENTRY_MODELS: &str = "sqlbuild.cli.entry.models";
 const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
 
@@ -54,7 +54,7 @@ const SNAPSHOT_LIMIT_FIELDS: [Field; 5] = [
 const SNAPSHOT_LIMITS: Field = field(
     "limit_inputs",
     Source::Nested(
-        class(COMMAND_MODELS, "ScenarioSnapshotLimitInputs"),
+        class(NATIVE_RECORDS, "ScenarioSnapshotLimitInputs"),
         &SNAPSHOT_LIMIT_FIELDS,
     ),
 );
@@ -95,7 +95,7 @@ const SCOPE_FIELDS: [Field; 22] = [
     NO_COLOR,
 ];
 const SCOPE_ARGUMENTS: [Field; 1] = [request(
-    class(COMMAND_MODELS, "ScopeCommandRequest"),
+    class(NATIVE_RECORDS, "ScopeCommandRequest"),
     &SCOPE_FIELDS,
 )];
 pub(crate) const SCOPE_ROUTE: Route = routed(
@@ -138,7 +138,7 @@ const PLAN_FIELDS: [Field; 19] = [
     same("selection_diagnostics"),
 ];
 const PLAN_ARGUMENTS: [Field; 1] = [request(
-    class(COMMAND_MODELS, "PlanCommandRequest"),
+    class(NATIVE_RECORDS, "PlanCommandRequest"),
     &PLAN_FIELDS,
 )];
 pub(crate) const PLAN_ROUTE: Route = routed(
@@ -185,7 +185,7 @@ const BUILD_FIELDS: [Field; 34] = [
     same("selection_diagnostics"),
 ];
 const BUILD_ARGUMENTS: [Field; 1] = [request(
-    class(COMMAND_MODELS, "BuildCommandRequest"),
+    class(NATIVE_RECORDS, "BuildCommandRequest"),
     &BUILD_FIELDS,
 )];
 pub(crate) const BUILD_ROUTE: Route = routed(
@@ -210,7 +210,7 @@ const FRESHNESS_FIELDS: [Field; 12] = [
     same("fail_on_stale"),
 ];
 const FRESHNESS_ARGUMENTS: [Field; 1] = [request(
-    class(COMMAND_MODELS, "FreshnessCommandRequest"),
+    class(NATIVE_RECORDS, "FreshnessCommandRequest"),
     &FRESHNESS_FIELDS,
 )];
 pub(crate) const FRESHNESS_ROUTE: Route = routed(
@@ -235,7 +235,7 @@ const TEST_FIELDS: [Field; 12] = [
     same("inspect"),
 ];
 const TEST_ARGUMENTS: [Field; 1] = [request(
-    class(COMMAND_MODELS, "TestCommandRequest"),
+    class(NATIVE_RECORDS, "TestCommandRequest"),
     &TEST_FIELDS,
 )];
 pub(crate) const TEST_ROUTE: Route = routed(
@@ -257,7 +257,7 @@ const CHECK_FIELDS: [Field; 9] = [
     JSON_OUTPUT_PATH,
 ];
 const CHECK_ARGUMENTS: [Field; 1] = [request(
-    class(COMMAND_MODELS, "CheckCommandRequest"),
+    class(NATIVE_RECORDS, "CheckCommandRequest"),
     &CHECK_FIELDS,
 )];
 pub(crate) const CHECK_ROUTE: Route = routed(
@@ -281,7 +281,7 @@ const AUDIT_FIELDS: [Field; 11] = [
     JSON_OUTPUT_PATH,
 ];
 const AUDIT_ARGUMENTS: [Field; 1] = [request(
-    class(COMMAND_MODELS, "AuditCommandRequest"),
+    class(NATIVE_RECORDS, "AuditCommandRequest"),
     &AUDIT_FIELDS,
 )];
 pub(crate) const AUDIT_ROUTE: Route = routed(
@@ -305,7 +305,7 @@ const LOAD_FIELDS: [Field; 11] = [
     JSON_OUTPUT_PATH,
 ];
 const LOAD_ARGUMENTS: [Field; 1] = [request(
-    class(COMMAND_MODELS, "LoadCommandRequest"),
+    class(NATIVE_RECORDS, "LoadCommandRequest"),
     &LOAD_FIELDS,
 )];
 pub(crate) const LOAD_ROUTE: Route = routed(
@@ -327,7 +327,7 @@ const SEED_FIELDS: [Field; 9] = [
     JSON_OUTPUT_PATH,
 ];
 const SEED_ARGUMENTS: [Field; 1] = [request(
-    class(COMMAND_MODELS, "SeedCommandRequest"),
+    class(NATIVE_RECORDS, "SeedCommandRequest"),
     &SEED_FIELDS,
 )];
 pub(crate) const SEED_ROUTE: Route = routed(
@@ -357,7 +357,7 @@ const LINEAGE_FIELDS: [Field; 11] = [
     CLI_VARS,
 ];
 const LINEAGE_ARGUMENTS: [Field; 1] = [request(
-    class(COMMAND_MODELS, "LineageCommandRequest"),
+    class(NATIVE_RECORDS, "LineageCommandRequest"),
     &LINEAGE_FIELDS,
 )];
 pub(crate) const LINEAGE_ROUTE: Route = routed(
@@ -382,7 +382,7 @@ const CLONE_FIELDS: [Field; 12] = [
     attr("event_output_path", "event_output"),
 ];
 const CLONE_ARGUMENTS: [Field; 1] = [request(
-    class(COMMAND_MODELS, "CloneCommandRequest"),
+    class(NATIVE_RECORDS, "CloneCommandRequest"),
     &CLONE_FIELDS,
 )];
 pub(crate) const CLONE_ROUTE: Route = routed(
@@ -433,7 +433,7 @@ const DIFF_FIELDS: [Field; 35] = [
     same("full_example_values"),
 ];
 const DIFF_ARGUMENTS: [Field; 1] = [request(
-    class(COMMAND_MODELS, "DiffCommandRequest"),
+    class(NATIVE_RECORDS, "DiffCommandRequest"),
     &DIFF_FIELDS,
 )];
 pub(crate) const DIFF_ROUTE: Route = routed(
@@ -475,7 +475,7 @@ const COST_FIELDS: [Field; 11] = [
     JSON_OUTPUT_PATH,
 ];
 const COST_ARGUMENTS: [Field; 1] = [request(
-    class(COMMAND_MODELS, "CostCommandRequest"),
+    class(NATIVE_RECORDS, "CostCommandRequest"),
     &COST_FIELDS,
 )];
 pub(crate) const COST_ROUTE: Route = routed(
@@ -516,7 +516,7 @@ const JANITOR_FIELDS: [Field; 8] = [
     same("as_target"),
 ];
 const JANITOR_ARGUMENTS: [Field; 1] = [request(
-    class(COMMAND_MODELS, "JanitorCommandRequest"),
+    class(NATIVE_RECORDS, "JanitorCommandRequest"),
     &JANITOR_FIELDS,
 )];
 pub(crate) const JANITOR_ROUTE: Route = routed(
@@ -538,7 +538,7 @@ const REFACTOR_FIELDS: [Field; 9] = [
     NO_COLOR,
 ];
 const REFACTOR_ARGUMENTS: [Field; 1] = [request(
-    class(COMMAND_MODELS, "RefactorCommandRequest"),
+    class(NATIVE_RECORDS, "RefactorCommandRequest"),
     &REFACTOR_FIELDS,
 )];
 pub(crate) const REFACTOR_ROUTE: Route = Route {
@@ -564,7 +564,7 @@ const CONTRACT_FIELDS: [Field; 10] = [
     CLI_VARS,
 ];
 const CONTRACT_ARGUMENTS: [Field; 1] = [request(
-    class(COMMAND_MODELS, "ContractCommandRequest"),
+    class(NATIVE_RECORDS, "ContractCommandRequest"),
     &CONTRACT_FIELDS,
 )];
 pub(crate) const CONTRACT_ROUTE: Route = Route {
@@ -637,7 +637,7 @@ const PLAYGROUND_FIELDS: [Field; 3] = [
     attr("template", "playground_template"),
 ];
 const PLAYGROUND_ARGUMENTS: [Field; 1] = [request(
-    class(COMMAND_MODELS, "PlaygroundCommandRequest"),
+    class(NATIVE_RECORDS, "PlaygroundCommandRequest"),
     &PLAYGROUND_FIELDS,
 )];
 pub(crate) const PLAYGROUND_ROUTE: Route = routed(
@@ -694,7 +694,7 @@ const RULES_FIELDS: [Field; 7] = [
     EXCLUDE,
 ];
 const RULES_ARGUMENTS: [Field; 1] = [request(
-    class(COMMAND_MODELS, "RulesCommandRequest"),
+    class(NATIVE_RECORDS, "RulesCommandRequest"),
     &RULES_FIELDS,
 )];
 pub(crate) const RULES_ROUTE: Route = routed(
@@ -716,7 +716,7 @@ const DBT_INIT_FIELDS: [Field; 9] = [
     same("skip_dbt_debug"),
 ];
 const DBT_INIT_ARGUMENTS: [Field; 1] = [request(
-    class(COMMAND_MODELS, "DbtInitCommandRequest"),
+    class(NATIVE_RECORDS, "DbtInitCommandRequest"),
     &DBT_INIT_FIELDS,
 )];
 pub(crate) const DBT_INIT_ROUTE: Route = routed(
@@ -769,7 +769,7 @@ const SCENARIO_TEST_FIELDS: [Field; 15] = [
     JSON_OUTPUT_PATH,
 ];
 const SCENARIO_TEST_ARGUMENTS: [Field; 1] = [request(
-    class(COMMAND_MODELS, "ScenarioTestCommandRequest"),
+    class(NATIVE_RECORDS, "ScenarioTestCommandRequest"),
     &SCENARIO_TEST_FIELDS,
 )];
 pub(crate) const SCENARIO_TEST_ROUTE: Route = routed(
@@ -790,7 +790,7 @@ const SCENARIO_CAPTURE_FIELDS: [Field; 8] = [
     SNAPSHOT_LIMITS,
 ];
 const SCENARIO_CAPTURE_ARGUMENTS: [Field; 1] = [request(
-    class(COMMAND_MODELS, "ScenarioCaptureCommandRequest"),
+    class(NATIVE_RECORDS, "ScenarioCaptureCommandRequest"),
     &SCENARIO_CAPTURE_FIELDS,
 )];
 pub(crate) const SCENARIO_CAPTURE_ROUTE: Route = routed(

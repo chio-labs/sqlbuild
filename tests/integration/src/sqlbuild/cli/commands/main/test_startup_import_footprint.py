@@ -53,7 +53,6 @@ COMPILE_ONLY_MODULES: tuple[str, ...] = (
 PRESENTATION_AND_PROVIDER_MODULES: tuple[str, ...] = (
     "pydantic_settings",
     "rich",
-    "sqlbuild.cli.commands.models",
 )
 PARSE_ONLY_FORBIDDEN: tuple[str, ...] = (
     *WAREHOUSE_AND_INTEGRATION_MODULES,

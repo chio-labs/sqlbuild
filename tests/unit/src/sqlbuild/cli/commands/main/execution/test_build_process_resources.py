@@ -7,9 +7,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from sqlbuild._native import run_build_command
+from sqlbuild._native import BuildCommandRequest, run_build_command
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.models import BuildCommandRequest
 from tests.unit.src.sqlbuild.cli.commands.main.execution._test_types import (
     BuildDurationLimitTestCase,
     BuildProcessReportTestCase,

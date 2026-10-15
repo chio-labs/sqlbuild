@@ -8,13 +8,14 @@ use crate::bindings::_helpers::{
     compile_attachment, compile_command, compile_driver, compile_outputs, compiled_project,
     contracts, cursor, dag_artifact, diagnostics, discovery, fingerprints, frontier, graph,
     lineage, macro_bridge, manifest, model_config, plan_output, planner_registration,
-    project_assembly, refactor, references, render, rules, scopes, semantic_checks,
+    project_assembly, records, refactor, references, render, rules, scopes, semantic_checks,
     semantic_shapes, sql_test_glue, sqltext, state_rows, type_system,
 };
 use crate::bindings::models;
 
 #[pymodule]
 pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    records::registration::register(module)?;
     rules::registration::register(module)?;
     cli::registration::register(module)?;
     module.add(

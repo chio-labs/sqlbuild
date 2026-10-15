@@ -9,11 +9,10 @@ from typing import Any
 import duckdb
 import pytest
 
-from sqlbuild._native import execute_query_diff
+from sqlbuild._native import DiffCommandRequest, QueryDiffPreparation, execute_query_diff
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.cli.commands.models import DiffCommandRequest, QueryDiffPreparation
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_QUERY_DIFF_ARTIFACT

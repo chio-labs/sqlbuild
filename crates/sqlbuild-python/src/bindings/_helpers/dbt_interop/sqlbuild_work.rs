@@ -27,13 +27,13 @@ const WORK_OPTIONS: (&[&str], &[&str]) = (
     &[],
 );
 const BUILD_MODELS: &str = "sqlbuild.executor.build.models";
-const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
+const NATIVE_RECORDS: &str = "sqlbuild._native";
 
 /// Interop has no allow flags; destructive work uses the ordinary interactive safety gates.
 #[pyfunction]
 fn dbt_interop_plan_safety_gates(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     call_with(
-        &imported(py, COMMAND_MODELS, "PlanSafetyGates")?,
+        &imported(py, NATIVE_RECORDS, "PlanSafetyGates")?,
         &[
             ("allow_missing_migration_origin", boolean(py, false)),
             ("allow_snapshot_full_refresh", boolean(py, false)),

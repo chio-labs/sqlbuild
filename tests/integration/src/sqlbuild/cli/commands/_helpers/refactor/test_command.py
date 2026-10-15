@@ -6,8 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import run_refactor_command
-from sqlbuild.cli.commands.models import RefactorCommandRequest
+from sqlbuild._native import RefactorCommandRequest, run_refactor_command
 from sqlbuild.cli.commands.types import CliCommand
 from tests.integration.src.sqlbuild.cli.commands._helpers.refactor._test_types import (
     BareTargetRefactorTestCase,

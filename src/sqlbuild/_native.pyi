@@ -27,34 +27,6 @@ from sqlbuild.adapter.contract.types import (
     TypeDialect,
 )
 from sqlbuild.adapter.relations.models import InspectionQueryRecord
-from sqlbuild.cli.commands.models import (
-    AuditCommandRequest,
-    BuildCommandRequest,
-    BuildCostFinalization,
-    CheckCommandRequest,
-    CloneCommandRequest,
-    ContractCommandRequest,
-    CostCommandRequest,
-    DbtInitCommandRequest,
-    DbtSqlbuildWorkContext,
-    DiffCommandRequest,
-    FreshnessCommandRequest,
-    JanitorCommandRequest,
-    LineageCommandRequest,
-    LoadCommandRequest,
-    NestedProgressChildRow,
-    PlanCommandRequest,
-    PlanSafetyGates,
-    PlaygroundCommandRequest,
-    QueryDiffPreparation,
-    RefactorCommandRequest,
-    RulesCommandRequest,
-    ScenarioCaptureCommandRequest,
-    ScenarioTestCommandRequest,
-    ScopeCommandRequest,
-    SeedCommandRequest,
-    TestCommandRequest,
-)
 from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode, ScopeIndexLoader
 from sqlbuild.cli.compile.models import CompileAnalysis
 from sqlbuild.cli.compile_reuse.models import CompileReuseRequest
@@ -65,6 +37,7 @@ from sqlbuild.cli.entry.models import (
     CompileProfileFlags,
     ParsedCliInvocation,
     ResolvedWarehouse,
+    SelectorFileSummary,
 )
 from sqlbuild.cli.output.models import SkillMaintenanceResult, SkillUpdateResult, WrittenTarget
 from sqlbuild.compiler.auditing.models import (
@@ -329,6 +302,7 @@ from sqlbuild.cost.models import (
     StatementExecutionTelemetry,
     StatementLedgerEntry,
 )
+from sqlbuild.cost.types import CostStatus
 from sqlbuild.cursor_algebra.models import (
     AlignedInterval,
     DateValue,
@@ -417,6 +391,7 @@ from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.models import (
+    CostConfig,
     DbtConfig,
     DefaultsConfig,
     ExecutionLimitsConfig,
@@ -7430,3 +7405,1036 @@ def render_snowflake_query_history_sql(
 ) -> str: ...
 def snowflake_statement_is_metadata_only(*, query_type: object, query_text: object) -> bool: ...
 def parse_sqlbuild_query_tag(value: object) -> dict[str, str | None] | None: ...
+
+class NestedProgressChildRow:
+    """One child row rendered below a completed nested progress item."""
+
+    label: str
+    name: str
+    status_text: str
+    detail: str
+    def __init__(
+        self,
+        label: str,
+        name: str,
+        status_text: str,
+        detail: str = "",
+    ) -> None: ...
+
+class AuditCommandRequest:
+    """CLI inputs for one audit command invocation."""
+
+    project_dir: Path | None
+    no_sql_validation: bool
+    defer_to: str | None
+    no_color: bool
+    selected_target: str | None
+    concurrency: int | None
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    cli_vars: dict[str, object] | None
+    json_output: bool
+    json_output_path: Path | None
+    def __init__(
+        self,
+        project_dir: Path | None = None,
+        no_sql_validation: bool = False,
+        defer_to: str | None = None,
+        no_color: bool = False,
+        selected_target: str | None = None,
+        concurrency: int | None = None,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        cli_vars: dict[str, object] | None = None,
+        json_output: bool = False,
+        json_output_path: Path | None = None,
+    ) -> None: ...
+
+class AuditInvocation:
+    """Resolved project, adapter, and reporter context for the audit command."""
+
+    effective_project_dir: Path
+    discovered_inputs: DiscoveredProjectInputs
+    adapter_name: str
+    adapter: BaseAdapter
+    connection_config: dict[str, object]
+    use_color: bool
+    progress_stream: TextIO
+    connection_progress: ConnectionProgressReporter
+    planning_progress: PlanningProgressReporter
+    def __init__(
+        self,
+        effective_project_dir: Path,
+        discovered_inputs: DiscoveredProjectInputs,
+        adapter_name: str,
+        adapter: BaseAdapter,
+        connection_config: dict[str, object],
+        use_color: bool,
+        progress_stream: TextIO,
+        connection_progress: ConnectionProgressReporter,
+        planning_progress: PlanningProgressReporter,
+    ) -> None: ...
+
+class BuildCommandRequest:
+    """CLI inputs for one build command invocation."""
+
+    project_dir: Path | None
+    no_sql_validation: bool
+    defer_to: str | None
+    defer_clone_from: str | None
+    defer_sources_to: str | None
+    selected_target: str | None
+    cursor_overrides: CursorOverrides | None
+    no_color: bool
+    fail_fast: bool
+    full_refresh: bool
+    load_sources: bool | None
+    reload_sources: bool
+    include_python: bool
+    allow_snapshot_full_refresh: bool
+    allow_table_type_downgrade: bool
+    allow_retention_decrease: bool
+    allow_missing_migration_origin: bool
+    allow_snapshot_schema_change: bool
+    concurrency: int | None
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    verbose: bool
+    debug: bool
+    cli_vars: dict[str, object] | None
+    run_tests: bool
+    run_audits: bool
+    manifest: bool
+    json_output: bool
+    json_output_path: Path | None
+    event_output_path: Path | None
+    no_cache: bool
+    max_microbatches: int | None
+    selection_diagnostics: bool
+    selector_files: tuple[SelectorFileSummary, ...]
+    def __init__(
+        self,
+        project_dir: Path | None = None,
+        no_sql_validation: bool = False,
+        defer_to: str | None = None,
+        defer_clone_from: str | None = None,
+        defer_sources_to: str | None = None,
+        selected_target: str | None = None,
+        cursor_overrides: CursorOverrides | None = None,
+        no_color: bool = False,
+        fail_fast: bool = False,
+        full_refresh: bool = False,
+        load_sources: bool | None = None,
+        reload_sources: bool = False,
+        include_python: bool = True,
+        allow_snapshot_full_refresh: bool = False,
+        allow_table_type_downgrade: bool = False,
+        allow_retention_decrease: bool = False,
+        allow_missing_migration_origin: bool = False,
+        allow_snapshot_schema_change: bool = False,
+        concurrency: int | None = None,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        verbose: bool = False,
+        debug: bool = False,
+        cli_vars: dict[str, object] | None = None,
+        run_tests: bool = True,
+        run_audits: bool = True,
+        manifest: bool = False,
+        json_output: bool = False,
+        json_output_path: Path | None = None,
+        event_output_path: Path | None = None,
+        no_cache: bool = False,
+        max_microbatches: int | None = None,
+        selection_diagnostics: bool = False,
+        selector_files: tuple[SelectorFileSummary, ...] = (),
+    ) -> None: ...
+
+class BuildInvocation:
+    """Resolved project, adapter, and reporter context for the build command."""
+
+    effective_project_dir: Path
+    discovered_inputs: DiscoveredProjectInputs
+    effective_defer_clone_from: str | None
+    adapter_name: str
+    adapter: BaseAdapter
+    connection_config: dict[str, object]
+    use_color: bool
+    progress_stream: TextIO
+    connection_progress: ConnectionProgressReporter
+    planning_progress: PlanningProgressReporter
+    should_load_sources: bool
+    effective_target_name: str | None
+    execution_limits: ExecutionLimitsConfig
+    def __init__(
+        self,
+        effective_project_dir: Path,
+        discovered_inputs: DiscoveredProjectInputs,
+        effective_defer_clone_from: str | None,
+        adapter_name: str,
+        adapter: BaseAdapter,
+        connection_config: dict[str, object],
+        use_color: bool,
+        progress_stream: TextIO,
+        connection_progress: ConnectionProgressReporter,
+        planning_progress: PlanningProgressReporter,
+        should_load_sources: bool,
+        effective_target_name: str | None = None,
+        execution_limits: ExecutionLimitsConfig = ...,
+    ) -> None: ...
+
+class CheckCommandRequest:
+    """CLI inputs for one check command invocation."""
+
+    project_dir: Path | None
+    no_sql_validation: bool
+    no_color: bool
+    selected_target: str | None
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    cli_vars: dict[str, object] | None
+    json_output: bool
+    json_output_path: Path | None
+    def __init__(
+        self,
+        project_dir: Path | None = None,
+        no_sql_validation: bool = False,
+        no_color: bool = False,
+        selected_target: str | None = None,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        cli_vars: dict[str, object] | None = None,
+        json_output: bool = False,
+        json_output_path: Path | None = None,
+    ) -> None: ...
+
+class CheckInvocation:
+    """Resolved project, adapter, and reporter context for the check command."""
+
+    effective_project_dir: Path
+    discovered_inputs: DiscoveredProjectInputs
+    adapter_name: str
+    adapter: BaseAdapter
+    connection_config: dict[str, object]
+    use_color: bool
+    progress_stream: TextIO
+    connection_progress: ConnectionProgressReporter
+    planning_progress: PlanningProgressReporter
+    def __init__(
+        self,
+        effective_project_dir: Path,
+        discovered_inputs: DiscoveredProjectInputs,
+        adapter_name: str,
+        adapter: BaseAdapter,
+        connection_config: dict[str, object],
+        use_color: bool,
+        progress_stream: TextIO,
+        connection_progress: ConnectionProgressReporter,
+        planning_progress: PlanningProgressReporter,
+    ) -> None: ...
+
+class CloneCommandRequest:
+    """CLI inputs for one clone command invocation."""
+
+    project_dir: Path | None
+    no_color: bool
+    no_sql_validation: bool
+    origin_target_name: str
+    destination_target_name: str | None
+    hard_copy: bool
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    verbose: bool
+    cli_vars: dict[str, object] | None
+    json_output_path: Path | None
+    event_output_path: Path | None
+    def __init__(
+        self,
+        project_dir: Path | None,
+        no_color: bool,
+        no_sql_validation: bool,
+        origin_target_name: str,
+        destination_target_name: str | None,
+        hard_copy: bool,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        verbose: bool = False,
+        cli_vars: dict[str, object] | None = None,
+        json_output_path: Path | None = None,
+        event_output_path: Path | None = None,
+    ) -> None: ...
+
+class DbtSqlbuildWorkContext:
+    """Shared execution context for one dbt interop SQLBuild work run."""
+
+    plan_output: PlanOutput
+    connection_config: dict[str, object]
+    adapter: BaseAdapter
+    adapter_name: str
+    output_stream: TextIO
+    use_color: bool
+    snapshots_config: SnapshotsConfig
+    execution_limits: ExecutionLimitsConfig
+    def __init__(
+        self,
+        plan_output: PlanOutput,
+        connection_config: dict[str, object],
+        adapter: BaseAdapter,
+        adapter_name: str,
+        output_stream: TextIO,
+        use_color: bool,
+        snapshots_config: SnapshotsConfig,
+        execution_limits: ExecutionLimitsConfig,
+    ) -> None: ...
+
+class PlanSafetyGates:
+    """Pre-confirmed plan safety gates and the guidance shown when one needs a terminal."""
+
+    allow_missing_migration_origin: bool
+    allow_snapshot_full_refresh: bool
+    allow_table_type_downgrade: bool
+    allow_retention_decrease: bool
+    missing_origin_help: str
+    snapshot_full_refresh_help: str
+    table_type_downgrade_help: str
+    retention_decrease_help: str
+    execution_limit_note: str
+    def __init__(
+        self,
+        allow_missing_migration_origin: bool,
+        allow_snapshot_full_refresh: bool,
+        allow_table_type_downgrade: bool,
+        allow_retention_decrease: bool,
+        missing_origin_help: str,
+        snapshot_full_refresh_help: str,
+        table_type_downgrade_help: str,
+        retention_decrease_help: str,
+        execution_limit_note: str,
+    ) -> None: ...
+
+class DbtInitCommandRequest:
+    """CLI inputs for one dbt init command invocation."""
+
+    cwd: Path
+    dbt_project_dir: str | None
+    profiles_dir: str | None
+    profile_name: str | None
+    target_name: str | None
+    sqb_output_dir: str | None
+    dry_run: bool
+    overwrite: bool
+    skip_dbt_debug: bool
+    def __init__(
+        self,
+        cwd: Path,
+        dbt_project_dir: str | None,
+        profiles_dir: str | None,
+        profile_name: str | None,
+        target_name: str | None,
+        sqb_output_dir: str | None,
+        dry_run: bool,
+        overwrite: bool,
+        skip_dbt_debug: bool,
+    ) -> None: ...
+
+class DiffCommandRequest:
+    """CLI inputs for one diff command invocation."""
+
+    project_dir: Path | None
+    no_color: bool
+    no_sql_validation: bool
+    from_name: str | None
+    to_name: str | None
+    full: bool
+    schema_only: bool
+    bounded: str | None
+    max_column_examples: int | None
+    max_row_only_examples: int | None
+    sample_rows: int | None
+    sample_seed: int | None
+    exhaustive: bool
+    json_output: bool
+    json_output_path: Path | None
+    max_models: int | None
+    max_columns: int | None
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    verbose: bool
+    cli_vars: dict[str, object] | None
+    selected_target: str | None
+    left_query: str | None
+    left_query_file: Path | None
+    left_label: str | None
+    right_query: str | None
+    right_query_file: Path | None
+    right_label: str | None
+    unique_key_override: tuple[str, ...]
+    unkeyed: bool
+    excluded_columns_override: tuple[str, ...]
+    tolerance_overrides: tuple[str, ...]
+    max_value_length: int | None
+    suppress_example_values: bool
+    full_example_values: bool
+    def __init__(
+        self,
+        project_dir: Path | None,
+        no_color: bool,
+        no_sql_validation: bool,
+        from_name: str | None,
+        to_name: str | None,
+        full: bool,
+        schema_only: bool,
+        bounded: str | None,
+        max_column_examples: int | None = None,
+        max_row_only_examples: int | None = None,
+        sample_rows: int | None = None,
+        sample_seed: int | None = None,
+        exhaustive: bool = False,
+        json_output: bool = False,
+        json_output_path: Path | None = None,
+        max_models: int | None = None,
+        max_columns: int | None = None,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        verbose: bool = False,
+        cli_vars: dict[str, object] | None = None,
+        selected_target: str | None = None,
+        left_query: str | None = None,
+        left_query_file: Path | None = None,
+        left_label: str | None = None,
+        right_query: str | None = None,
+        right_query_file: Path | None = None,
+        right_label: str | None = None,
+        unique_key_override: tuple[str, ...] = (),
+        unkeyed: bool = False,
+        excluded_columns_override: tuple[str, ...] = (),
+        tolerance_overrides: tuple[str, ...] = (),
+        max_value_length: int | None = None,
+        suppress_example_values: bool = False,
+        full_example_values: bool = False,
+    ) -> None: ...
+
+class QueryDiffPreparation:
+    """Resolved raw-query diff adapter, connection, SQL, and limits."""
+
+    adapter: BaseAdapter
+    connection_config: dict[str, object]
+    left_sql: str
+    right_sql: str
+    left_label: str
+    right_label: str
+    selected_target: str | None
+    database: str | None
+    schema: str
+    run_id: str
+    artifact_ttl: str
+    effective_max_column_examples: int
+    effective_max_row_only_examples: int
+    def __init__(
+        self,
+        adapter: BaseAdapter,
+        connection_config: dict[str, object],
+        left_sql: str,
+        right_sql: str,
+        left_label: str,
+        right_label: str,
+        selected_target: str | None,
+        database: str | None,
+        schema: str,
+        run_id: str,
+        artifact_ttl: str,
+        effective_max_column_examples: int,
+        effective_max_row_only_examples: int,
+    ) -> None: ...
+
+class FreshnessCommandRequest:
+    """CLI inputs for one `sqb freshness` invocation."""
+
+    project_dir: Path | None
+    no_sql_validation: bool
+    no_color: bool
+    selected_target: str | None
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    cli_vars: dict[str, object] | None
+    json_output: bool
+    json_output_path: Path | None
+    fail_on_error: bool
+    compare_state: bool
+    fail_on_stale: bool
+    def __init__(
+        self,
+        project_dir: Path | None = None,
+        no_sql_validation: bool = False,
+        no_color: bool = False,
+        selected_target: str | None = None,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        cli_vars: dict[str, object] | None = None,
+        json_output: bool = False,
+        json_output_path: Path | None = None,
+        fail_on_error: bool = False,
+        compare_state: bool = False,
+        fail_on_stale: bool = False,
+    ) -> None: ...
+
+class JanitorCommandRequest:
+    """CLI inputs for one janitor command invocation."""
+
+    project_dir: Path | None
+    no_color: bool
+    auto_approve: bool
+    retention_days: int | None
+    direct_state_history_versions: int | None
+    drop_old_name_views: tuple[str, ...]
+    selected_target: str | None
+    as_target: str | None
+    def __init__(
+        self,
+        project_dir: Path | None,
+        no_color: bool = False,
+        auto_approve: bool = False,
+        retention_days: int | None = None,
+        direct_state_history_versions: int | None = None,
+        drop_old_name_views: tuple[str, ...] = (),
+        selected_target: str | None = None,
+        as_target: str | None = None,
+    ) -> None: ...
+
+class JanitorInvocation:
+    """Resolved project discovery and output context for janitor."""
+
+    effective_project_dir: Path
+    discovered_inputs: DiscoveredProjectInputs
+    use_color: bool
+    selected_target: str | None
+    active_target_name: str | None
+    as_target: str | None
+    def __init__(
+        self,
+        effective_project_dir: Path,
+        discovered_inputs: DiscoveredProjectInputs,
+        use_color: bool,
+        selected_target: str | None = None,
+        active_target_name: str | None = None,
+        as_target: str | None = None,
+    ) -> None: ...
+
+class JanitorSettings:
+    """Validated effective janitor settings."""
+
+    retention_days: int
+    direct_state_history_versions: int
+    archive_retention_days: int
+    drop_old_name_views: tuple[str, ...]
+    def __init__(
+        self,
+        retention_days: int,
+        direct_state_history_versions: int,
+        archive_retention_days: int = 14,
+        drop_old_name_views: tuple[str, ...] = (),
+    ) -> None: ...
+
+class LoadCommandRequest:
+    """CLI inputs for one load command invocation."""
+
+    project_dir: Path | None
+    no_color: bool
+    selected_target: str | None
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    reload: bool
+    concurrency: int | None
+    cursor_overrides: CursorOverrides | None
+    cli_vars: dict[str, object] | None
+    json_output: bool
+    json_output_path: Path | None
+    def __init__(
+        self,
+        project_dir: Path | None,
+        no_color: bool = False,
+        selected_target: str | None = None,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        reload: bool = False,
+        concurrency: int | None = None,
+        cursor_overrides: CursorOverrides | None = None,
+        cli_vars: dict[str, object] | None = None,
+        json_output: bool = False,
+        json_output_path: Path | None = None,
+    ) -> None: ...
+
+class PlanCommandRequest:
+    """CLI inputs for one plan command invocation."""
+
+    project_dir: Path | None
+    no_sql_validation: bool
+    defer_to: str | None
+    defer_sources_to: str | None
+    selected_target: str | None
+    as_target: str | None
+    cursor_overrides: CursorOverrides | None
+    json_output: bool
+    full_refresh: bool
+    load_sources: bool | None
+    include_python: bool
+    no_color: bool
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    verbose: bool
+    cli_vars: dict[str, object] | None
+    no_cache: bool
+    max_microbatches: int | None
+    selection_diagnostics: bool
+    def __init__(
+        self,
+        project_dir: Path | None = None,
+        no_sql_validation: bool = False,
+        defer_to: str | None = None,
+        defer_sources_to: str | None = None,
+        selected_target: str | None = None,
+        as_target: str | None = None,
+        cursor_overrides: CursorOverrides | None = None,
+        json_output: bool = False,
+        full_refresh: bool = False,
+        load_sources: bool | None = None,
+        include_python: bool = True,
+        no_color: bool = False,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        verbose: bool = False,
+        cli_vars: dict[str, object] | None = None,
+        no_cache: bool = False,
+        max_microbatches: int | None = None,
+        selection_diagnostics: bool = False,
+    ) -> None: ...
+
+class PlaygroundCommandRequest:
+    """CLI inputs for one playground command invocation."""
+
+    project_dir: Path | None
+    target_path: str
+    template: str
+    def __init__(
+        self,
+        project_dir: Path | None,
+        target_path: str,
+        template: str = ...,
+    ) -> None: ...
+
+class AdapterConnectionContext:
+    """Resolved adapter and connection configuration for one CLI command."""
+
+    adapter_name: str
+    adapter: BaseAdapter
+    connection_config: dict[str, object]
+    def __init__(
+        self,
+        adapter_name: str,
+        adapter: BaseAdapter,
+        connection_config: dict[str, object],
+    ) -> None: ...
+
+class ScenarioSnapshotLimitInputs:
+    """CLI snapshot capture-limit overrides for one scenario run."""
+
+    max_snapshot_rows: int | None
+    max_snapshot_total_rows: int | None
+    max_snapshot_bytes: int | None
+    max_snapshot_total_bytes: int | None
+    force: bool
+    def __init__(
+        self,
+        max_snapshot_rows: int | None = None,
+        max_snapshot_total_rows: int | None = None,
+        max_snapshot_bytes: int | None = None,
+        max_snapshot_total_bytes: int | None = None,
+        force: bool = False,
+    ) -> None: ...
+
+class ScenarioTestCommandRequest:
+    """CLI inputs for one `sqb scenario test` invocation."""
+
+    project_dir: Path | None
+    scenario_namespace: str | None
+    no_sql_validation: bool
+    no_color: bool
+    selectors: tuple[str, ...]
+    exclude: tuple[str, ...]
+    retain: bool
+    local: bool
+    strict: bool
+    concurrency: int | None
+    sync_snapshots: bool
+    refresh: bool
+    limit_inputs: ScenarioSnapshotLimitInputs
+    json_output: bool
+    json_output_path: Path | None
+    def __init__(
+        self,
+        project_dir: Path | None = None,
+        scenario_namespace: str | None = None,
+        no_sql_validation: bool = False,
+        no_color: bool = False,
+        selectors: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        retain: bool = False,
+        local: bool = False,
+        strict: bool = False,
+        concurrency: int | None = None,
+        sync_snapshots: bool = False,
+        refresh: bool = False,
+        limit_inputs: ScenarioSnapshotLimitInputs = ...,
+        json_output: bool = False,
+        json_output_path: Path | None = None,
+    ) -> None: ...
+
+class ScenarioCaptureCommandRequest:
+    """CLI inputs for one `sqb scenario capture` invocation."""
+
+    project_dir: Path | None
+    scenario_namespace: str | None
+    no_sql_validation: bool
+    no_color: bool
+    selectors: tuple[str, ...]
+    exclude: tuple[str, ...]
+    retain: bool
+    limit_inputs: ScenarioSnapshotLimitInputs
+    def __init__(
+        self,
+        project_dir: Path | None = None,
+        scenario_namespace: str | None = None,
+        no_sql_validation: bool = False,
+        no_color: bool = False,
+        selectors: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        retain: bool = False,
+        limit_inputs: ScenarioSnapshotLimitInputs = ...,
+    ) -> None: ...
+
+class SeedCommandRequest:
+    """CLI inputs for one seed command invocation."""
+
+    project_dir: Path | None
+    no_color: bool
+    selected_target: str | None
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    concurrency: int | None
+    cli_vars: dict[str, object] | None
+    json_output: bool
+    json_output_path: Path | None
+    def __init__(
+        self,
+        project_dir: Path | None,
+        no_color: bool = False,
+        selected_target: str | None = None,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        concurrency: int | None = None,
+        cli_vars: dict[str, object] | None = None,
+        json_output: bool = False,
+        json_output_path: Path | None = None,
+    ) -> None: ...
+
+class SeedInvocation:
+    """Resolved project, adapter, connection, and output context for seed."""
+
+    effective_project_dir: Path
+    discovered_inputs: DiscoveredProjectInputs
+    adapter_name: str
+    adapter: BaseAdapter
+    connection_config: dict[str, object]
+    use_color: bool
+    progress_stream: TextIO
+    def __init__(
+        self,
+        effective_project_dir: Path,
+        discovered_inputs: DiscoveredProjectInputs,
+        adapter_name: str,
+        adapter: BaseAdapter,
+        connection_config: dict[str, object],
+        use_color: bool,
+        progress_stream: TextIO,
+    ) -> None: ...
+
+class TestCommandRequest:
+    """CLI inputs for one test command invocation."""
+
+    project_dir: Path | None
+    no_sql_validation: bool
+    no_color: bool
+    selected_target: str | None
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    cli_vars: dict[str, object] | None
+    json_output: bool
+    json_output_path: Path | None
+    concurrency: int | None
+    case_name: str | None
+    inspect: bool
+    def __init__(
+        self,
+        project_dir: Path | None = None,
+        no_sql_validation: bool = False,
+        no_color: bool = False,
+        selected_target: str | None = None,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        cli_vars: dict[str, object] | None = None,
+        json_output: bool = False,
+        json_output_path: Path | None = None,
+        concurrency: int | None = None,
+        case_name: str | None = None,
+        inspect: bool = False,
+    ) -> None: ...
+
+class RefactorCommandRequest:
+    """CLI inputs for one `sqb rename` or `sqb mv` invocation."""
+
+    command: str
+    target: str
+    new_name: str | None
+    destination: str | None
+    project_dir: Path | None
+    cascade: bool
+    dry_run: bool
+    json_output: bool
+    no_color: bool
+    def __init__(
+        self,
+        command: str,
+        target: str,
+        new_name: str | None = None,
+        destination: str | None = None,
+        project_dir: Path | None = None,
+        cascade: bool = False,
+        dry_run: bool = False,
+        json_output: bool = False,
+        no_color: bool = False,
+    ) -> None: ...
+
+class ScopeCommandRequest:
+    """CLI inputs for one offline declaration-scope inspection."""
+
+    project_dir: Path | None
+    target: str | None
+    at: str | None
+    as_path: str | None
+    browse: str | None
+    list_path: str | None
+    defined_under: str | None
+    kinds: tuple[str, ...]
+    match: str | None
+    used_only: bool
+    include_nearby: bool
+    nearby_depth: int
+    dependency_depth: int
+    explain: str | None
+    globals: str
+    page_size: int
+    after: str | None
+    paths: str
+    json_output: bool
+    no_cache: bool
+    verbose: bool
+    no_color: bool
+    def __init__(
+        self,
+        project_dir: Path | None = None,
+        target: str | None = None,
+        at: str | None = None,
+        as_path: str | None = None,
+        browse: str | None = None,
+        list_path: str | None = None,
+        defined_under: str | None = None,
+        kinds: tuple[str, ...] = (),
+        match: str | None = None,
+        used_only: bool = False,
+        include_nearby: bool = False,
+        nearby_depth: int = 1,
+        dependency_depth: int = 0,
+        explain: str | None = None,
+        globals: str = "summary",
+        page_size: int = 100,
+        after: str | None = None,
+        paths: str = "relative",
+        json_output: bool = False,
+        no_cache: bool = False,
+        verbose: bool = False,
+        no_color: bool = False,
+    ) -> None: ...
+
+class TestInvocation:
+    """Resolved project, adapter, and reporter context for the test command."""
+
+    effective_project_dir: Path
+    discovered_inputs: DiscoveredProjectInputs
+    adapter_name: str
+    adapter: BaseAdapter
+    connection_config: dict[str, object]
+    use_color: bool
+    progress_stream: TextIO
+    connection_progress: ConnectionProgressReporter
+    planning_progress: PlanningProgressReporter
+    def __init__(
+        self,
+        effective_project_dir: Path,
+        discovered_inputs: DiscoveredProjectInputs,
+        adapter_name: str,
+        adapter: BaseAdapter,
+        connection_config: dict[str, object],
+        use_color: bool,
+        progress_stream: TextIO,
+        connection_progress: ConnectionProgressReporter,
+        planning_progress: PlanningProgressReporter,
+    ) -> None: ...
+
+class RulesCommandRequest:
+    """Inputs for focused rule execution, inspection, or skill generation."""
+
+    project_dir: Path | None
+    json_output: bool
+    action: str
+    rule_selector: str | None
+    skills_check: bool
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    def __init__(
+        self,
+        project_dir: Path | None,
+        json_output: bool,
+        action: str,
+        rule_selector: str | None,
+        skills_check: bool,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+    ) -> None: ...
+
+class CostCommandRequest:
+    """Inputs for local run-cost history and drill-down."""
+
+    project_dir: Path | None
+    selector: str
+    no_color: bool
+    limit: int | None
+    no_limit: bool
+    sort: str | None
+    order: str | None
+    since: str | None
+    until: str | None
+    json_output: bool
+    json_output_path: Path | None
+    def __init__(
+        self,
+        project_dir: Path | None,
+        selector: str,
+        no_color: bool,
+        limit: int | None,
+        no_limit: bool,
+        sort: str | None,
+        order: str | None,
+        since: str | None,
+        until: str | None,
+        json_output: bool,
+        json_output_path: Path | None,
+    ) -> None: ...
+
+class BuildCostFinalization:
+    """Inputs for nonfatal automatic build-cost finalization."""
+
+    project_dir: Path
+    adapter_name: str
+    adapter: object
+    connection_config: dict[str, object]
+    target_name: str | None
+    target_database: str | None
+    run_id: str
+    build_status: str
+    started_at: datetime
+    completed_at: datetime
+    config: CostConfig
+    output_stream: TextIO
+    use_color: bool
+    collect: bool
+    render: bool
+    cost_status: CostStatus
+    cost_message: str
+    had_executable_work: bool | None
+    def __init__(
+        self,
+        project_dir: Path,
+        adapter_name: str,
+        adapter: object,
+        connection_config: dict[str, object],
+        target_name: str | None,
+        target_database: str | None,
+        run_id: str,
+        build_status: str,
+        started_at: datetime,
+        completed_at: datetime,
+        config: CostConfig,
+        output_stream: TextIO,
+        use_color: bool,
+        collect: bool = True,
+        render: bool = True,
+        cost_status: CostStatus = ...,
+        cost_message: str = ...,
+        had_executable_work: bool | None = True,
+    ) -> None: ...
+
+class ContractCommandRequest:
+    """CLI inputs for physical contract comparison and repository adoption."""
+
+    action: str
+    from_target: str
+    project_dir: Path | None
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    write: bool
+    overwrite: bool
+    json_output: bool
+    no_color: bool
+    cli_vars: dict[str, object] | None
+    def __init__(
+        self,
+        action: str,
+        from_target: str,
+        project_dir: Path | None = None,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        write: bool = False,
+        overwrite: bool = False,
+        json_output: bool = False,
+        no_color: bool = False,
+        cli_vars: dict[str, object] | None = None,
+    ) -> None: ...
+
+class LineageCommandRequest:
+    """CLI inputs for dependency and column lineage inspection."""
+
+    project_dir: Path | None
+    no_sql_validation: bool
+    targets: tuple[str, ...]
+    output_format: str
+    direction: str | None
+    depth: str
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    lineage_mode: ColumnLineageMode
+    include_uses: bool
+    cli_vars: dict[str, object] | None
+    def __init__(
+        self,
+        project_dir: Path | None,
+        no_sql_validation: bool = False,
+        targets: tuple[str, ...] = (),
+        output_format: str = "tree",
+        direction: str | None = None,
+        depth: str = "all",
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        lineage_mode: ColumnLineageMode = ...,
+        include_uses: bool = False,
+        cli_vars: dict[str, object] | None = None,
+    ) -> None: ...

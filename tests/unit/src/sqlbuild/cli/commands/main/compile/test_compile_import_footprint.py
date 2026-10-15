@@ -24,7 +24,6 @@ from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
         CompileImportFootprintTestCase(
             description="compile skips build and execution command models",
             checked_modules=(
-                "sqlbuild.cli.commands.models",
                 "sqlbuild.executor.build.models",
                 "sqlbuild.executor.run.models",
             ),

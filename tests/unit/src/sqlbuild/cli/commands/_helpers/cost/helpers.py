@@ -3,7 +3,7 @@ from io import StringIO
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.cli.commands.models import BuildCostFinalization
+from sqlbuild._native import BuildCostFinalization
 from sqlbuild.spec.contracts.models import CostConfig
 
 
