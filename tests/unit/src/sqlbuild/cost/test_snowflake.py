@@ -10,13 +10,13 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import (
+    COST_TELEMETRY_HEALTH,
     collect_snowflake_cost,
     parse_sqlbuild_query_tag,
     render_snowflake_query_history_sql,
     snowflake_query_observations,
     snowflake_statement_is_metadata_only,
 )
-from sqlbuild.cost.constants import COST_TELEMETRY_HEALTH
 from sqlbuild.cost.models import RunCostSummary
 from sqlbuild.cost.types import CostStatus
 from tests.unit.src.sqlbuild.cost._test_types import (

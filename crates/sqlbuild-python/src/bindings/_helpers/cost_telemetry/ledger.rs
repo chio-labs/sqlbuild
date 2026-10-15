@@ -18,8 +18,9 @@ use sqlbuild_core::json::models::{JsonDialect, JsonInteger, JsonValue, StdlibJso
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, within,
 };
+use crate::bindings::_helpers::cost_telemetry::health::mark_ledger_failure;
 use crate::bindings::_helpers::cost_telemetry::values::{
-    COST_CONSTANTS, COST_EXCEPTIONS, COST_MODELS, process_object,
+    COST_EXCEPTIONS, COST_MODELS, process_object,
 };
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
 
@@ -32,16 +33,8 @@ fn ledger_lock(py: Python<'_>) -> PyResult<&Bound<'_, PyAny>> {
     })
 }
 
-fn health(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    imported(py, COST_CONSTANTS, "COST_TELEMETRY_HEALTH")
-}
-
 fn mark_failure(run_id: &Bound<'_, PyAny>, error: &Bound<'_, PyAny>) -> PyResult<()> {
-    call_with(
-        &health(run_id.py())?.getattr("mark_ledger_failure")?,
-        &[("run_id", run_id.clone()), ("error", error.clone())],
-    )?;
-    Ok(())
+    mark_ledger_failure(run_id.extract()?, error)
 }
 
 fn optional_text(value: Option<String>) -> JsonValue {

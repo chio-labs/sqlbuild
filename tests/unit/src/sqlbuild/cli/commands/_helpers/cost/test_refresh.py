@@ -11,7 +11,6 @@ import pytest
 
 from sqlbuild._native import read_cost_run, refresh_pending_cost_run, write_cost_run
 from sqlbuild.cli.commands.models import CostCommandRequest
-from sqlbuild.cost.constants import LEDGER_PERSISTENCE_FAILURE_LIMITATION_PREFIX
 from sqlbuild.cost.models import CostRunRecord, RunCostSummary
 from sqlbuild.cost.types import CostCapability, CostStatus
 from tests.unit.src.sqlbuild.cli.commands._helpers.cost._test_types import (
@@ -249,7 +248,7 @@ def test_given_persisted_ledger_failure_when_refresh_has_no_coverage_then_failur
 ) -> None:
     now: datetime = datetime(2026, 8, 23, tzinfo=UTC)
     record: CostRunRecord = build_cost_run_record(run_id="run-ledger-failure", completed_at=now)
-    failure_limitation: str = f"{LEDGER_PERSISTENCE_FAILURE_LIMITATION_PREFIX}OSError)."
+    failure_limitation: str = "Statement-ledger persistence failed (OSError)."
     persisted_failure: RunCostSummary = RunCostSummary(
         status=CostStatus.PARTIAL,
         usd_per_credit=record.cost.usd_per_credit,

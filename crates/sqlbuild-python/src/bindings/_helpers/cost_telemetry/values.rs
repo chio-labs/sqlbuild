@@ -13,7 +13,6 @@ use crate::bindings::_helpers::state_rows::timestamps::offset_aware;
 
 pub(crate) const COST_MODELS: &str = "sqlbuild.cost.models";
 pub(crate) const COST_TYPES: &str = "sqlbuild.cost.types";
-pub(crate) const COST_CONSTANTS: &str = "sqlbuild.cost.constants";
 pub(crate) const COST_EXCEPTIONS: &str = "sqlbuild.cost.exceptions";
 const DECIMAL_MODULE: &str = "decimal";
 

@@ -8,10 +8,9 @@ from typing import Any
 
 import pytest
 
-from sqlbuild._native import CostContext
+from sqlbuild._native import COST_TELEMETRY_HEALTH, CostContext
 from sqlbuild.adapters.snowflake.classes.snowflake_connection import _SnowflakeConnection
 from sqlbuild.adapters.snowflake.classes.snowflake_cursor import _SnowflakeCursor
-from sqlbuild.cost.constants import COST_TELEMETRY_HEALTH
 from sqlbuild.cost.models import StatementExecutionTelemetry
 from sqlbuild.observability import (
     EventDispatcher,
