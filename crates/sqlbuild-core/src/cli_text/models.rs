@@ -616,3 +616,34 @@ pub struct MigrationTextReport {
     pub display: DisplayLimit,
     pub manual_rename_hint: String,
 }
+
+/// One planned table-type conversion line.
+#[derive(Clone, Debug)]
+pub struct TableTypeText {
+    pub model_name: String,
+    pub desired_type: String,
+    pub actual_type: Option<String>,
+    pub source: String,
+    pub irreversible_warning: Option<String>,
+}
+
+/// One planned retention change line.
+#[derive(Clone, Debug)]
+pub struct RetentionText {
+    pub scope: String,
+    pub desired_days: i64,
+    pub actual_days: Option<i64>,
+    pub effective_days: Option<i64>,
+    pub source: String,
+    pub direction: String,
+    pub phase: String,
+    pub irreversible_warning: Option<String>,
+}
+
+/// Storage work planned before model builds, ahead of the migration sections.
+#[derive(Clone, Debug)]
+pub struct PreBuildWorkText {
+    pub table_types: Vec<TableTypeText>,
+    pub retention: Vec<RetentionText>,
+    pub display: DisplayLimit,
+}

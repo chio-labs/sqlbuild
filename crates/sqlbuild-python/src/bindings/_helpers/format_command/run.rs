@@ -15,7 +15,7 @@ use crate::bindings::_helpers::format_command::files::{
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const FIXES_MODULE: &str = "sqlbuild._native";
-const FIXTURE_AUTOFIX_MODULE: &str = "sqlbuild.compiler.planner.classes.fixture_null_autofix";
+const FIXTURE_AUTOFIX_MODULE: &str = "sqlbuild._native";
 const LINT_ERRORS_MODULE: &str = "sqlbuild.lint.exceptions";
 const DESCRIPTION_PRESENT: &str = "description-present";
 
@@ -57,7 +57,7 @@ fn fixture_autofix<'py>(
         return Ok(PyDict::new(py));
     };
     Ok(call_with(
-        &imported(py, FIXTURE_AUTOFIX_MODULE, "FixtureNullAutofix")?.getattr("apply")?,
+        &imported(py, FIXTURE_AUTOFIX_MODULE, "format_redundant_fixture_nulls")?,
         &[
             ("files", files.clone().into_any()),
             ("project_dir", request.project_dir.clone()),

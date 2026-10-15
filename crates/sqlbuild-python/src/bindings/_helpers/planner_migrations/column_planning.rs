@@ -4,6 +4,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::planner_migrations::column_objects::{model, replace};
+use crate::bindings::_helpers::planner_migrations::known_input_columns::KnownInputColumns;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PySet, PySetMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -66,17 +67,14 @@ fn plan_column_migrations<'py>(
         &state.getattr("inspect_column_events")?,
         &[("schemas", schemas.into_any())],
     )?;
-    let inputs = call_with(
-        &imported(
-            py,
-            "sqlbuild.compiler.planner.classes.known_input_columns",
-            "KnownInputColumns",
-        )?,
-        &[
-            ("model_columns", snapshot.getattr("existing_columns")?),
-            ("source_columns", args.value("source_columns")?),
-        ],
-    )?;
+    let inputs = Bound::new(
+        py,
+        KnownInputColumns::new(
+            &snapshot.getattr("existing_columns")?,
+            &args.value("source_columns")?,
+        ),
+    )?
+    .into_any();
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut warnings: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut hints: Vec<Bound<'py, PyAny>> = Vec::new();

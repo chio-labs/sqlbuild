@@ -222,11 +222,7 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
                 ) =>
             {
                 call_with(
-                    &imported(
-                        py,
-                        "sqlbuild.compiler.planner.main.execution.display_plan",
-                        "build_display_only_sqlbuild_plan",
-                    )?,
+                    &imported(py, "sqlbuild._native", "build_display_only_sqlbuild_plan")?,
                     &[
                         ("project", environment.getattr("project")?),
                         ("selected_model_names", selected),

@@ -2,6 +2,7 @@
 
 mod clone_plans;
 mod command_plans;
+mod display_plan;
 mod execution_plan;
 mod model_entries;
 mod plan_output;
