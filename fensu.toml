@@ -40,6 +40,11 @@ reason = "Typed SQL values are normalized and state literals rendered natively; 
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
+path = "src/sqlbuild/cli/compile/__init__.py"
+reason = "Native bindings own the compile command, its reuse attempt and its analysis; this package only declares the compile analysis models the native code builds."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
 path = "src/sqlbuild/cli/compile_reuse/__init__.py"
 reason = "Native bindings own the compile reuse check, replay and launch records; this package declares the reuse models and constants and keeps the provider settings, runtime identity and startup inputs the native code reads from the interpreter."
 
@@ -187,12 +192,6 @@ reason = "The Snowflake adapter intentionally keeps overrideable backend behavio
 rule = "FFR601"
 path = "src/sqlbuild/adapters/sqlserver/classes/sqlserver_adapter.py"
 reason = "The SQL Server adapter intentionally keeps overrideable backend behavior on one class."
-
-[[targets.python.rule_exceptions]]
-rule = "XSB051"
-path = "src/sqlbuild/compiler/planner/_helpers/warehouse/source_columns.py"
-symbols = ["gather_source_inspection"]
-reason = "Each type-enforced expression source is its own query whose output columns can only be read by running it; table sources are listed in one batch per database."
 
 [[targets.python.rule_exceptions]]
 rule = "XSB051"

@@ -5,12 +5,15 @@ use std::sync::OnceLock;
 
 use serde_json::Value as Json;
 
-use crate::argv::constants::{COMMAND_TABLE, SUPPRESS_DEST};
+use crate::argv::constants::{
+    COMMAND_TABLE, DBT_COMMAND_PLACEHOLDER, DBT_EXECUTION_TABLE, SUPPRESS_DEST,
+};
 use crate::argv::models::{
     ActionKind, ActionSpec, ChoiceHelp, Default, GroupSpec, HelpText, Nargs, ParserSpec, Value,
 };
 
 static ROOT: OnceLock<ParserSpec> = OnceLock::new();
+static DBT_EXECUTION: OnceLock<ParserSpec> = OnceLock::new();
 
 /// The root `sqb` parser.
 pub(crate) fn root_parser() -> &'static ParserSpec {
@@ -18,6 +21,21 @@ pub(crate) fn root_parser() -> &'static ParserSpec {
         let table: Json = serde_json::from_str(COMMAND_TABLE).unwrap_or(Json::Null);
         TableReader { next_id: 0 }.parser(&table)
     })
+}
+
+/// The `sqb dbt <command>` execution parser with the command named in its texts.
+pub(crate) fn dbt_execution_parser(command: &str) -> ParserSpec {
+    let mut parser: ParserSpec = DBT_EXECUTION
+        .get_or_init(|| {
+            let table: Json = serde_json::from_str(DBT_EXECUTION_TABLE).unwrap_or(Json::Null);
+            TableReader { next_id: 0 }.parser(&table)
+        })
+        .clone();
+    parser.prog = parser.prog.replace(DBT_COMMAND_PLACEHOLDER, command);
+    parser.description = parser
+        .description
+        .map(|description| description.replace(DBT_COMMAND_PLACEHOLDER, command));
+    parser
 }
 
 /// Reads parser specs, numbering every action across the whole tree.

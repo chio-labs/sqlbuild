@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
-from sqlbuild.compiler.planner._helpers.planning.identities import (
-    _reusable_execution_model_names,
-)
+import sqlbuild._native as native_module
+from sqlbuild._native import detect_stale_warning_changes
 from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     DirectModelVersionIdentities,
     PlannerChangeResults,
     PlannerIdentityContext,
+    PlannerScope,
+    PlannerScopeResolution,
+    WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import ChangeKind
 from tests.unit.src.sqlbuild.compiler.planner._helpers.planning._test_types import (
@@ -46,6 +50,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.planning._test_types impo
 )
 def test_given_execution_change_when_checking_reuse_then_requires_equivalent_semantics(
     test_case: ReusableExecutionModelNamesTestCase,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     execution_identities: DirectModelVersionIdentities = DirectModelVersionIdentities(
         function_local_hashes={},
@@ -64,7 +69,26 @@ def test_given_execution_change_when_checking_reuse_then_requires_equivalent_sem
         model_version_hashes={"orders": test_case.stale_warning_hash},
     )
 
-    reusable_names: frozenset[str] = _reusable_execution_model_names(
+    monkeypatch.setattr(native_module, "detect_model_changes_in_scope", lambda **_: {})
+    stale_scope: PlannerScope = PlannerScope(
+        upstream_deps={},
+        downstream_deps={},
+        all_keys={},
+        models_by_name={},
+        selected_keys=frozenset(),
+        execution_order=(),
+    )
+
+    reused: PlannerChangeResults = detect_stale_warning_changes(
+        project=SimpleNamespace(
+            settings=SimpleNamespace(query_change_tracking=test_case.query_change_tracking)
+        ),
+        scopes=PlannerScopeResolution(
+            selected_scope=stale_scope,
+            stale_warning_scope=stale_scope,
+            inspection_scope=stale_scope,
+        ),
+        snapshot=WarehouseSnapshot(),
         identities=PlannerIdentityContext(
             version_identities=execution_identities,
             stale_warning_identities=stale_identities,
@@ -78,10 +102,9 @@ def test_given_execution_change_when_checking_reuse_then_requires_equivalent_sem
             },
             functions={},
         ),
-        query_change_tracking=test_case.query_change_tracking,
     )
 
-    assert reusable_names == test_case.expected_names
+    assert frozenset(reused.models) == test_case.expected_names
 
 
 if __name__ == "__main__":

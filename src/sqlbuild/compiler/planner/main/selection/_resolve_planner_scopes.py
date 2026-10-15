@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import resolve_planner_scopes as _resolve_planner_scopes
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.planner._helpers.planning.scopes import (
-    resolve_planner_scopes as _resolve_planner_scopes,
-)
 from sqlbuild.compiler.planner.models import (
     PlannerPolicies,
     PlannerScopeResolution,

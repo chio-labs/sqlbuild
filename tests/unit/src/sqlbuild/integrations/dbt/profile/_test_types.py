@@ -47,3 +47,19 @@ class DbtProfileNormalizeErrorTestCase:
     description: str
     output: dict[str, object]
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class DbtProfileConnectionTestCase:
+    description: str
+    raw_config: dict[str, object]
+    adapter_name: str
+    expected_connection: dict[str, object] | None
+
+
+@dataclass(frozen=True)
+class DbtProfileConnectionErrorTestCase:
+    description: str
+    raw_config: dict[str, object]
+    adapter_name: str
+    expected_error_fragment: str

@@ -36,13 +36,13 @@ use crate::bindings::_helpers::boundary::panics::{NativeCompilerError, compiler_
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::lineage::lineage_index::lineage_key;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::refactor::offline_compile::{OfflineCompile, compile_for_refactor};
 use crate::bindings::_helpers::refactor::refactor_facts::{
     declaration_placement, model_facts, refactor_facts,
 };
 
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const REFACTOR_ERRORS_MODULE: &str = "sqlbuild.compiler.refactoring.exceptions";
-const COMPILE_MODULE: &str = "sqlbuild.cli.commands._helpers.refactor.compile_facts";
 const STAGING_PREFIX: &str = "sqb-refactor-";
 const MOVE_COMMAND: &str = "mv";
 const EDIT_ERROR_CODE: &str = "C957";
@@ -86,24 +86,17 @@ fn refactor_error(py: Python<'_>, error: RefactorError) -> PyErr {
     }
 }
 
-/// One offline compile: the Python `RefactorCompile`.
+/// One offline compile: its project facts and errors.
 struct Compiled<'py> {
     project: Bound<'py, PyAny>,
     errors: Vec<Bound<'py, PyAny>>,
 }
 
 fn compile<'py>(py: Python<'py>, project_dir: &Path, no_cache: bool) -> PyResult<Compiled<'py>> {
-    let options: Bound<'py, PyDict> = PyDict::new(py);
-    options.set_item("project_dir", project_dir)?;
-    options.set_item("no_cache", no_cache)?;
-    let compiled: Bound<'py, PyAny> =
-        imported(py, COMPILE_MODULE, "compile_for_refactor")?.call((), Some(&options))?;
+    let compiled: OfflineCompile<'py> = compile_for_refactor(py, project_dir, no_cache)?;
     Ok(Compiled {
-        project: compiled.getattr("project")?,
-        errors: compiled
-            .getattr("errors")?
-            .try_iter()?
-            .collect::<PyResult<_>>()?,
+        project: compiled.project,
+        errors: compiled.errors,
     })
 }
 

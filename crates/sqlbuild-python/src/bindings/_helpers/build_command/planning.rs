@@ -3,6 +3,7 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use sqlbuild_core::build_command::models::PlanSafetyGates;
 
+use crate::bindings::_helpers::build_command::defer_clone::run_defer_clone_boundary_prephase;
 use crate::bindings::_helpers::build_command::invocation::BuildContext;
 use crate::bindings::_helpers::build_command::policies::{enforce_plan_policies, model_limit};
 use crate::bindings::_helpers::build_command::support::{
@@ -13,8 +14,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const CONSTANTS_MODULE: &str = "sqlbuild.cli.commands.constants";
-const DEFER_CLONE_MODULE: &str = "sqlbuild.cli.commands._helpers.build_planning.defer_clone";
-const EXTERNAL_REFS_MODULE: &str = "sqlbuild.cli.commands._helpers.planning.external_refs";
+const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const RUNTIME_CONTRACT_MODELS: &str = "sqlbuild.runtime.contracts.models";
 const CONNECTION_TIMING: [&str; 2] = ["connection_count", "elapsed_seconds"];
@@ -25,19 +25,7 @@ pub(crate) fn run_defer_clone_prephase(context: &BuildContext<'_>) -> PyResult<(
     if origin.is_none() {
         return Ok(());
     }
-    call_with(
-        &imported(
-            context.py(),
-            DEFER_CLONE_MODULE,
-            "run_defer_clone_boundary_prephase",
-        )?,
-        &[
-            ("request", context.request.clone()),
-            ("invocation", context.invocation.clone()),
-            ("origin_target_name", origin),
-        ],
-    )?;
-    Ok(())
+    run_defer_clone_boundary_prephase(context, origin)
 }
 
 fn request_options<'py>(context: &BuildContext<'py>) -> PyResult<Bound<'py, PyAny>> {

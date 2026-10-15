@@ -28,7 +28,11 @@ pub const UNORDERED_ATTRIBUTES: [(&str, &[&str]); 1] = [(
     &["analysis_shapes", "expression_shapes", "schemas"],
 )];
 /// The attributes captured, in order, for each native type.
-pub const PROJECTED_ATTRIBUTES: [(&str, &[&str]); 14] = [
+pub const PROJECTED_ATTRIBUTES: [(&str, &[&str]); 15] = [
+    (
+        "sqlbuild._native:DbtCompileReferenceResolver",
+        &["_dbt_manifest"],
+    ),
     (
         "sqlbuild._native:BindingCatalog",
         &[
@@ -330,7 +334,11 @@ pub const OMITTED_ATTRIBUTES: [(&str, &[&str]); 6] = [
     ),
 ];
 /// The Python model type a native type is captured as.
-pub const CANONICAL_TYPES: [(&str, &str); 10] = [
+pub const CANONICAL_TYPES: [(&str, &str); 11] = [
+    (
+        "sqlbuild._native:DbtCompileReferenceResolver",
+        "sqlbuild.integrations.dbt.classes.dbt_compile_reference_resolver:DbtCompileReferenceResolver",
+    ),
     (
         "sqlbuild._native:BindingCatalog",
         "sqlbuild.compiler.sql_analysis.classes.binding_catalog:BindingCatalog",

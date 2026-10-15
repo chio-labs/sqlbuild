@@ -1,0 +1,178 @@
+//! Boundary helpers shared by the native planner phases.
+
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::planner_phases::constants::{
+    NATIVE_MODULE, PLANNER_EXCEPTIONS, PLANNER_MODELS,
+};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::types::{PyFrozenSet, PyString, PyTuple};
+
+/// A Python `str`.
+pub(crate) fn text<'py>(py: Python<'py>, value: &str) -> Bound<'py, PyAny> {
+    PyString::new(py, value).into_any()
+}
+
+/// `None`, or the text.
+pub(crate) fn optional_text<'py>(py: Python<'py>, value: Option<&str>) -> Bound<'py, PyAny> {
+    value.map_or_else(|| py.None().into_bound(py), |value| text(py, value))
+}
+
+/// `module.name(**fields)`.
+pub(crate) fn construct<'py>(
+    py: Python<'py>,
+    (module, name): (&str, &str),
+    fields: &[(&str, Bound<'py, PyAny>)],
+) -> PyResult<Bound<'py, PyAny>> {
+    call_with(&imported(py, module, name)?, fields)
+}
+
+/// A planner model dataclass.
+pub(crate) fn planner_model<'py>(
+    py: Python<'py>,
+    name: &str,
+    fields: &[(&str, Bound<'py, PyAny>)],
+) -> PyResult<Bound<'py, PyAny>> {
+    construct(py, (PLANNER_MODELS, name), fields)
+}
+
+/// `sqlbuild._native.name(**fields)`.
+pub(crate) fn native<'py>(
+    py: Python<'py>,
+    name: &str,
+    fields: &[(&str, Bound<'py, PyAny>)],
+) -> PyResult<Bound<'py, PyAny>> {
+    construct(py, (NATIVE_MODULE, name), fields)
+}
+
+/// `dataclasses.replace(value, **fields)`.
+pub(crate) fn replace<'py>(
+    value: &Bound<'py, PyAny>,
+    fields: &[(&str, Bound<'py, PyAny>)],
+) -> PyResult<Bound<'py, PyAny>> {
+    imported(value.py(), "dataclasses", "replace")?
+        .call((value,), Some(&keywords(value.py(), fields)?))
+}
+
+/// A Python enum member from its value.
+pub(crate) fn member<'py>(
+    py: Python<'py>,
+    (module, name): (&str, &str),
+    value: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    imported(py, module, name)?.call1((value,))
+}
+
+/// `PlannerInputError(message, code=code, help=help)`.
+pub(crate) fn planner_error(
+    py: Python<'_>,
+    message: &str,
+    (code, help): (Option<&str>, Option<&str>),
+) -> PyErr {
+    let raised = imported(py, PLANNER_EXCEPTIONS, "PlannerInputError").and_then(|class| {
+        let fields = keywords(
+            py,
+            &[
+                ("code", optional_text(py, code)),
+                ("help", optional_text(py, help)),
+            ],
+        )?;
+        class.call((message,), Some(&fields))
+    });
+    match raised {
+        Ok(error) => PyErr::from_value(error),
+        Err(error) => error,
+    }
+}
+
+/// A tuple of the items.
+pub(crate) fn tuple<'py>(
+    py: Python<'py>,
+    items: Vec<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    Ok(PyTuple::new(py, items)?.into_any())
+}
+
+/// A frozenset of the items.
+pub(crate) fn frozenset<'py>(
+    py: Python<'py>,
+    items: &[Bound<'py, PyAny>],
+) -> PyResult<Bound<'py, PyAny>> {
+    Ok(PyFrozenSet::new(py, items)?.into_any())
+}
+
+/// Names of model keys among `keys`.
+pub(crate) fn model_key_names(keys: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+    let mut names: Vec<_> = Vec::new();
+    for key in keys.try_iter()? {
+        let key = key?;
+        if key.getattr("resource_type")?.eq("model")? {
+            names.push(key.getattr("name")?.extract()?);
+        }
+    }
+    Ok(names)
+}
+
+/// `sorted(items)` as a tuple of strings.
+pub(crate) fn sorted_names<'py>(
+    py: Python<'py>,
+    mut names: Vec<String>,
+) -> PyResult<Bound<'py, PyAny>> {
+    names.sort();
+    tuple(py, names.iter().map(|name| text(py, name)).collect())
+}
+
+/// The strings of any Python iterable, in iteration order.
+pub(crate) fn strings(values: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+    values
+        .try_iter()?
+        .map(|value| value?.extract::<String>())
+        .collect()
+}
+
+/// The project nodes of `field` by name.
+pub(crate) fn by_name<'py>(
+    project: &Bound<'py, PyAny>,
+    field: &str,
+) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+    let nodes = pyo3::types::PyDict::new(project.py());
+    for node in project.getattr(field)?.try_iter()? {
+        let node = node?;
+        pyo3::types::PyDictMethods::set_item(&nodes, node.getattr("name")?, node)?;
+    }
+    Ok(nodes)
+}
+
+/// A model config value as text, `None` when absent or not text.
+pub(crate) fn config_str(model: &Bound<'_, PyAny>, key: &str) -> PyResult<Option<String>> {
+    native(
+        model.py(),
+        "get_config_str",
+        &[
+            ("values", model.getattr("config")?.getattr("values")?),
+            ("key", text(model.py(), key)),
+        ],
+    )?
+    .extract()
+}
+
+/// The compiled object key of the model `name`.
+pub(crate) fn model_key<'py>(
+    py: Python<'py>,
+    name: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    call_with(
+        &imported(py, "sqlbuild.compiler.compile.models", "CompiledObjectKey")?,
+        &[
+            (
+                "resource_type",
+                imported(
+                    py,
+                    "sqlbuild.compiler.compile.types",
+                    "CompiledResourceType",
+                )?
+                .getattr("MODEL")?,
+            ),
+            ("name", name.clone()),
+        ],
+    )
+}

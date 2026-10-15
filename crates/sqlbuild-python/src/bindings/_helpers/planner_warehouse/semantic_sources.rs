@@ -1,0 +1,287 @@
+//! Complete missing source metadata in bounded, database-grouped batches.
+
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::planner_phases::objects::{text, tuple};
+use crate::bindings::_helpers::planner_warehouse::constants::ACTIVE_CATALOG;
+use crate::bindings::_helpers::planner_warehouse::snapshot::{columns_for, list_relations};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::pyfunction;
+use pyo3::types::PyDict as KeywordDict;
+use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use std::collections::BTreeSet;
+
+fn casefold(value: &Bound<'_, PyAny>) -> PyResult<String> {
+    value.call_method0("casefold")?.extract()
+}
+
+fn wanted_name<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let table = entry.getattr("table")?;
+    if table.is_truthy()? {
+        Ok(table)
+    } else {
+        entry.getattr("name")
+    }
+}
+
+fn matches(entry: &Bound<'_, PyAny>, relation: &Bound<'_, PyAny>) -> PyResult<bool> {
+    if casefold(&relation.getattr("name")?)? != casefold(&wanted_name(entry)?)? {
+        return Ok(false);
+    }
+    let schema = entry.getattr("schema")?;
+    if schema.is_none() {
+        return Ok(true);
+    }
+    let relation_schema = relation.getattr("schema")?;
+    let relation_schema = if relation_schema.is_truthy()? {
+        relation_schema
+    } else {
+        text(relation.py(), "")
+    };
+    Ok(casefold(&relation_schema)? == casefold(&schema)?)
+}
+
+fn sorted_texts<'py>(py: Python<'py>, values: BTreeSet<String>) -> PyResult<Bound<'py, PyAny>> {
+    tuple(py, values.iter().map(|value| text(py, value)).collect())
+}
+
+fn source_candidates<'py>(
+    (adapter, connection): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    database: &Bound<'py, PyAny>,
+    entries: &[Bound<'py, PyAny>],
+) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    let py = adapter.py();
+    let mut pending: Vec<Bound<'py, PyAny>> = entries.to_vec();
+    let mut relations: Vec<Bound<'py, PyAny>> = Vec::new();
+    let catalog = call_with(
+        &imported(py, ACTIVE_CATALOG.0, ACTIVE_CATALOG.1)?,
+        &[
+            ("adapter", adapter.clone()),
+            ("connection", connection.clone()),
+        ],
+    )?;
+    let mut scoped: Vec<_> = Vec::new();
+    for entry in entries {
+        if !entry.getattr("schema")?.is_none() {
+            scoped.push(entry.clone());
+        }
+    }
+    if !catalog.is_none() && catalog.getattr("schema_scoped")?.is_truthy()? && !scoped.is_empty() {
+        let mut schemas: BTreeSet<_> = BTreeSet::new();
+        let mut names: BTreeSet<_> = BTreeSet::new();
+        for entry in &scoped {
+            schemas.insert(
+                entry
+                    .getattr("schema")?
+                    .extract::<Option<String>>()?
+                    .unwrap_or_default(),
+            );
+            names.insert(wanted_name(entry)?.extract::<String>()?);
+        }
+        let listed = list_relations(
+            (adapter, connection),
+            database,
+            sorted_texts(py, schemas)?,
+            sorted_texts(py, names)?,
+        )?;
+        for relation in listed.try_iter()? {
+            relations.push(relation?);
+        }
+        let mut remaining: Vec<_> = Vec::new();
+        for entry in entries {
+            let mut found = false;
+            for relation in &relations {
+                if matches(entry, relation)? {
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                remaining.push(entry.clone());
+            }
+        }
+        pending = remaining;
+    }
+    if !pending.is_empty() {
+        let mut names: BTreeSet<_> = BTreeSet::new();
+        for entry in &pending {
+            names.insert(wanted_name(entry)?.extract::<String>()?);
+        }
+        let listed = list_relations(
+            (adapter, connection),
+            database,
+            py.None().into_bound(py),
+            sorted_texts(py, names)?,
+        )?;
+        for relation in listed.try_iter()? {
+            relations.push(relation?);
+        }
+    }
+    let unique = PyDict::new(py);
+    for relation in relations {
+        let identity = relation.getattr("identity")?;
+        if !unique.contains(&identity)? {
+            unique.set_item(identity, relation)?;
+        }
+    }
+    unique.values().try_iter()?.collect()
+}
+
+/// Source relation candidates by name; schema listings first answer schema-scoped catalogs.
+#[pyfunction]
+#[pyo3(signature = (*, adapter, connection, database, entries))]
+pub(crate) fn list_source_candidates<'py>(
+    adapter: &Bound<'py, PyAny>,
+    connection: &Bound<'py, PyAny>,
+    database: &Bound<'py, PyAny>,
+    entries: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let entries: Vec<Bound<'py, PyAny>> = entries.try_iter()?.collect::<PyResult<_>>()?;
+    tuple(
+        adapter.py(),
+        source_candidates((adapter, connection), database, &entries)?,
+    )
+}
+
+/// Reuse collected columns and inspect only selected, unresolved table sources.
+#[pyfunction]
+#[pyo3(name = "get_semantic_source_columns")]
+#[pyo3(signature = (**options))]
+pub(crate) fn semantic_source_columns<'py>(
+    py: pyo3::Python<'py>,
+    options: Option<Bound<'py, KeywordDict>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let args = KeywordArguments::read(
+        py,
+        "get_semantic_source_columns",
+        options,
+        (
+            &[
+                "project",
+                "adapter",
+                "connection",
+                "source_read_map",
+                "columns",
+                "selected_keys",
+            ],
+            &[],
+        ),
+    )?;
+    let project = &args.value("project")?;
+    let adapter = &args.value("adapter")?;
+    let connection = &args.value("connection")?;
+    let source_read_map = &args.value("source_read_map")?;
+    let columns = args.value("columns")?.downcast_into::<PyDict>()?;
+    let columns = &columns;
+    let selected_keys = &args.value("selected_keys")?;
+
+    let py = project.py();
+    if !project
+        .getattr("settings")?
+        .getattr("sql_analysis")?
+        .is_truthy()?
+        || connection.is_none()
+    {
+        return Ok(columns.clone());
+    }
+    let mut required: BTreeSet<String> = BTreeSet::new();
+    for model in project.getattr("models")?.try_iter()? {
+        let model = model?;
+        let analysis = model
+            .getattr("config")?
+            .getattr("values")?
+            .call_method1("get", ("sql_analysis",))?;
+        if !selected_keys.contains(model.getattr("key")?)?
+            || analysis.is(pyo3::types::PyBool::new(py, false))
+        {
+            continue;
+        }
+        for reference in model.getattr("references")?.try_iter()? {
+            let reference = reference?;
+            if reference.getattr("ref_kind")?.eq("source")? {
+                required.insert(reference.getattr("ref_name")?.extract()?);
+            }
+        }
+    }
+    let mut groups: Vec<(Bound<'py, PyAny>, Vec<Bound<'py, PyAny>>)> = Vec::new();
+    for name in required {
+        if columns.contains(&name)? {
+            continue;
+        }
+        let entry = source_read_map.call_method1("get", (&name,))?;
+        if entry.is_none()
+            || !entry.getattr("expression")?.is_none()
+            || entry.getattr("contract")?.eq("enforced")?
+        {
+            continue;
+        }
+        let database = entry.getattr("database")?;
+        let mut placed = false;
+        for (group, entries) in groups.iter_mut() {
+            if group.eq(&database)? {
+                entries.push(entry.clone());
+                placed = true;
+                break;
+            }
+        }
+        if !placed {
+            groups.push((database, vec![entry]));
+        }
+    }
+    let result = columns.copy()?;
+    for (database, entries) in groups {
+        let relations = source_candidates((adapter, connection), &database, &entries)?;
+        let mut chosen: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)> = Vec::new();
+        for entry in &entries {
+            let mut candidates: Vec<_> = Vec::new();
+            for relation in &relations {
+                if matches(entry, relation)? {
+                    candidates.push(relation.clone());
+                }
+            }
+            if candidates.len() == 1 {
+                let name = entry.getattr("name")?;
+                match chosen
+                    .iter_mut()
+                    .find(|(chosen_name, _)| chosen_name.eq(&name).unwrap_or(false))
+                {
+                    Some(existing) => existing.1 = candidates.remove(0),
+                    None => chosen.push((name, candidates.remove(0))),
+                }
+            }
+        }
+        let inspected = if chosen.is_empty() {
+            PyDict::new(py).into_any()
+        } else {
+            let unique = PyDict::new(py);
+            for (_, relation) in &chosen {
+                unique.set_item(relation, py.None())?;
+            }
+            columns_for(
+                (adapter, connection),
+                PyTuple::new(py, unique.keys())?.into_any(),
+            )?
+        };
+        for (name, relation) in chosen {
+            let lower = |value: Bound<'py, PyAny>| -> PyResult<Bound<'py, PyAny>> {
+                if value.is_truthy()? {
+                    value.call_method0("lower")
+                } else {
+                    Ok(py.None().into_bound(py))
+                }
+            };
+            let identity = PyTuple::new(
+                py,
+                [
+                    lower(relation.getattr("database")?)?,
+                    lower(relation.getattr("schema")?)?,
+                    relation.getattr("name")?.call_method0("lower")?,
+                ],
+            )?;
+            if inspected.contains(&identity)? {
+                result.set_item(name, inspected.get_item(identity)?)?;
+            }
+        }
+    }
+    Ok(result)
+}

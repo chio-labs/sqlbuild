@@ -13,23 +13,6 @@ class SemanticSourceBatchCase:
 
 
 @dataclass(frozen=True)
-class ConcurrentCursorBoundsTestCase:
-    description: str
-    relation_count: int
-    concurrency: int
-    failing_relations: frozenset[str]
-    expected_failure_relations: tuple[str, ...]
-    expected_start_progress: str
-
-
-@dataclass(frozen=True)
-class EligibleTargetMaxFailureTestCase:
-    description: str
-    failing_relation: str
-    expected_error_fragment: str
-
-
-@dataclass(frozen=True)
 class SemanticSourceSchemaCaseCase:
     description: str
     open_catalog: bool

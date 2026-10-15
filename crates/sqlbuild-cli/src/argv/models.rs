@@ -2,6 +2,8 @@
 
 use std::collections::HashMap;
 
+use sqlbuild_core::dbt_cli::models::DbtParsedFlags;
+
 /// How many command-line strings an action consumes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Nargs {
@@ -159,4 +161,39 @@ pub enum TypeFailure {
 pub struct ArgvOutcome {
     pub writes: Vec<(Stream, String)>,
     pub parsed: Result<Namespace, i64>,
+}
+
+/// Why a `sqb dbt` execution parse stopped before producing flags.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DbtExecutionFailure {
+    /// `-h` printed the help: `SystemExit` with this status.
+    Exit(i64),
+    /// `ArgumentParser.error`: the parser's `prog`, then the `ArgumentError` text.
+    Argument(String),
+    /// Strings before `--` that no declared flag consumed.
+    Unrecognized(Vec<String>),
+}
+
+/// The writes of a `sqb dbt` execution parse, then its flags or why it stopped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DbtExecutionOutcome {
+    pub writes: Vec<(Stream, String)>,
+    pub parsed: Result<DbtParsedFlags, DbtExecutionFailure>,
+}
+
+/// One `CliNamespace` attribute default, rebuilt fresh for every namespace.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NamespaceDefault {
+    None,
+    Bool(bool),
+    Int(i64),
+    Text(&'static str),
+    /// A new empty `list`.
+    EmptyList,
+    /// A new empty `dict`.
+    EmptyDict,
+    /// `CompileLineageMode.FAST`.
+    CompileLineageFast,
+    /// `ColumnLineageMode.RICH`.
+    ColumnLineageRich,
 }

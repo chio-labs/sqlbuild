@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
+from sqlbuild._native import CliNamespace
 from sqlbuild.cli.commands.types import (
     CompileLineageMode,
     DagCommandHandler,

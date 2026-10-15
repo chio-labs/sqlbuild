@@ -7,6 +7,11 @@ use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
 use pyo3::types::PyDict;
+
+use crate::bindings::_helpers::dbt_interop::reference_resolver::DbtCompileReferenceResolver;
+use crate::bindings::_helpers::dbt_interop::runtime_config::{
+    interop_adapter, manifest_path, parse_dbt_execution_args, plan_options, vars_mapping,
+};
 use pyo3::{pyfunction, wrap_pyfunction};
 use std::time::Instant;
 
@@ -66,55 +71,29 @@ pub(crate) fn resolve_dbt_execution_invocation<'py>(
     if !stream.is_truthy()? {
         stream = py.import("sys")?.getattr("stdout")?;
     }
-    let parsed = call_with(
-        &imported(
-            py,
-            "sqlbuild.integrations.dbt.main.cli._parse_execution_args",
-            "parse_dbt_execution_args",
-        )?,
-        &[
-            ("command", request.getattr("command")?),
-            ("args", request.getattr("args")?),
-        ],
-    )?;
+    let command = request.getattr("command")?;
+    let parsed = parse_dbt_execution_args(&command, &request.getattr("args")?)?;
     let routed = call_with(
         &imported(py, "sqlbuild._native", "route_dbt_interop_args")?,
-        &[("command", request.getattr("command")?), ("parsed", parsed)],
+        &[("command", command), ("parsed", parsed)],
     )?;
+    let project_dir = request.getattr("project_dir")?;
     let discovered = call_with(
         &imported(py, "sqlbuild._native", "discover_project_inputs")?,
-        &[("project_dir", request.getattr("project_dir")?)],
+        &[("project_dir", project_dir.clone())],
     )?;
-    let options = call_with(
-        &imported(
-            py,
-            "sqlbuild.integrations.dbt.main.config._resolve_plan_options",
-            "resolve_dbt_plan_options",
-        )?,
-        &[
-            ("project_dir", request.getattr("project_dir")?),
-            ("discovered_inputs", discovered.clone()),
-            ("dbt_args", routed.getattr("dbt_args")?),
-        ],
-    )?;
-    let vars = call_with(
-        &imported(
-            py,
-            "sqlbuild.integrations.dbt.main.config._resolve_vars_mapping",
-            "resolve_dbt_vars_mapping",
-        )?,
-        &[
-            (
-                "project_config",
-                discovered.getattr("project_config")?.getattr("dbt")?,
-            ),
-            (
-                "local_config",
-                discovered.getattr("local_config")?.getattr("dbt")?,
-            ),
-            ("dbt_args", routed.getattr("dbt_args")?),
-        ],
-    )?;
+    let dbt_args: Vec<String> = routed
+        .getattr("dbt_args")?
+        .try_iter()?
+        .map(|arg| arg?.extract())
+        .collect::<PyResult<_>>()?;
+    let options = plan_options(&project_dir, &discovered, &dbt_args)?;
+    let vars = vars_mapping(
+        &discovered.getattr("project_config")?.getattr("dbt")?,
+        &discovered.getattr("local_config")?.getattr("dbt")?,
+        &dbt_args,
+    )?
+    .into_any();
     let mut runner = request.getattr("dbt_runner")?;
     if !runner.is_truthy()? {
         runner = call_with(
@@ -189,14 +168,7 @@ fn load_compiled_dbt_manifest<'py>(
     completed(&callback, "Compiled dbt project.", start)?;
     let start = Instant::now();
     progress(&callback, "Loading dbt manifest...")?;
-    let path = call_with(
-        &imported(
-            py,
-            "sqlbuild.integrations.dbt.main.manifest._resolve_manifest_path",
-            "resolve_dbt_manifest_path",
-        )?,
-        &[("options", args.value("dbt_options")?)],
-    )?;
+    let path = manifest_path(&args.value("dbt_options")?)?;
     let manifest = call_with(
         &imported(py, "sqlbuild._native", "load_dbt_manifest_index")?,
         &[("manifest_path", path)],
@@ -224,25 +196,12 @@ fn compile_dbt_interop_project<'py>(
             ("local_config", discovered.getattr("local_config")?),
         ],
     )?;
-    let adapter = call_with(
-        &imported(
-            py,
-            "sqlbuild.integrations.dbt.main.runtime._resolve_interop_adapter",
-            "resolve_dbt_interop_adapter",
-        )?,
-        &[
-            ("adapter_name", name.clone()),
-            ("project_dir", args.value("project_dir")?),
-        ],
-    )?;
-    let resolver = call_with(
-        &imported(
-            py,
-            "sqlbuild.integrations.dbt.classes.dbt_compile_reference_resolver",
-            "DbtCompileReferenceResolver",
-        )?,
-        &[("dbt_manifest", args.value("manifest")?)],
-    )?;
+    let adapter = interop_adapter(&name, &args.value("project_dir")?)?;
+    let resolver = Bound::new(
+        py,
+        DbtCompileReferenceResolver::new(Some(args.value("manifest")?.unbind())),
+    )?
+    .into_any();
     let project = call_with(
         &imported(py, "sqlbuild._native", "build_compiled_project")?,
         &[

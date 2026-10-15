@@ -10,6 +10,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyList, PyString};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_cli::replay::main::write_launch_record::write_launch_record as write_record_file;
 
+use crate::bindings::_helpers::cli::launch_state::launch_record_path;
 use crate::bindings::_helpers::compile_driver::phases::{elapsed_ms, monotonic};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::compile_outputs::json_report::plain_json;
@@ -23,7 +24,6 @@ const COMPILE_CONSTANTS: &str = "sqlbuild.compiler.compile.constants";
 const RUNTIME_IDENTITY_MODULE: &str = "sqlbuild.cli.compile_reuse._helpers.runtime_identity";
 const STARTUP_INPUTS_MODULE: &str = "sqlbuild.cli.compile_reuse._helpers.startup_inputs";
 const CACHE_DIRECTORY_MODULE: &str = "sqlbuild.compiler.frontier.main.compiler_cache_directory";
-const LAUNCH_RECORD_PATH_MODULE: &str = "sqlbuild.cli.entry.main._launch_record_path";
 const COMPUTE_LOG_TEE_MODULE: &str = "sqlbuild.runtime.compute_logs.classes.text_tee";
 const OUTPUT_CAPTURE_CONSTANTS: &str = "sqlbuild.runtime.output_capture.constants";
 const SECONDS_FIELD: &str = "{seconds:.1f}";
@@ -199,8 +199,7 @@ fn write_record(
 /// Record this reusable compile for `sqb` when nothing it cannot replay took part.
 pub(crate) fn write_launch_record(attempt: &Bound<'_, PyAny>) -> PyResult<()> {
     let py: Python<'_> = attempt.py();
-    let path: Bound<'_, PyAny> =
-        imported(py, LAUNCH_RECORD_PATH_MODULE, "launch_record_path")?.call0()?;
+    let path: Bound<'_, PyAny> = launch_record_path(py)?;
     let native: Bound<'_, PyAny> = attempt.getattr("native")?;
     if path.is_none() || native.is_none() {
         return Ok(());
@@ -449,6 +448,61 @@ fn attempt_compile_reuse<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py
     Ok(attempt)
 }
 
+/// The compile command choices that decide whether and how a compile is reused.
+fn reuse_request<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = request.py();
+    let flags: Bound<'py, PyAny> = request.getattr("profile_flags")?;
+    let mut profiling: bool = false;
+    for name in [
+        "skip_discovery_sql_analysis",
+        "skip_column_inference",
+        "skip_contracts",
+        "skip_write",
+    ] {
+        profiling = profiling || flags.getattr(name)?.is_truthy()?;
+    }
+    let mut fields: Vec<(&str, Bound<'py, PyAny>)> = Vec::new();
+    for name in [
+        "project_dir",
+        "selected_target",
+        "json_output",
+        "no_color",
+        "manifest",
+        "dag_path",
+        "defer_to",
+        "no_cache",
+        "no_sql_validation",
+    ] {
+        fields.push((name, request.getattr(name)?));
+    }
+    fields.push((
+        "lineage_mode",
+        request
+            .getattr("lineage_mode")?
+            .getattr("value")?
+            .str()?
+            .into_any(),
+    ));
+    for name in ["select", "exclude", "cli_vars", "debug"] {
+        fields.push((name, request.getattr(name)?));
+    }
+    fields.push(("profiling", profiling.into_bound_py_any(py)?));
+    call_with(&imported(py, REUSE_MODELS, "CompileReuseRequest")?, &fields)
+}
+
+/// Run one compile command request, replaying the previous compile when nothing changed.
+#[pyfunction]
+fn run_compile<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = request.py();
+    let attempt: Bound<'py, PyAny> = attempt_compile_reuse(&reuse_request(request)?)?;
+    let exit_code: Bound<'py, PyAny> = attempt.getattr("exit_code")?;
+    if attempt.getattr("outcome")?.is(&outcome(py, HIT)?) && !exit_code.is_none() {
+        return Ok(exit_code);
+    }
+    imported(py, NATIVE_MODULE, "run_compile_command")?.call1((request, attempt))
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(attempt_compile_reuse, module)?)
+    module.add_function(wrap_pyfunction!(attempt_compile_reuse, module)?)?;
+    module.add_function(wrap_pyfunction!(run_compile, module)?)
 }

@@ -11,10 +11,10 @@ use sqlbuild_cli::argv::models::{ArgvOutcome, ArgvSettings, Stream, TypeFailure,
 use sqlbuild_cli::argv::types::ArgvHost;
 use sqlbuild_core::text::main::python_str_repr::python_str_repr;
 
+use crate::bindings::_helpers::cli::namespace::new_cli_namespace;
 use crate::bindings::_helpers::cli::surrogates::{python_text, rust_text, uses_placeholders};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
-const NAMESPACE_MODULE: &str = "sqlbuild.cli.commands.classes.cli_namespace";
 const ENTRY_MODELS_MODULE: &str = "sqlbuild.cli.entry.models";
 const INT_CONVERTER: &str = "int";
 const POSITIVE_INTEGER_CONVERTER: &str = "_positive_integer";
@@ -243,7 +243,7 @@ pub(crate) fn parse_cli_invocation<'py>(
     argv: Vec<Bound<'py, PyString>>,
     use_color: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let args: Bound<'py, PyAny> = imported(py, NAMESPACE_MODULE, "CliNamespace")?.call0()?;
+    let args: Bound<'py, PyAny> = new_cli_namespace(py)?;
     let defaults: Bound<'py, PyList> = py
         .get_type::<PyList>()
         .call1((args.getattr("__dict__")?.call_method0("items")?,))?

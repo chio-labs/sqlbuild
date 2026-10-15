@@ -6,7 +6,7 @@ import pytest
 from _pytest.capture import CaptureResult
 
 import sqlbuild._native as dbt_init_module
-import sqlbuild.integrations.dbt.main.profile.profile_init as dbt_profile_init
+import sqlbuild.integrations.dbt._helpers.profile.init as dbt_profile_init
 from sqlbuild.cli.commands.models import DbtInitCommandRequest
 from sqlbuild.integrations.dbt.exceptions import DbtProfileError
 from sqlbuild.integrations.dbt.models import DbtInitRequest, DbtInitResult
@@ -62,10 +62,10 @@ def test_given_dbt_init_when_running_then_outputs_progress_and_dbt_first_next_st
             toml='name = "analytics"\n',
         )
 
-    monkeypatch.setattr(dbt_profile_init, "run_dbt_profile_init", run_dbt_profile_init)
+    monkeypatch.setattr(dbt_profile_init, "build_dbt_init_project", run_dbt_profile_init)
     monkeypatch.setattr(
         dbt_profile_init,
-        "_validate_dbt_profile_init_request",
+        "validate_dbt_init_project",
         lambda *, request: None,
     )
 
@@ -136,10 +136,10 @@ def test_given_dbt_init_dry_run_when_running_then_outputs_preview_document(
             dry_run=True,
         )
 
-    monkeypatch.setattr(dbt_profile_init, "run_dbt_profile_init", run_dbt_profile_init)
+    monkeypatch.setattr(dbt_profile_init, "build_dbt_init_project", run_dbt_profile_init)
     monkeypatch.setattr(
         dbt_profile_init,
-        "_validate_dbt_profile_init_request",
+        "validate_dbt_init_project",
         lambda *, request: None,
     )
 
@@ -210,10 +210,10 @@ def test_given_color_terminal_when_running_dbt_init_then_it_styles_output(
         )
 
     use_color_terminal(monkeypatch)
-    monkeypatch.setattr(dbt_profile_init, "run_dbt_profile_init", run_dbt_profile_init)
+    monkeypatch.setattr(dbt_profile_init, "build_dbt_init_project", run_dbt_profile_init)
     monkeypatch.setattr(
         dbt_profile_init,
-        "_validate_dbt_profile_init_request",
+        "validate_dbt_init_project",
         lambda *, request: None,
     )
 
@@ -273,10 +273,10 @@ def test_given_dbt_project_in_cwd_when_running_dbt_init_then_project_dir_default
 
     monkeypatch.setattr(
         dbt_profile_init,
-        "_validate_dbt_profile_init_request",
+        "validate_dbt_init_project",
         validate_dbt_profile_init_request,
     )
-    monkeypatch.setattr(dbt_profile_init, "run_dbt_profile_init", run_dbt_profile_init)
+    monkeypatch.setattr(dbt_profile_init, "build_dbt_init_project", run_dbt_profile_init)
 
     exit_code: int = dbt_init_module.run_dbt_init_command(
         DbtInitCommandRequest(
@@ -319,10 +319,10 @@ def test_given_invalid_dbt_init_inputs_when_running_then_validation_happens_befo
 
     monkeypatch.setattr(
         dbt_profile_init,
-        "_validate_dbt_profile_init_request",
+        "validate_dbt_init_project",
         validate_dbt_profile_init_request,
     )
-    monkeypatch.setattr(dbt_profile_init, "run_dbt_profile_init", run_dbt_profile_init)
+    monkeypatch.setattr(dbt_profile_init, "build_dbt_init_project", run_dbt_profile_init)
 
     with pytest.raises(DbtProfileError, match=test_case.expected_error_fragment):
         dbt_init_module.run_dbt_init_command(

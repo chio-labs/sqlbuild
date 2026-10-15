@@ -1,0 +1,220 @@
+//! Warehouse source relation listing and column gathering for planning.
+
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::planner_phases::objects::{frozenset, text, tuple};
+use crate::bindings::_helpers::planner_warehouse::constants::{
+    COLUMN_INFO, METADATA_NAME_FILTER_LIMIT, RELATION_LOOKUP,
+};
+use crate::bindings::_helpers::planner_warehouse::snapshot::{columns_for, list_relations};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::pyfunction;
+use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use std::collections::{BTreeSet, HashSet};
+
+fn entries_of<'py>(
+    project: &Bound<'py, PyAny>,
+    source_entries: Option<Bound<'py, PyAny>>,
+) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    match source_entries.filter(|entries| !entries.is_none()) {
+        Some(entries) => entries.try_iter()?.collect(),
+        None => project
+            .getattr("sources")?
+            .try_iter()?
+            .map(|source| source?.getattr("source_entry"))
+            .collect(),
+    }
+}
+
+fn table_name(entry: &Bound<'_, PyAny>) -> PyResult<String> {
+    let table = entry.getattr("table")?;
+    if table.is_none() {
+        entry.getattr("name")?.extract()
+    } else {
+        table.extract()
+    }
+}
+
+fn database_of(entry: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
+    let database = entry.getattr("database")?;
+    if database.is_truthy()? {
+        Ok(Some(database.extract()?))
+    } else {
+        Ok(None)
+    }
+}
+
+fn name_filter(
+    entries: &[Bound<'_, PyAny>],
+    database: Option<&str>,
+    schemas: &BTreeSet<String>,
+) -> PyResult<Option<BTreeSet<String>>> {
+    let mut names: BTreeSet<_> = BTreeSet::new();
+    for entry in entries {
+        if !entry.getattr("expression")?.is_none() {
+            continue;
+        }
+        let schema: Option<String> = entry.getattr("schema")?.extract()?;
+        if !schema.is_some_and(|schema| schemas.contains(&schema)) {
+            continue;
+        }
+        if database_of(entry)?.as_deref() != database {
+            continue;
+        }
+        names.insert(table_name(entry)?);
+    }
+    if names.is_empty() || names.len() > METADATA_NAME_FILTER_LIMIT {
+        return Ok(None);
+    }
+    Ok(Some(names))
+}
+
+fn names_tuple<'py>(py: Python<'py>, names: &BTreeSet<String>) -> PyResult<Bound<'py, PyAny>> {
+    tuple(py, names.iter().map(|name| text(py, name)).collect())
+}
+
+/// Source columns and the names of sources the relation listing found.
+pub(crate) fn source_inspection<'py>(
+    project: &Bound<'py, PyAny>,
+    (adapter, connection): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    source_entries: Option<Bound<'py, PyAny>>,
+) -> PyResult<(Bound<'py, PyDict>, Bound<'py, PyAny>)> {
+    let py = project.py();
+    let entries = entries_of(project, source_entries)?;
+    let result = PyDict::new(py);
+    let mut listed: Vec<Bound<'py, PyAny>> = Vec::new();
+    let mut listed_names: HashSet<String> = HashSet::new();
+    let mut groups: Vec<(String, BTreeSet<String>)> = Vec::new();
+    let column_info = imported(py, COLUMN_INFO.0, COLUMN_INFO.1)?;
+    for entry in &entries {
+        let expression = entry.getattr("expression")?;
+        if !expression.is_none() {
+            if entry.getattr("type_enforcement")?.is_truthy()? {
+                let names = call_with(
+                    &adapter.getattr("query_column_names")?,
+                    &[("connection", connection.clone()), ("sql", expression)],
+                )?;
+                let mut columns: Vec<_> = Vec::new();
+                for name in names.try_iter()? {
+                    columns.push(call_with(
+                        &column_info,
+                        &[("name", name?), ("type", text(py, ""))],
+                    )?);
+                }
+                result.set_item(entry.getattr("name")?, tuple(py, columns)?)?;
+            }
+            continue;
+        }
+        let schema = entry.getattr("schema")?;
+        if schema.is_none() {
+            continue;
+        }
+        let key: String = entry
+            .getattr("database")?
+            .extract::<Option<String>>()?
+            .unwrap_or_default();
+        let schema: String = schema.extract()?;
+        match groups.iter_mut().find(|(group, _)| *group == key) {
+            Some((_, schemas)) => {
+                schemas.insert(schema);
+            }
+            None => groups.push((key, BTreeSet::from([schema]))),
+        }
+    }
+    let lookup = imported(py, RELATION_LOOKUP.0, RELATION_LOOKUP.1)?.getattr("key")?;
+    for (key, schemas) in groups {
+        let database = (!key.is_empty()).then_some(key.as_str());
+        let database_value = match database {
+            Some(database) => text(py, database),
+            None => py.None().into_bound(py),
+        };
+        let mut scoped: Vec<(String, Bound<'py, PyAny>, Bound<'py, PyAny>)> = Vec::new();
+        for entry in &entries {
+            if !entry.getattr("expression")?.is_none() || database_of(entry)?.as_deref() != database
+            {
+                continue;
+            }
+            let schema: Option<String> = entry.getattr("schema")?.extract()?;
+            if !schema.is_some_and(|schema| schemas.contains(&schema)) {
+                continue;
+            }
+            let identity = call_with(
+                &lookup,
+                &[
+                    ("database", database_value.clone()),
+                    ("schema", entry.getattr("schema")?),
+                    ("name", text(py, &table_name(entry)?)),
+                ],
+            )?;
+            let entry_name: String = entry.getattr("name")?.extract()?;
+            match scoped.iter_mut().find(|(name, _, _)| *name == entry_name) {
+                Some(existing) => existing.2 = identity,
+                None => scoped.push((entry_name, entry.getattr("name")?, identity)),
+            }
+        }
+        let relations = list_relations(
+            (adapter, connection),
+            &database_value,
+            names_tuple(py, &schemas)?,
+            match name_filter(&entries, database, &schemas)? {
+                Some(names) => names_tuple(py, &names)?,
+                None => py.None().into_bound(py),
+            },
+        )?;
+        let relations: Vec<Bound<'py, PyAny>> = relations.try_iter()?.collect::<PyResult<_>>()?;
+        let identities = frozenset(
+            py,
+            &relations
+                .iter()
+                .map(|relation| relation.getattr("identity"))
+                .collect::<PyResult<Vec<_>>>()?,
+        )?;
+        for (text_name, name, identity) in &scoped {
+            if identities.contains(identity)? && listed_names.insert(text_name.clone()) {
+                listed.push(name.clone());
+            }
+        }
+        let wanted = frozenset(
+            py,
+            &scoped
+                .iter()
+                .map(|(_, _, identity)| identity.clone())
+                .collect::<Vec<_>>(),
+        )?;
+        let mut chosen: Vec<_> = Vec::new();
+        for relation in &relations {
+            if wanted.contains(relation.getattr("identity")?)? {
+                chosen.push(relation.clone());
+            }
+        }
+        let all = columns_for((adapter, connection), tuple(py, chosen)?)?;
+        for (_, name, identity) in &scoped {
+            if all.contains(identity)? {
+                result.set_item(name, all.get_item(identity)?)?;
+            }
+        }
+    }
+    Ok((result, frozenset(py, &listed)?))
+}
+
+#[pyfunction]
+#[pyo3(signature = (*, project, adapter, connection, source_entries))]
+pub(crate) fn gather_source_inspection<'py>(
+    project: &Bound<'py, PyAny>,
+    adapter: &Bound<'py, PyAny>,
+    connection: &Bound<'py, PyAny>,
+    source_entries: Option<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let (columns, listed) = source_inspection(project, (adapter, connection), source_entries)?;
+    Ok(PyTuple::new(project.py(), [columns.into_any(), listed])?.into_any())
+}
+
+#[pyfunction]
+#[pyo3(signature = (*, project, adapter, connection, source_entries=None))]
+pub(crate) fn gather_source_columns<'py>(
+    project: &Bound<'py, PyAny>,
+    adapter: &Bound<'py, PyAny>,
+    connection: &Bound<'py, PyAny>,
+    source_entries: Option<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    Ok(source_inspection(project, (adapter, connection), source_entries)?.0)
+}

@@ -618,7 +618,7 @@ const COMPILE_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const COMPILE_ROUTE: Route = routed(
     "run_compile",
-    ("sqlbuild.cli.compile.main.run", "run_compile"),
+    ("sqlbuild._native", "run_compile"),
     &COMPILE_ARGUMENTS,
     REQUEST_SHAPE,
 );

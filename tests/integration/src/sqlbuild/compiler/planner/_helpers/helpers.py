@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import threading
+import time
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlbuild._native import (
     compiled_model_record,
+    gather_warehouse_snapshot,
     project_with,
 )
 from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.adapter.relations.main.open_inspection_catalog import open_inspection_catalog
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
@@ -34,6 +39,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSeedFile,
     DiscoveredSourceFile,
 )
+from sqlbuild.compiler.planner.models import WarehouseSnapshot
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import (
     SchemaColumn,
@@ -258,3 +264,161 @@ def build_deferred_locations_from_map(
         )
         for name, qualified in targets.items()
     }
+
+
+class ConcurrentDuckDbAdapter(DuckDbAdapter):
+    """DuckDB adapter allowing four concurrent inspection reads."""
+
+    metadata_inspection_concurrency: ClassVar[int] = 4
+
+
+class _FailingFetch:
+    def fetchall(self) -> list[Any]:
+        raise RuntimeError("fetch failed")
+
+
+class _Rows:
+    def __init__(self, rows: list[Any]) -> None:
+        self._rows: list[Any] = rows
+
+    def fetchall(self) -> list[Any]:
+        return self._rows
+
+
+def _read_rows(connection: Any, sql: str, lock: threading.Lock) -> Any:
+    with lock:
+        return _Rows(connection.execute(sql).fetchall())
+
+
+def _raise_unreadable(connection: Any, sql: str, lock: threading.Lock) -> Any:
+    del connection, lock
+    raise RuntimeError(f"cannot read {sql.split(' FROM ', 1)[1]}")
+
+
+def _failing_fetch(connection: Any, sql: str, lock: threading.Lock) -> Any:
+    del connection, sql, lock
+    return _FailingFetch()
+
+
+_CURSOR_ANSWERS: dict[tuple[bool, bool], Callable[[Any, str, threading.Lock], Any]] = {
+    (False, False): _read_rows,
+    (False, True): _read_rows,
+    (True, False): _raise_unreadable,
+    (True, True): _failing_fetch,
+}
+
+
+class TrackingCursorExecute:
+    """Execute double that tracks overlapping cursor reads and fails chosen relations."""
+
+    def __init__(
+        self,
+        *,
+        failing_relations: frozenset[str] = frozenset(),
+        failing_eligible_relations: frozenset[str] = frozenset(),
+        fail_on_fetch: bool = False,
+    ) -> None:
+        self._failing: tuple[frozenset[str], frozenset[str]] = (
+            failing_relations,
+            failing_eligible_relations,
+        )
+        self._fail_on_fetch: bool = fail_on_fetch
+        self._lock: threading.Lock = threading.Lock()
+        self._active: int = 0
+        self.max_active: int = 0
+        self.cursor_sql: list[str] = []
+
+    def __call__(self, *, connection: Any, sql: str) -> Any:
+        eligible: bool = "<=" in sql
+        tracked: bool = eligible or "AS _max" in sql
+        return (self._untracked, self._tracked)[tracked](connection, sql, eligible)
+
+    def _untracked(self, connection: Any, sql: str, eligible: bool) -> Any:
+        del eligible
+        return _read_rows(connection, sql, self._lock)
+
+    def _tracked(self, connection: Any, sql: str, eligible: bool) -> Any:
+        with self._lock:
+            self._active += 1
+            self.max_active = max(self.max_active, self._active)
+            self.cursor_sql.append(sql)
+        try:
+            time.sleep(0.01)
+            relation: str = sql.split(" FROM ", 1)[1].split(" ", 1)[0]
+            failing: bool = relation in self._failing[eligible]
+            return _CURSOR_ANSWERS[(failing, self._fail_on_fetch)](connection, sql, self._lock)
+        finally:
+            with self._lock:
+                self._active -= 1
+
+
+def create_events(connection: Any, count: int) -> None:
+    """Create one small events table per fanned model."""
+
+    index: int
+    for index in range(count):
+        connection.execute(f"CREATE TABLE staging.events_{index} (event_time TIMESTAMP)")
+        connection.execute(
+            f"INSERT INTO staging.events_{index} VALUES ('2024-01-01'), "
+            f"('2024-03-0{index % 9 + 1}')"
+        )
+
+
+def gather_with_catalog(
+    *,
+    project: CompiledProjectView,
+    adapter: DuckDbAdapter,
+    connection: Any,
+    execute: TrackingCursorExecute,
+    progress: list[str],
+) -> WarehouseSnapshot:
+    """Gather a snapshot inside an inspection catalog of the adapter."""
+
+    with open_inspection_catalog(adapter=adapter, connection=connection):
+        return gather_warehouse_snapshot(
+            project=project,
+            adapter=adapter,
+            connection=connection,
+            execute=execute,
+            on_progress=progress.append,
+        )
+
+
+def unreadable_inputs(snapshot: WarehouseSnapshot) -> dict[str, tuple[str, ...]]:
+    """Return the unreadable watermark inputs of every model that has some."""
+
+    return dict(
+        filter(
+            lambda item: bool(item[1]),
+            (
+                (name, cursor.unreadable_input_names)
+                for name, cursor in snapshot.cursor_snapshots.items()
+            ),
+        )
+    )
+
+
+def cursor_progress(progress: list[str]) -> list[str]:
+    """Return the cursor-bound progress messages."""
+
+    return list(filter(lambda message: "cursor bounds" in message, progress))
+
+
+def build_fanned_cursor_project(
+    count: int, *, extra_config: dict[str, object] | None = None
+) -> CompiledProjectView:
+    """Build one incremental model per upstream events table."""
+
+    return build_project_with_targets(
+        model_locations={f"events_{index}": "staging" for index in range(count)},
+        incremental_models=tuple(
+            _IncrementalModelSpec(
+                name=f"daily_{index}",
+                schema="marts",
+                cursor="event_time",
+                ref_names=(f"events_{index}",),
+                extra_config=extra_config or {},
+            )
+            for index in range(count)
+        ),
+    )

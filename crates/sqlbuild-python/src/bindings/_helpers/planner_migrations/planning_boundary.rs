@@ -14,11 +14,7 @@ fn migration_missing_origin_policy<'py>(
     runtime: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(
-            runtime.py(),
-            "sqlbuild.compiler.planner._helpers.planning.retention",
-            "effective_target_config",
-        )?,
+        &imported(runtime.py(), "sqlbuild._native", "effective_target_config")?,
         &[("runtime", runtime.clone())],
     )?
     .getattr("missing_migration_origin")
@@ -70,7 +66,7 @@ fn migration_redirected_cursor_snapshots<'py>(
     let full_refresh = call_with(
         &imported(
             py,
-            "sqlbuild.compiler.planner._helpers.planning.full_refresh",
+            "sqlbuild._native",
             "effectively_full_refreshed_model_names",
         )?,
         &[
@@ -79,11 +75,7 @@ fn migration_redirected_cursor_snapshots<'py>(
         ],
     )?;
     call_with(
-        &imported(
-            py,
-            "sqlbuild.compiler.planner._helpers.warehouse.snapshot",
-            "gather_redirected_cursor_snapshots",
-        )?,
+        &imported(py, "sqlbuild._native", "gather_redirected_cursor_snapshots")?,
         &[
             ("project", project),
             ("adapter", runtime.getattr("adapter")?),

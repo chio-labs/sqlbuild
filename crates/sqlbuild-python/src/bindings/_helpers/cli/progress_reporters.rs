@@ -1,6 +1,8 @@
 //! Warehouse connection and planning phase progress reporters.
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, PoisonError};
+use std::time::Instant;
 
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
@@ -199,7 +201,61 @@ impl PlanningProgressReporter {
     }
 }
 
+/// Render timed `sqb dbt init` phase progress.
+#[pyclass(module = "sqlbuild._native", frozen)]
+pub(crate) struct DbtInitProgressReporter {
+    stream: Py<PyAny>,
+    status: Py<PyAny>,
+    started: AtomicBool,
+    phase_start: Mutex<Option<Instant>>,
+}
+
+#[pymethods]
+impl DbtInitProgressReporter {
+    #[new]
+    #[pyo3(signature = (*, stream, use_color))]
+    fn new(stream: &Bound<'_, PyAny>, use_color: bool) -> PyResult<Self> {
+        Ok(Self {
+            stream: stream.clone().unbind(),
+            status: status_reporter(stream, use_color)?.unbind(),
+            started: AtomicBool::new(false),
+            phase_start: Mutex::new(None),
+        })
+    }
+
+    fn start(&self, py: Python<'_>, message: &str) -> PyResult<()> {
+        if !self.started.load(Ordering::SeqCst) {
+            let stream: &Bound<'_, PyAny> = self.stream.bind(py);
+            stream.call_method1("write", ("\n",))?;
+            stream.call_method0("flush")?;
+            self.started.store(true, Ordering::SeqCst);
+        }
+        *self
+            .phase_start
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(Instant::now());
+        self.status.bind(py).call_method1("start", (message,))?;
+        Ok(())
+    }
+
+    fn complete(&self, py: Python<'_>, message: &str) -> PyResult<()> {
+        let phase_start: Option<Instant> = self
+            .phase_start
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        let elapsed_seconds: f64 = phase_start.map_or(0.0, |start| start.elapsed().as_secs_f64());
+        let keywords: Bound<'_, PyDict> = PyDict::new(py);
+        keywords.set_item("message", format!("{message} ({elapsed_seconds:.2}s)"))?;
+        self.status
+            .bind(py)
+            .call_method("complete", (), Some(&keywords))?;
+        Ok(())
+    }
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<ConnectionProgressReporter>()?;
+    module.add_class::<DbtInitProgressReporter>()?;
     module.add_class::<PlanningProgressReporter>()
 }

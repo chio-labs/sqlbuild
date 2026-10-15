@@ -20,3 +20,10 @@ pub(super) struct ConfigTestCase {
     pub(super) choice: Result<DbtConfigChoice, DbtCliError>,
     pub(super) expected_choice: Result<DbtConfigChoice, &'static str>,
 }
+
+pub(super) struct FlagValueTestCase {
+    pub(super) description: &'static str,
+    pub(super) args: &'static [&'static str],
+    pub(super) flag: &'static str,
+    pub(super) expected_value: Option<&'static str>,
+}

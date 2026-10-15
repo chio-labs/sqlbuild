@@ -21,10 +21,12 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::compile_outputs::runtime_target::{
     write_python_check_runtime_target, write_runtime_target,
 };
+use crate::bindings::_helpers::cost_report::degradation::{
+    finalize_build_cost as finalize_cost, render_build_cost,
+};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
-const COST_COLLECTION_MODULE: &str = "sqlbuild.cli.commands._helpers.cost.collection";
 const COST_TYPES: &str = "sqlbuild.cost.types";
 const BUILD_MODELS: &str = "sqlbuild.executor.build.models";
 const BUILD_TYPES: &str = "sqlbuild.executor.build.types";
@@ -77,7 +79,7 @@ pub(crate) fn finalize_build_cost<'py>(
         &imported(py, COMMAND_MODELS, "BuildCostFinalization")?,
         &fields,
     )?;
-    imported(py, COST_COLLECTION_MODULE, "finalize_build_cost")?.call1((finalization,))
+    finalize_cost(&finalization)
 }
 
 fn cost_status<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
@@ -370,14 +372,7 @@ pub(crate) fn complete_direct_build<'py>(
         ],
     )?;
     write_json(context, payload)?;
-    call_with(
-        &imported(py, COST_COLLECTION_MODULE, "render_build_cost")?,
-        &[
-            ("record", record),
-            ("output_stream", context.stream.clone()),
-            ("use_color", boolean(py, context.use_color)),
-        ],
-    )?;
+    render_build_cost(&record, &context.stream, context.use_color)?;
     if context.verbose {
         let timings: Bound<'py, PyAny> = result.getattr("timings")?;
         let seconds = |name: &str| -> PyResult<Option<f64>> { timings.getattr(name)?.extract() };

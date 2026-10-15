@@ -22,10 +22,10 @@ from sqlbuild.adapter.contract.types import (
     TypeDialect,
 )
 from sqlbuild.adapter.relations.models import InspectionQueryRecord
-from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.models import (
     AuditCommandRequest,
     BuildCommandRequest,
+    BuildCostFinalization,
     CheckCommandRequest,
     CloneCommandRequest,
     ContractCommandRequest,
@@ -206,7 +206,6 @@ from sqlbuild.compiler.pipeline.models import (
     PythonRunPlanOutputs,
     StaticCommandContext,
 )
-from sqlbuild.compiler.planner.classes.migration_fingerprint_cache import MigrationFingerprintCache
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
@@ -220,6 +219,7 @@ from sqlbuild.compiler.planner.models import (
     CursorInputRelation,
     CursorOverridePair,
     CursorOverrides,
+    CursorSnapshotScope,
     DeferralInputs,
     DirectModelVersionIdentities,
     EmptyCursorInputDecision,
@@ -246,12 +246,21 @@ from sqlbuild.compiler.planner.models import (
     ParsedSelector,
     PathSelector,
     PlanEntryBuildInputs,
+    PlannedSqlTests,
+    PlannerChangeReconciliation,
     PlannerChangeResults,
+    PlannerEntryResults,
+    PlannerIdentityContext,
     PlannerOverrides,
+    PlannerPolicies,
     PlannerRelationsContext,
     PlannerResolvedActions,
     PlannerRuntime,
     PlannerScope,
+    PlannerScopePruningResult,
+    PlannerScopeResolution,
+    PlannerSelection,
+    PlannerWarehouseState,
     PlanOutput,
     PlanWarning,
     QueryShape,
@@ -259,6 +268,7 @@ from sqlbuild.compiler.planner.models import (
     RelationFixtureCompletion,
     RelationFixtureDiagnostic,
     RelationFixturePlanningContext,
+    RetentionPlanEntry,
     ScenarioArtifactIdentity,
     ScenarioExecutionPlan,
     ScenarioFixturePlan,
@@ -275,6 +285,7 @@ from sqlbuild.compiler.planner.models import (
     SqlTestPlanEntry,
     SqlTestPlanResult,
     SqlTestSelection,
+    TableTypePlanEntry,
     UnitTestSelectorSplit,
     WarehouseFingerprints,
     WarehouseSnapshot,
@@ -414,6 +425,7 @@ from sqlbuild.lint.types import RelationKeyRow, RelationKeys
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.presentation.types import CompletionState
+from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.rule_engine.models import (
     Finding,
@@ -1623,6 +1635,7 @@ class NativeReuseAttempt:
     def record(self, record: dict[str, object]) -> tuple[str, int]: ...
 
 def check_compile_reuse(check: dict[str, object]) -> NativeReuseAttempt: ...
+def run_compile(request: CompileCommandRequest) -> int: ...
 def attempt_compile_reuse(*, request: CompileReuseRequest) -> CompileReuseAttempt: ...
 
 class CompileArtifactWrites:
@@ -1741,6 +1754,21 @@ def read_cost_run(*, project_dir: Path, run_id: str) -> CostRunRecord | None: ..
 def list_cost_runs(*, project_dir: Path) -> tuple[CostRunRecord, ...]: ...
 def resolve_cost_run(*, project_dir: Path, selector: str) -> CostRunRecord | None: ...
 def format_cost_json(record: CostRunRecord) -> str: ...
+def resolve_defer_clone_selection(*, scope: PlannerScope) -> tuple[list[str], list[str], int]: ...
+def run_check_read_side_dependencies(
+    *,
+    adapter: BaseAdapter,
+    connection_config: dict[str, object],
+    connection: Any,
+    pipeline_result: CompilePipelineResult,
+    python_graph: PythonNodeGraph,
+    lifecycle_plan: PythonSqlRunLifecyclePlan,
+    relation_targets: dict[SqlResourceRef, str],
+    validation_refs: frozenset[SqlResourceRef] | None = None,
+    project_relations: dict[SqlResourceRef, str] | None = None,
+    providers: ProviderContainer | None = None,
+) -> tuple[PythonNodeExecutionResult, ...]: ...
+def finalize_build_cost(finalization: BuildCostFinalization) -> CostRunRecord | None: ...
 def persist_cost_run(
     *, project_dir: Path, record: CostRunRecord, output_stream: TextIO, stage: str
 ) -> None: ...
@@ -2139,6 +2167,45 @@ def parse_dbt_ls_json_lines(*, stdout: str) -> tuple[DbtLsNode, ...]: ...
 def route_dbt_interop_args(
     *, command: DbtInteropCommand | str, parsed: DbtInteropParsedArgs
 ) -> DbtInteropRoutedArgs: ...
+def parse_dbt_execution_args(
+    *, command: DbtInteropCommand | str, args: Sequence[str]
+) -> DbtInteropParsedArgs: ...
+def resolve_dbt_vars_mapping(
+    *, project_config: DbtConfig, local_config: LocalDbtConfig, dbt_args: Sequence[str]
+) -> dict[str, object]: ...
+def resolve_raw_dbt_profile_connection(
+    *,
+    raw_config: dict[str, object],
+    project_dir: Path,
+    adapter_name: str,
+    project_config: ProjectConfig,
+    cli_vars: dict[str, object] | None = None,
+) -> NormalizedDbtProfileConnection | None: ...
+
+class DbtCompileReferenceResolver:
+    def __init__(self, *, dbt_manifest: DbtManifestIndex | None) -> None: ...
+    def validate_model_names(self, *, known_model_names: set[str]) -> None: ...
+    def extend_sql_test_model_names(self, *, known_model_names: set[str]) -> set[str]: ...
+    def extend_sql_test_source_names(self, *, known_source_names: set[str]) -> set[str]: ...
+    def extend_sql_test_seed_names(self, *, known_seed_names: set[str]) -> set[str]: ...
+    def validate_reference(
+        self,
+        *,
+        ref_kind: str,
+        ref_name: str,
+        ref_package: str | None,
+        owner_relative_sql_path: Path,
+    ) -> None: ...
+    def resolve_reference(
+        self, *, ref_kind: str, ref_name: str, ref_package: str | None
+    ) -> str | None: ...
+
+def build_compile_reference_resolver(
+    *, manifest_contents: str | None
+) -> ExternalSqlReferenceResolver | None: ...
+def resolve_external_sql_reference_resolver(
+    *, project_dir: Path, discovered_inputs: DiscoveredProjectInputs
+) -> ExternalSqlReferenceResolver | None: ...
 def resolve_dbt_config(
     *,
     project_root: Path,
@@ -2319,6 +2386,179 @@ def render_dbt_node_result(
 def format_dbt_active_node_status(
     *, active_nodes: Sequence[tuple[str, float]], now: float
 ) -> str: ...
+
+class CliNamespace:
+    command: str | None
+    project_dir: str | None
+    dbt_project_dir: str | None
+    dbt_profiles_dir: str | None
+    dbt_target: str | None
+    dbt_profile: str | None
+    sqb_output_dir: str | None
+    dry_run: bool
+    overwrite: bool
+    skip_dbt_debug: bool
+    no_sql_validation: bool
+    no_cache: bool
+    defer_to: str | None
+    defer_clone_from: str | None
+    defer_sources_to: str | None
+    target: str | None
+    warehouse: str | None
+    case: str | None
+    inspect: bool
+    target_range: str | None
+    from_target: str | None
+    to_target: str | None
+    hard_copy: bool
+    json: bool
+    json_output: Path | None
+    event_output: Path | None
+    manifest: bool
+    dag: str | None
+    compile_lineage_mode: CompileLineageMode
+    profile_skip_discovery_sql_analysis: bool
+    profile_skip_column_inference: bool
+    profile_skip_contracts: bool
+    profile_skip_write: bool
+    start_cursor: str | None
+    end_cursor: str | None
+    start_cursor_ts: str | None
+    max_microbatches: int | None
+    end_cursor_ts: str | None
+    start_cursor_int: str | None
+    end_cursor_int: str | None
+    no_color: bool
+    fail_fast: bool
+    full_refresh: bool
+    as_target: str | None
+    selection_diagnostics: bool
+    include_python: bool
+    load_sources: bool | None
+    reload: bool
+    run_tests: bool
+    run_audits: bool
+    allow_snapshot_full_refresh: bool
+    allow_table_type_downgrade: bool
+    allow_retention_decrease: bool
+    allow_missing_migration_origin: bool
+    allow_snapshot_schema_change: bool
+    concurrency: int | None
+    verbose: bool
+    debug: bool
+    auto_approve: bool
+    retention_days: int | None
+    direct_state_history_versions: int | None
+    drop_old_name_views: list[str]
+    bounded: str | None
+    max_column_examples: int | None
+    max_row_only_examples: int | None
+    sample_rows: int | None
+    sample_seed: int | None
+    exhaustive: bool
+    max_models: int | None
+    max_columns: int | None
+    query_sql: str | None
+    query_file: str | None
+    query_format: str
+    query_limit: int | None
+    query_no_limit: bool
+    cost_selector: str
+    refactor_target: str | None
+    refactor_new_name: str | None
+    refactor_destination: str | None
+    refactor_cascade: bool
+    cost_limit: int | None
+    cost_no_limit: bool
+    cost_sort: str | None
+    cost_order: str | None
+    cost_since: str | None
+    cost_until: str | None
+    lineage_targets: list[str]
+    lineage_format: str
+    lineage_direction: str | None
+    lineage_depth: str
+    lineage_mode: ColumnLineageMode
+    lineage_include_uses: bool
+    no_connection: bool
+    fail_on_error: bool
+    fail_on_stale: bool
+    state: bool
+    full: bool
+    schema_only: bool
+    left_query: str | None
+    left_query_file: Path | None
+    left_label: str | None
+    right_query: str | None
+    right_query_file: Path | None
+    right_label: str | None
+    key: list[str]
+    unkeyed: bool
+    exclude_column: list[str]
+    tolerance: list[str]
+    max_value_length: int | None
+    no_example_values: bool
+    full_example_values: bool
+    playground_path: str
+    playground_template: str
+    scenario_command: str | None
+    scenario_selector: list[str]
+    scenario_retain: bool
+    scenario_namespace: str | None
+    scenario_local: bool
+    scenario_strict: bool
+    scenario_sync_snapshots: bool
+    scenario_refresh: bool
+    scenario_force: bool
+    scenario_max_snapshot_rows: int | None
+    scenario_max_snapshot_total_rows: int | None
+    scenario_max_snapshot_bytes: int | None
+    scenario_max_snapshot_total_bytes: int | None
+    skills_global: bool
+    skills_target: list[str]
+    skills_force: bool
+    select: list[str]
+    positional_select: list[str]
+    select_file: list[str]
+    exclude: list[str]
+    dbt_command: str | None
+    dbt_args: list[str]
+    vars: dict[str, object]
+    rules_command: str | None
+    rules_rule_selector: str | None
+    rules_skills_check: bool
+    format_check: bool
+    format_diff: bool
+    format_fixtures_only: bool
+    format_fix: bool
+    format_paths: list[str]
+    scope_target: str | None
+    scope_at: str | None
+    scope_as_path: str | None
+    scope_browse: str | None
+    scope_list: str | None
+    contract_command: str | None
+    contract_from: str | None
+    contract_write: bool
+    scope_defined_under: str | None
+    scope_kind: list[str]
+    scope_match: str | None
+    scope_used_only: bool
+    scope_include_nearby: bool
+    scope_nearby_depth: int
+    scope_dependency_depth: int
+    scope_explain: str | None
+    scope_globals: str
+    scope_page_size: int
+    scope_after: str | None
+    scope_paths: str
+
+    def __init__(self) -> None: ...
+
+class DbtInitProgressReporter:
+    def __init__(self, *, stream: TextIO, use_color: bool) -> None: ...
+    def start(self, message: str) -> None: ...
+    def complete(self, message: str) -> None: ...
 
 class PlanningProgressReporter:
     def __init__(self, *, stream: TextIO, use_color: bool = False) -> None: ...
@@ -5325,3 +5565,228 @@ def format_model_migrations(
     *, lines: list[str], plan: PlanOutput, display_options: DisplayOptions
 ) -> list[str]: ...
 def old_name_rows(*, entry: OldNameViewPlanEntry, style: CliStyle) -> list[str]: ...
+
+class MigrationFingerprintCache:
+    def __init__(self, *, root: Path | None = None) -> None: ...
+    def fingerprint(
+        self,
+        *,
+        query_sql: str,
+        metadata_json: str,
+        ref_identities: Mapping[str, str],
+        dialect: str | None,
+    ) -> str | None: ...
+    def persist(self) -> None: ...
+
+def gather_warehouse_snapshot(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    connection: Any,
+    execute: AdapterExecute[Any, Any],
+    selected_keys: frozenset[CompiledObjectKey] | None = None,
+    full_refresh: bool = False,
+    full_refresh_model_names: frozenset[str] | None = None,
+    on_progress: Callable[[str], None] | None = None,
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None,
+    cursor_scope: CursorSnapshotScope | None = None,
+) -> WarehouseSnapshot: ...
+def gather_redirected_cursor_snapshots(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    connection: Any,
+    existing_relations: dict[str, RelationInfo],
+    target_relations: dict[str, str],
+    cursor_scope: CursorSnapshotScope,
+    full_refresh_model_names: frozenset[str],
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None,
+    on_progress: Callable[[str], None] | None = None,
+    origin_cursor_columns: dict[str, str] | None = None,
+) -> dict[str, ModelCursorSnapshot]: ...
+def watermark_type_is_compatible(*, declared_type: str, cursor_type: str | None) -> bool: ...
+def gather_source_columns(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    connection: Any,
+    source_entries: tuple[SourceEntry, ...] | None = None,
+) -> dict[str, tuple[ColumnInfo, ...]]: ...
+def gather_source_inspection(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    connection: Any,
+    source_entries: tuple[SourceEntry, ...] | None,
+) -> tuple[dict[str, tuple[ColumnInfo, ...]], frozenset[str]]: ...
+def get_semantic_source_columns(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    connection: Any,
+    source_read_map: dict[str, SourceEntry],
+    columns: dict[str, tuple[ColumnInfo, ...]],
+    selected_keys: frozenset[CompiledObjectKey],
+) -> dict[str, tuple[ColumnInfo, ...]]: ...
+def check_selected_source_tables_exist(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    connection: Any,
+    scope: PlannerScope,
+    relations: PlannerRelationsContext,
+) -> None: ...
+def build_source_read_map(
+    *,
+    project: CompiledProjectView,
+    source_map: dict[str, SourceEntry],
+    selected_keys: frozenset[CompiledObjectKey],
+    project_config: ProjectConfig | None,
+    local_config: LocalConfig | None,
+    defer_sources_to: str | None,
+    read_source_names: frozenset[str] | None = None,
+) -> dict[str, SourceEntry]: ...
+def with_declared_source_reads(
+    *,
+    project: CompiledProjectView,
+    source_map: dict[str, SourceEntry],
+    source_names: frozenset[str],
+) -> dict[str, SourceEntry]: ...
+def build_source_freshness_unknown_warnings(
+    *, source_freshness: DirectSourceFreshnessPlanningResult
+) -> tuple[PlanWarning, ...]: ...
+def build_planner_source_freshness_result(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    connection: Any,
+    scope: PlannerScope,
+    relations: PlannerRelationsContext,
+    freshness_state_schemas: frozenset[str] | None = None,
+) -> DirectSourceFreshnessPlanningResult: ...
+def resolve_planner_scopes(
+    *,
+    project: CompiledProjectView,
+    selection: PlannerSelection,
+    policies: PlannerPolicies,
+) -> PlannerScopeResolution: ...
+def build_planner_identity_context(
+    *,
+    project: CompiledProjectView,
+    scopes: PlannerScopeResolution,
+    include_stale_warning_identities: bool = True,
+) -> PlannerIdentityContext: ...
+def detect_stale_warning_changes(
+    *,
+    project: CompiledProjectView,
+    scopes: PlannerScopeResolution,
+    snapshot: WarehouseSnapshot,
+    identities: PlannerIdentityContext,
+    execution_changes: PlannerChangeResults,
+) -> PlannerChangeResults: ...
+def check_selected_scope_buildability(
+    *,
+    runtime: PlannerRuntime,
+    scopes: PlannerScopeResolution,
+    warehouse: PlannerWarehouseState,
+    deferral: DeferralInputs,
+) -> None: ...
+def prune_planner_execution_scope(
+    *, scopes: PlannerScopeResolution, resolved_actions: PlannerResolvedActions
+) -> PlannerScopePruningResult: ...
+def reconcile_execution_changes(
+    *,
+    warehouse: PlannerWarehouseState,
+    identities: PlannerIdentityContext,
+    pruning: PlannerScopePruningResult,
+    changes: PlannerChangeResults,
+) -> PlannerChangeReconciliation: ...
+def build_planner_entry_results(
+    *,
+    runtime: PlannerRuntime,
+    warehouse: PlannerWarehouseState,
+    identities: PlannerIdentityContext,
+    overrides: PlannerOverrides,
+    policies: PlannerPolicies,
+    deferral: DeferralInputs,
+    pruning: PlannerScopePruningResult,
+    reconciliation: PlannerChangeReconciliation,
+    source_freshness: DirectSourceFreshnessPlanningResult,
+) -> PlannerEntryResults: ...
+def resolve_model_full_refresh(*, model: CompiledModelView, cli_full_refresh: bool) -> bool: ...
+def effectively_full_refreshed_model_names(
+    *, project: CompiledProjectView, cli_full_refresh: bool
+) -> frozenset[str]: ...
+def describe_full_rebuild_cause(
+    *, change_result: ChangeDetectionResult, full_refresh: bool
+) -> str: ...
+def check_full_rebuild_allowed(
+    *, model: CompiledModelView, change_result: ChangeDetectionResult, full_rebuild_cause: str
+) -> None: ...
+def effective_target_config(*, runtime: PlannerRuntime) -> TargetConfig: ...
+def table_type_copy_name(*, target_name: str, identifier_limit: int) -> str: ...
+def plan_table_types(
+    *, runtime: PlannerRuntime, warehouse: PlannerWarehouseState, scope: PlannerScope
+) -> tuple[TableTypePlanEntry, ...]: ...
+def plan_retention(
+    *, runtime: PlannerRuntime, warehouse: PlannerWarehouseState, scope: PlannerScope
+) -> tuple[RetentionPlanEntry, ...]: ...
+def assemble_base_plan_output(
+    *,
+    runtime: PlannerRuntime,
+    warehouse: PlannerWarehouseState,
+    identities: PlannerIdentityContext,
+    overrides: PlannerOverrides,
+    pruning: PlannerScopePruningResult,
+    reconciliation: PlannerChangeReconciliation,
+    entries: PlannerEntryResults,
+    source_freshness: DirectSourceFreshnessPlanningResult,
+    planned_sql_tests: PlannedSqlTests | None = None,
+) -> PlanOutput: ...
+def with_column_rename_hints(
+    *, entries: tuple[ModelPlanEntry, ...], hints: tuple[ColumnRenameHint, ...]
+) -> tuple[ModelPlanEntry, ...]: ...
+def with_storage_policies(
+    *,
+    plan_output: PlanOutput,
+    runtime: PlannerRuntime,
+    warehouse: PlannerWarehouseState,
+    scopes: PlannerScopeResolution,
+    policies: PlannerPolicies,
+) -> PlanOutput: ...
+def with_plan_warnings(
+    *,
+    runtime: PlannerRuntime,
+    scopes: PlannerScopeResolution,
+    warehouse: PlannerWarehouseState,
+    identities: PlannerIdentityContext,
+    stale_warning_changes: PlannerChangeResults,
+    pruning: PlannerScopePruningResult,
+    source_freshness: DirectSourceFreshnessPlanningResult,
+    plan_output: PlanOutput,
+    policies: PlannerPolicies,
+) -> PlanOutput: ...
+def with_plan_metadata(
+    *,
+    plan_output: PlanOutput,
+    pruning: PlannerScopePruningResult,
+    source_freshness: DirectSourceFreshnessPlanningResult,
+    policies: PlannerPolicies,
+) -> PlanOutput: ...
+def gather_planner_warehouse_state(
+    *,
+    runtime: PlannerRuntime,
+    scopes: PlannerScopeResolution,
+    overrides: PlannerOverrides,
+    deferral: DeferralInputs,
+) -> PlannerWarehouseState: ...
+def planner_metadata_name_filter(
+    *, project: CompiledProjectView, selected_keys: frozenset[CompiledObjectKey] | None = None
+) -> tuple[str, ...] | None: ...
+def list_source_candidates(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    database: str | None,
+    entries: tuple[SourceEntry, ...],
+) -> tuple[RelationInfo, ...]: ...

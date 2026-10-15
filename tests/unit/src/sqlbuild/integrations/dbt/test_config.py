@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import resolve_dbt_config
-from sqlbuild.integrations.dbt._helpers.planning.runtime import resolve_dbt_vars
+from sqlbuild._native import resolve_dbt_config, resolve_dbt_vars_mapping
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
 from sqlbuild.integrations.dbt.models import ResolvedDbtConfig
 from sqlbuild.spec.contracts.models import DbtConfig, LocalDbtConfig
@@ -136,14 +134,13 @@ def test_given_dbt_config_when_resolving_then_returns_expected_values(
 def test_given_dbt_vars_sources_when_resolving_then_vars_are_merged(
     test_case: DbtVarsResolutionTestCase,
 ) -> None:
-    resolved: str | None = resolve_dbt_vars(
+    resolved: dict[str, object] = resolve_dbt_vars_mapping(
         project_config=test_case.project_config,
         local_config=test_case.local_config,
         dbt_args=test_case.dbt_args,
     )
 
-    assert resolved is not None
-    assert json.loads(resolved) == test_case.expected_vars
+    assert resolved == test_case.expected_vars
 
 
 @pytest.mark.parametrize(

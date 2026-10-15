@@ -1,1 +1,0 @@
-"""dbt configuration public operations."""

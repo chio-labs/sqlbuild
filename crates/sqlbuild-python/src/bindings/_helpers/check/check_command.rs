@@ -12,6 +12,10 @@ use sqlbuild_core::check_command::main::validate_check_selection::validate_check
 use sqlbuild_core::check_command::models::CheckResultText;
 use sqlbuild_core::cli_text::models::CliStyle;
 
+use crate::bindings::_helpers::check::check_core::{
+    ReadSideInputs, load_results_by_loader_name, record_python_run_state_results,
+    run_read_side_dependencies,
+};
 use crate::bindings::_helpers::check::check_results::{
     check_result_text, results_json, write_results,
 };
@@ -23,8 +27,7 @@ use crate::bindings::_helpers::graph::python_selection::python_node_names;
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
-const CHECK_CORE_MODULE: &str = "sqlbuild.cli.commands._helpers.check.core";
-const EXTERNAL_REFS_MODULE: &str = "sqlbuild.cli.commands._helpers.planning.external_refs";
+const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
 const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
 const STATIC_COMMAND_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
@@ -424,24 +427,12 @@ fn record_run_state<'py>(
     ),
     source_map: &Bound<'py, PyAny>,
 ) -> PyResult<()> {
-    let py: Python<'py> = invocation.py();
-    let mut fields: Vec<(&str, Bound<'py, PyAny>)> = vec![
-        (
-            "discovered_inputs",
-            invocation.getattr("discovered_inputs")?,
-        ),
-        ("run_state", run_state),
-        ("python_results", python_results),
-    ];
-    if let Some(load_results) = load_results {
-        fields.push(("load_results", load_results));
-    }
-    fields.push(("source_map", source_map.clone()));
-    call_with(
-        &imported(py, CHECK_CORE_MODULE, "record_python_run_state_results")?,
-        &fields,
-    )?;
-    Ok(())
+    record_python_run_state_results(
+        &invocation.getattr("discovered_inputs")?,
+        &run_state,
+        (&python_results, load_results.as_ref()),
+        Some(source_map),
+    )
 }
 
 /// Run ingress loaders and read-side dependencies, then the checks themselves.
@@ -497,24 +488,18 @@ fn run_checks<'py>(
         ),
         &source_map,
     )?;
-    let read_side: Bound<'py, PyAny> = call_with(
-        &imported(py, CHECK_CORE_MODULE, "run_check_read_side_dependencies")?,
-        &[
-            ("adapter", invocation.getattr("adapter")?),
-            (
-                "connection_config",
-                invocation.getattr("connection_config")?,
-            ),
-            ("connection", connection.clone()),
-            ("pipeline_result", prepared.pipeline.clone()),
-            ("python_graph", prepared.python_graph.clone()),
-            ("lifecycle_plan", prepared.lifecycle_plan.clone()),
-            ("relation_targets", prepared.relation_targets.clone()),
-            ("validation_refs", prepared.relation_refs.clone()),
-            ("project_relations", prepared.project_relations.clone()),
-            ("providers", providers.clone()),
-        ],
-    )?;
+    let read_side: Bound<'py, PyAny> = run_read_side_dependencies(&ReadSideInputs {
+        adapter: invocation.getattr("adapter")?,
+        connection_config: invocation.getattr("connection_config")?,
+        connection: connection.clone(),
+        pipeline_result: prepared.pipeline.clone(),
+        python_graph: prepared.python_graph.clone(),
+        lifecycle_plan: prepared.lifecycle_plan.clone(),
+        relation_targets: prepared.relation_targets.clone(),
+        validation_refs: prepared.relation_refs.clone(),
+        project_relations: prepared.project_relations.clone(),
+        providers: providers.clone(),
+    })?;
     record_run_state(
         invocation,
         (run_state.clone(), read_side.clone(), None),
@@ -524,13 +509,8 @@ fn run_checks<'py>(
         .try_iter()?
         .chain(read_side.try_iter()?)
         .collect::<PyResult<_>>()?;
-    let by_loader: Bound<'py, PyAny> = call_with(
-        &imported(py, CHECK_CORE_MODULE, "load_results_by_loader_name")?,
-        &[
-            ("source_map", source_map),
-            ("load_results", load_results.clone()),
-        ],
-    )?;
+    let by_loader: Bound<'py, PyAny> =
+        load_results_by_loader_name(&source_map, &load_results)?.into_any();
     let on_complete: Bound<'py, PyAny> = Bound::new(
         py,
         CheckCompletionRelay {

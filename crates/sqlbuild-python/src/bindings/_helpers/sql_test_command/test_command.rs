@@ -33,7 +33,7 @@ use crate::bindings::_helpers::result_output::integration_values::json_value;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
-const EXTERNAL_REFS_MODULE: &str = "sqlbuild.cli.commands._helpers.planning.external_refs";
+const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
 const STATIC_COMMAND_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const TEST_PLAN_MODULE: &str = "sqlbuild.compiler.planner.main.commands._sql_test";

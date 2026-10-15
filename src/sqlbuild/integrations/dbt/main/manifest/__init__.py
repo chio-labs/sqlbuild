@@ -1,1 +1,0 @@
-"""dbt manifest public operations."""

@@ -9,6 +9,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from sqlbuild._native import MigrationFingerprintCache
 from sqlbuild._native import cursor_parse as parse
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, RetentionRequest
@@ -44,9 +45,6 @@ from sqlbuild.compiler.migrations.types import (
     OldNameViewAction,
 )
 from sqlbuild.compiler.planner.classes.fixture_column_inferences import FixtureColumnInferences
-from sqlbuild.compiler.planner.classes.migration_fingerprint_cache import (
-    MigrationFingerprintCache,
-)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import (
     BackfillAction,

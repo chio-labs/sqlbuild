@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild import _native as native
 from sqlbuild._native import (
     resolve_connection_config,
     resolve_project_connection_config,
@@ -13,7 +14,6 @@ from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.integrations.dbt.main.profile import profile_connection
 from sqlbuild.integrations.dbt.models import NormalizedDbtProfileConnection
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
@@ -274,7 +274,7 @@ def test_given_named_dbt_profile_connection_when_resolving_then_routes_downstrea
         )
 
     monkeypatch.setattr(
-        profile_connection,
+        native,
         "resolve_raw_dbt_profile_connection",
         resolve_raw_dbt_profile_connection,
     )
@@ -333,7 +333,7 @@ def test_given_dbt_profile_connection_when_resolving_then_merges_user_overrides(
         )
 
     monkeypatch.setattr(
-        profile_connection,
+        native,
         "resolve_raw_dbt_profile_connection",
         resolve_raw_dbt_profile_connection,
     )

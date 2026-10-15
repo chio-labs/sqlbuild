@@ -13,7 +13,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const EXTERNAL_REFS_MODULE: &str = "sqlbuild.cli.commands._helpers.planning.external_refs";
+const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const CONTRACT_MODELS: &str = "sqlbuild.runtime.contracts.models";
 const PRESENTATION_MODELS: &str = "sqlbuild.presentation.models";

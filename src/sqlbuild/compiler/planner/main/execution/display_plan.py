@@ -7,12 +7,12 @@ from sqlbuild._native import (
     build_execution_upstream_deps,
     get_config_str,
     get_materialization_type,
+    resolve_model_full_refresh,
 )
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.planner._helpers.planning.full_refresh import resolve_model_full_refresh
 from sqlbuild.compiler.planner.models import BackfillResult, ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.planner.types import (
     BackfillAction,

@@ -10,15 +10,16 @@ from unittest.mock import Mock
 import duckdb
 import pytest
 
-from sqlbuild._native import build_compiled_project, discover_project_inputs
+from sqlbuild._native import (
+    build_compiled_project,
+    discover_project_inputs,
+    get_semantic_source_columns,
+    list_source_candidates,
+)
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapter.relations.main.open_inspection_catalog import open_inspection_catalog
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.planner._helpers.warehouse.semantic_sources import (
-    _list_source_candidates,
-    get_semantic_source_columns,
-)
 from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.adapters.snowflake.inspection.helpers import (
     FakeRelation,
@@ -185,7 +186,7 @@ def test_given_snowflake_source_schema_when_listing_candidates_then_finds_relati
     )
 
     with open_inspection_catalog(adapter=adapter, connection=connection):
-        candidates: tuple[RelationInfo, ...] = _list_source_candidates(
+        candidates: tuple[RelationInfo, ...] = list_source_candidates(
             adapter=adapter,
             connection=connection,
             database="analytics",

@@ -130,3 +130,29 @@ class FixtureSchemaIntegrationTestCase:
     contract: str
     expected_authoritative: bool
     expected_diagnostics: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ConcurrentCursorReadsTestCase:
+    description: str
+    relation_count: int
+    concurrency: int
+    failing_relations: frozenset[str]
+    expected_start_progress: str
+    expected_unreadable: dict[str, tuple[str, ...]]
+
+
+@dataclass(frozen=True)
+class FailedCursorReadTestCase:
+    description: str
+    fail_on_fetch: bool
+    expected_unreadable_input_names: tuple[str, ...]
+    expected_empty_input_names: tuple[str, ...]
+    expected_unavailable_watermark_tags: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class EligibleMaxFailureTestCase:
+    description: str
+    model_count: int
+    expected_error_fragment: str

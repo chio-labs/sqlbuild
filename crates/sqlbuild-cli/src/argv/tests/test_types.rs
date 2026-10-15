@@ -1,6 +1,8 @@
 use sqlbuild_core::text::main::python_str_repr::python_str_repr;
 
-use crate::argv::models::{TypeFailure, Value};
+use sqlbuild_core::dbt_cli::models::DbtParsedFlags;
+
+use crate::argv::models::{DbtExecutionFailure, TypeFailure, Value};
 use crate::argv::types::ArgvHost;
 
 /// Integer conversion and a fixed version, standing in for the interpreter.
@@ -45,4 +47,11 @@ pub(super) struct WrapTestCase {
     pub(super) width: usize,
     pub(super) indent: &'static str,
     pub(super) expected_lines: &'static [&'static str],
+}
+
+/// `sqb dbt` execution arguments and the parse result they produce.
+pub(super) struct DbtExecutionTestCase {
+    pub(super) description: &'static str,
+    pub(super) args: &'static [&'static str],
+    pub(super) expected_parsed: Result<DbtParsedFlags, DbtExecutionFailure>,
 }

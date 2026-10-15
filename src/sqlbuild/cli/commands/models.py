@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -43,12 +42,8 @@ if TYPE_CHECKING:
         PlanningProgressReporter,
     )
     from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-    from sqlbuild.compiler.compile.models import (
-        CompilerDiagnostic,
-    )
     from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
     from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
-    from sqlbuild.compiler.refactoring.models import RefactorProject
 
 
 @dataclass(frozen=True)
@@ -150,41 +145,6 @@ class BuildInvocation:
     should_load_sources: bool
     effective_target_name: str | None = None
     execution_limits: ExecutionLimitsConfig = field(default_factory=ExecutionLimitsConfig)
-
-
-@dataclass(frozen=True)
-class DeferClonePrephaseOutcome:
-    """Selectors and destination resolved by the build defer-clone prephase."""
-
-    destination_target_name: str | None
-    boundary_selectors: tuple[str, ...]
-    view_chain_selectors: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DeferClonePrephaseInputs:
-    """Resolved project, targets, and selection for the defer-clone prephase."""
-
-    discovered_inputs: DiscoveredProjectInputs
-    adapter: BaseAdapter
-    origin_target_name: str
-    destination_target_name: str | None
-    no_sql_validation: bool
-    select: tuple[str, ...]
-    caused_by_names: tuple[str, ...]
-    cli_vars: dict[str, object] | None
-    connection_config: dict[str, object]
-    project_dir: Path
-    no_cache: bool = False
-
-
-@dataclass(frozen=True)
-class DeferClonePrephaseOutputContext:
-    """Progress reporting context for the defer-clone prephase."""
-
-    on_progress: Callable[[str], None] | None = None
-    progress_stream: TextIO | None = None
-    use_color: bool = False
 
 
 @dataclass(frozen=True)
@@ -558,14 +518,6 @@ class RefactorCommandRequest:
     dry_run: bool = False
     json_output: bool = False
     no_color: bool = False
-
-
-@dataclass(frozen=True)
-class RefactorCompile:
-    """One offline compile for a refactoring: its facts, or the errors that stopped it."""
-
-    project: RefactorProject | None
-    errors: tuple[CompilerDiagnostic, ...]
 
 
 @dataclass(frozen=True)

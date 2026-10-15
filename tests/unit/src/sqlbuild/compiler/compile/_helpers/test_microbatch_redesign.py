@@ -4,13 +4,13 @@ from datetime import date, datetime
 
 import pytest
 
+from sqlbuild._native import watermark_type_is_compatible
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileModelConfig
 from sqlbuild.compiler.planner._helpers.resolve.cursor import (
     compute_cursor_bounds,
     resolve_effective_timestamp_grain,
 )
-from sqlbuild.compiler.planner._helpers.warehouse.snapshot import _watermark_type_is_compatible
 from sqlbuild.compiler.planner.models import CursorBounds, CursorInputRelation, ModelCursorSnapshot
 from sqlbuild.cursor_algebra.models import DateValue, TimestampValue
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
@@ -576,7 +576,7 @@ def test_given_known_watermark_contract_type_when_validating_then_cursor_domain_
     test_case: MicrobatchCursorTypeTestCase,
 ) -> None:
     assert (
-        _watermark_type_is_compatible(
+        watermark_type_is_compatible(
             declared_type=test_case.declared_type, cursor_type=test_case.cursor_type
         )
         is test_case.expected_compatible

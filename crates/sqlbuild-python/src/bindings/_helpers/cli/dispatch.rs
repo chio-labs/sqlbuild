@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+use crate::bindings::_helpers::cli::launch_state::withhold_launch_record;
 use crate::bindings::_helpers::command_runtime::warehouse_scope::command_warehouse_scope;
 use crate::bindings::_helpers::diff_report::support::cli_error;
 use pyo3::IntoPyObjectExt;
@@ -22,7 +23,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 const EXCEPTIONS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const ENTRY_MODELS_MODULE: &str = "sqlbuild.cli.entry.models";
 const WAREHOUSES_MODULE: &str = "sqlbuild._native";
-const LAUNCH_RECORD_MODULE: &str = "sqlbuild.cli.entry.main._withhold_launch_record";
 const PATHLIB_MODULE: &str = "pathlib";
 const COMMENT_PREFIX: &str = "#";
 const UTF8: &str = "utf-8";
@@ -298,7 +298,7 @@ fn routed_command<'py>(
     };
     let (select, selector_files) = selector_inputs(args)?;
     if args.getattr("select_file")?.is_truthy()? {
-        imported(py, LAUNCH_RECORD_MODULE, "withhold_launch_record")?.call0()?;
+        withhold_launch_record(py)?;
     }
     let invocation = Invocation {
         args: args.clone(),

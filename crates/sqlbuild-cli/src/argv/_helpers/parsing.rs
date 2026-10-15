@@ -81,8 +81,22 @@ impl Run<'_> {
         &mut self,
         parser: &ParserSpec,
         args: Vec<String>,
-        mut namespace: Namespace,
+        namespace: Namespace,
     ) -> Result<KnownArgs, Exit> {
+        match self.known_args(parser, args, namespace) {
+            Ok(known) => Ok(known),
+            Err(Failure::Argument(message)) => Err(self.error(parser, &message)),
+            Err(Failure::Exit(exit)) => Err(exit),
+        }
+    }
+
+    /// `parse_known_args` for a parser whose `error` raises: the `ArgumentError` text, not an exit.
+    pub(crate) fn known_args(
+        &mut self,
+        parser: &ParserSpec,
+        args: Vec<String>,
+        mut namespace: Namespace,
+    ) -> Result<KnownArgs, Failure> {
         for action in &parser.actions {
             let (Some(dest), Default::Value(default)) = (&action.dest, &action.default) else {
                 continue;
@@ -92,16 +106,11 @@ impl Run<'_> {
             }
         }
         let level: Level<'_, '_, '_> = Level::new(self, parser, args, namespace);
-        match level.parse() {
-            Ok((mut namespace, mut extras)) => {
-                if let Some(unrecognized) = namespace.unrecognized.take() {
-                    extras.extend(unrecognized);
-                }
-                Ok((namespace, extras))
-            }
-            Err(Failure::Argument(message)) => Err(self.error(parser, &message)),
-            Err(Failure::Exit(exit)) => Err(exit),
+        let (mut namespace, mut extras): KnownArgs = level.parse()?;
+        if let Some(unrecognized) = namespace.unrecognized.take() {
+            extras.extend(unrecognized);
         }
+        Ok((namespace, extras))
     }
 }
 

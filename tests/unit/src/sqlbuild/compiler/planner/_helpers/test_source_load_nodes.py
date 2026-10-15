@@ -12,6 +12,7 @@ from sqlbuild._native import (
     build_source_load_entries,
     build_source_load_map,
     expand_selected_loader_dependencies,
+    planner_metadata_name_filter,
     project_with,
     upstream_loader_dependency_names,
 )
@@ -28,7 +29,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.compiler.planner._helpers.warehouse.snapshot import _build_metadata_name_filter
 from sqlbuild.compiler.planner.models import SourceLoadPlanEntry
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.contracts.models import SourceEntry
@@ -213,7 +213,7 @@ def test_given_unselected_upstream_in_closure_when_filtering_metadata_then_uses_
         models=(selected_model, upstream_model),
     )
 
-    names: tuple[str, ...] | None = _build_metadata_name_filter(
+    names: tuple[str, ...] | None = planner_metadata_name_filter(
         project=project,
         selected_keys=frozenset({selected_key, upstream_key}),
     )

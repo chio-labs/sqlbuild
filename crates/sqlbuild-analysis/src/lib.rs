@@ -27,6 +27,7 @@ pub mod planner_scenario;
 pub mod planner_scope;
 pub mod planner_selection;
 pub mod planner_strategy;
+pub mod planner_warehouse;
 pub mod python_plan;
 pub mod python_selection;
 pub mod python_values;

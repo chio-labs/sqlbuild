@@ -2,12 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild._native import build_compile_reference_resolver
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompileAdapterContext
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
-from sqlbuild.integrations.dbt.main.manifest.build_compile_reference_resolver import (
-    build_compile_reference_resolver,
-)
 from sqlbuild.sql_values.types import CollectionRendering
 
 DUCKDB_COMPILE_ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(

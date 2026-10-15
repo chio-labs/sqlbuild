@@ -6,11 +6,10 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlbuild._native import supports_color
+from sqlbuild._native import CliNamespace, supports_color
 from sqlbuild.cli.commands._helpers.entry.compute_log_diagnostics import (
     log_compute_capture_failure,
 )
-from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.diagnostics.classes.invocation_diagnostic_routing import InvocationDiagnosticRouting
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
 from sqlbuild.diagnostics.models import DiagnosticRoutingOptions
