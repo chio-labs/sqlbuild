@@ -5,9 +5,14 @@ import sys
 
 import pytest
 
-from sqlbuild._native import CliUserError, resolve_adapter, resolve_effective_adapter_name
+from sqlbuild._native import (
+    CliUserError,
+    LocalConfig,
+    ProjectConfig,
+    resolve_adapter,
+    resolve_effective_adapter_name,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     ExpectedMessageTestCase,
     ResolveAdapterErrorTestCase,

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from sqlbuild._native import PythonNodeGraph
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction
-from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes._helpers.python_checks import execute_python_check_nodes
 from sqlbuild.executor.python_nodes.models import (

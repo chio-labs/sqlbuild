@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy
+from sqlbuild._native import MissingMigrationOriginPolicy
 
 
 @dataclass(frozen=True)

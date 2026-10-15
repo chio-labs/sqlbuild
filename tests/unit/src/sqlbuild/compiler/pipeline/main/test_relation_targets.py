@@ -4,14 +4,17 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import build_python_relation_targets
+from sqlbuild._native import (
+    DiscoveredPythonNode,
+    PythonNodeGraph,
+    SourceEntry,
+    build_python_relation_targets,
+)
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.refs import model, source
-from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.pipeline.main._test_types import (
     PythonRelationTargetScopeTestCase,
     PythonRelationTargetsTestCase,

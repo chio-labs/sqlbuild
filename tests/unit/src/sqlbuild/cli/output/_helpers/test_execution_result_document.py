@@ -8,13 +8,18 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import format_audit_execution_json, format_parameterized_test_label
-from sqlbuild.adapter.contract.models import LifeCycleEvent
-from sqlbuild.adapter.contract.types import LifeCycleEventKind
-from sqlbuild.compiler.auditing.models import (
+from sqlbuild._native import (
+    FutureCursorAction,
     MeasurementThresholdBound,
     MeasurementThresholds,
+    SqlLogicalType,
+    SqlValue,
+    SqlValueKind,
+    format_audit_execution_json,
+    format_parameterized_test_label,
 )
+from sqlbuild.adapter.contract.models import LifeCycleEvent
+from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditEvaluationMode,
@@ -43,9 +48,6 @@ from sqlbuild.executor.testing.models import (
     StepResult,
 )
 from sqlbuild.executor.testing.types import SqlTestOutcome
-from sqlbuild.spec.contracts.types import FutureCursorAction
-from sqlbuild.sql_values.models import SqlLogicalType, SqlValue
-from sqlbuild.sql_values.types import SqlValueKind
 from tests.unit.src.sqlbuild.cli.output._helpers._test_types import (
     AuditExecutionProtocolTestCase,
     FailedModelSqlOutputTestCase,

@@ -8,12 +8,14 @@ from sqlbuild._native import (
     DirectSourceFreshnessPlanningResult,
     PlannerRelationsContext,
     PlannerScope,
+    SourceEntry,
+    SourceFreshnessConfig,
+    SourceFreshnessStrategy,
+    SourceFreshnessValueKind,
     build_planner_source_freshness_result,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
-from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     PlannerSourceFreshnessReadMapTestCase,
 )

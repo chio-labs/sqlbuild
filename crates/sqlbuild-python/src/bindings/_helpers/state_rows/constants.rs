@@ -5,7 +5,7 @@ pub(crate) const MIGRATION_TYPES: &str = "sqlbuild.compiler.migrations.types";
 pub(crate) const MIGRATION_EXCEPTIONS: &str = "sqlbuild._native";
 pub(crate) const STATE_TABLE_DDL: &str =
     "sqlbuild.adapter.state_sql.main.render_state_table_create_sql";
-pub(crate) const SQL_VALUE_TYPES: &str = "sqlbuild.sql_values.types";
+pub(crate) const SQL_VALUE_TYPES: &str = "sqlbuild._native";
 pub(crate) const OLD_NAME_VIEW_CONFIG_KEY: &str = "old_name_view";
 pub(crate) const MODEL_KIND: &str = "model";
 pub(crate) const COLUMN_KIND: &str = "column";

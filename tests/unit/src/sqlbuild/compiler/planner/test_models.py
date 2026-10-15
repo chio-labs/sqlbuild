@@ -6,9 +6,9 @@ from dataclasses import replace
 
 import pytest
 
+from sqlbuild._native import MissingMigrationOriginPolicy
 from sqlbuild.compiler.migrations.types import MigrationDecision
 from sqlbuild.compiler.planner.models import ModelMigrationPlanEntry
-from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy
 from tests.unit.src.sqlbuild.compiler.planner._test_types import MissingOriginBlockTestCase
 from tests.unit.src.sqlbuild.compiler.planner.main.pre_build.helpers import migration_entry
 

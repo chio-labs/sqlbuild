@@ -7,10 +7,13 @@ from pathlib import Path
 from sqlbuild._native import (
     BackfillResult,
     ColumnRenameHint,
+    MicrobatchLimitAction,
     PlanProviderUsage,
     PlanWarning,
     SchemaChangeKind,
     SchemaColumnSource,
+    SeedCsvSettings,
+    SourceWriteStrategy,
     WarningSeverity,
 )
 from sqlbuild.compiler.compile.models import (
@@ -36,8 +39,6 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
-from sqlbuild.spec.contracts.models import SeedCsvSettings
-from sqlbuild.spec.contracts.types import MicrobatchLimitAction, SourceWriteStrategy
 
 
 def build_model_entry(

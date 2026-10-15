@@ -28,6 +28,14 @@ pub enum ThresholdBound {
     Outside(f64, f64),
 }
 
+/// One limit passed to a measurement threshold bound, as Python sees its type.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ThresholdInput {
+    Absent,
+    Boolean,
+    Number(f64),
+}
+
 /// An audit's warn and error thresholds; at least one is set.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ParsedThresholds {

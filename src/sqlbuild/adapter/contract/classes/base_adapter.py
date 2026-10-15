@@ -9,6 +9,13 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
+from sqlbuild._native import (
+    SeedCsvSettings,
+    SourceFreshnessRecord,
+    SqlLexicalSyntax,
+    SqlValue,
+    SqlValueKind,
+)
 from sqlbuild.adapter.contract.classes.historical_check_snapshot_sql import (
     HistoricalCheckSnapshotSql,
 )
@@ -77,13 +84,8 @@ from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql 
     render_insert_source_freshness_records_sql,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
-from sqlbuild.spec.contracts.models import SeedCsvSettings
 from sqlbuild.sql_values.exceptions import SqlValueRenderingError
-from sqlbuild.sql_values.models import SqlValue
-from sqlbuild.sql_values.types import SqlValueKind
 
 _SCALAR_SQL_VALUE_KINDS: frozenset[SqlValueKind] = frozenset(
     {

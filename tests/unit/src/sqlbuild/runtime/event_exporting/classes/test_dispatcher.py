@@ -19,7 +19,6 @@ from sqlbuild.runtime.event_exporting.exceptions import EventExporterInputError
 from sqlbuild.runtime.output_capture.constants import COMMAND_OUTPUT_LOSS_RECORD_TYPE
 from sqlbuild.runtime.output_capture.models import BoundCommandOutputSink
 from sqlbuild.sinks import CommandOutputRecord, CommandOutputStream
-from sqlbuild.spec.contracts.types import EventExportSeverity
 from tests.unit.src.sqlbuild.runtime.event_exporting.classes._test_types import (
     EventExporterDispatcherTestCase,
     HealthIntervalTestCase,

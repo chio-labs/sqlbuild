@@ -46,7 +46,7 @@ pub(crate) const SQL_HOOK_ENTRY: (&str, &str) =
     ("sqlbuild.compiler.discovery.models", "SqlHookEntry");
 pub(crate) const CURSOR_ALGEBRA_ERROR: (&str, &str) =
     ("sqlbuild.cursor_algebra.exceptions", "CursorAlgebraError");
-pub(crate) const DATE_VALUE: (&str, &str) = ("sqlbuild.cursor_algebra.models", "DateValue");
+pub(crate) const DATE_VALUE: (&str, &str) = ("sqlbuild._native", "DateValue");
 pub(crate) const PLANNER_LOGGER: &str = "sqlbuild.planner";
 pub(crate) const FINGERPRINT_TABLE_NAME: &str = "_sqlbuild_fingerprints";
 pub(crate) const SOURCE_FRESHNESS_TABLE_NAME: &str = "_sqlbuild_source_freshness";

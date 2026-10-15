@@ -9,6 +9,7 @@ from sqlbuild._native import (
     BackfillResult,
     ChangeDetectionResult,
     ChangeKind,
+    Fingerprint,
     PlannerChangeResults,
     PlannerScope,
     PlanWarning,
@@ -26,7 +27,6 @@ from sqlbuild._native import (
 from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.discovery.models import SqlHookEntry
-from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
     PlanAction,

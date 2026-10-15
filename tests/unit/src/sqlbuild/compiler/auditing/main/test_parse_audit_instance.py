@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import SchemaAuditInstance
 from sqlbuild.compiler.auditing.types import AuditSeverity, ThresholdOperator
-from sqlbuild.spec.contracts.models import SchemaAuditInstance
 from tests.unit.src.sqlbuild.compiler.auditing.main._test_types import (
     MeasurementPolicyParsingTestCase,
     ParseAuditInstanceErrorTestCase,

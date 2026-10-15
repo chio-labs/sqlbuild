@@ -9,7 +9,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
-from sqlbuild._native import CompiledSeed, CompiledSource, CompileModelConfig
+from sqlbuild._native import (
+    CompiledSeed,
+    CompiledSource,
+    CompileModelConfig,
+    SchemaSeedEntry,
+    SeedCsvSettings,
+    SourceEntry,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import (
@@ -36,7 +43,6 @@ from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.executor.janitor_events.constants import JANITOR_EVENTS_TABLE_NAME
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
-from sqlbuild.spec.contracts.models import SchemaSeedEntry, SeedCsvSettings, SourceEntry
 
 UNQUOTED_ADDRESSING_REASON: str = (
     "relation name is not a plain lowercase identifier and may require quoting; "

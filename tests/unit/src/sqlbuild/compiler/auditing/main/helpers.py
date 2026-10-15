@@ -7,7 +7,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import cast
 
-from sqlbuild._native import parse_audit_instances
+from sqlbuild._native import SchemaAuditInstance, SourceEntry, parse_audit_instances
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.discovery.main.builtins import builtin_adapter_classes
 from sqlbuild.compiler.auditing.types import (
@@ -18,7 +18,6 @@ from sqlbuild.compiler.auditing.types import (
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import AuditPlanEntry
-from sqlbuild.spec.contracts.models import SchemaAuditInstance, SourceEntry
 
 
 def build_render_adapter(adapter_name: str | None) -> BaseAdapter | None:

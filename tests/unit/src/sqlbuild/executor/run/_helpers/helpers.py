@@ -2,6 +2,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from sqlbuild._native import SchemaDynamicColumnFamily, SourceEntry
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
@@ -28,7 +29,6 @@ from sqlbuild.executor.run._helpers.execution.hooks import execute_hooks
 from sqlbuild.executor.run.models import HookContext, HookRelationLookup, HookRunContext
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.python_nodes.models import SqlResourceRef
-from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily, SourceEntry
 
 
 def insert_snapshot_hook_log(ctx: HookContext, phase: str) -> None:

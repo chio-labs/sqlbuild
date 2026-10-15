@@ -6,10 +6,10 @@ use pyo3::types::{PyDict, PyDictMethods};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 
-const AUDITING_MODELS_MODULE: &str = "sqlbuild.compiler.auditing.models";
+const AUDITING_MODELS_MODULE: &str = "sqlbuild._native";
 const AUDITING_TYPES_MODULE: &str = "sqlbuild.compiler.auditing.types";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
-const CONTRACT_TYPES_MODULE: &str = "sqlbuild.spec.contracts.types";
+const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
+const CONTRACT_TYPES_MODULE: &str = "sqlbuild._native";
 const DLT_MODELS_MODULE: &str = "sqlbuild.integrations.dlt.models";
 const INGESTR_MODELS_MODULE: &str = "sqlbuild.integrations.ingestr.models";
 const CONTRACT_CLASSES: [(&str, &str, &str); 6] = [
@@ -125,10 +125,6 @@ fn built_contract_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     classes.set_item(
         "threshold_operators",
         members_by_value(&imported(py, AUDITING_TYPES_MODULE, "ThresholdOperator")?)?,
-    )?;
-    classes.set_item(
-        "allocate",
-        imported(py, "builtins", "object")?.getattr("__new__")?,
     )?;
     Ok(classes)
 }

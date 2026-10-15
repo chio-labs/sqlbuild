@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from sqlbuild.spec.contracts.models import SourceEntry
+from sqlbuild._native import SourceEntry
 
 
 @dataclass(frozen=True)

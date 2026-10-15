@@ -15,9 +15,9 @@ from sqlbuild._native import (
     DiscoveredModelSchemaFile,
     ModelSchemaDeclaration,
     ResourceIdentityError,
+    SqlValue,
 )
 from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
-from sqlbuild.sql_values.models import SqlValue
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DeclarationResourceIdentityErrorTestCase,
     ParseDeclarationFileErrorTestCase,

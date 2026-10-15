@@ -7,7 +7,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{FromPyObject, IntoPyObjectExt, pyclass, pymethods};
 use sqlbuild_discovery::models::LineColumnSpan;
 
-const SOURCE_LOCATION_MODULE: &str = "sqlbuild.spec.contracts.models";
+const SOURCE_LOCATION_MODULE: &str = "sqlbuild._native";
 const SOURCE_LOCATION_CLASS: &str = "SourceLocation";
 const FIELD_NAMES: [&str; 10] = [
     "file_path",

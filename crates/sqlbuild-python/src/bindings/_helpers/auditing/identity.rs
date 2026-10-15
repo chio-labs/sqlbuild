@@ -8,7 +8,7 @@ use sqlbuild_analysis::auditing::models::{
     GateIdentity, MeasurementFacts, PlannedAudit, ThresholdBound, Thresholds,
 };
 
-const AUDITING_MODELS_MODULE: &str = "sqlbuild.compiler.auditing.models";
+const AUDITING_MODELS_MODULE: &str = "sqlbuild._native";
 const MEASUREMENT_MODE: &str = "measurement";
 
 fn enum_value(value: &Bound<'_, PyAny>) -> PyResult<String> {

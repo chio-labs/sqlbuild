@@ -8,9 +8,12 @@ from typing import Any
 from sqlbuild._native import (
     CompileModelConfig,
     DeferralInputs,
+    Fingerprint,
     PlannerOverrides,
     PlannerPolicies,
     PlannerSelection,
+    SchemaColumn,
+    SchemaModelEntry,
     SelectionStalenessGraph,
     SelectionStalenessNodeKey,
     build_execution_plan,
@@ -30,9 +33,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.spec.contracts.models import SchemaColumn, SchemaModelEntry
 
 
 def model_definition_hash(project: CompiledProjectView, name: str) -> str:

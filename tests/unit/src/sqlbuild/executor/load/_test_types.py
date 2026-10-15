@@ -6,12 +6,12 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
 
+from sqlbuild._native import SourceColumnEntry
 from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.cursor_algebra.types import CursorScalar
 from sqlbuild.executor.scheduling.types import ExecutionStatus
-from sqlbuild.spec.contracts.models import SourceColumnEntry
 
 
 @dataclass(frozen=True)

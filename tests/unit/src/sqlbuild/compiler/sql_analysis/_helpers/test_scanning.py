@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 
 import sqlbuild._native as _native
+from sqlbuild._native import SqlLexicalSyntax
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.compiler.sql_analysis._helpers._test_types import (
     DialectMatchingParenTestCase,
     DialectNonCodeErrorTestCase,

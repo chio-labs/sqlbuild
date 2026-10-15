@@ -24,6 +24,7 @@ from sqlbuild._native import (
     NativeModelAnalyses,
     NativeModelAnalysisRequest,
     NativePivotTables,
+    SchemaDynamicColumnFamily,
     analyze_native_model_sql,
     build_analysis_cache_context,
     build_compile_inputs,
@@ -43,7 +44,6 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompactLineageFacts, InferredColumn
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import (
     AdapterRuleCallbackTestCase,
 )

@@ -2,17 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from sqlbuild._native import CollectionRendering
-from sqlbuild.spec.contracts.models import (
+from sqlbuild._native import (
     AuthoredTimeTravelRetention,
+    CollectionRendering,
     ExecutionLimitsConfig,
     LoaderDestinationParts,
     LocalConfig,
+    MissingMigrationOriginPolicy,
     ProjectConfig,
     TargetConfig,
     TargetWarehousesConfig,
 )
-from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy
 
 
 @dataclass(frozen=True)

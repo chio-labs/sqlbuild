@@ -14,6 +14,7 @@ from sqlbuild._native import (
     DeclarationKind,
     ResourceIdentity,
     ResourceKind,
+    SourceEntry,
     UsageKind,
     UsageRecord,
     assemble_project,
@@ -28,7 +29,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSourceFile,
     SqlHookEntry,
 )
-from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ExpectedBooleanTestCase,
     ExpectedModelDeclarationGrantTestCase,

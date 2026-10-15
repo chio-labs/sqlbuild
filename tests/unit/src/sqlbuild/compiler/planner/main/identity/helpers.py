@@ -10,6 +10,8 @@ from sqlbuild._native import (
     FunctionArgument,
     FunctionReturnColumn,
     PlannerScope,
+    SchemaColumn,
+    SeedCsvSettings,
     build_direct_model_version_identities,
     build_downstream_deps,
     build_model_version_identity_metadata_json,
@@ -26,7 +28,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     FunctionLanguage,
 )
-from sqlbuild.spec.contracts.models import SchemaColumn, SeedCsvSettings
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import build_compiled_function
 
 

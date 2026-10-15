@@ -5,6 +5,7 @@ from typing import cast
 
 import pytest
 
+from sqlbuild._native import EventExportSeverity
 from sqlbuild.runtime.event_exporting.exceptions import EventExporterInputError
 from sqlbuild.sinks import (
     CommandOutputSinkDefinition,
@@ -16,7 +17,6 @@ from sqlbuild.sinks import (
     get_lifecycle_event_sink_definition,
     lifecycle_event_sink,
 )
-from sqlbuild.spec.contracts.types import EventExportSeverity
 from tests.unit.src.sqlbuild.runtime.event_exporting._test_types import SinkApiTestCase
 
 

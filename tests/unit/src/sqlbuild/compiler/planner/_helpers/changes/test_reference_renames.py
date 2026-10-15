@@ -7,11 +7,11 @@ from datetime import UTC, datetime
 import pytest
 
 from sqlbuild._native import (
+    Fingerprint,
     ReferenceRename,
     compute_query_hash,
     origin_reference_names,
 )
-from sqlbuild.compiler.fingerprints.models import Fingerprint
 from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types import (
     OriginReferenceNamesTestCase,
 )

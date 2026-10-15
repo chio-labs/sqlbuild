@@ -134,6 +134,92 @@ const R_DIRECT_SOURCE_FRESHNESS_PLANNING_RESULT: RecordSpec = RecordSpec {
         FieldSpec::new("propagation", FieldDefault::None),
     ],
 };
+const R_FINGERPRINT: RecordSpec = RecordSpec {
+    name: "Fingerprint",
+    doc: "One applied fingerprint record from a successful materialization.",
+    fields: &[
+        FieldSpec::required("node_type"),
+        FieldSpec::required("node_name"),
+        FieldSpec::required("target_database"),
+        FieldSpec::required("target_schema"),
+        FieldSpec::required("target_name"),
+        FieldSpec::required("run_id"),
+        FieldSpec::required("definition_hash"),
+        FieldSpec::required("schema_fingerprint"),
+        FieldSpec::required("definition"),
+        FieldSpec::required("ts"),
+        FieldSpec::new("metadata_json", FieldDefault::Text("{}")),
+        FieldSpec::new("version_hash", FieldDefault::Text("")),
+    ],
+};
+const R_FINGERPRINT_SET: RecordSpec = RecordSpec {
+    name: "FingerprintSet",
+    doc: "Latest fingerprints per node name for one target schema.",
+    fields: &[
+        FieldSpec::required("schema"),
+        FieldSpec::required("fingerprints"),
+        FieldSpec::new("fingerprints_by_identity", FieldDefault::None),
+    ],
+};
+const R_SOURCE_FRESHNESS_RECORD: RecordSpec = RecordSpec {
+    name: "SourceFreshnessRecord",
+    doc: "One append-only direct observation whose observed time is always aware UTC.",
+    fields: &[
+        FieldSpec::required("source_name"),
+        FieldSpec::required("target_database"),
+        FieldSpec::required("target_schema"),
+        FieldSpec::required("target_name"),
+        FieldSpec::required("run_id"),
+        FieldSpec::required("strategy"),
+        FieldSpec::required("value_kind"),
+        FieldSpec::required("data_version"),
+        FieldSpec::required("data_version_hash"),
+        FieldSpec::required("observed_at"),
+    ],
+};
+const R_TIMESTAMP_VALUE: RecordSpec = RecordSpec {
+    name: "TimestampValue",
+    doc: "Timestamp cursor value; aware datetimes are normalized to UTC at ingestion.",
+    fields: &[
+        FieldSpec::required("value"),
+        FieldSpec {
+            name: "source_text",
+            default: FieldDefault::None,
+            compared: false,
+        },
+    ],
+};
+const R_DATE_VALUE: RecordSpec = RecordSpec {
+    name: "DateValue",
+    doc: "Date cursor value which must remain date-formatted when rendered.",
+    fields: &[FieldSpec::required("value")],
+};
+const R_INTEGER_VALUE: RecordSpec = RecordSpec {
+    name: "IntegerValue",
+    doc: "Integral cursor value.",
+    fields: &[FieldSpec::required("value")],
+};
+const R_ALIGNED_INTERVAL: RecordSpec = RecordSpec {
+    name: "AlignedInterval",
+    doc: "Validated half-open cursor interval.",
+    fields: &[
+        FieldSpec::required("start"),
+        FieldSpec::required("end"),
+        FieldSpec::required("grain"),
+    ],
+};
+const R_DURATION: RecordSpec = RecordSpec {
+    name: "Duration",
+    doc: "A calendar-aware duration (years/months plus fixed time units).",
+    fields: &[
+        FieldSpec::new("years", FieldDefault::Int(0)),
+        FieldSpec::new("months", FieldDefault::Int(0)),
+        FieldSpec::new("days", FieldDefault::Int(0)),
+        FieldSpec::new("hours", FieldDefault::Int(0)),
+        FieldSpec::new("minutes", FieldDefault::Int(0)),
+        FieldSpec::new("seconds", FieldDefault::Int(0)),
+    ],
+};
 
 /// The planner, migration, cursor and fingerprint value records.
 pub(crate) const PLANNER_RECORDS: &[RecordSpec] = &[
@@ -148,4 +234,12 @@ pub(crate) const PLANNER_RECORDS: &[RecordSpec] = &[
     R_DEFERRAL_INPUTS,
     R_PLANNER_POLICIES,
     R_DIRECT_SOURCE_FRESHNESS_PLANNING_RESULT,
+    R_FINGERPRINT,
+    R_FINGERPRINT_SET,
+    R_SOURCE_FRESHNESS_RECORD,
+    R_TIMESTAMP_VALUE,
+    R_DATE_VALUE,
+    R_INTEGER_VALUE,
+    R_ALIGNED_INTERVAL,
+    R_DURATION,
 ];

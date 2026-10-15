@@ -6,9 +6,8 @@ from typing import Any
 
 import pytest
 
-from sqlbuild._native import render_audit_sql
+from sqlbuild._native import SourceEntry, render_audit_sql
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.spec.contracts.models import SourceEntry
 from tests.integration.src.sqlbuild.compiler.auditing.main._test_types import (
     ExecuteRenderedAuditTestCase,
 )

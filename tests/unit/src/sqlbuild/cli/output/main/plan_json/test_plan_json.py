@@ -8,6 +8,8 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import (
+    FutureCursorAction,
+    MicrobatchLimitAction,
     PythonIdentityStatus,
     PythonPlanEntry,
     PythonRunPhase,
@@ -29,7 +31,6 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
-from sqlbuild.spec.contracts.types import FutureCursorAction, MicrobatchLimitAction
 from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
     build_discovered_provider_usage,
     build_model_entry,

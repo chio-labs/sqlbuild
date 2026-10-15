@@ -6,11 +6,11 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from sqlbuild._native import SourceFreshnessRecord
 from sqlbuild.adapter.state_sql._helpers.source_freshness import (
     render_insert_source_freshness_records_sql,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from tests.unit.src.sqlbuild.adapter.state_sql._test_types import StateSqlGoldenTestCase
 
 

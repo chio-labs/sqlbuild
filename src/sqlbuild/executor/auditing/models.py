@@ -6,8 +6,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from sqlbuild._native import MeasurementThresholds, SourceEntry
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.auditing.models import MeasurementThresholds
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditEvaluationMode,
@@ -17,7 +17,6 @@ from sqlbuild.compiler.auditing.types import (
 )
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 @dataclass(frozen=True)

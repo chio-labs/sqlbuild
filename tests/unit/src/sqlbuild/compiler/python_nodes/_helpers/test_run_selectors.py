@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import PythonSqlRunSelection
+from sqlbuild._native import PythonNodeGraph, PythonSqlRunSelection
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from tests.unit.src.sqlbuild.compiler.python_nodes._helpers._test_types import (
     PythonSqlSelectorErrorTestCase,
     PythonSqlSelectorTestCase,

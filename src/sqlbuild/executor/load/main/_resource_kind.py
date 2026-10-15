@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import SourceEntry
 from sqlbuild.executor.load._helpers.execution import load_resource_kind as _load_resource_kind
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def load_resource_kind(source: SourceEntry) -> ExecutionResourceKind:

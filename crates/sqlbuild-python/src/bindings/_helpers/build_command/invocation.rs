@@ -18,7 +18,7 @@ const SETTINGS_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
 const TARGET_NAME_MODULE: &str = "sqlbuild._native";
-const CONTRACT_MODELS: &str = "sqlbuild.spec.contracts.models";
+const CONTRACT_MODELS: &str = "sqlbuild._native";
 const DEFER_CONFLICT_CODE: &str = "C408";
 
 /// One build's request, resolved invocation and output settings.

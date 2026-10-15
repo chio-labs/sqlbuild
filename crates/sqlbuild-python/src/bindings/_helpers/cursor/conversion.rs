@@ -19,7 +19,7 @@ use crate::bindings::_helpers::cursor::values::{
     timedelta_micros,
 };
 
-pub(crate) const MODELS_MODULE: &str = "sqlbuild.cursor_algebra.models";
+pub(crate) const MODELS_MODULE: &str = "sqlbuild._native";
 const EXCEPTIONS_MODULE: &str = "sqlbuild.cursor_algebra.exceptions";
 const PLANNER_TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
 const GRAIN_NAMES: [(&str, Grain); 6] = [

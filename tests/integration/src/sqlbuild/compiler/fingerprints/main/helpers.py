@@ -6,9 +6,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlbuild._native import write_fingerprint
+from sqlbuild._native import Fingerprint, write_fingerprint
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.fingerprints.models import Fingerprint
 
 
 def write_fingerprint_from_own_connection(

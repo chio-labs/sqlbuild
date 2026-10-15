@@ -2,16 +2,17 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import CompileModelConfig
-from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.spec.contracts.models import (
+from sqlbuild._native import (
+    CompileModelConfig,
     DefaultsConfig,
     MaterializationDefaultsConfig,
     MaterializationRetentionDefaults,
     ResolvedTableType,
+    TableType,
+    TableTypeSource,
     TargetConfig,
 )
-from sqlbuild.spec.contracts.types import TableType, TableTypeSource
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from tests.unit.src.sqlbuild.compiler.compile._helpers.config._test_types import (
     TableTypeResolutionErrorTestCase,
     TableTypeResolutionTestCase,

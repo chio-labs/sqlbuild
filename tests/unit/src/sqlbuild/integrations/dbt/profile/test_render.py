@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import ResolvedDbtProfileOutput, SelectedDbtProfileOutput
 from sqlbuild.integrations.dbt._helpers.profile.render import render_selected_dbt_profile_output
-from sqlbuild.integrations.dbt.models import ResolvedDbtProfileOutput, SelectedDbtProfileOutput
 from tests.unit.src.sqlbuild.integrations.dbt.profile._test_types import (
     DbtProfileRenderErrorTestCase,
     DbtProfileRenderTestCase,

@@ -21,8 +21,17 @@ from sqlbuild._native import (
     DiscoveredSqlModelFile,
     DiscoveredSqlTestBlock,
     EnumMember,
+    EventExportSeverity,
+    LocalConfig,
     NativeDiscoverySession,
+    ProjectConfig,
     ScopeKind,
+    SourceColumnEntry,
+    SourceEntry,
+    SourceWriteStrategy,
+    SqlLogicalType,
+    SqlValue,
+    SqlValueKind,
 )
 from sqlbuild.compiler.discovery.constants import (
     SQL_SCENARIOS_OWNERSHIP_ROOT,
@@ -36,15 +45,6 @@ from sqlbuild.python_nodes.models import AuditCase, ColumnLineageRef, RetryPolic
 from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.runtime.event_exporting.constants import EVENT_EXPORT_KINDS
 from sqlbuild.runtime.output_capture.types import CommandOutputStream
-from sqlbuild.spec.contracts.models import (
-    LocalConfig,
-    ProjectConfig,
-    SourceColumnEntry,
-    SourceEntry,
-)
-from sqlbuild.spec.contracts.types import EventExportSeverity, SourceWriteStrategy
-from sqlbuild.sql_values.models import SqlLogicalType, SqlValue
-from sqlbuild.sql_values.types import SqlValueKind
 
 
 @dataclass(frozen=True)

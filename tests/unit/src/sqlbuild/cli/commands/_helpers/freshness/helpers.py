@@ -2,19 +2,20 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlbuild._native import source_freshness_data_version_hash
+from sqlbuild._native import (
+    SourceEntry,
+    SourceFreshnessAgePolicy,
+    SourceFreshnessConfig,
+    SourceFreshnessRecord,
+    SourceFreshnessStrategy,
+    SourceFreshnessValueKind,
+    source_freshness_data_version_hash,
+)
 from sqlbuild.adapter.contract.models import (
     QueryResult,
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
-from sqlbuild.spec.contracts.models import (
-    SourceEntry,
-    SourceFreshnessAgePolicy,
-    SourceFreshnessConfig,
-)
-from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 
 
 class FreshnessRecordingAdapter:

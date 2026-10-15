@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild._native import DiscoveredAuditBlock, DiscoveredAuditFile, plan_audit
+from sqlbuild._native import DiscoveredAuditBlock, DiscoveredAuditFile, SourceEntry, plan_audit
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
@@ -14,7 +14,6 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledAuditView, CompiledResourceType
 from sqlbuild.compiler.planner.models import AuditPlanEntry
-from sqlbuild.spec.contracts.models import SourceEntry
 from tests.integration.src.sqlbuild.compiler.planner._helpers._test_types import (
     ExecuteAuditTestCase,
 )

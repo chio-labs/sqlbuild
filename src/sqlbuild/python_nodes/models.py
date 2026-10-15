@@ -6,13 +6,11 @@ import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
-from sqlbuild.compiler.auditing.models import MeasurementThresholds
+from sqlbuild._native import MeasurementThresholds, SourceColumnEntry, SourceWriteStrategy
 from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.errors.contracts.exceptions import SharedInputError
 from sqlbuild.python_nodes.constants import RELATION_RENDERER
 from sqlbuild.python_nodes.types import PythonCheckSeverity, SqlResourceRefKind
-from sqlbuild.spec.contracts.models import SourceColumnEntry
-from sqlbuild.spec.contracts.types import SourceWriteStrategy
 
 
 @dataclass(frozen=True)

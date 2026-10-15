@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
+from sqlbuild._native import SqlLexicalSyntax
 
 
 @dataclass(frozen=True)

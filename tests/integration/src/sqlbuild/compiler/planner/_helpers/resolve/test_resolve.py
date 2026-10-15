@@ -7,6 +7,8 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import (
+    SourceColumnEntry,
+    SourceEntry,
     WarehouseSnapshot,
 )
 from sqlbuild.adapter.contract.models import ColumnInfo
@@ -19,7 +21,6 @@ from sqlbuild.compiler.planner.models import (
     ModelCursorSnapshot,
 )
 from sqlbuild.compiler.planner.types import CursorType
-from sqlbuild.spec.contracts.models import SourceColumnEntry, SourceEntry
 from tests.integration.src.sqlbuild.compiler.planner._helpers.resolve._test_types import (
     ResolveAndExecuteTestCase,
     ResolveBoundedOverrideTestCase,

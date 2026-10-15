@@ -12,6 +12,7 @@ import pytest
 from sqlbuild._native import (
     CompileModelConfig,
     DiscoveredSeedFile,
+    Fingerprint,
     PlannerRelationsContext,
     PlannerScope,
     PlannerSelection,
@@ -25,7 +26,6 @@ from sqlbuild._native import (
     resolve_static_relation_context,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledSeedView
-from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import PlanOutput, SeedPlanEntry
 from sqlbuild.compiler.planner.types import PlanReason
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (

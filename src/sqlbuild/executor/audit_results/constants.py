@@ -1,6 +1,6 @@
 """Audit result warehouse storage constants."""
 
-from sqlbuild.sql_values.types import StateSqlValueType
+from sqlbuild._native import StateSqlValueType
 
 AUDIT_RESULTS_TABLE_NAME: str = "_sqlbuild_audit_results"
 AUDIT_RESULT_SCHEMA_VERSION: int = 1

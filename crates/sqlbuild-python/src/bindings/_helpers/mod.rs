@@ -23,6 +23,7 @@ pub(crate) mod compiler_errors;
 pub(crate) mod compiler_records;
 pub(crate) mod compute_logs;
 pub(crate) mod contract_command;
+pub(crate) mod contract_records;
 pub(crate) mod contracts;
 pub(crate) mod cost_command;
 pub(crate) mod cost_report;

@@ -6,16 +6,18 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import CollectionRendering, ProjectConfigError
-from sqlbuild.runtime.event_exporting.types import LifecycleEventKind
-from sqlbuild.spec.contracts.models import (
+from sqlbuild._native import (
     AuthoredTimeTravelRetention,
+    CollectionRendering,
     ExecutionLimitsConfig,
     LocalConfig,
+    MissingMigrationOriginPolicy,
     ProjectConfig,
+    ProjectConfigError,
+    RetentionDecreasePolicy,
     TargetConfig,
 )
-from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy, RetentionDecreasePolicy
+from sqlbuild.runtime.event_exporting.types import LifecycleEventKind
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ColumnContractModeConfigErrorTestCase,
     ColumnContractModeConfigTestCase,

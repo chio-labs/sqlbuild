@@ -7,6 +7,7 @@ from typing import Any, cast
 
 import pytest
 
+from sqlbuild._native import SnapshotsConfig
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
@@ -22,7 +23,6 @@ from sqlbuild.executor.run._helpers.materializations.snapshot import (
 from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
 from sqlbuild.executor.run.types import ExecutionPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
-from sqlbuild.spec.contracts.models import SnapshotsConfig
 from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
     SnapshotHookFailureTestCase,
     SnapshotLifecycleTestCase,

@@ -8,6 +8,10 @@ import pytest
 
 from sqlbuild._native import (
     CursorSnapshotScope,
+    Fingerprint,
+    SchemaColumn,
+    SchemaModelEntry,
+    TimestampValue,
     WarehouseSnapshot,
     compiled_model_record,
     gather_source_columns,
@@ -26,14 +30,11 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     CursorOverrides,
     ModelCursorSnapshot,
 )
-from sqlbuild.cursor_algebra.models import TimestampValue
-from sqlbuild.spec.contracts.models import SchemaColumn, SchemaModelEntry
 from tests.integration.src.sqlbuild.compiler.planner._helpers._test_types import (
     GatherCursorSnapshotTestCase,
     GatherEmptySnapshotTestCase,

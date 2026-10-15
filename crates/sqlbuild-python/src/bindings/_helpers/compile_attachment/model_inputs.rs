@@ -28,7 +28,7 @@ const SCOPE_TYPES_MODULE: &str = "sqlbuild._native";
 const COLLECTOR_MODULE: &str = "sqlbuild._native";
 const PROJECT_VARS_MODULE: &str = "sqlbuild._native";
 const MACRO_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.main.active_macro_bridge";
-const SQL_ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.sql_analysis.models";
+const SQL_ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
 const PYTHON_NODE_MODELS_MODULE: &str = "sqlbuild.python_nodes.models";
 const PYTHON_NODE_TYPES_MODULE: &str = "sqlbuild.python_nodes.types";
 /// The explicit reference call kinds and the `SqlResourceRefKind` member each resolves to.

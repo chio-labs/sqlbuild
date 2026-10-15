@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
 
+from sqlbuild._native import SeedCsvSettings, SourceColumnEntry, SourceEntry, SourceWriteStrategy
 from sqlbuild.adapter.contract.classes.retention_adapter import RetentionAdapterMixin
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
@@ -31,8 +32,6 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
 )
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.spec.contracts.models import SeedCsvSettings, SourceColumnEntry, SourceEntry
-from sqlbuild.spec.contracts.types import SourceWriteStrategy
 
 
 def build_audit_result(

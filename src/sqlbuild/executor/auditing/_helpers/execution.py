@@ -11,6 +11,7 @@ from typing import Any, cast
 
 from sqlbuild._native import (
     CostContext,
+    SourceEntry,
     assert_no_unresolved_sql_markers,
     evaluate_measurement,
     render_audit_sql,
@@ -32,7 +33,6 @@ from sqlbuild.executor.auditing.exceptions import AuditMeasurementExecutionError
 from sqlbuild.executor.auditing.models import AuditExecutionContext, AuditExecutionResult
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.runtime.observability.models import OperationAttributes
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def execute_audit_impl(  # noqa: PLR0913

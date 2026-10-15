@@ -12,6 +12,12 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from sqlbuild._native import (
+    AlignedInterval,
+    DateValue,
+    IntegerValue,
+    MicrobatchLimitAction,
+    TableType,
+    TimestampValue,
     aligned_timestamp_bounds,
     compute_query_hash,
     cursor_bound_display,
@@ -59,7 +65,6 @@ from sqlbuild.compiler.planner.types import (
     MicrobatchStrategy,
     OnSchemaChange,
 )
-from sqlbuild.cursor_algebra.models import AlignedInterval, DateValue, IntegerValue, TimestampValue
 from sqlbuild.cursor_algebra.types import Bound, BoundSentinel, CursorScalar
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
@@ -162,7 +167,6 @@ from sqlbuild.runtime.observability.main.canonicalize_operation_adapter import (
     canonicalize_operation_adapter,
 )
 from sqlbuild.runtime.observability.models import MicrobatchLifecycleContext
-from sqlbuild.spec.contracts.types import MicrobatchLimitAction, TableType
 
 _DEFAULT_ON_SCHEMA_CHANGE: OnSchemaChange = OnSchemaChange.APPEND_NEW_COLUMNS
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")

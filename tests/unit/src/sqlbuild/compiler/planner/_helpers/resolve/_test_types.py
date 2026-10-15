@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
+from sqlbuild._native import SourceEntry
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.planner.models import CursorBounds, CursorOverrides, ModelCursorSnapshot
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 @dataclass(frozen=True)

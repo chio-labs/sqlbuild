@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    MicrobatchLimitAction,
     PlanEntryBuildInputs,
     PlanWarning,
     apply_configured_microbatch_limits,
@@ -28,7 +29,6 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
-from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     ConfiguredMicrobatchPolicyTestCase,
     EffectiveMicrobatchLimitPlanningTestCase,

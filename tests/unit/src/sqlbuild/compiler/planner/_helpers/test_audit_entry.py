@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import plan_audit
+from sqlbuild._native import SourceEntry, plan_audit
 from sqlbuild.compiler.auditing.types import AuditAttachmentKind, AuditRunScope
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
@@ -12,7 +12,6 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledAuditView
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     PlanAttachedAuditTestCase,
     PlanAuditTestCase,

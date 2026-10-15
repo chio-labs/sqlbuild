@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunLifecyclePlan
+from sqlbuild._native import PythonNodeGraph, PythonSqlRunLifecyclePlan
 from sqlbuild.executor.python_nodes._helpers.lifecycle_nodes import build_ingress_lifecycle_nodes
 from sqlbuild.executor.scheduling.models import LifecycleExecutionNode
 from tests.unit.src.sqlbuild.executor.python_nodes._helpers._test_types import (

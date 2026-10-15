@@ -6,6 +6,7 @@ import re
 from collections.abc import Callable, Iterable
 from typing import Any, cast
 
+from sqlbuild._native import EventExportSeverity
 from sqlbuild.python_nodes.main.attach_definition import attach_definition
 from sqlbuild.runtime.event_exporting.constants import (
     EVENT_EXPORT_KINDS,
@@ -15,7 +16,6 @@ from sqlbuild.runtime.event_exporting.constants import (
 from sqlbuild.runtime.event_exporting.exceptions import EventExporterInputError
 from sqlbuild.runtime.event_exporting.models import LifecycleEventSinkDefinition
 from sqlbuild.runtime.event_exporting.types import LifecycleEventKind
-from sqlbuild.spec.contracts.types import EventExportSeverity
 
 
 def lifecycle_event_sink(

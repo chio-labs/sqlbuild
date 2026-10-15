@@ -18,13 +18,13 @@ from sqlbuild._native import (
     CustomHostObserver,
     DeclarationScopeBuild,
     LintRunResult,
+    SqlLexicalSyntax,
     active_lint_stop,
     rules_bulk_cache_path,
 )
 from sqlbuild._native import run_cli as main
 from sqlbuild.compiler.compile.models import LoadedMacro
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile, DiscoveredProjectInputs
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     CustomHostFailureIntegrationTestCase,
     CustomHostInterruptIntegrationTestCase,

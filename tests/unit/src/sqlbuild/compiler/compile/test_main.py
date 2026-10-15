@@ -9,9 +9,21 @@ from typing import TYPE_CHECKING
 import pytest
 
 from sqlbuild._native import (
+    AuthoredTimeTravelRetention,
+    ClonePolicy,
     CompileModelConfig,
+    DefaultsConfig,
+    LocalClonePolicy,
+    LocalConfig,
+    LocalTargetConfig,
+    MaterializationDefaultsConfig,
+    MaterializationRetentionDefaults,
+    ProjectConfig,
+    ResolvedTimeTravelRetention,
     ResourceIdentityError,
     SpecConfigError,
+    TargetConfig,
+    TimeTravelRetentionSource,
     build_compile_inputs,
     discover_project_inputs,
     resolve_target_config,
@@ -21,20 +33,6 @@ from sqlbuild.compiler.discovery.models import (
     PythonHookEntry,
     SqlHookEntry,
 )
-from sqlbuild.spec.contracts.models import (
-    AuthoredTimeTravelRetention,
-    ClonePolicy,
-    DefaultsConfig,
-    LocalClonePolicy,
-    LocalConfig,
-    LocalTargetConfig,
-    MaterializationDefaultsConfig,
-    MaterializationRetentionDefaults,
-    ProjectConfig,
-    ResolvedTimeTravelRetention,
-    TargetConfig,
-)
-from sqlbuild.spec.contracts.types import TimeTravelRetentionSource
 from tests.unit.src.sqlbuild.compiler.compile._helpers.config.helpers import build_config_natively
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     DUCKDB_COMPILE_ADAPTER_CONTEXT,

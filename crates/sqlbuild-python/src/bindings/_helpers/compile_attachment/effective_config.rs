@@ -16,7 +16,7 @@ use crate::bindings::_helpers::model_config::template_data::{
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
+const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
 const CONNECTION_LABEL: &str = "effective connection";
 
 /// Merge base project connection with the selected environment overrides.

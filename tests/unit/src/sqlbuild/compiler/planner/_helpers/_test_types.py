@@ -4,6 +4,7 @@ from pathlib import Path
 
 from sqlbuild._native import (
     ChangeKind,
+    Fingerprint,
     MissingUpstream,
     ParsedSelector,
     PathSelector,
@@ -11,6 +12,8 @@ from sqlbuild._native import (
     ScenarioArtifactIdentity,
     ScenarioGraphPlan,
     SchemaAction,
+    SourceEntry,
+    SqlLexicalSyntax,
     WarningSeverity,
 )
 from sqlbuild.compiler.auditing.types import (
@@ -23,7 +26,6 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledProjectView
-from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
     ScenarioRelationMap,
@@ -38,8 +40,6 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     PlanTestChainTestCase as PlanTestChainTestCase,
 )

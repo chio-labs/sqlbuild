@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Any, cast
 
+from sqlbuild._native import SourceEntry
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
@@ -46,7 +47,6 @@ from sqlbuild.executor.run.types import ExecutionPhase, HookPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import _empty_provider_container, invoke_with_providers
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def execute_custom_entry(

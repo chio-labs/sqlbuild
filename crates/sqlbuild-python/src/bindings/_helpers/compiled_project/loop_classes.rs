@@ -19,8 +19,8 @@ const REFERENCE_TYPES_MODULE: &str = "sqlbuild.compiler.references.types";
 const SCOPE_ERRORS_MODULE: &str = "sqlbuild._native";
 const SCOPE_MODELS_MODULE: &str = "sqlbuild._native";
 const SCOPE_TYPES_MODULE: &str = "sqlbuild._native";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
-const CONTRACT_TYPES_MODULE: &str = "sqlbuild.spec.contracts.types";
+const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
+const CONTRACT_TYPES_MODULE: &str = "sqlbuild._native";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 /// The materializations a model's storage policies are inherited for, besides none.
 const TABLE_BACKED_MATERIALIZATIONS: [&str; 3] = ["TABLE", "INCREMENTAL", "SNAPSHOT"];

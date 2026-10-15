@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from types import SimpleNamespace
 from typing import Any, cast
 
-from sqlbuild.compiler.auditing.models import MeasurementThresholdBound, MeasurementThresholds
+from sqlbuild._native import MeasurementThresholdBound, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditEvaluationMode,

@@ -10,10 +10,3 @@ GRAIN_ORDER: dict[CursorGrain, int] = {
     CursorGrain.MONTH: 4,
     CursorGrain.YEAR: 5,
 }
-
-DURATION_YEAR_UNIT: str = "y"
-DURATION_MONTH_UNIT: str = "mo"
-DURATION_DAY_UNIT: str = "d"
-DURATION_HOUR_UNIT: str = "h"
-DURATION_MINUTE_UNIT: str = "m"
-DURATION_SECOND_UNIT: str = "s"

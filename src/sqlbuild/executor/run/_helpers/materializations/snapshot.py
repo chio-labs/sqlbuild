@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild._native import fit_auxiliary_relation_name
+from sqlbuild._native import SnapshotsConfig, fit_auxiliary_relation_name
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import (
@@ -78,7 +78,6 @@ from sqlbuild.runtime.observability.classes.operation_lifecycle import (
 from sqlbuild.runtime.observability.main.canonicalize_operation_adapter import (
     canonicalize_operation_adapter,
 )
-from sqlbuild.spec.contracts.models import SnapshotsConfig
 
 _SCHEMA_CHANGE_STRICTNESS: dict[SnapshotSchemaChangePolicy, int] = {
     SnapshotSchemaChangePolicy.APPEND_NEW_COLUMNS: 0,

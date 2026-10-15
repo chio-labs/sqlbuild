@@ -100,7 +100,7 @@ fn finite_limit<N: AuthoredNode>(
 }
 
 /// Check `MeasurementThresholds.__post_init__` for the parsed bounds.
-fn check_pair(
+pub(crate) fn check_pair(
     warn: Option<ThresholdBound>,
     error: Option<ThresholdBound>,
 ) -> Result<(), &'static str> {

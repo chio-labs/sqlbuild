@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
-from sqlbuild._native import setting_help
+from sqlbuild._native import Fingerprint, setting_help
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
@@ -16,7 +16,6 @@ from sqlbuild.compiler.discovery.constants import (
     STAGED_PROMOTION_MODE,
     TABLE_PROMOTION_MODE_SETTING_KEY,
 )
-from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError

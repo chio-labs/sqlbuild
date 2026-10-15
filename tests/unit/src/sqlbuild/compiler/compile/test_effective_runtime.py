@@ -4,14 +4,15 @@ import re
 
 import pytest
 
-from sqlbuild._native import build_effective_runtime_config, resolve_run_id
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.contracts.models import (
+from sqlbuild._native import (
     LocalConfig,
     LocalTargetConfig,
     ProjectConfig,
     TargetConfig,
+    build_effective_runtime_config,
+    resolve_run_id,
 )
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.unit.src.sqlbuild.compiler.compile._test_types import (
     BuildEffectiveRuntimeConfigTestCase,
     RunIdGenerationTestCase,

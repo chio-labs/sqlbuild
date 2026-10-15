@@ -5,7 +5,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from sqlbuild._native import CompiledLineageColumnFact, ExpansionSpan, UsageRecord
+from sqlbuild._native import (
+    CompiledLineageColumnFact,
+    ExpansionSpan,
+    ResolvedTimeTravelRetention,
+    SourceLocation,
+    SqlLexicalSyntax,
+    SqlValue,
+    UsageRecord,
+)
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompileSqlReference, InferredColumn
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
@@ -13,9 +21,6 @@ from sqlbuild.compiler.lineage.types import (
     InferredNullability,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention, SourceLocation
-from sqlbuild.sql_values.models import SqlValue
 
 if TYPE_CHECKING:
     from sqlbuild._native import CompileInputsView

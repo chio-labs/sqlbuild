@@ -1,14 +1,14 @@
 from pathlib import Path
 
 import sqlbuild._native as _native
-from sqlbuild._native import DiscoveredSqlTestBlock
-from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile, DiscoveredSqlScenarioFile
-from sqlbuild.spec.contracts.models import (
+from sqlbuild._native import (
+    DiscoveredSqlTestBlock,
     SchemaModelEntry,
     SchemaSeedEntry,
     SourceEntry,
     SourceLocation,
 )
+from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile, DiscoveredSqlScenarioFile
 
 REMOVED_SQL_MODEL_HEADER_KEYS: frozenset[str] = frozenset({"run_despite_unchanged"})
 SQL_MODEL_HEADER_KEYS: frozenset[str] = frozenset(

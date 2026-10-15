@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 
+from sqlbuild._native import SchemaDynamicColumnFamily
 from sqlbuild.adapter.contract.models import ColumnInfo, LifeCycleEvent
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.executor.run.types import (
@@ -9,7 +10,6 @@ from sqlbuild.executor.run.types import (
     RuntimeCursorWatermarkMode,
 )
 from sqlbuild.python_nodes.models import SqlResourceRef
-from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
 
 @dataclass(frozen=True)

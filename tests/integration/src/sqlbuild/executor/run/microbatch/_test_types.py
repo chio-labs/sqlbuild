@@ -2,12 +2,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from sqlbuild._native import FutureCursorsConfig, MicrobatchLimitAction
 from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.planner.types import OnSchemaChange
 from sqlbuild.executor.run.types import ExecutionPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
-from sqlbuild.spec.contracts.models import FutureCursorsConfig
-from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 
 
 @dataclass(frozen=True)

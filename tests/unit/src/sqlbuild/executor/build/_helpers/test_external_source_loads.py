@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import SourceEntry
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
@@ -28,7 +29,6 @@ from sqlbuild.observability import (
     invocation_scope,
 )
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
-from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.executor.build._helpers._test_types import (
     ExternalBuildSourceLoadTestCase,
 )

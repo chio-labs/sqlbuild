@@ -5,8 +5,8 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::PyString;
 use pyo3::{pyfunction, wrap_pyfunction};
 
-const SPEC_MODELS: &str = "sqlbuild.spec.contracts.models";
-const SPEC_TYPES: &str = "sqlbuild.spec.contracts.types";
+const SPEC_MODELS: &str = "sqlbuild._native";
+const SPEC_TYPES: &str = "sqlbuild._native";
 const POLICY_DISABLED: &str = "disabled";
 
 /// The policy class, its distance field, and the model keys overriding distance and action.

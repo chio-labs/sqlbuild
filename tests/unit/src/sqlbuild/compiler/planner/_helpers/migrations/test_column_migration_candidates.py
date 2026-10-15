@@ -11,6 +11,7 @@ import pytest
 from sqlbuild._native import (
     CompileModelConfig,
     DeferralInputs,
+    Fingerprint,
     PlannerOverrides,
     PlannerRuntime,
     PlannerScope,
@@ -26,7 +27,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
-from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations._test_types import (
     UnfingerprintableCandidateTestCase,

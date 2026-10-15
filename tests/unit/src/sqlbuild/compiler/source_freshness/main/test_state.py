@@ -5,12 +5,13 @@ from datetime import UTC, datetime
 import pytest
 
 from sqlbuild._native import (
+    SourceFreshnessRecord,
+    SourceFreshnessStrategy,
+    SourceFreshnessValueKind,
     normalize_source_freshness_data_version,
     source_freshness_data_version_hash,
     source_freshness_records_equivalent,
 )
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
-from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
     SharedSourceFreshnessHashTestCase,
     SourceFreshnessStateCompatibilityTestCase,

@@ -6,12 +6,11 @@ from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from typing import cast
 
-from sqlbuild._native import expand_template_data
+from sqlbuild._native import IntegrationLoaderConfig, SourceEntry, expand_template_data
 from sqlbuild.integrations.ingestr._helpers.destination import build_destination_uri
 from sqlbuild.integrations.ingestr.constants import INGESTR_INTEGRATION_KIND
 from sqlbuild.integrations.ingestr.exceptions import IngestrIntegrationError
 from sqlbuild.integrations.ingestr.models import IngestrSourceConfig
-from sqlbuild.spec.contracts.models import IntegrationLoaderConfig, SourceEntry
 
 
 def resolve_ingestr_config(

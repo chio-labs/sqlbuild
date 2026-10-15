@@ -29,6 +29,7 @@ from sqlbuild._native import (
     ScopeLookup,
     ScopeTargetQuery,
     ScopeValidationError,
+    SourceEntry,
     VisibilityReason,
     VisibilityResolution,
     build_scope_index,
@@ -47,7 +48,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
     EnumDeclaration,
 )
-from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.scopes._test_types import (
     ExpectedBooleanCase,
     ResourceExpectation,

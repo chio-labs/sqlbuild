@@ -11,12 +11,12 @@ from sqlbuild._native import (
     ModelValidationRequest,
     NativeModelConfigInputs,
     NativeModelConfigSession,
+    ProjectConfig,
     native_model_config_session,
 )
 from sqlbuild.compiler.compile.models import CompileSqlReference
 from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.spec.contracts.models import ProjectConfig
 
 _ACCEPTED: str = "accepted"
 

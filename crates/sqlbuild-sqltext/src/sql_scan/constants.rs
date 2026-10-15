@@ -6,3 +6,11 @@ pub(crate) const STRING_PREFIX_CHARACTERS: &[u8] = b"bBeErR";
 pub(crate) const STRING_PREFIX_MAX_LENGTH: usize = 2;
 /// Length of a triple-quote string delimiter.
 pub(crate) const TRIPLE_QUOTE_LENGTH: usize = 3;
+/// Line comment prefixes SQLBuild's scanners understand.
+pub const SUPPORTED_LINE_COMMENT_PREFIXES: [&str; 3] = ["#", "--", "//"];
+/// The generic SQL line comment prefix.
+pub const GENERIC_LINE_COMMENT_PREFIX: &str = "--";
+/// Quote characters a triple-quoted string may repeat.
+pub const TRIPLE_QUOTES: [&str; 2] = ["'''", "\"\"\""];
+pub const ESCAPE_CHARACTER: char = '\\';
+pub const BLOCK_COMMENT_OPEN: &str = "/*";

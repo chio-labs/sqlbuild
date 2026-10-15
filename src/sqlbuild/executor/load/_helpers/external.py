@@ -6,6 +6,7 @@ import logging
 import time
 from collections.abc import Callable
 
+from sqlbuild._native import SourceEntry
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
@@ -26,7 +27,6 @@ from sqlbuild.provider.main.runtime import (
 )
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def execute_external_source_load(

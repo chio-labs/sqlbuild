@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild._native import Fingerprint
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.executor.run.models import ModelMaterializationContext
 from sqlbuild.runtime.observability.classes.operation_lifecycle import (
     OperationAttributes,

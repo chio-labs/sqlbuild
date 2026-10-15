@@ -24,7 +24,7 @@ const TRANSIENT_MODELS_MODULE: &str =
 const FINGERPRINTING_MODULE: &str = "sqlbuild.executor.clone.main._fingerprinting";
 const EXECUTE_MODULE: &str = "sqlbuild.executor.clone.main.execute";
 const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
-const CONTRACT_TYPES: &str = "sqlbuild.spec.contracts.types";
+const CONTRACT_TYPES: &str = "sqlbuild._native";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const DESTINATION_ENTRY_GROUPS: [&str; 4] = [
     "destination_source_entries",

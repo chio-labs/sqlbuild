@@ -5,12 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Any
 
-from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
 from sqlbuild._native import (
+    TableType,
     fit_auxiliary_relation_name,
     future_cursor_cap_warning,
     maximum_start_cap_warning,
 )
+from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
@@ -69,7 +70,6 @@ from sqlbuild.runtime.observability.classes.operation_lifecycle import (
 from sqlbuild.runtime.observability.main.canonicalize_operation_adapter import (
     canonicalize_operation_adapter,
 )
-from sqlbuild.spec.contracts.types import TableType
 
 _DEFAULT_ON_SCHEMA_CHANGE: OnSchemaChange = OnSchemaChange.APPEND_NEW_COLUMNS
 

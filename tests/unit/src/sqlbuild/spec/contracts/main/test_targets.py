@@ -2,23 +2,22 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import SpecConfigError, resolve_target_config
-from sqlbuild.spec.contracts.models import (
+from sqlbuild._native import (
     AuthoredTimeTravelRetention,
     ClonePolicy,
     ExecutionLimitsConfig,
     LocalConfig,
     LocalTargetConfig,
+    MissingMigrationOriginPolicy,
     ProjectConfig,
+    RetentionDecreasePolicy,
+    SpecConfigError,
+    TableType,
+    TableTypeDowngradePolicy,
     TargetConfig,
     TargetDiffConfig,
     TargetWarehousesConfig,
-)
-from sqlbuild.spec.contracts.types import (
-    MissingMigrationOriginPolicy,
-    RetentionDecreasePolicy,
-    TableType,
-    TableTypeDowngradePolicy,
+    resolve_target_config,
 )
 from tests.unit.src.sqlbuild.spec.contracts.main._test_types import (
     AmbiguousTargetConnectionTestCase,

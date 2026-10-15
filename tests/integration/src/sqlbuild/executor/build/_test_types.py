@@ -1,8 +1,8 @@
 from dataclasses import dataclass, field
 
+from sqlbuild._native import MicrobatchLimitAction
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.scheduling.types import ExecutionStatus
-from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 
 
 @dataclass(frozen=True)

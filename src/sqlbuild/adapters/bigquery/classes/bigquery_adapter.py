@@ -10,6 +10,13 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
+from sqlbuild._native import (
+    SeedCsvSettings,
+    SourceFreshnessRecord,
+    SqlLexicalSyntax,
+    SqlValue,
+    SqlValueKind,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import (
     _COLLECTION_SQL_VALUE_KINDS,
     BaseAdapter,
@@ -135,14 +142,9 @@ from sqlbuild.adapters.bigquery.constants import (
     TIMESTAMP_TYPE_TOKEN,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.diagnostics.main.log_sql import log_sql
 from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
-from sqlbuild.spec.contracts.models import SeedCsvSettings
-from sqlbuild.sql_values.models import SqlValue
-from sqlbuild.sql_values.types import SqlValueKind
 
 
 class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):

@@ -12,11 +12,19 @@ from sqlbuild._native import (
     BackfillResult,
     ColumnRenameHint,
     CursorWatermarkMode,
+    DateValue,
     DirectSourceFreshnessPlanningResult,
+    Fingerprint,
     FunctionReturnColumn,
+    FutureCursorAction,
+    FutureCursorsConfig,
     GraphResourceKind,
+    IntegerValue,
+    MeasurementThresholds,
+    MicrobatchLimitAction,
     MigrationCompatibility,
     MigrationDiscovery,
+    MissingMigrationOriginPolicy,
     OldNameViewAction,
     PlanProviderUsage,
     PlanWarning,
@@ -25,12 +33,19 @@ from sqlbuild._native import (
     SchemaAction,
     SchemaChangeKind,
     SchemaColumnSource,
+    SchemaDynamicColumnFamily,
+    SeedCsvSettings,
+    SourceEntry,
+    SourceWriteStrategy,
     SqlTestAssertionStep,
+    SqlValue,
+    StartCursorsConfig,
+    TimestampValue,
 )
+from sqlbuild._native import Duration as Duration
 from sqlbuild._native import cursor_parse as parse
 from sqlbuild.adapter.contract.models import ColumnInfo, RetentionRequest
 from sqlbuild.adapter.contract.types import MigrationTransfer
-from sqlbuild.compiler.auditing.models import MeasurementThresholds
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditEvaluationMode,
@@ -43,7 +58,6 @@ from sqlbuild.compiler.compile.types import (
     FunctionLanguage,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, SqlTestParameterDeclaration
-from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.migrations.types import (
     ColumnMigrationDecision,
     MigrationDecision,
@@ -63,30 +77,8 @@ from sqlbuild.compiler.planner.types import (
     ScenarioArtifactKind,
 )
 from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError
-from sqlbuild.cursor_algebra.models import (
-    DateValue,
-    IntegerValue,
-    TimestampValue,
-)
-from sqlbuild.cursor_algebra.models import (
-    Duration as Duration,
-)
 from sqlbuild.cursor_algebra.types import Bound, BoundSentinel, CursorScalar
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
-from sqlbuild.spec.contracts.models import (
-    FutureCursorsConfig,
-    SchemaDynamicColumnFamily,
-    SeedCsvSettings,
-    SourceEntry,
-    StartCursorsConfig,
-)
-from sqlbuild.spec.contracts.types import (
-    FutureCursorAction,
-    MicrobatchLimitAction,
-    MissingMigrationOriginPolicy,
-    SourceWriteStrategy,
-)
-from sqlbuild.sql_values.models import SqlValue
 
 
 @dataclass(frozen=True, kw_only=True, init=False)

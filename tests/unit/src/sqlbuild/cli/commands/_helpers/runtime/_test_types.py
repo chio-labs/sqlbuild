@@ -1,13 +1,13 @@
 from dataclasses import dataclass, field
 
-from sqlbuild._native import CliCommand
-from sqlbuild.spec.contracts.models import (
+from sqlbuild._native import (
+    CliCommand,
     LocalConfig,
     LocalTargetConfig,
     ProjectConfig,
     TargetWarehousesConfig,
+    WarehouseGroup,
 )
-from sqlbuild.spec.contracts.types import WarehouseGroup
 
 
 @dataclass(frozen=True)

@@ -16,7 +16,7 @@ const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 const MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 const ERRORS_MODULE: &str = "sqlbuild._native";
 const TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const SQL_VALUE_TYPES_MODULE: &str = "sqlbuild.sql_values.types";
+const SQL_VALUE_TYPES_MODULE: &str = "sqlbuild._native";
 
 pub(crate) type NativeBlock<'py> = (Bound<'py, PyDict>, String, Bound<'py, PyAny>);
 

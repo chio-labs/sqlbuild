@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import CollectionRendering, resolve_effective_collection_rendering
-from sqlbuild.spec.contracts.models import ConstantsConfig, ProjectConfig
+from sqlbuild._native import (
+    CollectionRendering,
+    ConstantsConfig,
+    ProjectConfig,
+    resolve_effective_collection_rendering,
+)
 from tests.unit.src.sqlbuild.spec.contracts.main._test_types import (
     EffectiveCollectionRenderingResolutionTestCase,
 )

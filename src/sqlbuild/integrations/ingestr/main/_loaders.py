@@ -10,7 +10,6 @@ from sqlbuild.integrations.ingestr._helpers.output import record_ingestr_output
 from sqlbuild.integrations.ingestr._helpers.runner import run_ingestr_command
 from sqlbuild.integrations.ingestr.exceptions import IngestrIntegrationError
 from sqlbuild.integrations.ingestr.models import IngestrCommandResult
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def ingestr_loader_function(

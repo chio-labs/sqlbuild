@@ -10,11 +10,11 @@ from sqlbuild._native import (
     AuthoredSqlValueCall,
     DiscoveryFileFault,
     NamedSqlHookEntry,
+    SourceLocation,
     discover_model_files,
     model_output_column_locations,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile, PythonHookEntry, SqlHookEntry
-from sqlbuild.spec.contracts.models import SourceLocation
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DeferredModelOutputLocationTestCase,
     ExpectedBooleanTestCase,

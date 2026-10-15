@@ -6,8 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from sqlbuild._native import render_state_sql_literal
-from sqlbuild.sql_values.types import StateSqlValueType
+from sqlbuild._native import StateSqlValueType, render_state_sql_literal
 from tests.unit.src.sqlbuild.sql_values._test_types import StateLiteralGoldenTestCase
 
 

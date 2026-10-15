@@ -37,17 +37,13 @@ from sqlbuild.adapter.contract.types import (
 )
 from sqlbuild.adapter.relations.models import InspectionQueryRecord
 from sqlbuild.cli.compile_reuse.models import CompileReuseRequest
-from sqlbuild.compiler.auditing.models import (
-    AuditGateIdentity,
-    MeasurementContract,
-    MeasurementThresholds,
-)
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditEvaluationMode,
     AuditOutcome,
     AuditRunScope,
     AuditSeverity,
+    ThresholdOperator,
 )
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
@@ -105,7 +101,6 @@ from sqlbuild.compiler.discovery.models import (
     SqlTestParameterDeclaration,
 )
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
-from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.lineage.types import (
     InferredNullability,
 )
@@ -166,10 +161,6 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
     ScenarioArtifactKind,
-)
-from sqlbuild.compiler.python_nodes.models import (
-    PythonNodeGraph,
-    PythonSqlRunLifecyclePlan,
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.compiler.references.models import (
@@ -465,6 +456,14 @@ type NativeSqlTestPlanRow = tuple[
 ]
 
 type SqlTestAssemblyFailureKind = Literal["input", "internal", "decimal_overflow"]
+
+type SqlScalar = str | int | bool | float | Decimal | None
+type SqlValuePayload = SqlScalar | tuple[object, ...]
+
+class DbtInvoker(Protocol):
+    """Callable dbt process invocation contract."""
+
+    def __call__(self, *, argv: tuple[str, ...], cwd: Path | None) -> object: ...
 
 class FingerprintWriteProgress(Protocol):
     def __call__(self, *, completed: int, total: int) -> None: ...
@@ -14054,3 +14053,1467 @@ class ScopeReport(NativeRecord):
         diagnostics: tuple[ScopeDiagnostic, ...] = ...,
         complete: bool = ...,
     ) -> None: ...
+
+class EventExportSeverity(StrEnum):
+    """Severity used to filter exported lifecycle events."""
+
+    DEBUG = "debug"
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+
+class WarehouseGroup(StrEnum):
+    """Command group that selects a target's default warehouse."""
+
+    BUILD = "build"
+    QUERY = "query"
+
+class SourceWriteStrategy(StrEnum):
+    APPEND = "append"
+    DELETE_INSERT = "delete_insert"
+    MERGE = "merge"
+    TABLE = "table"
+
+class FutureCursorAction(StrEnum):
+    """Response when an effective cursor lies beyond the future horizon."""
+
+    CAP = "cap"
+    ERROR = "error"
+
+class MicrobatchLimitAction(StrEnum):
+    """Response when one model plans more than the configured batch limit."""
+
+    CAP_FROM_END = "cap_from_end"
+    CAP_FROM_START = "cap_from_start"
+    ERROR = "error"
+    WARN = "warn"
+
+class ColumnContractMode(StrEnum):
+    """Default contract behavior for model column declarations."""
+
+    IMPLICIT = "implicit"
+    EXPLICIT = "explicit"
+
+class SourceFreshnessStrategy(StrEnum):
+    ADAPTER = "adapter"
+    COLUMN = "column"
+    SQL = "sql"
+
+class SourceFreshnessValueKind(StrEnum):
+    TIMESTAMP = "timestamp"
+    INTEGER = "integer"
+    STRING = "string"
+
+class TimeTravelRetentionSource(StrEnum):
+    """Authored layer that supplied the effective retention policy."""
+
+    TARGET = "target"
+    MATERIALIZATION = "materialization"
+    MODEL = "model"
+
+class TableType(StrEnum):
+    """Snowflake managed table type."""
+
+    PERMANENT = "permanent"
+    TRANSIENT = "transient"
+
+class TableTypeSource(StrEnum):
+    """Authored layer that supplied the effective table type."""
+
+    DEFAULT = "default"
+    TARGET = "target"
+    MATERIALIZATION = "materialization"
+    MODEL = "model"
+
+class TableTypeDowngradePolicy(StrEnum):
+    """Permanent-to-transient conversion policy."""
+
+    DENY = "deny"
+    REQUIRE_CONFIRMATION = "require_confirmation"
+    ALLOW = "allow"
+
+class MissingMigrationOriginPolicy(StrEnum):
+    """Policy for a declared migrate_from whose origin does not exist in a target."""
+
+    DENY = "deny"
+    REQUIRE_CONFIRMATION = "require_confirmation"
+    ALLOW = "allow"
+
+class RetentionDecreasePolicy(StrEnum):
+    """Policy for lowering live time-travel retention."""
+
+    DENY = "deny"
+    REQUIRE_CONFIRMATION = "require_confirmation"
+    ALLOW = "allow"
+
+class ClonePolicy(NativeRecord):
+    """Environment clone policy."""
+
+    allow_as_clone_origin: bool
+    allow_as_clone_destination: bool
+    def __init__(
+        self,
+        allow_as_clone_origin: bool = ...,
+        allow_as_clone_destination: bool = ...,
+    ) -> None: ...
+
+class LocalClonePolicy(NativeRecord):
+    """Local environment clone policy overrides."""
+
+    allow_as_clone_origin: bool | None
+    allow_as_clone_destination: bool | None
+    def __init__(
+        self,
+        allow_as_clone_origin: bool | None = ...,
+        allow_as_clone_destination: bool | None = ...,
+    ) -> None: ...
+
+class AuthoredTimeTravelRetention(NativeRecord):
+    """One authored time-travel retention policy."""
+
+    desired_days: int | None
+    unmanaged: bool
+    def __init__(
+        self,
+        desired_days: int | None = ...,
+        unmanaged: bool = ...,
+    ) -> None: ...
+
+class MaterializationRetentionDefaults(NativeRecord):
+    """Retention defaults for one built-in materialization."""
+
+    time_travel_retention: AuthoredTimeTravelRetention | None
+    table_type: TableType | None
+    def __init__(
+        self,
+        time_travel_retention: AuthoredTimeTravelRetention | None = ...,
+        table_type: TableType | None = ...,
+    ) -> None: ...
+
+class MaterializationDefaultsConfig(NativeRecord):
+    """Project retention defaults by materialization type."""
+
+    table: MaterializationRetentionDefaults
+    incremental: MaterializationRetentionDefaults
+    snapshot: MaterializationRetentionDefaults
+    def __init__(
+        self,
+        table: MaterializationRetentionDefaults = ...,
+        incremental: MaterializationRetentionDefaults = ...,
+        snapshot: MaterializationRetentionDefaults = ...,
+    ) -> None: ...
+
+class ResolvedTimeTravelRetention(NativeRecord):
+    """Effective retention policy attached to a compiled model."""
+
+    desired_days: int | None
+    unmanaged: bool
+    source: TimeTravelRetentionSource | None
+    def __init__(
+        self,
+        desired_days: int | None = ...,
+        unmanaged: bool = ...,
+        source: TimeTravelRetentionSource | None = ...,
+    ) -> None: ...
+
+class ResolvedTableType(NativeRecord):
+    """Effective Snowflake table type attached to a compiled model."""
+
+    value: TableType
+    source: TableTypeSource
+    declared: bool
+    def __init__(
+        self,
+        value: TableType = ...,
+        source: TableTypeSource = ...,
+        declared: bool = ...,
+    ) -> None: ...
+
+class ExecutionLimitsConfig(NativeRecord):
+    """Optional target-scoped build execution limits."""
+
+    max_models: int | None
+    max_duration: str | None
+    max_duration_seconds: int | None
+    remediation: str | None
+    def __init__(
+        self,
+        max_models: int | None = ...,
+        max_duration: str | None = ...,
+        max_duration_seconds: int | None = ...,
+        remediation: str | None = ...,
+    ) -> None: ...
+
+class TargetDiffConfig(NativeRecord):
+    """Optional target-scoped data-diff limits."""
+
+    max_full_rows: int | Literal["unlimited"] | None
+    def __init__(
+        self,
+        max_full_rows: int | Literal["unlimited"] | None = ...,
+    ) -> None: ...
+
+class TargetWarehousesConfig(NativeRecord):
+    """Optional per-command-group default warehouses for one target."""
+
+    build: str | None
+    query: str | None
+    def __init__(
+        self,
+        build: str | None = ...,
+        query: str | None = ...,
+    ) -> None: ...
+
+class TargetConfig(NativeRecord):
+    """One named target configuration."""
+
+    connection: dict[str, object]
+    connection_name: str | None
+    vars: dict[str, str]
+    database: str | None
+    schema: str | None
+    loader_schema: str | None
+    defer_sources_to: str | None
+    defer_clone_from: str | None
+    clone: ClonePolicy
+    compile_cache: bool | None
+    time_travel_retention: AuthoredTimeTravelRetention | None
+    time_travel_retention_by_materialization: dict[str, AuthoredTimeTravelRetention]
+    owns_time_travel_retention_namespace: bool
+    default_table_type: TableType | None
+    table_type_downgrade: TableTypeDowngradePolicy
+    time_travel_retention_decrease: RetentionDecreasePolicy
+    missing_migration_origin: MissingMigrationOriginPolicy
+    execution_limits: ExecutionLimitsConfig
+    diff: TargetDiffConfig
+    warehouses: TargetWarehousesConfig
+    def __init__(
+        self,
+        connection: dict[str, object] = ...,
+        connection_name: str | None = ...,
+        vars: dict[str, str] = ...,
+        database: str | None = ...,
+        schema: str | None = ...,
+        loader_schema: str | None = ...,
+        defer_sources_to: str | None = ...,
+        defer_clone_from: str | None = ...,
+        clone: ClonePolicy = ...,
+        compile_cache: bool | None = ...,
+        time_travel_retention: AuthoredTimeTravelRetention | None = ...,
+        time_travel_retention_by_materialization: dict[str, AuthoredTimeTravelRetention] = ...,
+        owns_time_travel_retention_namespace: bool = ...,
+        default_table_type: TableType | None = ...,
+        table_type_downgrade: TableTypeDowngradePolicy = ...,
+        time_travel_retention_decrease: RetentionDecreasePolicy = ...,
+        missing_migration_origin: MissingMigrationOriginPolicy = ...,
+        execution_limits: ExecutionLimitsConfig = ...,
+        diff: TargetDiffConfig = ...,
+        warehouses: TargetWarehousesConfig = ...,
+    ) -> None: ...
+
+class LocalTargetConfig(NativeRecord):
+    """Local developer overrides for one named target."""
+
+    connection: dict[str, object]
+    connection_name: str | None
+    vars: dict[str, str]
+    database: str | None
+    schema: str | None
+    loader_schema: str | None
+    defer_sources_to: str | None
+    defer_clone_from: str | None
+    clone: LocalClonePolicy
+    compile_cache: bool | None
+    time_travel_retention: AuthoredTimeTravelRetention | None
+    time_travel_retention_by_materialization: dict[str, AuthoredTimeTravelRetention] | None
+    owns_time_travel_retention_namespace: bool | None
+    default_table_type: TableType | None
+    table_type_downgrade: TableTypeDowngradePolicy | None
+    time_travel_retention_decrease: RetentionDecreasePolicy | None
+    missing_migration_origin: MissingMigrationOriginPolicy | None
+    execution_limits: ExecutionLimitsConfig
+    diff: TargetDiffConfig
+    warehouses: TargetWarehousesConfig
+    def __init__(
+        self,
+        connection: dict[str, object] = ...,
+        connection_name: str | None = ...,
+        vars: dict[str, str] = ...,
+        database: str | None = ...,
+        schema: str | None = ...,
+        loader_schema: str | None = ...,
+        defer_sources_to: str | None = ...,
+        defer_clone_from: str | None = ...,
+        clone: LocalClonePolicy = ...,
+        compile_cache: bool | None = ...,
+        time_travel_retention: AuthoredTimeTravelRetention | None = ...,
+        time_travel_retention_by_materialization: dict[str, AuthoredTimeTravelRetention]
+        | None = ...,
+        owns_time_travel_retention_namespace: bool | None = ...,
+        default_table_type: TableType | None = ...,
+        table_type_downgrade: TableTypeDowngradePolicy | None = ...,
+        time_travel_retention_decrease: RetentionDecreasePolicy | None = ...,
+        missing_migration_origin: MissingMigrationOriginPolicy | None = ...,
+        execution_limits: ExecutionLimitsConfig = ...,
+        diff: TargetDiffConfig = ...,
+        warehouses: TargetWarehousesConfig = ...,
+    ) -> None: ...
+
+class SettingsConfig(NativeRecord):
+    """Global feature toggles."""
+
+    sql_analysis: bool
+    require_sql_analysis: bool
+    query_change_tracking: bool
+    column_contract_mode: ColumnContractMode
+    concurrency: int
+    auto_load_sources: bool
+    microbatch_concurrency: bool
+    microbatch_unaccounted_partition_policy: str
+    table_promotion_mode: str | None
+    default_audit_severity: AuditSeverity | None
+    default_audit_run_scope: str | None
+    def __init__(
+        self,
+        sql_analysis: bool = ...,
+        require_sql_analysis: bool = ...,
+        query_change_tracking: bool = ...,
+        column_contract_mode: ColumnContractMode = ...,
+        concurrency: int = ...,
+        auto_load_sources: bool = ...,
+        microbatch_concurrency: bool = ...,
+        microbatch_unaccounted_partition_policy: str = ...,
+        table_promotion_mode: str | None = ...,
+        default_audit_severity: AuditSeverity | None = ...,
+        default_audit_run_scope: str | None = ...,
+    ) -> None: ...
+    @property
+    def sql_validation(self) -> bool: ...
+
+class ScopesConfig(NativeRecord):
+    """Declaration scope policy configuration."""
+
+    enforce_placement: bool
+    def __init__(
+        self,
+        enforce_placement: bool = ...,
+    ) -> None: ...
+
+class ReferencesConfig(NativeRecord):
+    """Explicit-reference enforcement policy configuration."""
+
+    enforce_explicit: bool
+    def __init__(
+        self,
+        enforce_explicit: bool = ...,
+    ) -> None: ...
+
+class CostConfig(NativeRecord):
+    """Snowflake compute estimate configuration."""
+
+    usd_per_credit: Decimal
+    usd_per_credit_is_default: bool
+    def __init__(
+        self,
+        usd_per_credit: Decimal = ...,
+        usd_per_credit_is_default: bool = ...,
+    ) -> None: ...
+
+class ConstantsConfig(NativeRecord):
+    """Project-wide constant rendering configuration."""
+
+    collection_rendering: CollectionRendering
+    def __init__(
+        self,
+        collection_rendering: CollectionRendering = ...,
+    ) -> None: ...
+
+class FutureCursorsConfig(NativeRecord):
+    """Safety policy for automatically discovered future cursor watermarks."""
+
+    max_distance: str | None
+    action: FutureCursorAction
+    def __init__(
+        self,
+        max_distance: str | None = ...,
+        action: FutureCursorAction = ...,
+    ) -> None: ...
+
+class StartCursorsConfig(NativeRecord):
+    """Safety policy for automatically discovered incremental starts."""
+
+    max_ahead: str | None
+    action: FutureCursorAction
+    def __init__(
+        self,
+        max_ahead: str | None = ...,
+        action: FutureCursorAction = ...,
+    ) -> None: ...
+
+class CursorsConfig(NativeRecord):
+    """Project-wide cursor safety configuration."""
+
+    future: FutureCursorsConfig
+    start: StartCursorsConfig
+    def __init__(
+        self,
+        future: FutureCursorsConfig = ...,
+        start: StartCursorsConfig = ...,
+    ) -> None: ...
+
+class MicrobatchLimitsConfig(NativeRecord):
+    """Per-model microbatch planning safety limit."""
+
+    max_batches: int | None
+    action: MicrobatchLimitAction
+    def __init__(
+        self,
+        max_batches: int | None = ...,
+        action: MicrobatchLimitAction = ...,
+    ) -> None: ...
+
+class MicrobatchesConfig(NativeRecord):
+    """Project-wide microbatch configuration."""
+
+    limits: MicrobatchLimitsConfig
+    def __init__(
+        self,
+        limits: MicrobatchLimitsConfig = ...,
+    ) -> None: ...
+
+class DefaultsConfig(NativeRecord):
+    """Project-wide resource defaults."""
+
+    materialized: str | None
+    database: str | None
+    schema: str | None
+    seed_database: str | None
+    seed_schema: str | None
+    function_database: str | None
+    function_schema: str | None
+    incremental_strategy: str | None
+    incremental_mode: str | None
+    microbatch_strategy: str | None
+    cursor_watermark_mode: str | None
+    merge_exclude_columns: tuple[str, ...]
+    full_refresh: bool | None
+    append_cursor_inclusive: object | None
+    cursor_start: object | None
+    cursor_end: object | None
+    cursor_start_max_ahead: str | None
+    cursor_start_max_action: str | None
+    cursor_future_max_distance: str | None
+    cursor_future_action: str | None
+    lookback: str | None
+    batch_size: str | int | None
+    batch_concurrency: int | None
+    max_microbatches: int | None
+    unaccounted_partition_policy: str | None
+    replay_on_change: str | None
+    row_diff_exclude_columns: tuple[str, ...]
+    row_diff_tolerances: dict[str, object]
+    row_diff_sample_rows: int | None
+    row_diff_sample_seed: int | None
+    tags: tuple[str, ...]
+    contract: str | None
+    pre_hooks: object | None
+    post_hooks: object | None
+    def __init__(
+        self,
+        materialized: str | None = ...,
+        database: str | None = ...,
+        schema: str | None = ...,
+        seed_database: str | None = ...,
+        seed_schema: str | None = ...,
+        function_database: str | None = ...,
+        function_schema: str | None = ...,
+        incremental_strategy: str | None = ...,
+        incremental_mode: str | None = ...,
+        microbatch_strategy: str | None = ...,
+        cursor_watermark_mode: str | None = ...,
+        merge_exclude_columns: tuple[str, ...] = ...,
+        full_refresh: bool | None = ...,
+        append_cursor_inclusive: object | None = ...,
+        cursor_start: object | None = ...,
+        cursor_end: object | None = ...,
+        cursor_start_max_ahead: str | None = ...,
+        cursor_start_max_action: str | None = ...,
+        cursor_future_max_distance: str | None = ...,
+        cursor_future_action: str | None = ...,
+        lookback: str | None = ...,
+        batch_size: str | int | None = ...,
+        batch_concurrency: int | None = ...,
+        max_microbatches: int | None = ...,
+        unaccounted_partition_policy: str | None = ...,
+        replay_on_change: str | None = ...,
+        row_diff_exclude_columns: tuple[str, ...] = ...,
+        row_diff_tolerances: dict[str, object] = ...,
+        row_diff_sample_rows: int | None = ...,
+        row_diff_sample_seed: int | None = ...,
+        tags: tuple[str, ...] = ...,
+        contract: str | None = ...,
+        pre_hooks: object | None = ...,
+        post_hooks: object | None = ...,
+    ) -> None: ...
+
+class DiffConfig(NativeRecord):
+    """Project-wide data-diff configuration."""
+
+    query_artifact_ttl: str
+    def __init__(
+        self,
+        query_artifact_ttl: str = ...,
+    ) -> None: ...
+
+class JanitorConfig(NativeRecord):
+    """Janitor command defaults."""
+
+    enabled: bool
+    retention_days: int | None
+    archive_retention_days: int
+    direct_state_history_versions: int
+    delete_tracked_only: bool
+    exclude_patterns: tuple[str, ...]
+    def __init__(
+        self,
+        enabled: bool = ...,
+        retention_days: int | None = ...,
+        archive_retention_days: int = ...,
+        direct_state_history_versions: int = ...,
+        delete_tracked_only: bool = ...,
+        exclude_patterns: tuple[str, ...] = ...,
+    ) -> None: ...
+
+class MigrationsConfig(NativeRecord):
+    """Model migration defaults."""
+
+    old_name_views: str | None
+    def __init__(
+        self,
+        old_name_views: str | None = ...,
+    ) -> None: ...
+
+class SnapshotsConfig(NativeRecord):
+    """Snapshot materialization safety defaults."""
+
+    current_state_full_refresh: str
+    historical_full_refresh: str
+    schema_change: str
+    wildcard_check_schema_change: str
+    def __init__(
+        self,
+        current_state_full_refresh: str = ...,
+        historical_full_refresh: str = ...,
+        schema_change: str = ...,
+        wildcard_check_schema_change: str = ...,
+    ) -> None: ...
+
+class ScenarioSnapshotLimitsConfig(NativeRecord):
+    """Scenario snapshot capture safety limits."""
+
+    max_rows_per_relation: int | None
+    max_total_rows: int | None
+    max_bytes_per_relation: int | None
+    max_total_bytes: int | None
+    def __init__(
+        self,
+        max_rows_per_relation: int | None = ...,
+        max_total_rows: int | None = ...,
+        max_bytes_per_relation: int | None = ...,
+        max_total_bytes: int | None = ...,
+    ) -> None: ...
+
+class ScenarioConfig(NativeRecord):
+    """Scenario command configuration."""
+
+    run_namespace: str | None
+    local_type_overrides: dict[str, dict[str, str]]
+    snapshot_limits: ScenarioSnapshotLimitsConfig
+    def __init__(
+        self,
+        run_namespace: str | None = ...,
+        local_type_overrides: dict[str, dict[str, str]] = ...,
+        snapshot_limits: ScenarioSnapshotLimitsConfig = ...,
+    ) -> None: ...
+
+class DbtConfig(NativeRecord):
+    """dbt interop configuration."""
+
+    project_dir: str | None
+    profiles_dir: str | None
+    target: str | None
+    target_path: str | None
+    vars: dict[str, object]
+    def __init__(
+        self,
+        project_dir: str | None = ...,
+        profiles_dir: str | None = ...,
+        target: str | None = ...,
+        target_path: str | None = ...,
+        vars: dict[str, object] = ...,
+    ) -> None: ...
+
+class LocalDbtConfig(NativeRecord):
+    """Local dbt interop configuration overrides."""
+
+    target: str | None
+    vars: dict[str, object]
+    def __init__(
+        self,
+        target: str | None = ...,
+        vars: dict[str, object] = ...,
+    ) -> None: ...
+
+class LifecycleEventSinkFilterConfig(NativeRecord):
+    """Destination-neutral runtime narrowing for lifecycle-event sinks."""
+
+    event_kinds: frozenset[str] | None
+    min_severity: EventExportSeverity | None
+    def __init__(
+        self,
+        event_kinds: frozenset[str] | None = ...,
+        min_severity: EventExportSeverity | None = ...,
+    ) -> None: ...
+
+class LifecycleEventSinksConfig(NativeRecord):
+    """Global and named lifecycle-event sink runtime filters and delivery settings."""
+
+    defaults: LifecycleEventSinkFilterConfig
+    named: dict[str, LifecycleEventSinkFilterConfig]
+    shutdown_timeout: str | None
+    shutdown_timeout_seconds: int | None
+    def __init__(
+        self,
+        defaults: LifecycleEventSinkFilterConfig = ...,
+        named: dict[str, LifecycleEventSinkFilterConfig] = ...,
+        shutdown_timeout: str | None = ...,
+        shutdown_timeout_seconds: int | None = ...,
+    ) -> None: ...
+
+class SinksConfig(NativeRecord):
+    """Typed destination sink configuration."""
+
+    lifecycle: LifecycleEventSinksConfig
+    def __init__(
+        self,
+        lifecycle: LifecycleEventSinksConfig = ...,
+    ) -> None: ...
+
+class ProjectConfig(NativeRecord):
+    """Shared project configuration loaded from sqlbuild_project.toml."""
+
+    name: str
+    adapter: str
+    default_target: str | None
+    connection: dict[str, object]
+    connections: dict[str, dict[str, object]]
+    settings: SettingsConfig
+    scopes: ScopesConfig
+    references: ReferencesConfig
+    cost: CostConfig
+    constants: ConstantsConfig
+    cursors: CursorsConfig
+    microbatches: MicrobatchesConfig
+    defaults: DefaultsConfig
+    diff: DiffConfig
+    materialization_defaults: MaterializationDefaultsConfig
+    path_defaults: dict[str, dict[str, object]]
+    vars: dict[str, str]
+    targets: dict[str, TargetConfig]
+    janitor: JanitorConfig
+    migrations: MigrationsConfig
+    snapshots: SnapshotsConfig
+    scenario: ScenarioConfig
+    dbt: DbtConfig
+    sinks: SinksConfig
+    def __init__(
+        self,
+        name: str,
+        adapter: str,
+        default_target: str | None = ...,
+        connection: dict[str, object] = ...,
+        connections: dict[str, dict[str, object]] = ...,
+        settings: SettingsConfig = ...,
+        scopes: ScopesConfig = ...,
+        references: ReferencesConfig = ...,
+        cost: CostConfig = ...,
+        constants: ConstantsConfig = ...,
+        cursors: CursorsConfig = ...,
+        microbatches: MicrobatchesConfig = ...,
+        defaults: DefaultsConfig = ...,
+        diff: DiffConfig = ...,
+        materialization_defaults: MaterializationDefaultsConfig = ...,
+        path_defaults: dict[str, dict[str, object]] = ...,
+        vars: dict[str, str] = ...,
+        targets: dict[str, TargetConfig] = ...,
+        janitor: JanitorConfig = ...,
+        migrations: MigrationsConfig = ...,
+        snapshots: SnapshotsConfig = ...,
+        scenario: ScenarioConfig = ...,
+        dbt: DbtConfig = ...,
+        sinks: SinksConfig = ...,
+    ) -> None: ...
+
+class LocalConfig(NativeRecord):
+    """Local developer overrides from sqlbuild_local.toml."""
+
+    target: str | None
+    adapter: str | None
+    connection: dict[str, object]
+    connections: dict[str, dict[str, object]]
+    targets: dict[str, LocalTargetConfig]
+    settings: SettingsConfig
+    setting_overrides: frozenset[str]
+    vars: dict[str, str]
+    dbt: LocalDbtConfig
+    scenario: ScenarioConfig
+    def __init__(
+        self,
+        target: str | None = ...,
+        adapter: str | None = ...,
+        connection: dict[str, object] = ...,
+        connections: dict[str, dict[str, object]] = ...,
+        targets: dict[str, LocalTargetConfig] = ...,
+        settings: SettingsConfig = ...,
+        setting_overrides: frozenset[str] = ...,
+        vars: dict[str, str] = ...,
+        dbt: LocalDbtConfig = ...,
+        scenario: ScenarioConfig = ...,
+    ) -> None: ...
+
+class SourceLocation(NativeRecord):
+    """An authored source location for compiler diagnostics."""
+
+    path: Path
+    line: int
+    column: int
+    end_line: int | None
+    end_column: int | None
+    def __init__(
+        self,
+        path: Path,
+        line: int,
+        column: int,
+        end_line: int | None = ...,
+        end_column: int | None = ...,
+    ) -> None: ...
+
+class SeedCsvSettings(NativeRecord):
+    """CSV reader settings for a seed file."""
+
+    delimiter: str | None
+    quotechar: str | None
+    doublequote: bool | None
+    escapechar: str | None
+    skipinitialspace: bool | None
+    lineterminator: str | None
+    encoding: str | None
+    na_values: tuple[object, ...] | dict[str, tuple[object, ...]] | None
+    keep_default_na: bool | None
+    def __init__(
+        self,
+        delimiter: str | None = ...,
+        quotechar: str | None = ...,
+        doublequote: bool | None = ...,
+        escapechar: str | None = ...,
+        skipinitialspace: bool | None = ...,
+        lineterminator: str | None = ...,
+        encoding: str | None = ...,
+        na_values: tuple[object, ...] | dict[str, tuple[object, ...]] | None = ...,
+        keep_default_na: bool | None = ...,
+    ) -> None: ...
+
+class SchemaAuditInstance(NativeRecord):
+    """One audit instance attached to model, column, or seed metadata."""
+
+    definition_name: str
+    arguments: dict[str, object]
+    name: str | None
+    description: str | None
+    severity: AuditSeverity | None
+    run_scope: str | None
+    always_run: bool
+    thresholds: MeasurementThresholds | None
+    minimum_samples: int | None
+    evidence_limit: int | None
+    location: SourceLocation | None
+    def __init__(
+        self,
+        definition_name: str,
+        arguments: dict[str, object] = ...,
+        name: str | None = ...,
+        description: str | None = ...,
+        severity: AuditSeverity | None = ...,
+        run_scope: str | None = ...,
+        always_run: bool = ...,
+        thresholds: MeasurementThresholds | None = ...,
+        minimum_samples: int | None = ...,
+        evidence_limit: int | None = ...,
+        location: SourceLocation | None = ...,
+    ) -> None: ...
+
+class SchemaColumn(NativeRecord):
+    """One declared model, seed, or source column entry."""
+
+    name: str
+    type: str | None
+    nullable: bool | None
+    description: str | None
+    meta: dict[str, object]
+    audits: tuple[SchemaAuditInstance, ...]
+    location: SourceLocation | None
+    migrate_from: str | None
+    def __init__(
+        self,
+        name: str,
+        type: str | None = ...,
+        nullable: bool | None = ...,
+        description: str | None = ...,
+        meta: dict[str, object] = ...,
+        audits: tuple[SchemaAuditInstance, ...] = ...,
+        location: SourceLocation | None = ...,
+        migrate_from: str | None = ...,
+    ) -> None: ...
+
+class SchemaDynamicColumnFamily(NativeRecord):
+    """One declared family of columns generated by a runtime-dynamic pivot."""
+
+    name: str
+    pivot_column: str
+    value_column: str
+    aggregate: str
+    type: str
+    name_pattern: str | None
+    def __init__(
+        self,
+        name: str,
+        pivot_column: str,
+        value_column: str,
+        aggregate: str,
+        type: str,
+        name_pattern: str | None = ...,
+    ) -> None: ...
+
+class SchemaModelEntry(NativeRecord):
+    """One model metadata entry normalized from MODEL(...)."""
+
+    name: str
+    model_schema: str | None
+    description: str | None
+    type_enforcement: bool | None
+    meta: dict[str, object]
+    columns: tuple[SchemaColumn, ...]
+    dynamic_columns: tuple[SchemaDynamicColumnFamily, ...]
+    audits: tuple[SchemaAuditInstance, ...]
+    tags: tuple[str, ...]
+    def __init__(
+        self,
+        name: str,
+        model_schema: str | None = ...,
+        description: str | None = ...,
+        type_enforcement: bool | None = ...,
+        meta: dict[str, object] = ...,
+        columns: tuple[SchemaColumn, ...] = ...,
+        dynamic_columns: tuple[SchemaDynamicColumnFamily, ...] = ...,
+        audits: tuple[SchemaAuditInstance, ...] = ...,
+        tags: tuple[str, ...] = ...,
+    ) -> None: ...
+
+class SchemaSeedEntry(NativeRecord):
+    """One seed metadata entry from seed YAML."""
+
+    name: str
+    description: str | None
+    database: str | None
+    schema: str | None
+    meta: dict[str, object]
+    csv_settings: SeedCsvSettings
+    columns: tuple[SchemaColumn, ...]
+    tags: tuple[str, ...]
+    audits: tuple[SchemaAuditInstance, ...]
+    def __init__(
+        self,
+        name: str,
+        description: str | None = ...,
+        database: str | None = ...,
+        schema: str | None = ...,
+        meta: dict[str, object] = ...,
+        csv_settings: SeedCsvSettings = ...,
+        columns: tuple[SchemaColumn, ...] = ...,
+        tags: tuple[str, ...] = ...,
+        audits: tuple[SchemaAuditInstance, ...] = ...,
+    ) -> None: ...
+
+class IntegrationLoaderConfig(NativeRecord):
+    """Typed configuration for one declarative integration loader."""
+
+    kind: str
+    config: object
+    def __init__(
+        self,
+        kind: str,
+        config: object,
+    ) -> None: ...
+
+class SourceFreshnessAgePolicy(NativeRecord):
+    """Age-based source freshness warning/error thresholds."""
+
+    warn_after: str | None
+    error_after: str | None
+    def __init__(
+        self,
+        warn_after: str | None = ...,
+        error_after: str | None = ...,
+    ) -> None: ...
+
+class SourceFreshnessConfig(NativeRecord):
+    """Configured source freshness observation for planning."""
+
+    strategy: SourceFreshnessStrategy
+    value_kind: SourceFreshnessValueKind | None
+    column: str | None
+    query: str | None
+    filter: str | None
+    lag_tolerance: str | None
+    age_policy: SourceFreshnessAgePolicy | None
+    def __init__(
+        self,
+        strategy: SourceFreshnessStrategy,
+        value_kind: SourceFreshnessValueKind | None = ...,
+        column: str | None = ...,
+        query: str | None = ...,
+        filter: str | None = ...,
+        lag_tolerance: str | None = ...,
+        age_policy: SourceFreshnessAgePolicy | None = ...,
+    ) -> None: ...
+
+class SourceColumnEntry(NativeRecord):
+    """One source column entry from sources/*.yml."""
+
+    name: str
+    type: str | None
+    nullable: bool | None
+    description: str | None
+    meta: dict[str, object]
+    audits: tuple[SchemaAuditInstance, ...]
+    def __init__(
+        self,
+        name: str,
+        type: str | None = ...,
+        nullable: bool | None = ...,
+        description: str | None = ...,
+        meta: dict[str, object] = ...,
+        audits: tuple[SchemaAuditInstance, ...] = ...,
+    ) -> None: ...
+
+class SourceEntry(NativeRecord):
+    """One source declaration from sources/*.yml."""
+
+    name: str
+    database: str | None
+    schema: str | None
+    table: str | None
+    loader: str | None
+    managed: bool
+    integration_loader: IntegrationLoaderConfig | None
+    freshness: SourceFreshnessConfig | None
+    write_strategy: SourceWriteStrategy | None
+    load_batch_size: int | None
+    cursor_column: str | None
+    unique_key: tuple[str, ...]
+    expression: str | None
+    description: str | None
+    type_enforcement: bool | None
+    contract: str | None
+    meta: dict[str, object]
+    columns: tuple[SourceColumnEntry, ...]
+    audits: tuple[SchemaAuditInstance, ...]
+    def __init__(
+        self,
+        name: str,
+        database: str | None = ...,
+        schema: str | None = ...,
+        table: str | None = ...,
+        loader: str | None = ...,
+        managed: bool = ...,
+        integration_loader: IntegrationLoaderConfig | None = ...,
+        freshness: SourceFreshnessConfig | None = ...,
+        write_strategy: SourceWriteStrategy | None = ...,
+        load_batch_size: int | None = ...,
+        cursor_column: str | None = ...,
+        unique_key: tuple[str, ...] = ...,
+        expression: str | None = ...,
+        description: str | None = ...,
+        type_enforcement: bool | None = ...,
+        contract: str | None = ...,
+        meta: dict[str, object] = ...,
+        columns: tuple[SourceColumnEntry, ...] = ...,
+        audits: tuple[SchemaAuditInstance, ...] = ...,
+    ) -> None: ...
+
+class LoaderDestinationParts(NativeRecord):
+    """Parsed warehouse relation parts for a loader destination."""
+
+    database: str | None
+    schema: str | None
+    table: str
+    def __init__(
+        self,
+        database: str | None,
+        schema: str | None,
+        table: str,
+    ) -> None: ...
+
+class MeasurementThresholdBound(NativeRecord):
+    """One directional threshold bound for a measurement audit."""
+
+    operator: ThresholdOperator
+    limit: float | None
+    lower: float | None
+    upper: float | None
+    def __init__(
+        self,
+        operator: ThresholdOperator,
+        limit: float | None = ...,
+        lower: float | None = ...,
+        upper: float | None = ...,
+    ) -> None: ...
+
+class MeasurementThresholds(NativeRecord):
+    """Warning and error policy for a measurement audit."""
+
+    warn: MeasurementThresholdBound | None
+    error: MeasurementThresholdBound | None
+    def __init__(
+        self,
+        warn: MeasurementThresholdBound | None = ...,
+        error: MeasurementThresholdBound | None = ...,
+    ) -> None: ...
+
+class MeasurementContract(NativeRecord):
+    """Columns and sample unit returned by a measurement query."""
+
+    value_column: str
+    sample_count_column: str | None
+    sample_unit: str | None
+    def __init__(
+        self,
+        value_column: str,
+        sample_count_column: str | None = ...,
+        sample_unit: str | None = ...,
+    ) -> None: ...
+
+class AuditIdentity(NativeRecord):
+    """Stable identity values for one planned audit binding."""
+
+    binding_key: str
+    audit_name: str
+    definition_fingerprint: str
+    execution_fingerprint: str
+    severity: AuditSeverity
+    run_scope_phase: str
+    attachment_kind: str
+    attached_target_name: str | None
+    attached_column_name: str | None
+    always_run: bool
+    def __init__(
+        self,
+        binding_key: str,
+        audit_name: str,
+        definition_fingerprint: str,
+        execution_fingerprint: str,
+        severity: AuditSeverity,
+        run_scope_phase: str,
+        attachment_kind: str,
+        attached_target_name: str | None = ...,
+        attached_column_name: str | None = ...,
+        always_run: bool = ...,
+    ) -> None: ...
+
+class AuditGateIdentity(NativeRecord):
+    """Aggregate identity for a model's runtime audit gate."""
+
+    binding_set_hash: str
+    blocking_set_hash: str
+    audits: tuple[AuditIdentity, ...]
+    def __init__(
+        self,
+        binding_set_hash: str,
+        blocking_set_hash: str,
+        audits: tuple[AuditIdentity, ...],
+    ) -> None: ...
+
+class SqlValueKind(StrEnum):
+    """Closed logical kinds accepted by the typed SQL value boundary."""
+
+    STRING = "string"
+    INTEGER = "integer"
+    BOOLEAN = "boolean"
+    FLOAT = "float"
+    DECIMAL = "decimal"
+    NULL = "null"
+    LIST = "list"
+    SET = "set"
+    OBJECT = "object"
+
+class StateSqlValueType(StrEnum):
+    """Closed physical value kinds used by warehouse state columns."""
+
+    STRING = "string"
+    INTEGER = "integer"
+    BOOLEAN = "boolean"
+    TIMESTAMP = "timestamp"
+    TEXT_TIMESTAMP = "text_timestamp"
+    DATE = "date"
+    JSON = "json"
+
+class SqlLogicalType(NativeRecord):
+    """Logical type inferred for a normalized SQL value."""
+
+    kind: SqlValueKind
+    element_type: SqlLogicalType | None
+    def __init__(
+        self,
+        kind: SqlValueKind,
+        element_type: SqlLogicalType | None = ...,
+    ) -> None: ...
+    @property
+    def display_name(self) -> str: ...
+
+class SqlValue(NativeRecord):
+    """One validated, canonical SQL value."""
+
+    logical_type: SqlLogicalType
+    value: SqlValuePayload
+    def __init__(
+        self,
+        logical_type: SqlLogicalType,
+        value: SqlValuePayload,
+    ) -> None: ...
+    @property
+    def kind(self) -> SqlValueKind: ...
+
+class Fingerprint(NativeRecord):
+    """One applied fingerprint record from a successful materialization."""
+
+    node_type: str
+    node_name: str
+    target_database: str | None
+    target_schema: str | None
+    target_name: str | None
+    run_id: str
+    definition_hash: str
+    schema_fingerprint: str
+    definition: str
+    ts: datetime
+    metadata_json: str
+    version_hash: str
+    def __init__(
+        self,
+        node_type: str,
+        node_name: str,
+        target_database: str | None,
+        target_schema: str | None,
+        target_name: str | None,
+        run_id: str,
+        definition_hash: str,
+        schema_fingerprint: str,
+        definition: str,
+        ts: datetime,
+        metadata_json: str = ...,
+        version_hash: str = ...,
+    ) -> None: ...
+
+class FingerprintSet(NativeRecord):
+    """Latest fingerprints per node name for one target schema."""
+
+    schema: str
+    fingerprints: dict[str, Fingerprint]
+    fingerprints_by_identity: dict[tuple[str, str], Fingerprint] | None
+    def __init__(
+        self,
+        schema: str,
+        fingerprints: dict[str, Fingerprint],
+        fingerprints_by_identity: dict[tuple[str, str], Fingerprint] | None = ...,
+    ) -> None: ...
+
+class SourceFreshnessRecord(NativeRecord):
+    """One append-only direct observation whose observed time is always aware UTC."""
+
+    source_name: str
+    target_database: str | None
+    target_schema: str | None
+    target_name: str | None
+    run_id: str
+    strategy: str
+    value_kind: str
+    data_version: str | None
+    data_version_hash: str
+    observed_at: datetime
+    def __init__(
+        self,
+        source_name: str,
+        target_database: str | None,
+        target_schema: str | None,
+        target_name: str | None,
+        run_id: str,
+        strategy: str,
+        value_kind: str,
+        data_version: str | None,
+        data_version_hash: str,
+        observed_at: datetime,
+    ) -> None: ...
+    @property
+    def identity(self) -> SourceFreshnessIdentity: ...
+
+class SelectedDbtProfileOutput(NativeRecord):
+    """Selected dbt profile target output before rendering."""
+
+    profile_name: str
+    target_name: str
+    output: dict[str, object]
+    def __init__(
+        self,
+        profile_name: str,
+        target_name: str,
+        output: dict[str, object],
+    ) -> None: ...
+
+class ResolvedDbtProfileOutput(NativeRecord):
+    """Rendered dbt profile target output."""
+
+    project_dir: Path
+    profiles_dir: Path
+    profile_name: str
+    target_name: str
+    output: dict[str, object]
+    def __init__(
+        self,
+        project_dir: Path,
+        profiles_dir: Path,
+        profile_name: str,
+        target_name: str,
+        output: dict[str, object],
+    ) -> None: ...
+
+class DiscoveredPythonNode(NativeRecord):
+    """Shared internal view of a discovered Python DAG node."""
+
+    kind: PythonNodeKind
+    file_path: Path
+    relative_path: Path
+    name: str
+    function: Callable[..., object]
+    depends_on: tuple[Callable[..., object] | SqlResourceRef, ...]
+    sql_deps: tuple[SqlResourceRef, ...]
+    tags: tuple[str, ...]
+    group: str | None
+    description: str | None
+    meta: dict[str, object] | None
+    provider_usages: tuple[DiscoveredProviderUsage, ...]
+    loader: DiscoveredPythonLoaderMetadata | None
+    task: DiscoveredPythonTaskMetadata | None
+    asset: DiscoveredPythonAssetMetadata | None
+    check: DiscoveredPythonCheckMetadata | None
+    identity: PythonNodeIdentity | None
+    def __init__(
+        self,
+        kind: PythonNodeKind,
+        file_path: Path,
+        relative_path: Path,
+        name: str,
+        function: Callable[..., object],
+        depends_on: tuple[Callable[..., object] | SqlResourceRef, ...] = ...,
+        sql_deps: tuple[SqlResourceRef, ...] = ...,
+        tags: tuple[str, ...] = ...,
+        group: str | None = ...,
+        description: str | None = ...,
+        meta: dict[str, object] | None = ...,
+        provider_usages: tuple[DiscoveredProviderUsage, ...] = ...,
+        loader: DiscoveredPythonLoaderMetadata | None = ...,
+        task: DiscoveredPythonTaskMetadata | None = ...,
+        asset: DiscoveredPythonAssetMetadata | None = ...,
+        check: DiscoveredPythonCheckMetadata | None = ...,
+        identity: PythonNodeIdentity | None = ...,
+    ) -> None: ...
+
+class PythonNodeGraph(NativeRecord):
+    """Internal graph inventory for discovered executable Python nodes."""
+
+    nodes: tuple[DiscoveredPythonNode, ...]
+    dependency_edges: tuple[PythonNodeDependencyEdge, ...]
+    upstream_deps: dict[str, tuple[str, ...]]
+    downstream_deps: dict[str, tuple[str, ...]]
+    tag_index: dict[str, frozenset[str]]
+    path_index: dict[str, str]
+    nodes_by_name: dict[str, DiscoveredPythonNode]
+    nodes_by_typed_selector: dict[str, DiscoveredPythonNode]
+    def __init__(
+        self,
+        nodes: tuple[DiscoveredPythonNode, ...],
+        dependency_edges: tuple[PythonNodeDependencyEdge, ...],
+        upstream_deps: dict[str, tuple[str, ...]],
+        downstream_deps: dict[str, tuple[str, ...]],
+        tag_index: dict[str, frozenset[str]],
+        path_index: dict[str, str],
+        nodes_by_name: dict[str, DiscoveredPythonNode],
+        nodes_by_typed_selector: dict[str, DiscoveredPythonNode],
+    ) -> None: ...
+    def selected_sql_refs(self, *, selected_names: frozenset[str]) -> frozenset[SqlResourceRef]: ...
+
+class PythonSqlRunLifecyclePlan(NativeRecord):
+    """Lifecycle-aware run classification for SQL resources and Python nodes."""
+
+    ingress_python_node_names: frozenset[str]
+    ingress_loader_names: frozenset[str]
+    read_side_python_node_names: frozenset[str]
+    def __init__(
+        self,
+        ingress_python_node_names: frozenset[str],
+        ingress_loader_names: frozenset[str],
+        read_side_python_node_names: frozenset[str],
+    ) -> None: ...
+
+class PythonIdentityDependency(NativeRecord):
+    """One first-party Python source object included in a Python node identity."""
+
+    kind: str
+    module: str
+    qualname: str
+    source_path: str
+    source_hash: str
+    source_text: str
+    def __init__(
+        self,
+        kind: str,
+        module: str,
+        qualname: str,
+        source_path: str,
+        source_hash: str,
+        source_text: str,
+    ) -> None: ...
+
+class PythonNodeIdentity(NativeRecord):
+    """Read-only identity metadata for a SQLBuild Python node."""
+
+    node_type: str
+    node_name: str
+    source_path: str
+    source_hash: str
+    definition_hash: str
+    version_hash: str
+    dependencies: tuple[PythonIdentityDependency, ...]
+    definition_json: str
+    metadata_json: str
+    def __init__(
+        self,
+        node_type: str,
+        node_name: str,
+        source_path: str,
+        source_hash: str,
+        definition_hash: str,
+        version_hash: str,
+        dependencies: tuple[PythonIdentityDependency, ...] = ...,
+        definition_json: str = ...,
+        metadata_json: str = ...,
+    ) -> None: ...
+
+class SqlLexicalSyntax(NativeRecord):
+    """Dialect rules for where SQL quoted text and comments end."""
+
+    backslash_escape_quotes: frozenset[str]
+    escape_string_prefix: bool
+    raw_string_prefix: bool
+    triple_quoted_strings: bool
+    nested_block_comments: bool
+    line_comment_prefixes: frozenset[str]
+    def __init__(
+        self,
+        backslash_escape_quotes: frozenset[str] = ...,
+        escape_string_prefix: bool = ...,
+        raw_string_prefix: bool = ...,
+        triple_quoted_strings: bool = ...,
+        nested_block_comments: bool = ...,
+        line_comment_prefixes: frozenset[str] = ...,
+    ) -> None: ...
+    @property
+    def cache_key(self) -> str: ...
+    @property
+    def native_mapping(self) -> dict[str, object]: ...
+    def reads_differently_from_generic(self, sql: str) -> bool: ...
+
+class TimestampValue(NativeRecord):
+    """Timestamp cursor value; aware datetimes are normalized to UTC at ingestion."""
+
+    value: datetime
+    source_text: str | None
+    def __init__(
+        self,
+        value: datetime,
+        source_text: str | None = ...,
+    ) -> None: ...
+
+class DateValue(NativeRecord):
+    """Date cursor value which must remain date-formatted when rendered."""
+
+    value: date
+    def __init__(
+        self,
+        value: date,
+    ) -> None: ...
+
+class IntegerValue(NativeRecord):
+    """Integral cursor value."""
+
+    value: int
+    def __init__(
+        self,
+        value: int,
+    ) -> None: ...
+
+class AlignedInterval(NativeRecord):
+    """Validated half-open cursor interval."""
+
+    start: TimestampValue | DateValue | IntegerValue
+    end: TimestampValue | DateValue | IntegerValue
+    grain: CursorGrain | None
+    def __init__(
+        self,
+        start: TimestampValue | DateValue | IntegerValue,
+        end: TimestampValue | DateValue | IntegerValue,
+        grain: CursorGrain | None,
+    ) -> None: ...
+
+class Duration(NativeRecord):
+    """A calendar-aware duration (years/months plus fixed time units)."""
+
+    years: int
+    months: int
+    days: int
+    hours: int
+    minutes: int
+    seconds: int
+    def __init__(
+        self,
+        years: int = ...,
+        months: int = ...,
+        days: int = ...,
+        hours: int = ...,
+        minutes: int = ...,
+        seconds: int = ...,
+    ) -> None: ...
+    @classmethod
+    def parse(cls, value: str) -> Duration | None: ...
+    @property
+    def is_zero(self) -> bool: ...
+    @property
+    def units(self) -> frozenset[str]: ...
+    def is_single_unit_in(self, allowed_units: frozenset[str]) -> bool: ...
+    @property
+    def has_calendar_component(self) -> bool: ...
+    @property
+    def fixed_seconds(self) -> int: ...
+    @property
+    def total_months(self) -> int: ...
+    def add_to(self, moment: datetime) -> datetime: ...
+    def subtract_from(self, moment: datetime) -> datetime: ...

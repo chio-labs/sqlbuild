@@ -13,6 +13,11 @@ from sqlbuild._native import (
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSqlHookFile,
+    SchemaColumn,
+    SchemaModelEntry,
+    SchemaSeedEntry,
+    SourceColumnEntry,
+    SourceEntry,
     build_manifest,
 )
 from sqlbuild.compiler.auditing.types import (
@@ -47,13 +52,6 @@ from sqlbuild.compiler.planner.types import (
     MaterializationType,
     PlanAction,
     PlanReason,
-)
-from sqlbuild.spec.contracts.models import (
-    SchemaColumn,
-    SchemaModelEntry,
-    SchemaSeedEntry,
-    SourceColumnEntry,
-    SourceEntry,
 )
 
 

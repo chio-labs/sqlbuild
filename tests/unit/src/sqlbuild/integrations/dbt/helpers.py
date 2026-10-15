@@ -19,6 +19,9 @@ from sqlbuild._native import (
     DbtEventStream,
     DbtEventStreamUpdate,
     DbtRunner,
+    LocalConfig,
+    ProjectConfig,
+    SqlLexicalSyntax,
     assemble_project,
     build_dbt_combined_graph,
     build_dbt_ls_argv,
@@ -40,8 +43,6 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
 _GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
 

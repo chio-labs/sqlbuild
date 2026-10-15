@@ -22,6 +22,8 @@ pub(crate) enum FieldDefault {
     Text(&'static str),
     /// A tuple of texts.
     TextTuple(&'static [&'static str]),
+    /// A frozenset of texts.
+    TextFrozenset(&'static [&'static str]),
     EmptyTuple,
     EmptyDict,
     EmptyFrozenset,
@@ -29,6 +31,8 @@ pub(crate) enum FieldDefault {
     Member(&'static str, &'static str, &'static str),
     /// `getattr(import(module), name)()`, evaluated for every instance.
     Call(&'static str, &'static str),
+    /// `getattr(import(module), name)(text)`, evaluated for every instance.
+    CallText(&'static str, &'static str, &'static str),
 }
 
 /// One record field: its name, default and whether it takes part in equality and repr.

@@ -23,14 +23,24 @@ from sqlbuild._native import (
     CompileModelConfig,
     CompileSqlScenarioCte,
     CompileSqlTestCte,
+    DefaultsConfig,
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSqlTestBlock,
+    Fingerprint,
     FunctionArgument,
     PlannerChangeResults,
     ScenarioArtifactIdentity,
+    SchemaColumn,
+    SchemaModelEntry,
+    SchemaSeedEntry,
+    SeedCsvSettings,
+    SourceColumnEntry,
+    SourceEntry,
+    SourceWriteStrategy,
+    SqlLexicalSyntax,
     WarehouseSnapshot,
     build_downstream_deps,
     build_scenario_relation_map,
@@ -70,7 +80,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlScenarioFile,
     DiscoveredSqlTestFile,
 )
-from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import (
     PlanOutput,
@@ -81,19 +90,6 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.spec.contracts.models import (
-    DefaultsConfig,
-    SchemaColumn,
-    SchemaModelEntry,
-    SchemaSeedEntry,
-    SeedCsvSettings,
-    SourceColumnEntry,
-    SourceEntry,
-)
-from sqlbuild.spec.contracts.types import (
-    SourceWriteStrategy,
-)
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     BuildModelWarningsTestCase,
     IncrementalStrategyErrorTestCase,

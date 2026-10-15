@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.python_nodes.models import (
-    DiscoveredPythonNode,
-    PythonNodeGraph,
-    PythonSqlRunLifecyclePlan,
-)
+from sqlbuild._native import DiscoveredPythonNode, PythonNodeGraph, PythonSqlRunLifecyclePlan
 from sqlbuild.executor.scheduling.models import LifecycleExecutionNode
 
 

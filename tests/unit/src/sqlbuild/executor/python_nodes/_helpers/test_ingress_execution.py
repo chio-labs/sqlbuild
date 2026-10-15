@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph
+from sqlbuild._native import DiscoveredPythonNode, PythonNodeGraph, SourceEntry
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus, SkipMode
 from sqlbuild.executor.load.main._resource_kind import load_resource_kind
 from sqlbuild.executor.python_nodes._helpers.ingress_execution import (
@@ -29,7 +29,6 @@ from sqlbuild.observability import (
     dispatcher_scope,
     invocation_scope,
 )
-from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.executor.python_nodes._helpers._test_types import (
     IngressSchedulerSkipLifecycleTestCase,
     PythonIngressLoaderExecutorTestCase,

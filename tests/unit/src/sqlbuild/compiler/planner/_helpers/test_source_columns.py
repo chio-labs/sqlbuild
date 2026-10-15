@@ -9,6 +9,7 @@ import pytest
 from sqlbuild._native import (
     PlannerRelationsContext,
     PlannerScope,
+    SourceEntry,
     build_cursor_input_relations,
     build_planner_relations_context,
     gather_source_columns,
@@ -31,7 +32,6 @@ from sqlbuild.compiler.compile.types import (
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import CursorInputRelation
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     CursorRuntimeOwnershipTestCase,
     KnownSourceColumnsReuseTestCase,

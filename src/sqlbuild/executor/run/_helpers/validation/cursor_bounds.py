@@ -9,6 +9,11 @@ from functools import partial
 from typing import Any
 
 from sqlbuild._native import (
+    AlignedInterval,
+    DateValue,
+    IntegerValue,
+    StartCursorsConfig,
+    TimestampValue,
     apply_maximum_start_policy,
     apply_typed_cursor_replay_policy,
     cursor_window_override_flags,
@@ -51,19 +56,12 @@ from sqlbuild.compiler.planner.types import (
     MicrobatchStrategy,
 )
 from sqlbuild.cursor_algebra.constants import GRAIN_ORDER
-from sqlbuild.cursor_algebra.models import (
-    AlignedInterval,
-    DateValue,
-    IntegerValue,
-    TimestampValue,
-)
 from sqlbuild.cursor_algebra.types import BoundSentinel, CursorScalar
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run.exceptions import EmptyCursorInputsError
 from sqlbuild.executor.run.models import RuntimeCursorInputRelation, RuntimeCursorSpec
 from sqlbuild.executor.run.types import RuntimeCursorWatermarkMode, WatermarkResolver
 from sqlbuild.spec.contracts.constants import ZERO_DAY_CURSOR_DURATION
-from sqlbuild.spec.contracts.models import StartCursorsConfig
 
 
 def has_runtime_owned_cursor_watermarks(

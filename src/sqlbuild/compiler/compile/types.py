@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Protocol
 
-from sqlbuild.sql_values.models import SqlValue
+from sqlbuild._native import SqlValue
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -27,10 +27,18 @@ if TYPE_CHECKING:
         FunctionArgument,
         FunctionReturnColumn,
         LiteralSqlRelation,
+        MeasurementContract,
+        MeasurementThresholds,
+        ScenarioConfig,
+        SchemaModelEntry,
+        SchemaSeedEntry,
         ScopeIndex,
+        SettingsConfig,
+        SourceEntry,
+        SourceLocation,
+        SqlLexicalSyntax,
         UsageRecord,
     )
-    from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
     from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
     from sqlbuild.compiler.compile.models import (
         CompiledObjectKey,
@@ -51,15 +59,6 @@ if TYPE_CHECKING:
         EnumDeclaration,
     )
     from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
-    from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-    from sqlbuild.spec.contracts.models import (
-        ScenarioConfig,
-        SchemaModelEntry,
-        SchemaSeedEntry,
-        SettingsConfig,
-        SourceEntry,
-        SourceLocation,
-    )
 
 
 type RelationKeyRow = tuple[

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild._native import Fingerprint
 
 
 @dataclass(frozen=True)

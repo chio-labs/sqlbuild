@@ -4,6 +4,7 @@ use crate::bindings::_helpers::compile_records::constants::COMPILE_VALUE_RECORDS
 use crate::bindings::_helpers::compiler_enums::constants::COMPILER_ENUMS;
 use crate::bindings::_helpers::compiler_errors::constants::COMPILER_ERRORS;
 use crate::bindings::_helpers::compiler_records::constants::COMPILER_RECORDS;
+use crate::bindings::_helpers::contract_records::constants::CONTRACT_RECORDS;
 use crate::bindings::_helpers::freshness::observation::normalize_observation;
 use crate::bindings::_helpers::planner_records::constants::PLANNER_RECORDS;
 use crate::bindings::_helpers::record_behaviours::constants::{
@@ -146,6 +147,7 @@ pub(crate) const RECORDS: &[&[RecordSpec]] = &[
     SCOPE_RECORDS,
     PLANNER_RECORDS,
     RULE_RECORDS,
+    CONTRACT_RECORDS,
 ];
 
 /// Records whose bound values are normalized or validated before the record is created.
@@ -263,7 +265,7 @@ const BUILD_INVOCATION: RecordSpec = RecordSpec {
         FieldSpec::new("effective_target_name", FieldDefault::None),
         FieldSpec::new(
             "execution_limits",
-            FieldDefault::Call("sqlbuild.spec.contracts.models", "ExecutionLimitsConfig"),
+            FieldDefault::Call("sqlbuild._native", "ExecutionLimitsConfig"),
         ),
     ],
 };

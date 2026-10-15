@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
+from sqlbuild._native import SqlLexicalSyntax
 
 
 def generic_scanner(*, sql: str, context: str = "SQL") -> _native.SqlCodeScanner:

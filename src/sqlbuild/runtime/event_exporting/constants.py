@@ -1,5 +1,6 @@
 """Lifecycle-event sink declaration constants."""
 
+from sqlbuild._native import EventExportSeverity
 from sqlbuild.runtime.event_exporting.types import LifecycleEventKind
 from sqlbuild.spec.contracts.types import EventExportSeverity
 

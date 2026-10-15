@@ -20,6 +20,7 @@ from sqlbuild._native import (
     LoadCommandRequest,
     PlanCommandRequest,
     ScenarioTestCommandRequest,
+    SourceEntry,
     TestCommandRequest,
     discover_project_inputs,
     format_load_execution_json,
@@ -42,7 +43,6 @@ from sqlbuild.executor.load.models import (
     LoadExecutionResult,
     LoadRuntimeParams,
 )
-from sqlbuild.spec.contracts.models import SourceEntry
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     BuildRunAutoLoadFailureTestCase,
     BuildRunAutoLoadFlagTestCase,

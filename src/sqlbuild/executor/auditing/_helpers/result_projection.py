@@ -13,9 +13,8 @@ from contextvars import Context, ContextVar, Token, copy_context
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlbuild._native import build_audit_gate_identity
+from sqlbuild._native import AuditIdentity, MeasurementThresholdBound, build_audit_gate_identity
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.auditing.models import AuditIdentity, MeasurementThresholdBound
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, ThresholdOperator
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput

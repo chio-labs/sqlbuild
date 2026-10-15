@@ -18,6 +18,8 @@ from sqlbuild._native import (
     DeclarationIdentity,
     DeclarationKind,
     DeclarationRecord,
+    SqlValue,
+    SqlValueKind,
     validate_resource_identity,
 )
 from sqlbuild.compiler.compile.exceptions import (
@@ -37,8 +39,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredMacroFile,
     EnumDeclaration,
 )
-from sqlbuild.sql_values.models import SqlValue
-from sqlbuild.sql_values.types import SqlValueKind
 
 _OBJECT_ENTRY_LENGTH: int = 2
 _MACRO_MODULE_LOAD_LOCK: threading.RLock = threading.RLock()

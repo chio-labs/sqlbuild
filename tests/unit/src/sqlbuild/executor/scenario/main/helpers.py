@@ -6,6 +6,7 @@ from typing import Any, ClassVar
 
 from sqlbuild._native import (
     ScenarioGraphPlan,
+    SeedCsvSettings,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
@@ -30,7 +31,6 @@ from sqlbuild.compiler.planner.types import (
     ScenarioArtifactKind,
 )
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
-from sqlbuild.spec.contracts.models import SeedCsvSettings
 
 
 class ScenarioFixtureTestAdapter(BaseAdapter):

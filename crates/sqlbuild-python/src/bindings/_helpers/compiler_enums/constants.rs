@@ -304,6 +304,144 @@ const E_SCOPE_DIAGNOSTIC_CODE: EnumSpec = EnumSpec {
         ("OVER_BROAD_GLOBAL", "S024"),
     ],
 };
+const E_EVENT_EXPORT_SEVERITY: EnumSpec = EnumSpec {
+    name: "EventExportSeverity",
+    doc: "Severity used to filter exported lifecycle events.",
+    members: &[
+        ("DEBUG", "debug"),
+        ("INFO", "info"),
+        ("WARNING", "warning"),
+        ("ERROR", "error"),
+    ],
+};
+const E_WAREHOUSE_GROUP: EnumSpec = EnumSpec {
+    name: "WarehouseGroup",
+    doc: "Command group that selects a target's default warehouse.",
+    members: &[("BUILD", "build"), ("QUERY", "query")],
+};
+const E_SOURCE_WRITE_STRATEGY: EnumSpec = EnumSpec {
+    name: "SourceWriteStrategy",
+    doc: "",
+    members: &[
+        ("APPEND", "append"),
+        ("DELETE_INSERT", "delete_insert"),
+        ("MERGE", "merge"),
+        ("TABLE", "table"),
+    ],
+};
+const E_FUTURE_CURSOR_ACTION: EnumSpec = EnumSpec {
+    name: "FutureCursorAction",
+    doc: "Response when an effective cursor lies beyond the future horizon.",
+    members: &[("CAP", "cap"), ("ERROR", "error")],
+};
+const E_MICROBATCH_LIMIT_ACTION: EnumSpec = EnumSpec {
+    name: "MicrobatchLimitAction",
+    doc: "Response when one model plans more than the configured batch limit.",
+    members: &[
+        ("CAP_FROM_END", "cap_from_end"),
+        ("CAP_FROM_START", "cap_from_start"),
+        ("ERROR", "error"),
+        ("WARN", "warn"),
+    ],
+};
+const E_COLUMN_CONTRACT_MODE: EnumSpec = EnumSpec {
+    name: "ColumnContractMode",
+    doc: "Default contract behavior for model column declarations.",
+    members: &[("IMPLICIT", "implicit"), ("EXPLICIT", "explicit")],
+};
+const E_SOURCE_FRESHNESS_STRATEGY: EnumSpec = EnumSpec {
+    name: "SourceFreshnessStrategy",
+    doc: "",
+    members: &[("ADAPTER", "adapter"), ("COLUMN", "column"), ("SQL", "sql")],
+};
+const E_SOURCE_FRESHNESS_VALUE_KIND: EnumSpec = EnumSpec {
+    name: "SourceFreshnessValueKind",
+    doc: "",
+    members: &[
+        ("TIMESTAMP", "timestamp"),
+        ("INTEGER", "integer"),
+        ("STRING", "string"),
+    ],
+};
+const E_TIME_TRAVEL_RETENTION_SOURCE: EnumSpec = EnumSpec {
+    name: "TimeTravelRetentionSource",
+    doc: "Authored layer that supplied the effective retention policy.",
+    members: &[
+        ("TARGET", "target"),
+        ("MATERIALIZATION", "materialization"),
+        ("MODEL", "model"),
+    ],
+};
+const E_TABLE_TYPE: EnumSpec = EnumSpec {
+    name: "TableType",
+    doc: "Snowflake managed table type.",
+    members: &[("PERMANENT", "permanent"), ("TRANSIENT", "transient")],
+};
+const E_TABLE_TYPE_SOURCE: EnumSpec = EnumSpec {
+    name: "TableTypeSource",
+    doc: "Authored layer that supplied the effective table type.",
+    members: &[
+        ("DEFAULT", "default"),
+        ("TARGET", "target"),
+        ("MATERIALIZATION", "materialization"),
+        ("MODEL", "model"),
+    ],
+};
+const E_TABLE_TYPE_DOWNGRADE_POLICY: EnumSpec = EnumSpec {
+    name: "TableTypeDowngradePolicy",
+    doc: "Permanent-to-transient conversion policy.",
+    members: &[
+        ("DENY", "deny"),
+        ("REQUIRE_CONFIRMATION", "require_confirmation"),
+        ("ALLOW", "allow"),
+    ],
+};
+const E_MISSING_MIGRATION_ORIGIN_POLICY: EnumSpec = EnumSpec {
+    name: "MissingMigrationOriginPolicy",
+    doc: "Policy for a declared migrate_from whose origin does not exist in a target.",
+    members: &[
+        ("DENY", "deny"),
+        ("REQUIRE_CONFIRMATION", "require_confirmation"),
+        ("ALLOW", "allow"),
+    ],
+};
+const E_RETENTION_DECREASE_POLICY: EnumSpec = EnumSpec {
+    name: "RetentionDecreasePolicy",
+    doc: "Policy for lowering live time-travel retention.",
+    members: &[
+        ("DENY", "deny"),
+        ("REQUIRE_CONFIRMATION", "require_confirmation"),
+        ("ALLOW", "allow"),
+    ],
+};
+const E_SQL_VALUE_KIND: EnumSpec = EnumSpec {
+    name: "SqlValueKind",
+    doc: "Closed logical kinds accepted by the typed SQL value boundary.",
+    members: &[
+        ("STRING", "string"),
+        ("INTEGER", "integer"),
+        ("BOOLEAN", "boolean"),
+        ("FLOAT", "float"),
+        ("DECIMAL", "decimal"),
+        ("NULL", "null"),
+        ("LIST", "list"),
+        ("SET", "set"),
+        ("OBJECT", "object"),
+    ],
+};
+const E_STATE_SQL_VALUE_TYPE: EnumSpec = EnumSpec {
+    name: "StateSqlValueType",
+    doc: "Closed physical value kinds used by warehouse state columns.",
+    members: &[
+        ("STRING", "string"),
+        ("INTEGER", "integer"),
+        ("BOOLEAN", "boolean"),
+        ("TIMESTAMP", "timestamp"),
+        ("TEXT_TIMESTAMP", "text_timestamp"),
+        ("DATE", "date"),
+        ("JSON", "json"),
+    ],
+};
 
 /// Compiler, rule, lint and config string enums.
 pub(crate) const COMPILER_ENUMS: &[EnumSpec] = &[
@@ -334,4 +472,20 @@ pub(crate) const COMPILER_ENUMS: &[EnumSpec] = &[
     E_INACCESSIBLE_REASON,
     E_SCOPE_DIAGNOSTIC_SEVERITY,
     E_SCOPE_DIAGNOSTIC_CODE,
+    E_EVENT_EXPORT_SEVERITY,
+    E_WAREHOUSE_GROUP,
+    E_SOURCE_WRITE_STRATEGY,
+    E_FUTURE_CURSOR_ACTION,
+    E_MICROBATCH_LIMIT_ACTION,
+    E_COLUMN_CONTRACT_MODE,
+    E_SOURCE_FRESHNESS_STRATEGY,
+    E_SOURCE_FRESHNESS_VALUE_KIND,
+    E_TIME_TRAVEL_RETENTION_SOURCE,
+    E_TABLE_TYPE,
+    E_TABLE_TYPE_SOURCE,
+    E_TABLE_TYPE_DOWNGRADE_POLICY,
+    E_MISSING_MIGRATION_ORIGIN_POLICY,
+    E_RETENTION_DECREASE_POLICY,
+    E_SQL_VALUE_KIND,
+    E_STATE_SQL_VALUE_TYPE,
 ];

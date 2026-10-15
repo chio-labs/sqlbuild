@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 
-from sqlbuild.spec.contracts.models import MaterializationDefaultsConfig, TargetConfig
-from sqlbuild.spec.contracts.types import TableType, TableTypeSource
+from sqlbuild._native import MaterializationDefaultsConfig, TableType, TableTypeSource, TargetConfig
 
 
 @dataclass(frozen=True)

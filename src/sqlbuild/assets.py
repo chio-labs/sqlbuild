@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 
+from sqlbuild._native import SourceColumnEntry
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.python_nodes.models import AssetContext
 from sqlbuild.python_nodes.main.apply_asset import apply_asset
@@ -15,7 +16,6 @@ from sqlbuild.python_nodes.models import (
     SqlResourceRef,
 )
 from sqlbuild.python_nodes.types import ColumnLineageRefSpec, PythonNodeColumnSpec
-from sqlbuild.spec.contracts.models import SourceColumnEntry
 
 __all__ = ("AssetContext", "SkipMode", "asset", "get_asset_definition")
 

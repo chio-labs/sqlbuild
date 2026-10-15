@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from sqlbuild._native import format_build_execution_json
+from sqlbuild._native import MicrobatchLimitAction, format_build_execution_json
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
@@ -15,7 +15,6 @@ from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
-from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 from tests.unit.src.sqlbuild.cli.commands.shared._helpers.helpers import build_audit_result
 from tests.unit.src.sqlbuild.cli.output.main.build_execution_json._test_types import (
     ExecutionJsonCostTestCase,

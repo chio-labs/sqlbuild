@@ -44,15 +44,10 @@ pub(super) fn safety_duration(value: &Bound<'_, PyAny>, future: bool) -> PyResul
 
 pub(super) fn timestamp_bound(value: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = value.py();
-    Ok(value.is_instance(&imported(
-        py,
-        "sqlbuild.cursor_algebra.models",
-        "DateValue",
-    )?)? || value.is_instance(&imported(
-        py,
-        "sqlbuild.cursor_algebra.models",
-        "TimestampValue",
-    )?)?)
+    Ok(
+        value.is_instance(&imported(py, "sqlbuild._native", "DateValue")?)?
+            || value.is_instance(&imported(py, "sqlbuild._native", "TimestampValue")?)?,
+    )
 }
 
 pub(super) fn utc_clock<'py>(clock: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -68,11 +63,7 @@ pub(super) fn horizon<'py>(
     let py = session.py();
     let (clock, grain) = clock_and_grain;
     let mut clock = utc_clock(clock)?;
-    let date_only = discovered.is_instance(&imported(
-        py,
-        "sqlbuild.cursor_algebra.models",
-        "DateValue",
-    )?)?;
+    let date_only = discovered.is_instance(&imported(py, "sqlbuild._native", "DateValue")?)?;
     if date_only || discovered.getattr("value")?.getattr("tzinfo")?.is_none() {
         clock = call_with(
             &clock.getattr("replace")?,
@@ -80,7 +71,7 @@ pub(super) fn horizon<'py>(
         )?;
     }
     let clock = call_with(
-        &imported(py, "sqlbuild.cursor_algebra.models", "TimestampValue")?,
+        &imported(py, "sqlbuild._native", "TimestampValue")?,
         &[("value", clock)],
     )?;
     let grain = if grain.is_truthy()? {

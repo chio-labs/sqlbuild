@@ -9,6 +9,7 @@ import pytest
 from sqlbuild._native import (
     CompileSqlScenarioCte,
     ScenarioGraphPlan,
+    SqlLexicalSyntax,
     build_scenario_execution_plan,
     build_scenario_fixture_plans,
     build_scenario_relation_plan,
@@ -30,7 +31,6 @@ from sqlbuild.compiler.planner.models import (
     ScenarioFixturePlan,
     ScenarioRelationPlan,
 )
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     ScenarioCheckSqlResolutionErrorTestCase,
     ScenarioCheckSqlResolutionTestCase,

@@ -13,9 +13,14 @@ import pytest
 
 import sqlbuild._native as native_module
 from sqlbuild._native import (
+    ColumnContractMode,
     ContractValidationResult,
     DynamicColumnContractProof,
     DynamicColumnFamilyProof,
+    SchemaColumn,
+    SchemaDynamicColumnFamily,
+    SchemaModelEntry,
+    SourceLocation,
     build_project_graph,
     compiled_model_record,
     compiled_project_record,
@@ -27,13 +32,6 @@ from sqlbuild.compiler.compile.models import CompilerDiagnostic, InferredColumn
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.planner.types import ContractPolicy, IncrementalMode, MaterializationType
-from sqlbuild.spec.contracts.models import (
-    SchemaColumn,
-    SchemaDynamicColumnFamily,
-    SchemaModelEntry,
-    SourceLocation,
-)
-from sqlbuild.spec.contracts.types import ColumnContractMode
 
 _PROJECT_TOML: str = (
     'name = "orders_contracts"\nadapter = "duckdb"\n\n[connection]\ndatabase = "orders.duckdb"\n'

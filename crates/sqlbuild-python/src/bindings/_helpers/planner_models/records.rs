@@ -424,7 +424,7 @@ planner_record! {
         (invocation_time = "invocation_time", FieldDefault::NoneValue, true, true),
         (max_microbatches = "max_microbatches", FieldDefault::NoneValue, true, true),
         (max_microbatches_is_override = "max_microbatches_is_override", FieldDefault::Bool(false), true, true),
-        (microbatch_limit_action = "microbatch_limit_action", FieldDefault::Member(("sqlbuild.spec.contracts.types", "MicrobatchLimitAction"), "ERROR"), true, true),
+        (microbatch_limit_action = "microbatch_limit_action", FieldDefault::Member(("sqlbuild._native", "MicrobatchLimitAction"), "ERROR"), true, true),
     ]
 }
 

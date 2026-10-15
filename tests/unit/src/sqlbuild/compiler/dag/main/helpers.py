@@ -13,6 +13,11 @@ from sqlbuild._native import (
     DiscoveredSeedFile,
     DiscoveredSqlTestBlock,
     FunctionArgument,
+    SchemaColumn,
+    SchemaModelEntry,
+    SchemaSeedEntry,
+    SourceColumnEntry,
+    SourceEntry,
 )
 from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.compiler.compile.models import (
@@ -37,13 +42,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.spec.contracts.models import (
-    SchemaColumn,
-    SchemaModelEntry,
-    SchemaSeedEntry,
-    SourceColumnEntry,
-    SourceEntry,
-)
 from tests.unit.src.sqlbuild.compiler.graph.helpers import project_graph_from_indexes
 
 

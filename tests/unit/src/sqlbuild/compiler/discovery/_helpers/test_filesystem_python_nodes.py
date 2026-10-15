@@ -21,7 +21,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredTaskFunction,
 )
 from sqlbuild.compiler.python_nodes.main.identity import build_python_node_identity
-from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DiscoverCheckFunctionsTestCase,
     DiscoverPythonRootImportTestCase,

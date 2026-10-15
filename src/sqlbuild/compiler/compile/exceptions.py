@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.spec.contracts.models import SourceLocation
+from sqlbuild._native import SourceLocation
 
 
 class CompileInputError(ValueError):

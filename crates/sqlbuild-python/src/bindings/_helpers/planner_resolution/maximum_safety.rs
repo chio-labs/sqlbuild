@@ -188,7 +188,7 @@ fn apply_maximum_start_policy<'py>(
             (
                 "invocation_time",
                 call_with(
-                    &imported(py, "sqlbuild.cursor_algebra.models", "TimestampValue")?,
+                    &imported(py, "sqlbuild._native", "TimestampValue")?,
                     &[("value", utc_clock(&clock)?)],
                 )?,
             ),

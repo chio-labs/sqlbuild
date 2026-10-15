@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from sqlbuild._native import CompileModelConfig
+from sqlbuild._native import CompileModelConfig, Fingerprint
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
@@ -17,7 +17,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.fingerprints.models import Fingerprint
 
 
 def build_single_model_project(

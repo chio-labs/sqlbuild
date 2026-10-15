@@ -7,7 +7,7 @@ use pyo3::types::{PyDict, PyDictMethods};
 use sqlbuild_analysis::sql_test_attachment::main::sql_test_cte_location::sql_test_cte_location;
 use sqlbuild_analysis::sql_test_attachment::models::CteLocation;
 
-const SOURCE_LOCATION_MODULE: &str = "sqlbuild.spec.contracts.models";
+const SOURCE_LOCATION_MODULE: &str = "sqlbuild._native";
 
 /// The location of `call` inside one CTE of a SQL test block, else the CTE header, else the block.
 fn cte_call_location<'py>(

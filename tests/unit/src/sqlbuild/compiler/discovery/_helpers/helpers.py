@@ -9,6 +9,8 @@ from sqlbuild._native import (
     DiscoveredPythonFunctionFile,
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestCase,
+    LocalConfig,
+    ProjectConfig,
     discover_audit_files,
     discover_constant_files,
     discover_enum_files,
@@ -19,7 +21,6 @@ from sqlbuild._native import (
     discover_sql_hook_files,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile, SqlTestParameterDeclaration
-from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     LoadProjectConfigTestCase,
 )

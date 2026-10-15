@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import NativeProgressProjector
+from sqlbuild._native import NativeProgressProjector, SourceEntry, SourceWriteStrategy
 from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledObjectKey
@@ -38,8 +38,6 @@ from sqlbuild.observability import (
     invocation_scope,
 )
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
-from sqlbuild.spec.contracts.models import SourceEntry
-from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.executor.build._helpers._test_types import (
     BuildSchedulerModelHookTestCase,
     BuildSchedulerPlannedSkipTestCase,

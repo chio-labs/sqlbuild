@@ -52,14 +52,11 @@ const R_COMPILE_MODEL_CONFIG: RecordSpec = RecordSpec {
         FieldSpec::new("logical_database", FieldDefault::None),
         FieldSpec::new(
             "time_travel_retention",
-            FieldDefault::Call(
-                "sqlbuild.spec.contracts.models",
-                "ResolvedTimeTravelRetention",
-            ),
+            FieldDefault::Call("sqlbuild._native", "ResolvedTimeTravelRetention"),
         ),
         FieldSpec::new(
             "table_type",
-            FieldDefault::Call("sqlbuild.spec.contracts.models", "ResolvedTableType"),
+            FieldDefault::Call("sqlbuild._native", "ResolvedTableType"),
         ),
     ],
 };
@@ -299,7 +296,7 @@ const R_COMPILE_PROJECT_INPUTS: RecordSpec = RecordSpec {
         FieldSpec::new("effective_connection", FieldDefault::EmptyDict),
         FieldSpec::new(
             "effective_settings",
-            FieldDefault::Call("sqlbuild.spec.contracts.models", "SettingsConfig"),
+            FieldDefault::Call("sqlbuild._native", "SettingsConfig"),
         ),
         FieldSpec::new("no_sql_validation", FieldDefault::False),
         FieldSpec::new("effective_vars", FieldDefault::EmptyDict),

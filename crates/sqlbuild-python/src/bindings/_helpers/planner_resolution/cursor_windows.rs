@@ -94,7 +94,7 @@ fn empty_cursor_window<'py>(
     let mut bound = parse_value(&raw, &kind)?;
     if cursor_start.is_none() && !kind.eq("integer")? {
         bound = call_with(
-            &imported(py, "sqlbuild.cursor_algebra.models", "TimestampValue")?,
+            &imported(py, "sqlbuild._native", "TimestampValue")?,
             &[("value", bound.getattr("value")?)],
         )?;
     }

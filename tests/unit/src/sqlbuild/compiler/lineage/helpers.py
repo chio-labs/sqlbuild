@@ -10,6 +10,9 @@ from sqlbuild._native import (
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     ProjectColumnLineage,
+    SchemaColumn,
+    SchemaSeedEntry,
+    SettingsConfig,
 )
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
@@ -24,7 +27,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     CompiledSeedView,
 )
-from sqlbuild.spec.contracts.models import SchemaColumn, SchemaSeedEntry, SettingsConfig
 
 
 def make_compiled_project(

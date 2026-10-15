@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 
 from sqlbuild._native import (
+    SnapshotsConfig,
     assert_no_unresolved_sql_markers,
     replaces_incremental_relation,
     resolve_cursor_intrinsics,
@@ -47,7 +48,6 @@ from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializat
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
-from sqlbuild.spec.contracts.models import SnapshotsConfig
 
 type _BuildWorkerResult = (
     ModelExecutionResult

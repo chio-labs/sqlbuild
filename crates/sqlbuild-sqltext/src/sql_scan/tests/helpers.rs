@@ -41,3 +41,15 @@ pub(crate) fn raw_strings() -> LexicalSyntax {
         ..generic()
     }
 }
+
+/// Lexical rules with the given quotes, `[escape, raw, triple, nested]` flags and prefixes.
+pub(crate) fn syntax(quotes: &[&str], flags: [bool; 4], prefixes: &[&str]) -> LexicalSyntax {
+    LexicalSyntax {
+        backslash_escape_quotes: quotes.iter().map(|quote| (*quote).to_owned()).collect(),
+        escape_string_prefix: flags[0],
+        raw_string_prefix: flags[1],
+        triple_quoted_strings: flags[2],
+        nested_block_comments: flags[3],
+        line_comment_prefixes: prefixes.iter().map(|prefix| (*prefix).to_owned()).collect(),
+    }
+}

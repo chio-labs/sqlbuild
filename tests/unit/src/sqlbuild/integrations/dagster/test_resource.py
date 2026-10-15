@@ -12,7 +12,12 @@ from unittest.mock import Mock
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild._native import IntegrationResultEnvelope, serialize_maximum_start_safety
+from sqlbuild._native import (
+    FutureCursorAction,
+    IntegrationResultEnvelope,
+    MicrobatchLimitAction,
+    serialize_maximum_start_safety,
+)
 from sqlbuild.compiler.planner.models import MaximumStartSafetyEvidence
 from sqlbuild.integrations.dagster import (
     SqlBuildCliResource,
@@ -23,7 +28,6 @@ from sqlbuild.integrations.dagster._helpers.invocation import (
     _build_results_from_integration_result,
 )
 from sqlbuild.integrations.dagster.classes.sqlbuild_cli_invocation import SqlBuildCliInvocation
-from sqlbuild.spec.contracts.types import FutureCursorAction, MicrobatchLimitAction
 from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterAuditIdentityTestCase,
     DagsterCliCloneFailureTestCase,

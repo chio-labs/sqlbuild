@@ -13,8 +13,8 @@ use sqlbuild_model_config::sql_values::errors::SqlValueFailure;
 use sqlbuild_model_config::sql_values::main::normalize_sql_value::normalize_sql_value as normalized;
 use sqlbuild_model_config::sql_values::models::{RawKey, RawSqlValue, SqlValueLimits};
 
-const MODELS_MODULE: &str = "sqlbuild.sql_values.models";
-const TYPES_MODULE: &str = "sqlbuild.sql_values.types";
+const MODELS_MODULE: &str = "sqlbuild._native";
+const TYPES_MODULE: &str = "sqlbuild._native";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 
 /// The Python classes authored values are told apart by and normalized values are built from.

@@ -9,7 +9,15 @@ from typing import cast
 
 import pytest
 
-from sqlbuild._native import build_python_node_graph
+from sqlbuild._native import (
+    DiscoveredPythonNode,
+    LocalConfig,
+    ProjectConfig,
+    PythonNodeGraph,
+    PythonNodeIdentity,
+    SourceColumnEntry,
+    build_python_node_graph,
+)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAssetFunction,
     DiscoveredCheckFunction,
@@ -19,15 +27,9 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredTaskFunction,
 )
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
-from sqlbuild.compiler.python_nodes.models import (
-    DiscoveredPythonNode,
-    PythonNodeGraph,
-    PythonNodeIdentity,
-)
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.python_nodes.models import RetryPolicy
 from sqlbuild.python_nodes.types import PythonCheckSeverity
-from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SourceColumnEntry
 from tests.unit.src.sqlbuild.compiler.python_nodes._helpers._test_types import (
     PythonNodeGraphInventoryTestCase,
     PythonNodeIdentityConfigTestCase,

@@ -127,7 +127,7 @@ fn resolve_future_cursor_safety<'py>(
             (
                 "invocation_time",
                 call_with(
-                    &imported(py, "sqlbuild.cursor_algebra.models", "TimestampValue")?,
+                    &imported(py, "sqlbuild._native", "TimestampValue")?,
                     &[("value", utc_clock(&clock)?)],
                 )?,
             ),

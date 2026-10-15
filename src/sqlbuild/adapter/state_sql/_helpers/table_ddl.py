@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 
+from sqlbuild._native import StateSqlValueType
 from sqlbuild.adapter.contract.types import FrameworkType
-from sqlbuild.sql_values.types import StateSqlValueType
 
 
 def render_state_table_create_sql_impl(

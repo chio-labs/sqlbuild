@@ -43,8 +43,8 @@ const GENERATED_REFERENCE_MARKERS: [&str; 6] = [
     "__table_fn(",
 ];
 const DIAGNOSTICS_MODULE: &str = "sqlbuild._native";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
-const SQL_ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.sql_analysis.models";
+const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
+const SQL_ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
 const BUILTINS_MODULE: &str = "builtins";
 const MACRO_TOKEN: &str = "@";
 const GENERATED_ALLOWED: &str = "macro-generated references";

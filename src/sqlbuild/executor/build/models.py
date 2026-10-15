@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from sqlbuild._native import SnapshotsConfig
 from sqlbuild.adapter.contract.models import LifeCycleEvent, RelationInfo
 from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
@@ -33,7 +34,6 @@ from sqlbuild.microbatches.types import MicrobatchEventStore
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback, NodeStartCallback
-from sqlbuild.spec.contracts.models import SnapshotsConfig
 
 
 @dataclass(frozen=True)

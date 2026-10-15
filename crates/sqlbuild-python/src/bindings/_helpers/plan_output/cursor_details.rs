@@ -9,7 +9,7 @@ use crate::bindings::_helpers::plan_output::display::{
 use crate::bindings::_helpers::plan_output::values::{optional_text, text};
 
 const BOUND_TYPES_MODULE: &str = "sqlbuild.cursor_algebra.types";
-const CURSOR_MODELS_MODULE: &str = "sqlbuild.cursor_algebra.models";
+const CURSOR_MODELS_MODULE: &str = "sqlbuild._native";
 const MICROBATCH_MODE: &str = "microbatch";
 const TIMESTAMP_CURSOR: &str = "timestamp";
 const INTEGER_CURSOR: &str = "integer";

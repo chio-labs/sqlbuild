@@ -14,7 +14,7 @@ const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
+const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
 
 /// Capture the project inputs every model's native config build and validation read.
 #[pyfunction]

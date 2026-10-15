@@ -9,10 +9,10 @@ use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
 use crate::bindings::_helpers::state_rows::timestamps::{date_time_typed, in_utc, offset_aware};
 
 pub(crate) const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
-pub(crate) const FRESHNESS_MODELS: &str = "sqlbuild.compiler.source_freshness.models";
+pub(crate) const FRESHNESS_MODELS: &str = "sqlbuild._native";
 pub(crate) const FRESHNESS_CONSTANTS: &str = "sqlbuild.compiler.source_freshness.constants";
-pub(crate) const CONTRACT_MODELS: &str = "sqlbuild.spec.contracts.models";
-pub(crate) const CONTRACT_TYPES: &str = "sqlbuild.spec.contracts.types";
+pub(crate) const CONTRACT_MODELS: &str = "sqlbuild._native";
+pub(crate) const CONTRACT_TYPES: &str = "sqlbuild._native";
 pub(crate) const ADAPTER_MODELS: &str = "sqlbuild.adapter.contract.models";
 pub(crate) const ADAPTER_TYPES: &str = "sqlbuild.adapter.contract.types";
 pub(crate) const ADAPTER_EXCEPTIONS: &str = "sqlbuild.adapter.contract.exceptions";

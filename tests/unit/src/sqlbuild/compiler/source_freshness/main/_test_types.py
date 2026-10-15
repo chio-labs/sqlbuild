@@ -2,9 +2,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlbuild._native import SourceFreshnessUnknownReason
+from sqlbuild._native import SourceFreshnessUnknownReason, SourceFreshnessValueKind
 from sqlbuild.adapter.contract.models import TableFreshnessMetadata
-from sqlbuild.spec.contracts.types import SourceFreshnessValueKind
 
 
 @dataclass(frozen=True)

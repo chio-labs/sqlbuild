@@ -2,14 +2,14 @@ from dataclasses import dataclass, field
 
 from sqlbuild._native import (
     CursorSnapshotScope,
+    Fingerprint,
+    SourceEntry,
 )
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
-from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import (
     ModelCursorSnapshot,
 )
 from sqlbuild.cursor_algebra.types import CursorScalar
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 @dataclass(frozen=True)

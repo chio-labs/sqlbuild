@@ -34,14 +34,22 @@ from sqlbuild._native import (
     DiscoveredSqlTestBlock,
     DynamicColumnContractProof,
     LiteralSqlRelation,
+    MeasurementContract,
+    MeasurementThresholds,
     ModelSchemaDeclaration,
     RelatedLocation,
     ResourceIdentity,
+    ScenarioConfig,
+    SchemaModelEntry,
     ScopeIndex,
+    SettingsConfig,
+    SourceLocation,
+    SqlLexicalSyntax,
+    SqlValue,
+    TargetConfig,
     UsageRecord,
     VisibilityRecord,
 )
-from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE, MACRO_CONTEXT_PARAMETER_NAME
 from sqlbuild.compiler.compile.exceptions import CompileInputError
@@ -70,15 +78,6 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.spec.contracts.models import (
-    ScenarioConfig,
-    SchemaModelEntry,
-    SettingsConfig,
-    SourceLocation,
-    TargetConfig,
-)
-from sqlbuild.sql_values.models import SqlValue
 
 
 @dataclass(frozen=True)

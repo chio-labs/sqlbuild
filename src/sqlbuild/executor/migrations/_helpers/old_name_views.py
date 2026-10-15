@@ -31,7 +31,6 @@ from sqlbuild.compiler.migrations.models import (
 )
 from sqlbuild.compiler.migrations.types import OldNameViewEventType
 from sqlbuild.compiler.planner.models import OldNameView, OldNameViewPlanEntry, PlanOutput
-from sqlbuild.cursor_algebra.models import Duration
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.migrations._helpers.old_name_facts import (
     old_name_fact,

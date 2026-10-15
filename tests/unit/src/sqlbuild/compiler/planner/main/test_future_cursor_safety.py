@@ -4,14 +4,12 @@ from datetime import UTC, datetime
 
 import pytest
 
+from sqlbuild._native import FutureCursorAction, FutureCursorsConfig, future_cursor_cap_warning
 from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
-from sqlbuild._native import future_cursor_cap_warning
 from sqlbuild._native import resolve_future_cursor_safety as apply_future_cursor_safety
 from sqlbuild.compiler.planner.exceptions import FutureCursorSafetyError
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
-from sqlbuild.spec.contracts.models import FutureCursorsConfig
-from sqlbuild.spec.contracts.types import FutureCursorAction
 from tests.unit.src.sqlbuild.compiler.planner.main._test_types import FutureCursorSafetyTestCase
 
 

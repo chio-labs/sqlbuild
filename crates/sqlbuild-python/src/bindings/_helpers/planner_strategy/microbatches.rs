@@ -24,8 +24,8 @@ use crate::bindings::_helpers::plan_output::display::aligned_timestamp_bounds;
 use crate::bindings::_helpers::planner_changes::results::MODELS_MODULE;
 use crate::bindings::_helpers::planner_strategy::values::text;
 
-const CURSOR_MODELS_MODULE: &str = "sqlbuild.cursor_algebra.models";
-pub(crate) const CONTRACT_TYPES_MODULE: &str = "sqlbuild.spec.contracts.types";
+const CURSOR_MODELS_MODULE: &str = "sqlbuild._native";
+pub(crate) const CONTRACT_TYPES_MODULE: &str = "sqlbuild._native";
 const INTEGER_CURSOR: &str = "integer";
 const TIMESTAMP_CURSOR: &str = "timestamp";
 const MONTHS_PER_YEAR: i64 = 12;

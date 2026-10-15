@@ -15,9 +15,11 @@ from sqlbuild._native import (
     EnumMemberMetadata,
     EnumMetadata,
     GrantRecord,
+    LocalConfig,
     MacroMetadata,
     OwnershipRoot,
     OwnershipRootKind,
+    ProjectConfig,
     ResourceIdentity,
     ResourceKind,
     ResourceRecord,
@@ -34,7 +36,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlModelFile,
     EnumDeclaration,
 )
-from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
 SCOPE_CACHE_PROJECT: str = 'name = "demo"\nadapter = "duckdb"\n'
 SCOPE_CACHE_MODEL: str = "MODEL(description 'Test model.');\nSELECT 1 AS id\n"

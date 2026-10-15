@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import MicrobatchLimitAction
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 from tests.integration.src.sqlbuild.executor.build._test_types import (
     CappedFilterConsumerTestCase,
     CappedIntermediateFilterTestCase,

@@ -16,8 +16,10 @@ from sqlbuild._native import (
     MacroMetadata,
     OwnershipRoot,
     ResourceKind,
+    SchemaColumn,
     ScopeIndex,
     ScopeKind,
+    SourceColumnEntry,
     build_manifest,
     project_with,
 )
@@ -33,7 +35,6 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ChainStep, PlanOutput, SqlTestPlanEntry
-from sqlbuild.spec.contracts.models import SchemaColumn, SourceColumnEntry
 from tests.unit.src.sqlbuild.compiler.manifest._test_types import (
     FqnTestCase,
     ManifestAuditNodeTestCase,

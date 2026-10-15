@@ -6,6 +6,7 @@ from pathlib import Path
 from sqlbuild._native import (
     CostContext,
     SourceFreshnessIdentity,
+    SourceFreshnessRecord,
     build_source_freshness_create_table_sql,
 )
 from sqlbuild.adapter.contract.types import FrameworkType
@@ -17,7 +18,6 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ChainStep, ModelPlanEntry, SqlTestPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.cost.models import CostResourceContext
 
 

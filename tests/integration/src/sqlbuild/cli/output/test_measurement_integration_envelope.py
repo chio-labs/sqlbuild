@@ -6,8 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import IntegrationCheckResult, IntegrationResultEnvelope
-from sqlbuild.compiler.auditing.models import (
+from sqlbuild._native import (
+    IntegrationCheckResult,
+    IntegrationResultEnvelope,
     MeasurementThresholdBound,
     MeasurementThresholds,
 )

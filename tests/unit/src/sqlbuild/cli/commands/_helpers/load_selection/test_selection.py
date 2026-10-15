@@ -7,12 +7,15 @@ from dataclasses import replace
 import pytest
 
 from sqlbuild._native import (
+    LocalConfig,
+    ProjectConfig,
+    SourceEntry,
+    TargetConfig,
     resolve_loader_defaults,
     select_load_entries,
     select_load_reference_entries,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction, DiscoveredProjectInputs
-from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SourceEntry, TargetConfig
 from tests.unit.src.sqlbuild.cli.commands._helpers.load_selection._test_types import (
     LoaderDefaultResolutionTestCase,
     LoaderDestinationSelectionTestCase,

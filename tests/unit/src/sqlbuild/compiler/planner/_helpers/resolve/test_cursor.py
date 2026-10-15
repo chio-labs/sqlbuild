@@ -8,7 +8,10 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from sqlbuild._native import (
+    AlignedInterval,
     CursorWatermarkMode,
+    DateValue,
+    TimestampValue,
     apply_typed_cursor_replay_policy,
     compute_cursor_bounds,
 )
@@ -24,7 +27,6 @@ from sqlbuild.compiler.planner.types import (
     CursorGrain,
     CursorType,
 )
-from sqlbuild.cursor_algebra.models import AlignedInterval, DateValue, TimestampValue
 from sqlbuild.cursor_algebra.types import CursorScalar
 from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types import (
     CursorBoundsTestCase,

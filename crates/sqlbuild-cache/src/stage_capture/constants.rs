@@ -383,7 +383,11 @@ pub const CANONICAL_TYPES: [(&str, &str); 11] = [
 /// Sequence types captured as their items.
 pub const DECODED_SEQUENCES: [&str; 1] = ["sqlbuild.compiler.compile.models:CompactLineageFacts"];
 /// The Python model type a natively hosted compiler shape is captured as.
-pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
+pub const HOSTED_SHAPE_TYPES: [(&str, &str); 345] = [
+    (
+        "sqlbuild._native:AlignedInterval",
+        "sqlbuild.cursor_algebra.models:AlignedInterval",
+    ),
     (
         "sqlbuild._native:AnalysisCacheContext",
         "sqlbuild.compiler.compile.models:AnalysisCacheContext",
@@ -391,6 +395,18 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
     (
         "sqlbuild._native:AttachedAuditGateEdge",
         "sqlbuild.compiler.graph.models:AttachedAuditGateEdge",
+    ),
+    (
+        "sqlbuild._native:AuditGateIdentity",
+        "sqlbuild.compiler.auditing.models:AuditGateIdentity",
+    ),
+    (
+        "sqlbuild._native:AuditIdentity",
+        "sqlbuild.compiler.auditing.models:AuditIdentity",
+    ),
+    (
+        "sqlbuild._native:AuthoredTimeTravelRetention",
+        "sqlbuild.spec.contracts.models:AuthoredTimeTravelRetention",
     ),
     (
         "sqlbuild._native:ClonePipelineConnection",
@@ -405,8 +421,16 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
         "sqlbuild.compiler.pipeline.models:ClonePipelineResult",
     ),
     (
+        "sqlbuild._native:ClonePolicy",
+        "sqlbuild.spec.contracts.models:ClonePolicy",
+    ),
+    (
         "sqlbuild._native:CollectionRendering",
         "sqlbuild.sql_values.types:CollectionRendering",
+    ),
+    (
+        "sqlbuild._native:ColumnContractMode",
+        "sqlbuild.spec.contracts.types:ColumnContractMode",
     ),
     (
         "sqlbuild._native:ColumnLineage",
@@ -529,6 +553,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
         "sqlbuild.compiler.scopes.models:ConstantMetadata",
     ),
     (
+        "sqlbuild._native:ConstantsConfig",
+        "sqlbuild.spec.contracts.models:ConstantsConfig",
+    ),
+    (
         "sqlbuild._native:ContractAdoptionError",
         "sqlbuild.compiler.contract_adoption.exceptions:ContractAdoptionError",
     ),
@@ -553,12 +581,24 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
         "sqlbuild.compiler.contracts.models:ContractValidationResult",
     ),
     (
+        "sqlbuild._native:CostConfig",
+        "sqlbuild.spec.contracts.models:CostConfig",
+    ),
+    (
         "sqlbuild._native:CursorInputRoles",
         "sqlbuild.compiler.compile.models:CursorInputRoles",
     ),
     (
+        "sqlbuild._native:CursorsConfig",
+        "sqlbuild.spec.contracts.models:CursorsConfig",
+    ),
+    (
         "sqlbuild._native:CustomRulesOutcome",
         "sqlbuild.rule_engine.models:CustomRulesOutcome",
+    ),
+    (
+        "sqlbuild._native:DateValue",
+        "sqlbuild.cursor_algebra.models:DateValue",
     ),
     (
         "sqlbuild._native:DbtCliOptions",
@@ -567,6 +607,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
     (
         "sqlbuild._native:DbtCommandResult",
         "sqlbuild.integrations.dbt.models:DbtCommandResult",
+    ),
+    (
+        "sqlbuild._native:DbtConfig",
+        "sqlbuild.spec.contracts.models:DbtConfig",
     ),
     (
         "sqlbuild._native:DbtInitProgressCallbacks",
@@ -653,6 +697,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
         "sqlbuild.compiler.scopes.models:DeclarationVisibilityIndex",
     ),
     (
+        "sqlbuild._native:DefaultsConfig",
+        "sqlbuild.spec.contracts.models:DefaultsConfig",
+    ),
+    (
         "sqlbuild._native:DeferralInputs",
         "sqlbuild.compiler.planner.models:DeferralInputs",
     ),
@@ -663,6 +711,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
     (
         "sqlbuild._native:DiagnosticSeverity",
         "sqlbuild.compiler.compile.types:DiagnosticSeverity",
+    ),
+    (
+        "sqlbuild._native:DiffConfig",
+        "sqlbuild.spec.contracts.models:DiffConfig",
     ),
     (
         "sqlbuild._native:DirectSemanticColumnUse",
@@ -713,6 +765,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
         "sqlbuild.compiler.python_nodes.models:DiscoveredPythonLoaderMetadata",
     ),
     (
+        "sqlbuild._native:DiscoveredPythonNode",
+        "sqlbuild.compiler.python_nodes.models:DiscoveredPythonNode",
+    ),
+    (
         "sqlbuild._native:DiscoveredPythonTaskMetadata",
         "sqlbuild.compiler.python_nodes.models:DiscoveredPythonTaskMetadata",
     ),
@@ -757,6 +813,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
         "sqlbuild.presentation.models:DisplayOptions",
     ),
     (
+        "sqlbuild._native:Duration",
+        "sqlbuild.cursor_algebra.models:Duration",
+    ),
+    (
         "sqlbuild._native:DynamicColumnContractProof",
         "sqlbuild.compiler.compile.models:DynamicColumnContractProof",
     ),
@@ -777,8 +837,16 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
         "sqlbuild.compiler.scopes.models:EnumMetadata",
     ),
     (
+        "sqlbuild._native:EventExportSeverity",
+        "sqlbuild.spec.contracts.types:EventExportSeverity",
+    ),
+    (
         "sqlbuild._native:EventExporterDiscoveryError",
         "sqlbuild.compiler.discovery.exceptions:EventExporterDiscoveryError",
+    ),
+    (
+        "sqlbuild._native:ExecutionLimitsConfig",
+        "sqlbuild.spec.contracts.models:ExecutionLimitsConfig",
     ),
     (
         "sqlbuild._native:ExpandedLintFile",
@@ -789,8 +857,16 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
         "sqlbuild.compiler.compile.models:ExpansionSpan",
     ),
     (
+        "sqlbuild._native:Fingerprint",
+        "sqlbuild.compiler.fingerprints.models:Fingerprint",
+    ),
+    (
         "sqlbuild._native:FingerprintInputError",
         "sqlbuild.compiler.fingerprints.exceptions:FingerprintInputError",
+    ),
+    (
+        "sqlbuild._native:FingerprintSet",
+        "sqlbuild.compiler.fingerprints.models:FingerprintSet",
     ),
     (
         "sqlbuild._native:FixVerdict",
@@ -807,6 +883,14 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
     (
         "sqlbuild._native:FunctionReturnColumn",
         "sqlbuild.compiler.compile.models:FunctionReturnColumn",
+    ),
+    (
+        "sqlbuild._native:FutureCursorAction",
+        "sqlbuild.spec.contracts.types:FutureCursorAction",
+    ),
+    (
+        "sqlbuild._native:FutureCursorsConfig",
+        "sqlbuild.spec.contracts.models:FutureCursorsConfig",
     ),
     (
         "sqlbuild._native:GrantKind",
@@ -845,6 +929,14 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
         "sqlbuild.compiler.scopes.models:InaccessibleRecord",
     ),
     (
+        "sqlbuild._native:IntegerValue",
+        "sqlbuild.cursor_algebra.models:IntegerValue",
+    ),
+    (
+        "sqlbuild._native:IntegrationLoaderConfig",
+        "sqlbuild.spec.contracts.models:IntegrationLoaderConfig",
+    ),
+    (
         "sqlbuild._native:InterpolationSite",
         "sqlbuild.lint.models:InterpolationSite",
     ),
@@ -859,6 +951,18 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
     (
         "sqlbuild._native:InvalidSqlReferenceCall",
         "sqlbuild.compiler.compile.models:InvalidSqlReferenceCall",
+    ),
+    (
+        "sqlbuild._native:JanitorConfig",
+        "sqlbuild.spec.contracts.models:JanitorConfig",
+    ),
+    (
+        "sqlbuild._native:LifecycleEventSinkFilterConfig",
+        "sqlbuild.spec.contracts.models:LifecycleEventSinkFilterConfig",
+    ),
+    (
+        "sqlbuild._native:LifecycleEventSinksConfig",
+        "sqlbuild.spec.contracts.models:LifecycleEventSinksConfig",
     ),
     (
         "sqlbuild._native:LineageGraphViews",
@@ -899,6 +1003,26 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
         "sqlbuild.compiler.references.models:LiteralSqlRelation",
     ),
     (
+        "sqlbuild._native:LoaderDestinationParts",
+        "sqlbuild.spec.contracts.models:LoaderDestinationParts",
+    ),
+    (
+        "sqlbuild._native:LocalClonePolicy",
+        "sqlbuild.spec.contracts.models:LocalClonePolicy",
+    ),
+    (
+        "sqlbuild._native:LocalConfig",
+        "sqlbuild.spec.contracts.models:LocalConfig",
+    ),
+    (
+        "sqlbuild._native:LocalDbtConfig",
+        "sqlbuild.spec.contracts.models:LocalDbtConfig",
+    ),
+    (
+        "sqlbuild._native:LocalTargetConfig",
+        "sqlbuild.spec.contracts.models:LocalTargetConfig",
+    ),
+    (
         "sqlbuild._native:MacroExpansionResult",
         "sqlbuild.compiler.compile.models:MacroExpansionResult",
     ),
@@ -915,8 +1039,40 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
         "sqlbuild.compiler.compile.models:MappedOffset",
     ),
     (
+        "sqlbuild._native:MaterializationDefaultsConfig",
+        "sqlbuild.spec.contracts.models:MaterializationDefaultsConfig",
+    ),
+    (
+        "sqlbuild._native:MaterializationRetentionDefaults",
+        "sqlbuild.spec.contracts.models:MaterializationRetentionDefaults",
+    ),
+    (
         "sqlbuild._native:MeasurementAuditError",
         "sqlbuild.compiler.auditing.exceptions:MeasurementAuditError",
+    ),
+    (
+        "sqlbuild._native:MeasurementContract",
+        "sqlbuild.compiler.auditing.models:MeasurementContract",
+    ),
+    (
+        "sqlbuild._native:MeasurementThresholdBound",
+        "sqlbuild.compiler.auditing.models:MeasurementThresholdBound",
+    ),
+    (
+        "sqlbuild._native:MeasurementThresholds",
+        "sqlbuild.compiler.auditing.models:MeasurementThresholds",
+    ),
+    (
+        "sqlbuild._native:MicrobatchLimitAction",
+        "sqlbuild.spec.contracts.types:MicrobatchLimitAction",
+    ),
+    (
+        "sqlbuild._native:MicrobatchLimitsConfig",
+        "sqlbuild.spec.contracts.models:MicrobatchLimitsConfig",
+    ),
+    (
+        "sqlbuild._native:MicrobatchesConfig",
+        "sqlbuild.spec.contracts.models:MicrobatchesConfig",
     ),
     (
         "sqlbuild._native:MigrationCompatibility",
@@ -925,6 +1081,14 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
     (
         "sqlbuild._native:MigrationDiscovery",
         "sqlbuild.compiler.migrations.types:MigrationDiscovery",
+    ),
+    (
+        "sqlbuild._native:MigrationsConfig",
+        "sqlbuild.spec.contracts.models:MigrationsConfig",
+    ),
+    (
+        "sqlbuild._native:MissingMigrationOriginPolicy",
+        "sqlbuild.spec.contracts.types:MissingMigrationOriginPolicy",
     ),
     (
         "sqlbuild._native:ModelColumnLineage",
@@ -1083,6 +1247,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
         "sqlbuild.lint.exceptions:ProjectCompileError",
     ),
     (
+        "sqlbuild._native:ProjectConfig",
+        "sqlbuild.spec.contracts.models:ProjectConfig",
+    ),
+    (
         "sqlbuild._native:ProjectConfigError",
         "sqlbuild.compiler.discovery.exceptions:ProjectConfigError",
     ),
@@ -1099,6 +1267,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
         "sqlbuild.compiler.discovery.exceptions:ProviderDiscoveryError",
     ),
     (
+        "sqlbuild._native:PythonIdentityDependency",
+        "sqlbuild.compiler.python_nodes.models:PythonIdentityDependency",
+    ),
+    (
         "sqlbuild._native:PythonIdentityStatus",
         "sqlbuild.compiler.python_nodes.types:PythonIdentityStatus",
     ),
@@ -1109,6 +1281,14 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
     (
         "sqlbuild._native:PythonNodeDiscoveryError",
         "sqlbuild.compiler.discovery.exceptions:PythonNodeDiscoveryError",
+    ),
+    (
+        "sqlbuild._native:PythonNodeGraph",
+        "sqlbuild.compiler.python_nodes.models:PythonNodeGraph",
+    ),
+    (
+        "sqlbuild._native:PythonNodeIdentity",
+        "sqlbuild.compiler.python_nodes.models:PythonNodeIdentity",
     ),
     (
         "sqlbuild._native:PythonPlanEntry",
@@ -1125,6 +1305,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
     (
         "sqlbuild._native:PythonSqlReferenceReport",
         "sqlbuild.compiler.compile.models:PythonSqlReferenceReport",
+    ),
+    (
+        "sqlbuild._native:PythonSqlRunLifecyclePlan",
+        "sqlbuild.compiler.python_nodes.models:PythonSqlRunLifecyclePlan",
     ),
     (
         "sqlbuild._native:PythonSqlRunSelection",
@@ -1151,8 +1335,24 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
         "sqlbuild.compiler.refactoring.exceptions:RefactorValueError",
     ),
     (
+        "sqlbuild._native:ReferencesConfig",
+        "sqlbuild.spec.contracts.models:ReferencesConfig",
+    ),
+    (
         "sqlbuild._native:RelatedLocation",
         "sqlbuild.compiler.compile.models:RelatedLocation",
+    ),
+    (
+        "sqlbuild._native:ResolvedDbtProfileOutput",
+        "sqlbuild.integrations.dbt.models:ResolvedDbtProfileOutput",
+    ),
+    (
+        "sqlbuild._native:ResolvedTableType",
+        "sqlbuild.spec.contracts.models:ResolvedTableType",
+    ),
+    (
+        "sqlbuild._native:ResolvedTimeTravelRetention",
+        "sqlbuild.spec.contracts.models:ResolvedTimeTravelRetention",
     ),
     (
         "sqlbuild._native:ResourceIdentity",
@@ -1169,6 +1369,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
     (
         "sqlbuild._native:ResourceRecord",
         "sqlbuild.compiler.scopes.models:ResourceRecord",
+    ),
+    (
+        "sqlbuild._native:RetentionDecreasePolicy",
+        "sqlbuild.spec.contracts.types:RetentionDecreasePolicy",
     ),
     (
         "sqlbuild._native:RuleExemption",
@@ -1199,8 +1403,36 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
         "sqlbuild.rule_engine.models:RulesRunResult",
     ),
     (
+        "sqlbuild._native:ScenarioConfig",
+        "sqlbuild.spec.contracts.models:ScenarioConfig",
+    ),
+    (
+        "sqlbuild._native:ScenarioSnapshotLimitsConfig",
+        "sqlbuild.spec.contracts.models:ScenarioSnapshotLimitsConfig",
+    ),
+    (
+        "sqlbuild._native:SchemaAuditInstance",
+        "sqlbuild.spec.contracts.models:SchemaAuditInstance",
+    ),
+    (
+        "sqlbuild._native:SchemaColumn",
+        "sqlbuild.spec.contracts.models:SchemaColumn",
+    ),
+    (
+        "sqlbuild._native:SchemaDynamicColumnFamily",
+        "sqlbuild.spec.contracts.models:SchemaDynamicColumnFamily",
+    ),
+    (
+        "sqlbuild._native:SchemaModelEntry",
+        "sqlbuild.spec.contracts.models:SchemaModelEntry",
+    ),
+    (
         "sqlbuild._native:SchemaParseError",
         "sqlbuild.compiler.discovery.exceptions:SchemaParseError",
+    ),
+    (
+        "sqlbuild._native:SchemaSeedEntry",
+        "sqlbuild.spec.contracts.models:SchemaSeedEntry",
     ),
     (
         "sqlbuild._native:ScopeBrowseResult",
@@ -1279,6 +1511,14 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
         "sqlbuild.compiler.scopes.exceptions:ScopeValidationError",
     ),
     (
+        "sqlbuild._native:ScopesConfig",
+        "sqlbuild.spec.contracts.models:ScopesConfig",
+    ),
+    (
+        "sqlbuild._native:SeedCsvSettings",
+        "sqlbuild.spec.contracts.models:SeedCsvSettings",
+    ),
+    (
         "sqlbuild._native:SeedDiscoveryError",
         "sqlbuild.compiler.discovery.exceptions:SeedDiscoveryError",
     ),
@@ -1287,12 +1527,64 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
         "sqlbuild.rule_engine.models:SelectStarAllow",
     ),
     (
+        "sqlbuild._native:SelectedDbtProfileOutput",
+        "sqlbuild.integrations.dbt.models:SelectedDbtProfileOutput",
+    ),
+    (
         "sqlbuild._native:SelectorKind",
         "sqlbuild.compiler.planner.types:SelectorKind",
     ),
     (
+        "sqlbuild._native:SettingsConfig",
+        "sqlbuild.spec.contracts.models:SettingsConfig",
+    ),
+    (
+        "sqlbuild._native:SinksConfig",
+        "sqlbuild.spec.contracts.models:SinksConfig",
+    ),
+    (
+        "sqlbuild._native:SnapshotsConfig",
+        "sqlbuild.spec.contracts.models:SnapshotsConfig",
+    ),
+    (
+        "sqlbuild._native:SourceColumnEntry",
+        "sqlbuild.spec.contracts.models:SourceColumnEntry",
+    ),
+    (
+        "sqlbuild._native:SourceEntry",
+        "sqlbuild.spec.contracts.models:SourceEntry",
+    ),
+    (
+        "sqlbuild._native:SourceFreshnessAgePolicy",
+        "sqlbuild.spec.contracts.models:SourceFreshnessAgePolicy",
+    ),
+    (
+        "sqlbuild._native:SourceFreshnessConfig",
+        "sqlbuild.spec.contracts.models:SourceFreshnessConfig",
+    ),
+    (
+        "sqlbuild._native:SourceFreshnessRecord",
+        "sqlbuild.compiler.source_freshness.models:SourceFreshnessRecord",
+    ),
+    (
+        "sqlbuild._native:SourceFreshnessStrategy",
+        "sqlbuild.spec.contracts.types:SourceFreshnessStrategy",
+    ),
+    (
+        "sqlbuild._native:SourceFreshnessValueKind",
+        "sqlbuild.spec.contracts.types:SourceFreshnessValueKind",
+    ),
+    (
+        "sqlbuild._native:SourceLocation",
+        "sqlbuild.spec.contracts.models:SourceLocation",
+    ),
+    (
         "sqlbuild._native:SourceParseError",
         "sqlbuild.compiler.discovery.exceptions:SourceParseError",
+    ),
+    (
+        "sqlbuild._native:SourceWriteStrategy",
+        "sqlbuild.spec.contracts.types:SourceWriteStrategy",
     ),
     (
         "sqlbuild._native:SpecConfigError",
@@ -1321,6 +1613,14 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
     (
         "sqlbuild._native:SqlHookParseError",
         "sqlbuild.compiler.discovery.exceptions:SqlHookParseError",
+    ),
+    (
+        "sqlbuild._native:SqlLexicalSyntax",
+        "sqlbuild.compiler.sql_analysis.models:SqlLexicalSyntax",
+    ),
+    (
+        "sqlbuild._native:SqlLogicalType",
+        "sqlbuild.sql_values.models:SqlLogicalType",
     ),
     (
         "sqlbuild._native:SqlReferenceScan",
@@ -1355,12 +1655,60 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
         "sqlbuild.compiler.planner.models:SqlTestSelection",
     ),
     (
+        "sqlbuild._native:SqlValue",
+        "sqlbuild.sql_values.models:SqlValue",
+    ),
+    (
+        "sqlbuild._native:SqlValueKind",
+        "sqlbuild.sql_values.types:SqlValueKind",
+    ),
+    (
+        "sqlbuild._native:StartCursorsConfig",
+        "sqlbuild.spec.contracts.models:StartCursorsConfig",
+    ),
+    (
+        "sqlbuild._native:StateSqlValueType",
+        "sqlbuild.sql_values.types:StateSqlValueType",
+    ),
+    (
         "sqlbuild._native:StaticCommandContext",
         "sqlbuild.compiler.pipeline.models:StaticCommandContext",
     ),
     (
+        "sqlbuild._native:TableType",
+        "sqlbuild.spec.contracts.types:TableType",
+    ),
+    (
+        "sqlbuild._native:TableTypeDowngradePolicy",
+        "sqlbuild.spec.contracts.types:TableTypeDowngradePolicy",
+    ),
+    (
+        "sqlbuild._native:TableTypeSource",
+        "sqlbuild.spec.contracts.types:TableTypeSource",
+    ),
+    (
+        "sqlbuild._native:TargetConfig",
+        "sqlbuild.spec.contracts.models:TargetConfig",
+    ),
+    (
+        "sqlbuild._native:TargetDiffConfig",
+        "sqlbuild.spec.contracts.models:TargetDiffConfig",
+    ),
+    (
+        "sqlbuild._native:TargetWarehousesConfig",
+        "sqlbuild.spec.contracts.models:TargetWarehousesConfig",
+    ),
+    (
         "sqlbuild._native:ThresholdOverride",
         "sqlbuild.rule_engine.models:ThresholdOverride",
+    ),
+    (
+        "sqlbuild._native:TimeTravelRetentionSource",
+        "sqlbuild.spec.contracts.types:TimeTravelRetentionSource",
+    ),
+    (
+        "sqlbuild._native:TimestampValue",
+        "sqlbuild.cursor_algebra.models:TimestampValue",
     ),
     (
         "sqlbuild._native:TolerantScopeDiscovery",
@@ -1405,5 +1753,9 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
     (
         "sqlbuild._native:VisibleModelDeclarations",
         "sqlbuild.compiler.compile.models:VisibleModelDeclarations",
+    ),
+    (
+        "sqlbuild._native:WarehouseGroup",
+        "sqlbuild.spec.contracts.types:WarehouseGroup",
     ),
 ];

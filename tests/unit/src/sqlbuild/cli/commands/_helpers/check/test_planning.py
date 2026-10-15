@@ -6,18 +6,21 @@ from unittest.mock import Mock
 
 import pytest
 
-from sqlbuild._native import CliUserError, run_check_read_side_dependencies
+from sqlbuild._native import (
+    CliUserError,
+    PythonSqlRunLifecyclePlan,
+    SourceEntry,
+    run_check_read_side_dependencies,
+)
 from sqlbuild.adapter.contract.models import RelationLookup
 from sqlbuild.adapter.relations.main import relation_lookup as relation_lookup_module
 from sqlbuild.compiler.compile.models import CompiledProject, CompiledRelationLocation
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.compiler.python_nodes.models import PythonSqlRunLifecyclePlan
 from sqlbuild.executor.python_nodes.main import read_side as read_side_module
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.python_nodes.types import SqlResourceRefKind
-from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.cli.commands._helpers.check._test_types import (
     CheckPlanningTestCase,
 )

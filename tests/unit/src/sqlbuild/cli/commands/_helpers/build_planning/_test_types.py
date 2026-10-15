@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
+from sqlbuild._native import SnapshotsConfig
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.spec.contracts.models import SnapshotsConfig
 
 
 @dataclass(frozen=True)

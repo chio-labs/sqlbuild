@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import LoadProgressReporter, NativeProgressProjector
+from sqlbuild._native import LoadProgressReporter, NativeProgressProjector, SourceEntry
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.python_nodes.types import SkipMode
@@ -26,7 +26,6 @@ from sqlbuild.observability import (
     dispatcher_scope,
     invocation_scope,
 )
-from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.executor.load._test_types import (
     ConcurrentLoadProgressTestCase,
     ExternalLoadPipelineTestCase,

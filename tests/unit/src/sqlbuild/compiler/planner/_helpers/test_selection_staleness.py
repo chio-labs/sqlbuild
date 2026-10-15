@@ -10,6 +10,7 @@ from sqlbuild._native import (
     ChangeKind,
     DirectModelVersionIdentities,
     DirectSourceFreshnessPlanningResult,
+    Fingerprint,
     PlannerChangeResults,
     PlannerPolicies,
     PlannerScope,
@@ -30,7 +31,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
 )
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_SEED
-from sqlbuild.compiler.fingerprints.models import Fingerprint
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     CompleteModelChangesWorkTestCase,
     PlannerStaleWarningScopeTestCase,

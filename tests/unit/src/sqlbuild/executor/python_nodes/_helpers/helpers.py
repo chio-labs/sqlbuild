@@ -13,7 +13,13 @@ from typing import Any, ClassVar, cast
 
 from sqlbuild._native import (
     CostContext,
+    DiscoveredPythonNode,
+    LocalConfig,
+    ProjectConfig,
+    PythonNodeGraph,
+    PythonSqlRunLifecyclePlan,
     PythonSqlRunSelection,
+    SourceEntry,
     build_python_node_graph,
     build_python_sql_run_lifecycle,
 )
@@ -27,11 +33,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredLoaderFunction,
     DiscoveredProjectInputs,
     DiscoveredTaskFunction,
-)
-from sqlbuild.compiler.python_nodes.models import (
-    DiscoveredPythonNode,
-    PythonNodeGraph,
-    PythonSqlRunLifecyclePlan,
 )
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.cost.models import CostResourceContext
@@ -53,7 +54,6 @@ from sqlbuild.observability import LifecycleEvent
 from sqlbuild.providers import Provider
 from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.refs import model
-from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SourceEntry
 from sqlbuild.tasks import TaskContext, task
 from tests.unit.src.sqlbuild.compiler.python_nodes._helpers.helpers import (
     build_intermediate_loader_asset_dependency_python_node_graph,

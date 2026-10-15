@@ -2,10 +2,10 @@
 
 from collections.abc import Callable
 
+from sqlbuild._native import SourceFreshnessRecord
 from sqlbuild.adapter.state_sql._helpers.source_freshness import (
     render_insert_source_freshness_records_sql as _render_sql,
 )
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 
 
 def render_insert_source_freshness_records_sql(

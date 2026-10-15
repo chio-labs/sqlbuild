@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import IntegrationLoaderConfig, SourceEntry
 from sqlbuild.integrations.ingestr._helpers.command import build_ingestr_command
 from sqlbuild.integrations.ingestr.models import IngestrSourceConfig
-from sqlbuild.spec.contracts.models import IntegrationLoaderConfig, SourceEntry
 from tests.unit.src.sqlbuild.integrations.ingestr._test_types import IngestrCommandTestCase
 
 

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 
+from sqlbuild._native import SourceColumnEntry
+from sqlbuild._native import SourceWriteStrategy as SourceWriteStrategy
 from sqlbuild.python_nodes.main._apply_loader import apply_loader
 from sqlbuild.python_nodes.main.read_loader_definition import read_loader_definition
 from sqlbuild.python_nodes.models import LoaderDefinition
 from sqlbuild.python_nodes.types import LoaderColumnSpec
-from sqlbuild.spec.contracts.models import SourceColumnEntry
-from sqlbuild.spec.contracts.types import SourceWriteStrategy as SourceWriteStrategy
 
 
 def loader(

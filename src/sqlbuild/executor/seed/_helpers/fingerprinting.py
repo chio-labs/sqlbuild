@@ -6,10 +6,9 @@ import hashlib
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlbuild._native import write_fingerprint
+from sqlbuild._native import Fingerprint, write_fingerprint
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_SEED
-from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import SeedPlanEntry
 
 

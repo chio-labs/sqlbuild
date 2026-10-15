@@ -15,7 +15,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, cast
 
-from sqlbuild._native import CostContext, sql_test_resource_id
+from sqlbuild._native import CostContext, SnapshotsConfig, SourceEntry, sql_test_resource_id
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import RelationInfo
@@ -124,7 +124,6 @@ from sqlbuild.runtime.execution_limits.main.enforce_execution_deadline import (
 from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
     ResourceAttemptLifecycle,
 )
-from sqlbuild.spec.contracts.models import SnapshotsConfig, SourceEntry
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 

@@ -28,6 +28,10 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::discovery::configuration::discover_project_configuration;
 use crate::bindings::_helpers::model_config::template_data::expanded_template_data;
 
+/// The `WarehouseGroup` whose warehouse is a target's `warehouses.build`; any other reads `query`.
+const BUILD_GROUP: &str = "build";
+const QUERY_GROUP: &str = "query";
+
 const ENTRY_MODELS: &str = "sqlbuild._native";
 const TARGET_NAME_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
@@ -119,11 +123,12 @@ fn group_value(target: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) -> PyResult<
     if target.is_none() {
         return Ok(None);
     }
-    optional_text(
-        &target
-            .getattr("warehouses")?
-            .call_method1("for_group", (group,))?,
-    )
+    let attribute: &str = if group.str()?.extract::<String>()? == BUILD_GROUP {
+        BUILD_GROUP
+    } else {
+        QUERY_GROUP
+    };
+    optional_text(&target.getattr("warehouses")?.getattr(attribute)?)
 }
 
 /// The active target's authored, unexpanded warehouse for one command group.

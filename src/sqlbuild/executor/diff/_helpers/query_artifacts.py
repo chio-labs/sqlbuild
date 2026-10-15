@@ -8,7 +8,13 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlbuild._native import compute_query_hash, read_latest_fingerprints, write_fingerprint
+from sqlbuild._native import (
+    Fingerprint,
+    FingerprintSet,
+    compute_query_hash,
+    read_latest_fingerprints,
+    write_fingerprint,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, RelationLookup
@@ -17,7 +23,6 @@ from sqlbuild.compiler.fingerprints.constants import (
     FINGERPRINT_TABLE_NAME,
     NODE_TYPE_QUERY_DIFF_ARTIFACT,
 )
-from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.diff.models import (
     QueryDiffArtifact,

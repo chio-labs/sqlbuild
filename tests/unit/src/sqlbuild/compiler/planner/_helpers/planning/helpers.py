@@ -6,10 +6,17 @@ from unittest.mock import Mock
 
 from sqlbuild._native import (
     CompileModelConfig,
+    LocalConfig,
     PlannerRelationsContext,
     PlannerRuntime,
     PlannerScope,
     PlannerWarehouseState,
+    ProjectConfig,
+    ResolvedTableType,
+    ResolvedTimeTravelRetention,
+    TableTypeDowngradePolicy,
+    TargetConfig,
+    TimeTravelRetentionSource,
     WarehouseSnapshot,
 )
 from sqlbuild.adapter.contract.classes.retention_adapter import RetentionAdapterMixin
@@ -24,17 +31,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
-)
-from sqlbuild.spec.contracts.models import (
-    LocalConfig,
-    ProjectConfig,
-    ResolvedTableType,
-    ResolvedTimeTravelRetention,
-    TargetConfig,
-)
-from sqlbuild.spec.contracts.types import (
-    TableTypeDowngradePolicy,
-    TimeTravelRetentionSource,
 )
 
 

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import SourceEntry
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.adapter.contract.main.helpers import (
     ADAPTERS_BY_NAME,
     BinderException,

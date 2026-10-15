@@ -17,7 +17,7 @@ use sqlbuild_config::project::models::{Built, ConfigFile, ConfigPaths};
 
 use crate::bindings::_helpers::boundary::config_values::config_value_to_python;
 
-const MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
+const MODELS_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild._native";
 const PROJECT_CONFIG_ERROR: &str = "ProjectConfigError";
 const FILE_NAMES: [&str; 4] = [
@@ -28,17 +28,14 @@ const FILE_NAMES: [&str; 4] = [
 ];
 /// The module of each `StrEnum` a loaded config holds.
 const ENUM_MODULES: [(&str, &str); 10] = [
-    ("ColumnContractMode", "sqlbuild.spec.contracts.types"),
-    ("FutureCursorAction", "sqlbuild.spec.contracts.types"),
-    ("MicrobatchLimitAction", "sqlbuild.spec.contracts.types"),
-    ("TableType", "sqlbuild.spec.contracts.types"),
-    ("TableTypeDowngradePolicy", "sqlbuild.spec.contracts.types"),
-    ("RetentionDecreasePolicy", "sqlbuild.spec.contracts.types"),
-    (
-        "MissingMigrationOriginPolicy",
-        "sqlbuild.spec.contracts.types",
-    ),
-    ("EventExportSeverity", "sqlbuild.spec.contracts.types"),
+    ("ColumnContractMode", "sqlbuild._native"),
+    ("FutureCursorAction", "sqlbuild._native"),
+    ("MicrobatchLimitAction", "sqlbuild._native"),
+    ("TableType", "sqlbuild._native"),
+    ("TableTypeDowngradePolicy", "sqlbuild._native"),
+    ("RetentionDecreasePolicy", "sqlbuild._native"),
+    ("MissingMigrationOriginPolicy", "sqlbuild._native"),
+    ("EventExportSeverity", "sqlbuild._native"),
     ("AuditSeverity", "sqlbuild.compiler.auditing.types"),
     ("CollectionRendering", "sqlbuild._native"),
 ];
@@ -131,7 +128,7 @@ fn enum_member<'py>(py: Python<'py>, class: &str, value: &str) -> PyResult<Bound
     let module = ENUM_MODULES
         .iter()
         .find(|(name, _)| *name == class)
-        .map_or("sqlbuild.spec.contracts.types", |(_, module)| *module);
+        .map_or("sqlbuild._native", |(_, module)| *module);
     py.import(module)?.getattr(class)?.call1((value,))
 }
 

@@ -7,7 +7,13 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from sqlbuild._native import assemble_project, scope_overlaps
+from sqlbuild._native import (
+    SqlLogicalType,
+    SqlValue,
+    SqlValueKind,
+    assemble_project,
+    scope_overlaps,
+)
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
@@ -20,8 +26,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     TypedSqlValueRenderer,
 )
-from sqlbuild.sql_values.models import SqlLogicalType, SqlValue
-from sqlbuild.sql_values.types import SqlValueKind
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ParameterizedSqlTestAdapterRenderingTestCase,
     ParameterizedSqlTestCompilationErrorTestCase,

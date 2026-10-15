@@ -7,6 +7,7 @@ from typing import Any
 import duckdb
 import pytest
 
+from sqlbuild._native import SeedCsvSettings
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
@@ -23,7 +24,6 @@ from sqlbuild.adapter.contract.models import (
 from sqlbuild.adapter.contract.types import FunctionNullabilityRule
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.spec.contracts.models import SeedCsvSettings
 from tests.integration.src.sqlbuild.adapters.duckdb._test_types import (
     CompositeRowDiffSamplingTestCase,
     ConnectSettingsTestCase,

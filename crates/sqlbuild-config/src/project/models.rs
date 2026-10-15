@@ -25,7 +25,7 @@ pub struct ConfigPaths {
 pub enum Built {
     /// A plain value, including `None`, booleans, integers and raw authored mappings.
     Value(ConfigValue),
-    /// A dataclass from `sqlbuild.spec.contracts.models`; omitted fields keep their defaults.
+    /// A native project configuration record; omitted fields keep their defaults.
     Object(&'static str, Vec<(&'static str, Built)>),
     /// A member of a named `StrEnum`, by value.
     Enum(&'static str, String),

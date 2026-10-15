@@ -26,6 +26,7 @@ from sqlbuild._native import (
     ScopeIndex,
     ScopeKind,
     ScopeLookup,
+    SqlLexicalSyntax,
     VisibilityReason,
     VisibilityRecord,
     build_declaration_scope,
@@ -43,7 +44,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     EnumDeclaration,
 )
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.integration.src.sqlbuild.compiler.helpers import GoldenEntry, golden_entry
 
 CURRENT_PATH_COMPONENT: str = "."

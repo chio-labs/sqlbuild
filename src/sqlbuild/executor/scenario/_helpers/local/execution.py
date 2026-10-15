@@ -6,7 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from sqlbuild._native import error_code, error_help, error_message
+from sqlbuild._native import SourceEntry, error_code, error_help, error_message
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.types import TablePromotionMode
@@ -69,7 +69,6 @@ from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
     ResourceAttemptLifecycle,
 )
-from sqlbuild.spec.contracts.models import SourceEntry
 
 _LOCAL_STEP_FAILED_MESSAGE: str = "local scenario step failed"
 

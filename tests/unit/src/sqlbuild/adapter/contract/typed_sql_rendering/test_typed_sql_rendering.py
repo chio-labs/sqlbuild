@@ -4,6 +4,7 @@ from decimal import Decimal
 
 import pytest
 
+from sqlbuild._native import SqlValue
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
@@ -13,7 +14,6 @@ from sqlbuild.adapters.motherduck.classes.motherduck_adapter import MotherDuckAd
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
-from sqlbuild.sql_values.models import SqlValue
 from tests.unit.src.sqlbuild.adapter.contract.typed_sql_rendering._test_types import (
     AdapterTypedSqlRenderingTestCase,
     InvalidTypedArrayTestCase,

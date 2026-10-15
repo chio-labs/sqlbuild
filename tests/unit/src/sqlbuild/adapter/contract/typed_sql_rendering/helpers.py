@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from sqlbuild._native import normalize_sql_value
-from sqlbuild.sql_values.models import SqlValue
+from sqlbuild._native import SqlValue, normalize_sql_value
 
 
 def typed_sql_value(raw_value: object) -> SqlValue:

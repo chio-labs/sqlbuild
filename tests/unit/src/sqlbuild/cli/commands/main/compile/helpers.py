@@ -10,6 +10,7 @@ from sqlbuild._native import (
     CompileModelConfig,
     FunctionArgument,
     PreparedCompileArtifacts,
+    SeedCsvSettings,
     WrittenTarget,
     project_with,
 )
@@ -51,7 +52,6 @@ from sqlbuild.executor.build.models import (
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
-from sqlbuild.spec.contracts.models import SeedCsvSettings
 from tests.unit.src.sqlbuild.cli.commands.main.dag.helpers import (
     prepare_python_dag_project,
 )

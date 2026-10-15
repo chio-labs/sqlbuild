@@ -13,6 +13,7 @@ from sqlbuild._native import (
     CompileModelConfig,
     CursorOverridePair,
     ModelPlanContext,
+    SourceEntry,
     WarehouseSnapshot,
     assemble_project,
     build_compile_inputs,
@@ -37,7 +38,6 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import BackfillAction
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 class OrchestrationOverrideAdapter(DuckDbAdapter):

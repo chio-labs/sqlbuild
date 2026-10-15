@@ -15,6 +15,7 @@ from sqlbuild._native import (
     DiscoveredSqlTestBlock,
     NativeSqlTestPlan,
     PlanWarning,
+    SqlLexicalSyntax,
     SqlTestPlanResult,
     expand_sql_macros,
     extract_sql_references,
@@ -48,7 +49,6 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     PlanTestChainTestCase,
 )

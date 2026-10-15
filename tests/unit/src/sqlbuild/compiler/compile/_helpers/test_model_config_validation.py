@@ -6,10 +6,13 @@ from typing import cast
 
 import pytest
 
-from sqlbuild._native import CompileModelConfig, ConfigValueTypeError
+from sqlbuild._native import (
+    CompileModelConfig,
+    ConfigValueTypeError,
+    ResolvedTimeTravelRetention,
+    TimeTravelRetentionSource,
+)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention
-from sqlbuild.spec.contracts.types import TimeTravelRetentionSource
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ChangePolicyHelpTestCase,
     ContractConfigErrorTestCase,

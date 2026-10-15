@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from sqlbuild._native import render_state_sql_literal
+from sqlbuild._native import StateSqlValueType, render_state_sql_literal
 from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.microbatches.classes.event_codec import MicrobatchEventCodec
 from sqlbuild.microbatches.constants import (
@@ -15,7 +15,6 @@ from sqlbuild.microbatches.constants import (
 )
 from sqlbuild.microbatches.exceptions import MicrobatchStateError
 from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
-from sqlbuild.sql_values.types import StateSqlValueType
 
 
 def build_create_table_sql(

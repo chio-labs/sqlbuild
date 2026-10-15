@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.sql_values.types import StateSqlValueType
+from sqlbuild._native import StateSqlValueType
 
 SOURCE_FRESHNESS_TABLE_NAME: str = "_sqlbuild_source_freshness"
 

@@ -11,12 +11,12 @@ import pytest
 from sqlbuild._native import (
     CostContext,
     ExecutionEventWriter,
+    PythonNodeGraph,
     TerminalEventIndex,
     format_check_json,
     terminal_event_index_scope,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction
-from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus, SkipMode
 from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.executor.node_results.models import NodeResultEnvelope

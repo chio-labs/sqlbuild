@@ -5,9 +5,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from sqlbuild._native import write_fingerprint, write_fingerprints
+from sqlbuild._native import Fingerprint, write_fingerprint, write_fingerprints
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.fingerprints.models import Fingerprint
 from tests.unit.src.sqlbuild.compiler.fingerprints.main._test_types import (
     WriteFingerprintBatchTestCase,
     WriteFingerprintPartialFailureTestCase,

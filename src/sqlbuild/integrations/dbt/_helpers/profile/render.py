@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+from sqlbuild._native import ResolvedDbtProfileOutput, SelectedDbtProfileOutput
 from sqlbuild.integrations.dbt.exceptions import DbtProfileError
-from sqlbuild.integrations.dbt.models import ResolvedDbtProfileOutput, SelectedDbtProfileOutput
 
 _DBT_FALSE_VALUES: frozenset[str] = frozenset({"false", "0", "no", "n", "off"})
 _DBT_JINJA_MARKERS: tuple[str, ...] = ("{{", "{%", "{#")

@@ -8,7 +8,12 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlbuild._native import read_latest_fingerprints, write_fingerprints
+from sqlbuild._native import (
+    Fingerprint,
+    FingerprintSet,
+    read_latest_fingerprints,
+    write_fingerprints,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationLookup
 from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
@@ -17,7 +22,6 @@ from sqlbuild.compiler.fingerprints.constants import (
     NODE_TYPE_MODEL,
     NODE_TYPE_SEED,
 )
-from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.clone.models import CloneExecutionResult

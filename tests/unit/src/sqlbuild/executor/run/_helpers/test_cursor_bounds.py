@@ -10,6 +10,9 @@ import pytest
 
 from sqlbuild._native import (
     CursorWatermarkMode,
+    FutureCursorAction,
+    FutureCursorsConfig,
+    StartCursorsConfig,
     normalize_cursor_snapshot_grain,
 )
 from sqlbuild._native import cursor_render as render
@@ -41,8 +44,6 @@ from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
 from sqlbuild.executor.run.exceptions import EmptyCursorInputsError
 from sqlbuild.executor.run.models import RuntimeCursorInputRelation, RuntimeCursorSpec
 from sqlbuild.executor.run.types import RuntimeCursorWatermarkMode
-from sqlbuild.spec.contracts.models import FutureCursorsConfig, StartCursorsConfig
-from sqlbuild.spec.contracts.types import FutureCursorAction
 from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
     AuthoritativeRuntimeCursorOverrideTestCase,
     CursorSentinelSubstitutionErrorTestCase,

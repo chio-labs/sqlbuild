@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from sqlbuild._native import TableType
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     QueryResult,
@@ -10,7 +11,6 @@ from sqlbuild.adapter.contract.models import (
 )
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.cost.types import CostStatus
-from sqlbuild.spec.contracts.types import TableType
 
 
 @dataclass(frozen=True)

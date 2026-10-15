@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 import duckdb
 
+from sqlbuild._native import TableType
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import SnapshotChangeTarget
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
@@ -21,7 +22,6 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.motherduck.classes.motherduck_adapter import MotherDuckAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
-from sqlbuild.spec.contracts.types import TableType
 from tests.integration.src.sqlbuild.adapters.snapshot_sql_rendering._test_types import (
     SnapshotExecutionTestCase,
 )

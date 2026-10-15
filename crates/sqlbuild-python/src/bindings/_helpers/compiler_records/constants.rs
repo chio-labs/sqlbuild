@@ -781,6 +781,182 @@ const R_DBT_LS_RESULT: RecordSpec = RecordSpec {
     doc: "Parsed result from one dbt ls invocation.",
     fields: &[FieldSpec::required("nodes"), FieldSpec::required("command")],
 };
+const R_MEASUREMENT_THRESHOLD_BOUND: RecordSpec = RecordSpec {
+    name: "MeasurementThresholdBound",
+    doc: "One directional threshold bound for a measurement audit.",
+    fields: &[
+        FieldSpec::required("operator"),
+        FieldSpec::new("limit", FieldDefault::None),
+        FieldSpec::new("lower", FieldDefault::None),
+        FieldSpec::new("upper", FieldDefault::None),
+    ],
+};
+const R_MEASUREMENT_THRESHOLDS: RecordSpec = RecordSpec {
+    name: "MeasurementThresholds",
+    doc: "Warning and error policy for a measurement audit.",
+    fields: &[
+        FieldSpec::new("warn", FieldDefault::None),
+        FieldSpec::new("error", FieldDefault::None),
+    ],
+};
+const R_MEASUREMENT_CONTRACT: RecordSpec = RecordSpec {
+    name: "MeasurementContract",
+    doc: "Columns and sample unit returned by a measurement query.",
+    fields: &[
+        FieldSpec::required("value_column"),
+        FieldSpec::new("sample_count_column", FieldDefault::None),
+        FieldSpec::new("sample_unit", FieldDefault::None),
+    ],
+};
+const R_AUDIT_IDENTITY: RecordSpec = RecordSpec {
+    name: "AuditIdentity",
+    doc: "Stable identity values for one planned audit binding.",
+    fields: &[
+        FieldSpec::required("binding_key"),
+        FieldSpec::required("audit_name"),
+        FieldSpec::required("definition_fingerprint"),
+        FieldSpec::required("execution_fingerprint"),
+        FieldSpec::required("severity"),
+        FieldSpec::required("run_scope_phase"),
+        FieldSpec::required("attachment_kind"),
+        FieldSpec::new("attached_target_name", FieldDefault::None),
+        FieldSpec::new("attached_column_name", FieldDefault::None),
+        FieldSpec::new("always_run", FieldDefault::False),
+    ],
+};
+const R_AUDIT_GATE_IDENTITY: RecordSpec = RecordSpec {
+    name: "AuditGateIdentity",
+    doc: "Aggregate identity for a model's runtime audit gate.",
+    fields: &[
+        FieldSpec::required("binding_set_hash"),
+        FieldSpec::required("blocking_set_hash"),
+        FieldSpec::required("audits"),
+    ],
+};
+const R_SQL_LOGICAL_TYPE: RecordSpec = RecordSpec {
+    name: "SqlLogicalType",
+    doc: "Logical type inferred for a normalized SQL value.",
+    fields: &[
+        FieldSpec::required("kind"),
+        FieldSpec::new("element_type", FieldDefault::None),
+    ],
+};
+const R_SQL_VALUE: RecordSpec = RecordSpec {
+    name: "SqlValue",
+    doc: "One validated, canonical SQL value.",
+    fields: &[
+        FieldSpec::required("logical_type"),
+        FieldSpec::required("value"),
+    ],
+};
+const R_SELECTED_DBT_PROFILE_OUTPUT: RecordSpec = RecordSpec {
+    name: "SelectedDbtProfileOutput",
+    doc: "Selected dbt profile target output before rendering.",
+    fields: &[
+        FieldSpec::required("profile_name"),
+        FieldSpec::required("target_name"),
+        FieldSpec::required("output"),
+    ],
+};
+const R_RESOLVED_DBT_PROFILE_OUTPUT: RecordSpec = RecordSpec {
+    name: "ResolvedDbtProfileOutput",
+    doc: "Rendered dbt profile target output.",
+    fields: &[
+        FieldSpec::required("project_dir"),
+        FieldSpec::required("profiles_dir"),
+        FieldSpec::required("profile_name"),
+        FieldSpec::required("target_name"),
+        FieldSpec::required("output"),
+    ],
+};
+const R_DISCOVERED_PYTHON_NODE: RecordSpec = RecordSpec {
+    name: "DiscoveredPythonNode",
+    doc: "Shared internal view of a discovered Python DAG node.",
+    fields: &[
+        FieldSpec::required("kind"),
+        FieldSpec::required("file_path"),
+        FieldSpec::required("relative_path"),
+        FieldSpec::required("name"),
+        FieldSpec::required("function"),
+        FieldSpec::new("depends_on", FieldDefault::EmptyTuple),
+        FieldSpec::new("sql_deps", FieldDefault::EmptyTuple),
+        FieldSpec::new("tags", FieldDefault::EmptyTuple),
+        FieldSpec::new("group", FieldDefault::None),
+        FieldSpec::new("description", FieldDefault::None),
+        FieldSpec::new("meta", FieldDefault::None),
+        FieldSpec::new("provider_usages", FieldDefault::EmptyTuple),
+        FieldSpec::new("loader", FieldDefault::None),
+        FieldSpec::new("task", FieldDefault::None),
+        FieldSpec::new("asset", FieldDefault::None),
+        FieldSpec::new("check", FieldDefault::None),
+        FieldSpec::new("identity", FieldDefault::None),
+    ],
+};
+const R_PYTHON_NODE_GRAPH: RecordSpec = RecordSpec {
+    name: "PythonNodeGraph",
+    doc: "Internal graph inventory for discovered executable Python nodes.",
+    fields: &[
+        FieldSpec::required("nodes"),
+        FieldSpec::required("dependency_edges"),
+        FieldSpec::required("upstream_deps"),
+        FieldSpec::required("downstream_deps"),
+        FieldSpec::required("tag_index"),
+        FieldSpec::required("path_index"),
+        FieldSpec::required("nodes_by_name"),
+        FieldSpec::required("nodes_by_typed_selector"),
+    ],
+};
+const R_PYTHON_SQL_RUN_LIFECYCLE_PLAN: RecordSpec = RecordSpec {
+    name: "PythonSqlRunLifecyclePlan",
+    doc: "Lifecycle-aware run classification for SQL resources and Python nodes.",
+    fields: &[
+        FieldSpec::required("ingress_python_node_names"),
+        FieldSpec::required("ingress_loader_names"),
+        FieldSpec::required("read_side_python_node_names"),
+    ],
+};
+const R_PYTHON_IDENTITY_DEPENDENCY: RecordSpec = RecordSpec {
+    name: "PythonIdentityDependency",
+    doc: "One first-party Python source object included in a Python node identity.",
+    fields: &[
+        FieldSpec::required("kind"),
+        FieldSpec::required("module"),
+        FieldSpec::required("qualname"),
+        FieldSpec::required("source_path"),
+        FieldSpec::required("source_hash"),
+        FieldSpec::required("source_text"),
+    ],
+};
+const R_PYTHON_NODE_IDENTITY: RecordSpec = RecordSpec {
+    name: "PythonNodeIdentity",
+    doc: "Read-only identity metadata for a SQLBuild Python node.",
+    fields: &[
+        FieldSpec::required("node_type"),
+        FieldSpec::required("node_name"),
+        FieldSpec::required("source_path"),
+        FieldSpec::required("source_hash"),
+        FieldSpec::required("definition_hash"),
+        FieldSpec::required("version_hash"),
+        FieldSpec::new("dependencies", FieldDefault::EmptyTuple),
+        FieldSpec::new("definition_json", FieldDefault::Text("{}")),
+        FieldSpec::new("metadata_json", FieldDefault::Text("{}")),
+    ],
+};
+const R_SQL_LEXICAL_SYNTAX: RecordSpec = RecordSpec {
+    name: "SqlLexicalSyntax",
+    doc: "Dialect rules for where SQL quoted text and comments end.",
+    fields: &[
+        FieldSpec::new("backslash_escape_quotes", FieldDefault::EmptyFrozenset),
+        FieldSpec::new("escape_string_prefix", FieldDefault::False),
+        FieldSpec::new("raw_string_prefix", FieldDefault::False),
+        FieldSpec::new("triple_quoted_strings", FieldDefault::False),
+        FieldSpec::new("nested_block_comments", FieldDefault::False),
+        FieldSpec::new(
+            "line_comment_prefixes",
+            FieldDefault::TextFrozenset(&["--"]),
+        ),
+    ],
+};
 
 /// The compiler, lint and config value records.
 pub(crate) const COMPILER_RECORDS: &[RecordSpec] = &[
@@ -849,4 +1025,19 @@ pub(crate) const COMPILER_RECORDS: &[RecordSpec] = &[
     R_DBT_COMMAND_RESULT,
     R_DBT_NODE_EXECUTION_RESULT,
     R_DBT_LS_RESULT,
+    R_MEASUREMENT_THRESHOLD_BOUND,
+    R_MEASUREMENT_THRESHOLDS,
+    R_MEASUREMENT_CONTRACT,
+    R_AUDIT_IDENTITY,
+    R_AUDIT_GATE_IDENTITY,
+    R_SQL_LOGICAL_TYPE,
+    R_SQL_VALUE,
+    R_SELECTED_DBT_PROFILE_OUTPUT,
+    R_RESOLVED_DBT_PROFILE_OUTPUT,
+    R_DISCOVERED_PYTHON_NODE,
+    R_PYTHON_NODE_GRAPH,
+    R_PYTHON_SQL_RUN_LIFECYCLE_PLAN,
+    R_PYTHON_IDENTITY_DEPENDENCY,
+    R_PYTHON_NODE_IDENTITY,
+    R_SQL_LEXICAL_SYNTAX,
 ];

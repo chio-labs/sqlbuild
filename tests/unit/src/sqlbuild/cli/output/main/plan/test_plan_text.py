@@ -14,6 +14,7 @@ from sqlbuild._native import (
     PythonPlanEntry,
     PythonRunPhase,
     SchemaChangeKind,
+    SourceWriteStrategy,
     WarningSeverity,
     format_plan,
 )
@@ -30,7 +31,6 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
-from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.cli.output.main.plan._test_types import (
     FormatPlanColorTestCase,
     FormatPlanTestCase,

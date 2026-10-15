@@ -2,6 +2,7 @@ from pathlib import Path
 
 from sqlbuild._native import (
     CompiledSource,
+    SourceEntry,
     project_with,
 )
 from sqlbuild.compiler.compile.models import CompiledObjectKey
@@ -12,7 +13,6 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.discovery.models import DiscoveredSourceFile
 from sqlbuild.rule_engine.classes.rule_context import RuleFactViews, build_rule_fact_views
-from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_project
 
 SOURCES_CONTENTS: str = "sources:\n  - name: raw_orders\n  - name: raw_customers\n"

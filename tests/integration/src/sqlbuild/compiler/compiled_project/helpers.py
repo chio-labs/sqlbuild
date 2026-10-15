@@ -19,6 +19,12 @@ from sqlbuild._native import (
     CompileAdapterContext,
     CompileModelConfig,
     CompileProjectInputs,
+    LocalConfig,
+    MeasurementThresholdBound,
+    MeasurementThresholds,
+    ProjectConfig,
+    SourceColumnEntry,
+    SqlLexicalSyntax,
     assemble_project,
     build_compile_inputs,
     build_compiled_project,
@@ -27,7 +33,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.auditing.models import MeasurementThresholdBound, MeasurementThresholds
 from sqlbuild.compiler.compile import models as compile_models
 from sqlbuild.compiler.compile.models import CompileModelInput, CompilerDiagnostic
 from sqlbuild.compiler.compile.types import (
@@ -37,8 +42,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SourceColumnEntry
 from tests.integration.src.sqlbuild.compiler.graph.helpers import write_files
 
 if TYPE_CHECKING:

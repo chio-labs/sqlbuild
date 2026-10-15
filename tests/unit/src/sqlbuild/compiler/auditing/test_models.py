@@ -2,12 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import MeasurementContract, MeasurementThresholdBound, MeasurementThresholds
 from sqlbuild.audits import below
-from sqlbuild.compiler.auditing.models import (
-    MeasurementContract,
-    MeasurementThresholdBound,
-    MeasurementThresholds,
-)
 from sqlbuild.compiler.auditing.types import ThresholdOperator
 from tests.unit.src.sqlbuild.compiler.auditing._test_types import (
     BooleanThresholdTestCase,

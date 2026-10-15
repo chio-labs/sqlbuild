@@ -3,8 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild._native import DbtCliOptions, DbtCommandResult, DbtInteropParsedArgs
-from sqlbuild.spec.contracts.models import DbtConfig, LocalDbtConfig
+from sqlbuild._native import (
+    DbtCliOptions,
+    DbtCommandResult,
+    DbtConfig,
+    DbtInteropParsedArgs,
+    LocalDbtConfig,
+)
 
 
 @dataclass(frozen=True)
