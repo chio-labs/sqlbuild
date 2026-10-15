@@ -1,800 +1,803 @@
 # Python that stays once Rust hosts SQLBuild. Every other Python file under src/sqlbuild is
 # migration work that moves to Rust. `remaining_lines` must equal the current count of that work:
 # a PR that moves code lowers it, and adding movable Python fails the check.
+# Each `[[stays]]` entry names the one rule that keeps it Python and a note with the evidence:
+# 1 = executor or adapter runtime and the shapes it consumes; 2 = thin shim that invokes user
+# Python; 3 = public facade (facade only); 4 = glue around a Python-only third-party library.
 # Native failures must surface as errors; `handled_native_errors` lists the reviewed exceptions.
 remaining_lines = 0
 
 [[stays]]
 path = "executor"
-reason = "executor"
+rule = 1
 note = "Runs plans against warehouses; a separate later decision."
 
 [[stays]]
 path = "adapters"
-reason = "adapter"
+rule = 1
 note = "Built-in warehouse adapters that project adapters subclass and override."
 
 [[stays]]
 path = "adapter/contract"
-reason = "adapter"
+rule = 1
 note = "BaseAdapter and StrictAdapter, the documented classes project adapters subclass."
 
 [[stays]]
 path = "adapter/discovery"
-reason = "user-code"
+rule = 2
 note = "Imports project adapter modules."
 
 [[stays]]
 path = "adapter/relations"
-reason = "adapter"
+rule = 1
 note = "Relation inspection wrappers adapters call, with per-connection caches; executed-statement classification and invalidation keys are native."
 
 [[stays]]
 path = "adapter/type_system"
-reason = "adapter"
+rule = 1
 note = "Type normalisation adapters import; already a thin native wrapper."
 
 [[stays]]
 path = "provider"
-reason = "user-code"
+rule = 2
 note = "Provider base class users subclass, and injection into user functions."
 
 [[stays]]
 path = "python_nodes"
-reason = "user-code"
+rule = 3
 note = "Decorators that run when user modules are imported."
 
 [[stays]]
 path = "microbatches"
-reason = "executor"
+rule = 1
 note = "Rule 1: the executor's direct-mode event store (warehouse I/O and retries), the event row codec and the event, scope and projection shapes it consumes. Coverage and replay projection, event IDs and state SQL are native (sqlbuild-state microbatches)."
 
 [[stays]]
 path = "rules"
-reason = "public-api"
+rule = 3
 note = "Public custom-rule API and test helper."
 
 [[stays]]
 path = "diagnostics/_helpers/logging.py"
-reason = "public-api"
+rule = 4
 note = "Installs SQLBuild's handlers on Python's logging, which users and integrations configure."
 
 [[stays]]
 path = "diagnostics/_helpers/redaction.py"
-reason = "public-api"
+rule = 4
 note = "Collects redacted extra fields from a Python LogRecord; the redaction itself is native."
 
 [[stays]]
 path = "diagnostics/classes/diagnostic_record_redactor.py"
-reason = "public-api"
+rule = 4
 note = "Redaction entry points that Python logging handlers call per record."
 
 [[stays]]
 path = "diagnostics/classes/diagnostics_console_formatter.py"
-reason = "public-api"
+rule = 4
 note = "Rule 4 glue: the logging.Formatter subclass for the console stream; the line text is native (format_diagnostics_console_record) and only stdlib exception formatting stays here."
 
 [[stays]]
 path = "diagnostics/classes/dynamic_stderr_handler.py"
-reason = "public-api"
+rule = 4
 note = "A logging.Handler that follows the current sys.stderr."
 
 [[stays]]
 path = "diagnostics/classes/invocation_diagnostic_routing.py"
-reason = "public-api"
+rule = 4
 note = "Attaches and removes per-invocation logging handlers."
 
 [[stays]]
 path = "diagnostics/classes/log_record_route_filter.py"
-reason = "public-api"
+rule = 4
 note = "A logging.Filter that routes records to destinations."
 
 [[stays]]
 path = "diagnostics/main"
-reason = "public-api"
+rule = 1
 note = "Diagnostics entry points built on Python logging: configuration, context, debug and SQL logging."
 
 [[stays]]
 path = "diagnostics/_helpers/process_resources.py"
-reason = "public-api"
+rule = 4
 note = "Samples process resources for debug logging through Python's resource module."
 
 [[stays]]
 path = "rule_engine/_helpers/host"
-reason = "user-code"
+rule = 2
 note = "Rule 2: the subprocess host that loads and runs user rule modules (custom_host, custom_evaluation, tracked_facts, module_state, custom_host_launch); host fan-out, partitioning and CPU capacity run natively."
 
 [[stays]]
 path = "rule_engine/_helpers/engine/custom_payloads.py"
-reason = "user-code"
+rule = 2
 note = "Reads user rule functions (source lines, qualified names, import closures) to describe custom rules for native selection."
 
 [[stays]]
 path = "rule_engine/_helpers/engine/_custom_catalogue.py"
-reason = "user-code"
+rule = 2
 note = "Imports the project's custom rule modules and collects their @rule functions for the native catalogue."
 
 [[stays]]
 path = "rule_engine/classes/rule_context.py"
-reason = "user-code"
+rule = 3
 note = "The context object user rules receive."
 
 [[stays]]
 path = "rule_engine/_helpers/engine/definition.py"
-reason = "user-code"
+rule = 2
 note = "The @rule decorator implementation; inspects user rule functions and their signatures."
 
 [[stays]]
 path = "rule_engine/_helpers/engine/hermeticity.py"
-reason = "user-code"
+rule = 2
 note = "Statically checks the imports of user rule source files."
 
 [[stays]]
 path = "rule_engine/_helpers/engine/rule_harness.py"
-reason = "user-code"
+rule = 2
 note = "Public custom-rule test harness that runs user rules over a real compiled project."
 
 [[stays]]
 path = "rule_engine/_helpers/engine/fact_replay.py"
-reason = "user-code"
+rule = 2
 note = "Rule 2: the fact digest scheme shared with the rule host (tracked_facts.py, custom_host.py); recomputes values through the user-facing fact views and encodes live Python objects with orjson."
 
 [[stays]]
 path = "rule_engine/main/define.py"
-reason = "user-code"
+rule = 3
 note = "Public @rule decorator entry point."
 
 [[stays]]
 path = "rule_engine/main/evaluate_rule.py"
-reason = "user-code"
+rule = 3
 note = "Public custom-rule test harness entry point."
 
 [[stays]]
 path = "rule_engine/classes/audit_facts.py"
-reason = "user-code"
+rule = 3
 note = "Fact view user rules read through RuleContext; the Python API over native data."
 
 [[stays]]
 path = "rule_engine/classes/column_facts.py"
-reason = "user-code"
+rule = 3
 note = "Fact view user rules read through RuleContext; the Python API over native data."
 
 [[stays]]
 path = "rule_engine/classes/contract_facts.py"
-reason = "user-code"
+rule = 3
 note = "Fact view user rules read through RuleContext; the Python API over native data."
 
 [[stays]]
 path = "rule_engine/classes/declaration_facts.py"
-reason = "user-code"
+rule = 3
 note = "Fact view user rules read through RuleContext; the Python API over native data."
 
 [[stays]]
 path = "rule_engine/classes/graph_facts.py"
-reason = "user-code"
+rule = 3
 note = "Fact view user rules read through RuleContext; the Python API over native data."
 
 [[stays]]
 path = "rule_engine/classes/model_test_facts.py"
-reason = "user-code"
+rule = 3
 note = "Fact view user rules read through RuleContext; the Python API over native data."
 
 [[stays]]
 path = "rule_engine/classes/project_facts.py"
-reason = "user-code"
+rule = 3
 note = "Fact view user rules read through RuleContext; the Python API over native data."
 
 [[stays]]
 path = "rule_engine/classes/sql_facts.py"
-reason = "user-code"
+rule = 3
 note = "Fact view user rules read through RuleContext; the Python API over native data."
 
 [[stays]]
 path = "rule_engine/classes/project_tree.py"
-reason = "user-code"
+rule = 3
 note = "Project-tree fact view user rules read through RuleContext."
 
 [[stays]]
 path = "rule_engine/classes/sql_document.py"
-reason = "user-code"
+rule = 4
 note = "Lazy Polyglot SQL document user rules read through RuleContext."
 
 [[stays]]
 path = "rule_engine/classes/fact_reads.py"
-reason = "user-code"
+rule = 2
 note = "Records the fact-view reads of one user rule evaluation."
 
 [[stays]]
 path = "rule_engine/classes/shared_fact_encoder.py"
-reason = "user-code"
+rule = 2
 note = "Encodes the Python fact-view values user rules read, for their digests."
 
 [[stays]]
 path = "runtime/observability"
-reason = "public-api"
+rule = 1
 note = "Documented observability API used throughout the executor: lifecycle emitters, dispatcher, scopes and envelope shapes. The event catalogue, payload validation and JSON freezing are native (sqlbuild-core lifecycle_events)."
 
 [[stays]]
 path = "runtime/execution_history/__init__.py"
-reason = "public-api"
+rule = 3
 note = "Package marker of the public execution history shapes below; storage, projection and validation are native (sqlbuild-state execution_history)."
 
 [[stays]]
 path = "runtime/execution_history/models.py"
-reason = "public-api"
+rule = 3
 note = "Rule 3 shapes: StoredEvent, filter, page and RunRecord dataclasses re-exported by sqlbuild.execution_history; __post_init__ delegates validation to native validate_history_* functions."
 
 [[stays]]
 path = "runtime/execution_history/types.py"
-reason = "public-api"
+rule = 3
 note = "Rule 3 shapes: EventFamily, RunStatus, cursor aliases and the storage protocols re-exported by sqlbuild.execution_history."
 
 [[stays]]
 path = "runtime/execution_history/exceptions.py"
-reason = "public-api"
+rule = 3
 note = "Rule 3 shapes: public storage errors re-exported by sqlbuild.execution_history and raised by the native backends."
 
 [[stays]]
 path = "runtime/execution_limits"
-reason = "executor"
+rule = 1
 note = "Deadline the executor scheduler and warehouse cursors enforce."
 
 [[stays]]
 path = "runtime/compute_logs/classes"
-reason = "user-code"
+rule = 1
 note = "Rule 1 capture shim: sys.stdout/sys.stderr tees and a logging handler that record Python output from user code, adapters and the executor (_dispatch_with_compute_logs.py, compile_command/reuse_attempt.rs); storage itself is native LocalFilesystemComputeLogStorage."
 
 [[stays]]
 path = "runtime/compute_logs/main"
-reason = "user-code"
+rule = 1
 note = "Rule 1 capture shim entry: installs the stream tees around the CLI command (_dispatch_with_compute_logs.py)."
 
 [[stays]]
 path = "runtime/compute_logs/_helpers"
-reason = "user-code"
+rule = 1
 note = "Rule 1 tee shim: how much of a write the wrapped Python stream accepted (text_tee.py, binary_tee.py)."
 
 [[stays]]
 path = "runtime/compute_logs/__init__.py"
-reason = "public-api"
+rule = 3
 note = "Package marker of the public compute log shapes below."
 
 [[stays]]
 path = "runtime/compute_logs/models.py"
-reason = "public-api"
+rule = 3
 note = "Rule 3 shapes: capture metadata and result dataclasses re-exported by sqlbuild.compute_logs."
 
 [[stays]]
 path = "runtime/compute_logs/types.py"
-reason = "public-api"
+rule = 3
 note = "Rule 3 shapes: ComputeLogStream and the ComputeLogStorage protocol re-exported by sqlbuild.compute_logs."
 
 [[stays]]
 path = "runtime/compute_logs/exceptions.py"
-reason = "public-api"
+rule = 3
 note = "Rule 3 shapes: public storage errors re-exported by sqlbuild.compute_logs and raised by the native storage."
 
 [[stays]]
 path = "runtime/compute_logs/constants.py"
-reason = "public-api"
+rule = 1
 note = "Rule 1 capture shim constants: the SQL log record field and redaction message the Python diagnostic log handler uses; format version, retention and read limits are native (sqlbuild._native)."
 
 [[stays]]
 path = "runtime/event_exporting/__init__.py"
-reason = "public-api"
+rule = 3
 note = "Package marker of the public sink declarations below; the dispatcher, queue, accounting and command scope are native EventExporterDispatcher/EventExporterCommandScope."
 
 [[stays]]
 path = "runtime/event_exporting/main/__init__.py"
-reason = "public-api"
+rule = 3
 note = "Package marker of the public sink decorators and the user-sink invocation shims below."
 
 [[stays]]
 path = "runtime/event_exporting/main/lifecycle_event_sink.py"
-reason = "public-api"
+rule = 3
 note = "Rule 3 facade: the @lifecycle_event_sink decorator re-exported by sqlbuild.sinks, run when user sink modules are imported."
 
 [[stays]]
 path = "runtime/event_exporting/main/command_output_sink.py"
-reason = "public-api"
+rule = 3
 note = "Rule 3 facade: the @command_output_sink decorator re-exported by sqlbuild.sinks, run when user sink modules are imported."
 
 [[stays]]
 path = "runtime/event_exporting/main/get_lifecycle_event_sink_definition.py"
-reason = "public-api"
+rule = 3
 note = "Rule 3 facade: reads the decorator's definition off a user function; re-exported by sqlbuild.sinks."
 
 [[stays]]
 path = "runtime/event_exporting/main/get_command_output_sink_definition.py"
-reason = "public-api"
+rule = 3
 note = "Rule 3 facade: reads the decorator's definition off a user function; re-exported by sqlbuild.sinks."
 
 [[stays]]
 path = "runtime/event_exporting/main/_invoke_lifecycle_event_sink.py"
-reason = "user-code"
+rule = 2
 note = "Rule 2 shim: the daemon delivery thread's target that calls one user lifecycle sink and reports how it ended to the native dispatcher, so user code never runs above native frames that interpreter finalization would abort (event_exporting/workers.rs)."
 
 [[stays]]
 path = "runtime/event_exporting/main/_run_command_output_sinks.py"
-reason = "user-code"
+rule = 2
 note = "Rule 2 shim: target of each dispatcher's single command-output sink thread; waits on a Python queue and calls user sinks in order on that one thread (provider thread affinity), reporting each outcome through a Python queue, so no native frame is on that thread when finalization can end it (event_exporting/dispatcher.rs)."
 
 [[stays]]
 path = "runtime/event_exporting/models.py"
-reason = "public-api"
+rule = 3
 note = "Rule 3 shape: LifecycleEventSinkDefinition re-exported by sqlbuild.sinks."
 
 [[stays]]
 path = "runtime/event_exporting/types.py"
-reason = "public-api"
+rule = 3
 note = "Rule 3 shape: LifecycleEventKind re-exported by sqlbuild.sinks."
 
 [[stays]]
 path = "runtime/event_exporting/exceptions.py"
-reason = "public-api"
+rule = 3
 note = "Rule 3 shapes: errors the public decorators raise and the native dispatcher raises."
 
 [[stays]]
 path = "runtime/event_exporting/constants.py"
-reason = "public-api"
+rule = 3
 note = "Rule 3 shapes: decorator attribute names, sink kinds and severities the public decorators and discovery read."
 
 [[stays]]
 path = "runtime/output_capture/classes"
-reason = "user-code"
+rule = 1
 note = "Rule 1 capture shim: sys.stdout/sys.stderr tees forwarding accepted writes from user code, adapters and the executor to the native OutputCaptureDispatcher."
 
 [[stays]]
 path = "runtime/output_capture/main"
-reason = "user-code"
+rule = 1
 note = "Rule 1 capture shim entry: swaps sys.stdout/sys.stderr for the tees around one CLI command (Rust cli/observability.rs)."
 
 [[stays]]
 path = "runtime/output_capture/__init__.py"
-reason = "public-api"
+rule = 3
 note = "Package marker of the public command-output shapes below."
 
 [[stays]]
 path = "runtime/output_capture/models.py"
-reason = "public-api"
+rule = 3
 note = "Rule 3 shapes: CommandOutputRecord and sink definitions re-exported by sqlbuild.sinks; validation is native validate_command_output_record."
 
 [[stays]]
 path = "runtime/output_capture/types.py"
-reason = "public-api"
+rule = 3
 note = "Rule 3 shapes: CommandOutputStream re-exported by sqlbuild.sinks, priorities and the exporter protocol."
 
 [[stays]]
 path = "runtime/output_capture/exceptions.py"
-reason = "public-api"
+rule = 3
 note = "Rule 3 shapes: CommandOutputValidationError re-exported by sqlbuild.sinks and raised by the native records."
 
 [[stays]]
 path = "runtime/output_capture/constants.py"
-reason = "public-api"
+rule = 3
 note = "Rule 3 shapes: the command-output sink parameter name and producer version; INVOCATION_CONTEXT_ENV is re-exported from sqlbuild._native for integrations."
 
 [[stays]]
 path = "integrations/dagster"
-reason = "public-api"
+rule = 4
 note = "Documented orchestrator integration and rule 4 Dagster glue: translator invocation, context reads, subprocess streaming and Dagster event construction; CLI arguments, selector logs, payload and failure parsing, asset/check/selection projection of the DAG artifact are native."
 
 [[stays]]
 path = "integrations/rivers"
-reason = "public-api"
+rule = 4
 note = "Documented orchestrator integration and rule 4 Rivers glue: translator invocation and AssetDef construction; the asset projection of the DAG artifact is native."
 
 [[stays]]
 path = "integrations/dlt"
-reason = "user-code"
+rule = 4
 note = "Loader runtime that runs inside user loaders; synthetic loader record building and naming are native."
 
 [[stays]]
 path = "integrations/ingestr"
-reason = "user-code"
+rule = 1
 note = "Loader runtime that runs the ingestr subprocess inside the executor load phase; synthetic loader record building, naming, destination URIs and command lines are native."
 
 [[stays]]
 path = "integrations/dbt/_helpers/profile/load.py"
-reason = "user-code"
+rule = 4
 note = "Rule 4: PyYAML glue only; parses dbt_project.yml and profiles.yml with yaml.safe_load and reports YAMLError as DbtProfileError. Existence, mapping, field and target validation and output selection are native (dbt_interop/profile_load.rs)."
 
 [[stays]]
 path = "integrations/dbt/_helpers/profile/render.py"
-reason = "user-code"
+rule = 4
 note = "Renders the selected dbt profile output with Jinja, env_var and var as dbt does."
 
 [[stays]]
 path = "cli/commands/main/entrypoint/_dispatch_with_compute_logs.py"
-reason = "user-code"
+rule = 1
 note = "Captures the command's stdout, stderr and logging into the local compute log around user code."
 
 [[stays]]
 path = "cli/commands/_helpers/entry/compute_log_diagnostics.py"
-reason = "user-code"
+rule = 1
 note = "Logs compute log capture failures through Python logging during capture."
 
 [[stays]]
 path = "cli/compile_reuse/_helpers/provider_settings.py"
-reason = "user-code"
+rule = 4
 note = "Inspects user provider settings classes for the environment and files they read."
 
 [[stays]]
 path = "cli/compile_reuse/_helpers/startup_inputs.py"
-reason = "user-code"
+rule = 2
 note = "Interpreter and site-path inputs user modules import from."
 
 [[stays]]
 path = "cli/entry/main/entry.py"
-reason = "public-api"
+rule = 3
 note = "The installed sqlbuild-python console entry point."
 
 [[stays]]
 path = "cli/entry/main/launched.py"
-reason = "public-api"
+rule = 3
 note = "The Python entry point the native sqb executable hands invocations to."
 
 [[stays]]
 path = "cli/entry/_helpers/streams.py"
-reason = "public-api"
+rule = 3
 note = "Reconfigures the Python process's standard streams for the console entry points."
 
 [[stays]]
 path = "compiler/python_nodes/_helpers/identity.py"
-reason = "user-code"
+rule = 2
 note = "Identity hashing over live user functions (source and globals)."
 
 [[stays]]
 path = "compiler/macro_bridge/_helpers/store_environment.py"
-reason = "user-code"
+rule = 2
 note = "Fingerprints the installed packages, import path and live module files that project macros import from; the macro call store cache key. The interpreter stamp it shares with compile reuse is native (interpreter_identity)."
 
 [[stays]]
 path = "rule_engine/classes/runtime_guard.py"
-reason = "user-code"
+rule = 2
 note = "Guards custom-rule execution against side effects in user rule code."
 
 [[stays]]
 path = "rule_engine/classes/module_state_monitor.py"
-reason = "user-code"
+rule = 2
 note = "Watches user rule modules for state changes between custom-rule runs."
 
 [[stays]]
 path = "compiler/compile/_helpers/render/user_macros.py"
-reason = "user-code"
+rule = 2
 note = "Loads and executes project macro modules, and builds the declaration and enum mappings user macros read."
 
 [[stays]]
 path = "compiler/macro_bridge/classes/macro_bridge.py"
-reason = "user-code"
+rule = 2
 note = "Tracks the loaded user modules macro call results depend on, and runs a render stage through the bridge."
 
 [[stays]]
 path = "compiler/python_nodes/_helpers/user_inventory.py"
-reason = "user-code"
+rule = 2
 note = "Reads loaded user node functions: identities over live functions and decorated dependency names; graph construction is native."
 
 [[stays]]
 path = "compiler/discovery/_helpers/filesystem/project_modules.py"
-reason = "user-code"
+rule = 2
 note = "Rule 2 shim: imports project Python node, hook, provider, sink and materialization modules and reads live members, signatures, provider parameter annotations and source lines; record building, provider naming and validation, settings errors, factory results and duplicate checks are native."
 
 [[stays]]
 path = "compiler/discovery/_helpers/validation/discovery.py"
-reason = "user-code"
+rule = 2
 note = "Reads decorator definitions from loaded project Python node functions."
 
 [[stays]]
 path = "compiler/discovery/main/runtime_extensions.py"
-reason = "user-code"
+rule = 2
 note = "Binds imported project providers to event exporter and sink declarations."
 
 [[stays]]
 path = "compiler/compile/_helpers/diagnostics/python_resources.py"
-reason = "user-code"
+rule = 2
 note = "Reads docstrings and source lines of loaded project Python functions and provider classes."
 
 [[stays]]
 path = "compiler/discovery/_helpers/filesystem/command_output_sinks.py"
-reason = "user-code"
+rule = 2
 note = "Inspects loaded user sink functions."
 
 [[stays]]
 path = "compiler/pipeline/_helpers/materializations.py"
-reason = "user-code"
+rule = 2
 note = "Imports user materialization modules."
 
 [[stays]]
 path = "compiler/macro_bridge/main"
-reason = "user-code"
+rule = 2
 note = "Macro bridge entry points for the running render stage that executes user macros."
 
 [[stays]]
 path = "compiler/compile/_helpers/macro_bridge/call_store.py"
-reason = "user-code"
+rule = 2
 note = "Hands the running macro bridge its user macro call store."
 
 [[stays]]
 path = "compiler/python_nodes/main/identity.py"
-reason = "user-code"
+rule = 2
 note = "Identity entry point over live user node functions."
 
 [[stays]]
 path = "compiler/python_nodes/main/_hook_identities.py"
-reason = "user-code"
+rule = 2
 note = "Builds identities of loaded user hook functions."
 
 [[stays]]
 path = "compiler/auditing/main/above.py"
-reason = "public-api"
+rule = 3
 note = "Audit bound helper project audit factories call."
 
 [[stays]]
 path = "compiler/auditing/main/below.py"
-reason = "public-api"
+rule = 3
 note = "Audit bound helper project audit factories call."
 
 [[stays]]
 path = "compiler/auditing/main/outside.py"
-reason = "public-api"
+rule = 3
 note = "Audit bound helper project audit factories call."
 
 [[stays]]
 path = "compiler/auditing/main/audit_factory.py"
-reason = "public-api"
+rule = 3
 note = "Decorator that declares project audit factories."
 
 [[stays]]
 path = "compiler/auditing/main/get_audit_factory_definition.py"
-reason = "public-api"
+rule = 3
 note = "Reads the declaration attached to a project audit factory."
 
 [[stays]]
 path = "compiler/sql_analysis/main/import_polyglot.py"
-reason = "public-api"
+rule = 4
 note = "Imports the Polyglot Python package for the Python API."
 
 [[stays]]
 path = "compiler/sql_analysis/main/import_polyglot_sql.py"
-reason = "public-api"
+rule = 4
 note = "Imports the Polyglot SQL Python package for the Python API."
 
 [[stays]]
 path = "compiler/sql_analysis/_helpers/polyglot.py"
-reason = "public-api"
+rule = 4
 note = "Wraps the Polyglot Python package with complexity guards."
 
 [[stays]]
 path = "assets.py"
-reason = "public-api"
-note = "Public facade."
+rule = 3
+note = "Public facade: re-exports plus one-line delegating wrappers (asset, get_asset_definition)."
 
 [[stays]]
 path = "audits.py"
-reason = "public-api"
-note = "Public facade."
+rule = 3
+note = "Public facade: re-exports only."
 
 [[stays]]
 path = "checks.py"
-reason = "public-api"
-note = "Public facade."
+rule = 3
+note = "Public facade: re-exports plus one-line delegating wrappers (check, get_check_definition)."
 
 [[stays]]
 path = "compute_logs.py"
-reason = "public-api"
-note = "Public facade."
+rule = 3
+note = "Public facade: re-exports plus one-line delegating wrappers (open_local_compute_log_storage)."
 
 [[stays]]
 path = "execution_history.py"
-reason = "public-api"
-note = "Public facade."
+rule = 3
+note = "Public facade: re-exports plus one-line delegating wrappers (append_and_project, canonical_event_id, canonical_event_content, project_runs, validate_page_limit)."
 
 [[stays]]
 path = "factories.py"
-reason = "public-api"
-note = "Public facade."
+rule = 3
+note = "Public facade: re-exports plus one-line delegating wrappers (factory, get_factory_definition)."
 
 [[stays]]
 path = "functions.py"
-reason = "public-api"
-note = "Public facade."
+rule = 3
+note = "Public facade: re-exports only."
 
 [[stays]]
 path = "hooks.py"
-reason = "public-api"
-note = "Public facade."
+rule = 3
+note = "Public facade: re-exports plus one-line delegating wrappers (hook, get_hook_definition)."
 
 [[stays]]
 path = "loaders.py"
-reason = "public-api"
-note = "Public facade."
+rule = 3
+note = "Public facade: re-exports only."
 
 [[stays]]
 path = "observability.py"
-reason = "public-api"
-note = "Public facade."
+rule = 3
+note = "Public facade: re-exports only."
 
 [[stays]]
 path = "postgres_history.py"
-reason = "public-api"
-note = "Public facade."
+rule = 3
+note = "Public facade: re-exports only."
 
 [[stays]]
 path = "providers.py"
-reason = "public-api"
-note = "Public facade."
+rule = 3
+note = "Public facade: re-exports only."
 
 [[stays]]
 path = "refs.py"
-reason = "public-api"
-note = "Public facade."
+rule = 3
+note = "Public facade: re-exports plus one-line delegating wrappers (model, source, seed)."
 
 [[stays]]
 path = "retries.py"
-reason = "public-api"
-note = "Public facade."
+rule = 3
+note = "Public facade: re-exports only."
 
 [[stays]]
 path = "sinks.py"
-reason = "public-api"
-note = "Public facade."
+rule = 3
+note = "Public facade: re-exports only."
 
 [[stays]]
 path = "sqlite_history.py"
-reason = "public-api"
-note = "Public facade."
+rule = 3
+note = "Public facade: re-exports only."
 
 [[stays]]
 path = "tasks.py"
-reason = "public-api"
-note = "Public facade."
+rule = 3
+note = "Public facade: re-exports plus one-line delegating wrappers (task, get_task_definition)."
 
 [[stays]]
 path = "cost/models.py"
-reason = "executor"
+rule = 1
 note = "Shape rule: data records only (StatementExecutionTelemetry, CostResourceContext, RunCostSummary), no logic; consumed by adapters/snowflake/classes/snowflake_adapter.py, adapters/snowflake/classes/snowflake_cursor.py, executor/build/classes/build_scheduler.py and 2 more."
 
 [[stays]]
 path = "cli/compile_reuse/models.py"
-reason = "user-code"
+rule = 4
 note = "Shape rule: data records only (CompileReuseRequest, SettingsEnvironmentInputs, SettingsInputsResult), no logic; consumed by cli/compile_reuse/_helpers/provider_settings.py, and read natively by the compile reuse check."
 
 [[stays]]
 path = "compiler/source_freshness/constants.py"
-reason = "adapter"
+rule = 1
 note = "Shape rule: source freshness column names and adapter column types, no logic; SOURCE_FRESHNESS_TABLE_NAME is re-exported from sqlbuild._native."
 
 [[stays]]
 path = "compiler/auditing/types.py"
-reason = "executor"
+rule = 1
 note = "Shape rule: data enums and aliases only (AuditSeverity, AuditRunScope, AuditAttachmentKind, AuditEvaluationMode, ...), no logic; consumed by audits.py, compiler/auditing/main/above.py, compiler/auditing/main/below.py and 17 more."
 
 [[stays]]
 path = "compiler/python_nodes/types.py"
-reason = "executor"
+rule = 1
 note = "Shape rule: data enums and aliases only (PythonNodeKind, PythonNodeStatus, SkipMode, PythonNodeFanInAction), no logic; consumed by assets.py, assets.pyi, executor/load/_helpers/dag_runtime.py and 16 more."
 
 [[stays]]
 path = "compiler/macro_bridge/constants.py"
-reason = "user-code"
+rule = 2
 note = "Shape rule: data constants only (ACTIVE_MACRO_BRIDGE, COMPILES_STARTED, STORE_MODULE_PATHS, MACRO_CALL_STORE_FILE_NAME, ...), no logic; consumed by compiler/macro_bridge/_helpers/store_environment.py, compiler/macro_bridge/classes/macro_bridge.py, compiler/macro_bridge/main/_claim_first_compile.py and 2 more."
 
 [[stays]]
 path = "compiler/references/models.py"
-reason = "executor"
+rule = 1
 note = "Shape rule: data records only (RelationName, ProjectRelation, ProjectRelationIndex), no logic; consumed by executor/python_nodes/classes/runtime_relation_guard.py."
 
 [[stays]]
 path = "runtime/contracts/types.py"
-reason = "executor"
+rule = 1
 note = "Shape rule: data enums and aliases only (ExecutionResourceKind, ConnectionElapsedCallback, NodeStartCallback), no logic; consumed by executor/build/_helpers/scheduler.py, executor/build/_helpers/source_node.py, executor/build/classes/build_scheduler.py and 15 more."
 
 [[stays]]
 path = "errors/contracts/exceptions.py"
-reason = "executor"
+rule = 1
 note = "Shape rule: data exceptions only (SharedInputError, ExecutorInputError), no logic; consumed by executor/audit_results/_helpers/sql.py, executor/build/_helpers/external_source_loads.py, executor/build/_helpers/retention.py and 53 more."
 
 [[stays]]
 path = "compiler/fingerprints/constants.py"
-reason = "executor"
+rule = 1
 note = "Shape rule: Python-only node type names (NODE_TYPE_HOOK, NODE_TYPE_QUERY_DIFF_ARTIFACT), no logic; table and column names are native (sqlbuild._native)."
 
 [[stays]]
 path = "diagnostics/models.py"
-reason = "public-api"
+rule = 4
 note = "Shape rule: data records only (ProcessResourceUsage, DiagnosticRoutingOptions), no logic; consumed by cli/commands/main/entrypoint/_dispatch_with_compute_logs.py, diagnostics/classes/invocation_diagnostic_routing.py, diagnostics/main/_log_process_resources.py and 3 more."
 
 [[stays]]
 path = "compiler/dag/types.py"
-reason = "public-api"
+rule = 4
 note = "Shape rule: data enums and aliases only (NodeKind), no logic; consumed by integrations/dagster/constants.py, integrations/rivers/constants.py."
 
 [[stays]]
 path = "runtime/contracts/models.py"
-reason = "executor"
+rule = 1
 note = "Shape rule: data records only (ConnectionHooks), no logic; consumed by executor/pipeline/_helpers/scenario.py."
 
 [[stays]]
 path = "cursor_algebra/types.py"
-reason = "executor"
+rule = 1
 note = "Shape rule: data enums and aliases only (CursorScalar, BoundSentinel, Bound), no logic; consumed by executor/load/_helpers/cursors.py, executor/load/main/_execute.py, executor/run/_helpers/materializations/microbatch.py and 2 more."
 
 [[stays]]
 path = "cost/types.py"
-reason = "adapter"
+rule = 1
 note = "Shape rule: data enums and aliases only (CostCapability, CostStatus), no logic; consumed by adapters/snowflake/classes/snowflake_adapter.py."
 
 [[stays]]
 path = "compiler/lineage/types.py"
-reason = "adapter"
+rule = 1
 note = "Shape rule: data enums and aliases only (InferredNullability), no logic; consumed by adapter/contract/types.py, adapter/type_system/_helpers/inference_rules.py, adapter/type_system/main/conditional_result_nullability.py and 2 more."
 
 [[stays]]
 path = "compiler/macro_bridge/models.py"
-reason = "user-code"
+rule = 2
 note = "Shape rule: data records only (ModuleSources), no logic; consumed by compiler/macro_bridge/_helpers/store_environment.py, compiler/macro_bridge/classes/macro_bridge.py."
 
 [[stays]]
 path = "integrations/dbt/exceptions.py"
-reason = "user-code"
+rule = 4
 note = "Shape rule: data exceptions only (DbtProfileError), no logic; consumed by integrations/dbt/_helpers/profile/load.py, integrations/dbt/_helpers/profile/render.py."
 
 [[stays]]
 path = "diagnostics/constants.py"
-reason = "public-api"
+rule = 4
 note = "Shape rule: data constants only (LOGGER_ROOT_NAME, LOGGER_PREFIX, SQL_DIGEST_FIELD, SQL_TEXT_FIELD, ...), no logic; consumed by diagnostics/_helpers/logging.py, diagnostics/_helpers/redaction.py, diagnostics/classes/invocation_diagnostic_routing.py and 2 more."
 
 [[stays]]
 path = "cursor_algebra/exceptions.py"
-reason = "executor"
+rule = 1
 note = "Shape rule: data exceptions only (CursorAlgebraError), no logic; consumed by executor/run/models.py."
 
 [[stays]]
 path = "spec/contracts/constants.py"
-reason = "adapter"
+rule = 1
 note = "Shape rule: data constants only (DEFAULT_SEED_CSV_SETTINGS), no logic; consumed by adapter contract classes."
 
 [[stays]]
 path = "cli/entry/constants.py"
-reason = "public-api"
+rule = 3
 note = "Shape rule: data constants only (NATIVE_ALLOCATOR_PURGE_DELAY_VARIABLE, NATIVE_ALLOCATOR_PURGE_DELAY_MILLISECONDS, OUTPUT_STREAM_ENCODING, OUTPUT_STREAM_ERRORS, ...), no logic; consumed by cli/entry/_helpers/streams.py, cli/entry/main/entry.py, cli/entry/main/launched.py."
 
 [[stays]]
 path = "sql_values/exceptions.py"
-reason = "adapter"
+rule = 1
 note = "Shape rule: data exceptions only (SqlValueRenderingError), no logic; consumed by adapter/contract/classes/base_adapter.py, adapter/contract/exceptions.py."
 
 [[stays]]
 path = "cli/output/constants.py"
-reason = "public-api"
+rule = 4
 note = "Shape rule: re-export only (INTEGRATION_RESULT_PATH_ENV, from sqlbuild._native), no logic; consumed by integrations/dagster/_helpers/invocation_factory.py."
 
 [[stays]]
 path = "compiler/compile/types.py"
-reason = "executor"
+rule = 1
 note = "Shape rule: typing protocols, enums and aliases only (CompiledProjectView, CompiledModelView, CompiledResourceType, AuditInput, ...), no logic; consumed by executor/pipeline/_helpers/testing.py, executor/scenario/_helpers/local/execution.py and project audit factories that annotate AuditInput."
 
 [[stays]]
 path = "rule_engine/types.py"
-reason = "public-api"
+rule = 3
 note = "Shape rule: data protocol and aliases only (RuleContext, RuleCheck, RuleOptionValue, FactKey, CustomRulePlan), no logic; re-exported by rules/__init__.py and consumed by rule_engine/main/define.py, rule_engine/_helpers/host/custom_host.py, rule_engine/_helpers/engine/fact_replay.py and 4 more."
 
 [[stays]]
 path = "rule_engine/constants.py"
-reason = "user-code"
+rule = 2
 note = "Shape rule: custom-rule host and fact-name constants (CUSTOM_HOST_MAX_TRACKED_READS, CUSTOM_RULE_IMPORT_ROOTS, FACT_PROJECT_MODELS, ...) used by the Python custom-rule host, no logic; versions, launch module and shared keys are native (sqlbuild._native)."
 
 [[stays]]
 path = "compiler/compile/exceptions.py"
-reason = "user-code"
+rule = 2
 note = "Shape rule: data exceptions only (MacroDeclarationLookupError, a CompileInputError that is also a KeyError, which a native error class with one parent cannot express), no logic; consumed by compiler/compile/_helpers/render/user_macros.py."
 
 [[stays]]
 path = "compiler/sql_analysis/constants.py"
-reason = "public-api"
+rule = 4
 note = "Rule 4: polyglot_sql glue only; the entry point, call-shape and option names (POLYGLOT_ANALYZE_QUERY_ENTRY_POINT, POLYGLOT_COMPLEXITY_GUARD_OPTION, POLYGLOT_MAX_FUNCTION_CALL_DEPTH, ...) that compiler/sql_analysis/_helpers/polyglot.py uses to wrap the polyglot_sql Python package."
 
 [[stays]]
 path = "compiler/compile/models.py"
-reason = "public-api"
+rule = 3
 note = "Shape rule: re-export only (MacroContext, now hosted natively), no logic; project macro modules import it from this path to annotate their ctx parameter, as tests/e2e/fixtures/waffle_shop/models/marts/_macros/time.py does."

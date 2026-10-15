@@ -7,11 +7,12 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class StayEntry:
-    """A module or package that stays Python, and why."""
+    """A module or package that stays Python, the rule that keeps it, and the evidence."""
 
     path: str
-    reason: str
+    rule: object
     note: str
+    unknown_keys: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
