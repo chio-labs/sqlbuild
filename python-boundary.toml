@@ -853,3 +853,8 @@ note = "Shape rule: data constants only (STAGE_CAPTURE_DIR_ENV_VAR, COMPILE_REUS
 path = "cost/constants.py"
 reason = "adapter"
 note = "Shape rule: data constants only (SQLBUILD_QUERY_TAG_APP), no logic; consumed by adapters/snowflake/classes/snowflake_cursor.py."
+
+[[stays]]
+path = "compiler/compile/models.py"
+reason = "public-api"
+note = "Shape rule: re-export only (MacroContext, now hosted natively), no logic; project macro modules import it from this path to annotate their ctx parameter, as tests/e2e/fixtures/waffle_shop/models/marts/_macros/time.py does."

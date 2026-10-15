@@ -313,7 +313,7 @@ def test_given_rule_finding_when_running_shared_compile_pipeline_then_planning_i
                     'ENUM (name order_status, members (ACTIVE "active", PAUSED "paused"));\n'
                 ),
                 "models/_macros/policy.py": (
-                    "from sqlbuild._native import MacroContext\n\n\n"
+                    "from sqlbuild.compiler.compile.models import MacroContext\n\n\n"
                     "def policy_columns(ctx: MacroContext) -> str:\n"
                     "    minimum = ctx.constants['minimum_quantity']\n"
                     "    region_count = len(ctx.constants['regions'])\n"
