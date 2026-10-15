@@ -28,18 +28,6 @@ from sqlbuild.adapter.contract.types import (
     TypeDialect,
 )
 from sqlbuild.adapter.relations.models import InspectionQueryRecord
-from sqlbuild.cli.commands.types import (
-    CliCommand,
-    CompileLineageMode,
-    DagCommandHandler,
-    DebugCommandHandler,
-    FormatCommandHandler,
-    LineageCommandHandler,
-    QueryCommandHandler,
-    ScopeCommandHandler,
-    ScopeIndexLoader,
-    SkillsUpdateCommandHandler,
-)
 from sqlbuild.cli.compile_reuse.models import CompileReuseRequest
 from sqlbuild.compiler.auditing.models import (
     AuditGateIdentity,
@@ -323,7 +311,6 @@ from sqlbuild.integrations.dbt.models import (
     NormalizedDbtProfileConnection,
     ResolvedDbtProfileOutput,
 )
-from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSkipReason
 from sqlbuild.lint.models import (
     CompileFacts,
     ExpandedLintFile,
@@ -9308,3 +9295,131 @@ class NativeRecord:
 
     __dataclass_fields__: ClassVar[dict[str, Field[Any]]]
     __match_args__: ClassVar[tuple[str, ...]]
+
+class CompileLineageMode(StrEnum):
+    """Column lineage mode for compile output."""
+
+    FAST = "fast"
+    RICH = "rich"
+    NONE = "none"
+
+class CliCommand(StrEnum):
+    COMPILE = "compile"
+    DAG = "dag"
+    PLAN = "plan"
+    FRESHNESS = "freshness"
+    BUILD = "build"
+    TEST = "test"
+    CHECK = "check"
+    AUDIT = "audit"
+    LOAD = "load"
+    SEED = "seed"
+    CLONE = "clone"
+    DIFF = "diff"
+    DEBUG = "debug"
+    LINEAGE = "lineage"
+    QUERY = "query"
+    COST = "cost"
+    CLEAN = "clean"
+    JANITOR = "janitor"
+    INIT = "init"
+    PLAYGROUND = "playground"
+    SCENARIO = "scenario"
+    DBT = "dbt"
+    SKILLS = "skills"
+    FORMAT = "format"
+    RULES = "rules"
+    SCOPE = "scope"
+    CONTRACT = "contract"
+    RENAME = "rename"
+    MV = "mv"
+
+class ScopeCommandHandler(Protocol):
+    def __call__(self, *, request: ScopeCommandRequest) -> int: ...
+
+class ScopeIndexLoader(Protocol):
+    def __call__(self, *, project_dir: Path, no_cache: bool = False) -> ScopeIndex: ...
+
+class DagCommandHandler(Protocol):
+    def __call__(
+        self,
+        project_dir: Path | None,
+        *,
+        no_sql_validation: bool,
+        json_output: bool,
+        cli_vars: dict[str, object] | None,
+    ) -> int: ...
+
+class QueryCommandHandler(Protocol):
+    def __call__(
+        self,
+        project_dir: Path | None,
+        *,
+        sql: str | None,
+        query_file: Path | None,
+        selected_target: str | None,
+        output_format: str,
+        limit: int | None,
+    ) -> int: ...
+
+class DebugCommandHandler(Protocol):
+    def __call__(
+        self,
+        project_dir: Path | None,
+        *,
+        no_color: bool,
+        no_connection: bool,
+        selected_target: str | None,
+        json_output: bool,
+    ) -> int: ...
+
+class LineageCommandHandler(Protocol):
+    def __call__(self, request: LineageCommandRequest) -> int: ...
+
+class SkillsUpdateCommandHandler(Protocol):
+    def __call__(
+        self,
+        project_dir: Path | None,
+        *,
+        global_install: bool,
+        targets: tuple[str, ...],
+        force: bool,
+    ) -> int: ...
+
+class FormatCommandHandler(Protocol):
+    def __call__(
+        self,
+        project_dir: Path | None,
+        *,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+        check: bool,
+        diff: bool,
+        fixtures_only: bool,
+        fix: bool,
+        json_output: bool,
+        no_color: bool,
+    ) -> int: ...
+
+class PlaygroundTemplate(StrEnum):
+    """Available `sqb playground` templates."""
+
+    WAFFLE_SHOP = "waffle_shop"
+    LOADER_WAFFLE_SHOP = "loader_waffle_shop"
+    DAGSTER = "dagster"
+    RIVERS = "rivers"
+    PYTHON_NODES = "python_nodes"
+
+class DbtInteropCommand(StrEnum):
+    """dbt interop commands with SQLBuild participation."""
+
+    PLAN = "plan"
+    RUN = "run"
+    BUILD = "build"
+    DEBUG = "debug"
+
+class DbtInteropSkipReason(StrEnum):
+    """Reason one side of a dbt interop plan has no work."""
+
+    NO_DBT_WORK = "no_dbt_work"
+    NO_SQLBUILD_WORK = "no_sqlbuild_work"

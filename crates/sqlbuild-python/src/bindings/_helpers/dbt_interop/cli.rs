@@ -23,7 +23,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 
 const NATIVE_RECORDS: &str = "sqlbuild._native";
-const DBT_TYPES: &str = "sqlbuild.integrations.dbt.types";
+const DBT_TYPES: &str = "sqlbuild._native";
 const DBT_EXCEPTIONS: &str = "sqlbuild.integrations.dbt.exceptions";
 const DBT_EXECUTABLE_ENV_VAR: &str = "DBT_EXECUTABLE";
 const COMMAND_ARGV_OPTIONS: (&[&str], &[&str]) =

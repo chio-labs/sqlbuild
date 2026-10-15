@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    CliCommand,
     ParsedCliInvocation,
     ResolvedWarehouse,
     command_warehouse_scope,
@@ -16,7 +17,6 @@ from sqlbuild._native import (
     resolve_project_connection_config,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.types import CliCommand
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.contracts.models import LocalTargetConfig, TargetWarehousesConfig
 from sqlbuild.spec.contracts.types import WarehouseGroup

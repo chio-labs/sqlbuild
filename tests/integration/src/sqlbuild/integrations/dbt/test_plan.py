@@ -4,8 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import DbtInteropPlan, plan_dbt_interop_from_project
-from sqlbuild.integrations.dbt.types import DbtInteropSkipReason
+from sqlbuild._native import DbtInteropPlan, DbtInteropSkipReason, plan_dbt_interop_from_project
 from tests.integration.src.sqlbuild.integrations.dbt._test_types import (
     RealDbtInteropPlanTestCase,
 )

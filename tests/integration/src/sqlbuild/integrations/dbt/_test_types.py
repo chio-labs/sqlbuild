@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.integrations.dbt.types import DbtInteropSkipReason
+from sqlbuild._native import DbtInteropSkipReason
 
 
 @dataclass(frozen=True)

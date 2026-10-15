@@ -14,6 +14,7 @@ from sqlbuild import _native as plan_module
 from sqlbuild._native import (
     DbtCombinedGraph,
     DbtCommandExecutionResult,
+    DbtInteropCommand,
     DbtInteropCompiledProject,
     DbtInteropExecutionRequest,
     DbtInteropInvocation,
@@ -34,7 +35,6 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.main.runtime import _execute_json_event_stream as event_module
 from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtNodeExecutionResult
-from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtCompileFullRefreshPipelineTestCase,
     DbtExecutionSelectionStatusTestCase,

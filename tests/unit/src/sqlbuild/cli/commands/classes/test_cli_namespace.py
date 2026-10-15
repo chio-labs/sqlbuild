@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import CliNamespace
-from sqlbuild.cli.commands.types import CompileLineageMode
+from sqlbuild._native import CliNamespace, CompileLineageMode
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from tests.unit.src.sqlbuild.cli.commands.classes._test_types import (
     CliNamespaceAssignmentTestCase,

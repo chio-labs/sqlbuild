@@ -100,7 +100,7 @@ fn execute_dbt_sqlbuild_work<'py>(
         ],
     )?;
     let command = args.value("command")?;
-    let kinds = imported(py, "sqlbuild.integrations.dbt.types", "DbtInteropCommand")?;
+    let kinds = imported(py, "sqlbuild._native", "DbtInteropCommand")?;
     let display = if command.eq(kinds.getattr("RUN")?)? {
         "sqb build --no-tests --no-audits".to_owned()
     } else {

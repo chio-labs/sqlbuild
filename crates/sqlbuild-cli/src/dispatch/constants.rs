@@ -599,7 +599,7 @@ const COMPILE_FIELDS: [Field; 15] = [
     field(
         "lineage_mode",
         Source::Member(
-            class("sqlbuild.cli.commands.types", "CompileLineageMode"),
+            class("sqlbuild._native", "CompileLineageMode"),
             "compile_lineage_mode",
         ),
     ),
@@ -731,7 +731,7 @@ const DBT_ARGUMENTS: [Field; 3] = [
     field("args", Source::TupleOf("dbt_args")),
     NO_COLOR,
 ];
-const DBT_COMMAND: ClassRef = class("sqlbuild.integrations.dbt.types", "DbtInteropCommand");
+const DBT_COMMAND: ClassRef = class("sqlbuild._native", "DbtInteropCommand");
 
 pub(crate) const DBT_PLAN_ROUTE: Route =
     dbt_route("run_dbt_plan", "plan", &DBT_ARGUMENTS, DBT_COMMAND);

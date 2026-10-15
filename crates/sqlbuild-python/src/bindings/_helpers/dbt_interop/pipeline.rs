@@ -104,7 +104,7 @@ fn resolve_plan<'py>(
 fn execute_dbt_interop_from_project(request: &Bound<'_, PyAny>) -> PyResult<i64> {
     let py = request.py();
     let command = request.getattr("command")?;
-    let kind = imported(py, "sqlbuild.integrations.dbt.types", "DbtInteropCommand")?;
+    let kind = imported(py, "sqlbuild._native", "DbtInteropCommand")?;
     if !command.eq(kind.getattr("RUN")?)? && !command.eq(kind.getattr("BUILD")?)? {
         return Err(PyErr::from_value(
             imported(
@@ -245,8 +245,7 @@ fn plan_dbt_interop_from_project<'py>(
         &[
             (
                 "command",
-                imported(py, "sqlbuild.integrations.dbt.types", "DbtInteropCommand")?
-                    .getattr("PLAN")?,
+                imported(py, "sqlbuild._native", "DbtInteropCommand")?.getattr("PLAN")?,
             ),
             ("project_dir", args.value("project_dir")?),
             ("args", args.value("args")?),

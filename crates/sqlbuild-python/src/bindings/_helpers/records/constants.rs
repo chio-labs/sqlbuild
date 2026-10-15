@@ -17,7 +17,7 @@ pub(crate) const ENUM_MODULE: &str = "enum";
 pub(crate) const STR_ENUM: &str = "StrEnum";
 
 /// Every native string enum group, registered before the records.
-pub(crate) const ENUMS: &[&[EnumSpec]] = &[FRESHNESS_ENUMS];
+pub(crate) const ENUMS: &[&[EnumSpec]] = &[FRESHNESS_ENUMS, CLI_ENUMS, DBT_ENUMS];
 
 /// Every native record group, in registration order.
 pub(crate) const RECORDS: &[&[RecordSpec]] = &[
@@ -727,7 +727,7 @@ const COMPILE_COMMAND_REQUEST: RecordSpec = RecordSpec {
         FieldSpec::new("no_color", FieldDefault::False),
         FieldSpec::new(
             "lineage_mode",
-            FieldDefault::Member("sqlbuild.cli.commands.types", "CompileLineageMode", "FAST"),
+            FieldDefault::Member("sqlbuild._native", "CompileLineageMode", "FAST"),
         ),
         FieldSpec::new("select", FieldDefault::EmptyTuple),
         FieldSpec::new("exclude", FieldDefault::EmptyTuple),
@@ -1343,3 +1343,79 @@ const COST_RECORDS: &[RecordSpec] = &[
     COST_RUN_RECORD,
     STATEMENT_LEDGER_ENTRY,
 ];
+
+const COMPILE_LINEAGE_MODE: EnumSpec = EnumSpec {
+    name: "CompileLineageMode",
+    doc: "Column lineage mode for compile output.",
+    members: &[("FAST", "fast"), ("RICH", "rich"), ("NONE", "none")],
+};
+const CLI_COMMAND: EnumSpec = EnumSpec {
+    name: "CliCommand",
+    doc: "",
+    members: &[
+        ("COMPILE", "compile"),
+        ("DAG", "dag"),
+        ("PLAN", "plan"),
+        ("FRESHNESS", "freshness"),
+        ("BUILD", "build"),
+        ("TEST", "test"),
+        ("CHECK", "check"),
+        ("AUDIT", "audit"),
+        ("LOAD", "load"),
+        ("SEED", "seed"),
+        ("CLONE", "clone"),
+        ("DIFF", "diff"),
+        ("DEBUG", "debug"),
+        ("LINEAGE", "lineage"),
+        ("QUERY", "query"),
+        ("COST", "cost"),
+        ("CLEAN", "clean"),
+        ("JANITOR", "janitor"),
+        ("INIT", "init"),
+        ("PLAYGROUND", "playground"),
+        ("SCENARIO", "scenario"),
+        ("DBT", "dbt"),
+        ("SKILLS", "skills"),
+        ("FORMAT", "format"),
+        ("RULES", "rules"),
+        ("SCOPE", "scope"),
+        ("CONTRACT", "contract"),
+        ("RENAME", "rename"),
+        ("MV", "mv"),
+    ],
+};
+const PLAYGROUND_TEMPLATE: EnumSpec = EnumSpec {
+    name: "PlaygroundTemplate",
+    doc: "Available `sqb playground` templates.",
+    members: &[
+        ("WAFFLE_SHOP", "waffle_shop"),
+        ("LOADER_WAFFLE_SHOP", "loader_waffle_shop"),
+        ("DAGSTER", "dagster"),
+        ("RIVERS", "rivers"),
+        ("PYTHON_NODES", "python_nodes"),
+    ],
+};
+
+/// `sqb` commands, compile lineage modes and playground templates.
+const CLI_ENUMS: &[EnumSpec] = &[COMPILE_LINEAGE_MODE, CLI_COMMAND, PLAYGROUND_TEMPLATE];
+const DBT_INTEROP_COMMAND: EnumSpec = EnumSpec {
+    name: "DbtInteropCommand",
+    doc: "dbt interop commands with SQLBuild participation.",
+    members: &[
+        ("PLAN", "plan"),
+        ("RUN", "run"),
+        ("BUILD", "build"),
+        ("DEBUG", "debug"),
+    ],
+};
+const DBT_INTEROP_SKIP_REASON: EnumSpec = EnumSpec {
+    name: "DbtInteropSkipReason",
+    doc: "Reason one side of a dbt interop plan has no work.",
+    members: &[
+        ("NO_DBT_WORK", "no_dbt_work"),
+        ("NO_SQLBUILD_WORK", "no_sqlbuild_work"),
+    ],
+};
+
+/// dbt interop commands and skip reasons.
+const DBT_ENUMS: &[EnumSpec] = &[DBT_INTEROP_COMMAND, DBT_INTEROP_SKIP_REASON];

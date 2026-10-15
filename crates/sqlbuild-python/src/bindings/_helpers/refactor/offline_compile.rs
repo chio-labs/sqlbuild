@@ -16,7 +16,7 @@ const PLANNER_ERRORS: &str = "sqlbuild.compiler.planner.exceptions";
 const RULES_ERRORS: &str = "sqlbuild.rule_engine.exceptions";
 const SPEC_ERRORS: &str = "sqlbuild.spec.contracts.exceptions";
 const ENTRY_MODELS: &str = "sqlbuild._native";
-const COMMAND_TYPES: &str = "sqlbuild.cli.commands.types";
+const COMMAND_TYPES: &str = "sqlbuild._native";
 const REFACTOR_MODELS: &str = "sqlbuild.compiler.refactoring.models";
 const DEFAULT_ERROR_CODE: &str = "E001";
 
