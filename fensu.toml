@@ -312,6 +312,16 @@ path = "src/sqlbuild/rules/testing.py"
 reason = "This deliberate public shim keeps test-harness internals outside the stable authoring API."
 
 [[targets.python.rule_exceptions]]
+rule = "FFR403"
+path = "src/sqlbuild/compiler/compile/models.py"
+reason = "Project macro modules import MacroContext from this path for their ctx annotation; the class is hosted natively and this module keeps that import path working."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR001"
+path = "src/sqlbuild/compiler/compile/models.py"
+reason = "The only model here is the natively hosted MacroContext, re-exported for project macro imports."
+
+[[targets.python.rule_exceptions]]
 rule = "FFS120"
 path = "src/sqlbuild/integrations/dagster/classes/sqlbuild_cli_resource.py"
 symbols = ["SqlBuildCliResource.cli"]
