@@ -8,15 +8,14 @@ use sqlbuild_analysis::assembly::analysis_session::main::native_dialect::native_
 use crate::bindings::_helpers::analysis::binding_catalog::{BindingCatalog, ignores_quoted_case};
 use crate::bindings::_helpers::compile_driver::analysis_cache::analysis_cache_context;
 use crate::bindings::_helpers::compile_driver::assembly::AssemblyRequest;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    call_with, imported, keywords, within,
+use crate::bindings::_helpers::compile_driver::compile_timings::{
+    record_compile_cpu_timing, record_compile_timing,
 };
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ADAPTER_MODELS_MODULE: &str = "sqlbuild.adapter.contract.models";
 pub(crate) const ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.analysis_session.models";
-const PROFILING_MODULE: &str = "sqlbuild.compiler.profiling.main._record";
-const PROFILING_CPU_MODULE: &str = "sqlbuild.compiler.profiling.main._record_cpu";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const PLANNER_TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
 const GENERIC_DIALECT: &str = "generic";
@@ -347,13 +346,8 @@ fn model_analyses<'py>(
     } else {
         py.None().into_bound(py)
     };
-    let timing: Bound<'py, PyAny> =
-        imported(py, PROFILING_MODULE, "record_compile_timing")?.call1(("model_analysis_ms",))?;
-    within(&timing, |_| {
-        let cpu_timing: Bound<'py, PyAny> =
-            imported(py, PROFILING_CPU_MODULE, "record_compile_cpu_timing")?
-                .call1(("model_analysis_cpu_ms",))?;
-        within(&cpu_timing, |_| {
+    record_compile_timing("model_analysis_ms", || {
+        record_compile_cpu_timing(py, "model_analysis_cpu_ms", || {
             let (known_functions, known_types): (Bound<'py, PyAny>, Bound<'py, PyAny>) =
                 declared_names(inputs, &context.column_types)?;
             let mut model_inputs: Vec<Bound<'py, PyAny>> = Vec::new();

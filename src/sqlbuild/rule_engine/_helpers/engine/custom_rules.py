@@ -9,6 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+import sqlbuild._native as _native
 from sqlbuild._native import (
     CustomRuleCache,
     compiled_project_record,
@@ -19,7 +20,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.rule_engine._helpers.engine.fact_replay import full_fact_keys, is_tree_fact
 from sqlbuild.rule_engine._helpers.host.custom_host_pool import run_custom_hosts
@@ -130,7 +130,7 @@ def _rule_identity(
     *, rule: Rule, config: RulesConfig, project_dir: Path, dialect: str, fingerprint: str | None
 ) -> str:
     return custom_rule_identity(
-        code_identity=compiled_code_identity(),
+        code_identity=_native.compiled_code_identity(),
         runtime_version=CUSTOM_HOST_RUNTIME_VERSION,
         code=rule.code,
         family=rule.family,

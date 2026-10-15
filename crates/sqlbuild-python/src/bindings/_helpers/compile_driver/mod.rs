@@ -8,6 +8,7 @@ pub(crate) mod assembly_models;
 pub(crate) mod assembly_project;
 pub(crate) mod assembly_sql_tests;
 pub(crate) mod command;
+pub(crate) mod compile_timings;
 pub(crate) mod config_validation;
 pub(crate) mod deferral;
 pub(crate) mod diagnostic_collector;

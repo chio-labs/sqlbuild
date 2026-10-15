@@ -9,6 +9,7 @@ pub mod build_progress;
 pub mod check_command;
 pub mod cli_text;
 pub mod clone_text;
+pub mod compile_timings;
 pub mod constants;
 pub mod contract_command;
 pub mod cost_allocation;

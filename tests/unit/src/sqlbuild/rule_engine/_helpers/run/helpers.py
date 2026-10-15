@@ -4,7 +4,6 @@ import pytest
 
 from sqlbuild import _native
 from sqlbuild._native import NativeRulesRequest
-from sqlbuild.compiler.frontier.main import compiled_code_identity as code_identity
 from sqlbuild.rule_engine._helpers.engine import custom_dispatch as native
 from sqlbuild.rule_engine.models import NativeRulesEvaluation
 
@@ -39,5 +38,5 @@ def record_reuse(*, monkeypatch: pytest.MonkeyPatch) -> list[bool]:
 def rebuild_identity(*, monkeypatch: pytest.MonkeyPatch) -> None:
     """Pretend the compiled code changed, as after installing another build."""
 
-    identity: str = code_identity.compiled_code_identity()
-    monkeypatch.setattr(code_identity, "compiled_code_identity", lambda: f"{identity}-rebuilt")
+    identity: str = _native.compiled_code_identity()
+    monkeypatch.setattr(_native, "compiled_code_identity", lambda: f"{identity}-rebuilt")

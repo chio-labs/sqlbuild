@@ -11,13 +11,13 @@ use crate::bindings::_helpers::analysis_session::profile_inputs::{
 use crate::bindings::_helpers::analysis_session::stage_functions::family_rows;
 use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_sql;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::cache::native_store::current_code_identity;
 use crate::bindings::_helpers::compile_driver::analysis_cache::record_analysis_cache_metrics;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.analysis_session.models";
 const PLANNER_TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
-const CODE_IDENTITY_MODULE: &str = "sqlbuild.compiler.frontier.main.compiled_code_identity";
 const LOG_DEBUG_MODULE: &str = "sqlbuild.diagnostics.main.log_debug_event";
 const LOGGING_MODULE: &str = "logging";
 const DEBUG_LOGGER: &str = "sqlbuild.compile";
@@ -119,10 +119,7 @@ fn analysis_store<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny
         .div(STORE_FILE_NAME)?
         .str()?
         .into_any();
-    let identity: Bound<'py, PyAny> = py
-        .import(CODE_IDENTITY_MODULE)?
-        .getattr("compiled_code_identity")?
-        .call0()?;
+    let identity: Bound<'py, PyAny> = PyString::new(py, &current_code_identity(py)?).into_any();
     let parts: Bound<'py, PyList> = PyList::new(
         py,
         [
@@ -259,8 +256,12 @@ fn record_cache(python: &[Bound<'_, PyAny>], session: &Bound<'_, PyAny>) -> PyRe
 }
 
 /// Record the analysis cache entries a native session read, missed and bypassed.
-fn record_metrics(py: Python<'_>, (hits, misses, bypasses): (usize, usize, usize)) -> PyResult<()> {
-    record_analysis_cache_metrics(py, (0, hits, misses, bypasses))
+fn record_metrics(
+    _py: Python<'_>,
+    (hits, misses, bypasses): (usize, usize, usize),
+) -> PyResult<()> {
+    record_analysis_cache_metrics((0, hits, misses, bypasses));
+    Ok(())
 }
 
 /// Each model's native request row, in analysis order.

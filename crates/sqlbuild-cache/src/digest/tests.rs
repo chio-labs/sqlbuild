@@ -8,5 +8,7 @@ mod digest_files;
 mod fingerprint_project_files;
 #[path = "tests/helpers.rs"]
 mod helpers;
+#[path = "tests/test_installed_code_facts.rs"]
+mod installed_code_facts;
 #[path = "tests/test_types.rs"]
 mod test_types;

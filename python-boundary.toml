@@ -2,7 +2,7 @@
 # migration work that moves to Rust. `remaining_lines` must equal the current count of that work:
 # a PR that moves code lowers it, and adding movable Python fails the check.
 # Native failures must surface as errors; `handled_native_errors` lists the reviewed exceptions.
-remaining_lines = 9602
+remaining_lines = 9601
 
 [[stays]]
 path = "executor"
@@ -435,16 +435,6 @@ reason = "user-code"
 note = "Imports user materialization modules."
 
 [[stays]]
-path = "compiler/frontier/_helpers/code_identity.py"
-reason = "user-code"
-note = "Fingerprints the loaded Python modules behind cached compiler and rule results."
-
-[[stays]]
-path = "compiler/frontier/main/compiled_code_identity.py"
-reason = "user-code"
-note = "Entry point for the loaded-code identity of cached compiler and rule results."
-
-[[stays]]
 path = "compiler/macro_bridge/main"
 reason = "user-code"
 note = "Macro bridge entry points for the running render stage that executes user macros."
@@ -490,11 +480,6 @@ reason = "public-api"
 note = "Reads the declaration attached to a project audit factory."
 
 [[stays]]
-path = "compiler/auditing/main/_builtins.py"
-reason = "public-api"
-note = "Built-in audit factories written against the public audit factory API."
-
-[[stays]]
 path = "compiler/sql_analysis/main/import_polyglot.py"
 reason = "public-api"
 note = "Imports the Polyglot Python package for the Python API."
@@ -508,11 +493,6 @@ note = "Imports the Polyglot SQL Python package for the Python API."
 path = "compiler/sql_analysis/_helpers/polyglot.py"
 reason = "public-api"
 note = "Wraps the Polyglot Python package with complexity guards."
-
-[[stays]]
-path = "compiler/profiling"
-reason = "public-api"
-note = "Compile timing collectors built on Python context managers and clocks."
 
 [[stays]]
 path = "assets.py"

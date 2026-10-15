@@ -1,8 +1,7 @@
-"""Compile profiling type aliases."""
+//! The compile phases and metrics `--json` reports, in presentation order.
 
-from typing import Literal
-
-type CompileTimingPhase = Literal[
+/// Phases whose elapsed nanoseconds are reported as whole milliseconds.
+pub const COMPILE_TIMING_PHASES: [&str; 13] = [
     "attachment_ms",
     "model_analysis_ms",
     "model_analysis_cpu_ms",
@@ -16,13 +15,14 @@ type CompileTimingPhase = Literal[
     "cache_publication_ms",
     "physical_write_ms",
     "stale_traversal_ms",
-]
+];
 
-type CompileMetric = Literal[
+/// Counters reported as recorded.
+pub const COMPILE_METRICS: [&str; 6] = [
     "analysis_batch_cache_hits",
     "analysis_entry_cache_hits",
     "analysis_cache_misses",
     "analysis_cache_bypasses",
     "sql_test_scan_cache_hits",
     "sql_test_scan_cache_misses",
-]
+];

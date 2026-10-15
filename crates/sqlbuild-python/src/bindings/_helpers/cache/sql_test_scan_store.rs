@@ -2,7 +2,6 @@
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, Py, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyclass, pymethods};
 use sqlbuild_cache::digest::main::content_digest::content_digest;
 use sqlbuild_cache::digest::main::hex_digest::hex_digest;
@@ -12,11 +11,11 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use crate::bindings::_helpers::cache::native_store::current_code_identity;
 use crate::bindings::_helpers::cache::native_store::{open_store, save_store};
+use crate::bindings::_helpers::compile_driver::compile_timings::record_compile_metric;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 
-const CODE_IDENTITY_MODULE: &str = "sqlbuild.compiler.frontier.main.compiled_code_identity";
-const METRIC_MODULE: &str = "sqlbuild.compiler.profiling.main._metric";
 const SCAN_CACHE_LOGGER: &str = "sqlbuild.compile";
 
 /// The native store kind holding SQL-test scan results.
@@ -140,9 +139,7 @@ impl SqlTestScanCache {
         let Some(directory) = cache_dir.as_ref().filter(|_| store.is_none()) else {
             return Ok(store.as_ref().map(|store| store.clone_ref(py)));
         };
-        let identity: String = imported(py, CODE_IDENTITY_MODULE, "compiled_code_identity")?
-            .call0()?
-            .extract()?;
+        let identity: String = current_code_identity(py)?;
         let (opened, error) = SqlTestScanStore::open_in(py, directory.clone(), &identity);
         *store = opened.map(|opened| Py::new(py, opened)).transpose()?;
         if let Some(error) = error {
@@ -162,8 +159,14 @@ impl SqlTestScanCache {
             .as_ref()
             .map(|store| store.clone_ref(py));
         let (hits, misses) = store.as_ref().map_or((0, 0), |store| store.get().counts());
-        metric(py, "sql_test_scan_cache_hits", hits)?;
-        metric(py, "sql_test_scan_cache_misses", misses)?;
+        record_compile_metric(
+            "sql_test_scan_cache_hits",
+            i64::try_from(hits).unwrap_or(i64::MAX),
+        );
+        record_compile_metric(
+            "sql_test_scan_cache_misses",
+            i64::try_from(misses).unwrap_or(i64::MAX),
+        );
         let Some(store) = store else {
             return Ok(());
         };
@@ -172,14 +175,6 @@ impl SqlTestScanCache {
         }
         Ok(())
     }
-}
-
-fn metric(py: Python<'_>, name: &str, value: usize) -> PyResult<()> {
-    let keywords: Bound<'_, PyDict> = PyDict::new(py);
-    keywords.set_item("metric", name)?;
-    keywords.set_item("value", value)?;
-    imported(py, METRIC_MODULE, "record_compile_metric")?.call((), Some(&keywords))?;
-    Ok(())
 }
 
 fn debug(py: Python<'_>, message: &str, error: &str) -> PyResult<()> {

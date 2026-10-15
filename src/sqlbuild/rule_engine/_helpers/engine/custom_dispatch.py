@@ -16,7 +16,6 @@ from sqlbuild._native import (
     selected_rule_codes,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
 from sqlbuild.rule_engine._helpers.engine.custom_payloads import custom_rule_payloads
 from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
 from sqlbuild.rule_engine.constants import TYPE_PROOF_RULE_CODES
@@ -148,7 +147,7 @@ def start_custom_rules(
     if not custom_rules:
         return None
     if config.cache.enabled:
-        _ = compiled_code_identity()
+        _ = _native.compiled_code_identity()
     return executor.submit(
         evaluate_custom_rules_cached,
         project=project,

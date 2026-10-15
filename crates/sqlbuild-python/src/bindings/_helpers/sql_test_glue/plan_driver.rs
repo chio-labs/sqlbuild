@@ -1,5 +1,6 @@
 //! Host SQL-test request preparation, native planning, and Python result conversion.
 
+use crate::bindings::_helpers::compile_driver::compile_timings::add_compile_timing;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
@@ -138,34 +139,18 @@ fn planned<'py>(args: &KeywordArguments<'py>, artifact: bool) -> PyResult<Bound<
     let end: u64 = imported(py, "time", "perf_counter_ns")?
         .call0()?
         .extract()?;
-    let collector = imported(
-        py,
-        "sqlbuild.compiler.profiling.classes.context",
-        "CompileTimingContext",
-    )?
-    .getattr("active")?
-    .call_method0("get")?;
-    if !collector.is_none() {
-        use pyo3::IntoPyObject;
-        for (phase, elapsed) in [
-            (
-                "test_planning_ms",
-                planning_ns
-                    + end
-                        .saturating_sub(start)
-                        .saturating_sub(planning_ns)
-                        .saturating_sub(rendering_ns),
-            ),
-            ("comparison_render_ms", rendering_ns),
-        ] {
-            call_with(
-                &collector.getattr("add")?,
-                &[
-                    ("phase", super::plan_values::string(py, phase)),
-                    ("elapsed_ns", elapsed.into_pyobject(py)?.into_any()),
-                ],
-            )?;
-        }
+    for (phase, elapsed) in [
+        (
+            "test_planning_ms",
+            planning_ns
+                + end
+                    .saturating_sub(start)
+                    .saturating_sub(planning_ns)
+                    .saturating_sub(rendering_ns),
+        ),
+        ("comparison_render_ms", rendering_ns),
+    ] {
+        add_compile_timing(phase, elapsed);
     }
     let mut plans: Vec<Bound<'py, PyAny>> = Vec::new();
     for row in native.get_item(0)?.try_iter()? {
