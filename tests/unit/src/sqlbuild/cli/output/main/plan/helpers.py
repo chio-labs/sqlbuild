@@ -9,6 +9,9 @@ from sqlbuild._native import (
     ColumnRenameHint,
     PlanProviderUsage,
     PlanWarning,
+    SchemaChangeKind,
+    SchemaColumnSource,
+    WarningSeverity,
 )
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
@@ -32,9 +35,6 @@ from sqlbuild.compiler.planner.types import (
     MaterializationType,
     PlanAction,
     PlanReason,
-    SchemaChangeKind,
-    SchemaColumnSource,
-    WarningSeverity,
 )
 from sqlbuild.spec.contracts.models import SeedCsvSettings
 from sqlbuild.spec.contracts.types import MicrobatchLimitAction, SourceWriteStrategy

@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import detect_schema_changes
+from sqlbuild._native import (
+    SchemaChangeKind,
+    SchemaColumnSource,
+    detect_schema_changes,
+)
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.planner.models import SchemaFinding
-from sqlbuild.compiler.planner.types import SchemaChangeKind, SchemaColumnSource
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types import (
     DetectSchemaChangesTestCase,

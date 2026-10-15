@@ -376,7 +376,10 @@ fn check_microbatch_concurrency<'py>(
         "PlanWarning",
         &[
             ("model_name", none(py)),
-            ("severity", planner_type(py, "WarningSeverity", "WARNING")?),
+            (
+                "severity",
+                imported(py, "sqlbuild._native", "WarningSeverity")?.getattr("WARNING")?,
+            ),
             ("code", string(py, MICROBATCH_COMPLEXITY_CODE)),
             (
                 "message",

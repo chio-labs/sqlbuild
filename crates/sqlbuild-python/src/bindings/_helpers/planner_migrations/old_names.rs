@@ -142,8 +142,7 @@ fn old_name_claim_errors<'py>(
                     ("model_name", name.clone()),
                     (
                         "severity",
-                        imported(py, "sqlbuild.compiler.planner.types", "WarningSeverity")?
-                            .getattr("ERROR")?,
+                        imported(py, "sqlbuild._native", "WarningSeverity")?.getattr("ERROR")?,
                     ),
                     ("message", message.into_pyobject(py)?.into_any()),
                     ("code", "M114".into_pyobject(py)?.into_any()),

@@ -6,6 +6,7 @@ import pytest
 
 from sqlbuild._native import (
     ScenarioGraphPlan,
+    WarningSeverity,
     plan_scenario_graph,
 )
 from sqlbuild.compiler.compile.models import (
@@ -13,7 +14,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledSqlScenario,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.types import WarningSeverity
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     PlanScenarioGraphErrorTestCase,
     PlanScenarioGraphTestCase,

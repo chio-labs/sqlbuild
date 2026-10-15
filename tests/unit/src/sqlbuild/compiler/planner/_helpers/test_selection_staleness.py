@@ -7,6 +7,7 @@ import pytest
 
 from sqlbuild._native import (
     ChangeDetectionResult,
+    ChangeKind,
     DirectModelVersionIdentities,
     PlannerChangeResults,
     PlannerScopeResolution,
@@ -30,7 +31,6 @@ from sqlbuild.compiler.planner.models import (
     PlannerScope,
     PlannerSelection,
 )
-from sqlbuild.compiler.planner.types import ChangeKind
 from sqlbuild.compiler.source_freshness.models import (
     DirectSourceFreshnessPlanningResult,
     SourceFreshnessIdentity,

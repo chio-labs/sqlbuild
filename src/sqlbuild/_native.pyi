@@ -7,10 +7,10 @@ from contextlib import AbstractContextManager
 from contextvars import Token
 from datetime import date, datetime
 from decimal import Decimal
+from enum import StrEnum
 from pathlib import Path, PurePath
 from threading import Event
-from typing import Any, Literal, Protocol, TextIO, TypedDict
-from typing import Any, ClassVar, Literal, TextIO, TypedDict
+from typing import Any, ClassVar, Literal, Protocol, TextIO, TypedDict
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
@@ -208,7 +208,6 @@ from sqlbuild.compiler.pipeline.models import (
     PythonRunPlanOutputs,
     StaticCommandContext,
 )
-from sqlbuild.compiler.planner.classes.fixture_column_inferences import FixtureColumnInferences
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
@@ -253,7 +252,6 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
-    ChangeKind,
     CursorGrain,
     CursorType,
     MaterializationType,
@@ -261,8 +259,6 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
     ScenarioArtifactKind,
-    SchemaActionKind,
-    WarningSeverity,
 )
 from sqlbuild.compiler.python_nodes.models import (
     PythonNodeGraph,
@@ -724,6 +720,53 @@ type _GraphIndexes = tuple[
 ]
 type _SelectorFailure = tuple[str, str, str | None]
 type _SelectorKeys = tuple[list[_GraphKey] | None, _SelectorFailure | None]
+
+class GraphResourceKind(StrEnum):
+    MODEL = "model"
+    SEED = "seed"
+    SOURCE = "source"
+    FUNCTION = "function"
+
+class ChangeKind(StrEnum):
+    FIRST_RUN = "first_run"
+    RENAMED = "renamed"
+    QUERY_CHANGED = "query_changed"
+    FUNCTION_CHANGED = "function_changed"
+    CONFIG_CHANGED = "config_changed"
+    SCHEMA_CHANGED = "schema_changed"
+    NO_CHANGE = "no_change"
+
+class SchemaChangeKind(StrEnum):
+    COLUMN_ADDED = "column_added"
+    COLUMN_REMOVED = "column_removed"
+    COLUMN_TYPE_CHANGED = "column_type_changed"
+
+class SchemaColumnSource(StrEnum):
+    YML = "yml"
+    SQL_ANALYSIS = "sql_analysis"
+
+class CursorWatermarkMode(StrEnum):
+    ALL = "all"
+    ANY = "any"
+
+class SchemaActionKind(StrEnum):
+    ADD_COLUMN = "add_column"
+    DROP_COLUMN = "drop_column"
+    ALTER_COLUMN_TYPE = "alter_column_type"
+
+class WarningSeverity(StrEnum):
+    ERROR = "error"
+    WARNING = "warning"
+    INFO = "info"
+
+class FixtureColumnInferences:
+    """Reuse inference for identical fixture SQL under an equal, catalog-free profile."""
+
+    def __init__(self) -> None: ...
+    def infer(
+        self, *, query_sql: str, inference_profile: ExpressionInferenceProfile
+    ) -> FixtureColumnInference | None:
+        """Return the inference for one fixture query, computing each distinct query once."""
 
 class NativeSqlTestArtifact:
     """One native-planned SQL-test artifact and its distinct planning error messages."""

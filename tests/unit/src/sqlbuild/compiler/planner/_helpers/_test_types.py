@@ -3,11 +3,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild._native import (
+    ChangeKind,
     MissingUpstream,
     PlanWarning,
     ScenarioArtifactIdentity,
     ScenarioGraphPlan,
     SchemaAction,
+    WarningSeverity,
 )
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
@@ -30,12 +32,10 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
-    ChangeKind,
     MaterializationType,
     OnSchemaChange,
     PlanAction,
     PlanReason,
-    WarningSeverity,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax

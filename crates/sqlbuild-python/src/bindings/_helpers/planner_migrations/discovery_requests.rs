@@ -186,7 +186,7 @@ pub(super) fn warnings<'py>(
         if selected.contains(&name)? {
             warnings.push(native(py, "PlanWarning", &[
                 ("model_name", PyString::new(py, &name).into_any()),
-                ("severity", imported(py, "sqlbuild.compiler.planner.types", "WarningSeverity")?.getattr("WARNING")?),
+                ("severity", imported(py, "sqlbuild._native", "WarningSeverity")?.getattr("WARNING")?),
                 ("message", PyString::new(py, &format!("'{name}' matches {detail}; no automatic migration was inferred. Add migrate_from to choose one.")).into_any()),
                 ("code", PyString::new(py, "M107").into_any()),
             ])?);

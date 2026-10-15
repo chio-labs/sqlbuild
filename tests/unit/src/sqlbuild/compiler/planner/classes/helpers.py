@@ -11,7 +11,6 @@ from pathlib import Path
 import pytest
 
 import sqlbuild._native as native_module
-import sqlbuild.compiler.planner.classes.fixture_column_inferences as fixture_inferences
 from sqlbuild._native import build_migration_fingerprint, infer_fixture_column_facts
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.models import FixtureColumnInference
@@ -125,5 +124,5 @@ def count_fixture_inferences(monkeypatch: pytest.MonkeyPatch) -> list[int]:
         inferences.append(1)
         return infer_fixture_column_facts(query_sql=query_sql, inference_profile=inference_profile)
 
-    monkeypatch.setattr(fixture_inferences, "infer_fixture_column_facts", counting)
+    monkeypatch.setattr(native_module, "infer_fixture_column_facts", counting)
     return inferences

@@ -1,5 +1,6 @@
 //! Detect how each selected model and function changed since its recorded build.
 
+use crate::bindings::_helpers::planner_changes::results::native_enum;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
@@ -742,7 +743,7 @@ impl<'py> ChangeResult<'py> {
     }
 
     fn finish(self, backfill: Backfill, kind: &str) -> PyResult<Bound<'py, PyAny>> {
-        let kind: Bound<'py, PyAny> = planner_enum(self.py, "ChangeKind", kind)?;
+        let kind: Bound<'py, PyAny> = native_enum(self.py, "ChangeKind", kind)?;
         self.finish_kind(backfill, kind)
     }
 

@@ -1,5 +1,6 @@
 //! Warnings for selected models stale through changed upstreams outside the run set.
 
+use crate::bindings::_helpers::planner_changes::results::native_enum;
 use std::collections::{HashMap, HashSet};
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -19,7 +20,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::planner_changes::detect::{ModelPass, model_change};
-use crate::bindings::_helpers::planner_changes::results::planner_enum;
 use crate::bindings::_helpers::planner_identity::hashing::graph_key;
 
 /// Change kinds that mean the model's own identity changed.
@@ -144,7 +144,7 @@ fn plan_warnings<'py>(
     warnings: Vec<StaleWarning>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let warning_class: Bound<'py, PyAny> = imported(py, "sqlbuild._native", "PlanWarning")?;
-    let severity: Bound<'py, PyAny> = planner_enum(py, "WarningSeverity", "warning")?;
+    let severity: Bound<'py, PyAny> = native_enum(py, "WarningSeverity", "warning")?;
     let mut rendered: Vec<Bound<'py, PyAny>> = Vec::with_capacity(warnings.len());
     for warning in warnings {
         let message: String = stale_upstream_warning_message(

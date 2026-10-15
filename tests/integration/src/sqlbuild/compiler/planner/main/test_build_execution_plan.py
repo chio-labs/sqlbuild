@@ -10,6 +10,7 @@ import pytest
 import sqlbuild._native as identity_planning
 from sqlbuild._native import (
     PlanWarning,
+    WarningSeverity,
     compiled_model_record,
     format_plan,
     project_with,
@@ -27,7 +28,6 @@ from sqlbuild.compiler.planner.types import (
     BackfillAction,
     PlanAction,
     PlanReason,
-    WarningSeverity,
 )
 from sqlbuild.spec.contracts.models import (
     CursorsConfig,

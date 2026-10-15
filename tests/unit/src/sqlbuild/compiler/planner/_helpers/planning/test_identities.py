@@ -7,6 +7,7 @@ import pytest
 import sqlbuild._native as native_module
 from sqlbuild._native import (
     ChangeDetectionResult,
+    ChangeKind,
     DirectModelVersionIdentities,
     PlannerChangeResults,
     PlannerIdentityContext,
@@ -17,7 +18,6 @@ from sqlbuild._native import (
 from sqlbuild.compiler.planner.models import (
     PlannerScope,
 )
-from sqlbuild.compiler.planner.types import ChangeKind
 from tests.unit.src.sqlbuild.compiler.planner._helpers.planning._test_types import (
     ReusableExecutionModelNamesTestCase,
 )

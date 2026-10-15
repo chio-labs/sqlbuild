@@ -4,6 +4,9 @@ import pytest
 
 from sqlbuild._native import (
     SchemaAction,
+    SchemaActionKind,
+    SchemaChangeKind,
+    SchemaColumnSource,
     resolve_schema_actions,
 )
 from sqlbuild.compiler.planner.models import (
@@ -11,9 +14,6 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import (
     OnSchemaChange,
-    SchemaActionKind,
-    SchemaChangeKind,
-    SchemaColumnSource,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     ResolveSchemaActionsTestCase,

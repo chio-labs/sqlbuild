@@ -58,7 +58,7 @@ pub(super) fn plan<'py>(row: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> 
         assertions.push(step(&value?, false)?);
     }
     let mut warnings: Vec<Bound<'py, PyAny>> = Vec::new();
-    let severity = imported(py, "sqlbuild.compiler.planner.types", "WarningSeverity")?;
+    let severity = imported(py, "sqlbuild._native", "WarningSeverity")?;
     for value in row.get_item(4)?.try_iter()? {
         let value = value?;
         warnings.push(call_with(

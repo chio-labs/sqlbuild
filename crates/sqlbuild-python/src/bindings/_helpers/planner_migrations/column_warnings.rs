@@ -26,8 +26,11 @@ pub(super) fn warning<'py>(
             ("model_name", entry.getattr("model_name")?),
             (
                 "severity",
-                imported(py, "sqlbuild.compiler.planner.types", "WarningSeverity")?
-                    .getattr(if error { "ERROR" } else { "WARNING" })?,
+                imported(py, "sqlbuild._native", "WarningSeverity")?.getattr(if error {
+                    "ERROR"
+                } else {
+                    "WARNING"
+                })?,
             ),
             ("message", text(py, message)),
             ("code", text(py, code)),

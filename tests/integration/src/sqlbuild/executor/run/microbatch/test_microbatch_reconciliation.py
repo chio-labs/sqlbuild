@@ -9,6 +9,7 @@ import pytest
 
 from sqlbuild._native import (
     BackfillResult,
+    CursorWatermarkMode,
     compute_cursor_bounds,
 )
 from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
@@ -19,7 +20,9 @@ from sqlbuild.compiler.planner.models import (
     ModelCursorSnapshot,
     ModelPlanEntry,
 )
-from sqlbuild.compiler.planner.types import BackfillAction, CursorWatermarkMode
+from sqlbuild.compiler.planner.types import (
+    BackfillAction,
+)
 from sqlbuild.cursor_algebra.models import IntegerValue
 from sqlbuild.executor.run._helpers.materializations.microbatch import (
     _clamp_intervals_to_model_domain,

@@ -7,11 +7,14 @@ import pytest
 from sqlbuild._native import (
     BackfillResult,
     ChangeDetectionResult,
+    ChangeKind,
     check_full_rebuild_allowed,
     describe_full_rebuild_cause,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
+from sqlbuild.compiler.planner.types import (
+    BackfillAction,
+)
 from tests.unit.src.sqlbuild.compiler.planner._helpers.planning._test_types import (
     FullRebuildCheckTestCase,
 )

@@ -7,7 +7,10 @@ from typing import Any
 
 import pytest
 
-from sqlbuild._native import format_plan_json
+from sqlbuild._native import (
+    WarningSeverity,
+    format_plan_json,
+)
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
@@ -22,7 +25,6 @@ from sqlbuild.compiler.planner.types import (
     MaterializationType,
     PlanAction,
     PlanReason,
-    WarningSeverity,
 )
 from sqlbuild.compiler.python_nodes.types import (
     PythonIdentityStatus,

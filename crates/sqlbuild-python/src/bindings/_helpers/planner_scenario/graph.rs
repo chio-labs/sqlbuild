@@ -3,7 +3,7 @@
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::graph::keys::{KeyCache, native_key};
 use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_GRAPH_VALIDATION;
-use crate::bindings::_helpers::planner_scenario::values::{TYPES, string};
+use crate::bindings::_helpers::planner_scenario::values::string;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, pyfunction};
 use pyo3::types::PyTuple;
 use sqlbuild_analysis::planner_scenario::main::graph::graph;
@@ -97,7 +97,7 @@ pub(crate) fn plan_scenario_graph<'py>(
             ("model_name", py.None().into_bound(py)),
             (
                 "severity",
-                imported(py, TYPES, "WarningSeverity")?.getattr("ERROR")?,
+                imported(py, "sqlbuild._native", "WarningSeverity")?.getattr("ERROR")?,
             ),
             ("message", string(py, &message)),
         ];

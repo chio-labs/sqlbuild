@@ -128,8 +128,7 @@ pub(super) fn errors<'py>(
                 ("model_name", py.None().into_bound(py)),
                 (
                     "severity",
-                    imported(py, "sqlbuild.compiler.planner.types", "WarningSeverity")?
-                        .getattr("ERROR")?,
+                    imported(py, "sqlbuild._native", "WarningSeverity")?.getattr("ERROR")?,
                 ),
                 (
                     "message",

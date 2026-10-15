@@ -1,5 +1,7 @@
 //! Registers the planner value records.
 
+use crate::bindings::_helpers::planner_models::enums::register_enums;
+use crate::bindings::_helpers::planner_models::fixture_inferences::FixtureColumnInferences;
 use crate::bindings::_helpers::planner_models::records::{
     BackfillResult, ChangeDetectionResult, ColumnMigrationPlanning, ColumnRenameHint,
     CursorOverridePair, CursorSnapshotScope, DirectModelVersionIdentities, FixtureColumnMetadata,
@@ -17,9 +19,11 @@ use crate::bindings::_helpers::planner_models::records::{
     SelectorExpansion, SqlTestPlanResult, UnitTestSelectorSplit, WarehouseFingerprints,
     WarehouseSnapshot,
 };
-use pyo3::prelude::{Bound, PyModule, PyResult};
+use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult};
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    register_enums(module)?;
+    module.add_class::<FixtureColumnInferences>()?;
     NativeSqlTestArtifact::register_class(module)?;
     RelationFixtureDiagnostic::register_class(module)?;
     RelationFixtureCompletion::register_class(module)?;

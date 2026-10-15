@@ -27,7 +27,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.planner.classes import fixture_column_inferences as fixture_inferences
 from sqlbuild.compiler.planner.models import (
     SqlTestPlanEntry,
     SqlTestSelection,
@@ -233,9 +232,9 @@ def test_given_complete_authoritative_fixture_when_completing_then_skips_column_
         },
     )
     fixture_completion.fixture_read_cache_info(reset=True)
-    fixture_inference: Mock = Mock(wraps=fixture_inferences.infer_fixture_column_facts)
+    fixture_inference: Mock = Mock(wraps=sql_test_assembly.infer_fixture_column_facts)
     monkeypatch.setattr(
-        fixture_inferences,
+        sql_test_assembly,
         "infer_fixture_column_facts",
         fixture_inference,
     )

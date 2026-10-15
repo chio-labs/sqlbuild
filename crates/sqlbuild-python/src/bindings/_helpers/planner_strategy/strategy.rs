@@ -1,5 +1,6 @@
 //! Per-model plan actions, schema actions and plan warnings.
 
+use crate::bindings::_helpers::planner_changes::results::native_enum;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
@@ -124,7 +125,7 @@ fn resolve_schema_actions<'py>(
         actions.push(call_with(
             &class,
             &[
-                ("kind", planner_enum(py, "SchemaActionKind", kind)?),
+                ("kind", native_enum(py, "SchemaActionKind", kind)?),
                 (
                     "column_name",
                     PyString::new(py, &row.column_name).into_any(),

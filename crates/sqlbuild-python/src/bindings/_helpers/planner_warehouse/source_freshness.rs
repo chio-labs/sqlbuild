@@ -52,8 +52,7 @@ pub(crate) fn source_freshness_unknown_warnings<'py>(
                     ("model_name", py.None().into_bound(py)),
                     (
                         "severity",
-                        imported(py, "sqlbuild.compiler.planner.types", "WarningSeverity")?
-                            .getattr("WARNING")?,
+                        imported(py, "sqlbuild._native", "WarningSeverity")?.getattr("WARNING")?,
                     ),
                     ("message", text(py, &message)),
                 ],

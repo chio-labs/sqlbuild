@@ -142,7 +142,7 @@ fn namespace<'py>(
 
 fn raise_for_warnings(warnings: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = warnings.py();
-    let severity = imported(py, TYPES, "WarningSeverity")?.getattr("ERROR")?;
+    let severity = imported(py, "sqlbuild._native", "WarningSeverity")?.getattr("ERROR")?;
     let mut messages: Vec<String> = Vec::new();
     let mut code = None;
     for warning in warnings.try_iter()? {

@@ -34,6 +34,15 @@ pub(crate) fn planner_enum<'py>(
     imported(py, TYPES_MODULE, name)?.call1((value,))
 }
 
+/// A member of a natively declared planner enumeration, from its value.
+pub(crate) fn native_enum<'py>(
+    py: Python<'py>,
+    name: &str,
+    value: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    imported(py, "sqlbuild._native", name)?.call1((value,))
+}
+
 /// `BackfillResult(action=..., duration=...)`.
 pub(crate) fn backfill_result<'py>(
     py: Python<'py>,
@@ -65,7 +74,7 @@ pub(crate) fn change_kind<'py>(py: Python<'py>, kind: ChangeKind) -> PyResult<Bo
         ChangeKind::ConfigChanged => "config_changed",
         ChangeKind::NoChange => "no_change",
     };
-    planner_enum(py, "ChangeKind", value)
+    native_enum(py, "ChangeKind", value)
 }
 
 /// A tuple of `SchemaFinding` values.
@@ -88,12 +97,12 @@ pub(crate) fn schema_findings<'py>(
         items.push(call_with(
             &class,
             &[
-                ("kind", planner_enum(py, "SchemaChangeKind", kind)?),
+                ("kind", native_enum(py, "SchemaChangeKind", kind)?),
                 (
                     "column_name",
                     finding.column_name.clone().into_pyobject(py)?.into_any(),
                 ),
-                ("source", planner_enum(py, "SchemaColumnSource", source)?),
+                ("source", native_enum(py, "SchemaColumnSource", source)?),
                 (
                     "expected_type",
                     finding.expected_type.clone().into_pyobject(py)?.into_any(),

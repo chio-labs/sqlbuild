@@ -4,6 +4,9 @@ import pytest
 
 from sqlbuild._native import (
     ChangeDetectionResult,
+    ChangeKind,
+    SchemaChangeKind,
+    SchemaColumnSource,
     resolve_model_plan_action,
 )
 from sqlbuild.compiler.compile.types import CompiledModelView
@@ -12,11 +15,8 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
-    ChangeKind,
     PlanAction,
     PlanReason,
-    SchemaChangeKind,
-    SchemaColumnSource,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     IncrementalStrategyErrorTestCase,

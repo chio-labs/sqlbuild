@@ -14,7 +14,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 
 const PIPELINE_MODELS_MODULE: &str = "sqlbuild.compiler.pipeline.models";
-const PLANNER_TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
 const NODE_GRAPH_MODULE: &str = "sqlbuild.compiler.python_nodes.main._graph";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const PYTHON_NODE_MODELS_MODULE: &str = "sqlbuild.compiler.python_nodes.models";
@@ -352,7 +351,7 @@ fn skipped_ingress_warnings<'py>(
     let upstream: HashMap<String, Vec<String>> = upstream_names(graph)?;
     let warning_class: Bound<'py, PyAny> = imported(py, "sqlbuild._native", "PlanWarning")?;
     let severity: Bound<'py, PyAny> =
-        imported(py, PLANNER_TYPES_MODULE, "WarningSeverity")?.getattr("WARNING")?;
+        imported(py, "sqlbuild._native", "WarningSeverity")?.getattr("WARNING")?;
     let mut warnings: Vec<Bound<'py, PyAny>> = Vec::new();
     for loader in loaders {
         if !nodes.contains(loader.as_str())? {

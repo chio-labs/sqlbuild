@@ -5,12 +5,15 @@ import pytest
 from sqlbuild._native import (
     BackfillResult,
     ChangeDetectionResult,
+    ChangeKind,
     PlannerChangeResults,
     PlannerResolvedActions,
     ResolvedModelAction,
     merge_recomputed_model_changes,
 )
-from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
+from sqlbuild.compiler.planner.types import (
+    BackfillAction,
+)
 from tests.unit.src.sqlbuild.compiler.planner._helpers.identity._test_types import (
     MergeRecomputedModelChangesTestCase,
 )

@@ -11,11 +11,15 @@ from typing import Any
 from sqlbuild._native import (
     BackfillResult,
     ColumnRenameHint,
+    CursorWatermarkMode,
+    GraphResourceKind,
     PlanProviderUsage,
     PlanWarning,
     ScenarioArtifactName,
     ScenarioGraphPlan,
     SchemaAction,
+    SchemaChangeKind,
+    SchemaColumnSource,
 )
 from sqlbuild._native import cursor_parse as parse
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, RetentionRequest
@@ -52,8 +56,6 @@ from sqlbuild.compiler.planner.types import (
     BackfillAction,
     CursorGrain,
     CursorType,
-    CursorWatermarkMode,
-    GraphResourceKind,
     MaterializationType,
     OnSchemaChange,
     PlanAction,
@@ -61,8 +63,6 @@ from sqlbuild.compiler.planner.types import (
     RetentionDirection,
     RetentionPlanPhase,
     ScenarioArtifactKind,
-    SchemaChangeKind,
-    SchemaColumnSource,
     SelectorKind,
 )
 from sqlbuild.compiler.source_freshness.models import (

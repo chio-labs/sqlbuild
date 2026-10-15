@@ -8,6 +8,9 @@ import pytest
 
 from sqlbuild._native import (
     ColumnRenameHint,
+    GraphResourceKind,
+    SchemaChangeKind,
+    WarningSeverity,
     format_plan,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
@@ -19,12 +22,9 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
-    GraphResourceKind,
     MaterializationType,
     PlanAction,
     PlanReason,
-    SchemaChangeKind,
-    WarningSeverity,
 )
 from sqlbuild.compiler.python_nodes.types import (
     PythonIdentityStatus,

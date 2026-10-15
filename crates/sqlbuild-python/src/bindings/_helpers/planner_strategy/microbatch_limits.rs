@@ -1,5 +1,6 @@
 //! Microbatch limits applied to planned model entries in CLI, project and model precedence.
 
+use crate::bindings::_helpers::planner_changes::results::native_enum;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction};
@@ -13,7 +14,6 @@ use sqlbuild_core::plan_display::models::TimestampGrainFacts;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::compiled_project::records::replace;
 use crate::bindings::_helpers::plan_output::display::resolve_effective_microbatch_batch_size;
-use crate::bindings::_helpers::planner_changes::results::planner_enum;
 use crate::bindings::_helpers::planner_strategy::constants::PLANNER_TYPES_MODULE;
 use crate::bindings::_helpers::planner_strategy::microbatches::{
     CAP_ACTIONS, CONTRACT_TYPES_MODULE, capped_microbatch_bounds, count_microbatches,
@@ -160,7 +160,7 @@ fn limited<'py>(
         &imported(py, "sqlbuild._native", "PlanWarning")?,
         &[
             ("model_name", name),
-            ("severity", planner_enum(py, "WarningSeverity", "warning")?),
+            ("severity", native_enum(py, "WarningSeverity", "warning")?),
             (
                 "code",
                 PyString::new(py, MICROBATCH_LIMIT_WARNING_CODE).into_any(),

@@ -8,10 +8,12 @@ import pytest
 from sqlbuild._native import (
     BackfillResult,
     ChangeDetectionResult,
+    ChangeKind,
     PlannerChangeResults,
     PlanWarning,
     WarehouseFingerprints,
     WarehouseSnapshot,
+    WarningSeverity,
     build_model_warnings,
     build_version_identity_metadata_json,
     compute_query_hash,
@@ -29,10 +31,8 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
-    ChangeKind,
     PlanAction,
     PlanReason,
-    WarningSeverity,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_helpers import (
     build_function_caller_metadata_case,

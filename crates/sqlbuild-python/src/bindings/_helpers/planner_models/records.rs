@@ -242,7 +242,7 @@ planner_record! {
         (relations = "relations", FieldDefault::Required, true, true),
         (authoritative_columns = "authoritative_columns", FieldDefault::Required, true, true),
         (expected_types = "expected_types", FieldDefault::Required, true, true),
-        (fixture_inferences = "fixture_inferences", FieldDefault::Class(("sqlbuild.compiler.planner.classes.fixture_column_inferences", "FixtureColumnInferences")), false, true),
+        (fixture_inferences = "fixture_inferences", FieldDefault::Class(("sqlbuild._native", "FixtureColumnInferences")), false, true),
     ]
 }
 

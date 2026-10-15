@@ -18,23 +18,6 @@ class SelectorKind(StrEnum):
     TEST = "test"
 
 
-class GraphResourceKind(StrEnum):
-    MODEL = "model"
-    SEED = "seed"
-    SOURCE = "source"
-    FUNCTION = "function"
-
-
-class ChangeKind(StrEnum):
-    FIRST_RUN = "first_run"
-    RENAMED = "renamed"
-    QUERY_CHANGED = "query_changed"
-    FUNCTION_CHANGED = "function_changed"
-    CONFIG_CHANGED = "config_changed"
-    SCHEMA_CHANGED = "schema_changed"
-    NO_CHANGE = "no_change"
-
-
 class BackfillAction(StrEnum):
     FULL = "full"
     BOUNDED = "bounded"
@@ -51,17 +34,6 @@ class OnSchemaChange(StrEnum):
 class ContractPolicy(StrEnum):
     NONE = "none"
     ENFORCED = "enforced"
-
-
-class SchemaChangeKind(StrEnum):
-    COLUMN_ADDED = "column_added"
-    COLUMN_REMOVED = "column_removed"
-    COLUMN_TYPE_CHANGED = "column_type_changed"
-
-
-class SchemaColumnSource(StrEnum):
-    YML = "yml"
-    SQL_ANALYSIS = "sql_analysis"
 
 
 class RetentionDirection(StrEnum):
@@ -119,13 +91,6 @@ class MicrobatchStrategy(StrEnum):
     WATERMARK = "watermark"
 
 
-class CursorWatermarkMode(StrEnum):
-    """How multiple watermark inputs contribute availability."""
-
-    ALL = "all"
-    ANY = "any"
-
-
 class IncrementalMode(StrEnum):
     FULL = "full"
     MICROBATCH = "microbatch"
@@ -180,18 +145,6 @@ class MaterializationType(StrEnum):
         """Return whether a materialization owns a physical managed table."""
 
         return materialized in {cls.TABLE, cls.INCREMENTAL, cls.SNAPSHOT}
-
-
-class SchemaActionKind(StrEnum):
-    ADD_COLUMN = "add_column"
-    DROP_COLUMN = "drop_column"
-    ALTER_COLUMN_TYPE = "alter_column_type"
-
-
-class WarningSeverity(StrEnum):
-    ERROR = "error"
-    WARNING = "warning"
-    INFO = "info"
 
 
 class ScenarioArtifactKind(StrEnum):
