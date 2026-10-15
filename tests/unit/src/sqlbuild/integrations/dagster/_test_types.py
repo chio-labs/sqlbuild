@@ -125,6 +125,20 @@ class DagsterAssetCheckFilterTestCase:
 
 
 @dataclass(frozen=True)
+class DagsterCliArgumentTypeTestCase:
+    description: str
+    args: tuple[object, ...]
+    expected_args: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DagsterCliArgumentErrorTestCase:
+    description: str
+    args: tuple[object, ...]
+    expected_error: str
+
+
+@dataclass(frozen=True)
 class DagsterCliInvocationTestCase:
     description: str
     command_stdout: str
