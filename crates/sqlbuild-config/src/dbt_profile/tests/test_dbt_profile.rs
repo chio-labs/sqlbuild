@@ -1,11 +1,20 @@
 use crate::dbt_profile::errors::DbtProfileError;
 use crate::dbt_profile::main::dbt_init_project_toml::dbt_init_project_toml;
+use crate::dbt_profile::main::dbt_profile_outputs::dbt_profile_outputs;
+use crate::dbt_profile::main::dbt_project_metadata::dbt_project_metadata;
 use crate::dbt_profile::main::normalize_dbt_profile::normalize_dbt_profile;
+use crate::dbt_profile::main::select_dbt_profile_target::select_dbt_profile_target;
 use crate::dbt_profile::models::{
-    ConnectionKey, ConnectionSource, NormalizedProfile, ProfileValue,
+    ConnectionKey, ConnectionSource, DbtProfileOutputs, DbtProjectMetadata, DbtYamlValue,
+    LoadedDbtProfile, NormalizedProfile, ProfileValue,
 };
-use crate::dbt_profile::tests::helpers::{entry, init_config, text};
-use crate::dbt_profile::tests::test_types::{InitTomlTestCase, NormalizeTestCase};
+use crate::dbt_profile::tests::helpers::{
+    YAML_MAPPING, entry, init_config, loaded_profile, profile_outputs, text, yaml_text,
+};
+use crate::dbt_profile::tests::test_types::{
+    InitTomlTestCase, NormalizeTestCase, ProfileOutputsTestCase, ProjectMetadataTestCase,
+    SelectTargetTestCase,
+};
 
 #[test]
 fn given_rendered_profile_outputs_when_normalizing_then_matches_python_rules() {
@@ -112,6 +121,174 @@ fn given_init_values_when_writing_project_toml_then_keys_and_strings_are_escaped
         assert_eq!(
             dbt_init_project_toml(&test_case.config),
             test_case.expected_toml,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_dbt_project_values_when_reading_metadata_then_strings_are_stripped_and_required() {
+    let test_cases = [
+        ProjectMetadataTestCase {
+            description: "padded values are stripped and target-path defaults",
+            values: [
+                yaml_text(" shop "),
+                yaml_text("orders "),
+                DbtYamlValue::Null,
+            ],
+            expected_result: Ok(DbtProjectMetadata {
+                project_name: "shop".to_owned(),
+                profile_name: "orders".to_owned(),
+                target_path: "target".to_owned(),
+            }),
+        },
+        ProjectMetadataTestCase {
+            description: "a blank name is rejected before the profile",
+            values: [yaml_text("  "), DbtYamlValue::Null, DbtYamlValue::Null],
+            expected_result: Err(DbtProfileError(
+                "dbt_project.yml must define non-empty string 'name'".to_owned(),
+            )),
+        },
+        ProjectMetadataTestCase {
+            description: "a non-string profile is rejected",
+            values: [yaml_text("shop"), DbtYamlValue::Other, DbtYamlValue::Null],
+            expected_result: Err(DbtProfileError(
+                "dbt_project.yml must define non-empty string 'profile'".to_owned(),
+            )),
+        },
+        ProjectMetadataTestCase {
+            description: "a mapping target-path is rejected",
+            values: [yaml_text("shop"), yaml_text("orders"), YAML_MAPPING],
+            expected_result: Err(DbtProfileError(
+                "dbt_project.yml target-path must be a non-empty string".to_owned(),
+            )),
+        },
+    ];
+    for test_case in test_cases {
+        let [name, profile, target_path] = &test_case.values;
+        assert_eq!(
+            dbt_project_metadata("dbt_project.yml", (name, profile, target_path)),
+            test_case.expected_result,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_loaded_profile_when_validating_outputs_then_names_and_target_follow_dbt_rules() {
+    let test_cases = [
+        ProfileOutputsTestCase {
+            description: "a repeated stripped name keeps its first place and last output",
+            loaded: loaded_profile(
+                vec![
+                    (yaml_text(" dev"), YAML_MAPPING),
+                    (yaml_text("prod"), YAML_MAPPING),
+                    (yaml_text("dev "), YAML_MAPPING),
+                ],
+                yaml_text(" dev "),
+            ),
+            expected_result: Ok(DbtProfileOutputs {
+                name: "shop".to_owned(),
+                default_target: Some("dev".to_owned()),
+                outputs: vec![("dev".to_owned(), 2), ("prod".to_owned(), 1)],
+            }),
+        },
+        ProfileOutputsTestCase {
+            description: "a profile that is not a mapping is undefined",
+            loaded: LoadedDbtProfile {
+                profile: yaml_text("shop"),
+                outputs: DbtYamlValue::Null,
+                output_entries: Vec::new(),
+                target: DbtYamlValue::Null,
+            },
+            expected_result: Err(DbtProfileError(
+                "profiles.yml does not define dbt profile 'shop'".to_owned(),
+            )),
+        },
+        ProfileOutputsTestCase {
+            description: "empty outputs are rejected",
+            loaded: loaded_profile(Vec::new(), DbtYamlValue::Null),
+            expected_result: Err(DbtProfileError(
+                "dbt profile 'shop' must define non-empty outputs".to_owned(),
+            )),
+        },
+        ProfileOutputsTestCase {
+            description: "a non-string output name is invalid",
+            loaded: loaded_profile(
+                vec![(DbtYamlValue::Other, YAML_MAPPING)],
+                DbtYamlValue::Null,
+            ),
+            expected_result: Err(DbtProfileError(
+                "dbt profile 'shop' contains an invalid output name".to_owned(),
+            )),
+        },
+        ProfileOutputsTestCase {
+            description: "a scalar output names its unstripped key",
+            loaded: loaded_profile(
+                vec![(yaml_text(" dev"), yaml_text("duckdb"))],
+                DbtYamlValue::Null,
+            ),
+            expected_result: Err(DbtProfileError(
+                "dbt profile 'shop' output ' dev' must be a mapping".to_owned(),
+            )),
+        },
+        ProfileOutputsTestCase {
+            description: "a blank target is rejected after the outputs",
+            loaded: loaded_profile(vec![(yaml_text("dev"), YAML_MAPPING)], yaml_text(" ")),
+            expected_result: Err(DbtProfileError(
+                "dbt profile 'shop' target must be a non-empty string".to_owned(),
+            )),
+        },
+    ];
+    for test_case in test_cases {
+        assert_eq!(
+            dbt_profile_outputs("profiles.yml", "shop", &test_case.loaded),
+            test_case.expected_result,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_profile_outputs_when_selecting_target_then_requested_or_default_output_is_chosen() {
+    let test_cases = [
+        SelectTargetTestCase {
+            description: "the requested target wins over the default",
+            profile: profile_outputs(Some("dev"), &["dev", "prod"]),
+            requested: Some("prod"),
+            expected_result: Ok(("prod".to_owned(), 1)),
+        },
+        SelectTargetTestCase {
+            description: "an empty request falls back to the default",
+            profile: profile_outputs(Some("dev"), &["dev", "prod"]),
+            requested: Some(""),
+            expected_result: Ok(("dev".to_owned(), 0)),
+        },
+        SelectTargetTestCase {
+            description: "no request and no default asks for --target",
+            profile: profile_outputs(None, &["dev"]),
+            requested: None,
+            expected_result: Err(DbtProfileError(
+                "dbt profile 'shop' does not define a default target; pass --target".to_owned(),
+            )),
+        },
+        SelectTargetTestCase {
+            description: "an unknown target lists the sorted targets",
+            profile: profile_outputs(Some("qa"), &["zeta", "alpha", "Beta"]),
+            requested: None,
+            expected_result: Err(DbtProfileError(
+                "dbt profile 'shop' does not define target 'qa'. Available targets: Beta, alpha, zeta"
+                    .to_owned(),
+            )),
+        },
+    ];
+    for test_case in test_cases {
+        assert_eq!(
+            select_dbt_profile_target(&test_case.profile, test_case.requested),
+            test_case.expected_result,
             "{}",
             test_case.description
         );

@@ -3,8 +3,9 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::compute_logs::constants::{
-    DAYS_PER_ERA, EPOCH_DAY_OFFSET, FEBRUARY, MARCH_BASED_JANUARY, MICROSECOND_DIGITS,
-    MICROSECONDS_PER_SECOND, SECONDS_PER_DAY, SECONDS_PER_HOUR, SECONDS_PER_MINUTE, YEARS_PER_ERA,
+    CAPTURE_DATE_LENGTH, DAYS_PER_ERA, EPOCH_DAY_OFFSET, FEBRUARY, HOURS_PER_DAY,
+    MARCH_BASED_JANUARY, MAX_DAY_OF_MONTH, MICROSECOND_DIGITS, MICROSECONDS_PER_SECOND,
+    MONTHS_PER_YEAR, SECONDS_PER_DAY, SECONDS_PER_HOUR, SECONDS_PER_MINUTE, YEARS_PER_ERA,
 };
 
 /// Microseconds since the Unix epoch of `instant`.
@@ -79,25 +80,59 @@ fn number(text: &str) -> Option<i64> {
     Some(value)
 }
 
-/// Microseconds of a `YYYY-MM-DDTHH:MM:SS[.ffffff]` UTC timestamp ending in `Z` or `+00:00`.
-pub(crate) fn parse_utc_timestamp(text: &str) -> Option<i64> {
-    let body = text
-        .strip_suffix('Z')
-        .or_else(|| text.strip_suffix("+00:00"))?;
-    let (date, time) = body.split_once('T')?;
-    let (clock, fraction) = time.split_once('.').unwrap_or((time, ""));
+fn offset_seconds(text: &str) -> Option<i64> {
+    let (sign, body) = match text.as_bytes().first()? {
+        b'+' => (1, text.get(1..)?),
+        b'-' => (-1, text.get(1..)?),
+        _ => return None,
+    };
+    let (whole, _fraction) = body.split_once('.').unwrap_or((body, ""));
+    let parts: Vec<i64> = whole.split(':').map(number).collect::<Option<_>>()?;
+    let seconds = match parts.as_slice() {
+        [hours, minutes] => hours * SECONDS_PER_HOUR + minutes * SECONDS_PER_MINUTE,
+        [hours, minutes, seconds] => {
+            hours * SECONDS_PER_HOUR + minutes * SECONDS_PER_MINUTE + seconds
+        }
+        _ => return None,
+    };
+    Some(sign * seconds)
+}
+
+/// UTC microseconds and awareness of `datetime.fromisoformat(text)`, or `None` when unparsable.
+pub(crate) fn parse_iso_instant(text: &str) -> Option<(i64, bool)> {
+    let date = text.get(..CAPTURE_DATE_LENGTH)?;
+    let rest = text.get(CAPTURE_DATE_LENGTH + 1..)?;
+    let split = rest.find(['+', '-']).unwrap_or(rest.len());
+    let (clock, offset) = rest.split_at(split);
+    let (whole, fraction) = clock.split_once('.').unwrap_or((clock, ""));
     let dates: Vec<i64> = date.split('-').map(number).collect::<Option<_>>()?;
-    let clocks: Vec<i64> = clock.split(':').map(number).collect::<Option<_>>()?;
+    let clocks: Vec<i64> = whole.split(':').map(number).collect::<Option<_>>()?;
     let ([year, month, day], [hour, minute, second]) = (dates.as_slice(), clocks.as_slice()) else {
         return None;
     };
+    let in_range = (1..=MONTHS_PER_YEAR).contains(month)
+        && (1..=MAX_DAY_OF_MONTH).contains(day)
+        && (0..HOURS_PER_DAY).contains(hour)
+        && (0..SECONDS_PER_MINUTE).contains(minute)
+        && (0..SECONDS_PER_MINUTE).contains(second);
+    if !in_range || !fraction.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
     let micros = match fraction {
         "" => 0,
         digits => number(format!("{digits:0<6}").get(..MICROSECOND_DIGITS)?)?,
     };
-    let seconds = days_from_civil(*year, *month, *day) * SECONDS_PER_DAY
+    let local = (days_from_civil(*year, *month, *day) * SECONDS_PER_DAY
         + hour * SECONDS_PER_HOUR
         + minute * SECONDS_PER_MINUTE
-        + second;
-    Some(seconds * MICROSECONDS_PER_SECOND + micros)
+        + second)
+        * MICROSECONDS_PER_SECOND
+        + micros;
+    if offset.is_empty() {
+        return Some((local, false));
+    }
+    Some((
+        local - offset_seconds(offset)? * MICROSECONDS_PER_SECOND,
+        true,
+    ))
 }

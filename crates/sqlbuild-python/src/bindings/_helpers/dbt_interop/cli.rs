@@ -64,7 +64,7 @@ pub(crate) fn option_values(options: &Bound<'_, PyAny>) -> PyResult<DbtCliOption
     })
 }
 
-fn argv<'py>(
+pub(crate) fn argv<'py>(
     py: Python<'py>,
     (dbt_executable, options): (&str, &Bound<'py, PyAny>),
     command: DbtArgvCommand,
@@ -75,7 +75,7 @@ fn argv<'py>(
     )
 }
 
-fn sequence(values: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+pub(crate) fn sequence(values: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     if values.is_none() {
         return Ok(Vec::new());
     }
@@ -84,7 +84,7 @@ fn sequence(values: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
 
 /// The dbt executable, honouring a non-blank `DBT_EXECUTABLE` override.
 #[pyfunction]
-fn resolve_dbt_executable() -> String {
+pub(crate) fn resolve_dbt_executable() -> String {
     let value: Option<String> =
         std::env::var_os(DBT_EXECUTABLE_ENV_VAR).map(|value| value.to_string_lossy().into_owned());
     executable(value.as_deref())
@@ -219,6 +219,11 @@ fn ls_node<'py>(
 #[pyfunction]
 #[pyo3(signature = (*, stdout))]
 fn parse_dbt_ls_json_lines<'py>(py: Python<'py>, stdout: &str) -> PyResult<Bound<'py, PyTuple>> {
+    ls_nodes(py, stdout)
+}
+
+/// The `DbtLsNode`s of `dbt ls --output json` lines.
+pub(crate) fn ls_nodes<'py>(py: Python<'py>, stdout: &str) -> PyResult<Bound<'py, PyTuple>> {
     let node_class: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS, "DbtLsNode")?;
     let mut nodes: Vec<Bound<'py, PyAny>> = Vec::new();
     for line in python_splitlines(stdout) {

@@ -45,6 +45,16 @@ reason = "Native bindings own configuration resolution; this package only declar
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
+path = "src/sqlbuild/integrations/dbt/__init__.py"
+reason = "Native bindings own the dbt interop commands, the dbt runner, its JSON event stream and project initialisation; this package keeps the dbt models, types and errors and the PyYAML and Jinja profile glue they call."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/compiler/frontier/__init__.py"
+reason = "Native bindings own the compile frontier and the installed code identity; this package only declares the frontier constants, types and errors they read and raise."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
 path = "src/sqlbuild/compiler/planner/__init__.py"
 reason = "Native bindings own planning, plan entries, plan output, command plans and the planner value records; this package only declares the plan models, types, constants and errors the executor, integrations and pipeline import."
 
@@ -67,6 +77,11 @@ reason = "Native bindings own contract comparison, edits and repository writes; 
 rule = "FFR309"
 path = "src/sqlbuild/compiler/pipeline/__init__.py"
 reason = "Native bindings own the compile-and-plan pipeline; this package declares the pipeline models and keeps the custom materialization loader that imports project code."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/runtime/execution_history/__init__.py"
+reason = "The native SQLite and PostgreSQL backends and sqlbuild-state own execution history storage, projection and validation; this package only declares the history models, types, constants and errors the public facades re-export."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"

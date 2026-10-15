@@ -15,7 +15,6 @@ from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.pipeline._helpers import materializations
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.rule_engine._helpers.run import rule_threads
 from sqlbuild.rule_engine.models import RulesRunResult
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from tests.unit.src.sqlbuild.compiler.pipeline.main._test_types import PipelinePhaseTimingTestCase
@@ -80,7 +79,7 @@ def test_given_slow_planning_connection_when_compiling_then_direct_phases_are_di
     (tmp_path / "sqlbuild_project.toml").write_text('name = "timing"\n', encoding="utf-8")
     monkeypatch.setattr(_native, "resolve_configured_rule_selection", Mock(return_value=None))
     monkeypatch.setattr(
-        rule_threads,
+        _native,
         "evaluate_rules",
         Mock(
             return_value=RulesRunResult(findings=(), evaluated_models=0, built_in_ms=0, custom_ms=0)

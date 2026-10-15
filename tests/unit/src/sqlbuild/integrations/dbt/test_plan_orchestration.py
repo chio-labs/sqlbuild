@@ -9,13 +9,13 @@ from sqlbuild._native import (
     DbtInteropCommandArgs,
     DbtInteropPlan,
     DbtManifestIndex,
+    DbtRunner,
     build_dbt_combined_graph,
     build_dbt_ls_argv,
     build_dbt_manifest_index,
     plan_dbt_interop_command,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (

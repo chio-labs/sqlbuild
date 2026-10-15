@@ -1175,6 +1175,7 @@ version = "0.156.1"
 dependencies = [
  "blake3",
  "rayon",
+ "serde_json",
  "sha2",
  "sqlbuild-core",
  "tempfile",

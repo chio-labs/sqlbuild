@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import evaluate_project_rules as evaluate
 from sqlbuild.compiler.compile.models import CompileSqlReference
-from sqlbuild.rule_engine.main._evaluate import evaluate
 from sqlbuild.rule_engine.models import (
     Finding,
     RulesConfig,

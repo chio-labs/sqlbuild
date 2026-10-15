@@ -23,24 +23,6 @@ class DbtCliOptions:
 
 
 @dataclass(frozen=True)
-class DbtProjectProfileMetadata:
-    """dbt project metadata needed for profile resolution."""
-
-    project_name: str
-    profile_name: str
-    target_path: str
-
-
-@dataclass(frozen=True)
-class RawDbtProfile:
-    """Raw dbt profile payload loaded from profiles.yml."""
-
-    name: str
-    default_target: str | None
-    outputs: dict[str, dict[str, object]]
-
-
-@dataclass(frozen=True)
 class SelectedDbtProfileOutput:
     """Selected dbt profile target output before rendering."""
 

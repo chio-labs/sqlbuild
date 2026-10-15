@@ -8,7 +8,7 @@ import pytest
 
 import sqlbuild._native as native_module
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.rule_engine._helpers.engine import custom_rules
+from sqlbuild.rule_engine._helpers.engine import fact_replay
 from sqlbuild.rule_engine.models import CustomRulesOutcome
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (
     CustomRuleProjectFileTestCase,
@@ -253,14 +253,13 @@ def test_given_file_edited_while_rules_run_when_rerunning_then_new_contents_are_
     project: CompiledProjectView = two_model_project(
         customers_sql=_CUSTOMERS_SQL, customers_config={}
     )
-    run_host: Callable[..., object] = custom_rules.run_custom_hosts
+    digest: Callable[..., str] = fact_replay.fact_outcome_digest
 
-    def run_host_then_edit(**kwargs: Any) -> object:
-        result: object = run_host(**kwargs)
-        owners.write_text(_OWNERS_AFTER, encoding="utf-8")
-        return result
+    def edit_then_digest(**kwargs: Any) -> str:
+        _ = owners.write_text(_OWNERS_AFTER, encoding="utf-8")
+        return digest(**kwargs)
 
-    monkeypatch.setattr(custom_rules, "run_custom_hosts", run_host_then_edit)
+    monkeypatch.setattr(fact_replay, "fact_outcome_digest", edit_then_digest)
     during_edit: CustomRulesOutcome = evaluate_cached_custom_rules(
         project=project, project_dir=tmp_path, cache_enabled=True
     )

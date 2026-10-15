@@ -17,6 +17,7 @@ use crate::bindings::_helpers::cli::dispatch::{command_facts, dispatch_command};
 use crate::bindings::_helpers::cli::launch_state::offer_launch_record;
 use crate::bindings::_helpers::cli::observability::cli_observability_scope;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::output_capture::records::invocation_context;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use sqlbuild_cli::launcher::constants::LAUNCH_RECORD_OPTION;
 use sqlbuild_core::cli_text::main::format_coded_error::format_coded_error;
@@ -30,7 +31,6 @@ const LIFECYCLE_EVENT_MODULE: &str = "sqlbuild.runtime.observability.main.create
 const INVOCATION_SCOPE_MODULE: &str = "sqlbuild.runtime.observability.main.invocation_scope";
 const EXTERNAL_SCOPE_MODULE: &str =
     "sqlbuild.runtime.observability.main.invocation_external_context_scope";
-const INVOCATION_CONTEXT_MODULE: &str = "sqlbuild.runtime.output_capture.main.invocation_context";
 const OUTPUT_CAPTURE_ERRORS_MODULE: &str = "sqlbuild.runtime.output_capture.exceptions";
 const DIAGNOSTICS_MODULE: &str = "sqlbuild.diagnostics.main.diagnostics_context";
 const TRANSIENT_LINE_MODULE: &str = "sqlbuild._native";
@@ -495,13 +495,7 @@ fn handled_dispatch<'py>(invocation: &Invocation<'py>) -> PyResult<Bound<'py, Py
 
 /// `invocation_context_from_environment()`, or `{}` when the environment context is invalid.
 fn external_context(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    match imported(
-        py,
-        INVOCATION_CONTEXT_MODULE,
-        "invocation_context_from_environment",
-    )?
-    .call0()
-    {
+    match invocation_context(py, None) {
         Ok(context) => Ok(context),
         Err(error)
             if error.is_instance(

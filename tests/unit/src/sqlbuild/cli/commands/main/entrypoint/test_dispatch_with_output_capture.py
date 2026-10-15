@@ -7,12 +7,12 @@ import sys
 
 import pytest
 
-from sqlbuild.cli.commands.main.entrypoint._dispatch_with_output_capture import (
-    configured_output_capture_scope,
-)
 from sqlbuild.observability import ExecutionIdentity
 from sqlbuild.runtime.event_exporting.classes.command_scope import EventExporterCommandScope
 from sqlbuild.runtime.output_capture.constants import INVOCATION_CONTEXT_ENV
+from sqlbuild.runtime.output_capture.main.configured_output_capture_scope import (
+    configured_output_capture_scope,
+)
 from sqlbuild.sinks import (
     CommandOutputRecord,
     CommandOutputValidationError,

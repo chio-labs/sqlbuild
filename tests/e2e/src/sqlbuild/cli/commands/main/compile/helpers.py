@@ -34,7 +34,6 @@ import sqlbuild._native as plan_artifacts_module
 import sqlbuild.adapter.type_system._helpers.type_normalization as type_normalization
 import sqlbuild.cli.compile_reuse._helpers.provider_settings as provider_settings
 import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
-import sqlbuild.compiler.frontier.main.compiled_code_identity as compiled_code_identity_module
 import sqlbuild.compiler.macro_bridge.classes.macro_bridge as macro_bridge_class
 from scripts.cold_compile_performance.main.read_compile_measurement import read_compile_measurement
 from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
@@ -4120,9 +4119,7 @@ def corrupt_sql_test_scan_store(root: Path, _monkeypatch: pytest.MonkeyPatch) ->
 def edit_installed_code(_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Pretend the installed Python code changed, as a local edit of an editable install does."""
 
-    monkeypatch.setattr(
-        compiled_code_identity_module, "installed_code_identity", lambda: "edited-python-code"
-    )
+    monkeypatch.setattr(native_module, "compiled_code_identity", lambda: "edited-python-code")
 
 
 RETIRED_RENDER_FILES: tuple[str, ...] = (

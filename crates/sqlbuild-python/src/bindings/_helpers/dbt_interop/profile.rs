@@ -33,7 +33,7 @@ const INIT_TOML_OPTIONS: (&[&str], &[&str]) = (
     &[],
 );
 
-fn raised(py: Python<'_>, error: DbtProfileError) -> PyErr {
+pub(crate) fn raised(py: Python<'_>, error: DbtProfileError) -> PyErr {
     match imported(py, DBT_ERRORS_MODULE, "DbtProfileError")
         .and_then(|class| class.call1((error.0,)))
     {

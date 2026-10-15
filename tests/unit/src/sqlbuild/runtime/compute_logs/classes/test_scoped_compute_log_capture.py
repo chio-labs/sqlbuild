@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from sqlbuild._native import LocalFilesystemComputeLogStorage
 from sqlbuild.compute_logs import (
     CaptureMetadata,
     CaptureStateError,
@@ -24,9 +25,6 @@ from sqlbuild.observability import ExecutionIdentity, identity_scope
 from sqlbuild.runtime.compute_logs.classes.diagnostic_log_handler import (
     ComputeDiagnosticLogHandler,
 )
-from sqlbuild.runtime.compute_logs.classes.local_filesystem_compute_log_storage import (
-    LocalFilesystemComputeLogStorage,
-)
 from sqlbuild.runtime.compute_logs.classes.scoped_compute_log_capture import (
     ScopedComputeLogCapture,
 )
@@ -40,6 +38,7 @@ from tests.unit.src.sqlbuild.runtime.compute_logs.classes._test_types import (
 from tests.unit.src.sqlbuild.runtime.compute_logs.classes.helpers import (
     AccessFailureTextSink,
     HostRecordingLogHandler,
+    PatchableComputeLogStorage,
     build_capture_metadata,
 )
 
@@ -226,9 +225,7 @@ def test_given_handler_removal_failure_when_cleaning_then_fallback_prevents_hand
 def test_given_finalization_failure_when_operation_returns_then_result_is_not_replaced(
     tmp_path: Path, test_case: CaptureOutcomeTestCase
 ) -> None:
-    storage: LocalFilesystemComputeLogStorage = LocalFilesystemComputeLogStorage(
-        project_dir=tmp_path
-    )
+    storage: LocalFilesystemComputeLogStorage = PatchableComputeLogStorage(project_dir=tmp_path)
     metadata: CaptureMetadata = build_capture_metadata(
         project_dir=tmp_path, invocation_id="finalize_failure", started_at=datetime.now(UTC)
     )
@@ -261,9 +258,7 @@ def test_given_finalization_failure_when_operation_returns_then_result_is_not_re
 def test_given_storage_close_failure_when_cleanup_runs_then_result_and_writer_cleanup_are_preserved(
     tmp_path: Path, test_case: CaptureOutcomeTestCase
 ) -> None:
-    storage: LocalFilesystemComputeLogStorage = LocalFilesystemComputeLogStorage(
-        project_dir=tmp_path
-    )
+    storage: LocalFilesystemComputeLogStorage = PatchableComputeLogStorage(project_dir=tmp_path)
     metadata: CaptureMetadata = build_capture_metadata(
         project_dir=tmp_path, invocation_id="close_failure", started_at=datetime.now(UTC)
     )
@@ -556,9 +551,7 @@ def test_given_internal_user_and_sql_records_when_routing_then_policy_is_destina
 def test_given_storage_append_failure_when_operation_writes_then_failure_reaches_callback(
     tmp_path: Path, test_case: CaptureWriteFailureTestCase
 ) -> None:
-    storage: LocalFilesystemComputeLogStorage = LocalFilesystemComputeLogStorage(
-        project_dir=tmp_path
-    )
+    storage: LocalFilesystemComputeLogStorage = PatchableComputeLogStorage(project_dir=tmp_path)
     metadata: CaptureMetadata = build_capture_metadata(
         project_dir=tmp_path, invocation_id="append_failure", started_at=datetime.now(UTC)
     )

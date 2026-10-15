@@ -14,7 +14,7 @@ use sqlbuild_cache::artifacts::main::reusable_sql_test_record::reusable_sql_test
 use sqlbuild_cache::artifacts::models::SqlTestArtifactRecord;
 
 use crate::bindings::_helpers::analysis::sql_test_comparisons::single_comparison_sql;
-use crate::bindings::_helpers::compile_command::artifact_batch::{ArtifactBatch, timed};
+use crate::bindings::_helpers::compile_command::artifact_batch::ArtifactBatch;
 use crate::bindings::_helpers::compile_command::reuse_recording::{
     ArtifactRecorder, CompileArtifactWrites, artifact_kept, artifact_moved, artifact_tree_moved,
 };
@@ -22,6 +22,7 @@ use crate::bindings::_helpers::compile_command::test_artifact_cache::{
     IdentityContext, artifact_identity, artifact_record_key, identity_context, read_cache,
     write_cache,
 };
+use crate::bindings::_helpers::compile_driver::compile_timings::record_compile_timing;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords, within,
 };
@@ -154,7 +155,7 @@ fn remove_stale(target_dir: &Bound<'_, PyAny>, managed: &[Bound<'_, PyAny>]) -> 
         .iter()
         .map(|path| path.extract())
         .collect::<PyResult<_>>()?;
-    timed(py, "stale_traversal_ms", || {
+    record_compile_timing("stale_traversal_ms", || {
         remove_stale_artifacts(py, compiled, managed).map(|_| ())
     })
 }
@@ -270,7 +271,7 @@ fn write_planned_target<'py>(
         let path: Bound<'py, PyAny> = compiled
             .div(TESTS_DIR)?
             .div(planned_sql_test_path(&entry)?)?;
-        let comparison_sql: String = timed(py, "comparison_render_ms", || {
+        let comparison_sql: String = record_compile_timing("comparison_render_ms", || {
             single_comparison_sql(&entry, adapter)
         })?;
         batch.queue_sql(&path, &comparison_sql)?;
@@ -547,7 +548,7 @@ fn write_static_tests<'py>(
             }
         }
     }
-    timed(py, "cache_publication_ms", || {
+    record_compile_timing("cache_publication_ms", || {
         write_cache(&project.getattr("compile_cache_dir")?, &records)
     })?;
     Ok((managed, diagnostics))
@@ -651,7 +652,7 @@ pub(crate) fn publish_staged_target<'py>(
         .call1((expected_files,))?
         .extract()?;
     let (staged, compiled): (PathBuf, PathBuf) = (staged_dir.extract()?, compiled_dir.extract()?);
-    let (kind, published) = timed(py, "physical_write_ms", || {
+    let (kind, published) = record_compile_timing("physical_write_ms", || {
         publish_staged_artifacts(py, staged, compiled, expected)
     })?;
     if kind == PUBLISHED_STAGING_CHANGED {

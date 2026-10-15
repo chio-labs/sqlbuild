@@ -7,22 +7,8 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use crate::bindings::_helpers::compile_command::reuse_recording::{
     ArtifactRecorder, artifact_written,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::{imported, within};
+use crate::bindings::_helpers::compile_driver::compile_timings::record_compile_timing;
 use crate::bindings::_helpers::compile_outputs::artifacts::write_compiled_artifacts;
-
-const PROFILING_MODULE: &str = "sqlbuild.compiler.profiling.main._record";
-
-/// Run `body` inside `record_compile_timing(phase)`.
-pub(crate) fn timed<'py, T>(
-    py: Python<'py>,
-    phase: &str,
-    body: impl FnOnce() -> PyResult<T>,
-) -> PyResult<T> {
-    within(
-        &imported(py, PROFILING_MODULE, "record_compile_timing")?.call1((phase,))?,
-        |_| body(),
-    )
-}
 
 /// The artifacts of one write group, written together by `flush`.
 pub(crate) struct ArtifactBatch<'a> {
@@ -74,7 +60,7 @@ impl<'a> ArtifactBatch<'a> {
             return Ok(());
         }
         let files: Vec<(PathBuf, Vec<u8>)> = std::mem::take(&mut self.files);
-        timed(py, "physical_write_ms", || {
+        record_compile_timing("physical_write_ms", || {
             write_compiled_artifacts(py, files, self.check_existing).map(|_| ())
         })
     }

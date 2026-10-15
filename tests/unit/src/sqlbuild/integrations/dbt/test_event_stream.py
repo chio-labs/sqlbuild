@@ -2,17 +2,17 @@ from __future__ import annotations
 
 import io
 import json
-import threading
 import time
-from collections.abc import Callable, Iterator
-from typing import cast
+from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import DbtEventStream, DbtEventStreamUpdate
-from sqlbuild.integrations.dbt._helpers.runtime.event_stream import (
+from sqlbuild._native import (
+    DbtEventStream,
+    DbtEventStreamUpdate,
     execute_dbt_json_event_stream,
 )
+from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.models import DbtNodeExecutionResult
 from sqlbuild.observability import (
     EventDispatcher,
@@ -26,8 +26,20 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtRuntimeCleanupTestCase,
     DbtSilentStatusRefreshTestCase,
 )
-from tests.unit.src.sqlbuild.integrations.dbt.helpers import consume_dbt_events
+from tests.unit.src.sqlbuild.integrations.dbt.helpers import consume_dbt_events, fake_dbt_argv
 
+_STOPPED_WITHIN_SECONDS: float = 30.0
+_DBT_SLOW_START_LINE: str = (
+    '{"data":{"index":1,"total":1,"node_info":{"node_name":"slow_model",'
+    '"resource_type":"model","unique_id":"model.analytics.slow_model"}},'
+    '"info":{"level":"info","name":"LogStartLine","msg":"START"}}\n'
+)
+_DBT_SLOW_RESULT_LINE: str = (
+    '{"data":{"execution_time":1.2,"index":1,"total":1,"status":"success",'
+    '"node_info":{"node_name":"slow_model","resource_type":"model",'
+    '"node_status":"success","unique_id":"model.analytics.slow_model"}},'
+    '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n'
+)
 _DBT_RESULT_LINE: str = (
     '{"data":{"execution_time":1.0,"index":1,"total":1,"status":"success",'
     '"node_info":{"node_name":"orders","resource_type":"model",'
@@ -409,35 +421,17 @@ def test_given_non_result_event_when_parsing_then_returns_none(
 )
 def test_given_dbt_json_stream_when_running_then_invokes_node_result_callback(
     test_case: DbtEventStreamTestCase,
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     lifecycle_events: list[LifecycleEvent] = []
-
-    class StubProcess:
-        stdout: io.StringIO = io.StringIO("".join(test_case.stdout_lines))
-
-        def wait(self) -> int:
-            assert tuple(event.event_type for event in lifecycle_events) == ("operation_started",)
-            return 0
-
     captured_results: list[DbtNodeExecutionResult] = []
-
-    def launch(*args: object, **kwargs: object) -> StubProcess:
-        del args, kwargs
-        assert lifecycle_events[-1].event_type == "operation_started"
-        return StubProcess()
-
-    monkeypatch.setattr(
-        "sqlbuild.integrations.dbt._helpers.runtime.event_stream.subprocess.Popen", launch
-    )
-
     stream: io.StringIO = io.StringIO()
     dispatcher: EventDispatcher = EventDispatcher()
     dispatcher.subscribe_lifecycle(subscriber=lifecycle_events.append, accepts_opaque=False)
-    returncode: int
+
     with invocation_scope("inv-dbt-stream"), dispatcher_scope(dispatcher):
         returncode, results = execute_dbt_json_event_stream(
-            argv=("dbt", "run"),
+            argv=fake_dbt_argv(tmp_path, lines=test_case.stdout_lines),
             cwd=None,
             stream=stream,
             use_color=False,
@@ -467,101 +461,23 @@ def test_given_dbt_json_stream_when_running_then_invokes_node_result_callback(
     "test_case",
     (
         DbtRuntimeCleanupTestCase(
-            description="callback failure cleans launched dbt runtime before terminal",
+            description="callback failure stops dbt before the failed terminal",
             expected_error="original callback failure",
-            expected_actions=(
-                "operation_started",
-                "popen",
-                "status_start",
-                "thread_start",
-                "status_close",
-                "thread_join",
-                "poll",
-                "terminate",
-                "wait",
-                "operation_failed",
-            ),
+            expected_actions=("operation_started", "operation_failed"),
         ),
     ),
     ids=lambda case: case.description,
 )
 def test_given_callback_failure_when_streaming_then_runtime_cleans_before_failed_terminal(
     test_case: DbtRuntimeCleanupTestCase,
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     actions: list[str] = []
-    lifecycle_events: list[LifecycleEvent] = []
-
-    class TtyStream(io.StringIO):
-        def isatty(self) -> bool:
-            return True
-
-    class StatusReporter:
-        def __init__(self, *args: object, **kwargs: object) -> None:
-            del args, kwargs
-
-        def start(self, message: str) -> None:
-            del message
-            actions.append("status_start")
-
-        def close(self) -> None:
-            assert lifecycle_events[-1].event_type == "operation_started"
-            actions.append("status_close")
-
-    class StatusThread:
-        def __init__(self, status_stop: threading.Event) -> None:
-            self._status_stop: threading.Event = status_stop
-
-        def join(self, timeout: float) -> None:
-            del timeout
-            assert lifecycle_events[-1].event_type == "operation_started"
-            assert self._status_stop.is_set()
-            actions.append("thread_join")
-
-    class Process:
-        stdout: io.StringIO = io.StringIO(_DBT_RESULT_LINE)
-
-        def poll(self) -> None:
-            actions.append("poll")
-            return None
-
-        def terminate(self) -> None:
-            assert lifecycle_events[-1].event_type == "operation_started"
-            actions.append("terminate")
-
-        def wait(self, timeout: float | None = None) -> int:
-            assert timeout == 1
-            assert lifecycle_events[-1].event_type == "operation_started"
-            actions.append("wait")
-            return -15
-
-    def launch(*args: object, **kwargs: object) -> Process:
-        del args, kwargs
-        actions.append("popen")
-        return Process()
-
-    def start_thread(*args: object, **kwargs: object) -> StatusThread:
-        del args
-        actions.append("thread_start")
-        return StatusThread(cast(threading.Event, kwargs["status_stop"]))
-
-    def record_event(event: LifecycleEvent) -> None:
-        lifecycle_events.append(event)
-        actions.append(event.event_type)
-
-    monkeypatch.setattr(
-        "sqlbuild.integrations.dbt._helpers.runtime.event_stream.subprocess.Popen", launch
-    )
-    monkeypatch.setattr(
-        "sqlbuild.integrations.dbt._helpers.runtime.event_stream.TransientStatusReporter",
-        StatusReporter,
-    )
-    monkeypatch.setattr(
-        "sqlbuild.integrations.dbt._helpers.runtime.event_stream._start_active_node_status_refresher",
-        start_thread,
-    )
     dispatcher: EventDispatcher = EventDispatcher()
-    dispatcher.subscribe_lifecycle(subscriber=record_event, accepts_opaque=False)
+    dispatcher.subscribe_lifecycle(
+        subscriber=lambda event: actions.append(event.event_type), accepts_opaque=False
+    )
+    started: float = time.monotonic()
 
     with (
         invocation_scope("inv-dbt-callback-failure"),
@@ -569,9 +485,9 @@ def test_given_callback_failure_when_streaming_then_runtime_cleans_before_failed
         pytest.raises(RuntimeError, match=test_case.expected_error),
     ):
         _ = execute_dbt_json_event_stream(
-            argv=("dbt", "run"),
+            argv=fake_dbt_argv(tmp_path, lines=(_DBT_RESULT_LINE,), sleep_seconds=60),
             cwd=None,
-            stream=TtyStream(),
+            stream=io.StringIO(),
             use_color=False,
             target_path=None,
             on_node_result=lambda result: (_ for _ in ()).throw(
@@ -580,295 +496,47 @@ def test_given_callback_failure_when_streaming_then_runtime_cleans_before_failed
         )
 
     assert tuple(actions) == test_case.expected_actions
+    assert time.monotonic() - started < _STOPPED_WITHIN_SECONDS
 
 
 @pytest.mark.parametrize(
     "test_case",
     (
         DbtRuntimeCleanupTestCase(
-            description="process wait failure reaps child before terminal",
-            expected_error="original wait failure",
-            expected_actions=(
-                "operation_started",
-                "main_wait",
-                "poll",
-                "terminate",
-                "cleanup_wait",
-                "operation_failed",
-            ),
-        ),
-    ),
-    ids=lambda case: case.description,
-)
-def test_given_process_wait_failure_when_streaming_then_child_cleanup_precedes_terminal(
-    test_case: DbtRuntimeCleanupTestCase,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    actions: list[str] = []
-    lifecycle_events: list[LifecycleEvent] = []
-    wait_labels: Iterator[str] = iter(("main_wait", "cleanup_wait"))
-    wait_outcomes: Iterator[Callable[[], int]] = iter(
-        (
-            lambda: (_ for _ in ()).throw(RuntimeError(test_case.expected_error)),
-            lambda: -15,
-        )
-    )
-
-    class Process:
-        stdout: io.StringIO = io.StringIO()
-
-        def poll(self) -> None:
-            actions.append("poll")
-            return None
-
-        def terminate(self) -> None:
-            assert lifecycle_events[-1].event_type == "operation_started"
-            actions.append("terminate")
-
-        def wait(self, timeout: float | None = None) -> int:
-            del timeout
-            assert lifecycle_events[-1].event_type == "operation_started"
-            actions.append(next(wait_labels))
-            return next(wait_outcomes)()
-
-    def record_event(event: LifecycleEvent) -> None:
-        lifecycle_events.append(event)
-        actions.append(event.event_type)
-
-    monkeypatch.setattr(
-        "sqlbuild.integrations.dbt._helpers.runtime.event_stream.subprocess.Popen",
-        lambda *args, **kwargs: Process(),
-    )
-    dispatcher: EventDispatcher = EventDispatcher()
-    dispatcher.subscribe_lifecycle(subscriber=record_event, accepts_opaque=False)
-
-    with (
-        invocation_scope("inv-dbt-wait-failure"),
-        dispatcher_scope(dispatcher),
-        pytest.raises(RuntimeError, match=test_case.expected_error),
-    ):
-        _ = execute_dbt_json_event_stream(
-            argv=("dbt", "run"),
-            cwd=None,
-            stream=io.StringIO(),
-            use_color=False,
-            target_path=None,
-            enable_status=False,
-        )
-
-    assert tuple(actions) == test_case.expected_actions
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    (
-        DbtRuntimeCleanupTestCase(
-            description="popen failure starts no status thread",
+            description="launch failure starts no status and fails the operation",
             expected_error="failed to execute dbt",
-            expected_actions=("operation_started", "popen", "operation_failed"),
+            expected_actions=("operation_started", "operation_failed"),
         ),
     ),
     ids=lambda case: case.description,
 )
 def test_given_popen_failure_when_streaming_then_no_status_runtime_is_started(
     test_case: DbtRuntimeCleanupTestCase,
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     actions: list[str] = []
     dispatcher: EventDispatcher = EventDispatcher()
     dispatcher.subscribe_lifecycle(
         subscriber=lambda event: actions.append(event.event_type), accepts_opaque=False
     )
-
-    def launch(*args: object, **kwargs: object) -> None:
-        del args, kwargs
-        actions.append("popen")
-        raise OSError("private launch failure")
-
-    monkeypatch.setattr(
-        "sqlbuild.integrations.dbt._helpers.runtime.event_stream.subprocess.Popen", launch
-    )
-    monkeypatch.setattr(
-        "sqlbuild.integrations.dbt._helpers.runtime.event_stream._start_active_node_status_refresher",
-        lambda *args, **kwargs: actions.append("unexpected_thread"),
-    )
+    stream: io.StringIO = io.StringIO()
 
     with (
         invocation_scope("inv-dbt-popen-failure"),
         dispatcher_scope(dispatcher),
-        pytest.raises(Exception, match=test_case.expected_error),
+        pytest.raises(DbtInteropRuntimeError, match=test_case.expected_error) as raised,
     ):
         _ = execute_dbt_json_event_stream(
-            argv=("dbt", "run"),
+            argv=(str(tmp_path / "missing-dbt"), "run"),
             cwd=None,
-            stream=io.StringIO(),
+            stream=stream,
             use_color=False,
             target_path=None,
         )
 
     assert tuple(actions) == test_case.expected_actions
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    (
-        DbtRuntimeCleanupTestCase(
-            description="interrupted dbt wait leaves operation unmatched",
-            expected_error="",
-            expected_actions=("operation_started",),
-        ),
-    ),
-    ids=lambda case: case.description,
-)
-def test_given_unobserved_dbt_interruption_when_cleanup_reaps_then_no_terminal_is_fabricated(
-    test_case: DbtRuntimeCleanupTestCase,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    lifecycle_events: list[LifecycleEvent] = []
-    wait_outcomes: Iterator[Callable[[], int]] = iter(
-        (
-            lambda: (_ for _ in ()).throw(KeyboardInterrupt),
-            lambda: -2,
-        )
-    )
-
-    class Process:
-        stdout: io.StringIO = io.StringIO()
-
-        def poll(self) -> int:
-            return -2
-
-        def wait(self, timeout: float | None = None) -> int:
-            del timeout
-            return next(wait_outcomes)()
-
-    monkeypatch.setattr(
-        "sqlbuild.integrations.dbt._helpers.runtime.event_stream.subprocess.Popen",
-        lambda *args, **kwargs: Process(),
-    )
-    dispatcher: EventDispatcher = EventDispatcher()
-    dispatcher.subscribe_lifecycle(subscriber=lifecycle_events.append, accepts_opaque=False)
-
-    with (
-        invocation_scope("inv-dbt-interrupted"),
-        dispatcher_scope(dispatcher),
-        pytest.raises(KeyboardInterrupt),
-    ):
-        _ = execute_dbt_json_event_stream(
-            argv=("dbt", "run"),
-            cwd=None,
-            stream=io.StringIO(),
-            use_color=False,
-            target_path=None,
-            enable_status=False,
-        )
-
-    assert tuple(event.event_type for event in lifecycle_events) == test_case.expected_actions
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    (
-        DbtRuntimeCleanupTestCase(
-            description="cleanup failures preserve parse exception",
-            expected_error="original parse failure",
-            expected_actions=(
-                "operation_started",
-                "thread_join",
-                "status_close",
-                "poll",
-                "terminate",
-                "wait",
-                "kill",
-                "wait",
-                "operation_failed",
-            ),
-        ),
-    ),
-    ids=lambda case: case.description,
-)
-def test_given_cleanup_failures_when_parse_raises_then_original_exception_is_preserved(
-    test_case: DbtRuntimeCleanupTestCase,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    actions: list[str] = []
-
-    class TtyStream(io.StringIO):
-        def isatty(self) -> bool:
-            return True
-
-    class FailingStatus:
-        def __init__(self, *args: object, **kwargs: object) -> None:
-            del args, kwargs
-
-        def start(self, message: str) -> None:
-            del message
-
-        def close(self) -> None:
-            actions.append("status_close")
-            raise RuntimeError("cleanup status failure")
-
-    class FailingThread:
-        def join(self, timeout: float) -> None:
-            del timeout
-            actions.append("thread_join")
-            raise RuntimeError("cleanup thread failure")
-
-    class FailingProcess:
-        stdout: io.StringIO = io.StringIO(_DBT_RESULT_LINE)
-
-        def poll(self) -> None:
-            actions.append("poll")
-            raise RuntimeError("cleanup poll failure")
-
-        def terminate(self) -> None:
-            actions.append("terminate")
-            raise RuntimeError("cleanup terminate failure")
-
-        def wait(self, timeout: float | None = None) -> int:
-            del timeout
-            actions.append("wait")
-            raise RuntimeError("cleanup wait failure")
-
-        def kill(self) -> None:
-            actions.append("kill")
-            raise RuntimeError("cleanup kill failure")
-
-    dispatcher: EventDispatcher = EventDispatcher()
-    dispatcher.subscribe_lifecycle(
-        subscriber=lambda event: actions.append(event.event_type), accepts_opaque=False
-    )
-    monkeypatch.setattr(
-        "sqlbuild.integrations.dbt._helpers.runtime.event_stream.subprocess.Popen",
-        lambda *args, **kwargs: FailingProcess(),
-    )
-    monkeypatch.setattr(
-        "sqlbuild.integrations.dbt._helpers.runtime.event_stream.TransientStatusReporter",
-        FailingStatus,
-    )
-    monkeypatch.setattr(
-        "sqlbuild.integrations.dbt._helpers.runtime.event_stream._start_active_node_status_refresher",
-        lambda *args, **kwargs: FailingThread(),
-    )
-    monkeypatch.setattr(
-        "sqlbuild.integrations.dbt._helpers.runtime.event_stream._handle_dbt_output_line",
-        lambda **kwargs: (_ for _ in ()).throw(RuntimeError(test_case.expected_error)),
-    )
-
-    with (
-        invocation_scope("inv-dbt-cleanup-failure"),
-        dispatcher_scope(dispatcher),
-        pytest.raises(RuntimeError, match=test_case.expected_error),
-    ):
-        _ = execute_dbt_json_event_stream(
-            argv=("dbt", "run"),
-            cwd=None,
-            stream=TtyStream(),
-            use_color=False,
-            target_path=None,
-        )
-
-    assert tuple(actions) == test_case.expected_actions
+    assert isinstance(raised.value.__cause__, FileNotFoundError)
+    assert stream.getvalue() == ""
 
 
 @pytest.mark.parametrize(
@@ -876,8 +544,8 @@ def test_given_cleanup_failures_when_parse_raises_then_original_exception_is_pre
     [
         DbtSilentStatusRefreshTestCase(
             description="active node elapsed refreshes without dbt events",
-            silent_seconds=1.15,
-            refresh_seconds=0.05,
+            silent_seconds=2.4,
+            refresh_seconds=1.0,
             expected_initial_status="running 1 dbt node: slow_model <1s",
             expected_refreshed_status="running 1 dbt node: slow_model 1s",
         )
@@ -886,53 +554,23 @@ def test_given_cleanup_failures_when_parse_raises_then_original_exception_is_pre
 )
 def test_given_active_dbt_node_when_dbt_stream_is_silent_then_status_elapsed_updates(
     test_case: DbtSilentStatusRefreshTestCase,
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class TtyStream(io.StringIO):
         def isatty(self) -> bool:
             return True
 
-    class DelayedStdout:
-        def __enter__(self) -> DelayedStdout:
-            return self
-
-        def __exit__(self, *args: object) -> None:
-            return None
-
-        def __iter__(self) -> object:
-            yield (
-                '{"data":{"index":1,"total":1,"node_info":{"node_name":"slow_model",'
-                '"resource_type":"model","unique_id":"model.analytics.slow_model"}},'
-                '"info":{"level":"info","name":"LogStartLine","msg":"START"}}\n'
-            )
-            time.sleep(test_case.silent_seconds)
-            yield (
-                '{"data":{"execution_time":1.2,"index":1,"total":1,"status":"success",'
-                '"node_info":{"node_name":"slow_model","resource_type":"model",'
-                '"node_status":"success","unique_id":"model.analytics.slow_model"}},'
-                '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n'
-            )
-
-    class StubProcess:
-        stdout: DelayedStdout = DelayedStdout()
-
-        def wait(self) -> int:
-            return 0
-
     monkeypatch.setenv("SQLBUILD_NO_PROGRESS", "1")
-    monkeypatch.setattr(
-        "sqlbuild.integrations.dbt._helpers.runtime.event_stream._DBT_STATUS_REFRESH_SECONDS",
-        test_case.refresh_seconds,
-    )
-    monkeypatch.setattr(
-        "sqlbuild.integrations.dbt._helpers.runtime.event_stream.subprocess.Popen",
-        lambda *args, **kwargs: StubProcess(),
-    )
-
     stream: TtyStream = TtyStream()
-    returncode: int
+
     returncode, _ = execute_dbt_json_event_stream(
-        argv=("dbt", "run"),
+        argv=fake_dbt_argv(
+            tmp_path,
+            lines=(_DBT_SLOW_START_LINE,),
+            sleep_seconds=test_case.silent_seconds,
+            after_lines=(_DBT_SLOW_RESULT_LINE,),
+        ),
         cwd=None,
         stream=stream,
         use_color=False,
@@ -941,6 +579,7 @@ def test_given_active_dbt_node_when_dbt_stream_is_silent_then_status_elapsed_upd
     status_lines: list[str] = stream.getvalue().splitlines()
 
     assert returncode == 0
+    assert test_case.refresh_seconds < test_case.silent_seconds
     assert test_case.expected_initial_status in status_lines
     assert test_case.expected_refreshed_status in status_lines
 

@@ -59,3 +59,44 @@ pub struct DbtInitConfig {
     pub target_schema: Option<String>,
     pub target_database: Option<String>,
 }
+
+/// One value loaded from a dbt YAML file, as project and profile loading tell values apart.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DbtYamlValue {
+    /// `None`, or a key the mapping does not have.
+    Null,
+    Text(String),
+    /// A mapping and whether it has no entries.
+    Mapping {
+        empty: bool,
+    },
+    /// Any other value.
+    Other,
+}
+
+/// The `dbt_project.yml` settings profile resolution needs.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DbtProjectMetadata {
+    pub project_name: String,
+    pub profile_name: String,
+    pub target_path: String,
+}
+
+/// One profile of `profiles.yml` as loaded: the profile, its outputs, their entries and its target.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LoadedDbtProfile {
+    pub profile: DbtYamlValue,
+    pub outputs: DbtYamlValue,
+    /// Each `(name, output)` of `outputs` in file order, when `outputs` is a mapping.
+    pub output_entries: Vec<(DbtYamlValue, DbtYamlValue)>,
+    pub target: DbtYamlValue,
+}
+
+/// A validated profile: its name, default target, and each output name with its entry index.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DbtProfileOutputs {
+    pub name: String,
+    pub default_target: Option<String>,
+    /// Stripped output names in first-seen order; a repeated name keeps its last entry.
+    pub outputs: Vec<(String, usize)>,
+}

@@ -2,7 +2,7 @@
 # migration work that moves to Rust. `remaining_lines` must equal the current count of that work:
 # a PR that moves code lowers it, and adding movable Python fails the check.
 # Native failures must surface as errors; `handled_native_errors` lists the reviewed exceptions.
-remaining_lines = 9602
+remaining_lines = 9546
 
 [[stays]]
 path = "executor"
@@ -112,12 +112,7 @@ note = "Samples process resources for debug logging through Python's resource mo
 [[stays]]
 path = "rule_engine/_helpers/host"
 reason = "user-code"
-note = "Subprocess host that loads and runs user rule modules."
-
-[[stays]]
-path = "rule_engine/_helpers/engine/custom_dispatch.py"
-reason = "user-code"
-note = "Submits custom rules to their worker thread beside native built-in rule evaluation."
+note = "Rule 2: the subprocess host that loads and runs user rule modules (custom_host, custom_evaluation, tracked_facts, module_state, custom_host_launch); host fan-out, partitioning and CPU capacity run natively."
 
 [[stays]]
 path = "rule_engine/_helpers/engine/custom_payloads.py"
@@ -128,16 +123,6 @@ note = "Reads user rule functions (source lines, qualified names, import closure
 path = "rule_engine/_helpers/engine/_custom_catalogue.py"
 reason = "user-code"
 note = "Imports the project's custom rule modules and collects their @rule functions for the native catalogue."
-
-[[stays]]
-path = "rule_engine/_helpers/engine/custom_rules.py"
-reason = "user-code"
-note = "Dispatches custom rules to the rule-host worker pool and digests the fact views they read."
-
-[[stays]]
-path = "rule_engine/_helpers/run/rule_threads.py"
-reason = "user-code"
-note = "Runs rule phases and early SQL lint on worker threads with futures and stop events."
 
 [[stays]]
 path = "rule_engine/classes/rule_context.py"
@@ -162,7 +147,7 @@ note = "Public custom-rule test harness that runs user rules over a real compile
 [[stays]]
 path = "rule_engine/_helpers/engine/fact_replay.py"
 reason = "user-code"
-note = "Recomputes the fact-view values a custom rule read, for its cache key."
+note = "Rule 2: the fact digest scheme shared with the rule host (tracked_facts.py, custom_host.py); recomputes values through the user-facing fact views and encodes live Python objects with orjson."
 
 [[stays]]
 path = "rule_engine/main/define.py"
@@ -173,11 +158,6 @@ note = "Public @rule decorator entry point."
 path = "rule_engine/main/evaluate_rule.py"
 reason = "user-code"
 note = "Public custom-rule test harness entry point."
-
-[[stays]]
-path = "rule_engine/main/_evaluate.py"
-reason = "user-code"
-note = "Project evaluation entry used by the public custom-rule test harness."
 
 [[stays]]
 path = "rule_engine/classes/audit_facts.py"
@@ -235,11 +215,6 @@ reason = "user-code"
 note = "Records the fact-view reads of one user rule evaluation."
 
 [[stays]]
-path = "rule_engine/classes/fact_digests.py"
-reason = "user-code"
-note = "Digests the fact-view values user rules read, for the custom-rule cache."
-
-[[stays]]
 path = "rule_engine/classes/shared_fact_encoder.py"
 reason = "user-code"
 note = "Encodes the Python fact-view values user rules read, for their digests."
@@ -250,9 +225,29 @@ reason = "public-api"
 note = "Documented observability API used throughout the executor."
 
 [[stays]]
-path = "runtime/execution_history"
+path = "runtime/execution_history/__init__.py"
 reason = "public-api"
-note = "Documented SQLite and Postgres execution-history backends."
+note = "Package marker of the public execution history shapes below; storage, projection and validation are native (sqlbuild-state execution_history)."
+
+[[stays]]
+path = "runtime/execution_history/models.py"
+reason = "public-api"
+note = "Rule 3 shapes: StoredEvent, filter, page and RunRecord dataclasses re-exported by sqlbuild.execution_history; __post_init__ delegates validation to native validate_history_* functions."
+
+[[stays]]
+path = "runtime/execution_history/types.py"
+reason = "public-api"
+note = "Rule 3 shapes: EventFamily, RunStatus, cursor aliases and the storage protocols re-exported by sqlbuild.execution_history."
+
+[[stays]]
+path = "runtime/execution_history/exceptions.py"
+reason = "public-api"
+note = "Rule 3 shapes: public storage errors re-exported by sqlbuild.execution_history and raised by the native backends."
+
+[[stays]]
+path = "runtime/execution_history/constants.py"
+reason = "public-api"
+note = "Rule 3 shapes: page limit and schema version constants re-exported by sqlbuild.execution_history."
 
 [[stays]]
 path = "runtime/execution_limits"
@@ -260,9 +255,44 @@ reason = "executor"
 note = "Deadline the executor scheduler and warehouse cursors enforce."
 
 [[stays]]
-path = "runtime/compute_logs"
-reason = "executor"
-note = "Captures compute logs while the executor runs models, loaders and tasks."
+path = "runtime/compute_logs/classes"
+reason = "user-code"
+note = "Rule 1 capture shim: sys.stdout/sys.stderr tees and a logging handler that record Python output from user code, adapters and the executor (_dispatch_with_compute_logs.py, compile_command/reuse_attempt.rs); storage itself is native LocalFilesystemComputeLogStorage."
+
+[[stays]]
+path = "runtime/compute_logs/main"
+reason = "user-code"
+note = "Rule 1 capture shim entry: installs the stream tees around the CLI command (_dispatch_with_compute_logs.py)."
+
+[[stays]]
+path = "runtime/compute_logs/_helpers"
+reason = "user-code"
+note = "Rule 1 tee shim: how much of a write the wrapped Python stream accepted (text_tee.py, binary_tee.py)."
+
+[[stays]]
+path = "runtime/compute_logs/__init__.py"
+reason = "public-api"
+note = "Package marker of the public compute log shapes below."
+
+[[stays]]
+path = "runtime/compute_logs/models.py"
+reason = "public-api"
+note = "Rule 3 shapes: capture metadata and result dataclasses re-exported by sqlbuild.compute_logs."
+
+[[stays]]
+path = "runtime/compute_logs/types.py"
+reason = "public-api"
+note = "Rule 3 shapes: ComputeLogStream and the ComputeLogStorage protocol re-exported by sqlbuild.compute_logs."
+
+[[stays]]
+path = "runtime/compute_logs/exceptions.py"
+reason = "public-api"
+note = "Rule 3 shapes: public storage errors re-exported by sqlbuild.compute_logs and raised by the native storage."
+
+[[stays]]
+path = "runtime/compute_logs/constants.py"
+reason = "public-api"
+note = "Rule 3 shapes: format version, retention and read-limit constants re-exported by sqlbuild.compute_logs."
 
 [[stays]]
 path = "runtime/event_exporting"
@@ -270,9 +300,39 @@ reason = "executor"
 note = "Exports execution events while the executor runs."
 
 [[stays]]
-path = "runtime/output_capture"
-reason = "executor"
-note = "Captures stdout and stderr of running Python nodes for the executor."
+path = "runtime/output_capture/classes"
+reason = "user-code"
+note = "Rule 1 capture shim: sys.stdout/sys.stderr tees forwarding accepted writes from user code, adapters and the executor to the native OutputCaptureDispatcher."
+
+[[stays]]
+path = "runtime/output_capture/main"
+reason = "user-code"
+note = "Rule 1 capture shim entry: swaps sys.stdout/sys.stderr for the tees around one CLI command (Rust cli/observability.rs)."
+
+[[stays]]
+path = "runtime/output_capture/__init__.py"
+reason = "public-api"
+note = "Package marker of the public command-output shapes below."
+
+[[stays]]
+path = "runtime/output_capture/models.py"
+reason = "public-api"
+note = "Rule 3 shapes: CommandOutputRecord and sink definitions re-exported by sqlbuild.sinks; validation is native validate_command_output_record."
+
+[[stays]]
+path = "runtime/output_capture/types.py"
+reason = "public-api"
+note = "Rule 3 shapes: CommandOutputStream re-exported by sqlbuild.sinks, priorities and the exporter protocol."
+
+[[stays]]
+path = "runtime/output_capture/exceptions.py"
+reason = "public-api"
+note = "Rule 3 shapes: CommandOutputValidationError re-exported by sqlbuild.sinks and raised by the native records."
+
+[[stays]]
+path = "runtime/output_capture/constants.py"
+reason = "public-api"
+note = "Rule 3 shapes: the invocation-context variable and wire constants used by the models and integrations."
 
 [[stays]]
 path = "integrations/dagster"
@@ -295,24 +355,9 @@ reason = "user-code"
 note = "Loader runtime that runs inside the executor load phase."
 
 [[stays]]
-path = "integrations/dbt/_helpers/runtime/event_stream.py"
-reason = "user-code"
-note = "Runs the dbt subprocess over the user's dbt project and drives its progress threads."
-
-[[stays]]
-path = "integrations/dbt/main/runtime/_execute_json_event_stream.py"
-reason = "user-code"
-note = "Entry point of the dbt subprocess runner."
-
-[[stays]]
-path = "integrations/dbt/classes/dbt_runner.py"
-reason = "user-code"
-note = "Runs dbt compile, deps, debug and ls as subprocesses over the user's dbt project."
-
-[[stays]]
 path = "integrations/dbt/_helpers/profile/load.py"
 reason = "user-code"
-note = "Loads the user's dbt_project.yml and profiles.yml with PyYAML."
+note = "Rule 4: PyYAML glue only; parses dbt_project.yml and profiles.yml with yaml.safe_load and reports YAMLError as DbtProfileError. Existence, mapping, field and target validation and output selection are native (dbt_interop/profile_load.rs)."
 
 [[stays]]
 path = "integrations/dbt/_helpers/profile/render.py"
@@ -325,19 +370,9 @@ reason = "user-code"
 note = "Captures the command's stdout, stderr and logging into the local compute log around user code."
 
 [[stays]]
-path = "cli/commands/main/entrypoint/_dispatch_with_output_capture.py"
-reason = "user-code"
-note = "Tees the command's Python output streams to configured output capture sinks."
-
-[[stays]]
 path = "cli/commands/_helpers/entry/compute_log_diagnostics.py"
 reason = "user-code"
 note = "Logs compute log capture failures through Python logging during capture."
-
-[[stays]]
-path = "integrations/dbt/_helpers/profile/init.py"
-reason = "user-code"
-note = "Initializes a SQLBuild project from the user's dbt project and runs dbt debug as a subprocess."
 
 [[stays]]
 path = "cli/compile_reuse/_helpers/provider_settings.py"
@@ -435,16 +470,6 @@ reason = "user-code"
 note = "Imports user materialization modules."
 
 [[stays]]
-path = "compiler/frontier/_helpers/code_identity.py"
-reason = "user-code"
-note = "Fingerprints the loaded Python modules behind cached compiler and rule results."
-
-[[stays]]
-path = "compiler/frontier/main/compiled_code_identity.py"
-reason = "user-code"
-note = "Entry point for the loaded-code identity of cached compiler and rule results."
-
-[[stays]]
 path = "compiler/macro_bridge/main"
 reason = "user-code"
 note = "Macro bridge entry points for the running render stage that executes user macros."
@@ -490,11 +515,6 @@ reason = "public-api"
 note = "Reads the declaration attached to a project audit factory."
 
 [[stays]]
-path = "compiler/auditing/main/_builtins.py"
-reason = "public-api"
-note = "Built-in audit factories written against the public audit factory API."
-
-[[stays]]
 path = "compiler/sql_analysis/main/import_polyglot.py"
 reason = "public-api"
 note = "Imports the Polyglot Python package for the Python API."
@@ -508,11 +528,6 @@ note = "Imports the Polyglot SQL Python package for the Python API."
 path = "compiler/sql_analysis/_helpers/polyglot.py"
 reason = "public-api"
 note = "Wraps the Polyglot Python package with complexity guards."
-
-[[stays]]
-path = "compiler/profiling"
-reason = "public-api"
-note = "Compile timing collectors built on Python context managers and clocks."
 
 [[stays]]
 path = "assets.py"

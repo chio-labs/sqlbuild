@@ -1,20 +1,21 @@
 import dataclasses
+from collections.abc import Callable
 from itertools import product
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+import sqlbuild.compiler.compile.models as compile_models
 from sqlbuild._native import build_compiled_project, discover_project_inputs
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.rule_engine._helpers.engine import custom_rules, fact_replay
+from sqlbuild.rule_engine._helpers.engine import fact_replay
 from sqlbuild.rule_engine._helpers.engine.fact_replay import (
     fact_outcome_digest,
     shared_fact_encoder,
 )
-from sqlbuild.rule_engine._helpers.host import custom_host_pool
 from sqlbuild.rule_engine.classes.project_tree import public_model
 from sqlbuild.rule_engine.classes.rule_context import RuleFactViews, build_rule_fact_views
 from sqlbuild.rule_engine.models import Model
@@ -112,13 +113,14 @@ def fact_digests(*, project: CompiledProjectView, root: Path) -> dict[FactKey, t
 def record_trimmed_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> dict[type[object], set[str]]:
-    """Record replaced fields and omitted constructor fields in the host-payload trimmers."""
+    """Record replaced fields and omitted constructor fields while the host payload is trimmed."""
 
     trimmed: dict[type[object], set[str]] = {CompiledProject: set(), CompiledModel: set()}
+    replace: Callable[..., Any] = dataclasses.replace
 
     def recording_replace(obj: Any, /, **changes: object) -> Any:
         trimmed.setdefault(type(obj), set()).update(changes)
-        return dataclasses.replace(obj, **changes)
+        return replace(obj, **changes)
 
     def recording_model(**values: Any) -> CompiledModel:
         trimmed[CompiledModel].update(
@@ -126,7 +128,6 @@ def record_trimmed_fields(
         )
         return CompiledModel(**values)
 
-    monkeypatch.setattr(custom_rules, "replace", recording_replace)
-    monkeypatch.setattr(custom_host_pool, "replace", recording_replace)
-    monkeypatch.setattr(custom_host_pool, "CompiledModel", recording_model)
+    monkeypatch.setattr(dataclasses, "replace", recording_replace)
+    monkeypatch.setattr(compile_models, "CompiledModel", recording_model)
     return trimmed

@@ -2,7 +2,7 @@
 
 import threading
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence, Set
-from concurrent.futures import Future
+from concurrent.futures import Executor, Future
 from contextlib import AbstractContextManager
 from contextvars import Token
 from dataclasses import Field
@@ -11,7 +11,8 @@ from decimal import Decimal
 from enum import StrEnum
 from pathlib import Path, PurePath
 from threading import Event
-from typing import Any, ClassVar, Literal, Protocol, TextIO, TypedDict
+from types import TracebackType
+from typing import Any, ClassVar, Literal, Protocol, Self, TextIO, TypedDict
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
@@ -258,9 +259,7 @@ from sqlbuild.compiler.scopes.models import (
     UsageRecord,
     VisibilityResolution,
 )
-from sqlbuild.compiler.scopes.types import (
-    DeclarationKind,
-)
+from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.compiler.source_freshness.models import (
     DirectSourceFreshnessPlanningResult,
     SourceFreshnessRecord,
@@ -275,18 +274,9 @@ from sqlbuild.compiler.sql_test_glue.models import (
     NativeSqlTestChainRequest,
     NativeSqlTestPlanningRequest,
 )
-from sqlbuild.cost.models import (
-    CostResourceContext,
-    RunCostSummary,
-    StatementExecutionTelemetry,
-)
+from sqlbuild.cost.models import CostResourceContext, RunCostSummary, StatementExecutionTelemetry
 from sqlbuild.cost.types import CostStatus
-from sqlbuild.cursor_algebra.models import (
-    AlignedInterval,
-    DateValue,
-    Duration,
-    TimestampValue,
-)
+from sqlbuild.cursor_algebra.models import AlignedInterval, DateValue, Duration, TimestampValue
 from sqlbuild.cursor_algebra.types import Bound, BoundSentinel, CursorScalar
 from sqlbuild.diagnostics.models import ProcessResourceUsage
 from sqlbuild.executor.auditing.models import AuditExecutionResult
@@ -307,14 +297,17 @@ from sqlbuild.executor.python_nodes.models import (
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotCaptureRunResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
-from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCommandResult,
+    DbtInitRequest,
+    DbtInitResult,
+    DbtLsResult,
     DbtNodeExecutionResult,
     NormalizedDbtProfileConnection,
     ResolvedDbtProfileOutput,
 )
+from sqlbuild.integrations.dbt.types import DbtInvoker
 from sqlbuild.lint.models import (
     CompileFacts,
     ExpandedLintFile,
@@ -336,9 +329,11 @@ from sqlbuild.presentation.types import TransientLineOwner
 from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.rule_engine.models import (
+    CustomRulesOutcome,
     Finding,
     NativeRulesEvaluation,
     PreparedSqlLint,
+    PreparedSqlLintResult,
     Rule,
     RuleRunPlan,
     RulesConfig,
@@ -347,10 +342,38 @@ from sqlbuild.rule_engine.models import (
     SqlExpansionReuse,
     SqlRulesEvaluation,
 )
+from sqlbuild.runtime.compute_logs.models import (
+    CaptureByteCounts,
+    CaptureInventory,
+    CaptureMetadata,
+    ComputeLogReadChunk,
+    FinalCaptureMetadata,
+    PruneResult,
+)
+from sqlbuild.runtime.compute_logs.types import ComputeLogStream
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
+from sqlbuild.runtime.execution_history.models import (
+    EventFilter,
+    EventPage,
+    RunFilter,
+    RunPage,
+    RunRecord,
+    StoredEvent,
+)
+from sqlbuild.runtime.execution_history.types import (
+    CanonicalLifecycleEvent,
+    LifecycleEventLogStorage,
+    RunStorage,
+)
 from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
-from sqlbuild.runtime.observability.models import LifecycleEvent
+from sqlbuild.runtime.observability.models import DiagnosticLog, LifecycleEvent
+from sqlbuild.runtime.output_capture.models import (
+    CommandOutputCaptureSummary,
+    CommandOutputRecord,
+    OutputCaptureContext,
+)
+from sqlbuild.runtime.output_capture.types import CommandOutputStream
 from sqlbuild.spec.contracts.models import (
     CostConfig,
     DbtConfig,
@@ -3075,6 +3098,42 @@ def plan_dbt_interop_command(
     command_args: DbtInteropCommandArgs,
 ) -> DbtInteropPlan: ...
 def resolve_dbt_executable() -> str: ...
+
+class DbtRunner:
+    dbt_executable: str
+    invoker: DbtInvoker | None
+    def __init__(
+        self, *, dbt_executable: str | None = None, invoker: DbtInvoker | None = None
+    ) -> None: ...
+    def compile(
+        self, *, options: DbtCliOptions, full_refresh: bool = False
+    ) -> DbtCommandResult: ...
+    def deps(self, *, options: DbtCliOptions) -> DbtCommandResult: ...
+    def debug(self, *, options: DbtCliOptions, args: Sequence[str] = ()) -> DbtCommandResult: ...
+    def ls(
+        self,
+        *,
+        options: DbtCliOptions,
+        select: Sequence[str] = (),
+        exclude: Sequence[str] = (),
+        resource_types: Sequence[str] = (),
+    ) -> DbtLsResult: ...
+    def invoke(self, *, argv: tuple[str, ...], cwd: Path | None) -> DbtCommandResult: ...
+
+def execute_dbt_json_event_stream(
+    *,
+    argv: tuple[str, ...],
+    cwd: Path | None,
+    stream: TextIO,
+    use_color: bool,
+    target_path: Path | None,
+    display_total: int | None = None,
+    on_node_result: Callable[[DbtNodeExecutionResult], None] | None = None,
+    detail_by_unique_id: dict[str, str] | None = None,
+    enable_status: bool = True,
+) -> tuple[int, tuple[DbtNodeExecutionResult, ...]]: ...
+def build_dbt_init_project(*, request: DbtInitRequest) -> DbtInitResult: ...
+def validate_dbt_init_project(*, request: DbtInitRequest) -> None: ...
 def build_dbt_compile_argv(
     *, dbt_executable: str, options: DbtCliOptions, full_refresh: bool = False
 ) -> tuple[str, ...]: ...
@@ -3411,6 +3470,179 @@ class CliObservabilityScope:
     def __exit__(self, *exc_info: object) -> bool: ...
 
 def cli_observability_scope(*, args: CliNamespace, project_dir: Path) -> CliObservabilityScope: ...
+
+class OutputCaptureDispatcher:
+    """Turn stream fragments into bounded text chunks and export them off execution threads."""
+
+    def __init__(
+        self,
+        *,
+        exporter: object,
+        invocation_id: str,
+        run_id: str | None = None,
+        external_context: Mapping[str, object] | None = None,
+        queue_capacity: int = 1024,
+        batch_size: int = 64,
+        max_record_bytes: int = 65536,
+        shutdown_timeout_seconds: float = 2.0,
+        clock: Callable[[], datetime] | None = None,
+        failure_callback: Callable[[BaseException], object] | None = None,
+    ) -> None: ...
+    def append(self, *, stream: CommandOutputStream, text: str) -> None: ...
+    def close(self) -> CommandOutputCaptureSummary: ...
+
+class OutputDeliveryWorker:
+    def __call__(self) -> None: ...
+
+class CommandOutputContext:
+    def __enter__(self) -> None: ...
+    def __exit__(self, *exc_info: object) -> bool: ...
+
+def command_output_context(*, external_context: Mapping[str, object]) -> CommandOutputContext: ...
+def current_output_capture_context() -> OutputCaptureContext | None: ...
+def chunk_command_output_text(*, text: str, max_bytes: int) -> tuple[str, ...]: ...
+def freeze_command_output_record(record: CommandOutputRecord, /) -> Mapping[str, object]: ...
+def command_output_to_json(record: CommandOutputRecord, /) -> str: ...
+def command_output_from_json(raw_json: str, /) -> CommandOutputRecord: ...
+def invocation_context_from_environment(
+    *, environment: Mapping[str, str] | None = None
+) -> Mapping[str, object]: ...
+
+class LocalFilesystemComputeLogStorage:
+    """Ordered fsync capture storage subject to underlying filesystem and hardware guarantees."""
+
+    def __init__(
+        self,
+        *,
+        project_dir: Path,
+        root: Path | None = None,
+        retention_count: int | None = 20,
+    ) -> None: ...
+    @property
+    def root(self) -> Path: ...
+    def start_capture(self, metadata: CaptureMetadata) -> None: ...
+    def append(self, *, invocation_id: str, stream: ComputeLogStream, data: bytes) -> None: ...
+    def append_diagnostic(self, *, invocation_id: str, record: DiagnosticLog) -> None: ...
+    def read(
+        self,
+        *,
+        invocation_id: str,
+        stream: ComputeLogStream,
+        cursor: int = 0,
+        max_bytes: int = 1_048_576,
+    ) -> ComputeLogReadChunk: ...
+    def get_metadata(self, *, invocation_id: str) -> CaptureMetadata | FinalCaptureMetadata: ...
+    def get_byte_count(self, *, invocation_id: str, stream: ComputeLogStream) -> int: ...
+    def get_byte_counts(self, *, invocation_id: str) -> CaptureByteCounts: ...
+    def is_complete(self, *, invocation_id: str) -> bool: ...
+    def mark_complete(self, metadata: FinalCaptureMetadata) -> None: ...
+    def delete(self, *, invocation_id: str) -> None: ...
+    def prune(self, retain_count: int | None = None) -> PruneResult: ...
+    def inventory(self) -> CaptureInventory: ...
+    def close(self) -> None: ...
+    def dispose(self) -> None: ...
+    def __enter__(self) -> Self: ...
+    def __exit__(
+        self,
+        exception_type: type[BaseException] | None,
+        exception: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None: ...
+
+class _ExecutionHistoryStorage:
+    @property
+    def project_calls(self) -> int: ...
+    def append_event(self, event: CanonicalLifecycleEvent) -> StoredEvent: ...
+    def append_events(
+        self, events: Iterable[CanonicalLifecycleEvent]
+    ) -> tuple[StoredEvent, ...]: ...
+    def get_events(
+        self,
+        *,
+        event_filter: EventFilter,
+        after_cursor: str | None = None,
+        limit: int = 100,
+    ) -> EventPage: ...
+    def get_run(self, run_id: str) -> RunRecord | None: ...
+    def get_runs(
+        self,
+        *,
+        run_filter: RunFilter,
+        after_cursor: str | None = None,
+        limit: int = 100,
+    ) -> RunPage: ...
+    def project(self, stored_events: Iterable[StoredEvent]) -> tuple[RunRecord, ...]: ...
+    def rebuild_from_events(
+        self, stored_events: Iterable[StoredEvent]
+    ) -> tuple[RunRecord, ...]: ...
+    def append_and_project(
+        self, events: Iterable[CanonicalLifecycleEvent]
+    ) -> tuple[StoredEvent, ...]: ...
+    def reconcile(self) -> tuple[RunRecord, ...]: ...
+    def check_health(self) -> bool: ...
+    def get_schema_version(self) -> int: ...
+    def upgrade_schema(self, *, target_version: int | None = None) -> int: ...
+    def close(self) -> None: ...
+    def dispose(self) -> None: ...
+    def __enter__(self) -> Self: ...
+    def __exit__(
+        self,
+        exception_type: type[BaseException] | None,
+        exception: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None: ...
+
+class SQLiteExecutionHistory(_ExecutionHistoryStorage):
+    """Project-local SQLite implementation of event-log and run-projection storage contracts."""
+
+    _connection: Any
+    def __init__(
+        self,
+        project_dir: Path | str | None = None,
+        *,
+        path: Path | str | None = None,
+        busy_timeout_ms: int = 5_000,
+    ) -> None: ...
+    @property
+    def path(self) -> Path | None: ...
+    def _migrate(self) -> None: ...
+    def _read_all_events(self) -> tuple[StoredEvent, ...]: ...
+    def _publish_projection(self, projected: tuple[RunRecord, ...]) -> None: ...
+
+class PostgresExecutionHistory(_ExecutionHistoryStorage):
+    """Deployed PostgreSQL implementation of event-log and run-projection contracts."""
+
+    _connection: Any
+    def __init__(
+        self,
+        dsn: str,
+        *,
+        connect_timeout_seconds: int = 10,
+        statement_timeout_ms: int = 30_000,
+        max_transaction_retries: int = 3,
+    ) -> None: ...
+    def _append_events(
+        self, *, cursor: Any, events: tuple[CanonicalLifecycleEvent, ...]
+    ) -> tuple[StoredEvent, ...]: ...
+    def _replace_projection(self, *, cursor: Any, projected: tuple[RunRecord, ...]) -> None: ...
+    def _read_all_events(self, *, cursor: Any) -> tuple[StoredEvent, ...]: ...
+
+def canonical_event_id(event: CanonicalLifecycleEvent) -> str: ...
+def canonical_event_content(event: CanonicalLifecycleEvent) -> str: ...
+def project_execution_runs(
+    *, stored_events: Iterable[StoredEvent], current_runs: Iterable[RunRecord] | None = None
+) -> tuple[RunRecord, ...]: ...
+def validate_history_page_limit(limit: int) -> None: ...
+def append_and_project(
+    *,
+    event_log: LifecycleEventLogStorage,
+    run_storage: RunStorage,
+    events: Iterable[CanonicalLifecycleEvent],
+) -> tuple[StoredEvent, ...]: ...
+def validate_stored_history_event(record: StoredEvent) -> None: ...
+def validate_history_event_filter(event_filter: EventFilter) -> None: ...
+def validate_history_run_filter(run_filter: RunFilter) -> None: ...
+def validate_history_page(*, page: EventPage | RunPage, is_event_page: bool) -> None: ...
 def current_native_progress_projector() -> NativeProgressProjector | None: ...
 
 class ConnectionProgressReporter:
@@ -5172,8 +5404,7 @@ class SqlTestScanCache:
 SQL_TEST_SCAN_STORE_FILE_NAME: str
 
 def content_digest(parts: list[str]) -> str: ...
-def installed_code_identity(facts: list[str], package_root: str | None) -> str: ...
-def compiled_code_identity(installed: str, build_identity: str) -> str: ...
+def compiled_code_identity() -> str: ...
 def fingerprint_project_files(root: str, excluded_files: list[str]) -> str: ...
 def digest_files(paths: list[str]) -> list[str | None]: ...
 
@@ -6450,38 +6681,73 @@ def custom_rule_identity(
     dialect: str,
     project_dir: str,
 ) -> str: ...
+def evaluate_project_rules(
+    *,
+    project: CompiledProjectView,
+    config: RulesConfig,
+    project_dir: Path,
+    dialect: str = "generic",
+    verify_determinism: bool = False,
+) -> RulesResult: ...
+def evaluate_native_rules(
+    *,
+    project: CompiledProjectView,
+    config: RulesConfig,
+    project_dir: Path,
+    catalogue: tuple[Rule, ...],
+    dialect: str = "generic",
+    initial_findings: tuple[Finding, ...] | None = None,
+    defer_suppressions: bool = False,
+    verify_determinism: bool = False,
+) -> RulesResult: ...
+def evaluate_custom_rules(
+    *,
+    project: CompiledProjectView,
+    config: RulesConfig,
+    project_dir: Path,
+    rules: tuple[Rule, ...],
+    dialect: str,
+    verify_determinism: bool = False,
+    implementation_fingerprints: dict[str, str] | None = None,
+) -> CustomRulesOutcome: ...
+def custom_host_payload(project: CompiledProjectView) -> CompiledProject: ...
 
-class CustomRuleCache:
-    """One custom-rule run's subjects, reused and new results, and its cache file."""
-
+class CustomHostObserver:
     def __init__(
         self,
         *,
-        path: Path | None,
-        rules: list[tuple[str, str | None, str | None]],
-        target_name: str | None,
-        models: list[tuple[str, str, str | None]],
+        cores: int | None = None,
+        min_invocations_per_host: int | None = None,
+        publish_inputs: Callable[[Path], object] | None = None,
     ) -> None: ...
-    def pending_readsets(self) -> list[tuple[tuple[str, ...], ...]]: ...
-    def plan(self, *, digests: list[str | None]) -> dict[str, list[str] | None]: ...
-    def record(
-        self,
-        *,
-        evaluated: list[
-            tuple[
-                str,
-                str,
-                tuple[tuple[tuple[str, ...], ...], str | None] | None,
-                list[dict[str, object]],
-            ]
-        ],
-    ) -> None: ...
-    def findings(self) -> list[Finding]: ...
-    @property
-    def hits(self) -> int: ...
-    @property
-    def misses(self) -> int: ...
+    def launches(self) -> tuple[str, ...]: ...
 
+custom_host_observer: CustomHostObserver | None
+
+def evaluate_rules(
+    *,
+    graph: ProjectGraph,
+    discovered_inputs: DiscoveredProjectInputs,
+    config: RulesConfig,
+    project_dir: Path,
+    dialect: str,
+    selected_keys: frozenset[CompiledObjectKey] | None = None,
+    prepared_sql: PreparedSqlLint | None = None,
+    expansion_reuse: SqlExpansionReuse | None = None,
+    no_sql_analysis: bool = False,
+) -> RulesRunResult: ...
+def prepare_sql_rules(
+    *, inputs: CompileInputsView, executor: Executor, dialect: str, stop: Event
+) -> PreparedSqlLint | None: ...
+def prepare_early_sql_lint(
+    *,
+    project_dir: Path,
+    config: LintConfig,
+    discovered_inputs: DiscoveredProjectInputs,
+    static_declaration_scope: DeclarationScopeBuild | None,
+    compiled_expansions: dict[Path, CompiledSqlExpansion],
+    stop: Event,
+) -> PreparedSqlLintResult: ...
 def custom_rule_test_evidence(
     *, rule: Rule, project_dir: Path
 ) -> list[tuple[str, int, int, str]]: ...

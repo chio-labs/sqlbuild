@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import rules_bulk_cache_path
+from sqlbuild._native import CustomHostObserver, rules_bulk_cache_path
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.rule_engine._helpers.host import custom_host, custom_host_pool
+from sqlbuild.rule_engine._helpers.host import custom_host
 from sqlbuild.rule_engine.constants import CUSTOM_RULES_CACHE_FILE
 from sqlbuild.rule_engine.exceptions import HostCancelledError, RulesError
 from sqlbuild.rule_engine.models import CustomRulesOutcome
@@ -17,14 +17,17 @@ from tests.unit.src.sqlbuild.rule_engine._helpers.host._test_types import (
     HostCancellationTestCase,
     HostFailureTestCase,
     HostInputsTestCase,
+    HostInterruptTestCase,
     HostPartitionTestCase,
-    HostPlanTestCase,
 )
 from tests.unit.src.sqlbuild.rule_engine._helpers.host.helpers import (
-    delay_inputs,
+    child_processes,
+    delayed_publish,
     evaluate_order_rules,
-    fail_inputs,
-    fail_inputs_without_directory,
+    failed_publish,
+    failed_publish_without_directory,
+    host_inputs_left,
+    interrupting_publish,
     orders_project,
     record_signals,
     touch_files,
@@ -82,21 +85,21 @@ def test_given_partitioned_hosts_when_evaluating_then_findings_and_cache_match_o
     cache_glob: str = cache_path.relative_to(tmp_path).as_posix()
     cache_enabled: bool = test_case.cache_enabled
 
-    single_launches: list[str] = use_hosts(monkeypatch=monkeypatch, hosts=1)
+    single_hosts: CustomHostObserver = use_hosts(monkeypatch=monkeypatch, hosts=1)
     single: CustomRulesOutcome = evaluate_order_rules(
         project=project, root=tmp_path, cache_enabled=cache_enabled
     )
     single_warm: CustomRulesOutcome = evaluate_order_rules(
         project=project, root=tmp_path, cache_enabled=cache_enabled
     )
+    single_launches: int = len(single_hosts.launches())
     single_cache: bytes = b"".join(path.read_bytes() for path in tmp_path.glob(cache_glob))
     cache_path.unlink(missing_ok=True)
-    monkeypatch.undo()
-    split_launches: list[str] = use_hosts(monkeypatch=monkeypatch, hosts=test_case.hosts)
+    split_hosts: CustomHostObserver = use_hosts(monkeypatch=monkeypatch, hosts=test_case.hosts)
     split: CustomRulesOutcome = evaluate_order_rules(
         project=project, root=tmp_path, cache_enabled=cache_enabled
     )
-    split_cold_launches: int = len(split_launches)
+    split_cold_launches: int = len(split_hosts.launches())
     split_cache: bytes = b"".join(path.read_bytes() for path in tmp_path.glob(cache_glob))
     split_warm: CustomRulesOutcome = evaluate_order_rules(
         project=project, root=tmp_path, cache_enabled=cache_enabled
@@ -104,7 +107,7 @@ def test_given_partitioned_hosts_when_evaluating_then_findings_and_cache_match_o
 
     assert split.findings == single.findings
     assert split_warm.findings == single_warm.findings == single.findings
-    assert len(single_launches) == 1 + int(not cache_enabled)
+    assert single_launches == 1 + int(not cache_enabled)
     assert split_cold_launches == test_case.expected_host_runs
     assert (split.cache_hits, split.cache_misses) == (single.cache_hits, single.cache_misses)
     assert (split_warm.cache_hits, split_warm.cache_misses) == (
@@ -113,7 +116,7 @@ def test_given_partitioned_hosts_when_evaluating_then_findings_and_cache_match_o
     )
     assert split_cache == single_cache
     assert bool(single_cache) is cache_enabled
-    assert not tuple((tmp_path / "target" / "rules-cache" / "host-inputs").iterdir())
+    assert not host_inputs_left(tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -133,12 +136,12 @@ def test_given_results_cached_by_split_hosts_when_rerunning_then_only_edited_sub
     edited: CompiledProjectView = orders_project(
         model_count=test_case.model_count, edits={"orders_003": "SELECT 2 AS order_id"}
     )
-    launches: list[str] = use_hosts(monkeypatch=monkeypatch, hosts=test_case.hosts)
+    hosts: CustomHostObserver = use_hosts(monkeypatch=monkeypatch, hosts=test_case.hosts)
 
     cold: CustomRulesOutcome = evaluate_order_rules(project=project, root=tmp_path)
-    cold_launches: int = len(launches)
+    cold_launches: int = len(hosts.launches())
     warm: CustomRulesOutcome = evaluate_order_rules(project=project, root=tmp_path)
-    warm_launches: int = len(launches) - cold_launches
+    warm_launches: int = len(hosts.launches()) - cold_launches
     after_edit: CustomRulesOutcome = evaluate_order_rules(project=edited, root=tmp_path)
     oracle: CustomRulesOutcome = evaluate_order_rules(
         project=edited, root=tmp_path, cache_enabled=False
@@ -179,52 +182,13 @@ def test_given_failing_rule_on_split_hosts_when_evaluating_then_single_host_erro
     _ = use_hosts(monkeypatch=monkeypatch, hosts=1)
     with pytest.raises(RulesError) as single:
         _ = evaluate_order_rules(project=project, root=tmp_path)
-    monkeypatch.undo()
     _ = use_hosts(monkeypatch=monkeypatch, hosts=3)
     with pytest.raises(RulesError) as split:
         _ = evaluate_order_rules(project=project, root=tmp_path)
 
     assert str(split.value) == str(single.value)
     assert f"cannot inspect {test_case.expected_failing_model}" in str(split.value)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        HostPlanTestCase(
-            description="project rules and whole subjects are dealt round-robin",
-            plan={"XSQBRT101": None, "XSQBRT102": None, "XSQBRT103": ["models/b.sql"]},
-            invocations=(
-                ("XSQBRT102", ""),
-                ("XSQBRT101", "models/a.sql"),
-                ("XSQBRT101", "models/b.sql"),
-                ("XSQBRT103", "models/b.sql"),
-                ("XSQBRT101", "models/c.sql"),
-            ),
-            hosts=2,
-            expected_plans=(
-                {"XSQBRT101": ["models/b.sql"], "XSQBRT102": [""], "XSQBRT103": ["models/b.sql"]},
-                {"XSQBRT101": ["models/a.sql", "models/c.sql"], "XSQBRT102": [], "XSQBRT103": []},
-            ),
-        ),
-        HostPlanTestCase(
-            description="one subject keeps the original plan",
-            plan={"XSQBRT101": None},
-            invocations=(("XSQBRT101", "models/a.sql"),),
-            hosts=4,
-            expected_plans=({"XSQBRT101": None},),
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_planned_invocations_when_partitioning_then_split_is_deterministic(
-    test_case: HostPlanTestCase,
-) -> None:
-    plans: tuple[dict[str, list[str] | None], ...] = custom_host_pool.partition_host_plan(
-        plan=test_case.plan, invocations=test_case.invocations, hosts=test_case.hosts
-    )
-
-    assert plans == test_case.expected_plans
+    assert not host_inputs_left(tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -234,7 +198,6 @@ def test_given_planned_invocations_when_partitioning_then_split_is_deterministic
             description="busy hosts stop at their next invocation",
             model_count=60,
             hosts=3,
-            timeout_millis=120_000,
             delay_seconds=2.0,
             expected_error_fragment="cannot inspect orders_000",
             expected_max_seconds=20.0,
@@ -247,8 +210,8 @@ def test_given_failing_host_when_others_are_busy_then_they_stop_before_later_inv
 ) -> None:
     write_order_rules(root=tmp_path, failing=("orders_000",), delay_seconds=test_case.delay_seconds)
     project: CompiledProjectView = orders_project(model_count=test_case.model_count)
-    launches: list[str] = use_hosts(monkeypatch=monkeypatch, hosts=test_case.hosts)
-    monkeypatch.setattr(custom_host_pool, "_HOST_TIMEOUT_MILLIS", test_case.timeout_millis)
+    hosts: CustomHostObserver = use_hosts(monkeypatch=monkeypatch, hosts=test_case.hosts)
+    signals: list[tuple[int, int]] = record_signals(monkeypatch=monkeypatch)
     started: float = time.monotonic()
 
     with pytest.raises(RulesError) as raised:
@@ -256,38 +219,45 @@ def test_given_failing_host_when_others_are_busy_then_they_stop_before_later_inv
 
     assert time.monotonic() - started < test_case.expected_max_seconds
     assert test_case.expected_error_fragment in str(raised.value)
-    assert len(launches) == test_case.hosts + 1
-    assert not tuple((tmp_path / "target" / "rules-cache" / "host-inputs").iterdir())
+    assert len(hosts.launches()) == test_case.hosts + 1
+    assert signals == []
+    assert not host_inputs_left(tmp_path)
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
-        HostCancellationTestCase(
-            description="busy hosts stop at their next invocation",
+        HostInterruptTestCase(
+            description="busy split hosts stop after an interrupt",
             model_count=60,
             hosts=3,
-            timeout_millis=120_000,
-            delay_seconds=2.0,
-            expected_error_fragment="cannot inspect orders_000",
-            expected_max_seconds=20.0,
+            delay_seconds=1.0,
+            interrupt_after_seconds=1.5,
+            expected_max_seconds=10.0,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_cancelled_hosts_when_failing_then_no_process_is_signalled(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: HostCancellationTestCase
+def test_given_busy_split_hosts_when_interrupted_then_hosts_stop_and_no_process_remains(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: HostInterruptTestCase
 ) -> None:
-    write_order_rules(root=tmp_path, failing=("orders_000",), delay_seconds=test_case.delay_seconds)
+    write_order_rules(root=tmp_path, delay_seconds=test_case.delay_seconds)
     project: CompiledProjectView = orders_project(model_count=test_case.model_count)
-    _ = use_hosts(monkeypatch=monkeypatch, hosts=test_case.hosts)
-    signals: list[tuple[int, int]] = record_signals(monkeypatch=monkeypatch)
+    children_before: frozenset[int] = child_processes()
+    hosts: CustomHostObserver = use_hosts(
+        monkeypatch=monkeypatch,
+        hosts=test_case.hosts,
+        publish_inputs=interrupting_publish(test_case.interrupt_after_seconds),
+    )
+    started: float = time.monotonic()
 
-    with pytest.raises(RulesError) as raised:
+    with pytest.raises(KeyboardInterrupt):
         _ = evaluate_order_rules(project=project, root=tmp_path)
 
-    assert signals == []
-    assert test_case.expected_error_fragment in str(raised.value)
+    assert time.monotonic() - started < test_case.expected_max_seconds
+    assert len(hosts.launches()) == test_case.hosts
+    assert child_processes() <= children_before
+    assert not host_inputs_left(tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -318,16 +288,19 @@ def test_given_hosts_started_before_payload_when_payload_arrives_then_findings_a
     oracle: CustomRulesOutcome = evaluate_order_rules(
         project=project, root=tmp_path, cache_enabled=False
     )
-    launches: list[str] = use_hosts(monkeypatch=monkeypatch, hosts=test_case.hosts)
-    delay_inputs(monkeypatch=monkeypatch, delay_seconds=test_case.write_delay_seconds)
+    hosts: CustomHostObserver = use_hosts(
+        monkeypatch=monkeypatch,
+        hosts=test_case.hosts,
+        publish_inputs=delayed_publish(test_case.write_delay_seconds),
+    )
     started: float = time.monotonic()
 
     delayed: CustomRulesOutcome = evaluate_order_rules(project=project, root=tmp_path)
 
     assert time.monotonic() - started < test_case.expected_max_seconds
-    assert len(launches) == test_case.hosts
+    assert len(hosts.launches()) == test_case.hosts
     assert delayed.findings == oracle.findings
-    assert not tuple((tmp_path / "target" / "rules-cache" / "host-inputs").iterdir())
+    assert not host_inputs_left(tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -355,16 +328,19 @@ def test_given_payload_write_failure_when_hosts_wait_then_original_error_is_rais
 ) -> None:
     write_order_rules(root=tmp_path)
     project: CompiledProjectView = orders_project(model_count=test_case.model_count)
-    launches: list[str] = use_hosts(monkeypatch=monkeypatch, hosts=test_case.hosts)
-    fail_inputs(monkeypatch=monkeypatch, delay_seconds=test_case.write_delay_seconds)
+    hosts: CustomHostObserver = use_hosts(
+        monkeypatch=monkeypatch,
+        hosts=test_case.hosts,
+        publish_inputs=failed_publish(test_case.write_delay_seconds),
+    )
     started: float = time.monotonic()
 
     with pytest.raises(OSError, match="project payload disk is full"):
         _ = evaluate_order_rules(project=project, root=tmp_path)
 
     assert time.monotonic() - started < test_case.expected_max_seconds
-    assert len(launches) == test_case.hosts
-    assert not tuple((tmp_path / "target" / "rules-cache" / "host-inputs").iterdir())
+    assert len(hosts.launches()) == test_case.hosts
+    assert not host_inputs_left(tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -392,17 +368,17 @@ def test_given_input_folder_removed_when_payload_write_fails_then_original_error
 ) -> None:
     write_order_rules(root=tmp_path)
     project: CompiledProjectView = orders_project(model_count=test_case.model_count)
-    launches: list[str] = use_hosts(monkeypatch=monkeypatch, hosts=test_case.hosts)
-    failures: list[float] = fail_inputs_without_directory(
-        monkeypatch=monkeypatch, delay_seconds=test_case.write_delay_seconds
+    publish, failures = failed_publish_without_directory(test_case.write_delay_seconds)
+    hosts: CustomHostObserver = use_hosts(
+        monkeypatch=monkeypatch, hosts=test_case.hosts, publish_inputs=publish
     )
 
     with pytest.raises(OSError, match="project payload disk is full"):
         _ = evaluate_order_rules(project=project, root=tmp_path)
 
     assert time.monotonic() - failures[0] < test_case.expected_max_seconds
-    assert len(launches) == test_case.hosts
-    assert not tuple((tmp_path / "target" / "rules-cache" / "host-inputs").iterdir())
+    assert len(hosts.launches()) == test_case.hosts
+    assert not host_inputs_left(tmp_path)
 
 
 @pytest.mark.parametrize(

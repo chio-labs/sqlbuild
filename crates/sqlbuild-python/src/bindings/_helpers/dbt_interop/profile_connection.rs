@@ -11,9 +11,11 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::dbt_interop::cli::resolved_path;
+use crate::bindings::_helpers::dbt_interop::profile_load::{
+    default_profiles_dir, load_dbt_project_metadata, load_selected_dbt_profile_output,
+};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const PROFILE_LOAD_MODULE: &str = "sqlbuild.integrations.dbt._helpers.profile.load";
 const PROFILE_RENDER_MODULE: &str = "sqlbuild.integrations.dbt._helpers.profile.render";
 const DBT_ERRORS_MODULE: &str = "sqlbuild.integrations.dbt.exceptions";
 const DBT_PROFILE_SOURCE: &str = "dbt_profile";
@@ -28,7 +30,7 @@ const PROFILE_CONNECTION_OPTIONS: (&[&str], &[&str]) = (
 );
 const NON_EMPTY_MESSAGE: &str = "dbt_profile connection values must be non-empty strings";
 
-fn profile_error(py: Python<'_>, message: String) -> PyErr {
+pub(crate) fn profile_error(py: Python<'_>, message: String) -> PyErr {
     match imported(py, DBT_ERRORS_MODULE, "DbtProfileError")
         .and_then(|class| class.call1((message,)))
     {
@@ -64,10 +66,6 @@ fn or_config(value: Option<String>, fallback: &Bound<'_, PyAny>) -> PyResult<Opt
     Ok(Some(fallback.extract()?))
 }
 
-fn load<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, PROFILE_LOAD_MODULE, name)
-}
-
 /// The dbt profile reference rendered and normalized into SQLBuild adapter config.
 fn profile_connection<'py>(
     sqlbuild_project_dir: &Bound<'py, PyAny>,
@@ -84,31 +82,14 @@ fn profile_connection<'py>(
     let profiles_dir: Bound<'py, PyAny> = if profiles_dir.is_truthy()? {
         profiles_dir
     } else {
-        load(py, "default_profiles_dir")?.call0()?
+        default_profiles_dir(py)?
     };
-    let profile_name: Bound<'py, PyAny> = match profile_name {
-        Some(name) => PyString::new(py, &name).into_any(),
-        None => call_with(
-            &load(py, "load_dbt_project_metadata")?,
-            &[("project_dir", dbt_project_dir.clone())],
-        )?
-        .getattr("profile_name")?,
+    let profile_name: String = match profile_name {
+        Some(name) => name,
+        None => load_dbt_project_metadata(&dbt_project_dir)?.profile_name,
     };
-    let profile: Bound<'py, PyAny> = call_with(
-        &load(py, "load_raw_dbt_profile")?,
-        &[
-            ("profiles_dir", profiles_dir.clone()),
-            ("profile_name", profile_name),
-        ],
-    )?;
-    let target_name: Bound<'py, PyAny> = target_name.map_or_else(
-        || py.None().into_bound(py),
-        |name| PyString::new(py, &name).into_any(),
-    );
-    let selected: Bound<'py, PyAny> = call_with(
-        &load(py, "select_dbt_profile_output")?,
-        &[("profile", profile), ("target_name", target_name)],
-    )?;
+    let selected: Bound<'py, PyAny> =
+        load_selected_dbt_profile_output(&profiles_dir, &profile_name, target_name.as_deref())?;
     let resolved: Bound<'py, PyAny> = call_with(
         &imported(
             py,

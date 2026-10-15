@@ -4,10 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import build_compile_inputs, discover_project_inputs
+from sqlbuild._native import DbtRunner, build_compile_inputs, discover_project_inputs
 from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult
 from tests.integration.src.sqlbuild.integrations.dbt._test_types import (
     RealDbtManifestCompileTestCase,

@@ -175,6 +175,28 @@ class CustomHostSplitIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class CustomHostFailureIntegrationTestCase:
+    """A compile whose custom rule fails for some models while its hosts are split."""
+
+    description: str
+    model_count: int
+    hosts: int
+    failing_models: tuple[str, ...]
+    expected_failing_model: str
+
+
+@dataclass(frozen=True)
+class CustomHostInterruptIntegrationTestCase:
+    """A compile interrupted while split hosts run a slow custom rule."""
+
+    description: str
+    model_count: int
+    hosts: int
+    interrupt_after_seconds: float
+    expected_max_seconds: float
+
+
+@dataclass(frozen=True)
 class DollarQuotedLiteralBuildTestCase:
     """One model projection with dollar-quoted literals and its built rows."""
 

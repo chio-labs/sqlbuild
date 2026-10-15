@@ -194,9 +194,6 @@ SQL_REFERENCE_KIND_CLASS_NAME: str = "SqlReferenceKind"
 STRICT_ADAPTER_CLASS_NAME: str = "StrictAdapter"
 ATTRIBUTE_REFERENCE_KIND: str = "attribute"
 
-NON_RECURSIVE_EXECUTION_HISTORY_PATH: str = (
-    "src/sqlbuild/runtime/execution_history/classes/postgres_execution_history.py"
-)
 APPROVED_RAW_STATEMENT_MODULES: frozenset[str] = frozenset(
     {
         "src/sqlbuild/adapter/contract/classes/observed_connection.py",

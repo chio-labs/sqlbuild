@@ -5,8 +5,11 @@ use pyo3::types::{PyCFunction, PyDict, PyDictMethods, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use std::collections::HashMap;
 
+use sqlbuild_attachments::audits::constants::BUILTIN_AUDITS;
+
+use crate::bindings::_helpers::compile_driver::compile_timings::record_compile_timing;
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, within,
+    KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::compiled_project::audit_loop::{AuditBlockRow, AuditFileRow};
 use crate::bindings::_helpers::compiled_project::function_loop::FunctionRow;
@@ -28,8 +31,7 @@ const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
 const SCOPE_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
 const AUDITING_TYPES_MODULE: &str = "sqlbuild.compiler.auditing.types";
-const BUILTIN_AUDITS_MODULE: &str = "sqlbuild.compiler.auditing.main._builtins";
-const PROFILING_MODULE: &str = "sqlbuild.compiler.profiling.main._record";
+const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
 const SQL_VALUE_ERRORS_MODULE: &str = "sqlbuild.sql_values.exceptions";
 const YAML_FILE_SUFFIXES: [&str; 2] = [".yml", ".yaml"];
@@ -406,6 +408,39 @@ fn audit_file_row(file: Bound<'_, PyAny>) -> PyResult<AuditFileRow> {
     ))
 }
 
+/// The discovered file of one built-in generic audit, as project discovery would describe it.
+fn builtin_audit_file<'py>(
+    py: Python<'py>,
+    (name, sql_body): (&str, &str),
+) -> PyResult<Bound<'py, PyAny>> {
+    let path_class: Bound<'py, PyAny> = imported(py, PATHLIB_MODULE, "Path")?;
+    let relative_path: Bound<'py, PyAny> =
+        path_class.call1((format!("audits/generic/{name}.sql"),))?;
+    let block: Bound<'py, PyAny> = call_with(
+        &imported(py, DISCOVERY_MODELS_MODULE, "DiscoveredAuditBlock")?,
+        &[
+            ("audit_index", 0.into_bound_py_any(py)?),
+            ("header_values", PyDict::new(py).into_any()),
+            ("sql_body", sql_body.into_bound_py_any(py)?),
+        ],
+    )?;
+    call_with(
+        &imported(py, DISCOVERY_MODELS_MODULE, "DiscoveredAuditFile")?,
+        &[
+            (
+                "file_path",
+                path_class.call1(("<built-in>",))?.div(&relative_path)?,
+            ),
+            ("relative_path", relative_path),
+            (
+                "contents",
+                format!("AUDIT ();\n\n{sql_body}\n").into_bound_py_any(py)?,
+            ),
+            ("blocks", PyTuple::new(py, [block])?.into_any()),
+        ],
+    )
+}
+
 fn audit_settings<'py>(
     py: Python<'py>,
     effective_settings: &Bound<'py, PyAny>,
@@ -424,12 +459,10 @@ fn audit_settings<'py>(
         "default_run_scope",
         effective_settings.getattr("default_audit_run_scope")?,
     )?;
-    let builtins: Vec<AuditFileRow> =
-        imported(py, BUILTIN_AUDITS_MODULE, "builtin_audit_definitions")?
-            .call0()?
-            .try_iter()?
-            .map(|file| audit_file_row(file?))
-            .collect::<PyResult<_>>()?;
+    let builtins: Vec<AuditFileRow> = BUILTIN_AUDITS
+        .iter()
+        .map(|definition| audit_file_row(builtin_audit_file(py, *definition)?))
+        .collect::<PyResult<_>>()?;
     settings.set_item("builtins", builtins)?;
     settings.set_item(
         "declaration_identity",
@@ -584,9 +617,7 @@ pub(crate) fn attach_checks<'py>(
     ) = arguments.value("settings")?.extract()?;
     let scan_cache: &Bound<'py, PyAny> = &arguments.value("scan_cache")?;
     let source_inputs: &Bound<'py, PyAny> = &arguments.value("source_inputs")?;
-    let timing: Bound<'py, PyAny> =
-        imported(py, PROFILING_MODULE, "record_compile_timing")?.call1((TEST_TIMING_KEY,))?;
-    let (tests, scenarios) = within(&timing, |_| {
+    let (tests, scenarios) = record_compile_timing(TEST_TIMING_KEY, || {
         let attached = NativeCompiledProject::attach_sql_tests(
             native_project,
             items(discovered_inputs, "test_files")?

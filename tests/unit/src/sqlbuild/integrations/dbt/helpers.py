@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from types import MappingProxyType
@@ -13,6 +14,7 @@ from sqlbuild._native import (
     DbtCombinedGraph,
     DbtEventStream,
     DbtEventStreamUpdate,
+    DbtRunner,
     assemble_project,
     build_dbt_combined_graph,
     build_dbt_ls_argv,
@@ -28,13 +30,8 @@ from sqlbuild.compiler.compile.models import (
     CompileProjectInputs,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredProjectInputs,
-    DiscoveredSqlModelFile,
-)
-from sqlbuild.compiler.planner.models import (
-    ModelPlanEntry,
-)
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
+from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
     MaterializationType,
@@ -42,7 +39,6 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
 )
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
@@ -495,3 +491,24 @@ def consume_dbt_events(*events: dict[str, object]) -> DbtEventStreamUpdate | Non
         stream.consume(json.dumps(event)) for event in events
     )
     return updates[-1]
+
+
+def fake_dbt_argv(
+    directory: Path,
+    *,
+    lines: tuple[str, ...],
+    sleep_seconds: float = 0.0,
+    after_lines: tuple[str, ...] = (),
+) -> tuple[str, ...]:
+    """argv of a stand-in dbt process printing `lines`, pausing, then printing `after_lines`."""
+
+    script: Path = directory / "fake_dbt.py"
+    _ = script.write_text(
+        "import sys, time\n"
+        f"sys.stdout.write({''.join(lines)!r})\n"
+        "sys.stdout.flush()\n"
+        f"time.sleep({sleep_seconds!r})\n"
+        f"sys.stdout.write({''.join(after_lines)!r})\n",
+        encoding="utf-8",
+    )
+    return (sys.executable, str(script))

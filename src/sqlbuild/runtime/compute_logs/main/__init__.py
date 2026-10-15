@@ -1,1 +1,1 @@
-"""Compute log construction entrypoints."""
+"""Compute log capture entry points."""

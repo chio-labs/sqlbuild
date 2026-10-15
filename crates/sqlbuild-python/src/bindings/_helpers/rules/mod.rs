@@ -1,6 +1,9 @@
 pub(crate) mod builtin_catalogue;
 pub(crate) mod catalogue;
 pub(crate) mod constants;
+pub(crate) mod custom_evaluation;
+pub(crate) mod custom_host_observation;
+pub(crate) mod custom_hosts;
 pub(crate) mod custom_rule_cache;
 pub(crate) mod custom_rule_evidence;
 pub(crate) mod dsl_headers;
@@ -25,6 +28,7 @@ pub(crate) mod relation_keys;
 pub(crate) mod results;
 pub(crate) mod rows;
 pub(crate) mod rule_cache;
+pub(crate) mod rule_dispatch;
 pub(crate) mod rule_plan;
 pub(crate) mod rule_run;
 pub(crate) mod rules_config;

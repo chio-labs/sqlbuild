@@ -6,11 +6,10 @@ import pytest
 
 from sqlbuild._native import (
     compiled_project_record,
+    custom_host_payload,
 )
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.rule_engine._helpers.engine.custom_rules import host_project
-from sqlbuild.rule_engine._helpers.host.custom_host_pool import host_payload_project
 from sqlbuild.rule_engine.classes.project_tree import public_model
 from sqlbuild.rule_engine.types import FactKey
 from tests.integration.src.sqlbuild.rule_engine.host_payload._test_types import (
@@ -114,7 +113,8 @@ def test_given_compiled_project_when_trimming_host_payload_then_every_fact_is_un
 ) -> None:
     project: CompiledProjectView = compile_files(root=tmp_path, files=test_case.project_files)
     trimmed_fields: dict[type[object], set[str]] = record_trimmed_fields(monkeypatch)
-    trimmed: CompiledProjectView = host_payload_project(host_project(project))
+    trimmed: CompiledProjectView = custom_host_payload(project)
+    monkeypatch.undo()
 
     full_digests: dict[FactKey, tuple[str, str]] = fact_digests(project=project, root=tmp_path)
     trimmed_digests: dict[FactKey, tuple[str, str]] = fact_digests(project=trimmed, root=tmp_path)

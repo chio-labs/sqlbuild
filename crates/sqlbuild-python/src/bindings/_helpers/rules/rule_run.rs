@@ -15,7 +15,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::rules::results::rule_finding;
 use crate::bindings::_helpers::rules::rows::finalize_rule_findings_rows;
 
-const RULE_THREADS_MODULE: &str = "sqlbuild.rule_engine._helpers.run.rule_threads";
 const MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
 const PATHLIB_MODULE: &str = "pathlib";
 const CTYPES_MODULE: &str = "ctypes";
@@ -132,7 +131,7 @@ pub(crate) fn run_rules<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, RULE_THREADS_MODULE, "evaluate_rules")?.call((), options.as_ref())
+    crate::bindings::_helpers::rules::rule_dispatch::evaluate_rules(py, options)
 }
 
 /// One bulk Rules cache file owned by the native compiler engine.

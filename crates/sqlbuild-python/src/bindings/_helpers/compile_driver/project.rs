@@ -4,10 +4,11 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::types::{PyBool, PyCFunction, PyDict, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::compile_driver::compile_timings::record_compile_timing;
 use crate::bindings::_helpers::compile_driver::phases::monotonic;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::project_graph;
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, keywords, within,
+    KeywordArguments, call_with, imported, keywords,
 };
 use crate::bindings::_helpers::compile_driver::target_defaults::{
     TargetDefaults, apply_target_defaults,
@@ -28,7 +29,6 @@ const DISCOVERY_CONSTANTS_MODULE: &str = "sqlbuild.compiler.discovery.constants"
 const LOCAL_CONFIG_FILENAME: &str = "sqlbuild_local.toml";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const ANALYSIS_SELECTION_MODULE: &str = "sqlbuild._native";
-const PROFILING_MODULE: &str = "sqlbuild.compiler.profiling.main._record";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const COLLECTION_RENDERING_MODULE: &str = "sqlbuild._native";
 /// Optional keywords of the project graph builders.
@@ -152,10 +152,9 @@ fn python_compiled_project<'py>(
     managed_loader_target_isolation(discovered, adapter, request.resolved_connection.bind(py))?;
     let selection: &Bound<'py, PyAny> = request.analysis_selection.bind(py);
     let no_cache: bool = !selection.is_none() && selection.getattr("no_cache")?.is_truthy()?;
-    let timing: Bound<'py, PyAny> =
-        imported(py, PROFILING_MODULE, "record_compile_timing")?.call1(("attachment_ms",))?;
-    let compile_inputs: Bound<'py, PyAny> =
-        within(&timing, |_| frontier_compile_inputs(py, request, no_cache))?;
+    let compile_inputs: Bound<'py, PyAny> = record_compile_timing("attachment_ms", || {
+        frontier_compile_inputs(py, request, no_cache)
+    })?;
     if !selection.is_none() {
         let on_inputs_ready: Bound<'py, PyAny> = selection.getattr("on_inputs_ready")?;
         if !on_inputs_ready.is_none() {

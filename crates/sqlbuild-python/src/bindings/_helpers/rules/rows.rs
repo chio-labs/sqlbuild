@@ -27,6 +27,7 @@ use sqlbuild_rules::rule_cache::main::rules_bulk_cache_path::rules_bulk_cache_pa
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::boundary::panics::{compiler_guard, value_error};
+use crate::bindings::_helpers::cache::native_store::current_code_identity;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::compiled_project::records::declaration_rows;
@@ -39,7 +40,6 @@ use crate::bindings::types::CompilerDetach;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
-const CODE_IDENTITY_MODULE: &str = "sqlbuild.compiler.frontier.main.compiled_code_identity";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const NATIVE_RULES_CACHE_FILE: &str = "native.json";
 const NATIVE_RULES_MEMO_FILE: &str = "native-response.json";
@@ -130,9 +130,7 @@ fn built_request(options: &Request<'_, '_>) -> PyResult<NativeRulesRequest> {
     let memo: Option<(String, String)> = if enabled {
         let unresolved: PathBuf = project_dir.extract()?;
         Some((
-            imported(py, CODE_IDENTITY_MODULE, "compiled_code_identity")?
-                .call0()?
-                .extract()?,
+            current_code_identity(py)?,
             path_text(
                 py,
                 rules_bulk_cache_path(&unresolved, NATIVE_RULES_MEMO_FILE),

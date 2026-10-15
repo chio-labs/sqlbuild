@@ -1,14 +1,10 @@
 //! Publish an incomplete capture before the command writes output, as `start_capture` does.
 
-use std::io::{self, Write};
-use std::path::Path;
+use std::io;
 
-use crate::compute_logs::_helpers::files::{
-    create_new, is_symlink, sync_directory, uuid4_hex, write_metadata,
-};
+use crate::compute_logs::_helpers::files::{is_symlink, publish_staged, uuid4_hex};
 use crate::compute_logs::_helpers::metadata::metadata_json;
 use crate::compute_logs::_helpers::timestamps::{epoch_microseconds, utc_date};
-use crate::compute_logs::constants::STREAM_FILE_NAMES;
 use crate::compute_logs::models::{CaptureStart, OpenCapture};
 
 /// The published capture, or the failure that leaves the command running without one.
@@ -33,39 +29,15 @@ pub fn start_capture(start: CaptureStart) -> io::Result<OpenCapture> {
     }
     let staging = date_directory.join(format!(".{invocation_id}.{}.tmp", uuid4_hex()?));
     std::fs::create_dir(&staging)?;
-    match published((&start, &invocation_id), &staging, &directory) {
-        Ok(streams) => Ok(OpenCapture {
-            start,
-            invocation_id,
-            directory,
-            streams,
-        }),
-        Err(error) => {
-            let _ = std::fs::remove_dir_all(&staging);
-            let _ = std::fs::remove_dir_all(&directory);
-            Err(error)
-        }
-    }
-}
-
-fn published(
-    start: (&CaptureStart, &str),
-    staging: &Path,
-    directory: &Path,
-) -> io::Result<Vec<std::fs::File>> {
-    let mut streams: Vec<std::fs::File> = Vec::new();
-    for name in STREAM_FILE_NAMES {
-        streams.push(create_new(&staging.join(name))?);
-    }
-    write_metadata(staging, &metadata_json(start, None))?;
-    for stream in &mut streams {
-        stream.flush()?;
-        stream.sync_all()?;
-    }
-    sync_directory(staging)?;
-    std::fs::rename(staging, directory)?;
-    if let Some(parent) = directory.parent() {
-        sync_directory(parent)?;
-    }
-    Ok(streams)
+    let streams = publish_staged(
+        &staging,
+        &directory,
+        &metadata_json((&start, &invocation_id), None),
+    )?;
+    Ok(OpenCapture {
+        start,
+        invocation_id,
+        directory,
+        streams: Vec::from(streams),
+    })
 }

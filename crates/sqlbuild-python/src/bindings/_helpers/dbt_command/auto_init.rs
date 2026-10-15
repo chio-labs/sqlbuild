@@ -14,9 +14,9 @@ use sqlbuild_core::dbt_command::models::ForwardedArg;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, flag, path, stream};
 
+const NATIVE_MODULE: &str = "sqlbuild._native";
 const DISCOVERY_CONSTANTS: &str = "sqlbuild.compiler.discovery.constants";
 const PROGRESS_REPORTER_MODULE: &str = "sqlbuild._native";
-const PROFILE_INIT_MODULE: &str = "sqlbuild.integrations.dbt._helpers.profile.init";
 const DBT_MODELS: &str = "sqlbuild.integrations.dbt.models";
 
 fn project_config_found(directory: &Bound<'_, PyAny>) -> PyResult<bool> {
@@ -122,7 +122,7 @@ pub(crate) fn ensure_twin_project<'py>(
         ],
     )?;
     let result: Bound<'py, PyAny> = call_with(
-        &imported(py, PROFILE_INIT_MODULE, "build_dbt_init_project")?,
+        &imported(py, NATIVE_MODULE, "build_dbt_init_project")?,
         &[("request", request)],
     )?;
     let project_file: String = result.getattr("project_file")?.str()?.to_string();

@@ -334,3 +334,19 @@ class DbtPlanOrchestrationErrorTestCase:
     expected_error_fragment: str
     expected_code: str
     expected_help_fragment: str
+
+
+@dataclass(frozen=True)
+class DbtRunnerProcessTestCase:
+    description: str
+    script: str
+    expected_returncode: int
+    expected_stdout: str
+    expected_stderr: str
+
+
+@dataclass(frozen=True)
+class DbtRunnerLaunchFailureTestCase:
+    description: str
+    executable_name: str
+    expected_message: str

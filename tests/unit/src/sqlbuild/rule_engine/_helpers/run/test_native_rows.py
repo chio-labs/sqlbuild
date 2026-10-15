@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
+import sqlbuild._native as native
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.rule_engine._helpers.engine import custom_dispatch as native
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.models import RulesCacheConfig, RulesConfig, RulesResult
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine.helpers import evaluate_contract_rule
@@ -15,7 +15,6 @@ from tests.unit.src.sqlbuild.rule_engine._helpers.run._test_types import (
 )
 from tests.unit.src.sqlbuild.rule_engine._helpers.run.helpers import (
     rebuild_identity,
-    record_custom_starts,
     record_reuse,
 )
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_project
@@ -35,7 +34,6 @@ def test_given_config_value_the_encoder_rejects_when_building_natively_then_rule
     tmp_path: Path,
     test_case: NativeRowsEncodeErrorTestCase,
 ) -> None:
-    started: list[str] = record_custom_starts(monkeypatch=monkeypatch)
     project: CompiledProjectView = build_project(
         name="orders",
         relative_path="models/orders.sql",
@@ -44,14 +42,12 @@ def test_given_config_value_the_encoder_rejects_when_building_natively_then_rule
     )
 
     with pytest.raises(RulesError, match=test_case.expected_message):
-        native.evaluate_native(
+        native.evaluate_native_rules(
             project=project,
             config=RulesConfig(cache=RulesCacheConfig(enabled=False)),
             project_dir=tmp_path,
             catalogue=(),
         )
-
-    assert started == []
 
 
 @pytest.mark.parametrize(

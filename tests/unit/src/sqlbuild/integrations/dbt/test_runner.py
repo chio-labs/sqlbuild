@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
 
 from sqlbuild._native import (
     DbtLsNode,
+    DbtRunner,
     build_dbt_compile_argv,
     build_dbt_debug_argv,
     build_dbt_deps_argv,
@@ -13,13 +15,19 @@ from sqlbuild._native import (
     dbt_fqn_selector_term,
     parse_dbt_ls_json_lines,
 )
-from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
-from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult, DbtLsResult
+from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
+from sqlbuild.integrations.dbt.models import (
+    DbtCliOptions,
+    DbtCommandResult,
+    DbtLsResult,
+)
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtArgvTestCase,
     DbtLsParseTestCase,
     DbtRunnerCommandTestCase,
+    DbtRunnerLaunchFailureTestCase,
     DbtRunnerMemoTestCase,
+    DbtRunnerProcessTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     RecordingDbtInvoker,
@@ -296,3 +304,56 @@ def test_given_dbt_runner_when_running_compile_then_uses_project_dir_as_cwd(
 
     assert result == test_case.command_result
     assert invoker.calls == [(test_case.expected_argv, options.project_dir)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtRunnerProcessTestCase(
+            description="captures text output, stderr and the exit code of a real process",
+            script="import sys\nprint('compiled')\nsys.stderr.write('warn\\r\\n')\nsys.exit(3)\n",
+            expected_returncode=3,
+            expected_stdout="compiled\n",
+            expected_stderr="warn\n",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_dbt_process_when_invoked_then_captures_output_and_exit_code(
+    test_case: DbtRunnerProcessTestCase,
+    tmp_path: Path,
+) -> None:
+    script: Path = tmp_path / "fake_dbt.py"
+    _ = script.write_text(test_case.script, encoding="utf-8")
+    runner: DbtRunner = DbtRunner(dbt_executable="dbt")
+
+    result: DbtCommandResult = runner.invoke(argv=(sys.executable, str(script)), cwd=tmp_path)
+
+    assert result.returncode == test_case.expected_returncode
+    assert result.stdout == test_case.expected_stdout
+    assert result.stderr == test_case.expected_stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtRunnerLaunchFailureTestCase(
+            description="a missing executable raises the dbt launch error",
+            executable_name="missing-dbt",
+            expected_message="failed to execute dbt",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_missing_dbt_executable_when_invoked_then_raises_launch_error(
+    test_case: DbtRunnerLaunchFailureTestCase,
+    tmp_path: Path,
+) -> None:
+    runner: DbtRunner = DbtRunner(dbt_executable="dbt")
+    executable: Path = tmp_path / test_case.executable_name
+
+    with pytest.raises(DbtInteropRuntimeError, match=test_case.expected_message) as raised:
+        _ = runner.invoke(argv=(str(executable),), cwd=None)
+
+    assert isinstance(raised.value.__cause__, FileNotFoundError)
+    assert raised.value.help == f"[Errno 2] No such file or directory: '{executable}'"

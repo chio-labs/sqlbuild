@@ -27,37 +27,27 @@ class HostFailureTestCase:
 
 
 @dataclass(frozen=True)
-class HostPlanTestCase:
-    """One deterministic split of planned invocations."""
-
-    description: str
-    plan: dict[str, list[str] | None]
-    invocations: tuple[tuple[str, str], ...]
-    hosts: int
-    expected_plans: tuple[dict[str, list[str] | None], ...]
-
-
-@dataclass(frozen=True)
 class HostCancellationTestCase:
     """A fast failure on one host while the other hosts are still busy."""
 
     description: str
     model_count: int
     hosts: int
-    timeout_millis: int
     delay_seconds: float
     expected_error_fragment: str
     expected_max_seconds: float
 
 
 @dataclass(frozen=True)
-class HostCapacityTestCase:
-    """Fake cgroup files and the CPU count they allow."""
+class HostInterruptTestCase:
+    """An interrupt while split hosts are still busy with slow invocations."""
 
     description: str
-    proc_cgroup: str
-    files: dict[str, str]
-    expected_cores: int
+    model_count: int
+    hosts: int
+    delay_seconds: float
+    interrupt_after_seconds: float
+    expected_max_seconds: float
 
 
 @dataclass(frozen=True)

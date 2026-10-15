@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::time::{Duration, UNIX_EPOCH};
 
 use crate::compute_logs::_helpers::metadata::metadata_json;
-use crate::compute_logs::_helpers::timestamps::{parse_utc_timestamp, utc_timestamp};
+use crate::compute_logs::_helpers::timestamps::{parse_iso_instant, utc_timestamp};
 use crate::compute_logs::models::{CaptureEnd, CaptureStart};
 use crate::compute_logs::tests::test_types::{MetadataTestCase, TimestampTestCase};
 
@@ -37,8 +37,14 @@ fn given_utc_instant_when_formatting_then_matches_python_isoformat_and_parses_ba
         let timestamp = utc_timestamp(test_case.microseconds);
 
         assert_eq!(
-            (timestamp.as_str(), parse_utc_timestamp(&timestamp)),
-            (test_case.expected_timestamp, Some(test_case.microseconds)),
+            (
+                timestamp.as_str(),
+                parse_iso_instant(&timestamp.replace('Z', "+00:00")),
+            ),
+            (
+                test_case.expected_timestamp,
+                Some((test_case.microseconds, true))
+            ),
             "{}",
             test_case.description
         );

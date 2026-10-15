@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.runtime.output_capture.classes.dispatcher import OutputCaptureDispatcher
+from sqlbuild._native import OutputCaptureDispatcher
 from sqlbuild.runtime.output_capture.types import CommandOutputStream
 
 

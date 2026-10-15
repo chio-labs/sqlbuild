@@ -97,11 +97,7 @@ pub(crate) fn resolve_dbt_execution_invocation<'py>(
     let mut runner = request.getattr("dbt_runner")?;
     if !runner.is_truthy()? {
         runner = call_with(
-            &imported(
-                py,
-                "sqlbuild.integrations.dbt.classes.dbt_runner",
-                "DbtRunner",
-            )?,
+            &imported(py, "sqlbuild._native", "DbtRunner")?,
             &[("dbt_executable", executable.clone())],
         )?;
     }

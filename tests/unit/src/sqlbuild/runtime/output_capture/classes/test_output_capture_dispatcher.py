@@ -9,7 +9,7 @@ import time
 
 import pytest
 
-from sqlbuild.runtime.output_capture.classes.dispatcher import OutputCaptureDispatcher
+from sqlbuild._native import OutputCaptureDispatcher
 from sqlbuild.runtime.output_capture.classes.text_tee import TextOutputTee
 from sqlbuild.runtime.output_capture.models import CommandOutputCaptureSummary
 from sqlbuild.runtime.output_capture.types import CommandOutputStream

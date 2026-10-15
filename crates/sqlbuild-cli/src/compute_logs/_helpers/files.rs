@@ -4,7 +4,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
 use std::path::Path;
 
-use crate::compute_logs::constants::METADATA_FILE_NAME;
+use crate::compute_logs::constants::{METADATA_FILE_NAME, STREAM_FILE_NAMES};
 
 /// Random 128-bit hex text, as `uuid.uuid4().hex`.
 pub(crate) fn uuid4_hex() -> io::Result<String> {
@@ -48,4 +48,36 @@ fn write_and_replace(temporary: &Path, destination: &Path, json: &str) -> io::Re
 /// Whether `path` is a symbolic link, without following it.
 pub(crate) fn is_symlink(path: &Path) -> bool {
     std::fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink())
+}
+
+/// Publish `staging` as `directory` with its streams and metadata, removing it on failure.
+pub(crate) fn publish_staged(
+    staging: &Path,
+    directory: &Path,
+    metadata_json: &str,
+) -> io::Result<[File; 3]> {
+    let mut published: bool = false;
+    let result = (|| -> io::Result<[File; 3]> {
+        let mut streams: [File; 3] = [
+            create_new(&staging.join(STREAM_FILE_NAMES[0]))?,
+            create_new(&staging.join(STREAM_FILE_NAMES[1]))?,
+            create_new(&staging.join(STREAM_FILE_NAMES[2]))?,
+        ];
+        write_metadata(staging, metadata_json)?;
+        for stream in &mut streams {
+            stream.flush()?;
+            stream.sync_all()?;
+        }
+        sync_directory(staging)?;
+        std::fs::rename(staging, directory)?;
+        published = true;
+        if let Some(parent) = directory.parent() {
+            sync_directory(parent)?;
+        }
+        Ok(streams)
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_dir_all(if published { directory } else { staging });
+    }
+    result
 }

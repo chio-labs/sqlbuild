@@ -10,7 +10,7 @@ from sqlbuild._native import (
     install_rules_skills,
     select_catalogue_rules,
 )
-from sqlbuild.rule_engine.main._evaluate import evaluate
+from sqlbuild._native import evaluate_project_rules as evaluate
 from sqlbuild.rule_engine.models import (
     Rule,
     RulesCacheConfig,

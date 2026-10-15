@@ -4,7 +4,7 @@ import time
 
 import pytest
 
-from sqlbuild.runtime.output_capture._helpers.text import chunk_text
+from sqlbuild._native import chunk_command_output_text as chunk_text
 from tests.unit.src.sqlbuild.runtime.output_capture._helpers._test_types import (
     ChunkTextErrorTestCase,
     ChunkTextFunction,

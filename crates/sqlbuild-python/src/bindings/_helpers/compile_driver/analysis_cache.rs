@@ -8,6 +8,7 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyListMethods, PySlice,
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_cache::digest::main::sha256_hex::sha256_hex;
 
+use crate::bindings::_helpers::compile_driver::compile_timings::record_compile_metric;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
@@ -21,7 +22,6 @@ const UNKNOWN_VERSION: &str = "unknown";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 /// Sorted; the dialects whose expression types compile checks.
 const TYPE_CHECKED_DIALECTS: [&str; 4] = ["bigquery", "duckdb", "postgresql", "snowflake"];
-const METRIC_MODULE: &str = "sqlbuild.compiler.profiling.main._metric";
 const METADATA_MODULE: &str = "importlib.metadata";
 const CONTEXT_REQUIRED: [&str; 3] = ["root", "inference_profile", "allow_compact_analysis"];
 const CONTEXT_OPTIONAL: [&str; 2] = ["rich_type_inference", "signature_namespace"];
@@ -121,22 +121,16 @@ fn build_analysis_cache_context<'py>(
 
 /// Record semantic analysis cache outcomes for one invocation.
 pub(crate) fn record_analysis_cache_metrics(
-    py: Python<'_>,
     (batch_hits, entry_hits, misses, bypasses): (usize, usize, usize, usize),
-) -> PyResult<()> {
-    let record: Bound<'_, PyAny> = imported(py, METRIC_MODULE, "record_compile_metric")?;
+) {
     for (metric, value) in [
         ("analysis_batch_cache_hits", batch_hits),
         ("analysis_entry_cache_hits", entry_hits),
         ("analysis_cache_misses", misses),
         ("analysis_cache_bypasses", bypasses),
     ] {
-        let keywords: Bound<'_, PyDict> = PyDict::new(py);
-        keywords.set_item("metric", metric)?;
-        keywords.set_item("value", value)?;
-        record.call((), Some(&keywords))?;
+        record_compile_metric(metric, i64::try_from(value).unwrap_or(i64::MAX));
     }
-    Ok(())
 }
 
 /// Whether `error` is the `TypeError` or `ValueError` an unstable payload raises.

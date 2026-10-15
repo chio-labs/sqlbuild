@@ -6,7 +6,7 @@ import threading
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 
-from sqlbuild.runtime.output_capture.classes.dispatcher import OutputCaptureDispatcher
+from sqlbuild._native import OutputCaptureDispatcher
 from sqlbuild.runtime.output_capture.models import CommandOutputRecord
 
 

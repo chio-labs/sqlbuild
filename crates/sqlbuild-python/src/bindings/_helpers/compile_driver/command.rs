@@ -3,6 +3,7 @@
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyMapping, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
+use std::rc::Rc;
 
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::compile_command::models::CompileReuseAttempt;
@@ -13,6 +14,9 @@ use crate::bindings::_helpers::compile_command::reuse_recording::{
     CompileArtifactWrites, RecordedCompileOutput, compile_reuse_timings, new_artifact_recorder,
 };
 use crate::bindings::_helpers::compile_driver::analysis::analyze;
+use crate::bindings::_helpers::compile_driver::compile_timings::{
+    CompileTimingsHandle, collect_compile_timings, timing_milliseconds,
+};
 use crate::bindings::_helpers::compile_driver::phases::{
     elapsed_ms, manifest_payload, monotonic, resolved_dag_path, sql_test_planning_diagnostics,
     target_dir, write_artifacts, write_dag_artifact,
@@ -27,7 +31,6 @@ const BYPASS_OUTCOME: &str = "bypass";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const PROFILING_MODULE: &str = "sqlbuild.compiler.profiling.main._collect";
 
 /// What one full compile reports for reuse recording.
 struct CommandOutcome<'py> {
@@ -39,7 +42,7 @@ struct CommandOutcome<'py> {
 
 /// The per-invocation recorders a compile runs inside.
 struct Recorders<'py> {
-    detailed_timings: Bound<'py, PyAny>,
+    detailed_timings: CompileTimingsHandle,
     input_reads: Bound<'py, PyAny>,
     artifact_writes: Py<CompileArtifactWrites>,
     prepared_artifacts: Bound<'py, PyAny>,
@@ -146,9 +149,8 @@ fn recorded_compile<'py>(
         .getattr("profile_flags")?
         .getattr("skip_write")?
         .is_truthy()?;
-    let compiled: PyResult<(CommandOutcome<'py>, Bound<'py, PyAny>, Bound<'py, PyAny>)> = within(
-        &imported(py, PROFILING_MODULE, "collect_compile_timings")?.call0()?,
-        |detailed_timings| {
+    let compiled: PyResult<(CommandOutcome<'py>, Bound<'py, PyAny>, Bound<'py, PyAny>)> =
+        collect_compile_timings(|detailed_timings| {
             within(
                 &imported(py, NATIVE_MODULE, "record_compile_input_reads")?.call0()?,
                 |input_reads| {
@@ -168,7 +170,7 @@ fn recorded_compile<'py>(
                     )?;
                     within(&manager, |prepared_artifacts| {
                         let recorders: Recorders<'py> = Recorders {
-                            detailed_timings: detailed_timings.clone(),
+                            detailed_timings: Rc::clone(detailed_timings),
                             input_reads: input_reads.clone(),
                             artifact_writes: artifact_writes.clone_ref(py),
                             prepared_artifacts: prepared_artifacts.clone(),
@@ -188,8 +190,7 @@ fn recorded_compile<'py>(
                     })
                 },
             )
-        },
-    );
+        });
     close_status(status)?;
     let (outcome, input_reads, artifact_writes) = compiled?;
     let stored: PyResult<Bound<'py, PyAny>> = call_with(
@@ -372,7 +373,7 @@ fn rules_failed(analysis: &Bound<'_, PyAny>) -> PyResult<bool> {
 /// The compile's phase timings, in the order `--json` reports them.
 fn timings_ms<'py>(
     (analysis, write_ms): (&Bound<'py, PyAny>, i64),
-    (detailed_timings, reuse_timings): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    (detailed_timings, reuse_timings): (&CompileTimingsHandle, &Bound<'py, PyAny>),
     total_start: f64,
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = analysis.py();
@@ -393,11 +394,9 @@ fn timings_ms<'py>(
         timings.set_item(key, analysis.getattr(attribute)?)?;
     }
     timings.set_item("write_ms", write_ms)?;
-    timings.update(
-        detailed_timings
-            .call_method0("as_milliseconds")?
-            .downcast::<PyMapping>()?,
-    )?;
+    for (key, value) in timing_milliseconds(detailed_timings) {
+        timings.set_item(key, value)?;
+    }
     timings.update(reuse_timings.downcast::<PyMapping>()?)?;
     timings.set_item("total_ms", elapsed_ms(py, total_start)?)?;
     Ok(timings)

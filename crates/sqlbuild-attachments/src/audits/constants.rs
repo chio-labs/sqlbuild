@@ -13,3 +13,22 @@ pub(crate) const FUNCTION_RESOURCE: &str = "function";
 pub(crate) const CROSS_MODEL_MINIMUM: usize = 2;
 /// The run scope Python falls back to without an instance or project value.
 pub(crate) const FALLBACK_RUN_SCOPE: &str = "delta_and_final";
+/// Built-in generic audit names and SQL bodies, which project definitions override by name.
+pub const BUILTIN_AUDITS: [(&str, &str); 4] = [
+    (
+        "accepted_values",
+        "SELECT @column\nFROM @relation\nWHERE @column IS NOT NULL\n  AND @column NOT IN (@'values')",
+    ),
+    (
+        "not_null",
+        "SELECT @column\nFROM @relation\nWHERE @column IS NULL",
+    ),
+    (
+        "relationships",
+        "SELECT @column\nFROM @relation\nWHERE @column IS NOT NULL\n  AND @column NOT IN (\n    SELECT @field\n    FROM @to\n    WHERE @field IS NOT NULL\n  )",
+    ),
+    (
+        "unique",
+        "SELECT @column, COUNT(*) AS duplicate_count\nFROM @relation\nWHERE @column IS NOT NULL\nGROUP BY @column\nHAVING COUNT(*) > 1",
+    ),
+];

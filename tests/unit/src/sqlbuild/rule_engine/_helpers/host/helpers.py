@@ -1,8 +1,10 @@
 """Builders for custom-rule host partitioning tests."""
 
+import _thread
 import os
 import random
 import shutil
+import threading
 import time
 from collections.abc import Callable
 from operator import attrgetter
@@ -14,12 +16,12 @@ import pytest
 
 import sqlbuild._native as native_module
 from sqlbuild._native import (
+    CustomHostObserver,
     build_rule_catalogue,
     project_with,
 )
+from sqlbuild._native import evaluate_custom_rules as evaluate_custom_rules_cached
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
-from sqlbuild.rule_engine._helpers.host import custom_host_pool
 from sqlbuild.rule_engine._helpers.host.module_state import module_state_token, rule_namespaces
 from sqlbuild.rule_engine.classes.module_state_monitor import ModuleStateMonitor
 from sqlbuild.rule_engine.exceptions import OpaqueModuleStateError
@@ -112,32 +114,81 @@ def evaluate_order_rules(
     )
 
 
-def use_hosts(*, monkeypatch: pytest.MonkeyPatch, hosts: int) -> list[str]:
+def use_hosts(
+    *,
+    monkeypatch: pytest.MonkeyPatch,
+    hosts: int,
+    publish_inputs: Callable[[Path], object] | None = None,
+) -> CustomHostObserver:
     """Allow up to `hosts` host processes for any plan and record every host launch."""
 
-    launches: list[str] = []
-    launch: Callable[[str], str] = native_module.run_custom_host_json
-
-    def recording_launch(spec_json: str) -> str:
-        launches.append(spec_json)
-        return launch(spec_json)
-
-    monkeypatch.setattr(custom_host_pool, "_MIN_INVOCATIONS_PER_HOST", 1)
-    monkeypatch.setattr(custom_host_pool, "available_cores", lambda: hosts)
-    monkeypatch.setattr(native_module, "run_custom_host_json", recording_launch)
-    return launches
+    observer: CustomHostObserver = CustomHostObserver(
+        cores=hosts, min_invocations_per_host=1, publish_inputs=publish_inputs
+    )
+    monkeypatch.setattr(native_module, "custom_host_observer", observer)
+    return observer
 
 
-def write_cgroup_files(*, root: Path, proc_cgroup: str, files: dict[str, str]) -> Path:
-    """Write a fake `/proc/self/cgroup` and cgroup hierarchy beneath `root`."""
+def host_inputs_left(root: Path) -> tuple[Path, ...]:
+    """Return every payload, marker or folder a run left in the host-input folder."""
 
-    for relative_path, contents in files.items():
-        path: Path = root / "cgroup" / relative_path
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(contents, encoding="utf-8", errors="surrogateescape")
-    proc: Path = root / "proc-self-cgroup"
-    proc.write_text(proc_cgroup, encoding="utf-8", errors="surrogateescape")
-    return proc
+    return tuple((root / "target" / "rules-cache" / "host-inputs").iterdir())
+
+
+def child_processes() -> frozenset[int]:
+    """Return the live child processes of this process."""
+
+    children: set[int] = set()
+    for task in (Path("/proc") / str(os.getpid()) / "task").iterdir():
+        children.update(map(int, (task / "children").read_text().split()))
+    return frozenset(children)
+
+
+def delayed_publish(delay_seconds: float) -> Callable[[Path], None]:
+    """Return a publish hook that lets the payload be written only after a delay."""
+
+    def delay(path: Path) -> None:
+        del path
+        time.sleep(delay_seconds)
+
+    return delay
+
+
+def failed_publish(delay_seconds: float) -> Callable[[Path], None]:
+    """Return a publish hook that fails to write the payload after a delay."""
+
+    def fail(path: Path) -> None:
+        del path
+        time.sleep(delay_seconds)
+        raise OSError("project payload disk is full")
+
+    return fail
+
+
+def failed_publish_without_directory(
+    delay_seconds: float,
+) -> tuple[Callable[[Path], None], list[float]]:
+    """Return a hook that removes the input folder then fails, and when each failure happened."""
+
+    failures: list[float] = []
+
+    def fail(path: Path) -> None:
+        time.sleep(delay_seconds)
+        shutil.rmtree(path.parent)
+        failures.append(time.monotonic())
+        raise OSError("project payload disk is full")
+
+    return fail, failures
+
+
+def interrupting_publish(delay_seconds: float) -> Callable[[Path], None]:
+    """Return a hook that interrupts the main thread once hosts have run for a while."""
+
+    def interrupt(path: Path) -> None:
+        del path
+        threading.Timer(delay_seconds, _thread.interrupt_main).start()
+
+    return interrupt
 
 
 def record_signals(*, monkeypatch: pytest.MonkeyPatch) -> list[tuple[int, int]]:
@@ -440,47 +491,6 @@ def timed_state_history(
         rules=rules, model_count=model_count, detectors=(detector(rules=rules, root=root),)
     )
     return time.process_time() - started, history
-
-
-def delay_inputs(*, monkeypatch: pytest.MonkeyPatch, delay_seconds: float) -> None:
-    """Publish every host project payload only after a delay."""
-
-    write: Callable[..., None] = custom_host_pool._write_inputs
-
-    def delayed_write(*, path: Path, project: CompiledProjectView, config: RulesConfig) -> None:
-        time.sleep(delay_seconds)
-        write(path=path, project=project, config=config)
-
-    monkeypatch.setattr(custom_host_pool, "_write_inputs", delayed_write)
-
-
-def fail_inputs(*, monkeypatch: pytest.MonkeyPatch, delay_seconds: float) -> None:
-    """Fail to publish every host project payload after a delay."""
-
-    def failed_write(*, path: Path, project: CompiledProjectView, config: RulesConfig) -> None:
-        del path, project, config
-        time.sleep(delay_seconds)
-        raise OSError("project payload disk is full")
-
-    monkeypatch.setattr(custom_host_pool, "_write_inputs", failed_write)
-
-
-def fail_inputs_without_directory(
-    *, monkeypatch: pytest.MonkeyPatch, delay_seconds: float
-) -> list[float]:
-    """Remove the host-input directory, then fail to publish; return when each write failed."""
-
-    failures: list[float] = []
-
-    def failed_write(*, path: Path, project: CompiledProjectView, config: RulesConfig) -> None:
-        del project, config
-        time.sleep(delay_seconds)
-        shutil.rmtree(path.parent)
-        failures.append(time.monotonic())
-        raise OSError("project payload disk is full")
-
-    monkeypatch.setattr(custom_host_pool, "_write_inputs", failed_write)
-    return failures
 
 
 def touch_files(*, root: Path, names: tuple[str, ...]) -> None:

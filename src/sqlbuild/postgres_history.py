@@ -1,11 +1,9 @@
 """Typed public PostgreSQL execution history API."""
 
-from sqlbuild.runtime.execution_history.classes.postgres_execution_history import (
-    PostgresExecutionHistory as _PostgresExecutionHistory,
-)
+from sqlbuild._native import PostgresExecutionHistory as _NativePostgresExecutionHistory
 
 __all__ = ("PostgresExecutionHistory",)
 
 
-class PostgresExecutionHistory(_PostgresExecutionHistory):
+class PostgresExecutionHistory(_NativePostgresExecutionHistory):
     """Supported deployed PostgreSQL execution history backend."""
