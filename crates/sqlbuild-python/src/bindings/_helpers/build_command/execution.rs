@@ -20,6 +20,7 @@ use crate::bindings::_helpers::check::check_core::{
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 use crate::bindings::_helpers::cursor::overrides::{cursor_integer, cursor_timestamp};
+use crate::bindings::_helpers::freshness::publication::append_freshness_records;
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
@@ -27,7 +28,6 @@ const CURSOR_OVERRIDES_MODULE: &str = "sqlbuild._native";
 const PLANNER_MODELS: &str = "sqlbuild._native";
 const BUILD_MODELS: &str = "sqlbuild.executor.build.models";
 const PIPELINE_RUN_MODULE: &str = "sqlbuild.executor.pipeline.main.run";
-const FRESHNESS_MODULE: &str = "sqlbuild.cli.commands._helpers.freshness.source_freshness";
 const COST_CONTEXT_MODULE: &str = "sqlbuild._native";
 const CHECKS_MODULE: &str = "sqlbuild.executor.python_nodes.main._checks";
 const EXECUTOR_PYTHON_MODELS: &str = "sqlbuild.executor.python_nodes.models";
@@ -403,19 +403,11 @@ pub(crate) fn execute_build_plan<'py>(
             ("initial_state", initial_state),
         ],
     )?;
-    call_with(
-        &imported(
-            py,
-            FRESHNESS_MODULE,
-            "append_eligible_direct_source_freshness_records",
-        )?,
-        &[
-            ("plan", plan),
-            ("result", result.clone()),
-            ("adapter", adapter),
-            ("connection_config", connection_config),
-            ("run_id", project.getattr("run_id")?),
-        ],
+    append_freshness_records(
+        (&plan, &result),
+        &adapter,
+        &connection_config,
+        &project.getattr("run_id")?,
     )?;
     lifecycle.finalize(py)?;
     Ok(Outcome {

@@ -6595,6 +6595,14 @@ def write_source_freshness_records(
     records: tuple[SourceFreshnessRecord, ...],
     renderers: SourceFreshnessRenderers,
 ) -> None: ...
+def append_eligible_direct_source_freshness_records(
+    *,
+    plan: PlanOutput,
+    result: object,
+    adapter: object,
+    connection_config: dict[str, object],
+    run_id: str,
+) -> None: ...
 def observe_configured_source_freshness(
     *, adapter: StrictAdapter, connection: object, source: SourceEntry, observed_at: datetime
 ) -> SourceFreshnessObservation: ...
