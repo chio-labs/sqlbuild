@@ -27,7 +27,7 @@ const EXPORTER_SCOPE_MODULE: &str =
     "sqlbuild.runtime.event_exporting.main._event_exporter_command_scope";
 const EXPORTING_CONSTANTS_MODULE: &str = "sqlbuild.runtime.event_exporting.constants";
 const OUTPUT_CAPTURE_MODULE: &str =
-    "sqlbuild.cli.commands.main.entrypoint._dispatch_with_output_capture";
+    "sqlbuild.runtime.output_capture.main.configured_output_capture_scope";
 const DEBUG_EVENT_MODULE: &str = "sqlbuild.diagnostics.main.log_debug_event";
 const OBSERVABILITY_LOGGER: &str = "sqlbuild.cli.observability";
 const DEBUG_COMMAND: &str = "debug";

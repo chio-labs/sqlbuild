@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild._native import OutputCaptureDispatcher
 from sqlbuild.runtime.output_capture.classes.binary_tee import BinaryOutputTee
-from sqlbuild.runtime.output_capture.classes.dispatcher import OutputCaptureDispatcher
 from sqlbuild.runtime.output_capture.types import CommandOutputStream
 
 

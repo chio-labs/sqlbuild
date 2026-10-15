@@ -280,9 +280,39 @@ reason = "executor"
 note = "Exports execution events while the executor runs."
 
 [[stays]]
-path = "runtime/output_capture"
-reason = "executor"
-note = "Captures stdout and stderr of running Python nodes for the executor."
+path = "runtime/output_capture/classes"
+reason = "user-code"
+note = "Rule 1 capture shim: sys.stdout/sys.stderr tees forwarding accepted writes from user code, adapters and the executor to the native OutputCaptureDispatcher."
+
+[[stays]]
+path = "runtime/output_capture/main"
+reason = "user-code"
+note = "Rule 1 capture shim entry: swaps sys.stdout/sys.stderr for the tees around one CLI command (Rust cli/observability.rs)."
+
+[[stays]]
+path = "runtime/output_capture/__init__.py"
+reason = "public-api"
+note = "Package marker of the public command-output shapes below."
+
+[[stays]]
+path = "runtime/output_capture/models.py"
+reason = "public-api"
+note = "Rule 3 shapes: CommandOutputRecord and sink definitions re-exported by sqlbuild.sinks; validation is native validate_command_output_record."
+
+[[stays]]
+path = "runtime/output_capture/types.py"
+reason = "public-api"
+note = "Rule 3 shapes: CommandOutputStream re-exported by sqlbuild.sinks, priorities and the exporter protocol."
+
+[[stays]]
+path = "runtime/output_capture/exceptions.py"
+reason = "public-api"
+note = "Rule 3 shapes: CommandOutputValidationError re-exported by sqlbuild.sinks and raised by the native records."
+
+[[stays]]
+path = "runtime/output_capture/constants.py"
+reason = "public-api"
+note = "Rule 3 shapes: the invocation-context variable and wire constants used by the models and integrations."
 
 [[stays]]
 path = "integrations/dagster"
@@ -318,11 +348,6 @@ note = "Renders the selected dbt profile output with Jinja, env_var and var as d
 path = "cli/commands/main/entrypoint/_dispatch_with_compute_logs.py"
 reason = "user-code"
 note = "Captures the command's stdout, stderr and logging into the local compute log around user code."
-
-[[stays]]
-path = "cli/commands/main/entrypoint/_dispatch_with_output_capture.py"
-reason = "user-code"
-note = "Tees the command's Python output streams to configured output capture sinks."
 
 [[stays]]
 path = "cli/commands/_helpers/entry/compute_log_diagnostics.py"

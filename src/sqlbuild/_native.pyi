@@ -355,6 +355,12 @@ from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
 from sqlbuild.runtime.observability.models import DiagnosticLog, LifecycleEvent
+from sqlbuild.runtime.output_capture.models import (
+    CommandOutputCaptureSummary,
+    CommandOutputRecord,
+    OutputCaptureContext,
+)
+from sqlbuild.runtime.output_capture.types import CommandOutputStream
 from sqlbuild.spec.contracts.models import (
     CostConfig,
     DbtConfig,
@@ -3451,6 +3457,43 @@ class CliObservabilityScope:
     def __exit__(self, *exc_info: object) -> bool: ...
 
 def cli_observability_scope(*, args: CliNamespace, project_dir: Path) -> CliObservabilityScope: ...
+
+class OutputCaptureDispatcher:
+    """Turn stream fragments into bounded text chunks and export them off execution threads."""
+
+    def __init__(
+        self,
+        *,
+        exporter: object,
+        invocation_id: str,
+        run_id: str | None = None,
+        external_context: Mapping[str, object] | None = None,
+        queue_capacity: int = 1024,
+        batch_size: int = 64,
+        max_record_bytes: int = 65536,
+        shutdown_timeout_seconds: float = 2.0,
+        clock: Callable[[], datetime] | None = None,
+        failure_callback: Callable[[BaseException], object] | None = None,
+    ) -> None: ...
+    def append(self, *, stream: CommandOutputStream, text: str) -> None: ...
+    def close(self) -> CommandOutputCaptureSummary: ...
+
+class OutputDeliveryWorker:
+    def __call__(self) -> None: ...
+
+class CommandOutputContext:
+    def __enter__(self) -> None: ...
+    def __exit__(self, *exc_info: object) -> bool: ...
+
+def command_output_context(*, external_context: Mapping[str, object]) -> CommandOutputContext: ...
+def current_output_capture_context() -> OutputCaptureContext | None: ...
+def chunk_command_output_text(*, text: str, max_bytes: int) -> tuple[str, ...]: ...
+def freeze_command_output_record(record: CommandOutputRecord, /) -> Mapping[str, object]: ...
+def command_output_to_json(record: CommandOutputRecord, /) -> str: ...
+def command_output_from_json(raw_json: str, /) -> CommandOutputRecord: ...
+def invocation_context_from_environment(
+    *, environment: Mapping[str, str] | None = None
+) -> Mapping[str, object]: ...
 
 class LocalFilesystemComputeLogStorage:
     """Ordered fsync capture storage subject to underlying filesystem and hardware guarantees."""

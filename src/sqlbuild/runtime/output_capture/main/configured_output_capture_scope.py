@@ -1,4 +1,4 @@
-"""Configured command-output capture for one CLI command."""
+"""Tee the process streams of one CLI command into configured command-output sinks."""
 
 from __future__ import annotations
 
@@ -7,15 +7,13 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from typing import Any
 
-from sqlbuild.runtime.observability.models import ExecutionIdentity
-from sqlbuild.runtime.output_capture.classes.dispatcher import OutputCaptureDispatcher
-from sqlbuild.runtime.output_capture.classes.text_tee import TextOutputTee
-from sqlbuild.runtime.output_capture.main.current_output_capture_context import (
+from sqlbuild._native import (
+    OutputCaptureDispatcher,
     current_output_capture_context,
-)
-from sqlbuild.runtime.output_capture.main.invocation_context import (
     invocation_context_from_environment,
 )
+from sqlbuild.runtime.observability.models import ExecutionIdentity
+from sqlbuild.runtime.output_capture.classes.text_tee import TextOutputTee
 from sqlbuild.runtime.output_capture.models import OutputCaptureContext
 from sqlbuild.runtime.output_capture.types import (
     CommandOutputBatchExporter,

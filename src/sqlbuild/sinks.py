@@ -1,5 +1,8 @@
 """Public typed sink declarations for lifecycle events and command output."""
 
+from sqlbuild._native import command_output_context as command_output_context
+from sqlbuild._native import command_output_from_json as command_output_from_json
+from sqlbuild._native import command_output_to_json as command_output_to_json
 from sqlbuild.runtime.event_exporting.main.command_output_sink import (
     command_output_sink as command_output_sink,
 )
@@ -22,15 +25,6 @@ from sqlbuild.runtime.observability.main.lifecycle_event_to_json import (
 from sqlbuild.runtime.observability.models import LifecycleEvent as LifecycleEvent
 from sqlbuild.runtime.output_capture.exceptions import (
     CommandOutputValidationError as CommandOutputValidationError,
-)
-from sqlbuild.runtime.output_capture.main.command_output_context import (
-    command_output_context as command_output_context,
-)
-from sqlbuild.runtime.output_capture.main.command_output_from_json import (
-    command_output_from_json as command_output_from_json,
-)
-from sqlbuild.runtime.output_capture.main.command_output_to_json import (
-    command_output_to_json as command_output_to_json,
 )
 from sqlbuild.runtime.output_capture.models import (
     CommandOutputRecord as CommandOutputRecord,
