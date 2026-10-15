@@ -8,10 +8,10 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild._native import (
-    build_query_diff_artifact_name,
-    compute_query_hash,
     Fingerprint,
     FingerprintSet,
+    build_query_diff_artifact_name,
+    compute_query_hash,
     parse_query_diff_artifact_name,
     read_latest_fingerprints,
     write_fingerprint,
