@@ -19,7 +19,6 @@ pub(crate) const EXPANSION_MARKER: char = '+';
 pub(crate) const INTERSECTION_SEPARATOR: char = ',';
 pub(crate) const PATTERN_CHARACTERS: [char; 3] = ['*', '?', '['];
 pub(crate) const SQL_MODEL_PATH_ROOT: &str = "models";
-pub(crate) const PYTHON_NODE_PATH_ROOT: &str = "python";
 pub(crate) const CURRENT_DIRECTORY: &str = ".";
 pub(crate) const ROOT_DIRECTORY: &str = "/";
 pub(crate) const PLANNER_DEFAULT_CODE: &str = "S000";

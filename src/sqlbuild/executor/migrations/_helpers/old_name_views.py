@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlbuild._native import (
+    COLUMN_MIGRATION_TABLE_NAME,
     ColumnMigrationEvent,
     CompiledRelationLocation,
     Duration,
@@ -31,7 +32,6 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
 from sqlbuild.adapter.type_system.main.normalize_relation_type import normalize_relation_type
-from sqlbuild.compiler.migrations.constants import COLUMN_MIGRATION_TABLE_NAME
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.migrations._helpers.old_name_facts import (
     old_name_fact,

@@ -2,12 +2,12 @@
 
 from collections.abc import Iterable
 
+from sqlbuild._native import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
 from sqlbuild._native import append_and_project as _append_and_project
 from sqlbuild._native import canonical_event_content as _canonical_event_content
 from sqlbuild._native import canonical_event_id as _canonical_event_id
 from sqlbuild._native import project_execution_runs as _project_execution_runs
 from sqlbuild._native import validate_history_page_limit as _validate_history_page_limit
-from sqlbuild.runtime.execution_history.constants import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
 from sqlbuild.runtime.execution_history.exceptions import (
     ExecutionHistoryStorageError,
     IntegrityConflictError,

@@ -2,8 +2,8 @@
 
 use crate::constants::{
     CANONICAL_AUTHORED_ROOTS, DECLARATION_GROUP_DIRECTORY, GLOBAL_DECLARATION_DIRECTORIES,
-    LOCAL_DECLARATION_DIRECTORIES, PYTHON_FILE_SUFFIX, PYTHON_INIT_MODULE_STEM,
-    SCOPED_DECLARATION_DIRECTORIES, SQL_FILE_SUFFIX,
+    LOCAL_DECLARATION_DIRECTORIES, PYTHON_FILE_SUFFIX, SCOPED_DECLARATION_DIRECTORIES,
+    SQL_FILE_SUFFIX,
 };
 use crate::declarations::_helpers::declaration_groups::validate_declaration_groups;
 use crate::declarations::_helpers::paths::{directory_facts, name, parent, stem};
@@ -14,6 +14,7 @@ use crate::tree::main::directories::directories;
 use crate::tree::main::path_order::compare_posix_text;
 use crate::tree::main::rglob::rglob;
 use crate::tree::models::ProjectTree;
+use sqlbuild_core::constants::PYTHON_INIT_MODULE_STEM;
 
 /// Where a declaration root sits and who owns it.
 struct DeclarationRoot<'a> {

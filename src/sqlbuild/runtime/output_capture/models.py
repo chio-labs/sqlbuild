@@ -6,12 +6,12 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlbuild._native import freeze_command_output_record
-from sqlbuild.runtime.output_capture.constants import (
+from sqlbuild._native import (
     COMMAND_OUTPUT_RECORD_TYPE,
     CURRENT_COMMAND_OUTPUT_SCHEMA_VERSION,
-    SQLBUILD_COMMAND_OUTPUT_PRODUCER_VERSION,
+    freeze_command_output_record,
 )
+from sqlbuild.runtime.output_capture.constants import SQLBUILD_COMMAND_OUTPUT_PRODUCER_VERSION
 from sqlbuild.runtime.output_capture.types import CommandOutputStream, OutputRecordPriority
 
 

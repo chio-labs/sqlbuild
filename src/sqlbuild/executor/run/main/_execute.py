@@ -5,17 +5,19 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
-from sqlbuild._native import Fingerprint, ModelPlanEntry, setting_help
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapter.contract.models import ColumnInfo
-from sqlbuild.adapter.contract.types import TablePromotionMode
-from sqlbuild.compiler.discovery.constants import (
+from sqlbuild._native import (
     PROJECT_CONFIG_FILENAME,
     SETTINGS_SECTION,
     STAGED_PROMOTION_MODE,
     TABLE_PROMOTION_MODE_SETTING_KEY,
+    Fingerprint,
+    ModelPlanEntry,
+    setting_help,
 )
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.auditing.models import AuditExecutionResult

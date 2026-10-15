@@ -17,11 +17,12 @@ use crate::project::constants::{
     REQUIRE_SQL_ANALYSIS_KEY, RUN_NAMESPACE_KEY, RUN_NAMESPACE_MAX_LENGTH, SCENARIO_KEYS,
     SETTINGS_KEYS, SNAPSHOT_FULL_REFRESH_POLICIES, SNAPSHOT_KEYS, SNAPSHOT_LIMIT_KEYS,
     SNAPSHOT_SCHEMA_CHANGE_POLICIES, SQL_ANALYSIS_KEY, UNACCOUNTED_PARTITION_POLICIES,
-    USD_PER_CREDIT_KEY, ZERO_DAY_DURATION, ZERO_FIXED_DURATION, ZERO_FLOAT,
+    USD_PER_CREDIT_KEY, ZERO_FIXED_DURATION, ZERO_FLOAT,
 };
 use crate::project::errors::ConfigFailure;
 use crate::project::models::{Built, ConfigFile};
 use crate::project::types::{Entries, Fields, Loaded};
+use sqlbuild_core::constants::ZERO_DAY_DURATION;
 
 fn place(file: ConfigFile, label: &str) -> Place<'_> {
     Place { file, label }

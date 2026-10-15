@@ -5,9 +5,10 @@ use std::path::Path;
 use crate::lint_text::_helpers::settings::{adapter_dialect, positive_int, read_table};
 use crate::lint_text::constants::{
     DEFAULT_DIALECT, DEFAULT_LINE_WIDTH, DEFAULT_MAX_DESCRIPTION_LINES, DEFAULT_MAX_LITERAL_LENGTH,
-    DEFAULT_MAX_RANKING_ORDER_BY, LOCAL_CONFIG_FILENAME, PROJECT_CONFIG_FILENAME,
+    DEFAULT_MAX_RANKING_ORDER_BY, LOCAL_CONFIG_FILENAME,
 };
 use crate::lint_text::models::FormatSettings;
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 
 /// `[format]` widths, rule thresholds and the adapter dialect, the local adapter winning.
 pub fn resolve_format_settings(project_dir: &Path) -> Result<FormatSettings, String> {

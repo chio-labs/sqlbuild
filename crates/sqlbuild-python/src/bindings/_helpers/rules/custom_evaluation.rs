@@ -19,7 +19,9 @@ use sqlbuild_rules::custom_rule_cache::types::ReadSet;
 
 use crate::bindings::_helpers::cache::native_store::current_code_identity;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::rules::constants::CUSTOM_RULES_CACHE_FILE;
+use crate::bindings::_helpers::rules::constants::{
+    CUSTOM_HOST_RUNTIME_VERSION, CUSTOM_RULES_CACHE_FILE,
+};
 use crate::bindings::_helpers::rules::custom_hosts::{
     HostCancel, HostRequest, host_payload_project, run_custom_hosts,
 };
@@ -28,7 +30,6 @@ use crate::bindings::_helpers::rules::custom_rule_cache::CustomRuleCache;
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const RULES_CONSTANTS_MODULE: &str = "sqlbuild.rule_engine.constants";
 const RULES_ERRORS_MODULE: &str = "sqlbuild._native";
 const RULE_CONTEXT_MODULE: &str = "sqlbuild.rule_engine.classes.rule_context";
 const FACT_REPLAY_MODULE: &str = "sqlbuild.rule_engine._helpers.engine.fact_replay";
@@ -473,7 +474,7 @@ fn rule_identity(
             ),
             (
                 "runtime_version",
-                imported(py, RULES_CONSTANTS_MODULE, "CUSTOM_HOST_RUNTIME_VERSION")?,
+                pyo3::types::PyString::new(py, CUSTOM_HOST_RUNTIME_VERSION).into_any(),
             ),
             ("code", rule.getattr("code")?),
             ("family", rule.getattr("family")?),

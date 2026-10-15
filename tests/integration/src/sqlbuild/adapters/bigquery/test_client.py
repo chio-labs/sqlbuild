@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import (
+    FINGERPRINT_TABLE_NAME,
     Fingerprint,
     FingerprintSet,
     SourceFreshnessValueKind,
@@ -30,7 +31,6 @@ from sqlbuild.adapter.contract.models import (
 )
 from sqlbuild.adapter.contract.types import FunctionNullabilityRule
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
-from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.lineage.types import InferredNullability
 from tests.integration.src.sqlbuild.adapters.bigquery._test_types import (
     BigQueryBuildFlowTestCase,

@@ -16,8 +16,6 @@ pub(crate) const TYPE_CODES: [&str; 10] = [
 pub(crate) const MIN_ABBREVIATION_LENGTH: usize = 3;
 pub(crate) const MAX_EDIT_DISTANCE: usize = 2;
 pub(crate) const DISPLAY_LIMIT: usize = 10;
-pub(crate) const PROJECT_CONFIG_FILENAME: &str = "sqlbuild_project.toml";
-pub(crate) const SETTINGS_SECTION: &str = "settings";
 pub(crate) const REQUIRE_SQL_ANALYSIS_KEY: &str = "require_sql_analysis";
 pub(crate) const SETTING_SNIPPET_INDENT: &str = "            ";
 pub(crate) const ADDITIONAL_HELP_SEPARATOR: &str = "\n  = help: ";

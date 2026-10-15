@@ -5,12 +5,12 @@ from collections.abc import Callable
 import pytest
 
 from sqlbuild._native import (
+    SOURCE_FRESHNESS_TABLE_NAME,
     build_source_freshness_create_table_sql,
     build_source_freshness_read_latest_sql,
 )
 from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from tests.unit.src.sqlbuild.compiler.source_freshness.main.shared._helpers._test_types import (
     BuildSourceFreshnessSqlTestCase,
 )

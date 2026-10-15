@@ -47,13 +47,7 @@ pub(crate) const CURSOR_ALGEBRA_ERROR: (&str, &str) =
     ("sqlbuild.cursor_algebra.exceptions", "CursorAlgebraError");
 pub(crate) const DATE_VALUE: (&str, &str) = ("sqlbuild._native", "DateValue");
 pub(crate) const PLANNER_LOGGER: &str = "sqlbuild.planner";
-pub(crate) const FINGERPRINT_TABLE_NAME: &str = "_sqlbuild_fingerprints";
-pub(crate) const SOURCE_FRESHNESS_TABLE_NAME: &str = "_sqlbuild_source_freshness";
-pub(crate) const OLD_NAME_VIEW_TABLE_NAME: &str = "_sqlbuild_old_name_views";
-pub(crate) const MIGRATION_TABLE_NAME: &str = "_sqlbuild_migrations";
 pub(crate) const METADATA_NAME_FILTER_LIMIT: usize = 250;
-pub(crate) const NODE_TYPE_MODEL: &str = "model";
-pub(crate) const NODE_TYPE_SEED: &str = "seed";
 pub(crate) const FUNCTION_NODE_TYPES: [&str; 2] = ["udf", "table_fn"];
 pub(crate) const WILDCARD_TABLE_CHARACTER: &str = "*";
 pub(crate) const MIGRATE_FROM_CONFIG_KEY: &str = "migrate_from";

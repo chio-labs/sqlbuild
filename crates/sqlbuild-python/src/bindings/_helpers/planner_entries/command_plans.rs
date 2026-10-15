@@ -1,6 +1,6 @@
 //! Static plans for commands that do not build models, and direct seed identity reads.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_entries::plan_output::{
     function_entry, selected_test_entries, test_selected,
 };
@@ -11,9 +11,9 @@ use crate::bindings::_helpers::planner_entries::values::{
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyList, PyListMethods, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_analysis::fingerprint_storage::constants::NODE_TYPE_SEED;
+use sqlbuild_core::constants::FINGERPRINT_TABLE_NAME;
 use std::collections::{BTreeMap, BTreeSet};
-
-const FINGERPRINT_CONSTANTS: &str = "sqlbuild.compiler.fingerprints.constants";
 
 /// Optional fields of a static command plan; absent ones take `PlanOutput` defaults.
 #[derive(Default)]
@@ -370,9 +370,7 @@ fn read_selected_seed_fingerprints<'py>(
     seeds: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let py = adapter.py();
-    let table_name: String =
-        imported(py, FINGERPRINT_CONSTANTS, "FINGERPRINT_TABLE_NAME")?.extract()?;
-    let seed_node_type = imported(py, FINGERPRINT_CONSTANTS, "NODE_TYPE_SEED")?;
+    let table_name: &str = FINGERPRINT_TABLE_NAME;
     let mut names_by_target: BTreeMap<(String, String), (Target, BTreeSet<String>)> =
         BTreeMap::new();
     for seed in seeds.try_iter()? {
@@ -393,7 +391,7 @@ fn read_selected_seed_fingerprints<'py>(
     let fingerprints = PyDict::new(py);
     let mut relations_by_target: Vec<Bound<'py, PyAny>> = Vec::new();
     for ((database, schema), _) in names_by_target.values() {
-        let names = PyTuple::new(py, [table_name.as_str()])?;
+        let names = PyTuple::new(py, [table_name])?;
         let schemas = PyTuple::new(py, [schema.as_str()])?;
         let kwargs = PyDict::new(py);
         kwargs.set_item("connection", connection)?;
@@ -449,7 +447,7 @@ fn read_selected_seed_fingerprints<'py>(
         )?;
         for item in items.iter() {
             let (name, fingerprint) = (item.get_item(0)?, item.get_item(1)?);
-            if fingerprint.getattr("node_type")?.eq(&seed_node_type)?
+            if fingerprint.getattr("node_type")?.eq(NODE_TYPE_SEED)?
                 && names.contains(&name.extract::<String>()?)
             {
                 fingerprints.set_item(name, fingerprint)?;

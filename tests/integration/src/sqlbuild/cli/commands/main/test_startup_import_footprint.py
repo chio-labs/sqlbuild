@@ -11,9 +11,7 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.compiler.frontier.constants import (
-    COMPILE_REUSE_DISABLE_ENV_VAR as REUSE_DISABLE_ENV_VAR,
-)
+from sqlbuild._native import COMPILE_REUSE_DISABLE_ENV_VAR as REUSE_DISABLE_ENV_VAR
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     ReusedCompileImportFootprintTestCase,
     StartupImportFootprintTestCase,

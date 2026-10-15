@@ -1,9 +1,6 @@
 """Rules engine constants."""
 
-CUSTOM_HOST_PROTOCOL_VERSION: int = 1
-CUSTOM_HOST_RUNTIME_VERSION: str = "sqlbuild-rules-custom-v2"
 CUSTOM_HOST_MAX_TRACKED_READS: int = 100_000
-CUSTOM_RULE_PROJECT_SUBJECT: str = ""
 CUSTOM_HOST_INPUT_TUPLE_SIZE: int = 2
 SHARED_FACT_DATACLASS_TAG: str = "\0dataclass"
 CUSTOM_HOST_INPUT_POLL_SECONDS: float = 0.002
@@ -11,7 +8,6 @@ CUSTOM_HOST_INPUT_WAIT_SECONDS: float = 120.0
 CUSTOM_HOST_MODULE: str = "sqlbuild.rule_engine._helpers.host.custom_host"
 CUSTOM_HOST_CANCELLED_EXIT_CODE: int = 75
 CUSTOM_HOST_CANCELLED_MESSAGE: str = "custom host cancelled after another host failed"
-CUSTOM_HOST_LAUNCH_MODULE: str = "sqlbuild.rule_engine._helpers.host.custom_host_launch"
 CUSTOM_HOST_HASH_SEED: str = "0"
 CUSTOM_HOST_EXEC_OS_NAME: str = "posix"
 CUSTOM_HOST_STARTUP_ENVIRONMENT: tuple[str, ...] = (
@@ -57,15 +53,9 @@ CUSTOM_RULE_IMPORT_ROOTS: frozenset[str] = frozenset(
     }
 )
 
-AST_CTE_KIND: str = "cte"
-CONTRACT_ENFORCED: str = "enforced"
-
-
 RULE_DECORATOR_TOKEN: str = "@rule"
-INIT_MODULE_NAME: str = "__init__"
 PARENT_DIRECTORY_TOKEN: str = ".."
 
-MIN_CUSTOM_RULE_TEST_CASES: str = "min_custom_rule_test_cases"
 FACT_PROJECT_MODELS: str = "project.models"
 FACT_PROJECT_SOURCES: str = "project.sources"
 FACT_PROJECT_SEEDS: str = "project.seeds"

@@ -13,12 +13,14 @@ use crate::project::_helpers::keys::{Place, reject_removed_virtual_keys, validat
 use crate::project::constants::{
     BATCH_CONCURRENCY_KEY, CHANGE_POLICY_KEYS, CONTRACT_POLICIES, DEFAULTS_KEYS, DISABLED_VALUE,
     GLOB_SEGMENTS, INHERIT_VALUE, MATERIALIZATION_DEFAULT_KEYS, MAX_MICROBATCHES_KEY,
-    MODEL_HEADER_KEYS, MODELS_DIRECTORY_NAME, PROJECT_CONFIG_FILENAME, RETENTION_MATERIALIZATIONS,
-    TABLE_TYPES, TEMPLATE_OPEN_TOKEN, UNSUPPORTED_GLOB_MARKERS, ZERO_DAY_DURATION,
+    MODEL_HEADER_KEYS, MODELS_DIRECTORY_NAME, RETENTION_MATERIALIZATIONS, TABLE_TYPES,
+    TEMPLATE_OPEN_TOKEN, UNSUPPORTED_GLOB_MARKERS,
 };
 use crate::project::errors::ConfigFailure;
 use crate::project::models::{Built, ConfigFile};
 use crate::project::types::{Entries, Fields, Loaded};
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
+use sqlbuild_core::constants::ZERO_DAY_DURATION;
 
 /// A retention or table-type field: where it lives and whether `'inherit'` is accepted.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

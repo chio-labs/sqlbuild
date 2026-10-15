@@ -25,7 +25,7 @@ const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const DBT_EXCEPTIONS: &str = "sqlbuild.integrations.dbt.exceptions";
 const PROFILE_RENDER_MODULE: &str = "sqlbuild.integrations.dbt._helpers.profile.render";
-const PROJECT_FILE: &str = "sqlbuild_project.toml";
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME as PROJECT_FILE;
 const DEFAULT_OUTPUT_DIR: &str = "sqlbuild_project";
 const PROFILES_FILE: &str = "profiles.yml";
 const PROFILES_DIR_ENV_VAR: &str = "DBT_PROFILES_DIR";

@@ -1,5 +1,6 @@
 use crate::configuration::main::setting_help::setting_help;
 use crate::configuration::main::toml_string_array::toml_string_array;
+use crate::constants::MIN_CUSTOM_RULE_TEST_CASES_KEY;
 use crate::constants::{
     DECLARATION_DOMAIN_COMPONENTS, ENFORCED_CONTRACT, NEGATION_OPERATOR, REFERENCE_KIND,
     SOURCE_REFERENCE_KIND, VIEW_MATERIALIZATION,
@@ -1492,7 +1493,7 @@ fn custom_rule_test_coverage(
     let (selected, rule) = policy;
     let minimum = config
         .thresholds
-        .get("min_custom_rule_test_cases")
+        .get(MIN_CUSTOM_RULE_TEST_CASES_KEY)
         .copied()
         .unwrap_or(1);
     if minimum == 0 {

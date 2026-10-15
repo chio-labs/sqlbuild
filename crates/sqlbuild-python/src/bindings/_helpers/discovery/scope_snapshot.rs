@@ -28,7 +28,7 @@ const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const MODELS_MODULE: &str = "sqlbuild._native";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
-const PROJECT_CONFIG_FILENAME: &str = "sqlbuild_project.toml";
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 const LOCAL_CONFIG_FILENAME: &str = "sqlbuild_local.toml";
 const FALLBACK_PROJECT_NAME: &str = "project";
 const FALLBACK_ADAPTER: &str = "duckdb";

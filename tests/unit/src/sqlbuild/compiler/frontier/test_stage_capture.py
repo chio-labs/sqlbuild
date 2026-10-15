@@ -9,8 +9,12 @@ from pathlib import Path
 import pytest
 
 from scripts.compiler_differential.classes.capture_file import expand_capture_text
-from sqlbuild._native import CompilerStage, compile_frontier, render_stage_capture
-from sqlbuild.compiler.frontier.constants import STAGE_CAPTURE_DIR_ENV_VAR
+from sqlbuild._native import (
+    STAGE_CAPTURE_DIR_ENV_VAR,
+    CompilerStage,
+    compile_frontier,
+    render_stage_capture,
+)
 from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
     FrontierCaptureTestCase,
     OmittedFieldTestCase,

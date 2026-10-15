@@ -5,12 +5,12 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from sqlbuild._native import (
+    FINGERPRINT_TABLE_NAME,
+    SOURCE_FRESHNESS_TABLE_NAME,
     build_janitor_plan,
     build_scenario_artifact_name,
     compute_scenario_hash_prefix,
 )
-from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
-from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.executor.janitor.main.execute import execute_janitor_plan
 from sqlbuild.executor.janitor.models import (
     JanitorExecutionResult,

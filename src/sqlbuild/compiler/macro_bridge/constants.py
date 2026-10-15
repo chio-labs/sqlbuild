@@ -5,11 +5,6 @@ from __future__ import annotations
 import itertools
 from contextvars import ContextVar
 
-from sqlbuild.compiler.frontier.constants import (
-    COMPILE_REUSE_DISABLE_ENV_VAR,
-    STAGE_CAPTURE_DIR_ENV_VAR,
-)
-
 ACTIVE_MACRO_BRIDGE: ContextVar[object | None] = ContextVar(
     "sqlbuild_active_macro_bridge", default=None
 )
@@ -24,10 +19,3 @@ INSTALLED_DISTRIBUTION_SUFFIX: str = ".dist-info"
 INSTALLED_RECORD_FILE_NAME: str = "RECORD"
 INTERPRETER_MODULE_ORIGINS: frozenset[str] = frozenset({"built-in", "frozen"})
 MAIN_MODULE_NAME: str = "__main__"
-STORE_TRACKED_ENVIRONMENT_PREFIXES: tuple[str, ...] = ("SQLBUILD_", "SQB_")
-STORE_UNTRACKED_ENVIRONMENT_NAMES: frozenset[str] = frozenset(
-    {
-        COMPILE_REUSE_DISABLE_ENV_VAR,
-        STAGE_CAPTURE_DIR_ENV_VAR,
-    }
-)

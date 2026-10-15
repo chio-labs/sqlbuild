@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import SOURCE_FRESHNESS_TABLE_NAME as SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild._native import StateSqlValueType
-
-SOURCE_FRESHNESS_TABLE_NAME: str = "_sqlbuild_source_freshness"
 
 COLUMN_SOURCE_NAME: str = "source_name"
 COLUMN_TARGET_DATABASE: str = "target_database"

@@ -316,7 +316,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         database: str | None,
         schema: str,
     ) -> str:
-        from sqlbuild.compiler.fingerprints.constants import (
+        from sqlbuild._native import (
             COLUMN_DEFINITION_B64,
             COLUMN_DEFINITION_HASH,
             COLUMN_METADATA_JSON_B64,
@@ -385,7 +385,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         database: str | None,
         schema: str,
     ) -> tuple[str, ...]:
-        from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+        from sqlbuild._native import FINGERPRINT_TABLE_NAME
 
         table_name: str | None = self.render_qualified_name(
             database=database,
@@ -430,7 +430,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         schema: str,
         retain_versions: int,
     ) -> str:
-        from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+        from sqlbuild._native import FINGERPRINT_TABLE_NAME
 
         table_name: str | None = self.render_qualified_name(
             database=database,
@@ -465,7 +465,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         database: str | None,
         schema: str,
     ) -> tuple[str, ...]:
-        from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
+        from sqlbuild._native import SOURCE_FRESHNESS_TABLE_NAME
 
         table_name: str | None = self.render_qualified_name(
             database=database,
@@ -657,8 +657,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
 
     def render_create_migration_state_table_sql(self, *, database: str | None, schema: str) -> str:
-        from sqlbuild._native import render_migration_state_create_sql
-        from sqlbuild.compiler.migrations.constants import MIGRATION_TABLE_NAME
+        from sqlbuild._native import MIGRATION_TABLE_NAME, render_migration_state_create_sql
 
         create_sql: str = render_migration_state_create_sql(
             kind="model",
@@ -677,8 +676,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def render_create_old_name_view_state_table_sql(
         self, *, database: str | None, schema: str
     ) -> str:
-        from sqlbuild._native import render_migration_state_create_sql
-        from sqlbuild.compiler.migrations.constants import OLD_NAME_VIEW_TABLE_NAME
+        from sqlbuild._native import OLD_NAME_VIEW_TABLE_NAME, render_migration_state_create_sql
 
         create_sql: str = render_migration_state_create_sql(
             kind="old_name",
@@ -697,8 +695,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def render_create_column_migration_state_table_sql(
         self, *, database: str | None, schema: str
     ) -> str:
-        from sqlbuild._native import render_migration_state_create_sql
-        from sqlbuild.compiler.migrations.constants import COLUMN_MIGRATION_TABLE_NAME
+        from sqlbuild._native import COLUMN_MIGRATION_TABLE_NAME, render_migration_state_create_sql
 
         create_sql: str = render_migration_state_create_sql(
             kind="column",
@@ -735,7 +732,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         schema: str,
         retain_versions: int,
     ) -> str:
-        from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
+        from sqlbuild._native import SOURCE_FRESHNESS_TABLE_NAME
 
         table_name: str | None = self.render_qualified_name(
             database=database,

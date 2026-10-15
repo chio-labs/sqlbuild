@@ -19,7 +19,7 @@ use crate::bindings::_helpers::result_output::terminal_index::{
     TerminalEventClaim, TerminalEventIndex, current_index_object,
 };
 
-const RESULT_PATH_ENV: &str = "SQLBUILD_INTEGRATION_RESULT_PATH";
+pub(crate) const RESULT_PATH_ENV: &str = "SQLBUILD_INTEGRATION_RESULT_PATH";
 const BUILD_OPTIONS: (&[&str], &[&str]) = (&["result", "plan"], &["command"]);
 
 /// Thread-safe JSON Lines execution event writer.

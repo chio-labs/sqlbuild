@@ -15,6 +15,9 @@ from pathlib import Path
 from typing import Any, BinaryIO
 
 from sqlbuild._native import (
+    CUSTOM_HOST_LAUNCH_MODULE,
+    CUSTOM_HOST_PROTOCOL_VERSION,
+    CUSTOM_HOST_RUNTIME_VERSION,
     CompiledProject,
     CustomHostPartition,
     CustomRuleRun,
@@ -37,10 +40,7 @@ from sqlbuild.rule_engine.constants import (
     CUSTOM_HOST_INPUT_POLL_SECONDS,
     CUSTOM_HOST_INPUT_TUPLE_SIZE,
     CUSTOM_HOST_INPUT_WAIT_SECONDS,
-    CUSTOM_HOST_LAUNCH_MODULE,
     CUSTOM_HOST_MAX_TRACKED_READS,
-    CUSTOM_HOST_PROTOCOL_VERSION,
-    CUSTOM_HOST_RUNTIME_VERSION,
 )
 from sqlbuild.rule_engine.types import CustomRulePlan
 

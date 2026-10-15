@@ -13,7 +13,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::frontier::encoder::{CaptureEncoder, emit_error};
 
-const CAPTURE_DIR_ENV_VAR: &str = "SQLBUILD_COMPILER_STAGE_CAPTURE_DIR";
+pub(crate) const CAPTURE_DIR_ENV_VAR: &str = "SQLBUILD_COMPILER_STAGE_CAPTURE_DIR";
 const CAPTURE_SUFFIX: &str = ".json";
 const PLAN_CAPTURE_DIR_ENV_VAR: &str = "SQLBUILD_PLANNER_CAPTURE_DIR";
 const PLAN_CAPTURE_NAME: &str = "plan_output";

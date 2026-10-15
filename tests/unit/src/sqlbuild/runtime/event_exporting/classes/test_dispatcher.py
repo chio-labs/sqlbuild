@@ -9,6 +9,7 @@ from typing import cast
 import pytest
 
 from sqlbuild._native import (
+    COMMAND_OUTPUT_LOSS_RECORD_TYPE,
     BoundEventExporter,
     EventExporterCounts,
     EventExporterDispatcher,
@@ -17,7 +18,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.observability import LifecycleEvent
 from sqlbuild.runtime.event_exporting.exceptions import EventExporterInputError
-from sqlbuild.runtime.output_capture.constants import COMMAND_OUTPUT_LOSS_RECORD_TYPE
 from sqlbuild.runtime.output_capture.models import BoundCommandOutputSink
 from sqlbuild.sinks import CommandOutputRecord, CommandOutputStream
 from tests.unit.src.sqlbuild.runtime.event_exporting.classes._test_types import (

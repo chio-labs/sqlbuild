@@ -22,8 +22,8 @@ const IS_COMPATIBILITY_VIEW: (&str, &str) = (
 );
 const READ_HISTORIES: (&str, &str) = ("sqlbuild._native", "read_old_name_view_histories");
 const STORED_COLUMNS: (&str, &str) = ("sqlbuild._native", "stored_old_name_view_columns");
-const OLD_NAME_VIEW_TABLE_NAME: &str = "_sqlbuild_old_name_views";
-const MIGRATION_TABLE_NAME: &str = "_sqlbuild_migrations";
+use sqlbuild_core::constants::MIGRATION_TABLE_NAME;
+use sqlbuild_core::constants::OLD_NAME_VIEW_TABLE_NAME;
 const MIGRATE_FROM_CONFIG_KEY: &str = "migrate_from";
 
 /// Old-name view planning and the old names it owns.

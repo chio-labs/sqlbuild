@@ -2,9 +2,9 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::constants::PROJECT_CONFIG_FILENAME;
 use crate::debug_report::constants::{
     LEGACY_LOCAL_CONFIG_FILENAME, LEGACY_PROJECT_CONFIG_FILENAME, LOCAL_CONFIG_FILENAME,
-    PROJECT_CONFIG_FILENAME,
 };
 use crate::debug_report::models::DebugConfigFiles;
 

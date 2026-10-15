@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild._native import (
+    FINGERPRINT_TABLE_NAME,
     Fingerprint,
     FingerprintSet,
     build_query_diff_artifact_name,
@@ -20,10 +21,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, RelationLookup
 from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
-from sqlbuild.compiler.fingerprints.constants import (
-    FINGERPRINT_TABLE_NAME,
-    NODE_TYPE_QUERY_DIFF_ARTIFACT,
-)
+from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_QUERY_DIFF_ARTIFACT
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.diff.models import (
     QueryDiffArtifact,

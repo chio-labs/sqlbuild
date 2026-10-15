@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlbuild._native import (
+    MIGRATION_WRITE_ATTEMPTS,
     MigrationRelation,
     OldNameViewEvent,
     OldNameViewEventType,
@@ -16,7 +17,6 @@ from sqlbuild._native import (
     write_migration_state_event,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.migrations.constants import MIGRATION_WRITE_ATTEMPTS
 from sqlbuild.executor.migrations._helpers.relation_for_location import (
     migration_relation_for_location,
 )

@@ -14,7 +14,7 @@ use crate::bindings::_helpers::discovery::imported_modules::{
 };
 use crate::bindings::_helpers::discovery::imported_providers;
 
-const PYTHON_NODE_ROOT: &str = "python";
+use sqlbuild_core::constants::PYTHON_NODE_ROOT;
 const NODE_ERROR: &str = "PythonNodeDiscoveryError";
 const AUDIT_CASE: (&str, &str) = ("sqlbuild.python_nodes.models", "AuditCase");
 const READ_FACTORY: (&str, &str) = (

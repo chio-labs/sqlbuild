@@ -7,9 +7,7 @@ from itertools import product
 from pathlib import Path
 from typing import NamedTuple, cast
 
-from sqlbuild.compiler.frontier.constants import (
-    COMPILE_REUSE_DISABLE_ENV_VAR as REUSE_DISABLE_ENV_VAR,
-)
+from sqlbuild._native import COMPILE_REUSE_DISABLE_ENV_VAR as REUSE_DISABLE_ENV_VAR
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import run_installed_sqb
 
 _TIMING: re.Pattern[str] = re.compile(r" \(\d+\.\d+s\)")

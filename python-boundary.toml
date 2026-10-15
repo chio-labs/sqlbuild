@@ -245,11 +245,6 @@ reason = "public-api"
 note = "Rule 3 shapes: public storage errors re-exported by sqlbuild.execution_history and raised by the native backends."
 
 [[stays]]
-path = "runtime/execution_history/constants.py"
-reason = "public-api"
-note = "Rule 3 shapes: page limit and schema version constants re-exported by sqlbuild.execution_history."
-
-[[stays]]
 path = "runtime/execution_limits"
 reason = "executor"
 note = "Deadline the executor scheduler and warehouse cursors enforce."
@@ -292,7 +287,7 @@ note = "Rule 3 shapes: public storage errors re-exported by sqlbuild.compute_log
 [[stays]]
 path = "runtime/compute_logs/constants.py"
 reason = "public-api"
-note = "Rule 3 shapes: format version, retention and read-limit constants re-exported by sqlbuild.compute_logs."
+note = "Rule 1 capture shim constants: the SQL log record field and redaction message the Python diagnostic log handler uses; format version, retention and read limits are native (sqlbuild._native)."
 
 [[stays]]
 path = "runtime/event_exporting/__init__.py"
@@ -387,7 +382,7 @@ note = "Rule 3 shapes: CommandOutputValidationError re-exported by sqlbuild.sink
 [[stays]]
 path = "runtime/output_capture/constants.py"
 reason = "public-api"
-note = "Rule 3 shapes: the invocation-context variable and wire constants used by the models and integrations."
+note = "Rule 3 shapes: the command-output sink parameter name and producer version; INVOCATION_CONTEXT_ENV is re-exported from sqlbuild._native for integrations."
 
 [[stays]]
 path = "integrations/dagster"
@@ -682,7 +677,7 @@ note = "Shape rule: data records only (CompileReuseRequest, SettingsEnvironmentI
 [[stays]]
 path = "compiler/source_freshness/constants.py"
 reason = "adapter"
-note = "Shape rule: data constants only (SOURCE_FRESHNESS_TABLE_NAME, COLUMN_SOURCE_NAME, COLUMN_TARGET_DATABASE, COLUMN_TARGET_SCHEMA, ...), no logic; consumed by adapter/contract/classes/duckdb_backed_adapter.py, adapter/state_sql/_helpers/source_freshness.py, adapters/bigquery/classes/bigquery_adapter.py and 6 more."
+note = "Shape rule: source freshness column names and adapter column types, no logic; SOURCE_FRESHNESS_TABLE_NAME is re-exported from sqlbuild._native."
 
 [[stays]]
 path = "compiler/auditing/types.py"
@@ -717,7 +712,7 @@ note = "Shape rule: data exceptions only (SharedInputError, ExecutorInputError),
 [[stays]]
 path = "compiler/fingerprints/constants.py"
 reason = "executor"
-note = "Shape rule: data constants only (FINGERPRINT_TABLE_NAME, COLUMN_NODE_TYPE, COLUMN_NODE_NAME, COLUMN_TARGET_DATABASE, ...), no logic; consumed by adapter/contract/classes/duckdb_backed_adapter.py, adapters/bigquery/classes/bigquery_adapter.py, adapters/databricks/classes/databricks_adapter.py and 13 more."
+note = "Shape rule: Python-only node type names (NODE_TYPE_HOOK, NODE_TYPE_QUERY_DIFF_ARTIFACT), no logic; table and column names are native (sqlbuild._native)."
 
 [[stays]]
 path = "diagnostics/models.py"
@@ -760,11 +755,6 @@ reason = "user-code"
 note = "Shape rule: data exceptions only (DbtProfileError), no logic; consumed by integrations/dbt/_helpers/profile/load.py, integrations/dbt/_helpers/profile/render.py."
 
 [[stays]]
-path = "compiler/migrations/constants.py"
-reason = "executor"
-note = "Shape rule: data constants only (MIGRATION_TABLE_NAME, MIGRATION_WRITE_ATTEMPTS, COLUMN_MIGRATION_TABLE_NAME, OLD_NAME_VIEW_TABLE_NAME), no logic; consumed by adapters/sqlserver/classes/sqlserver_adapter.py, executor/migrations/_helpers/columns.py, executor/migrations/_helpers/old_name_facts.py and 2 more."
-
-[[stays]]
 path = "diagnostics/constants.py"
 reason = "public-api"
 note = "Shape rule: data constants only (LOGGER_ROOT_NAME, LOGGER_PREFIX, SQL_DIGEST_FIELD, SQL_TEXT_FIELD, ...), no logic; consumed by diagnostics/_helpers/logging.py, diagnostics/_helpers/redaction.py, diagnostics/classes/invocation_diagnostic_routing.py and 2 more."
@@ -777,7 +767,7 @@ note = "Shape rule: data exceptions only (CursorAlgebraError), no logic; consume
 [[stays]]
 path = "spec/contracts/constants.py"
 reason = "adapter"
-note = "Shape rule: data constants only (DEFAULT_SEED_CSV_SETTINGS, ZERO_DAY_CURSOR_DURATION), no logic; consumed by adapter/contract/classes/base_adapter.py, adapter/contract/classes/duckdb_backed_adapter.py, adapter/contract/classes/materialization.py and 6 more."
+note = "Shape rule: data constants only (DEFAULT_SEED_CSV_SETTINGS), no logic; consumed by adapter contract classes."
 
 [[stays]]
 path = "cli/entry/constants.py"
@@ -797,7 +787,7 @@ note = "Shape rule: data exceptions only (SqlValueRenderingError), no logic; con
 [[stays]]
 path = "cli/output/constants.py"
 reason = "public-api"
-note = "Shape rule: data constants only (INTEGRATION_RESULT_PATH_ENV), no logic; consumed by integrations/dagster/_helpers/invocation_factory.py."
+note = "Shape rule: re-export only (INTEGRATION_RESULT_PATH_ENV, from sqlbuild._native), no logic; consumed by integrations/dagster/_helpers/invocation_factory.py."
 
 [[stays]]
 path = "compiler/compile/types.py"
@@ -812,12 +802,7 @@ note = "Shape rule: data protocol and aliases only (RuleContext, RuleCheck, Rule
 [[stays]]
 path = "rule_engine/constants.py"
 reason = "user-code"
-note = "Shape rule: data constants only (CUSTOM_HOST_PROTOCOL_VERSION, CUSTOM_HOST_RUNTIME_VERSION, CUSTOM_RULE_IMPORT_ROOTS, FACT_PROJECT_MODELS, ...), no logic; consumed by rule_engine/_helpers/host/custom_host.py, rule_engine/_helpers/host/tracked_facts.py, rule_engine/_helpers/engine/fact_replay.py and 10 more."
-
-[[stays]]
-path = "compiler/discovery/constants.py"
-reason = "executor"
-note = "Shape rule: data constants only (PROJECT_CONFIG_FILENAME, SETTINGS_SECTION, TABLE_PROMOTION_MODE_SETTING_KEY, PYTHON_NODE_ROOT, ...), no logic; consumed by executor/run/main/_execute.py, compiler/discovery/_helpers/filesystem/project_modules.py."
+note = "Shape rule: custom-rule host and fact-name constants (CUSTOM_HOST_MAX_TRACKED_READS, CUSTOM_RULE_IMPORT_ROOTS, FACT_PROJECT_MODELS, ...) used by the Python custom-rule host, no logic; versions, launch module and shared keys are native (sqlbuild._native)."
 
 [[stays]]
 path = "compiler/compile/exceptions.py"
@@ -825,29 +810,9 @@ reason = "user-code"
 note = "Shape rule: data exceptions only (MacroDeclarationLookupError, a CompileInputError that is also a KeyError, which a native error class with one parent cannot express), no logic; consumed by compiler/compile/_helpers/render/user_macros.py."
 
 [[stays]]
-path = "cursor_algebra/constants.py"
-reason = "executor"
-note = "Shape rule: data constants only (GRAIN_ORDER), no logic; consumed by executor/run/_helpers/validation/cursor_bounds.py."
-
-[[stays]]
 path = "compiler/sql_analysis/constants.py"
 reason = "public-api"
-note = "Shape rule: data constants only (POLYGLOT_ANALYZE_QUERY_ENTRY_POINT, POLYGLOT_COMPLEXITY_GUARD_OPTION, POLYGLOT_MAX_FUNCTION_CALL_DEPTH, ...), no logic; consumed by compiler/sql_analysis/_helpers/polyglot.py."
-
-[[stays]]
-path = "compiler/planner/constants.py"
-reason = "executor"
-note = "Shape rule: data constants only (MICROBATCH_START_SENTINEL, MICROBATCH_END_SENTINEL, MIGRATION_FINGERPRINT_METADATA_KEY, SNAPSHOT_DEFAULT_VALID_FROM_COLUMN, ...), no logic; consumed by executor/build/_helpers/scheduler.py, executor/run/_helpers/validation/cursor_bounds.py, executor/run/_helpers/reuse/fingerprint_metadata.py and 1 more."
-
-[[stays]]
-path = "compiler/frontier/constants.py"
-reason = "user-code"
-note = "Shape rule: data constants only (STAGE_CAPTURE_DIR_ENV_VAR, COMPILE_REUSE_DISABLE_ENV_VAR), no logic; consumed by compiler/macro_bridge/constants.py."
-
-[[stays]]
-path = "cost/constants.py"
-reason = "adapter"
-note = "Shape rule: data constants only (SQLBUILD_QUERY_TAG_APP), no logic; consumed by adapters/snowflake/classes/snowflake_cursor.py."
+note = "Rule 4: polyglot_sql glue only; the entry point, call-shape and option names (POLYGLOT_ANALYZE_QUERY_ENTRY_POINT, POLYGLOT_COMPLEXITY_GUARD_OPTION, POLYGLOT_MAX_FUNCTION_CALL_DEPTH, ...) that compiler/sql_analysis/_helpers/polyglot.py uses to wrap the polyglot_sql Python package."
 
 [[stays]]
 path = "compiler/compile/models.py"

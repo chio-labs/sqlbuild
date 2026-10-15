@@ -1,6 +1,5 @@
 //! `sqb debug` file names, masking and wording.
 
-pub(crate) const PROJECT_CONFIG_FILENAME: &str = "sqlbuild_project.toml";
 pub(crate) const LOCAL_CONFIG_FILENAME: &str = "sqlbuild_local.toml";
 pub(crate) const LEGACY_PROJECT_CONFIG_FILENAME: &str = "sqlbuild_project.yml";
 pub(crate) const LEGACY_LOCAL_CONFIG_FILENAME: &str = "sqlbuild_local.yml";

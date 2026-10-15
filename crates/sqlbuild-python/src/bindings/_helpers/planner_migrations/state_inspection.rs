@@ -6,22 +6,23 @@ use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyRef, PyRefMut, PyResult, Python, pyclass, pymethods,
 };
 use pyo3::types::{PyBool, PyDict, PyString, PyTuple, PyTupleMethods};
-use sqlbuild_state::events::constants::{
-    COLUMN_MIGRATION_TABLE_NAME, MIGRATION_TABLE_NAME, OLD_NAME_VIEW_TABLE_NAME,
-};
+use sqlbuild_core::constants::COLUMN_MIGRATION_TABLE_NAME;
+use sqlbuild_core::constants::MIGRATION_TABLE_NAME;
+use sqlbuild_core::constants::OLD_NAME_VIEW_TABLE_NAME;
 use sqlbuild_state::events::main::newest_fingerprint::newest_fingerprint;
 use sqlbuild_state::events::models::{EventRelation, FingerprintKey, FingerprintOrder};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::planner_migrations::constants::{
-    FINGERPRINT_TABLE_NAME, GET_COLUMNS_FOR_INSPECTION, LIST_RELATIONS_FOR_INSPECTION,
-    NATIVE_MODULE, NODE_TYPE_MODEL,
+    GET_COLUMNS_FOR_INSPECTION, LIST_RELATIONS_FOR_INSPECTION, NATIVE_MODULE,
 };
 use crate::bindings::_helpers::state_rows::constants::{COLUMN_KIND, MODEL_KIND, OLD_NAME_KIND};
 use crate::bindings::_helpers::state_rows::migration_io::{read_events, stored_old_name_columns};
 use crate::bindings::_helpers::state_rows::migration_objects::layout;
 use crate::bindings::_helpers::state_rows::migration_projections::old_name_views;
 use crate::bindings::_helpers::state_rows::models::StateAccess;
+use sqlbuild_analysis::fingerprint_storage::constants::NODE_TYPE_MODEL;
+use sqlbuild_core::constants::FINGERPRINT_TABLE_NAME;
 
 /// A lowercased schema and relation name.
 type RelationKey = (String, String);

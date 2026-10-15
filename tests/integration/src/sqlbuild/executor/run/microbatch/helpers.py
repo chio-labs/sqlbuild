@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any, cast
 
 from sqlbuild._native import (
+    MICROBATCH_END_SENTINEL,
+    MICROBATCH_START_SENTINEL,
     AuditPlanEntry,
     CompiledObjectKey,
     CompiledRelationLocation,
@@ -27,10 +29,6 @@ from sqlbuild.compiler.auditing.types import (
     AuditSeverity,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.constants import (
-    MICROBATCH_END_SENTINEL,
-    MICROBATCH_START_SENTINEL,
-)
 from sqlbuild.executor.run._helpers.materializations.microbatch import execute_microbatch_entry
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import resolve_runtime_cursor_bounds
 from sqlbuild.executor.run.models import (

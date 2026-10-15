@@ -7,6 +7,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from sqlbuild._native import (
+    MIN_CUSTOM_RULE_TEST_CASES,
     DiscoveredProjectInputs,
     Rule,
     RuleAssertionError,
@@ -26,7 +27,6 @@ from sqlbuild.rule_engine._helpers.engine.definition import (
     resolve_rule_signature,
     rule_from_value,
 )
-from sqlbuild.rule_engine.constants import MIN_CUSTOM_RULE_TEST_CASES
 from sqlbuild.rule_engine.types import RuleCheck
 
 

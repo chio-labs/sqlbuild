@@ -28,7 +28,6 @@ pub(crate) const VALID_SKILL_TARGETS: [&str; 3] = ["opencode", "claude", "agents
 pub(crate) const DEFAULT_SKILL_TARGETS: [&str; 2] = ["agents", "claude"];
 pub(crate) const OPENCODE_TARGET: &str = "opencode";
 pub(crate) const CLAUDE_TARGET: &str = "claude";
-pub(crate) const PROJECT_CONFIG_FILENAME: &str = "sqlbuild_project.toml";
 pub(crate) const UTF8_BYTE_ORDER_MARK: char = '\u{feff}';
 pub(crate) const GIT_MARKER: &str = ".git";
 pub(crate) const PLAYGROUND_EXAMPLES: [(&str, &str); 4] = [

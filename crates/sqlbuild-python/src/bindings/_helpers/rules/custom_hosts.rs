@@ -27,14 +27,14 @@ use sqlbuild_rules::engine::main::custom_host::run_custom_host_json;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::rules::constants::{
-    CUSTOM_HOST_ABANDONED_SUFFIX, CUSTOM_HOST_CANCELLED_MARKER,
+    CUSTOM_HOST_ABANDONED_SUFFIX, CUSTOM_HOST_CANCELLED_MARKER, CUSTOM_HOST_LAUNCH_MODULE,
+    CUSTOM_HOST_RUNTIME_VERSION,
 };
 use crate::bindings::_helpers::rules::custom_host_observation::{
     LaunchLog, ObservedHosts, before_publish, observed_hosts, record_launch,
 };
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const RULES_CONSTANTS_MODULE: &str = "sqlbuild.rule_engine.constants";
 const RULES_ERRORS_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const HOST_INPUTS: [&str; 3] = ["target", "rules-cache", "host-inputs"];
@@ -169,8 +169,8 @@ impl Launch {
     ) -> PyResult<Self> {
         Ok(Self {
             program: imported(py, "sys", "executable")?.extract()?,
-            arguments: vec!["-m".to_owned(), constant(py, "CUSTOM_HOST_LAUNCH_MODULE")?],
-            runtime_version: constant(py, "CUSTOM_HOST_RUNTIME_VERSION")?,
+            arguments: vec!["-m".to_owned(), CUSTOM_HOST_LAUNCH_MODULE.to_owned()],
+            runtime_version: CUSTOM_HOST_RUNTIME_VERSION.to_owned(),
             payload,
             launches,
         })
@@ -430,10 +430,6 @@ fn cores(py: Python<'_>) -> PyResult<usize> {
         count.unwrap_or(1),
         (Path::new(CGROUP_ROOT), Path::new(PROC_CGROUP)),
     ))
-}
-
-fn constant<'py, T: pyo3::FromPyObject<'py>>(py: Python<'py>, name: &str) -> PyResult<T> {
-    imported(py, RULES_CONSTANTS_MODULE, name)?.extract()
 }
 
 fn uuid_hex(py: Python<'_>) -> PyResult<String> {

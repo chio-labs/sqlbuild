@@ -6,6 +6,7 @@ from datetime import datetime
 import pytest
 
 from sqlbuild._native import (
+    FINGERPRINT_TABLE_NAME,
     Fingerprint,
     build_create_table_sql,
     build_read_latest_sql,
@@ -14,7 +15,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from tests.unit.src.sqlbuild.compiler.fingerprints.main.shared._helpers._test_types import (
     BuildCreateTableSqlTestCase,
     BuildInsertSqlTestCase,

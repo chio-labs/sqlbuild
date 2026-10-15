@@ -1,8 +1,7 @@
 """Contract facts for custom rules."""
 
-from sqlbuild._native import Model
+from sqlbuild._native import CONTRACT_ENFORCED, Model
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
-from sqlbuild.rule_engine.constants import CONTRACT_ENFORCED
 
 
 class ContractFacts:

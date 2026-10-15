@@ -13,6 +13,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 import sqlbuild._native as _native
+from sqlbuild._native import STORE_TRACKED_ENVIRONMENT_PREFIXES, STORE_UNTRACKED_ENVIRONMENT_NAMES
 from sqlbuild.compiler.macro_bridge.constants import (
     INSTALLED_DISTRIBUTION_SUFFIX,
     INSTALLED_PACKAGE_DIRECTORY_NAMES,
@@ -22,8 +23,6 @@ from sqlbuild.compiler.macro_bridge.constants import (
     MAIN_MODULE_NAME,
     MISSING_SEARCH_PATH_STAMP,
     PROJECT_ROOT_SEARCH_PATH_STAMP,
-    STORE_TRACKED_ENVIRONMENT_PREFIXES,
-    STORE_UNTRACKED_ENVIRONMENT_NAMES,
 )
 from sqlbuild.compiler.macro_bridge.models import ModuleSources
 

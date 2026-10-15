@@ -11,6 +11,7 @@ import pytest
 
 import sqlbuild._native as native
 from sqlbuild._native import (
+    MIN_CUSTOM_RULE_TEST_CASES,
     CompiledDirectLogicSqlTestPayload,
     CompiledModelSqlTestPayload,
     CompiledObjectKey,
@@ -37,7 +38,6 @@ from sqlbuild._native import (
 from sqlbuild._native import evaluate_custom_rules as evaluate_custom_rules_cached
 from sqlbuild._native import evaluate_project_rules as evaluate
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType, SqlTestMode
-from sqlbuild.rule_engine.constants import MIN_CUSTOM_RULE_TEST_CASES
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import CustomRuleTestCase
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_project
 

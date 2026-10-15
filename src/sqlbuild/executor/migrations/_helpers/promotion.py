@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild._native import (
+    MIGRATION_WRITE_ATTEMPTS,
     MigrationDecision,
     MigrationEvent,
     MigrationRelation,
@@ -18,7 +19,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.compiler.migrations.constants import MIGRATION_WRITE_ATTEMPTS
 from sqlbuild.executor.migrations._helpers.old_name_facts import (
     old_name_fact,
     old_name_state_table_sql,

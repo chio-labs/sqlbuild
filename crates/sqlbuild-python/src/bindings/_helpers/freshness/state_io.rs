@@ -3,7 +3,8 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet};
 use pyo3::{pyfunction, wrap_pyfunction};
-use sqlbuild_state::freshness::constants::{REQUIRED_STATE_COLUMNS, SOURCE_FRESHNESS_TABLE_NAME};
+use sqlbuild_core::constants::SOURCE_FRESHNESS_TABLE_NAME;
+use sqlbuild_state::freshness::constants::REQUIRED_STATE_COLUMNS;
 use sqlbuild_state::freshness::main::read_latest_sql::read_latest_sql;
 use sqlbuild_state::freshness::main::relevant_sources_sql::relevant_sources_sql;
 

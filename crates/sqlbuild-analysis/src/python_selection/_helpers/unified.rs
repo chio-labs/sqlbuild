@@ -19,11 +19,12 @@ use crate::python_selection::_helpers::validation::{
 };
 use crate::python_selection::constants::{
     ASSET_KIND, CHECK_KIND, EXPANSION_MARKER, INTERSECTION_SEPARATOR, LOADER_KIND, NAME_KIND,
-    PATH_KIND, PATH_ROOT_CODE, PATH_ROOT_ERROR, PLANNER_DEFAULT_CODE, PYTHON_NODE_PATH_ROOT,
-    SEED_KIND, SOURCE_KIND, SOURCE_RESOURCE, SQL_MODEL_PATH_ROOT, TAG_KIND, TASK_KIND, TEST_KIND,
-    UNKNOWN_NAME_CODE, UNKNOWN_TAG_CODE,
+    PATH_KIND, PATH_ROOT_CODE, PATH_ROOT_ERROR, PLANNER_DEFAULT_CODE, SEED_KIND, SOURCE_KIND,
+    SOURCE_RESOURCE, SQL_MODEL_PATH_ROOT, TAG_KIND, TASK_KIND, TEST_KIND, UNKNOWN_NAME_CODE,
+    UNKNOWN_TAG_CODE,
 };
 use crate::python_selection::models::{Atom, PythonSelectionNode, RunSelection, SelectionContext};
+use sqlbuild_core::constants::PYTHON_NODE_ROOT as PYTHON_NODE_PATH_ROOT;
 
 type Atoms = BTreeSet<Atom>;
 type Resolved = Result<Atoms, SelectorError>;

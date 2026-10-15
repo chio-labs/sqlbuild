@@ -72,7 +72,6 @@ pub(crate) const COLUMN_AST_KIND: &str = "column";
 pub(crate) const TABLE_AST_KIND: &str = "table";
 pub(crate) const FUNCTION_AST_KIND: &str = "function";
 pub(crate) const ALIAS_AST_KIND: &str = "alias";
-pub(crate) const CTE_AST_KIND: &str = "cte";
 pub(crate) const STAR_AST_KIND: &str = "star";
 pub(crate) const DYNAMIC_VALUE_SOURCE_KINDS: [&str; 3] = ["pivot_any", "select", "query"];
 pub(crate) const DEPENDENCY_FUNCTION_NAMES: [&str; 3] = ["__ref", "__source", "__seed"];

@@ -10,6 +10,7 @@ from itertools import chain
 from pathlib import Path
 
 from sqlbuild._native import (
+    CUSTOM_RULE_PROJECT_SUBJECT,
     CustomHostPartition,
     CustomRuleEvaluation,
     CustomRuleRun,
@@ -35,10 +36,7 @@ from sqlbuild.rule_engine.classes.rule_context import (
     build_rule_fact_views,
 )
 from sqlbuild.rule_engine.classes.runtime_guard import RuntimeGuard
-from sqlbuild.rule_engine.constants import (
-    CUSTOM_HOST_CANCELLED_MESSAGE,
-    CUSTOM_RULE_PROJECT_SUBJECT,
-)
+from sqlbuild.rule_engine.constants import CUSTOM_HOST_CANCELLED_MESSAGE
 from sqlbuild.rule_engine.types import CustomRulePlan
 
 type _FindingKey = tuple[str, str, int, int, str, str]

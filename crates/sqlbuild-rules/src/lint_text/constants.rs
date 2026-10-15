@@ -121,7 +121,6 @@ pub(crate) const NON_CONTIGUOUS_FIX: &str =
     "fix overlaps generated SQL or a non-contiguous authored region";
 pub(crate) const GENERATED_FIX: &str = "fix overlaps generated SQL";
 pub(crate) const GENERATED_SQL_SUFFIX: &str = "(in generated SQL)";
-pub(crate) const PROJECT_CONFIG_FILENAME: &str = "sqlbuild_project.toml";
 pub(crate) const LOCAL_CONFIG_FILENAME: &str = "sqlbuild_local.toml";
 pub(crate) const DEFAULT_LINE_WIDTH: i64 = 100;
 pub(crate) const DEFAULT_MAX_DESCRIPTION_LINES: i64 = 10;

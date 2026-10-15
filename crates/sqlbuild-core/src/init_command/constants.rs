@@ -19,9 +19,6 @@ pub const SCAFFOLD_DIRECTORIES: [&str; 15] = [
     "audits/singular",
 ];
 
-/// The project configuration file name.
-pub const PROJECT_FILE: &str = "sqlbuild_project.toml";
-
 /// The placeholder file kept in otherwise empty directories.
 pub const GITKEEP_FILE: &str = ".gitkeep";
 

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild._native import (
+    MIGRATION_WRITE_ATTEMPTS,
     ColumnMigrationDecision,
     ColumnMigrationEvent,
     ColumnMigrationPlanEntry,
@@ -16,7 +17,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
-from sqlbuild.compiler.migrations.constants import MIGRATION_WRITE_ATTEMPTS
 from sqlbuild.executor.migrations._helpers.relation_for_location import (
     migration_relation_for_location,
 )

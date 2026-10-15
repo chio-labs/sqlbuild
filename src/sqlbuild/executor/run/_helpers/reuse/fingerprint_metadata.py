@@ -8,14 +8,14 @@ from collections.abc import Mapping
 from typing import cast
 
 from sqlbuild._native import (
+    AUDIT_GATE_METADATA_KEY,
+    MIGRATION_FINGERPRINT_METADATA_KEY,
     AuditGateIdentity,
     AuditIdentity,
     AuditPlanEntry,
     build_audit_gate_identity,
 )
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditSeverity
-from sqlbuild.compiler.fingerprints.constants import AUDIT_GATE_METADATA_KEY
-from sqlbuild.compiler.planner.constants import MIGRATION_FINGERPRINT_METADATA_KEY
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.models import (
     AuditGateMetadata,

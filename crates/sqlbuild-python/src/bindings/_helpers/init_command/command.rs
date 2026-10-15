@@ -8,7 +8,7 @@ use pyo3::prelude::{
 use pyo3::types::{PyDict, PyDictMethods, PyString};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::cli_text::models::CliStyle;
-use sqlbuild_core::init_command::constants::PROJECT_FILE;
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME as PROJECT_FILE;
 use sqlbuild_core::init_command::main::init_project_name::init_project_name;
 use sqlbuild_core::init_command::main::init_project_toml::init_project_toml;
 use sqlbuild_core::init_command::main::render_init_summary::render_init_summary;

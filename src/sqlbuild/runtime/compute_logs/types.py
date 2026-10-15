@@ -6,7 +6,7 @@ from enum import StrEnum
 from types import TracebackType
 from typing import TYPE_CHECKING, Protocol, Self
 
-from sqlbuild.runtime.compute_logs.constants import MAX_READ_BYTES
+from sqlbuild._native import MAX_READ_BYTES
 
 if TYPE_CHECKING:
     from sqlbuild.runtime.compute_logs.models import (

@@ -17,7 +17,7 @@ use crate::bindings::_helpers::dbt_command::support::{color_enabled, flag, path,
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const PROJECT_CONFIG_FILENAME: &str = "sqlbuild_project.toml";
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 const PROGRESS_REPORTER_MODULE: &str = "sqlbuild._native";
 
 fn project_config_found(directory: &Bound<'_, PyAny>) -> PyResult<bool> {

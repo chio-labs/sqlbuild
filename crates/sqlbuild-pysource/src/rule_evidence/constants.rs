@@ -6,7 +6,6 @@ pub(crate) const RULE_CASE: &str = "RuleCase";
 pub(crate) const RULE_KEYWORD: &str = "rule";
 pub(crate) const TEST_CASE_KEYWORD: &str = "test_case";
 pub(crate) const CONDITION_KEYWORD: &str = "condition";
-pub(crate) const INIT_MODULE_NAME: &str = "__init__";
 pub(crate) const INIT_FILE_NAME: &str = "__init__.py";
 pub(crate) const RULES_DIRECTORY_NAME: &str = "rules";
 pub(crate) const TESTS_DIRECTORY_NAME: &str = "tests";

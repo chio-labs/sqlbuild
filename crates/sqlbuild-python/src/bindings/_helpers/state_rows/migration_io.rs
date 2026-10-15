@@ -6,7 +6,7 @@ use pyo3::prelude::{
 };
 use pyo3::types::{PyDict, PyString, PyTuple, PyTupleMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
-use sqlbuild_state::events::constants::OLD_NAME_VIEW_TABLE_NAME;
+use sqlbuild_core::constants::OLD_NAME_VIEW_TABLE_NAME;
 use sqlbuild_state::events::main::recorded_renames::recorded_renames;
 use sqlbuild_state::events::models::RecordedRenameKey;
 

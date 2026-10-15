@@ -1,3 +1,3 @@
 """CLI execution output constants."""
 
-INTEGRATION_RESULT_PATH_ENV: str = "SQLBUILD_INTEGRATION_RESULT_PATH"
+from sqlbuild._native import INTEGRATION_RESULT_PATH_ENV as INTEGRATION_RESULT_PATH_ENV

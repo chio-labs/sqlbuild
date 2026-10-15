@@ -2,7 +2,7 @@
 
 import sys
 
-from sqlbuild.cli.entry.constants import LAUNCH_RECORD_OPTION
+from sqlbuild._native import LAUNCH_RECORD_OPTION
 from sqlbuild.cli.entry.main.entry import main as run_cli
 
 

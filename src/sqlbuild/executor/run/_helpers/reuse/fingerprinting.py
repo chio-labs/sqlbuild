@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild._native import (
+    NODE_TYPE_MODEL,
     AuditPlanEntry,
     Fingerprint,
     ModelPlanEntry,
@@ -14,7 +15,6 @@ from sqlbuild._native import (
     write_fingerprint,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_MODEL
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run._helpers.reuse.fingerprint_metadata import (
     model_fingerprint_metadata_with_audit_gate,

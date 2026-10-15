@@ -22,7 +22,8 @@ use crate::bindings::_helpers::cursor::values::{
 pub(crate) const MODELS_MODULE: &str = "sqlbuild._native";
 const EXCEPTIONS_MODULE: &str = "sqlbuild.cursor_algebra.exceptions";
 const PLANNER_TYPES_MODULE: &str = "sqlbuild._native";
-const GRAIN_NAMES: [(&str, Grain); 6] = [
+/// Cursor grain names, finest first.
+pub(crate) const GRAIN_NAMES: [(&str, Grain); 6] = [
     ("second", Grain::Second),
     ("minute", Grain::Minute),
     ("hour", Grain::Hour),

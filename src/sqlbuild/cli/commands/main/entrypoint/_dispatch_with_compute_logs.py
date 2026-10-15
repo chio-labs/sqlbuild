@@ -6,14 +6,18 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlbuild._native import CliNamespace, LocalFilesystemComputeLogStorage, supports_color
+from sqlbuild._native import (
+    COMPUTE_LOG_FORMAT_VERSION,
+    CliNamespace,
+    LocalFilesystemComputeLogStorage,
+    supports_color,
+)
 from sqlbuild.cli.commands._helpers.entry.compute_log_diagnostics import (
     log_compute_capture_failure,
 )
 from sqlbuild.diagnostics.classes.invocation_diagnostic_routing import InvocationDiagnosticRouting
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
 from sqlbuild.diagnostics.models import DiagnosticRoutingOptions
-from sqlbuild.runtime.compute_logs.constants import COMPUTE_LOG_FORMAT_VERSION
 from sqlbuild.runtime.compute_logs.main.run_with_compute_log_capture import (
     run_with_compute_log_capture,
 )

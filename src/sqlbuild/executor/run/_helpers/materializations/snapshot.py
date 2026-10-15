@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild._native import (
+    SNAPSHOT_DEFAULT_VALID_FROM_COLUMN,
+    SNAPSHOT_DEFAULT_VALID_TO_COLUMN,
     HistoricalInput,
     InitialValidFrom,
     ModelPlanEntry,
@@ -31,10 +33,6 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
 )
 from sqlbuild.adapter.type_system.main.normalize_type import normalize_type
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
-from sqlbuild.compiler.planner.constants import (
-    SNAPSHOT_DEFAULT_VALID_FROM_COLUMN,
-    SNAPSHOT_DEFAULT_VALID_TO_COLUMN,
-)
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.auditing.models import AuditExecutionResult

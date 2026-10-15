@@ -2,24 +2,5 @@
 
 from __future__ import annotations
 
-FINGERPRINT_TABLE_NAME: str = "_sqlbuild_fingerprints"
-
-COLUMN_NODE_TYPE: str = "node_type"
-COLUMN_NODE_NAME: str = "node_name"
-COLUMN_TARGET_DATABASE: str = "target_database"
-COLUMN_TARGET_SCHEMA: str = "target_schema"
-COLUMN_TARGET_NAME: str = "target_name"
-COLUMN_RUN_ID: str = "run_id"
-COLUMN_DEFINITION_HASH: str = "definition_hash"
-COLUMN_VERSION_HASH: str = "version_hash"
-COLUMN_SCHEMA_FINGERPRINT: str = "schema_fingerprint"
-COLUMN_DEFINITION_B64: str = "definition_b64"
-COLUMN_METADATA_JSON_B64: str = "metadata_json_b64"
-COLUMN_TIMESTAMP: str = "ts"
-
-NODE_TYPE_MODEL: str = "model"
-NODE_TYPE_SEED: str = "seed"
 NODE_TYPE_HOOK: str = "hook"
 NODE_TYPE_QUERY_DIFF_ARTIFACT: str = "query_diff_artifact"
-
-AUDIT_GATE_METADATA_KEY: str = "audit_gate"

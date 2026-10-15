@@ -9,6 +9,7 @@ use pyo3::prelude::{
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyList, PyString};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_cli::replay::main::write_launch_record::write_launch_record as write_record_file;
+use sqlbuild_core::command_output::constants::INVOCATION_CONTEXT_ENV;
 
 use sqlbuild_cli::replay::constants::{LAUNCH_RECORD_DIRECTORY, LAUNCH_RECORD_FORMAT};
 
@@ -37,7 +38,6 @@ const REUSE_REQUEST: (&str, &str) = ("sqlbuild.cli.compile_reuse.models", "Compi
 const RUNTIME_IDENTITY_MODULE: &str = "sqlbuild.cli.compile_reuse._helpers.runtime_identity";
 const STARTUP_INPUTS_MODULE: &str = "sqlbuild.cli.compile_reuse._helpers.startup_inputs";
 const COMPUTE_LOG_TEE_MODULE: &str = "sqlbuild.runtime.compute_logs.classes.text_tee";
-const OUTPUT_CAPTURE_CONSTANTS: &str = "sqlbuild.runtime.output_capture.constants";
 const HIT: &str = "hit";
 const CHECKED_HIT: &str = "hit";
 const CHECKED_BYPASS: &str = "bypass";
@@ -210,11 +210,7 @@ pub(crate) fn write_launch_record(attempt: &Bound<'_, PyAny>) -> PyResult<()> {
         return Ok(());
     }
     let environment: Bound<'_, PyAny> = imported(py, "os", "environ")?;
-    if environment.contains(imported(
-        py,
-        OUTPUT_CAPTURE_CONSTANTS,
-        "INVOCATION_CONTEXT_ENV",
-    )?)? {
+    if environment.contains(INVOCATION_CONTEXT_ENV)? {
         return Ok(());
     }
     let mut directory: Bound<'_, PyAny> = attempt.getattr("project_dir")?;

@@ -9,9 +9,8 @@ from typing import Any
 
 import pytest
 
-from sqlbuild._native import AuditPlanEntry, Fingerprint, ModelPlanEntry
+from sqlbuild._native import AUDIT_GATE_METADATA_KEY, AuditPlanEntry, Fingerprint, ModelPlanEntry
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditSeverity
-from sqlbuild.compiler.fingerprints.constants import AUDIT_GATE_METADATA_KEY
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run._helpers.reuse import fingerprinting
 from sqlbuild.executor.run._helpers.reuse.fingerprint_metadata import (

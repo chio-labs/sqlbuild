@@ -9,6 +9,10 @@ from functools import partial
 from typing import Any
 
 from sqlbuild._native import (
+    GRAIN_ORDER,
+    MICROBATCH_END_SENTINEL,
+    MICROBATCH_START_SENTINEL,
+    ZERO_DAY_CURSOR_DURATION,
     AlignedInterval,
     BackfillAction,
     CursorBounds,
@@ -50,14 +54,11 @@ from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
 from sqlbuild._native import resolve_future_cursor_safety as apply_future_cursor_safety
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.relations.main.cached_relation_exists import cached_relation_exists
-from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
-from sqlbuild.cursor_algebra.constants import GRAIN_ORDER
 from sqlbuild.cursor_algebra.types import BoundSentinel, CursorScalar
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run.exceptions import EmptyCursorInputsError
 from sqlbuild.executor.run.models import RuntimeCursorInputRelation, RuntimeCursorSpec
 from sqlbuild.executor.run.types import RuntimeCursorWatermarkMode, WatermarkResolver
-from sqlbuild.spec.contracts.constants import ZERO_DAY_CURSOR_DURATION
 
 
 def has_runtime_owned_cursor_watermarks(

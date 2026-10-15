@@ -45,7 +45,7 @@ const CONNECTION_IDENTITY_KEYS: [&str; 7] = [
 const EXPLICIT_TARGET_ADAPTERS: [&str; 3] = ["snowflake", "bigquery", "databricks"];
 const LOADER_NAMESPACE_LABEL: &str = "managed loader target namespace";
 const DEFAULTS_HELP_PURPOSE: &str = "to set project-wide defaults";
-const PROJECT_CONFIG_FILENAME: &str = "sqlbuild_project.toml";
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 const DEFAULTS_SECTION: &str = "defaults";
 
 /// One optional `(database, schema)` namespace.

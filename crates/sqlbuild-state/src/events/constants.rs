@@ -15,9 +15,6 @@ pub(crate) const ALIAS_KEY_SEPARATOR: &str = ":";
 pub(crate) const PYTHON_TRUE: &str = "True";
 pub(crate) const PYTHON_FALSE: &str = "False";
 pub(crate) const PYTHON_NONE: &str = "None";
-pub const MIGRATION_TABLE_NAME: &str = "_sqlbuild_migrations";
-pub const COLUMN_MIGRATION_TABLE_NAME: &str = "_sqlbuild_column_migrations";
-pub const OLD_NAME_VIEW_TABLE_NAME: &str = "_sqlbuild_old_name_views";
 /// Event columns stored as text timestamps; every other event column is a string.
 pub const TIMESTAMP_COLUMNS: [&str; 2] = ["expires_at", "created_at"];
 pub const MIGRATION_COLUMNS: [&str; 15] = [

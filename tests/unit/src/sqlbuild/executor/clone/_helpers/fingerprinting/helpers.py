@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    FINGERPRINT_TABLE_NAME,
     CompiledObjectKey,
     CompiledRelationLocation,
     Fingerprint,
@@ -19,7 +20,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 
 
 class CloneFingerprintAdapter:

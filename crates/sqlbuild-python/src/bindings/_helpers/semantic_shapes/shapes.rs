@@ -15,8 +15,10 @@ const NATIVE_MODULE: &str = "sqlbuild._native";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const UNKNOWN: &str = "UNKNOWN";
 const GENERIC_DIALECT: &str = "generic";
-const VALID_FROM_DEFAULT: &str = "valid_from";
-const VALID_TO_DEFAULT: &str = "valid_to";
+/// Snapshot validity start column when the model names none.
+pub(crate) const VALID_FROM_DEFAULT: &str = "valid_from";
+/// Snapshot validity end column when the model names none.
+pub(crate) const VALID_TO_DEFAULT: &str = "valid_to";
 const TABLE_FUNCTION_PREFIX: &str = "__sqlbuild_table_function_";
 const UDF_KIND: &str = "udf";
 const TABLE_FUNCTION_KIND: &str = "table_fn";

@@ -40,6 +40,7 @@ pub(crate) mod diff_report;
 pub(crate) mod discovery;
 pub(crate) mod event_exporting;
 pub(crate) mod execution_history;
+pub(crate) mod exported_constants;
 pub(crate) mod fingerprints;
 pub(crate) mod format_command;
 pub(crate) mod freshness;

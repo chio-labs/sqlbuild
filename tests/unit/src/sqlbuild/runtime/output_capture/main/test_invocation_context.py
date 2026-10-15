@@ -7,8 +7,7 @@ from collections.abc import Mapping
 
 import pytest
 
-from sqlbuild._native import invocation_context_from_environment
-from sqlbuild.runtime.output_capture.constants import INVOCATION_CONTEXT_ENV
+from sqlbuild._native import INVOCATION_CONTEXT_ENV, invocation_context_from_environment
 from sqlbuild.runtime.output_capture.exceptions import OutputCaptureInputError
 from tests.unit.src.sqlbuild.runtime.output_capture.main._test_types import (
     InvocationContextTestCase,

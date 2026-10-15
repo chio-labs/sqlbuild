@@ -3,9 +3,11 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::PyString;
+use sqlbuild_core::constants::COLUMN_MIGRATION_TABLE_NAME;
+use sqlbuild_core::constants::MIGRATION_TABLE_NAME;
+use sqlbuild_core::constants::OLD_NAME_VIEW_TABLE_NAME;
 use sqlbuild_state::events::constants::{
-    COLUMN_MIGRATION_COLUMNS, COLUMN_MIGRATION_TABLE_NAME, MIGRATION_COLUMNS, MIGRATION_TABLE_NAME,
-    OLD_NAME_VIEW_COLUMNS, OLD_NAME_VIEW_TABLE_NAME,
+    COLUMN_MIGRATION_COLUMNS, MIGRATION_COLUMNS, OLD_NAME_VIEW_COLUMNS,
 };
 use sqlbuild_state::events::models::EventOrder;
 

@@ -7,6 +7,7 @@ use crate::constants::{
 use crate::models::{Fault, Model, RuleMetadata};
 use crate::rules::_helpers::evaluation::parse_name;
 use crate::rules::models::{FaultCollector, ProjectEvaluationRequest};
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 
 const NO_CANONICAL_LAYER_FOLDER: &str = "no canonical layer folder";
 
@@ -85,7 +86,7 @@ pub(crate) fn internal_forward_refs(
         faults.push(Fault {
             unevaluated: false,
             code: rule.code.clone(),
-            path: "sqlbuild_project.toml".into(),
+            path: PROJECT_CONFIG_FILENAME.into(),
             line: 1,
             column: 1,
             message: format!(

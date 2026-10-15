@@ -10,12 +10,12 @@ use crate::graph::main::parse_selector::parse_selector;
 use crate::graph::models::{EdgeDirection, ParsedSelector, ProjectGraph};
 use crate::python_selection::constants::{
     ASSET_KIND, CHECK_KIND, INTERSECTION_SEPARATOR, LOADER_KIND, NAME_KIND, PATH_BETWEEN_CODE,
-    PATH_KIND, PATH_ROOT_CODE, PATH_ROOT_ERROR, PATTERN_CHARACTERS, PYTHON_NODE_PATH_ROOT,
-    SQL_MODEL_PATH_ROOT, TAG_KIND, TASK_KIND, TEST_KIND, UNIT_TEST_CODE,
-    UNIT_TEST_ONLY_TEST_AND_BUILD, UNKNOWN_NAME_CODE, UNKNOWN_PATH_CODE, UNKNOWN_TAG_CODE,
-    UNMAPPED_KIND_CODE,
+    PATH_KIND, PATH_ROOT_CODE, PATH_ROOT_ERROR, PATTERN_CHARACTERS, SQL_MODEL_PATH_ROOT, TAG_KIND,
+    TASK_KIND, TEST_KIND, UNIT_TEST_CODE, UNIT_TEST_ONLY_TEST_AND_BUILD, UNKNOWN_NAME_CODE,
+    UNKNOWN_PATH_CODE, UNKNOWN_TAG_CODE, UNMAPPED_KIND_CODE,
 };
 use crate::python_selection::models::{NodeIndex, PythonSelectionGraph, PythonSelectionNode};
+use sqlbuild_core::constants::PYTHON_NODE_ROOT as PYTHON_NODE_PATH_ROOT;
 
 pub(crate) type Names = BTreeSet<String>;
 type Resolved = Result<Names, SelectorError>;

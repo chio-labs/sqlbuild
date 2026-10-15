@@ -7,10 +7,11 @@ use pyo3::types::{PyDict, PyDictMethods, PyString};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_config::command_connection::constants::{
     CONNECTION_DATABASE_KEY, CONNECTION_SOURCE_KEY, DBT_PROFILE_CONNECTION_SOURCE,
-    DBT_PROFILE_ROUTING_KEYS, DUCKDB_ADAPTER, DUCKDB_MEMORY_DATABASE, PROJECT_CONFIG_FILENAME,
+    DBT_PROFILE_ROUTING_KEYS, DUCKDB_ADAPTER, DUCKDB_MEMORY_DATABASE,
 };
 use sqlbuild_config::command_connection::main::missing_connection_error::missing_connection_error;
 use sqlbuild_config::command_connection::main::snowflake_key_warning::snowflake_key_warning;
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 
 use crate::bindings::_helpers::command_runtime::runtime_errors::raised;
 use crate::bindings::_helpers::command_runtime::warehouses::{WarehouseInputs, apply_warehouse};

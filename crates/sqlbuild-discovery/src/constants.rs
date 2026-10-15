@@ -1,4 +1,4 @@
-//! Project layout names shared by native discovery, mirroring the Python discovery constants.
+//! Project layout names shared by native discovery.
 
 /// Root of SQL model files.
 pub const MODELS_DIRECTORY: &str = "models";
@@ -41,8 +41,6 @@ pub const GROUPED_NAMED_DECLARATION_DIRECTORIES: [&str; 6] = [
 pub const GLOBAL_NAMED_DECLARATION_DIRECTORIES: [&str; 3] = ["audits", "schemas", "hooks"];
 /// Suffix of macro files.
 pub const PYTHON_FILE_SUFFIX: &str = ".py";
-/// The stem of package initialisers, which are not macro files.
-pub const PYTHON_INIT_MODULE_STEM: &str = "__init__";
 /// The project-wide audit role directory.
 pub const AUDIT_ROLE_DIRECTORY: &str = "audits";
 /// The folder-local audit role directory inside a declaration group.

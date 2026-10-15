@@ -1,5 +1,9 @@
 //! Compile reuse storage, fingerprint, environment and notice constants.
 
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
+
+use crate::bindings::_helpers::frontier::stage_capture::CAPTURE_DIR_ENV_VAR;
+
 /// The directory under the compiler cache directory holding the native reuse store.
 pub(crate) const NATIVE_REUSE_DIRECTORY_NAME: &str = "project-reuse-v2";
 /// The reuse directory an older release kept stored compiles in.
@@ -11,14 +15,12 @@ pub(crate) const REUSE_DISABLE_VALUE: &str = "1";
 pub(crate) const REUSE_LOGGER_NAME: &str = "sqlbuild.compile.reuse";
 pub(crate) const TRACKED_ENVIRONMENT_PREFIXES: [&str; 2] = ["SQLBUILD_", "SQB_"];
 /// Sorted; tracked-prefix variables that never invalidate a stored compile.
-pub(crate) const UNTRACKED_ENVIRONMENT_NAMES: [&str; 2] = [
-    "SQLBUILD_COMPILER_STAGE_CAPTURE_DIR",
-    "SQLBUILD_DISABLE_COMPILE_REUSE",
-];
+pub(crate) const UNTRACKED_ENVIRONMENT_NAMES: [&str; 2] =
+    [CAPTURE_DIR_ENV_VAR, REUSE_DISABLE_ENV_VAR];
 pub(crate) const MISSING_ENVIRONMENT_VALUE: &str = "\0missing";
 pub(crate) const MISSING_FILE_DIGEST: &str = "\0missing";
 pub(crate) const PROJECT_CONFIG_FILENAMES: [&str; 2] =
-    ["sqlbuild_project.toml", "sqlbuild_project.yml"];
+    [PROJECT_CONFIG_FILENAME, "sqlbuild_project.yml"];
 /// The `sqlbuild._native` attribute the reuse check reads its racy window from.
 pub(crate) const RACY_WINDOW_ATTRIBUTE: &str = "COMPILE_REUSE_RACY_WINDOW_NS";
 /// The `sqlbuild._native` attribute the reuse check reads its excluded root directories from.

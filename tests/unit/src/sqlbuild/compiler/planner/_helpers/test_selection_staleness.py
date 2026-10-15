@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 import pytest
 
 from sqlbuild._native import (
+    NODE_TYPE_SEED,
     ChangeDetectionResult,
     ChangeKind,
     CompiledObjectKey,
@@ -31,7 +32,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_SEED
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     CompleteModelChangesWorkTestCase,
     PlannerStaleWarningScopeTestCase,

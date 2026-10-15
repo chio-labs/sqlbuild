@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any, ClassVar, cast
 
 from sqlbuild._native import (
+    FINGERPRINT_TABLE_NAME,
+    SOURCE_FRESHNESS_TABLE_NAME,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
@@ -37,8 +39,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     CompiledSourceView,
 )
-from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
-from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.executor.janitor_events.constants import JANITOR_EVENTS_TABLE_NAME
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 

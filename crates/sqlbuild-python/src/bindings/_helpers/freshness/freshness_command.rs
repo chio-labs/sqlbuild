@@ -29,7 +29,7 @@ const GRAPH_SELECTION_MODULE: &str = "sqlbuild._native";
 const UPSTREAM_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const RELATION_LOOKUP_MODULE: &str = "sqlbuild.adapter.relations.main.relation_lookup";
-const STATE_TABLE_NAME: &str = "_sqlbuild_source_freshness";
+use sqlbuild_core::constants::SOURCE_FRESHNESS_TABLE_NAME as STATE_TABLE_NAME;
 const STALE_REQUIRES_STATE_MESSAGE: &str = "freshness --fail-on-stale requires --state";
 const STALE_REQUIRES_STATE_CODE: &str = "C238";
 

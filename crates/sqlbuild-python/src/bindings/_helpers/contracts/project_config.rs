@@ -16,12 +16,13 @@ use sqlbuild_config::project::main::resolve_config_file::resolve_config_file;
 use sqlbuild_config::project::models::{Built, ConfigFile, ConfigPaths};
 
 use crate::bindings::_helpers::boundary::config_values::config_value_to_python;
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 
 const MODELS_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild._native";
 const PROJECT_CONFIG_ERROR: &str = "ProjectConfigError";
 const FILE_NAMES: [&str; 4] = [
-    "sqlbuild_project.toml",
+    PROJECT_CONFIG_FILENAME,
     "sqlbuild_project.yml",
     "sqlbuild_local.toml",
     "sqlbuild_local.yml",
