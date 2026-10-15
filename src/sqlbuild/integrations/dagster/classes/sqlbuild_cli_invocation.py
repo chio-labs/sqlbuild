@@ -5,14 +5,18 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-import textwrap
 import time
 from collections.abc import Iterator, Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import IO, Any
 
-from sqlbuild._native import IntegrationAssetResult, IntegrationResultEnvelope
+from sqlbuild._native import (
+    IntegrationAssetResult,
+    IntegrationResultEnvelope,
+    dagster_failure,
+    dagster_live_failure,
+)
 from sqlbuild.integrations.dagster._helpers.imports import load_dagster
 from sqlbuild.integrations.dagster._helpers.invocation import (
     _build_results_for_selected_assets,
@@ -23,42 +27,8 @@ from sqlbuild.integrations.dagster._helpers.invocation import (
     _log_invocation,
     _start_stream_future,
 )
-from sqlbuild.integrations.dagster.constants import (
-    COMPLETED_EXECUTION_STATUSES,
-    FAILED_EXECUTION_STATUS,
-)
+from sqlbuild.integrations.dagster.constants import FAILED_EXECUTION_STATUS
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
-
-_MAX_DIAGNOSTIC_CHARS: int = 4_000
-
-
-def _diagnostic_tail(value: str) -> str:
-    return value[-_MAX_DIAGNOSTIC_CHARS:]
-
-
-def _format_asset_failure(asset: Mapping[str, Any]) -> str:
-    status: str = str(asset.get("status"))
-    lines: list[str] = [f"{asset.get('kind')}:{asset.get('name')} ({status})"]
-    failed_phase: object = asset.get("failed_phase")
-    if failed_phase is not None:
-        lines[0] += f" during {failed_phase}"
-    error_message: object = asset.get("error_message")
-    if error_message is not None:
-        error_code: object = asset.get("error_code")
-        prefix: str = f"[{error_code}] " if error_code is not None else ""
-        lines.append(f"  {prefix}{error_message}")
-    staging_relation: object = asset.get("staging_relation")
-    if staging_relation is not None:
-        lines.append(f"  staging relation: {staging_relation}")
-    failed_sql: object = asset.get("failed_sql")
-    if isinstance(failed_sql, str) and failed_sql:
-        lines.append("  failed SQL:")
-        lines.append(textwrap.indent(failed_sql, "    "))
-    last_recorded_sql: object = asset.get("last_recorded_sql")
-    if isinstance(last_recorded_sql, str) and last_recorded_sql:
-        lines.append("  last recorded SQL:")
-        lines.append(textwrap.indent(last_recorded_sql, "    "))
-    return "\n".join(lines)
 
 
 class SqlBuildCliInvocation:
@@ -155,45 +125,18 @@ class SqlBuildCliInvocation:
         if self.returncode is None or self.returncode == 0:
             return None
         dg: Any = load_dagster()
-        metadata: dict[str, Any] = {
-            "command": " ".join(self.command),
-            "project_dir": str(self.project_dir),
-            "selection": " ".join(self.selection),
-            "selector_file": self.selector_file_path,
-        }
-        description: str = (
-            "SQLBuild CLI command failed with exit code "
-            f"{self.returncode}: {' '.join(self.command)}"
+        description: str
+        metadata: dict[str, Any]
+        description, metadata = dagster_failure(
+            command=list(self.command),
+            project_dir=self.project_dir,
+            selection=list(self.selection),
+            selector_file=self.selector_file_path,
+            returncode=self.returncode,
+            execution_payload=self.execution_payload,
+            stdout=self.stdout,
+            stderr=self.stderr,
         )
-        if self.execution_payload is not None:
-            incomplete_assets: list[str] = []
-            failure_details: list[str] = []
-            microbatch_limits: dict[str, object] = {}
-            for asset in self.execution_payload.get("assets", ()):
-                status: str = str(asset.get("status"))
-                if status in COMPLETED_EXECUTION_STATUSES:
-                    continue
-                incomplete_assets.append(f"{asset.get('kind')}:{asset.get('name')} ({status})")
-                failure_details.append(_format_asset_failure(asset))
-                microbatch: object | None = asset.get("microbatch")
-                if isinstance(microbatch, dict) and microbatch.get("limit") is not None:
-                    microbatch_limits[str(asset.get("name"))] = microbatch
-            metadata["execution_status"] = str(self.execution_payload.get("status"))
-            metadata["incomplete_assets"] = ", ".join(incomplete_assets)
-            if microbatch_limits:
-                metadata["microbatch_limits"] = microbatch_limits
-            if failure_details:
-                description += "\n\nFailures:\n\n" + "\n\n".join(failure_details)
-        else:
-            stdout_tail: str = _diagnostic_tail(self.stdout)
-            stderr_tail: str = _diagnostic_tail(self.stderr)
-            if stdout_tail:
-                metadata["stdout_tail"] = stdout_tail
-            if stderr_tail:
-                metadata["stderr_tail"] = stderr_tail
-            diagnostic: str = stderr_tail.strip() or stdout_tail.strip()
-            if diagnostic:
-                description += f"\n\n{diagnostic}"
         return dg.Failure(description=description, metadata=metadata)
 
     def get_artifact(self, artifact: str) -> dict[str, Any]:
@@ -430,33 +373,14 @@ class SqlBuildCliInvocation:
         logger: Any = getattr(self.context, "log", None) if self.context is not None else None
         if logger is None:
             return logged_failed_assets
-        asset_label: str = f"{asset_kind}:{asset_name}"
-        phase: str = str(asset.failed_phase or "unknown")
-        code: str = str(envelope.error_code or "unknown")
-        message: str = "SQLBuild resource attempt failed; see final execution diagnostics"
-        metadata: dict[str, Any] = {
-            "sqlbuild_asset": asset_label,
-            "sqlbuild_asset_kind": asset_kind,
-            "sqlbuild_asset_name": asset_name,
-            "sqlbuild_phase": phase,
-            "sqlbuild_error_code": code,
-            "sqlbuild_error_message": message,
-            "sqlbuild_command": " ".join(self.command),
-        }
-        values: Mapping[str, object] = {
-            "target": asset.target,
-            "staging_relation": asset.staging_relation,
-            "duration_ms": envelope.duration_ms,
-        }
-        for key, value in values.items():
-            if value is not None:
-                metadata[f"sqlbuild_{key}"] = value
+        log_arguments: list[str]
+        metadata: dict[str, Any]
+        log_arguments, metadata = dagster_live_failure(
+            asset=asset, envelope=envelope, command=list(self.command)
+        )
         logger.error(
             "SQLBuild asset failed: asset=%s phase=%s code=%s message=%s",
-            asset_label,
-            phase,
-            code,
-            message,
+            *log_arguments,
             extra=metadata,
         )
         return logged_failed_assets

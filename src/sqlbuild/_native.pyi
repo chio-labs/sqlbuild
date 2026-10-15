@@ -6308,6 +6308,51 @@ def bind_event_exporter_declarations(
 def discover_event_exporter_functions(
     *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] | None = None
 ) -> tuple[DiscoveredEventExporter, ...]: ...
+def dagster_cli_arguments(
+    *,
+    args: list[str],
+    dag: Mapping[str, Any] | None,
+    has_context: bool,
+    read_selection: Callable[[], tuple[list[tuple[str, ...]], list[tuple[tuple[str, ...], str]]]],
+) -> dict[str, Any]: ...
+def dagster_selector_log_lines(*, selectors: list[str]) -> list[str]: ...
+def dagster_payload_results(
+    *,
+    dag: Mapping[str, Any],
+    payload: Mapping[str, Any],
+    command: list[str],
+    selected_asset_paths: list[tuple[str, ...]],
+    selected_check_keys: list[tuple[tuple[str, ...], str]],
+    check_selection_is_explicit: bool,
+) -> list[tuple[Any, ...]]: ...
+def dagster_integration_results(
+    *,
+    dag: Mapping[str, Any],
+    envelope: IntegrationResultEnvelope,
+    command: list[str],
+    selected_asset_paths: list[tuple[str, ...]],
+    selected_check_keys: list[tuple[tuple[str, ...], str]],
+    check_selection_is_explicit: bool,
+    emitted_asset_paths: list[tuple[str, ...]],
+) -> list[tuple[Any, ...]]: ...
+def dagster_selected_asset_results(
+    *, dag: Mapping[str, Any], command: list[str], selected_asset_paths: list[tuple[str, ...]]
+) -> list[tuple[Any, ...]]: ...
+def dagster_execution_payload(*, text: str) -> Mapping[str, Any] | None: ...
+def dagster_failure(
+    *,
+    command: list[str],
+    project_dir: Path,
+    selection: list[str],
+    selector_file: str,
+    returncode: int,
+    execution_payload: Mapping[str, Any] | None,
+    stdout: str,
+    stderr: str,
+) -> tuple[str, dict[str, Any]]: ...
+def dagster_live_failure(
+    *, asset: IntegrationAssetResult, envelope: IntegrationResultEnvelope, command: list[str]
+) -> tuple[list[str], dict[str, Any]]: ...
 def build_janitor_plan(
     *,
     project: CompiledProjectView,

@@ -392,7 +392,7 @@ note = "Rule 3 shapes: the invocation-context variable and wire constants used b
 [[stays]]
 path = "integrations/dagster"
 reason = "public-api"
-note = "Documented orchestrator integration."
+note = "Documented orchestrator integration and rule 4 Dagster glue: context reads, subprocess streaming and Dagster event construction; CLI arguments, selector logs, payload and failure parsing are native."
 
 [[stays]]
 path = "integrations/rivers"
