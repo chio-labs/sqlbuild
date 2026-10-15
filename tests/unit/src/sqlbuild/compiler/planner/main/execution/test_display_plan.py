@@ -7,6 +7,10 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
     CompileModelConfig,
     ModelPlanEntry,
     PlanAction,
@@ -14,12 +18,6 @@ from sqlbuild._native import (
     PlanReason,
     build_display_only_sqlbuild_plan,
     format_plan,
-)
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from tests.unit.src.sqlbuild.compiler.planner.main.execution._test_types import (

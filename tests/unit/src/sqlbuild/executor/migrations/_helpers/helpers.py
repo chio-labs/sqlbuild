@@ -12,6 +12,7 @@ from sqlbuild._native import (
     ColumnMigrationDecision,
     ColumnMigrationEvent,
     ColumnMigrationPlanEntry,
+    CompiledRelationLocation,
     MigrationDiscovery,
     MigrationRelation,
     OldNameViewAction,
@@ -20,7 +21,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
 
 RELATION: str = "main.fct_orders"
 

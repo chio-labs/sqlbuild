@@ -12,13 +12,13 @@ import pytest
 
 from sqlbuild._native import (
     CompileInputError,
+    InferredColumn,
     InvalidQualifiedIdentityError,
     build_compiled_project,
     discover_project_inputs,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.entry.main.entry import main
-from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from tests.integration.src.sqlbuild.compiler.compiled_project._test_types import (
     ImmediateSyntaxErrorTestCase,

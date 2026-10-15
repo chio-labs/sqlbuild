@@ -2,7 +2,7 @@
 
 from functools import cached_property
 
-from sqlbuild.compiler.compile.models import CompiledSqlTest
+from sqlbuild._native import CompiledSqlTest
 from sqlbuild.compiler.compile.types import CompiledProjectView, SqlTestMode
 from sqlbuild.rule_engine.models import Model
 

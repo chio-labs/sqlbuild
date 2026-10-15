@@ -11,13 +11,13 @@ import pytest
 import sqlbuild._native as _native
 from sqlbuild._native import (
     BuildPhaseTimingTracker,
+    CompiledProject,
     CompilePipelineOptions,
     CompilePipelineResult,
     PartialBuildPhaseTimings,
     PlanOutput,
     RulesRunResult,
 )
-from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.pipeline._helpers import materializations
 from sqlbuild.runtime.contracts.models import ConnectionHooks

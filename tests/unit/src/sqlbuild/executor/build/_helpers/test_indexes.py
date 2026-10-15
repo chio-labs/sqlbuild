@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import AuditPlanEntry, PlanOutput
+from sqlbuild._native import AuditPlanEntry, CompiledObjectKey, PlanOutput
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledResourceType
 from sqlbuild.executor.build._helpers.indexes import build_execution_indexes
 from sqlbuild.executor.build.models import BuildIndexes

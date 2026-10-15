@@ -8,6 +8,8 @@ import pytest
 
 from sqlbuild._native import (
     CliUserError,
+    CompiledProject,
+    CompiledRelationLocation,
     CompilePipelineResult,
     PlanOutput,
     PythonSqlRunLifecyclePlan,
@@ -16,7 +18,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.models import RelationLookup
 from sqlbuild.adapter.relations.main import relation_lookup as relation_lookup_module
-from sqlbuild.compiler.compile.models import CompiledProject, CompiledRelationLocation
 from sqlbuild.executor.python_nodes.main import read_side as read_side_module
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.python_nodes.models import SqlResourceRef

@@ -22,7 +22,6 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
 from sqlbuild.adapter.type_system.main.normalize_relation_type import normalize_relation_type
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.migrations.constants import COLUMN_MIGRATION_TABLE_NAME
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.migrations._helpers.old_name_facts import (

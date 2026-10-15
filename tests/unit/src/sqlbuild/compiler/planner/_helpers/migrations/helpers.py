@@ -7,13 +7,13 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlbuild._native import (
+    CompiledRelationLocation,
     OldNameViewAction,
     OldNameViewPlanEntry,
     QueryShape,
     build_migration_fingerprint,
     parse_query_shape,
 )
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
 
 if TYPE_CHECKING:
     from sqlbuild._native import InputColumns

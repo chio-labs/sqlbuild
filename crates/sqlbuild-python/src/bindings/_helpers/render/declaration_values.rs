@@ -11,7 +11,7 @@ use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
 
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
 const SCOPE_MODELS_MODULE: &str = "sqlbuild._native";
 const SCOPE_TYPES_MODULE: &str = "sqlbuild._native";
@@ -437,7 +437,7 @@ fn render_constant_declaration<'py>(
 /// One enum member value as a SQL scalar literal.
 #[pyfunction]
 #[pyo3(signature = (*, value))]
-fn render_enum_member_value(value: &Bound<'_, PyAny>) -> PyResult<String> {
+pub(crate) fn render_enum_member_value(value: &Bound<'_, PyAny>) -> PyResult<String> {
     if value.is_instance_of::<PyInt>() {
         return value.str()?.extract();
     }

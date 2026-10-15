@@ -9,11 +9,10 @@ from typing import Any
 import duckdb
 import pytest
 
-from sqlbuild._native import AuditPlanEntry, ModelPlanEntry, PlanReason
+from sqlbuild._native import AuditPlanEntry, CompiledRelationLocation, ModelPlanEntry, PlanReason
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult

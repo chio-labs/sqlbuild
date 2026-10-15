@@ -21,6 +21,7 @@ import pytest
 from sqlbuild._native import (
     AuditPlanEntry,
     AuditProgressReporter,
+    CompiledObjectKey,
     CostContext,
     PlanOutput,
     StatementLedgerEntry,
@@ -36,7 +37,6 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledResourceType
 from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.executor.auditing.models import AuditExecutionResult

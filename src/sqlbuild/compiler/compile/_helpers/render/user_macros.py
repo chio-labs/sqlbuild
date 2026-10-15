@@ -20,21 +20,19 @@ from sqlbuild._native import (
     DeclarationIdentity,
     DeclarationKind,
     DeclarationRecord,
+    DeclarationResolutionContext,
     DiscoveredMacroFile,
     EnumDeclaration,
-    SqlValue,
-    SqlValueKind,
-    validate_resource_identity,
-)
-from sqlbuild.compiler.compile.exceptions import MacroDeclarationLookupError
-from sqlbuild.compiler.compile.models import (
-    DeclarationResolutionContext,
     LoadedMacro,
     MacroContext,
+    SqlValue,
+    SqlValueKind,
     StaticMacroExport,
     StaticMacroFault,
     StaticMacroInventory,
+    validate_resource_identity,
 )
+from sqlbuild.compiler.compile.exceptions import MacroDeclarationLookupError
 
 _OBJECT_ENTRY_LENGTH: int = 2
 _MACRO_MODULE_LOAD_LOCK: threading.RLock = threading.RLock()

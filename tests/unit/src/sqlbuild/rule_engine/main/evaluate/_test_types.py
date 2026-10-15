@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 
-from sqlbuild.compiler.compile.models import CompileSqlReference
+from sqlbuild._native import CompileSqlReference
 from sqlbuild.rule_engine.models import RulesConfig
 
 

@@ -5,12 +5,13 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from sqlbuild._native import CompileModelConfig, Fingerprint
-from sqlbuild.compiler.compile.models import (
+from sqlbuild._native import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompileModelConfig,
+    Fingerprint,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,

@@ -6,13 +6,13 @@ from typing import ClassVar
 import pytest
 
 from sqlbuild._native import (
+    CompiledSqlScenario,
     CompilePipelineResult,
     ScenarioArtifactName,
     ScenarioExecutionPlan,
     SqlLexicalSyntax,
     build_cli_scenario_plan,
 )
-from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     ScenarioCliPlanIdentifierLimitTestCase,
 )

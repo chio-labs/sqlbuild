@@ -10,7 +10,7 @@ use crate::bindings::_helpers::sql_test_glue::assembly::{
     AssemblyRequest, AssemblyRow, DiagnosticRow, FactsRow, assemble_compiled_sql_tests,
 };
 
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const GLUE_MODELS_MODULE: &str = "sqlbuild._native";
 const SPEC_MODELS_MODULE: &str = "sqlbuild._native";

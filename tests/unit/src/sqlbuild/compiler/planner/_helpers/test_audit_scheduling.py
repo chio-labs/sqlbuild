@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
+    CompiledObjectKey,
+    CompileSqlReference,
     MaterializationType,
     SqlReferenceKind,
     reads_outside_target_lineage,
@@ -14,10 +16,6 @@ from sqlbuild._native import (
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditRunScope,
-)
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompileSqlReference,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,

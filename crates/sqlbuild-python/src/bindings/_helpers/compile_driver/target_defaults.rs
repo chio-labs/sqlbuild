@@ -6,7 +6,7 @@ use pyo3::types::PyTuple;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 
 /// The adapter defaults every compiled location falls back to.
 pub(crate) struct TargetDefaults<'py> {

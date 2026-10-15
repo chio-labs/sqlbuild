@@ -4,8 +4,12 @@ import time
 
 import pytest
 
-from sqlbuild._native import SqlReferenceKind, analyze_resolved_column_reads
-from sqlbuild.compiler.compile.models import CompiledLineageSourceFact, CompileSqlReference
+from sqlbuild._native import (
+    CompiledLineageSourceFact,
+    CompileSqlReference,
+    SqlReferenceKind,
+    analyze_resolved_column_reads,
+)
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     LongUnionRequiredColumnsTestCase,

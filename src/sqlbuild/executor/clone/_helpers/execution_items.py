@@ -7,6 +7,7 @@ from dataclasses import replace
 
 from sqlbuild._native import (
     CloneSourcePlanEntry,
+    CompiledObjectKey,
     FunctionPlanEntry,
     MaterializationType,
     ModelPlanEntry,
@@ -15,7 +16,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import RelationLookup, RetentionRequest
 from sqlbuild.adapter.contract.types import RetentionScope
-from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.executor.build.models import FunctionExecutionResult
 from sqlbuild.executor.clone._helpers.operations import clone_relation, recreate_view
 from sqlbuild.executor.clone._helpers.retention import apply_clone_retention

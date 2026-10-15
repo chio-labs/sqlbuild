@@ -16,13 +16,21 @@ from sqlbuild._native import (
     BackfillAction,
     BackfillResult,
     ChangeDetectionResult,
+    CompiledAudit,
     CompiledDirectLogicSqlTestPayload,
     CompiledFunction,
+    CompiledModel,
     CompiledModelSqlTestPayload,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
+    CompiledSqlScenario,
+    CompiledSqlTest,
     CompileModelConfig,
     CompilePipelineResult,
+    CompileSqlReference,
     CompileSqlScenarioCte,
     CompileSqlTestCte,
     DefaultsConfig,
@@ -63,16 +71,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.auditing.types import AuditSeverity
-from sqlbuild.compiler.compile.models import (
-    CompiledAudit,
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
-    CompiledSqlScenario,
-    CompiledSqlTest,
-    CompileSqlReference,
-)
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledAuditView,

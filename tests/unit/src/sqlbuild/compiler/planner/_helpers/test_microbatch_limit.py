@@ -5,6 +5,8 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    CompiledObjectKey,
+    CompiledRelationLocation,
     CompileInputError,
     CursorBounds,
     CursorInputRelation,
@@ -20,10 +22,6 @@ from sqlbuild._native import (
     apply_microbatch_limit,
 )
 from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledRelationLocation,
-)
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     ConfiguredMicrobatchPolicyTestCase,

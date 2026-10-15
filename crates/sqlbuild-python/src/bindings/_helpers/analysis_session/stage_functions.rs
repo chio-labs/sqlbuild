@@ -33,7 +33,7 @@ const LINEAGE_RESOURCE_TYPES: [(&str, &str); 4] = [
     ("table_fn", "table_fn"),
 ];
 const ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 
 /// Each query's `(succeeded, column rows, has star)`; a native internal failure raises.

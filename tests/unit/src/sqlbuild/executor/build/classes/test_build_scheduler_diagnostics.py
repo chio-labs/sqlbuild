@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild._native import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.build.classes.build_scheduler import BuildScheduler
 from sqlbuild.executor.build.models import BuildCallbacks, SchedulerState

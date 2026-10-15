@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild._native import (
+    CompiledRelationLocation,
     FunctionPlanEntry,
     ModelPlanEntry,
     ScenarioArtifactKind,
@@ -22,7 +23,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.types import TablePromotionMode
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.executor.build.models import FunctionExecutionResult
 from sqlbuild.executor.functions.main._execute import execute_function

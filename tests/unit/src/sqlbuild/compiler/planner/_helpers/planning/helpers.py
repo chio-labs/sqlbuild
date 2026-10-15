@@ -5,6 +5,10 @@ from typing import Any
 from unittest.mock import Mock
 
 from sqlbuild._native import (
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
     CompileModelConfig,
     LocalConfig,
     PlannerRelationsContext,
@@ -21,12 +25,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.classes.retention_adapter import RetentionAdapterMixin
 from sqlbuild.adapter.contract.models import RelationInfo
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
-)
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,

@@ -19,12 +19,14 @@ from sqlbuild._native import (
     DeclarationIdentity,
     DeclarationKind,
     DeclarationRecord,
+    DeclarationResolutionContext,
     DeclarationScopeBuild,
     DeclarationScopeResolver,
     DeclarationVisibility,
     DiscoveredProjectInputs,
     DiscoveryError,
     EnumDeclaration,
+    LoadedMacro,
     ResourceIdentity,
     ResourceKind,
     ScopeIndex,
@@ -41,7 +43,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
-from sqlbuild.compiler.compile.models import DeclarationResolutionContext, LoadedMacro
 from tests.integration.src.sqlbuild.compiler.helpers import GoldenEntry, golden_entry
 
 CURRENT_PATH_COMPONENT: str = "."

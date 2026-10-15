@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild._native import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 
 

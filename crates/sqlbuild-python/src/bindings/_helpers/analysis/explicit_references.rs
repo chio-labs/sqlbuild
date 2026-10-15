@@ -32,7 +32,7 @@ use crate::bindings::types::CompilerDetach;
 const EXPLICIT_REFERENCES_CONTEXT: &str = "native explicit-reference checks";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
 const COMPILE_INPUT_ERROR: &str = "CompileInputError";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const REFERENCE_MODELS_MODULE: &str = "sqlbuild.compiler.references.models";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
 const REFERENCE_TYPES_MODULE: &str = "sqlbuild._native";

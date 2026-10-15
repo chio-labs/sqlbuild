@@ -9,6 +9,10 @@ from unittest.mock import Mock
 import pytest
 
 from sqlbuild._native import (
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
     CompileModelConfig,
     DeferralInputs,
     Fingerprint,
@@ -21,12 +25,6 @@ from sqlbuild._native import (
     plan_column_migrations,
 )
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
-)
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations._test_types import (
     UnfingerprintableCandidateTestCase,

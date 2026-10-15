@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, cast
 import pytest
 
 from sqlbuild._native import (
+    CompiledObjectKey,
     DiscoveredProjectInputs,
     ProjectGraph,
     assemble_project,
@@ -17,9 +18,6 @@ from sqlbuild._native import (
     discover_project_inputs,
     project_lineage_views,
     project_with,
-)
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.dag.types import NodeKind

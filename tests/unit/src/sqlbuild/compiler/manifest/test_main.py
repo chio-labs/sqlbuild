@@ -11,10 +11,12 @@ import sqlbuild._native as _native
 from sqlbuild._native import (
     AuditPlanEntry,
     ChainStep,
+    CompiledObjectKey,
     DeclarationIdentity,
     DeclarationKind,
     DeclarationRecord,
     DiscoveredSqlHookFile,
+    LoadedMacro,
     MacroMetadata,
     OwnershipRoot,
     PlanOutput,
@@ -27,10 +29,6 @@ from sqlbuild._native import (
     SqlTestPlanEntry,
     build_manifest,
     project_with,
-)
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    LoadedMacro,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,

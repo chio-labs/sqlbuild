@@ -16,7 +16,7 @@ use crate::bindings::_helpers::planner_strategy::values::{
 };
 
 const AUDITING_TYPES_MODULE: &str = "sqlbuild.compiler.auditing.types";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const MODEL_RESOURCE_TYPE: &str = "model";
 const FINAL_RUN_SCOPE: &str = "final";

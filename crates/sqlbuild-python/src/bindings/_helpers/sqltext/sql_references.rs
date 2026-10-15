@@ -18,7 +18,7 @@ use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
 const REFERENCE_TYPES_MODULE: &str = "sqlbuild._native";

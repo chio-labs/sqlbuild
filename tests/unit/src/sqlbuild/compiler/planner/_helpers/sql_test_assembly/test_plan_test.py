@@ -10,6 +10,10 @@ from sqlbuild._native import (
     CompiledDirectLogicSqlTestPayload,
     CompiledFunction,
     CompiledModelSqlTestPayload,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
+    CompiledSqlTest,
     CompileInputError,
     CompileSqlTestCte,
     DiscoveredSqlTestBlock,
@@ -35,12 +39,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
-    CompiledSqlTest,
-)
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType, SqlTestMode
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     AssertionChainCteErrorTestCase,

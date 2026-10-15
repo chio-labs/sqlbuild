@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
+    CompiledObjectKey,
     ParsedSelector,
     PathSelector,
     SelectorKind,
@@ -10,9 +11,6 @@ from sqlbuild._native import (
     parse_project_selector,
     project_lineage_views,
     resolve_project_selectors,
-)
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (

@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild._native import MigrationRelation
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
+from sqlbuild._native import CompiledRelationLocation, MigrationRelation
 
 
 def migration_relation_for_location(location: CompiledRelationLocation) -> MigrationRelation:

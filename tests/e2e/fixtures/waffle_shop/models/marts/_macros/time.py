@@ -1,6 +1,6 @@
 """Time expression macros."""
 
-from sqlbuild.compiler.compile.models import MacroContext
+from sqlbuild._native import MacroContext
 
 
 def timestamp_trunc(ctx: MacroContext, grain: str, expression: str) -> str:

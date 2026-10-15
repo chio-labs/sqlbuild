@@ -22,6 +22,9 @@ use crate::bindings::_helpers::compiled_project::compiled_model_view::{
     CompiledViewClasses, InferredRow,
 };
 use crate::bindings::_helpers::compiled_project::model_input_view::ModelInputRecord;
+use crate::bindings::_helpers::record_behaviours::lineage_facts::{
+    confidence_member, transform_kind_member,
+};
 
 const COMPILE_PHASE: &str = "compile";
 const MODEL_RESOURCE: &str = "model";
@@ -296,15 +299,11 @@ fn lineage_facts(classes: &CompiledViewClasses<'_>, rows: &[LineageRow]) -> PyRe
         fields.set_item("upstream_columns", PyTuple::new(py, sources)?)?;
         fields.set_item(
             "transform_kind",
-            classes
-                .compact_lineage_facts
-                .call_method1("transform_kind", (row.transform_code,))?,
+            transform_kind_member(py, usize::from(row.transform_code))?,
         )?;
         fields.set_item(
             "confidence",
-            classes
-                .compact_lineage_facts
-                .call_method1("confidence", (row.confidence_code,))?,
+            confidence_member(py, usize::from(row.confidence_code))?,
         )?;
         facts.push(
             classes

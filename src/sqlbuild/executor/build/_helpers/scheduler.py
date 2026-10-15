@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 
 from sqlbuild._native import (
+    CompiledObjectKey,
     IncrementalMode,
     MaterializationType,
     ModelPlanEntry,
@@ -17,7 +18,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.adapter.contract.types import TablePromotionMode
-from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.build.constants import (

@@ -8,12 +8,12 @@ from typing import Any
 
 from sqlbuild._native import (
     ChainStep,
+    CompiledObjectKey,
     CompilePipelineResult,
     SqlTestPlanEntry,
     render_sql_test_comparison_sql,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.testing.main._execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult

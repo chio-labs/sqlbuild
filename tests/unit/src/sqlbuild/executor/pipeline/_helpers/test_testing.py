@@ -7,12 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import ChainStep, PlanOutput, SqlTestPlanEntry
-from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import (
+from sqlbuild._native import (
+    ChainStep,
     CompiledObjectKey,
     CompiledRelationLocation,
+    PlanOutput,
+    SqlTestPlanEntry,
 )
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.pipeline._helpers import testing as testing_pipeline
 from sqlbuild.executor.pipeline._helpers.testing import run_test_pipeline

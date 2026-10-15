@@ -6,6 +6,8 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    CompiledObjectKey,
+    CompiledRelationLocation,
     Fingerprint,
     FingerprintSet,
     MaterializationType,
@@ -16,7 +18,6 @@ from sqlbuild._native import (
     SeedPlanEntry,
 )
 from sqlbuild.adapter.contract.models import RelationInfo
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 

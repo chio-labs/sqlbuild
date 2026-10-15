@@ -6,9 +6,9 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    CompiledSqlTest,
     project_with,
 )
-from sqlbuild.compiler.compile.models import CompiledSqlTest
 from sqlbuild.compiler.compile.types import CompiledProjectView, SqlTestMode
 from sqlbuild.rule_engine.classes.model_test_facts import TestFacts as ModelTestFacts
 from sqlbuild.rule_engine.models import Model

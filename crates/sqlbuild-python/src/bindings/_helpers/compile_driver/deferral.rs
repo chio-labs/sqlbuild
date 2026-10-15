@@ -16,7 +16,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const PROJECT_VARS_MODULE: &str = "sqlbuild._native";
 const PRESERVE_TARGET_VALUE: &str = "preserve";
 /// `sorted(DEFERRED_TARGET_CONTEXT_KEYS)`.

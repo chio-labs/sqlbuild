@@ -3,6 +3,8 @@
 from pathlib import Path
 
 from sqlbuild._native import (
+    CompiledObjectKey,
+    CompiledRelationLocation,
     MaterializationType,
     ModelPlanEntry,
     PlanAction,
@@ -15,7 +17,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.models import RetentionRequest
 from sqlbuild.adapter.contract.types import RetentionScope
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 
 

@@ -9,6 +9,7 @@ import pytest
 
 import sqlbuild._native as native
 from sqlbuild._native import (
+    CompilerDiagnostic,
     build_compiled_project,
     discover_project_inputs,
     source_binding_diagnostics,
@@ -16,7 +17,6 @@ from sqlbuild._native import (
 from sqlbuild._native import run_cli as main
 from sqlbuild.adapter.contract.models import ColumnInfo, ExpressionInferenceProfile
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
-from sqlbuild.compiler.compile.models import CompilerDiagnostic
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     FunctionArgumentTypeCase,

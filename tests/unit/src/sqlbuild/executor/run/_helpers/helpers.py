@@ -4,6 +4,8 @@ from typing import Any
 
 from sqlbuild._native import (
     AuditPlanEntry,
+    CompiledObjectKey,
+    CompiledRelationLocation,
     DiscoveredHookFunction,
     MaterializationType,
     ModelPlanEntry,
@@ -25,10 +27,6 @@ from sqlbuild.compiler.auditing.types import (
     AuditOutcome,
     AuditRunScope,
     AuditSeverity,
-)
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.auditing.models import AuditExecutionResult

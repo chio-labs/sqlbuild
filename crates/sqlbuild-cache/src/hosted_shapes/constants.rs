@@ -3,7 +3,7 @@
 /// The extension module hosting the shapes.
 pub const NATIVE_MODULE: &str = "sqlbuild._native";
 /// The Python model type a natively hosted compiler shape is captured as.
-pub const HOSTED_SHAPE_TYPES: [(&str, &str); 450] = [
+pub const HOSTED_SHAPE_TYPES: [(&str, &str); 470] = [
     (
         "sqlbuild._native:AlignedInterval",
         "sqlbuild.cursor_algebra.models:AlignedInterval",
@@ -105,6 +105,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 450] = [
         "sqlbuild.compiler.lineage.types:ColumnTransformKind",
     ),
     (
+        "sqlbuild._native:CompactLineageFacts",
+        "sqlbuild.compiler.compile.models:CompactLineageFacts",
+    ),
+    (
         "sqlbuild._native:CompileAdapterContext",
         "sqlbuild.compiler.compile.models:CompileAdapterContext",
     ),
@@ -129,6 +133,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 450] = [
         "sqlbuild.compiler.compile.models:CompileModelConfig",
     ),
     (
+        "sqlbuild._native:CompileModelInput",
+        "sqlbuild.compiler.compile.models:CompileModelInput",
+    ),
+    (
         "sqlbuild._native:CompileModelSqlTestInputPayload",
         "sqlbuild.compiler.compile.models:CompileModelSqlTestInputPayload",
     ),
@@ -143,6 +151,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 450] = [
     (
         "sqlbuild._native:CompileProjectInputs",
         "sqlbuild.compiler.compile.models:CompileProjectInputs",
+    ),
+    (
+        "sqlbuild._native:CompileSqlReference",
+        "sqlbuild.compiler.compile.models:CompileSqlReference",
     ),
     (
         "sqlbuild._native:CompileSqlScenarioCte",
@@ -161,6 +173,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 450] = [
         "sqlbuild.compiler.compile.models:CompileSqlTestInput",
     ),
     (
+        "sqlbuild._native:CompiledAudit",
+        "sqlbuild.compiler.compile.models:CompiledAudit",
+    ),
+    (
         "sqlbuild._native:CompiledDirectLogicSqlTestPayload",
         "sqlbuild.compiler.compile.models:CompiledDirectLogicSqlTestPayload",
     ),
@@ -173,12 +189,32 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 450] = [
         "sqlbuild.compiler.compile.models:CompiledLineageColumnFact",
     ),
     (
+        "sqlbuild._native:CompiledLineageSourceFact",
+        "sqlbuild.compiler.compile.models:CompiledLineageSourceFact",
+    ),
+    (
+        "sqlbuild._native:CompiledModel",
+        "sqlbuild.compiler.compile.models:CompiledModel",
+    ),
+    (
         "sqlbuild._native:CompiledModelSqlTestPayload",
         "sqlbuild.compiler.compile.models:CompiledModelSqlTestPayload",
     ),
     (
+        "sqlbuild._native:CompiledObjectKey",
+        "sqlbuild.compiler.compile.models:CompiledObjectKey",
+    ),
+    (
+        "sqlbuild._native:CompiledProject",
+        "sqlbuild.compiler.compile.models:CompiledProject",
+    ),
+    (
         "sqlbuild._native:CompiledProjectPhaseResult",
         "sqlbuild.compiler.pipeline.models:CompiledProjectPhaseResult",
+    ),
+    (
+        "sqlbuild._native:CompiledRelationLocation",
+        "sqlbuild.compiler.compile.models:CompiledRelationLocation",
     ),
     (
         "sqlbuild._native:CompiledSeed",
@@ -193,8 +229,20 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 450] = [
         "sqlbuild.compiler.compile.models:CompiledSqlExpansion",
     ),
     (
+        "sqlbuild._native:CompiledSqlScenario",
+        "sqlbuild.compiler.compile.models:CompiledSqlScenario",
+    ),
+    (
+        "sqlbuild._native:CompiledSqlTest",
+        "sqlbuild.compiler.compile.models:CompiledSqlTest",
+    ),
+    (
         "sqlbuild._native:CompiledSqlTestResource",
         "sqlbuild.compiler.compile.models:CompiledSqlTestResource",
+    ),
+    (
+        "sqlbuild._native:CompilerDiagnostic",
+        "sqlbuild.compiler.compile.models:CompilerDiagnostic",
     ),
     (
         "sqlbuild._native:CompilerStage",
@@ -363,6 +411,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 450] = [
     (
         "sqlbuild._native:DeclarationReport",
         "sqlbuild.compiler.scopes.models:DeclarationReport",
+    ),
+    (
+        "sqlbuild._native:DeclarationResolutionContext",
+        "sqlbuild.compiler.compile.models:DeclarationResolutionContext",
     ),
     (
         "sqlbuild._native:DeclarationRuntimeProjection",
@@ -741,6 +793,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 450] = [
         "sqlbuild.compiler.planner.types:IncrementalStrategy",
     ),
     (
+        "sqlbuild._native:InferredColumn",
+        "sqlbuild.compiler.compile.models:InferredColumn",
+    ),
+    (
         "sqlbuild._native:InitialValidFrom",
         "sqlbuild.compiler.planner.types:InitialValidFrom",
     ),
@@ -819,6 +875,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 450] = [
         "sqlbuild.compiler.references.models:LiteralSqlRelation",
     ),
     (
+        "sqlbuild._native:LoadedMacro",
+        "sqlbuild.compiler.compile.models:LoadedMacro",
+    ),
+    (
         "sqlbuild._native:LoaderConnectionMode",
         "sqlbuild.compiler.discovery.types:LoaderConnectionMode",
     ),
@@ -845,6 +905,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 450] = [
     (
         "sqlbuild._native:MacroArgumentError",
         "sqlbuild.compiler.compile.exceptions:MacroArgumentError",
+    ),
+    (
+        "sqlbuild._native:MacroContext",
+        "sqlbuild.compiler.compile.models:MacroContext",
     ),
     (
         "sqlbuild._native:MacroExpansionResult",
@@ -957,6 +1021,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 450] = [
     (
         "sqlbuild._native:ModelCursorSnapshot",
         "sqlbuild.compiler.planner.models:ModelCursorSnapshot",
+    ),
+    (
+        "sqlbuild._native:ModelInputBuildContext",
+        "sqlbuild.compiler.compile.models:ModelInputBuildContext",
     ),
     (
         "sqlbuild._native:ModelMigrationPlanEntry",
@@ -1709,6 +1777,18 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 450] = [
     (
         "sqlbuild._native:StaticCommandContext",
         "sqlbuild.compiler.pipeline.models:StaticCommandContext",
+    ),
+    (
+        "sqlbuild._native:StaticMacroExport",
+        "sqlbuild.compiler.compile.models:StaticMacroExport",
+    ),
+    (
+        "sqlbuild._native:StaticMacroFault",
+        "sqlbuild.compiler.compile.models:StaticMacroFault",
+    ),
+    (
+        "sqlbuild._native:StaticMacroInventory",
+        "sqlbuild.compiler.compile.models:StaticMacroInventory",
     ),
     (
         "sqlbuild._native:TableType",

@@ -4,6 +4,7 @@ import pytest
 
 from sqlbuild._native import (
     CompileInputError,
+    InferredColumn,
     NativeColumnQuery,
     cursor_intrinsics_analysis_sql,
     infer_native_query_columns,
@@ -11,7 +12,6 @@ from sqlbuild._native import (
     validated_model_cursor_intrinsics,
 )
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.lineage.types import InferredNullability
 from tests.unit.src.sqlbuild.compiler.compile._helpers.render._test_types import (
     CursorIntrinsicAnalysisTestCase,

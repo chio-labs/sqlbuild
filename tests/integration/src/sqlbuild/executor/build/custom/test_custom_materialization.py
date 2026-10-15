@@ -11,6 +11,7 @@ import pytest
 
 from sqlbuild._native import (
     AuditPlanEntry,
+    CompiledRelationLocation,
     DiscoveredHookFunction,
     ModelPlanEntry,
     PlanReason,
@@ -19,7 +20,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import AuditOutcome
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.executor.custom.models import (
     MaterializationContext,
     MaterializationResult,

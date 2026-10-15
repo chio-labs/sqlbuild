@@ -6,6 +6,7 @@ from unittest.mock import Mock, call
 import pytest
 
 from sqlbuild._native import (
+    CompiledRelationLocation,
     IncrementalMode,
     MaterializationType,
     ModelPlanEntry,
@@ -23,7 +24,6 @@ from sqlbuild.adapter.contract.models import (
     RetentionState,
 )
 from sqlbuild.adapter.contract.types import RetentionChangePhase, RetentionScope
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.build._helpers.retention import (
     apply_retention_phase,

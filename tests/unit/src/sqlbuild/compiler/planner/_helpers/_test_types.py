@@ -5,8 +5,11 @@ from pathlib import Path
 from sqlbuild._native import (
     BackfillAction,
     ChangeKind,
+    CompiledObjectKey,
+    CompileSqlReference,
     CursorBounds,
     Fingerprint,
+    InferredColumn,
     MaterializationType,
     MissingUpstream,
     OnSchemaChange,
@@ -29,11 +32,6 @@ from sqlbuild._native import (
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditRunScope,
-)
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompileSqlReference,
-    InferredColumn,
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledProjectView
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (

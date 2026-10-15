@@ -7,17 +7,15 @@ import pytest
 
 from sqlbuild._native import (
     AuditPlanEntry,
+    CompiledAudit,
+    CompiledObjectKey,
+    CompiledRelationLocation,
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
     SourceEntry,
     plan_audit,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import (
-    CompiledAudit,
-    CompiledObjectKey,
-    CompiledRelationLocation,
-)
 from sqlbuild.compiler.compile.types import CompiledAuditView, CompiledResourceType
 from tests.integration.src.sqlbuild.compiler.planner._helpers._test_types import (
     ExecuteAuditTestCase,

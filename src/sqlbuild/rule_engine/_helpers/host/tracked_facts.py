@@ -6,8 +6,13 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from sqlbuild._native import ConstantDeclaration, EnumDeclaration, FactDigestError
-from sqlbuild.compiler.compile.models import CompiledSqlTest, InferredColumn
+from sqlbuild._native import (
+    CompiledSqlTest,
+    ConstantDeclaration,
+    EnumDeclaration,
+    FactDigestError,
+    InferredColumn,
+)
 from sqlbuild.compiler.compile.types import CompiledAuditView
 from sqlbuild.rule_engine._helpers.engine.fact_replay import fact_error_digest, fact_value_digest
 from sqlbuild.rule_engine.classes.fact_reads import FactReads

@@ -3,6 +3,13 @@
 use crate::bindings::_helpers::record_behaviours::auditing::{
     finish_measurement_contract, finish_threshold_bound, finish_thresholds,
 };
+use crate::bindings::_helpers::record_behaviours::compiled::{
+    build_context_declaration_expansion, diagnostic_is_error, finish_compiler_diagnostic,
+    finish_resource_typed, finish_sql_reference, finish_sql_scenario, finish_sql_test,
+    input_attached_schema_name, input_relation_key_row, model_dep_rows, model_destination_row,
+    model_has_dynamic_columns, model_inferred_rows, model_key_row, model_output_column_count,
+    model_relation_key_row_property, model_schema_column_rows, record_reference_rows,
+};
 use crate::bindings::_helpers::record_behaviours::config::settings_sql_validation;
 use crate::bindings::_helpers::record_behaviours::cursors::{
     finish_cursor_bounds, finish_cursor_snapshot, finish_future_evidence, finish_input_evidence,
@@ -27,6 +34,13 @@ use crate::bindings::_helpers::record_behaviours::freshness::{
 };
 use crate::bindings::_helpers::record_behaviours::lexical::{
     finish_lexical_syntax, lexical_cache_key, lexical_native_mapping, lexical_reads_differently,
+};
+use crate::bindings::_helpers::record_behaviours::lineage_facts::{
+    facts_eq, facts_getitem, facts_iter, facts_len, facts_projected, facts_resource_name,
+};
+use crate::bindings::_helpers::record_behaviours::macros::{
+    context_render_constant, context_render_enum_member, macro_injects_context,
+    project_lineage_graph,
 };
 use crate::bindings::_helpers::record_behaviours::migrations::{
     column_decision_blocks_build, column_decision_label, column_decision_records_event,
@@ -70,6 +84,12 @@ pub(crate) const BEHAVIOUR_FINISHERS: &[(&str, RecordFinish)] = &[
     ("FutureCursorSafetyEvidence", finish_future_evidence),
     ("MaximumStartSafetyEvidence", finish_maximum_evidence),
     ("CursorInputRelation", finish_input_relation),
+    ("CompilerDiagnostic", finish_compiler_diagnostic),
+    ("CompileSqlReference", finish_sql_reference),
+    ("CompiledLineageSourceFact", finish_resource_typed),
+    ("CompiledObjectKey", finish_resource_typed),
+    ("CompiledSqlScenario", finish_sql_scenario),
+    ("CompiledSqlTest", finish_sql_test),
 ];
 /// Computed attributes of compiler shapes.
 pub(crate) const BEHAVIOUR_PROPERTIES: &[(&str, &str, ClassProperty)] = &[
@@ -188,10 +208,56 @@ pub(crate) const BEHAVIOUR_PROPERTIES: &[(&str, &str, ClassProperty)] = &[
     ("ProjectGraph", "tag_index", graph_tag_index),
     ("ProjectGraph", "path_index", graph_path_index),
     ("ProjectGraph", "all_keys", graph_all_keys),
+    ("CompilerDiagnostic", "is_error", diagnostic_is_error),
+    (
+        "ModelInputBuildContext",
+        "declaration_expansion",
+        build_context_declaration_expansion,
+    ),
+    ("CompileModelInput", "reference_rows", record_reference_rows),
+    (
+        "CompileModelInput",
+        "relation_key_row",
+        input_relation_key_row,
+    ),
+    (
+        "CompileModelInput",
+        "attached_schema_name",
+        input_attached_schema_name,
+    ),
+    ("CompiledModel", "reference_rows", record_reference_rows),
+    (
+        "CompiledModel",
+        "relation_key_row",
+        model_relation_key_row_property,
+    ),
+    ("CompiledModel", "key_row", model_key_row),
+    ("CompiledModel", "dep_rows", model_dep_rows),
+    ("CompiledModel", "destination_row", model_destination_row),
+    ("CompiledModel", "inferred_rows", model_inferred_rows),
+    (
+        "CompiledModel",
+        "schema_column_rows",
+        model_schema_column_rows,
+    ),
+    (
+        "CompiledModel",
+        "has_dynamic_columns",
+        model_has_dynamic_columns,
+    ),
+    (
+        "CompiledModel",
+        "output_column_count",
+        model_output_column_count,
+    ),
 ];
 /// Computed attributes of compiler shapes that a record computes once and keeps.
-pub(crate) const BEHAVIOUR_CACHED_PROPERTIES: &[(&str, &str, ClassProperty)] =
-    &[("ProjectGraph", "lineage_views", graph_lineage_views)];
+pub(crate) const BEHAVIOUR_CACHED_PROPERTIES: &[(&str, &str, ClassProperty)] = &[
+    ("ProjectGraph", "lineage_views", graph_lineage_views),
+    ("LoadedMacro", "injects_context", macro_injects_context),
+    ("CompactLineageFacts", "facts", facts_projected),
+    ("CompiledProject", "lineage_graph", project_lineage_graph),
+];
 /// Methods of compiler shapes.
 pub(crate) const BEHAVIOUR_METHODS: &[(&str, &str, ClassMethod)] = &[
     (
@@ -242,7 +308,20 @@ pub(crate) const BEHAVIOUR_METHODS: &[(&str, &str, ClassMethod)] = &[
     ),
     ("RulesConfigError", "__init__", rules_config_error_init),
     ("Duration", "subtract_from", duration_subtract_from),
+    ("MacroContext", "render_constant", context_render_constant),
+    (
+        "MacroContext",
+        "render_enum_member",
+        context_render_enum_member,
+    ),
+    ("CompactLineageFacts", "__len__", facts_len),
+    ("CompactLineageFacts", "__getitem__", facts_getitem),
+    ("CompactLineageFacts", "__iter__", facts_iter),
+    ("CompactLineageFacts", "__eq__", facts_eq),
+    ("CompactLineageFacts", "resource_name", facts_resource_name),
 ];
+/// Compiler records registered as `collections.abc.Sequence` virtual subclasses.
+pub(crate) const BEHAVIOUR_SEQUENCES: &[&str] = &["CompactLineageFacts"];
 /// Compiler records ordered by their compared fields.
 pub(crate) const BEHAVIOUR_ORDERED: &[&str] =
     &["ResourceIdentity", "DeclarationIdentity", "OwnershipRoot"];

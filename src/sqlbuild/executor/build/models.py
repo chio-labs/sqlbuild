@@ -9,6 +9,8 @@ from pathlib import Path
 
 from sqlbuild._native import (
     AuditPlanEntry,
+    CompiledObjectKey,
+    CompiledRelationLocation,
     DiscoveredLoaderFunction,
     FunctionPlanEntry,
     ModelPlanEntry,
@@ -19,7 +21,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.models import LifeCycleEvent, RelationInfo
 from sqlbuild.adapter.contract.types import TablePromotionMode
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.cost.models import StatementExecutionTelemetry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.types import BeforeModelMaterializeCallback, BuildStatus

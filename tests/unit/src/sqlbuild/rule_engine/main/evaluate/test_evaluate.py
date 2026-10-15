@@ -5,9 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import SelectStarAllow
+from sqlbuild._native import CompileSqlReference, SelectStarAllow
 from sqlbuild._native import evaluate_project_rules as evaluate
-from sqlbuild.compiler.compile.models import CompileSqlReference
 from sqlbuild.rule_engine.models import Finding, RulesConfig, RulesResult
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate._test_types import (
     PolicyEvaluationTestCase,

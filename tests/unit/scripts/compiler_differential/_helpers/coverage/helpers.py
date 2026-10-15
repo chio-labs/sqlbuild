@@ -8,10 +8,10 @@ from typing import cast
 
 from sqlbuild._native import (
     STAGE_CAPTURE_OMITTED_ATTRIBUTES,
+    CompiledProject,
     CompileProjectInputs,
     DiscoveredProjectInputs,
 )
-from sqlbuild.compiler.compile.models import CompiledProject
 
 _VALUE_KIND: str = "sqlbuild.sql_values.types:SqlValueKind"
 

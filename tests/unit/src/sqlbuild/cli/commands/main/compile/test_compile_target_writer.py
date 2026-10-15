@@ -12,6 +12,7 @@ import sqlbuild._native as model_chain_module
 import sqlbuild._native as plan_artifacts_module
 from sqlbuild._native import (
     ChainStep,
+    CompiledSqlTest,
     DiagnosticPhase,
     PlanOutput,
     SqlTestPlanEntry,
@@ -24,7 +25,6 @@ from sqlbuild._native import (
     write_static_compile_target,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import CompiledSqlTest
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,

@@ -6,7 +6,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyString};
 
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const UNNEEDED_SQL_ANALYSIS_OPT_OUT_CODE: &str = "P009";
 const SQL_ANALYSIS_CONFIG_KEY: &str = "sql_analysis";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";

@@ -6,6 +6,10 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild._native import (
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
     CompileModelConfig,
     DeferralInputs,
     Fingerprint,
@@ -23,12 +27,6 @@ from sqlbuild._native import (
     write_fingerprint,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
-)
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,

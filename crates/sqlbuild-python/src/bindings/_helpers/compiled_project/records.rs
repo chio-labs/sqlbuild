@@ -16,7 +16,7 @@ use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView
 
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const DECIMAL_KIND: &str = "decimal";

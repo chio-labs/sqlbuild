@@ -15,7 +15,7 @@ use crate::bindings::_helpers::clone::clone_progress::{
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS: &str = "sqlbuild._native";
 const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
 const CLONE_MODELS: &str = "sqlbuild.executor.clone.models";
 const RETENTION_REQUESTS_MODULE: &str = "sqlbuild.executor.clone.main._build_retention_requests";

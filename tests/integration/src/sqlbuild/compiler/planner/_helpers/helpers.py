@@ -10,9 +10,14 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from sqlbuild._native import (
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
     CompileModelConfig,
+    CompileSqlReference,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
@@ -29,13 +34,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapter.relations.main.open_inspection_catalog import open_inspection_catalog
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
-    CompileSqlReference,
-)
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,

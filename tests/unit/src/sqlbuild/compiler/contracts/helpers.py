@@ -5,21 +5,19 @@ from typing import cast
 
 from sqlbuild._native import (
     ColumnContractMode,
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
     CompileModelConfig,
     DynamicColumnContractProof,
+    InferredColumn,
     SchemaAuditInstance,
     SchemaColumn,
     SchemaDynamicColumnFamily,
     SchemaModelEntry,
     SettingsConfig,
     SourceLocation,
-)
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
-    InferredColumn,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 from sqlbuild.compiler.lineage.types import InferredNullability

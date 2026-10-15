@@ -10,6 +10,10 @@ from typing import cast
 from sqlbuild._native import (
     ChangeKind,
     CompiledFunction,
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
     CompileModelConfig,
     Fingerprint,
     FunctionArgument,
@@ -22,12 +26,6 @@ from sqlbuild._native import (
     compute_query_hash,
 )
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
-)
 from sqlbuild.compiler.compile.types import (
     CompiledFunctionView,
     CompiledModelView,

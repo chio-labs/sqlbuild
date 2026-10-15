@@ -8,6 +8,7 @@ from collections.abc import Callable
 from typing import Any
 
 from sqlbuild._native import (
+    CompiledObjectKey,
     CostContext,
     DiscoveredLoaderFunction,
     PlanOutput,
@@ -16,7 +17,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.executor.build.models import BuildCallbacks, BuildRuntimeParams
 from sqlbuild.executor.load.main._execute import execute_source_load
 from sqlbuild.executor.load.models import LoadExecutionResult, LoadRuntimeParams

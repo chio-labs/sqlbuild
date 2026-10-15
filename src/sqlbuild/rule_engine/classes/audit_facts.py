@@ -3,9 +3,9 @@
 from functools import cached_property
 
 from sqlbuild._native import (
+    CompiledAudit,
     compiled_audit_record,
 )
-from sqlbuild.compiler.compile.models import CompiledAudit
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine.models import Model
 

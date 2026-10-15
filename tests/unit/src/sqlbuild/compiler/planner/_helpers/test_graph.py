@@ -3,13 +3,13 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
+    CompiledObjectKey,
     build_downstream_deps,
     build_execution_edge_origins,
     build_execution_upstream_deps,
     topologically_order_keys,
     transitive_closure,
 )
-from sqlbuild.compiler.compile.models import CompiledObjectKey
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     BuildDownstreamDepsTestCase,
     BuildUpstreamDepsTestCase,

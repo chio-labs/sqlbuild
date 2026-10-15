@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, cast
 import pytest
 
 from sqlbuild._native import (
+    CompiledObjectKey,
     DiscoveredProjectInputs,
     SqlHookEntry,
     assemble_project,
@@ -14,9 +15,6 @@ from sqlbuild._native import (
     discover_project_inputs,
 )
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-)
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledProjectView,

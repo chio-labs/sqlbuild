@@ -10,11 +10,11 @@ from sqlbuild._native import (
     ColumnLineageMode,
     ColumnTransformKind,
     CompiledLineageColumnFact,
+    CompiledLineageSourceFact,
     ModelColumnLineage,
     ProjectColumnLineage,
     compiled_model_record,
 )
-from sqlbuild.compiler.compile.models import CompiledLineageSourceFact
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,

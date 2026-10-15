@@ -4,13 +4,11 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import (
-    DiscoveredSqlScenarioFile,
-    project_with,
-)
-from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledSqlScenario,
     CompiledSqlTest,
+    DiscoveredSqlScenarioFile,
+    project_with,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType, SqlTestMode
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (

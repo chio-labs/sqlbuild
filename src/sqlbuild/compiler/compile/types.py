@@ -14,10 +14,16 @@ if TYPE_CHECKING:
     import sqlbuild._native as _native
     from sqlbuild._native import (
         CompiledLineageColumnFact,
+        CompiledObjectKey,
+        CompiledRelationLocation,
         CompiledSeed,
         CompiledSource,
         CompiledSqlExpansion,
+        CompiledSqlScenario,
+        CompiledSqlTest,
         CompileModelConfig,
+        CompilerDiagnostic,
+        CompileSqlReference,
         ConstantDeclaration,
         DiscoveredAuditBlock,
         DiscoveredAuditFile,
@@ -32,7 +38,9 @@ if TYPE_CHECKING:
         EnumDeclaration,
         FunctionArgument,
         FunctionReturnColumn,
+        InferredColumn,
         LiteralSqlRelation,
+        LoadedMacro,
         MeasurementContract,
         MeasurementThresholds,
         ScenarioConfig,
@@ -46,16 +54,6 @@ if TYPE_CHECKING:
         UsageRecord,
     )
     from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
-    from sqlbuild.compiler.compile.models import (
-        CompiledObjectKey,
-        CompiledRelationLocation,
-        CompiledSqlScenario,
-        CompiledSqlTest,
-        CompilerDiagnostic,
-        CompileSqlReference,
-        InferredColumn,
-        LoadedMacro,
-    )
 
 
 type RelationKeyRow = tuple[

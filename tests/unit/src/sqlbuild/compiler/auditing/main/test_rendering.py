@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import SourceEntry, render_audit_sql
+from sqlbuild._native import CompiledRelationLocation, SourceEntry, render_audit_sql
 from sqlbuild.adapter.contract.types import BuiltinAdapter
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from tests.unit.src.sqlbuild.compiler.auditing.main._test_types import (
     RenderAuditSqlTestCase,
 )

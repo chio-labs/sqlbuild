@@ -2,7 +2,7 @@
 
 from functools import cached_property
 
-from sqlbuild.compiler.compile.models import InferredColumn
+from sqlbuild._native import InferredColumn
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.rule_engine.models import Model
 

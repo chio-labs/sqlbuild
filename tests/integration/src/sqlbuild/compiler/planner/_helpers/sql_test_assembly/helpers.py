@@ -5,19 +5,17 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild._native import (
+    CompiledModel,
     CompiledModelSqlTestPayload,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
+    CompiledSqlTest,
     CompileModelConfig,
     CompileSqlTestCte,
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
     SqlReferenceKind,
-)
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
-    CompiledSqlTest,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,

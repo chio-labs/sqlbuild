@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild._native import (
+    CompiledObjectKey,
+    CompiledRelationLocation,
     DiscoveredHookFunction,
     MaterializationType,
     ModelPlanEntry,
@@ -17,10 +19,6 @@ from sqlbuild._native import (
     ScenarioGraphPlan,
     ScenarioRelationMap,
     ScenarioRelationPlan,
-)
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.run.models import HookContext

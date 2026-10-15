@@ -14,7 +14,7 @@ from tests.unit.src.sqlbuild.cli.compile_reuse.main._test_types import (
 )
 from tests.unit.src.sqlbuild.cli.compile_reuse.main.helpers import compile_in_fresh_process
 
-_FULL_COMPILE_MODULES: tuple[str, ...] = ("sqlbuild.compiler.compile.models",)
+_FULL_COMPILE_MODULES: tuple[str, ...] = ("sqlbuild.compiler.compile.types",)
 
 
 @pytest.mark.parametrize(

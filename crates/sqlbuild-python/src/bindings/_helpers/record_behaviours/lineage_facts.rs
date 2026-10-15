@@ -1,0 +1,190 @@
+//! Sequence behaviour of the natively hosted `CompactLineageFacts` record.
+
+use pyo3::IntoPyObjectExt;
+use pyo3::exceptions::PyIndexError;
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::types::{PyDict, PyDictMethods, PySlice, PyTuple, PyTupleMethods};
+
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::record_behaviours::call_arguments::call_argument;
+use crate::bindings::_helpers::records::constants::NATIVE_MODULE;
+
+/// `ColumnTransformKind` members by native transform code.
+const TRANSFORM_KINDS: [&str; 6] = [
+    "DIRECT",
+    "CAST",
+    "EXPRESSION",
+    "AGGREGATION",
+    "STAR",
+    "CONSTANT",
+];
+/// `ColumnLineageConfidence` members by native confidence code.
+const CONFIDENCES: [&str; 3] = ["UNKNOWN", "HIGH", "MEDIUM"];
+
+/// The `ColumnTransformKind` member of a native transform code.
+pub(crate) fn transform_kind_member(py: Python<'_>, code: usize) -> PyResult<Py<PyAny>> {
+    coded_member(py, ("ColumnTransformKind", &TRANSFORM_KINDS), code)
+}
+
+/// The `ColumnLineageConfidence` member of a native confidence code.
+pub(crate) fn confidence_member(py: Python<'_>, code: usize) -> PyResult<Py<PyAny>> {
+    coded_member(py, ("ColumnLineageConfidence", &CONFIDENCES), code)
+}
+
+/// The enum member at `code` of `members`.
+fn coded_member(
+    py: Python<'_>,
+    (class, members): (&str, &[&str]),
+    code: usize,
+) -> PyResult<Py<PyAny>> {
+    let Some(member) = members.get(code) else {
+        return Err(PyIndexError::new_err("tuple index out of range"));
+    };
+    Ok(imported(py, NATIVE_MODULE, class)?
+        .getattr(*member)?
+        .unbind())
+}
+
+/// `CompactLineageFacts.resource_name(index)`: the model's name for a native relation index.
+fn resource_name<'py>(
+    facts: &Bound<'py, PyAny>,
+    index: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let names: Bound<'py, PyAny> = facts.getattr("resource_names")?;
+    let name: Bound<'py, PyAny> = names.call_method1("get", (index,))?;
+    if !name.is_none() {
+        return Ok(name);
+    }
+    let pooled: Bound<'py, PyAny> = facts
+        .getattr("resource_name_indexes")?
+        .call_method1("get", (index, index))?;
+    facts.getattr("string_pool")?.get_item(pooled)
+}
+
+/// `CompactLineageFacts.resource_name(index)`.
+pub(crate) fn facts_resource_name(
+    instance: &Bound<'_, PyAny>,
+    args: &Bound<'_, PyTuple>,
+    kwargs: Option<&Bound<'_, PyDict>>,
+) -> PyResult<Py<PyAny>> {
+    let index: Bound<'_, PyAny> = call_argument((args, kwargs), "index", 0)?;
+    Ok(resource_name(instance, &index)?.unbind())
+}
+
+/// One compact row projected to a `CompiledLineageColumnFact`.
+fn project_row(facts: &Bound<'_, PyAny>, row: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+    let py: Python<'_> = facts.py();
+    let pool: Bound<'_, PyAny> = facts.getattr("string_pool")?;
+    let (name_index, transform_code, confidence_code, sources): (
+        Bound<'_, PyAny>,
+        usize,
+        usize,
+        Bound<'_, PyAny>,
+    ) = row.extract()?;
+    let source_class: Bound<'_, PyAny> = imported(py, NATIVE_MODULE, "CompiledLineageSourceFact")?;
+    let mut upstream: Vec<Bound<'_, PyAny>> = Vec::new();
+    for source in sources.try_iter()? {
+        let source: Bound<'_, PyTuple> = source?.cast_into::<PyTuple>()?;
+        let keywords: Bound<'_, PyDict> = PyDict::new(py);
+        keywords.set_item("resource_type", pool.get_item(source.get_item(0)?)?)?;
+        keywords.set_item("resource_name", resource_name(facts, &source.get_item(1)?)?)?;
+        keywords.set_item("column_name", pool.get_item(source.get_item(2)?)?)?;
+        upstream.push(source_class.call((), Some(&keywords))?);
+    }
+    let keywords: Bound<'_, PyDict> = PyDict::new(py);
+    keywords.set_item("output_column", pool.get_item(name_index)?)?;
+    keywords.set_item("upstream_columns", PyTuple::new(py, upstream)?)?;
+    keywords.set_item(
+        "transform_kind",
+        coded_member(
+            py,
+            ("ColumnTransformKind", &TRANSFORM_KINDS),
+            transform_code,
+        )?,
+    )?;
+    keywords.set_item(
+        "confidence",
+        coded_member(
+            py,
+            ("ColumnLineageConfidence", &CONFIDENCES),
+            confidence_code,
+        )?,
+    )?;
+    Ok(imported(py, NATIVE_MODULE, "CompiledLineageColumnFact")?
+        .call((), Some(&keywords))?
+        .unbind())
+}
+
+/// `CompactLineageFacts.facts`: every row projected once, in order.
+pub(crate) fn facts_projected(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+    let projected: Vec<Py<PyAny>> = instance
+        .getattr("rows")?
+        .try_iter()?
+        .map(|row| project_row(instance, &row?))
+        .collect::<PyResult<_>>()?;
+    Ok(PyTuple::new(instance.py(), projected)?.into_any().unbind())
+}
+
+/// `len(facts)`.
+pub(crate) fn facts_len(
+    instance: &Bound<'_, PyAny>,
+    _args: &Bound<'_, PyTuple>,
+    _kwargs: Option<&Bound<'_, PyDict>>,
+) -> PyResult<Py<PyAny>> {
+    instance.getattr("rows")?.len()?.into_py_any(instance.py())
+}
+
+/// `facts[index]`: one fact, or a tuple of facts for a slice.
+pub(crate) fn facts_getitem(
+    instance: &Bound<'_, PyAny>,
+    args: &Bound<'_, PyTuple>,
+    _kwargs: Option<&Bound<'_, PyDict>>,
+) -> PyResult<Py<PyAny>> {
+    let index: Bound<'_, PyAny> = args.get_item(0)?;
+    let projected: Bound<'_, PyAny> = instance.getattr("facts")?;
+    if index.is_instance_of::<PySlice>() {
+        return Ok(projected.get_item(index)?.unbind());
+    }
+    let length: isize = isize::try_from(projected.len()?)?;
+    let requested: isize = index.extract()?;
+    let normalized: isize = if requested >= 0 {
+        requested
+    } else {
+        length + requested
+    };
+    if normalized < 0 || normalized >= length {
+        return Err(PyIndexError::new_err(index.unbind()));
+    }
+    Ok(projected.get_item(normalized)?.unbind())
+}
+
+/// `iter(facts)`.
+pub(crate) fn facts_iter(
+    instance: &Bound<'_, PyAny>,
+    _args: &Bound<'_, PyTuple>,
+    _kwargs: Option<&Bound<'_, PyDict>>,
+) -> PyResult<Py<PyAny>> {
+    Ok(instance.getattr("facts")?.try_iter()?.into_any().unbind())
+}
+
+/// `facts == other`: item-wise equality with any sequence.
+pub(crate) fn facts_eq(
+    instance: &Bound<'_, PyAny>,
+    args: &Bound<'_, PyTuple>,
+    _kwargs: Option<&Bound<'_, PyDict>>,
+) -> PyResult<Py<PyAny>> {
+    let py: Python<'_> = instance.py();
+    let other: Bound<'_, PyAny> = args.get_item(0)?;
+    let sequence: Bound<'_, PyAny> = py.import("collections.abc")?.getattr("Sequence")?;
+    if !other.is_instance(&sequence)? {
+        return Ok(py.NotImplemented());
+    }
+    let mine: Bound<'_, PyAny> = instance.getattr("facts")?;
+    let theirs: Bound<'_, PyTuple> = PyTuple::new(
+        py,
+        other
+            .try_iter()?
+            .collect::<PyResult<Vec<Bound<'_, PyAny>>>>()?,
+    )?;
+    mine.eq(theirs)?.into_py_any(py)
+}

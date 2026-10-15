@@ -152,7 +152,7 @@ class ProjectTree:
 
 
 def public_model(model: object) -> Model:
-    from sqlbuild.compiler.compile.models import CompiledModel
+    from sqlbuild._native import CompiledModel
 
     if not isinstance(model, (CompiledModel, _native.NativeCompiledModel)):
         raise RuleUsageError("model is not a compiled SQL model")

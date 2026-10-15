@@ -10,6 +10,7 @@ import pytest
 from sqlbuild._native import (
     CompilePipelineResult,
     DiscoveredProjectInputs,
+    InferredColumn,
     ModelPlanEntry,
     RulesError,
     build_compiled_project,
@@ -19,7 +20,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
-from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.lineage.types import InferredNullability
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
@@ -313,7 +313,7 @@ def test_given_rule_finding_when_running_shared_compile_pipeline_then_planning_i
                     'ENUM (name order_status, members (ACTIVE "active", PAUSED "paused"));\n'
                 ),
                 "models/_macros/policy.py": (
-                    "from sqlbuild.compiler.compile.models import MacroContext\n\n\n"
+                    "from sqlbuild._native import MacroContext\n\n\n"
                     "def policy_columns(ctx: MacroContext) -> str:\n"
                     "    minimum = ctx.constants['minimum_quantity']\n"
                     "    region_count = len(ctx.constants['regions'])\n"

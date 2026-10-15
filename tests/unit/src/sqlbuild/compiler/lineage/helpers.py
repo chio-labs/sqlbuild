@@ -5,21 +5,19 @@ from pathlib import Path
 import sqlbuild._native as native
 from sqlbuild._native import (
     ColumnLineageMode,
-    CompiledSeed,
-    CompileModelConfig,
-    DiscoveredSchemaFile,
-    DiscoveredSeedFile,
-    ProjectColumnLineage,
-    SchemaColumn,
-    SchemaSeedEntry,
-    SettingsConfig,
-)
-from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledSeed,
+    CompileModelConfig,
+    DiscoveredSchemaFile,
+    DiscoveredSeedFile,
     InferredColumn,
+    ProjectColumnLineage,
+    SchemaColumn,
+    SchemaSeedEntry,
+    SettingsConfig,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,

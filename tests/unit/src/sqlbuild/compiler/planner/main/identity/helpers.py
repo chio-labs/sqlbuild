@@ -5,6 +5,9 @@ from types import SimpleNamespace
 
 from sqlbuild._native import (
     CompiledFunction,
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledRelationLocation,
     CompileModelConfig,
     DirectModelVersionIdentities,
     FunctionArgument,
@@ -17,11 +20,6 @@ from sqlbuild._native import (
     build_model_version_identity_metadata_json,
     build_version_identity_metadata_json,
     compiled_model_record,
-)
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,

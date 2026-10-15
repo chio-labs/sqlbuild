@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild._native import AuditPlanEntry, SourceEntry, audit_resource_id
+from sqlbuild._native import (
+    AuditPlanEntry,
+    CompiledRelationLocation,
+    SourceEntry,
+    audit_resource_id,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.executor.auditing.main._execute_reporting_errors import (
     execute_audit_reporting_errors,
 )

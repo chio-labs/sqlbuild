@@ -142,11 +142,7 @@ fn target_for_artifact<'py>(
         ],
     )?;
     call_with(
-        &imported(
-            py,
-            "sqlbuild.compiler.compile.models",
-            "CompiledRelationLocation",
-        )?,
+        &imported(py, "sqlbuild._native", "CompiledRelationLocation")?,
         &[
             ("database", database),
             ("schema", schema),

@@ -4,8 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import MaterializationType, ModelPlanEntry, PlanAction, PlanOutput, PlanReason
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
+from sqlbuild._native import (
+    CompiledObjectKey,
+    CompiledRelationLocation,
+    MaterializationType,
+    ModelPlanEntry,
+    PlanAction,
+    PlanOutput,
+    PlanReason,
+)
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.pipeline._helpers.graph_width import runnable_graph_width
 from sqlbuild.executor.pipeline._helpers.schema_preparation import prepare_build_schemas

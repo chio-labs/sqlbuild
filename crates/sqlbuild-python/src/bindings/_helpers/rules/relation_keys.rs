@@ -123,7 +123,7 @@ fn unique_key(values: &Bound<'_, PyDict>) -> PyResult<Option<Vec<String>>> {
 /// The key row of a seed, source or hand-built model from its config values and schema entry.
 #[pyfunction(name = "relation_key_row")]
 #[pyo3(signature = (kind, name, values, entry))]
-fn entry_relation_key_row(
+pub(crate) fn entry_relation_key_row(
     kind: &str,
     name: String,
     values: &Bound<'_, PyDict>,

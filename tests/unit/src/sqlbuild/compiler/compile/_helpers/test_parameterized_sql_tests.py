@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING
 import pytest
 
 from sqlbuild._native import (
+    CompiledObjectKey,
+    CompiledSqlTest,
     CompileInputError,
     SqlLogicalType,
     SqlValue,
@@ -17,10 +19,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledSqlTest,
-)
 from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,

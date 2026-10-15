@@ -7,16 +7,14 @@ import pytest
 
 from sqlbuild._native import (
     DiscoveredMacroFile,
+    LoadedMacro,
+    MacroContext,
     ScopeKind,
     expand_sql_macros,
     find_macro_call_names,
 )
 from sqlbuild.compiler.compile._helpers.render import user_macros as macros_module
 from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
-from sqlbuild.compiler.compile.models import (
-    LoadedMacro,
-    MacroContext,
-)
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ExpandSqlMacrosErrorTestCase,
     ExpandSqlMacrosTestCase,

@@ -7,6 +7,8 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import (
+    CompiledObjectKey,
+    CompiledRelationLocation,
     CursorOverrides,
     CursorSnapshotScope,
     Fingerprint,
@@ -24,10 +26,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledRelationLocation,
-)
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,

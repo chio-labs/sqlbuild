@@ -8,6 +8,10 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
     CompileModelConfig,
     DiscoveredLoaderFunction,
     SourceEntry,
@@ -20,12 +24,6 @@ from sqlbuild._native import (
     planner_metadata_name_filter,
     project_with,
     upstream_loader_dependency_names,
-)
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,

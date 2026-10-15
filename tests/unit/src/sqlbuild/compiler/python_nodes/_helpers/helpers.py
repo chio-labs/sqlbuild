@@ -11,6 +11,10 @@ from types import MappingProxyType, ModuleType
 from typing import Any, cast
 
 from sqlbuild._native import (
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
     CompiledSource,
     CompileModelConfig,
     DiscoveredAssetFunction,
@@ -30,12 +34,6 @@ from sqlbuild._native import (
     build_python_node_graph,
     compiled_graph_keys,
     resolve_python_sql_run_selection,
-)
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,

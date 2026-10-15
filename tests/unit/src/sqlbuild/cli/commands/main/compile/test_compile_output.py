@@ -7,6 +7,7 @@ from typing import cast
 import pytest
 
 from sqlbuild._native import (
+    CompiledObjectKey,
     CompileLineageMode,
     CompileModelConfig,
     ProjectColumnLineage,
@@ -18,7 +19,6 @@ from sqlbuild._native import (
     format_compile_text,
     project_with,
 )
-from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileJsonExecutionLayersTestCase,

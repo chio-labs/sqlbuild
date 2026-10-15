@@ -14,8 +14,15 @@ from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
 import sqlbuild._native as _native
-from sqlbuild._native import ConstantDeclaration, SqlLogicalType, SqlValue, SqlValueKind
-from sqlbuild.compiler.compile.models import DeclarationResolutionContext, LoadedMacro, MacroContext
+from sqlbuild._native import (
+    ConstantDeclaration,
+    DeclarationResolutionContext,
+    LoadedMacro,
+    MacroContext,
+    SqlLogicalType,
+    SqlValue,
+    SqlValueKind,
+)
 from sqlbuild.compiler.macro_bridge._helpers.store_environment import (
     project_fingerprint,
     store_environment,

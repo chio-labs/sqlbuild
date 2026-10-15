@@ -8,6 +8,8 @@ import pytest
 from sqlbuild._native import (
     ChangeDetectionResult,
     ChangeKind,
+    CompiledObjectKey,
+    CompiledProject,
     DirectModelVersionIdentities,
     DirectSourceFreshnessPlanningResult,
     Fingerprint,
@@ -24,7 +26,6 @@ from sqlbuild._native import (
     compiled_model_record,
     resolve_planner_scopes,
 )
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,

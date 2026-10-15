@@ -19,6 +19,8 @@ from sqlbuild._native import (
     CompileInputError,
     CompilerStage,
     DiscoveredProjectInputs,
+    LoadedMacro,
+    MacroContext,
     MacroExpansionResult,
     ResourceIdentity,
     ResourceKind,
@@ -31,7 +33,6 @@ from sqlbuild._native import (
     resolve_effective_collection_rendering,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import LoadedMacro, MacroContext
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 from sqlbuild.compiler.macro_bridge.constants import ACTIVE_MACRO_BRIDGE
 

@@ -21,7 +21,7 @@ const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const LOADER_DAG_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS: &str = "sqlbuild._native";
 const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
 const INGRESS_MODULE: &str = "sqlbuild.executor.python_nodes.main._ingress";
 const READ_SIDE_MODULE: &str = "sqlbuild.executor.python_nodes.main.read_side";

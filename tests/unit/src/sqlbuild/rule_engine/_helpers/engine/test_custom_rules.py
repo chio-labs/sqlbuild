@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    CompactLineageFacts,
     RuleExemption,
     RuleIgnore,
     RulesError,
@@ -13,7 +14,6 @@ from sqlbuild._native import (
     project_with,
 )
 from sqlbuild._native import evaluate_project_rules as evaluate
-from sqlbuild.compiler.compile.models import CompactLineageFacts
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine.models import RulesConfig, RulesResult
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (

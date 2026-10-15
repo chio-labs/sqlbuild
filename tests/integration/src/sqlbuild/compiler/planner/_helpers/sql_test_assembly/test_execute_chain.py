@@ -9,6 +9,9 @@ import pytest
 from sqlbuild._native import (
     ChainStep,
     CompiledDirectLogicSqlTestPayload,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledSqlTest,
     CompileSqlTestCte,
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
@@ -17,7 +20,6 @@ from sqlbuild._native import (
     discover_project_inputs,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject, CompiledSqlTest
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType, SqlTestMode
 from sqlbuild.executor.testing.main._execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult

@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import (
+    CompiledRelationLocation,
     CursorType,
     ModelCursorSnapshot,
     PlannerInputError,
@@ -15,9 +16,6 @@ from sqlbuild._native import (
     WarehouseSnapshot,
 )
 from sqlbuild.adapter.contract.models import ColumnInfo
-from sqlbuild.compiler.compile.models import (
-    CompiledRelationLocation,
-)
 from sqlbuild.compiler.compile.types import CompiledModelView
 from tests.integration.src.sqlbuild.compiler.planner._helpers.resolve._test_types import (
     ResolveAndExecuteTestCase,

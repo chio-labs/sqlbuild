@@ -14,15 +14,24 @@ from sqlbuild._native import (
     CompileAdapterContext,
     CompiledDirectLogicSqlTestPayload,
     CompiledLineageColumnFact,
+    CompiledLineageSourceFact,
     CompiledModelSqlTestPayload,
+    CompiledObjectKey,
+    CompiledRelationLocation,
+    CompiledSqlTest,
+    CompilerDiagnostic,
+    CompileSqlReference,
     DeclarationExpansionContext,
     DeclarationIdentity,
     DeclarationKind,
     DeclarationRecord,
+    DeclarationResolutionContext,
     DeclarationRuntimeProjection,
     DeclarationScopeResolver,
     DiscoveredMacroFile,
     DiscoveredProjectInputs,
+    LoadedMacro,
+    MacroContext,
     MacroMetadata,
     NativeColumnQuery,
     NativeQueryColumns,
@@ -54,17 +63,6 @@ from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
-from sqlbuild.compiler.compile.models import (
-    CompiledLineageSourceFact,
-    CompiledObjectKey,
-    CompiledRelationLocation,
-    CompiledSqlTest,
-    CompilerDiagnostic,
-    CompileSqlReference,
-    DeclarationResolutionContext,
-    LoadedMacro,
-    MacroContext,
-)
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,

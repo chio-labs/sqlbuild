@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from sqlbuild._native import MeasurementThresholds, SourceEntry
+from sqlbuild._native import CompiledRelationLocation, MeasurementThresholds, SourceEntry
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
@@ -15,7 +15,6 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 
 

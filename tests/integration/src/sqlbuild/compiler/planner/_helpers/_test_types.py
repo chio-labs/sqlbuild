@@ -1,12 +1,13 @@
 from dataclasses import dataclass, field
 
 from sqlbuild._native import (
+    CompiledObjectKey,
+    CompiledRelationLocation,
     CursorSnapshotScope,
     Fingerprint,
     ModelCursorSnapshot,
     SourceEntry,
 )
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.cursor_algebra.types import CursorScalar
 
 

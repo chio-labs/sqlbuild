@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild._native import SeedCsvSettings, SeedPlanEntry
+from sqlbuild._native import (
+    CompiledObjectKey,
+    CompiledRelationLocation,
+    SeedCsvSettings,
+    SeedPlanEntry,
+)
 from sqlbuild.adapter.contract.models import ColumnInfo
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 
 

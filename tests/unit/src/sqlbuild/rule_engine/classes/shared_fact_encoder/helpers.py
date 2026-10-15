@@ -1,12 +1,12 @@
 from pathlib import Path
 
 from sqlbuild._native import (
+    CompiledObjectKey,
     CompiledSource,
     DiscoveredSourceFile,
     SourceEntry,
     project_with,
 )
-from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,

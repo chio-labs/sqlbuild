@@ -12,13 +12,13 @@ from sqlbuild._native import (
     DeclarationKind,
     DeclarationScopeBuild,
     DiscoveredProjectInputs,
+    LoadedMacro,
     SqlLexicalSyntax,
     build_declaration_scope,
     discover_project_inputs,
     rebind_declaration_scope,
 )
 from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
-from sqlbuild.compiler.compile.models import LoadedMacro
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     RebindDeclarationScopeTestCase,
 )

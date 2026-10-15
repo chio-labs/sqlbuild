@@ -9,11 +9,18 @@ from typing import Any
 
 from sqlbuild._native import (
     CompiledFunction,
+    CompiledModel,
     CompiledModelSqlTestPayload,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
+    CompiledSqlTest,
     CompileModelConfig,
     CompileSqlTestCte,
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
+    LoadedMacro,
+    MacroContext,
     NativeSqlTestPlan,
     PlanWarning,
     SqlLexicalSyntax,
@@ -31,15 +38,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
-    CompiledSqlTest,
-    LoadedMacro,
-    MacroContext,
-)
 from sqlbuild.compiler.compile.types import (
     CompiledFunctionView,
     CompiledModelView,

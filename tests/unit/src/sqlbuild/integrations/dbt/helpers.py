@@ -11,7 +11,10 @@ from typing import cast
 from sqlbuild._native import (
     BackfillAction,
     BackfillResult,
+    CompiledObjectKey,
+    CompiledRelationLocation,
     CompileModelConfig,
+    CompileModelInput,
     CompileProjectInputs,
     DbtCliConfigOverrides,
     DbtCliOptions,
@@ -35,11 +38,6 @@ from sqlbuild._native import (
     build_dbt_manifest_index,
     extract_sql_references,
     transitive_closure,
-)
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledRelationLocation,
-    CompileModelInput,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 

@@ -9,6 +9,10 @@ from sqlbuild._native import (
     AuditPlanEntry,
     ChainStep,
     CompiledFunction,
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
     CompileModelConfig,
     FunctionArgument,
     FunctionPlanEntry,
@@ -32,12 +36,6 @@ from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditRunScope,
     AuditSeverity,
-)
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,

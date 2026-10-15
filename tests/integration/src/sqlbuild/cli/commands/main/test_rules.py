@@ -20,12 +20,12 @@ from sqlbuild._native import (
     DiscoveredMacroFile,
     DiscoveredProjectInputs,
     LintRunResult,
+    LoadedMacro,
     SqlLexicalSyntax,
     active_lint_stop,
     rules_bulk_cache_path,
 )
 from sqlbuild._native import run_cli as main
-from sqlbuild.compiler.compile.models import LoadedMacro
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     CustomHostFailureIntegrationTestCase,
     CustomHostInterruptIntegrationTestCase,

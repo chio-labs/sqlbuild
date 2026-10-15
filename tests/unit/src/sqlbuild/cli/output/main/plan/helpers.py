@@ -8,6 +8,8 @@ from sqlbuild._native import (
     BackfillAction,
     BackfillResult,
     ColumnRenameHint,
+    CompiledObjectKey,
+    CompiledRelationLocation,
     CursorBounds,
     CursorInputRelation,
     DiscoveredProviderUsage,
@@ -29,10 +31,6 @@ from sqlbuild._native import (
     SourceWriteStrategy,
     TableTypePlanEntry,
     WarningSeverity,
-)
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
 

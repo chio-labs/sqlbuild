@@ -10,6 +10,10 @@ from pathlib import Path
 from typing import Any, ClassVar, cast
 
 from sqlbuild._native import (
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
     CompileModelConfig,
@@ -28,12 +32,6 @@ from sqlbuild.adapter.contract.models import (
     SchemaDiffResult,
 )
 from sqlbuild.adapter.contract.types import TablePromotionMode
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
-)
 from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,

@@ -3,9 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild._native import (
+    CompiledAudit,
     CompiledFunction,
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
+    CompiledSqlScenario,
+    CompiledSqlTest,
     CompileModelConfig,
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
@@ -25,15 +32,6 @@ from sqlbuild._native import (
     SourceEntry,
 )
 from sqlbuild.compiler.auditing.types import AuditSeverity
-from sqlbuild.compiler.compile.models import (
-    CompiledAudit,
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
-    CompiledSqlScenario,
-    CompiledSqlTest,
-)
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledProjectView,

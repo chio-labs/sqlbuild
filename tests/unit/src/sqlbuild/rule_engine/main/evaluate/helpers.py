@@ -2,13 +2,15 @@
 
 from pathlib import Path
 
-from sqlbuild._native import CompileModelConfig, EnumDeclaration, EnumMember
-from sqlbuild.compiler.compile.models import (
+from sqlbuild._native import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompileModelConfig,
     CompileSqlReference,
+    EnumDeclaration,
+    EnumMember,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,

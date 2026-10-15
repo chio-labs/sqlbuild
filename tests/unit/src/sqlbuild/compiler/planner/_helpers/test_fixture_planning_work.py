@@ -8,6 +8,9 @@ import pytest
 import sqlbuild._native as sql_test_assembly
 from sqlbuild import _native as fixture_completion
 from sqlbuild._native import (
+    CompiledObjectKey,
+    CompiledSqlTest,
+    CompileSqlReference,
     FixtureColumnMetadata,
     FixtureRelationMetadata,
     PlanWarning,
@@ -20,11 +23,6 @@ from sqlbuild._native import (
     build_selected_test_entries,
     compiled_model_record,
     project_with,
-)
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledSqlTest,
-    CompileSqlReference,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,

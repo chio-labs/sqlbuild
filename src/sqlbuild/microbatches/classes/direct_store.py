@@ -6,9 +6,8 @@ import time
 from dataclasses import replace
 from typing import Any
 
-from sqlbuild._native import ModelPlanEntry
+from sqlbuild._native import CompiledRelationLocation, ModelPlanEntry
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.microbatches._helpers.sql import (
     build_existing_event_ids_sql,
     build_insert_many_sql,

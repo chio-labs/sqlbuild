@@ -13,6 +13,8 @@ import sqlbuild._native as native
 from sqlbuild._native import (
     CompiledDirectLogicSqlTestPayload,
     CompiledModelSqlTestPayload,
+    CompiledObjectKey,
+    CompiledSqlTest,
     CompiledSqlTestResource,
     CompileSqlTestCte,
     CustomRulesOutcome,
@@ -30,7 +32,6 @@ from sqlbuild._native import (
 )
 from sqlbuild._native import evaluate_custom_rules as evaluate_custom_rules_cached
 from sqlbuild._native import evaluate_project_rules as evaluate
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledSqlTest
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType, SqlTestMode
 from sqlbuild.rule_engine.constants import MIN_CUSTOM_RULE_TEST_CASES
 from sqlbuild.rule_engine.models import Finding, Rule, RulesConfig, RulesResult

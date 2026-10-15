@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlbuild._native import (
     ColumnMigrationDecision,
     ColumnMigrationPlanEntry,
+    CompiledRelationLocation,
     DisplayOptions,
     MigrationCompatibility,
     MigrationDecision,
@@ -15,7 +16,6 @@ from sqlbuild._native import (
     format_pre_build_work,
 )
 from sqlbuild.adapter.contract.types import MigrationTransfer
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
 
 
 def migration_entry(

@@ -41,7 +41,6 @@ COMPILE_ONLY_MODULES: tuple[str, ...] = (
     "pydantic",
     "yaml",
     "sqlbuild.adapter.contract.classes.base_adapter",
-    "sqlbuild.compiler.compile.models",
     "sqlbuild.lint",
     "sqlbuild.rule_engine",
     "sqlbuild.runtime.compute_logs",
@@ -63,7 +62,6 @@ FULL_COMPILE_MODULES: tuple[str, ...] = (
     "polyglot_sql",
     "pydantic",
     "sqlbuild.adapter.contract.classes.base_adapter",
-    "sqlbuild.compiler.compile.models",
     "sqlbuild.compiler.pipeline",
 )
 REUSED_COMPILE_FORBIDDEN: tuple[str, ...] = (

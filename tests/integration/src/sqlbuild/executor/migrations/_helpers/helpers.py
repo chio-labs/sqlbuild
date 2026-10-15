@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild._native import (
+    CompiledRelationLocation,
     MigrationCompatibility,
     MigrationDecision,
     MigrationDiscovery,
@@ -11,7 +12,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.models import MigrationStagePlan
 from sqlbuild.adapter.contract.types import MigrationTransfer
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.executor.migrations.models import MigrationArtifactNames
 
 

@@ -4,11 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import CompileModelConfig, PlannerScope, resolve_defer_clone_selection
-from sqlbuild.compiler.compile.models import (
+from sqlbuild._native import (
     CompiledModel,
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompileModelConfig,
+    PlannerScope,
+    resolve_defer_clone_selection,
 )
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from tests.unit.src.sqlbuild.cli.commands.main.build._test_types import (

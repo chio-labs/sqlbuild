@@ -7,6 +7,7 @@ import pytest
 
 import sqlbuild._native as native_module
 from sqlbuild._native import (
+    CompiledObjectKey,
     PlannedSqlTests,
     PlannerInputError,
     PlanWarning,
@@ -14,7 +15,6 @@ from sqlbuild._native import (
     WarningSeverity,
     start_sql_test_planning,
 )
-from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from tests.unit.src.sqlbuild.compiler.planner.classes._test_types import (
     BackgroundSqlTestPlanningTestCase,

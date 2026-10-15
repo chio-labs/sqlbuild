@@ -161,7 +161,7 @@ pub(crate) fn model_key<'py>(
     name: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(py, "sqlbuild.compiler.compile.models", "CompiledObjectKey")?,
+        &imported(py, "sqlbuild._native", "CompiledObjectKey")?,
         &[
             (
                 "resource_type",

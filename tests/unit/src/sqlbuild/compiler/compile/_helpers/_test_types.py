@@ -7,7 +7,10 @@ from typing import TYPE_CHECKING
 
 from sqlbuild._native import (
     CompiledLineageColumnFact,
+    CompiledObjectKey,
+    CompileSqlReference,
     ExpansionSpan,
+    InferredColumn,
     ResolvedTimeTravelRetention,
     SourceLocation,
     SqlLexicalSyntax,
@@ -16,7 +19,6 @@ from sqlbuild._native import (
     UsageRecord,
 )
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompileSqlReference, InferredColumn
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.compiler.lineage.types import (
     InferredNullability,

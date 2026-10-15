@@ -1,9 +1,6 @@
 from dataclasses import dataclass, field
 
-from sqlbuild._native import ModelPlanEntry, PlanOutput
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-)
+from sqlbuild._native import CompiledObjectKey, ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 
 

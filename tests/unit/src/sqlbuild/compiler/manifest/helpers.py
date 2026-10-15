@@ -9,6 +9,10 @@ from typing import Any, cast
 from sqlbuild._native import (
     AuditPlanEntry,
     ChainStep,
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
     CompileModelConfig,
@@ -16,6 +20,7 @@ from sqlbuild._native import (
     DiscoveredSeedFile,
     DiscoveredSourceFile,
     DiscoveredSqlHookFile,
+    LoadedMacro,
     MaterializationType,
     ModelPlanEntry,
     PlanAction,
@@ -34,13 +39,6 @@ from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditRunScope,
     AuditSeverity,
-)
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
-    LoadedMacro,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,

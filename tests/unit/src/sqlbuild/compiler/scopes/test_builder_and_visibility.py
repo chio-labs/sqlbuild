@@ -25,6 +25,7 @@ from sqlbuild._native import (
     EnumDeclaration,
     EnumMember,
     InaccessibleReason,
+    LoadedMacro,
     OwnershipRoot,
     ResourceIdentity,
     ResourceKind,
@@ -45,7 +46,6 @@ from sqlbuild._native import (
     resolve_scope_visibility,
     validate_scope_index,
 )
-from sqlbuild.compiler.compile.models import LoadedMacro
 from tests.unit.src.sqlbuild.compiler.scopes._test_types import (
     ExpectedBooleanCase,
     ResourceExpectation,

@@ -11,7 +11,11 @@ from sqlbuild._native import (
     BackfillResult,
     CollectionRendering,
     CompileAdapterContext,
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledRelationLocation,
     CompileModelConfig,
+    CompileSqlReference,
     CursorOverridePair,
     ModelCursorSnapshot,
     ModelPlanContext,
@@ -25,12 +29,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledRelationLocation,
-    CompileSqlReference,
-)
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,

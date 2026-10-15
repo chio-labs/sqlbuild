@@ -9,9 +9,8 @@ from uuid import UUID
 import duckdb
 import pytest
 
-from sqlbuild._native import ScenarioArtifactKind
+from sqlbuild._native import CompiledRelationLocation, ScenarioArtifactKind
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.executor.scenario._helpers.snapshots.core import read_scenario_snapshot_manifest
 from sqlbuild.executor.scenario.main._capture import execute_scenario_snapshot_capture
 from sqlbuild.executor.scenario.models import (

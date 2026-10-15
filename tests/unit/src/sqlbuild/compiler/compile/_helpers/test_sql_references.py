@@ -8,6 +8,7 @@ import pytest
 
 from sqlbuild._native import (
     CompileInputError,
+    CompileSqlReference,
     SqlLexicalSyntax,
     SqlReferenceKind,
     collect_compile_diagnostics,
@@ -18,7 +19,6 @@ from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAd
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
-from sqlbuild.compiler.compile.models import CompileSqlReference
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     CollectedReferenceCallSyntaxTestCase,
     DialectSqlScanTestCase,

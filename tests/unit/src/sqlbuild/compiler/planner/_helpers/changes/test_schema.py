@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
+    InferredColumn,
     SchemaChangeKind,
     SchemaColumnSource,
     SchemaDynamicColumnFamily,
@@ -10,7 +11,6 @@ from sqlbuild._native import (
     detect_schema_changes,
 )
 from sqlbuild.adapter.contract.models import ColumnInfo
-from sqlbuild.compiler.compile.models import InferredColumn
 from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types import (
     DetectSchemaChangesTestCase,
 )

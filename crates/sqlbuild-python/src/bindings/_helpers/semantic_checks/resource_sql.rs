@@ -18,7 +18,7 @@ use crate::bindings::models::ProjectCatalog;
 use crate::bindings::types::CompilerDetach;
 
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
 const SQL_ANALYSIS_CONFIG_KEY: &str = "sql_analysis";
 const MODEL_HOOK_KEYS: [&str; 2] = ["pre_hooks", "post_hooks"];

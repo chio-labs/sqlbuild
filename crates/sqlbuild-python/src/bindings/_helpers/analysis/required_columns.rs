@@ -12,7 +12,7 @@ use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::types::CompilerDetach;
 
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 
 /// CTE-aware column reads of `query_sql`, resolved to the external resources it references.
 #[pyfunction]

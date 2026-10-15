@@ -5,14 +5,19 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from sqlbuild._native import AuditPlanEntry, DiscoveredHookFunction, ModelPlanEntry, SourceEntry
+from sqlbuild._native import (
+    AuditPlanEntry,
+    CompiledRelationLocation,
+    DiscoveredHookFunction,
+    ModelPlanEntry,
+    SourceEntry,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.main._execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult

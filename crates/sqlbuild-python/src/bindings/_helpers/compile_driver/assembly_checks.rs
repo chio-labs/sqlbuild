@@ -10,7 +10,7 @@ use crate::bindings::_helpers::render::declaration_values::declaration_scope_res
 
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 /// The `CompiledSqlScenario` fields copied from its input, in Python's keyword order.

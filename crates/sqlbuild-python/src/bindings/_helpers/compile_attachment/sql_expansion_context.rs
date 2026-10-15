@@ -12,7 +12,7 @@ const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const USER_MACROS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.user_macros";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 
 /// Build the declaration scope of `discovered`; a static scope lends only its index to macros.
 fn declaration_scope<'py>(

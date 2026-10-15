@@ -10,6 +10,10 @@ from unittest.mock import MagicMock
 
 from sqlbuild._native import (
     AuditPlanEntry,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
+    CompiledSqlScenario,
     CompilePipelineResult,
     DiscoveredSqlScenarioFile,
     PlanOutput,
@@ -29,12 +33,6 @@ from sqlbuild.compiler.auditing.types import (
     AuditOutcome,
     AuditRunScope,
     AuditSeverity,
-)
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
-    CompiledSqlScenario,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError

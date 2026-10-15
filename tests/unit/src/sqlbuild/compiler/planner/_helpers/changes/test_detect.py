@@ -11,6 +11,7 @@ from sqlbuild._native import (
     ChangeDetectionResult,
     ChangeKind,
     Fingerprint,
+    InferredColumn,
     PlanAction,
     PlannerChangeResults,
     PlannerScope,
@@ -28,7 +29,6 @@ from sqlbuild._native import (
     get_materialization_type,
     resolve_model_plan_action,
 )
-from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.compile.types import CompiledModelView
 from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_helpers import (
     build_function_caller_metadata_case,

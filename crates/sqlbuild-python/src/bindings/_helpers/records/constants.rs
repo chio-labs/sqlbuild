@@ -9,7 +9,7 @@ use crate::bindings::_helpers::freshness::observation::normalize_observation;
 use crate::bindings::_helpers::planner_records::constants::PLANNER_RECORDS;
 use crate::bindings::_helpers::record_behaviours::constants::{
     BEHAVIOUR_CACHED_PROPERTIES, BEHAVIOUR_FINISHERS, BEHAVIOUR_METHODS, BEHAVIOUR_ORDERED,
-    BEHAVIOUR_PROPERTIES,
+    BEHAVIOUR_PROPERTIES, BEHAVIOUR_SEQUENCES,
 };
 use crate::bindings::_helpers::records::models::{
     ClassValue, EnumSpec, ErrorSpec, FieldDefault, FieldSpec, RecordSpec,
@@ -173,6 +173,8 @@ pub(crate) const CACHED_PROPERTIES: &[&[(&str, &str, ClassProperty)]] =
 pub(crate) const CLASS_METHODS: &[&[(&str, &str, ClassMethod)]] = &[BEHAVIOUR_METHODS];
 /// Records ordered by their compared fields, as `order=True` dataclasses are.
 pub(crate) const ORDERED_RECORDS: &[&[&str]] = &[BEHAVIOUR_ORDERED];
+/// Native records registered as `collections.abc.Sequence` virtual subclasses.
+pub(crate) const SEQUENCE_RECORDS: &[&[&str]] = &[BEHAVIOUR_SEQUENCES];
 /// `SourceFreshnessObservation` field positions.
 pub(crate) const DATA_VERSION_FIELD: usize = 2;
 pub(crate) const OBSERVED_AT_FIELD: usize = 4;

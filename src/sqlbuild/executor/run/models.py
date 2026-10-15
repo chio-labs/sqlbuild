@@ -10,6 +10,7 @@ from typing import Any, cast
 
 from sqlbuild._native import (
     AuditPlanEntry,
+    CompiledRelationLocation,
     CursorBounds,
     CursorGrain,
     CursorType,
@@ -32,7 +33,6 @@ from sqlbuild._native import cursor_parse as parse
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import LifeCycleEvent, QueryResult
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError
 from sqlbuild.cursor_algebra.types import BoundSentinel, CursorScalar

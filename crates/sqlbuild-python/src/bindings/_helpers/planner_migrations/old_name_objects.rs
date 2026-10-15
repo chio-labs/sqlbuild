@@ -31,11 +31,7 @@ pub(super) fn location<'py>(
     )?;
     fields.push(("qualified_name", qualified));
     call_with(
-        &imported(
-            runtime.py(),
-            "sqlbuild.compiler.compile.models",
-            "CompiledRelationLocation",
-        )?,
+        &imported(runtime.py(), "sqlbuild._native", "CompiledRelationLocation")?,
         &fields,
     )
 }

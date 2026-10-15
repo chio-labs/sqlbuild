@@ -4,6 +4,9 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from sqlbuild._native import (
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
     CompiledSource,
     DiscoveredSourceFile,
     MaterializationType,
@@ -14,11 +17,6 @@ from sqlbuild._native import (
     SourceEntry,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
-)
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 
 

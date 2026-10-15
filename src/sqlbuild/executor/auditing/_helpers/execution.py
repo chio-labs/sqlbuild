@@ -11,6 +11,7 @@ from typing import Any, cast
 
 from sqlbuild._native import (
     AuditPlanEntry,
+    CompiledRelationLocation,
     CostContext,
     SourceEntry,
     assert_no_unresolved_sql_markers,
@@ -23,7 +24,6 @@ from sqlbuild.compiler.auditing.types import (
     AuditOutcome,
     AuditRunScope,
 )
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.constants import (
     DEFAULT_EVIDENCE_ROW_LIMIT,

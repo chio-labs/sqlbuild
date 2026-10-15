@@ -19,7 +19,7 @@ use crate::bindings::_helpers::render::macro_expansion_result::macro_expansion_c
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
 const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
 const PROJECT_CONFIG_FILENAME: &str = "sqlbuild_project.toml";

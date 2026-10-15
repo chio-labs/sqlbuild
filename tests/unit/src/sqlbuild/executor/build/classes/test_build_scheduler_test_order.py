@@ -4,8 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import PlanOutput, SqlTestPlanEntry
-from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild._native import CompiledObjectKey, PlanOutput, SqlTestPlanEntry
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.build.classes.build_scheduler import _test_result_authored_order
 from sqlbuild.executor.testing.models import SqlTestExecutionResult

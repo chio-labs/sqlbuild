@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    CompiledSqlScenario,
     CompileSqlScenarioCte,
     DiscoveredHookFunction,
     PlannerInputError,
@@ -27,7 +28,6 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
-from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     ScenarioCheckSqlResolutionErrorTestCase,

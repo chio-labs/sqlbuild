@@ -4,6 +4,7 @@ from sqlbuild._native import (
     BackfillAction,
     BackfillResult,
     ChangeKind,
+    InferredColumn,
     PlanAction,
     PlanReason,
     ReferenceRename,
@@ -11,7 +12,6 @@ from sqlbuild._native import (
     SchemaFinding,
 )
 from sqlbuild.adapter.contract.models import ColumnInfo
-from sqlbuild.compiler.compile.models import InferredColumn
 
 
 @dataclass(frozen=True)

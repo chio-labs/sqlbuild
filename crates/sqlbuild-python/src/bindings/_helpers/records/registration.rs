@@ -7,8 +7,8 @@ use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use crate::bindings::_helpers::records::constants::{
     BUILTIN_PARENT_PREFIX, BUILTINS_MODULE, CACHED_PROPERTIES, CLASS_METHODS, CLASS_PROPERTIES,
     DATACLASS_FIELD_KIND, DATACLASS_FIELDS_ATTRIBUTE, DATACLASSES_MODULE, ENUM_MODULE, ENUMS,
-    ERROR_SPEC_ATTRIBUTE, ERRORS, EXCEPTION_PARENT, NATIVE_MODULE, RECORD_SPEC_ATTRIBUTE, STR_ENUM,
-    VALUE_ERROR_PARENT,
+    ERROR_SPEC_ATTRIBUTE, ERRORS, EXCEPTION_PARENT, NATIVE_MODULE, RECORD_SPEC_ATTRIBUTE,
+    SEQUENCE_RECORDS, STR_ENUM, VALUE_ERROR_PARENT,
 };
 use crate::bindings::_helpers::records::error_classes::{
     BoundErrorInitializer, ErrorInitializer, class_value,
@@ -79,6 +79,10 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     for (class, name, method) in CLASS_METHODS.iter().flat_map(|group| group.iter()) {
         let descriptor: Py<NativeMethod> = Py::new(py, NativeMethod { method: *method })?;
         module.getattr(*class)?.setattr(*name, descriptor)?;
+    }
+    let sequence: Bound<'_, PyAny> = py.import("collections.abc")?.getattr("Sequence")?;
+    for class in SEQUENCE_RECORDS.iter().flat_map(|group| group.iter()) {
+        sequence.call_method1("register", (module.getattr(*class)?,))?;
     }
     Ok(())
 }

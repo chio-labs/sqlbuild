@@ -25,7 +25,7 @@ const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE_RECORDS: &str = "sqlbuild._native";
 const ADAPTER_STRATEGY: &str = "adapter";
-const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS: &str = "sqlbuild._native";
 const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
 const NO_CONFIG_MESSAGE: &str = "no freshness config and adapter metadata unavailable";
 

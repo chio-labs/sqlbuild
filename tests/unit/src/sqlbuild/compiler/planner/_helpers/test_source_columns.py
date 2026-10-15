@@ -7,6 +7,8 @@ from typing import Any, ClassVar
 import pytest
 
 from sqlbuild._native import (
+    CompiledObjectKey,
+    CompiledProject,
     CursorInputRelation,
     PlannerInputError,
     PlannerRelationsContext,
@@ -22,10 +24,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledProject,
-)
 from sqlbuild.compiler.compile.types import (
     CompiledFunctionView,
     CompiledModelView,

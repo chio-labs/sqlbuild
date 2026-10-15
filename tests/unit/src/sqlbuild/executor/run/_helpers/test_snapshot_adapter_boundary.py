@@ -9,6 +9,8 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import (
+    CompiledObjectKey,
+    CompiledRelationLocation,
     HistoricalInput,
     MaterializationType,
     ModelPlanEntry,
@@ -16,7 +18,6 @@ from sqlbuild._native import (
     PlanReason,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.run._helpers.materializations.snapshot import execute_snapshot_entry
 from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
