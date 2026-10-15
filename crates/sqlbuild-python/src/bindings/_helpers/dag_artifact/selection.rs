@@ -1,10 +1,12 @@
-//! Dagster asset selection: SQLBuild selectors resolved over a DAG artifact mapping.
+//! DAG artifact loading and SQLBuild selectors resolved over a DAG artifact mapping.
+
+use std::collections::BTreeSet;
 
 use pyo3::exceptions::PyOSError;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyDict, PyFrozenSet, PyList, PyString, PyTuple};
+use pyo3::types::{PyDict, PyList, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::dag_artifact::errors::DagSelectionError;
 use sqlbuild_analysis::dag_artifact::main::resolve_dag_selection::resolve_dag_selection as resolve;
@@ -106,18 +108,12 @@ fn selection_error(py: Python<'_>, error: DagSelectionError, raw: &str) -> PyErr
 }
 
 /// Ids of DAG artifact nodes `select` matches minus those `exclude` matches.
-#[pyfunction]
-#[pyo3(signature = (*, dag, select, exclude = None))]
-fn resolve_dag_selection<'py>(
-    dag: &Bound<'py, PyAny>,
-    select: &str,
-    exclude: Option<&str>,
-) -> PyResult<Bound<'py, PyFrozenSet>> {
-    let py: Python<'py> = dag.py();
+pub(crate) fn selected_node_ids(
+    dag: &Bound<'_, PyAny>,
+    (select, exclude): (&str, Option<&str>),
+) -> PyResult<BTreeSet<String>> {
     let graph: DagSelectionGraph = selection_graph(dag)?;
-    let selected =
-        resolve(&graph, (select, exclude)).map_err(|error| selection_error(py, error, select))?;
-    PyFrozenSet::new(py, selected)
+    resolve(&graph, (select, exclude)).map_err(|error| selection_error(dag.py(), error, select))
 }
 
 fn raised(error_class: &Bound<'_, PyAny>, message: String, cause: Option<PyErr>) -> PyErr {
@@ -212,7 +208,6 @@ fn load_sqlbuild_dag<'py>(
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(resolve_dag_selection, module)?)?;
     module.add_function(wrap_pyfunction!(load_sqlbuild_dag, module)?)?;
     Ok(())
 }

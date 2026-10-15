@@ -1,5 +1,7 @@
 //! The compiled project, Python node graph and authored values the DAG artifact is built from.
 
+use std::collections::BTreeSet;
+
 use crate::assembly::project::types::ObjectKey;
 use crate::dag_artifact::types::{DagColumnLineage, DagValue};
 
@@ -241,6 +243,69 @@ pub struct DagSelectionGraph {
     pub nodes: Vec<DagSelectionNode>,
     pub edges: Vec<(String, String)>,
     pub checks: Vec<DagSelectionCheck>,
+}
+
+/// One DAG artifact node as orchestrator asset projection reads it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DagProjectionNode {
+    pub id: String,
+    pub kind: String,
+}
+
+/// One DAG artifact check as orchestrator check projection reads it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DagProjectionCheck {
+    pub kind: String,
+    pub checked_asset_ids: Vec<String>,
+}
+
+/// The DAG artifact's nodes, `(from, to)` edges and checks, in artifact order.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DagProjectionGraph {
+    pub nodes: Vec<DagProjectionNode>,
+    pub edges: Vec<(String, String)>,
+    pub checks: Vec<DagProjectionCheck>,
+}
+
+/// Which nodes become orchestrator assets and which upstream nodes they depend on.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AssetProjectionPolicy {
+    /// Node kinds the orchestrator owns as assets.
+    pub asset_kinds: BTreeSet<String>,
+    /// Upstream nodes of other kinds are left out of an asset's dependencies.
+    pub upstream_asset_kinds_only: bool,
+}
+
+/// One asset node and the nodes it depends on, as indexes into the graph's nodes.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AssetNodePlan {
+    pub node: usize,
+    pub upstream: Vec<usize>,
+}
+
+/// Which check kinds a check definition exposes.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CheckKindFilter {
+    pub excluded: BTreeSet<String>,
+    /// When set, only these kinds are exposed.
+    pub required: Option<BTreeSet<String>>,
+}
+
+/// One check, whether its kind is exposed, and the nodes it checks as graph indexes.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CheckPlan {
+    pub check: usize,
+    pub included: bool,
+    pub nodes: Vec<usize>,
+}
+
+/// How an asset's orchestrator kinds follow from its node kind and materialization.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AssetSpecKindPolicy {
+    pub model_kind: String,
+    pub view_materialization: String,
+    /// Node kinds reported as their own orchestrator kind.
+    pub direct_kinds: BTreeSet<String>,
 }
 
 /// The node lookup and edge indexes every selector token resolves against.

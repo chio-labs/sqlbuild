@@ -392,12 +392,12 @@ note = "Rule 3 shapes: the invocation-context variable and wire constants used b
 [[stays]]
 path = "integrations/dagster"
 reason = "public-api"
-note = "Documented orchestrator integration and rule 4 Dagster glue: context reads, subprocess streaming and Dagster event construction; CLI arguments, selector logs, payload and failure parsing are native."
+note = "Documented orchestrator integration and rule 4 Dagster glue: translator invocation, context reads, subprocess streaming and Dagster event construction; CLI arguments, selector logs, payload and failure parsing, asset/check/selection projection of the DAG artifact are native."
 
 [[stays]]
 path = "integrations/rivers"
 reason = "public-api"
-note = "Documented orchestrator integration."
+note = "Documented orchestrator integration and rule 4 Rivers glue: translator invocation and AssetDef construction; the asset projection of the DAG artifact is native."
 
 [[stays]]
 path = "integrations/dlt"

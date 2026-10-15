@@ -318,3 +318,11 @@ class DagsterUnitTestSelectorTestCase:
     select: str
     expected_code: str
     expected_message: str
+
+
+@dataclass(frozen=True)
+class DagsterCheckTranslatorCallTestCase:
+    description: str
+    include_scenarios: bool
+    expected_is_asset_check_ids: tuple[str, ...]
+    expected_checked_node_last_key: str
