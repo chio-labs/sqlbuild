@@ -1,18 +1,36 @@
 //! Building, intersecting, merging, splitting and capping half-open cursor intervals.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
+use std::cmp::Ordering;
+
+use pyo3::prelude::{
+    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
 use pyo3::types::{PySlice, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_cursor::algebra::main::cap_from_end::cap_from_end;
 use sqlbuild_cursor::algebra::main::cap_from_start::cap_from_start;
 use sqlbuild_cursor::algebra::main::clamp::clamp;
+use sqlbuild_cursor::algebra::main::compare::compare;
 use sqlbuild_cursor::algebra::main::merge::merge;
 use sqlbuild_cursor::algebra::main::observed_partition::observed_partition;
 use sqlbuild_cursor::algebra::main::split_into_batches::split_into_batches;
 use sqlbuild_cursor::algebra::main::validate_interval::validate_interval;
 use sqlbuild_cursor::algebra::models::{Interval, Scalar};
 
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
+use crate::bindings::_helpers::cursor::scalars::as_scalar;
+
+const MICROBATCH_MODELS_MODULE: &str = "sqlbuild.microbatches.models";
+const MICROBATCH_EXCEPTIONS_MODULE: &str = "sqlbuild.microbatches.exceptions";
+const RAW_INTERVAL_CURSOR_TYPES: [&str; 2] = ["timestamp", "integer"];
+
+/// One stored interval with its parsed bounds.
+struct RawInterval<'py> {
+    start: Scalar,
+    end: Scalar,
+    interval: Bound<'py, PyAny>,
+}
 
 fn python_intervals<'py>(
     session: &CursorSession<'py>,
@@ -84,6 +102,69 @@ fn merge_intervals<'py>(intervals: &Bound<'py, PyAny>) -> PyResult<Bound<'py, Py
     python_intervals(&session, &merged)
 }
 
+/// Overlapping or adjacent raw microbatch intervals merged, keeping disjoint ones in order.
+#[pyfunction(name = "merge_microbatch_intervals")]
+#[pyo3(signature = (*, intervals, cursor_type))]
+fn merge_raw_intervals<'py>(
+    intervals: &Bound<'py, PyAny>,
+    cursor_type: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let py: Python<'py> = intervals.py();
+    let kind: String = cursor_type.str()?.extract()?;
+    if !RAW_INTERVAL_CURSOR_TYPES.contains(&kind.as_str()) {
+        return Err(
+            imported(py, MICROBATCH_EXCEPTIONS_MODULE, "MicrobatchStateError")
+                .and_then(|class| class.call1((format!("unsupported cursor type: {kind}"),)))
+                .map_or_else(|error| error, PyErr::from_value),
+        );
+    }
+    let session: CursorSession<'py> = CursorSession::new(py)?;
+    let mut parsed: Vec<RawInterval<'py>> = Vec::new();
+    for interval in intervals.try_iter()? {
+        let interval: Bound<'py, PyAny> = interval?;
+        parsed.push(RawInterval {
+            start: as_scalar(&session, &interval.getattr("start")?, cursor_type)?,
+            end: as_scalar(&session, &interval.getattr("end")?, cursor_type)?,
+            interval,
+        });
+    }
+    let mut failure: Option<PyErr> = None;
+    parsed.sort_by(|left, right| {
+        session
+            .checked(compare(&left.start, &right.start, &session))
+            .unwrap_or_else(|error| {
+                failure.get_or_insert(error);
+                Ordering::Equal
+            })
+    });
+    if let Some(error) = failure {
+        return Err(error);
+    }
+    let class: Bound<'py, PyAny> = imported(py, MICROBATCH_MODELS_MODULE, "MicrobatchInterval")?;
+    let mut merged: Vec<RawInterval<'py>> = Vec::new();
+    for next in parsed {
+        let Some(last) = merged.last_mut() else {
+            merged.push(next);
+            continue;
+        };
+        if session.checked(compare(&last.end, &next.start, &session))? == Ordering::Less {
+            merged.push(next);
+            continue;
+        }
+        if session.checked(compare(&last.end, &next.end, &session))? == Ordering::Less {
+            last.interval = call_with(
+                &class,
+                &[
+                    ("start", last.interval.getattr("start")?),
+                    ("end", next.interval.getattr("end")?),
+                ],
+            )?;
+            last.end = next.end;
+        }
+    }
+    PyTuple::new(py, merged.into_iter().map(|raw| raw.interval))
+}
+
 /// An interval split into batches of a positive number of grain units.
 #[pyfunction(name = "cursor_split_into_batches")]
 #[pyo3(signature = (*, interval, step))]
@@ -124,6 +205,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(partition, module)?)?;
     module.add_function(wrap_pyfunction!(clamp_intervals, module)?)?;
     module.add_function(wrap_pyfunction!(merge_intervals, module)?)?;
+    module.add_function(wrap_pyfunction!(merge_raw_intervals, module)?)?;
     module.add_function(wrap_pyfunction!(split, module)?)?;
     module.add_function(wrap_pyfunction!(cap_start, module)?)?;
     module.add_function(wrap_pyfunction!(cap_end, module)?)?;

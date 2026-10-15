@@ -8,9 +8,12 @@ use crate::bindings::_helpers::planner_scenario::constants::{
     SCENARIO_PLAN_RELATION_COLLISION,
 };
 use crate::bindings::_helpers::planner_scenario::values::{MODELS, TYPES, error, string};
+use crate::bindings::_helpers::relation_naming::fitting::fitted_logical_name;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use sqlbuild_analysis::planner_scenario::main::{hash_prefix, parse_artifact_name};
+
+const SCENARIO_ARTIFACT_LABEL: &str = "Scenario artifact";
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
@@ -106,24 +109,17 @@ pub(crate) fn build_scenario_hash_index<'py>(
 
 #[pyfunction]
 #[pyo3(signature = (*, logical_name, fixed_prefix, identifier_limit))]
-pub(crate) fn fit_scenario_artifact_logical_name<'py>(
-    py: Python<'py>,
-    logical_name: Bound<'py, PyAny>,
-    fixed_prefix: Bound<'py, PyAny>,
-    identifier_limit: Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    call_with(
-        &imported(
-            py,
-            "sqlbuild.adapter.relations.main.fit_artifact_logical_name",
-            "fit_artifact_logical_name",
-        )?,
-        &[
-            ("logical_name", logical_name),
-            ("fixed_prefix", fixed_prefix),
-            ("identifier_limit", identifier_limit),
-            ("artifact_label", string(py, "Scenario artifact")),
-        ],
+pub(crate) fn fit_scenario_artifact_logical_name(
+    py: Python<'_>,
+    logical_name: &str,
+    fixed_prefix: &str,
+    identifier_limit: i64,
+) -> PyResult<String> {
+    fitted_logical_name(
+        py,
+        (logical_name, fixed_prefix),
+        identifier_limit,
+        SCENARIO_ARTIFACT_LABEL,
     )
 }
 
@@ -133,17 +129,16 @@ pub(crate) fn build_scenario_artifact_physical_name(
     hash_prefix: &str,
     kind: &str,
     logical_name: Bound<'_, PyAny>,
-    identifier_limit: Bound<'_, PyAny>,
+    identifier_limit: i64,
 ) -> PyResult<String> {
     let py = logical_name.py();
     let prefix = format!("__sqb_{hash_prefix}__{kind}__");
     let logical: String = fit_scenario_artifact_logical_name(
         py,
-        logical_name,
-        string(py, &prefix),
+        &logical_name.extract::<String>()?,
+        &prefix,
         identifier_limit,
-    )?
-    .extract()?;
+    )?;
     Ok(format!("{prefix}{logical}"))
 }
 
@@ -160,8 +155,7 @@ pub(crate) fn build_scenario_artifact_name(
         .call1((kind,))?
         .getattr("value")?
         .extract()?;
-    let limit = pyo3::IntoPyObjectExt::into_bound_py_any(identifier_limit, py)?;
-    build_scenario_artifact_physical_name(hash_prefix, &kind, logical_name, limit)
+    build_scenario_artifact_physical_name(hash_prefix, &kind, logical_name, identifier_limit)
 }
 
 #[pyfunction]

@@ -331,6 +331,8 @@ from sqlbuild.lint.models import (
 from sqlbuild.lint.types import (
     RelationKeyRow,
 )
+from sqlbuild.lint.types import RelationKeyRow, RelationKeys
+from sqlbuild.microbatches.models import MicrobatchInterval
 from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.presentation.types import TransientLineOwner
 from sqlbuild.provider.classes.container import ProviderContainer
@@ -4913,6 +4915,13 @@ def scope_test_ctes(
 ) -> list[tuple[str | None, list[tuple[str, str]]]]: ...
 def omitted_ceremonial_select(sql: str, syntax: dict[str, object]) -> int | None: ...
 def extract_sql_tests_json(request_json: str) -> str: ...
+def fit_artifact_logical_name(
+    *, logical_name: str, fixed_prefix: str, identifier_limit: int, artifact_label: str
+) -> str: ...
+def fit_auxiliary_relation_name(*, base_name: str, suffix: str, identifier_limit: int) -> str: ...
+def merge_microbatch_intervals(
+    *, intervals: Sequence[MicrobatchInterval], cursor_type: str
+) -> tuple[MicrobatchInterval, ...]: ...
 def render_sql_test_comparison_sql(
     test_entries: Sequence[SqlTestPlanEntry],
     *,

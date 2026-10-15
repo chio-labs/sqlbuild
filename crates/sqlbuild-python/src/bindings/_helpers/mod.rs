@@ -66,6 +66,7 @@ pub(crate) mod query_command;
 pub(crate) mod records;
 pub(crate) mod refactor;
 pub(crate) mod references;
+pub(crate) mod relation_naming;
 pub(crate) mod render;
 pub(crate) mod result_output;
 pub(crate) mod rules;
