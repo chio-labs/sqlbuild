@@ -6531,6 +6531,20 @@ def evaluate_custom_rules(
     verify_determinism: bool = False,
     implementation_fingerprints: dict[str, str] | None = None,
 ) -> CustomRulesOutcome: ...
+def custom_host_payload(project: CompiledProjectView) -> CompiledProject: ...
+
+class CustomHostObserver:
+    def __init__(
+        self,
+        *,
+        cores: int | None = None,
+        min_invocations_per_host: int | None = None,
+        publish_inputs: Callable[[Path], object] | None = None,
+    ) -> None: ...
+    def launches(self) -> tuple[str, ...]: ...
+
+custom_host_observer: CustomHostObserver | None
+
 def evaluate_rules(
     *,
     graph: ProjectGraph,

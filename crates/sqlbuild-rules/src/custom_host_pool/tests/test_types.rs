@@ -20,6 +20,7 @@ pub(super) struct HostCountTestCase {
     pub(super) description: &'static str,
     pub(super) invocations: usize,
     pub(super) cores: usize,
+    pub(super) min_invocations_per_host: usize,
     pub(super) expected_hosts: usize,
 }
 

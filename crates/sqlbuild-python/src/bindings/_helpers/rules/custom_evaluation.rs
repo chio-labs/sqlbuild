@@ -4,9 +4,11 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 use std::time::Instant;
 
-use pyo3::IntoPyObjectExt;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::prelude::{
+    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_cache::digest::main::sha256_hex::sha256_hex;
 use sqlbuild_core::json::main::dumps::dumps;
 use sqlbuild_core::json::models::{JsonDialect, JsonValue, OrjsonOptions};
@@ -17,7 +19,9 @@ use sqlbuild_rules::custom_rule_cache::types::ReadSet;
 
 use crate::bindings::_helpers::cache::native_store::current_code_identity;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::rules::custom_hosts::{HostRequest, run_custom_hosts};
+use crate::bindings::_helpers::rules::custom_hosts::{
+    HostCancel, HostRequest, host_payload_project, run_custom_hosts,
+};
 use crate::bindings::_helpers::rules::custom_rule_cache::CustomRuleCache;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
@@ -61,6 +65,7 @@ pub(crate) struct CustomRun<'a, 'py> {
     pub(crate) dialect: &'a str,
     pub(crate) verify_determinism: bool,
     pub(crate) implementation_fingerprints: HashMap<String, String>,
+    pub(crate) cancel: HostCancel,
 }
 
 /// Reuse results whose recorded fact reads are unchanged and evaluate only the rest.
@@ -151,6 +156,7 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
                 model_paths: &model_paths,
                 track_reads: enabled,
                 verify_determinism: run.verify_determinism,
+                cancel: &run.cancel,
             },
             &plan,
         )?;
@@ -492,4 +498,14 @@ fn cpu_seconds(py: Python<'_>) -> PyResult<f64> {
     let user: f64 = times.getattr("children_user")?.extract()?;
     let system: f64 = times.getattr("children_system")?.extract()?;
     Ok(thread + user + system)
+}
+
+/// The project every custom-rule host decodes from its payload.
+#[pyfunction]
+fn custom_host_payload<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    host_payload_project(&host_project(project)?)
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(custom_host_payload, module)?)
 }

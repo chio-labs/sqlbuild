@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-import os
+import time
 from collections.abc import Callable
 from pathlib import Path
 from threading import Event
@@ -14,13 +14,15 @@ from _pytest.capture import CaptureResult
 
 import sqlbuild._native as native_module
 import sqlbuild.compiler.compile._helpers.render.user_macros as macros_module
-from sqlbuild._native import active_lint_stop, rules_bulk_cache_path
+from sqlbuild._native import CustomHostObserver, active_lint_stop, rules_bulk_cache_path
 from sqlbuild._native import run_cli as main
 from sqlbuild.compiler.compile.models import DeclarationScopeBuild, LoadedMacro
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile, DiscoveredProjectInputs
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.lint.models import LintRunResult
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
+    CustomHostFailureIntegrationTestCase,
+    CustomHostInterruptIntegrationTestCase,
     CustomHostSplitIntegrationTestCase,
     CustomRuleCacheSequenceTestCase,
     DynamicPivotRulesIntegrationTestCase,
@@ -35,8 +37,12 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
 )
 from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
     EARLY_LINT_PROJECT_FILES,
+    child_processes,
     compile_finding_keys,
     compile_findings,
+    interrupt_main_after,
+    observe_hosts,
+    write_custom_host_project,
     write_project_files,
 )
 
@@ -1096,13 +1102,13 @@ def final_directory(*, model: Model, ctx: RuleContext) -> list[Finding]:
 """,
         encoding="utf-8",
     )
+    hosts: CustomHostObserver = CustomHostObserver()
+    monkeypatch.setattr(native_module, "custom_host_observer", hosts)
     cold: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)
 
     warm: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)
-    _ = main(["--project-dir", str(tmp_path), "compile", "--json"])
-    timings: dict[str, int] = json.loads(capsys.readouterr().out)["compile_timings"]
 
-    assert timings["rule_cache_misses"] == 0
+    assert len(hosts.launches()) == 1
     assert warm == cold
     assert {
         f"models/orders.sql:{test_case.expected_code}",
@@ -1112,7 +1118,7 @@ def final_directory(*, model: Model, ctx: RuleContext) -> list[Finding]:
 
 @pytest.mark.parametrize(
     "test_case",
-    [CustomHostSplitIntegrationTestCase("custom rules split across hosts", 128, 2, "XSQBRARCH001")],
+    [CustomHostSplitIntegrationTestCase("custom rules split across hosts", 9, 3, "XSQBRARCH001")],
     ids=lambda case: case.description,
 )
 def test_given_custom_rules_split_across_hosts_when_compiling_then_output_matches_one_host(
@@ -1129,7 +1135,7 @@ def test_given_custom_rules_split_across_hosts_when_compiling_then_output_matche
     )
     for index in range(test_case.model_count):
         folder: str = ("final", "staging", "staging")[index % 3]
-        model: Path = tmp_path / "models" / folder / f"orders_{index:03d}.sql"
+        model: Path = tmp_path / "models" / folder / f"orders_{index:02d}.sql"
         model.parent.mkdir(parents=True, exist_ok=True)
         model.write_text(
             f'MODEL (description "Orders {index}");\nSELECT {index} AS order_id\n',
@@ -1151,28 +1157,118 @@ def final_directory(*, model: Model, ctx: RuleContext) -> list[Finding]:
         encoding="utf-8",
     )
 
-    def compile_payload(*, cores: int) -> dict[str, Any]:
-        monkeypatch.setattr(os, "process_cpu_count", lambda: cores, raising=False)
+    def compile_payload() -> dict[str, Any]:
         exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
         assert exit_code == 1
         return json.loads(capsys.readouterr().out)
 
-    single: dict[str, Any] = compile_payload(cores=1)
+    single_hosts: CustomHostObserver = observe_hosts(monkeypatch=monkeypatch, cores=1)
+    single: dict[str, Any] = compile_payload()
     rules_bulk_cache_path(project_dir=tmp_path, file_name="custom-rules.json").parent.parent.rename(
         tmp_path / "single-rules-cache"
     )
-    split: dict[str, Any] = compile_payload(cores=test_case.hosts)
-    warm: dict[str, Any] = compile_payload(cores=test_case.hosts)
+    split_hosts: CustomHostObserver = observe_hosts(monkeypatch=monkeypatch, cores=test_case.hosts)
+    split: dict[str, Any] = compile_payload()
+    split_runs: int = len(split_hosts.launches())
+    warm: dict[str, Any] = compile_payload()
 
-    assert single["compile_timings"]["rule_cache_misses"] >= test_case.model_count
-    assert warm["compile_timings"]["rule_cache_misses"] == 0
+    assert (len(single_hosts.launches()), split_runs, len(split_hosts.launches())) == (
+        1,
+        test_case.hosts,
+        test_case.hosts,
+    )
     assert split["diagnostics"] == single["diagnostics"]
-    assert len(split["diagnostics"]) == test_case.model_count - (test_case.model_count + 2) // 3
+    assert len(split["diagnostics"]) == test_case.model_count - test_case.model_count // 3
     assert warm["diagnostics"] == single["diagnostics"]
     assert warm["compile_timings"]["rule_cache_hits"] >= test_case.model_count
     assert (tmp_path / "single-rules-cache" / "bulk" / "custom-rules.json").read_bytes() == (
         rules_bulk_cache_path(project_dir=tmp_path, file_name="custom-rules.json").read_bytes()
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CustomHostFailureIntegrationTestCase(
+            description="earliest failure lives on a later host",
+            model_count=9,
+            hosts=3,
+            failing_models=("orders_004", "orders_007"),
+            expected_failing_model="orders_004",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_failing_custom_rule_on_split_hosts_when_compiling_then_one_host_failure_is_reported(
+    test_case: CustomHostFailureIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    write_custom_host_project(
+        project_dir=tmp_path,
+        model_count=test_case.model_count,
+        rule_body=(
+            f"if model.name in {test_case.failing_models!r}:\n"
+            '    raise ValueError(f"cannot inspect {model.name}")\n'
+            "return []"
+        ),
+    )
+
+    def failed_compile() -> tuple[int, dict[str, Any]]:
+        exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+        return exit_code, json.loads(capsys.readouterr().out)
+
+    single_hosts: CustomHostObserver = observe_hosts(monkeypatch=monkeypatch, cores=1)
+    single_exit, single = failed_compile()
+    split_hosts: CustomHostObserver = observe_hosts(monkeypatch=monkeypatch, cores=test_case.hosts)
+    split_exit, split = failed_compile()
+
+    assert split_exit == single_exit == 1
+    assert split["diagnostics"] == single["diagnostics"]
+    assert f"cannot inspect {test_case.expected_failing_model}" in json.dumps(split["diagnostics"])
+    assert (len(single_hosts.launches()), len(split_hosts.launches())) == (1, test_case.hosts + 1)
+    assert not tuple((tmp_path / "target" / "rules-cache" / "host-inputs").iterdir())
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CustomHostInterruptIntegrationTestCase(
+            description="busy split hosts stop after an interrupt",
+            model_count=45,
+            hosts=3,
+            interrupt_after_seconds=1.5,
+            expected_max_seconds=12.0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_busy_split_hosts_when_compile_is_interrupted_then_hosts_stop_and_none_remain(
+    test_case: CustomHostInterruptIntegrationTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    write_custom_host_project(
+        project_dir=tmp_path,
+        model_count=test_case.model_count,
+        rule_body="total = 0\nfor index in range(10_000_000):\n    total += index\nreturn []",
+    )
+    children_before: frozenset[int] = child_processes()
+    hosts: CustomHostObserver = observe_hosts(
+        monkeypatch=monkeypatch,
+        cores=test_case.hosts,
+        publish_inputs=interrupt_main_after(test_case.interrupt_after_seconds),
+    )
+    started: float = time.monotonic()
+
+    with pytest.raises(KeyboardInterrupt):
+        _ = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+
+    assert time.monotonic() - started < test_case.expected_max_seconds
+    assert len(hosts.launches()) == test_case.hosts
+    assert child_processes() <= children_before
+    assert not tuple((tmp_path / "target" / "rules-cache" / "host-inputs").iterdir())
 
 
 @pytest.mark.parametrize(

@@ -2,6 +2,7 @@ pub(crate) mod builtin_catalogue;
 pub(crate) mod catalogue;
 pub(crate) mod constants;
 pub(crate) mod custom_evaluation;
+pub(crate) mod custom_host_observation;
 pub(crate) mod custom_hosts;
 pub(crate) mod custom_rule_cache;
 pub(crate) mod custom_rule_evidence;

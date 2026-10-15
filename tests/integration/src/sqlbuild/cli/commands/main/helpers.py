@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import _thread
 import json
 import os
 import sys
@@ -16,6 +17,7 @@ import pytest
 import sqlbuild._native as native_module
 import sqlbuild._native as plan_artifacts_module
 from sqlbuild._native import (
+    CustomHostObserver,
     NativeSqlTestArtifact,
     PlannedStaticSqlTests,
     PreparedCompileArtifacts,
@@ -891,3 +893,68 @@ def compile_findings(
     return tuple(
         (item["code"], item["path"], item.get("line"), item.get("column")) for item in diagnostics
     )
+
+
+CUSTOM_HOST_RULE_CODE: str = "XSQBRHOST001"
+
+
+def write_custom_host_project(*, project_dir: Path, model_count: int, rule_body: str) -> None:
+    """Write numbered order models and one custom model rule running `rule_body`."""
+
+    (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n'
+        f'[rules]\nselect = ["{CUSTOM_HOST_RULE_CODE}"]\n\n'
+        "[rules.thresholds]\nmin_custom_rule_test_cases = 0\n",
+        encoding="utf-8",
+    )
+    for index in range(model_count):
+        model: Path = project_dir / "models" / f"orders_{index:03d}.sql"
+        model.parent.mkdir(parents=True, exist_ok=True)
+        model.write_text(
+            f'MODEL (description "Orders {index}");\nSELECT {index} AS order_id\n',
+            encoding="utf-8",
+        )
+    body: str = "".join(f"    {line}\n" for line in rule_body.splitlines())
+    rule_file: Path = project_dir / "rules" / "orders.py"
+    rule_file.parent.mkdir(parents=True, exist_ok=True)
+    rule_file.write_text(
+        "from sqlbuild.rules import Finding, Model, RuleContext, rule\n\n\n"
+        f'@rule(code="{CUSTOM_HOST_RULE_CODE}", message="orders", remediation="Fix orders.")\n'
+        "def check_orders(*, model: Model, ctx: RuleContext) -> list[Finding]:\n"
+        f"{body}",
+        encoding="utf-8",
+    )
+
+
+def interrupt_main_after(delay_seconds: float) -> Callable[[Path], None]:
+    """Return a host publish hook that interrupts the main thread after a delay."""
+
+    def interrupt(path: Path) -> None:
+        del path
+        threading.Timer(delay_seconds, _thread.interrupt_main).start()
+
+    return interrupt
+
+
+def child_processes() -> frozenset[int]:
+    """Return the live child processes of this process."""
+
+    children: set[int] = set()
+    for task in (Path("/proc") / str(os.getpid()) / "task").iterdir():
+        children.update(map(int, (task / "children").read_text().split()))
+    return frozenset(children)
+
+
+def observe_hosts(
+    *,
+    monkeypatch: pytest.MonkeyPatch,
+    cores: int,
+    publish_inputs: Callable[[Path], None] | None = None,
+) -> CustomHostObserver:
+    """Run custom rules on up to `cores` hosts, one invocation each, and record every launch."""
+
+    observer: CustomHostObserver = CustomHostObserver(
+        cores=cores, min_invocations_per_host=1, publish_inputs=publish_inputs
+    )
+    monkeypatch.setattr(native_module, "custom_host_observer", observer)
+    return observer

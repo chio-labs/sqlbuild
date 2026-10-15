@@ -1,7 +1,10 @@
 """Builders for custom-rule host partitioning tests."""
 
+import _thread
 import os
 import random
+import shutil
+import threading
 import time
 from collections.abc import Callable
 from operator import attrgetter
@@ -11,7 +14,9 @@ from typing import Protocol
 
 import pytest
 
+import sqlbuild._native as native_module
 from sqlbuild._native import (
+    CustomHostObserver,
     build_rule_catalogue,
     project_with,
 )
@@ -107,6 +112,83 @@ def evaluate_order_rules(
     return evaluate_custom_rules_cached(
         project=project, config=config, project_dir=root, rules=rules, dialect="duckdb"
     )
+
+
+def use_hosts(
+    *,
+    monkeypatch: pytest.MonkeyPatch,
+    hosts: int,
+    publish_inputs: Callable[[Path], object] | None = None,
+) -> CustomHostObserver:
+    """Allow up to `hosts` host processes for any plan and record every host launch."""
+
+    observer: CustomHostObserver = CustomHostObserver(
+        cores=hosts, min_invocations_per_host=1, publish_inputs=publish_inputs
+    )
+    monkeypatch.setattr(native_module, "custom_host_observer", observer)
+    return observer
+
+
+def host_inputs_left(root: Path) -> tuple[Path, ...]:
+    """Return every payload, marker or folder a run left in the host-input folder."""
+
+    return tuple((root / "target" / "rules-cache" / "host-inputs").iterdir())
+
+
+def child_processes() -> frozenset[int]:
+    """Return the live child processes of this process."""
+
+    children: set[int] = set()
+    for task in (Path("/proc") / str(os.getpid()) / "task").iterdir():
+        children.update(map(int, (task / "children").read_text().split()))
+    return frozenset(children)
+
+
+def delayed_publish(delay_seconds: float) -> Callable[[Path], None]:
+    """Return a publish hook that lets the payload be written only after a delay."""
+
+    def delay(path: Path) -> None:
+        del path
+        time.sleep(delay_seconds)
+
+    return delay
+
+
+def failed_publish(delay_seconds: float) -> Callable[[Path], None]:
+    """Return a publish hook that fails to write the payload after a delay."""
+
+    def fail(path: Path) -> None:
+        del path
+        time.sleep(delay_seconds)
+        raise OSError("project payload disk is full")
+
+    return fail
+
+
+def failed_publish_without_directory(
+    delay_seconds: float,
+) -> tuple[Callable[[Path], None], list[float]]:
+    """Return a hook that removes the input folder then fails, and when each failure happened."""
+
+    failures: list[float] = []
+
+    def fail(path: Path) -> None:
+        time.sleep(delay_seconds)
+        shutil.rmtree(path.parent)
+        failures.append(time.monotonic())
+        raise OSError("project payload disk is full")
+
+    return fail, failures
+
+
+def interrupting_publish(delay_seconds: float) -> Callable[[Path], None]:
+    """Return a hook that interrupts the main thread once hosts have run for a while."""
+
+    def interrupt(path: Path) -> None:
+        del path
+        threading.Timer(delay_seconds, _thread.interrupt_main).start()
+
+    return interrupt
 
 
 def record_signals(*, monkeypatch: pytest.MonkeyPatch) -> list[tuple[int, int]]:

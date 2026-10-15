@@ -1,10 +1,16 @@
 //! Run built-in, SQL and custom rule phases on their threads and combine their findings.
 
 use std::collections::HashMap;
+use std::sync::Mutex;
+use std::sync::atomic::Ordering;
+use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
 use std::thread::JoinHandle;
+use std::time::Duration;
 
-use pyo3::exceptions::PyRuntimeError;
-use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::exceptions::{PyKeyboardInterrupt, PyRuntimeError};
+use pyo3::prelude::{
+    Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 
@@ -15,6 +21,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::rules::custom_evaluation::{
     CustomRun, evaluate_custom_rules_cached, outcome,
 };
+use crate::bindings::_helpers::rules::custom_hosts::HostCancel;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const RULES_MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
@@ -41,6 +48,8 @@ const CUSTOM_RULES_OPTIONS: (&[&str], &[&str]) = (
     &["verify_determinism", "implementation_fingerprints"],
 );
 const RULES_THREAD: &str = "sqlbuild-rules";
+/// How often a thread waiting for a rule phase checks for interrupts.
+const JOIN_POLL: Duration = Duration::from_millis(100);
 const EVALUATE_RULES_OPTIONS: (&[&str], &[&str]) = (
     &[
         "graph",
@@ -69,7 +78,31 @@ const PREPARE_OPTIONS: (&[&str], &[&str]) = (
 );
 
 /// A running custom-rule evaluation, whose result is a `CustomRulesOutcome`.
-type CustomHandle = JoinHandle<PyResult<Py<PyAny>>>;
+type CustomHandle = PhaseThread;
+
+/// A rule phase thread and the channel that disconnects when it finishes.
+struct PhaseThread {
+    handle: JoinHandle<PyResult<Py<PyAny>>>,
+    finished: Receiver<()>,
+}
+
+impl PhaseThread {
+    fn spawn(
+        name: &str,
+        phase: impl FnOnce() -> PyResult<Py<PyAny>> + Send + 'static,
+    ) -> PyResult<Self> {
+        let (sender, finished): (Sender<()>, Receiver<()>) = channel();
+        let handle: JoinHandle<PyResult<Py<PyAny>>> = std::thread::Builder::new()
+            .name(name.to_owned())
+            .spawn(move || {
+                let result: PyResult<Py<PyAny>> = phase();
+                drop(sender);
+                result
+            })
+            .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+        Ok(Self { handle, finished })
+    }
+}
 
 /// The rule run one native evaluation describes; every field stays bound to its Python value.
 struct NativeRun<'py> {
@@ -80,6 +113,7 @@ struct NativeRun<'py> {
     dialect: String,
     verify_determinism: bool,
     initial_findings: Option<Bound<'py, PyAny>>,
+    cancel: HostCancel,
 }
 
 /// How a native evaluation obtains its custom-rule outcome.
@@ -141,6 +175,7 @@ fn evaluate_project_rules<'py>(
         dialect,
         verify_determinism,
         initial_findings: None,
+        cancel: HostCancel::default(),
     };
     evaluate_native(&run, (false, None), CustomSource::Deferred)
 }
@@ -164,6 +199,7 @@ fn evaluate_native_rules<'py>(
         dialect: dialect_argument(&arguments)?,
         verify_determinism: arguments.flag("verify_determinism")?,
         initial_findings: (!initial_findings.is_none()).then_some(initial_findings),
+        cancel: HostCancel::default(),
     };
     evaluate_native(&run, (defer_suppressions, None), CustomSource::Deferred)
 }
@@ -193,6 +229,7 @@ fn evaluate_custom_rules<'py>(
         } else {
             fingerprints.extract()?
         },
+        cancel: HostCancel::default(),
     })
 }
 
@@ -236,6 +273,7 @@ pub(crate) fn evaluate_rules<'py>(
         dialect: dialect.extract()?,
         verify_determinism: false,
         initial_findings: None,
+        cancel: HostCancel::default(),
     };
     let payloads: Bound<'py, PyAny> = plan.getattr("custom_payloads")?;
     let custom: Option<CustomHandle> = start_custom_rules(&run, &payloads)?;
@@ -247,29 +285,28 @@ pub(crate) fn evaluate_rules<'py>(
         payloads.clone().unbind(),
     ];
     let native_dialect: String = run.dialect.clone();
-    let native_thread: JoinHandle<PyResult<Py<PyAny>>> = std::thread::Builder::new()
-        .name(RULES_THREAD.to_owned())
-        .spawn(move || {
-            Python::attach(|py| {
-                let [project, config, project_dir, catalogue, payloads] = native_run;
-                let run: NativeRun<'_> = NativeRun {
-                    project: project.into_bound(py),
-                    config: config.into_bound(py),
-                    project_dir: project_dir.into_bound(py),
-                    catalogue: catalogue.into_bound(py),
-                    dialect: native_dialect,
-                    verify_determinism: false,
-                    initial_findings: None,
-                };
-                evaluate_native(
-                    &run,
-                    (true, Some(payloads.into_bound(py))),
-                    CustomSource::Started(custom),
-                )
-                .map(Bound::unbind)
-            })
+    let native_cancel: HostCancel = run.cancel.clone();
+    let native_thread: PhaseThread = PhaseThread::spawn(RULES_THREAD, move || {
+        Python::attach(|py| {
+            let [project, config, project_dir, catalogue, payloads] = native_run;
+            let run: NativeRun<'_> = NativeRun {
+                project: project.into_bound(py),
+                config: config.into_bound(py),
+                project_dir: project_dir.into_bound(py),
+                catalogue: catalogue.into_bound(py),
+                dialect: native_dialect,
+                verify_determinism: false,
+                initial_findings: None,
+                cancel: native_cancel,
+            };
+            evaluate_native(
+                &run,
+                (true, Some(payloads.into_bound(py))),
+                CustomSource::Started(custom),
+            )
+            .map(Bound::unbind)
         })
-        .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+    })?;
     let sql_result: PyResult<Bound<'py, PyAny>> = call_with(
         &native(py, "run_planned_sql_rules")?,
         &[
@@ -281,7 +318,8 @@ pub(crate) fn evaluate_rules<'py>(
             ("expansion_reuse", arguments.value("expansion_reuse")?),
         ],
     );
-    let result: PyResult<Bound<'py, PyAny>> = joined(py, native_thread);
+    cancel_on_interrupt(py, &sql_result, &run.cancel);
+    let result: PyResult<Bound<'py, PyAny>> = joined(py, native_thread, &run.cancel);
     let sql_result: Bound<'py, PyAny> = sql_result?;
     let result: Bound<'py, PyAny> = result?;
     call_with(
@@ -398,7 +436,7 @@ fn evaluate_native<'py>(
         (CustomSource::Started(handle), Ok(_)) => handle,
         (CustomSource::Started(handle), Err(_)) => {
             if let Some(handle) = handle {
-                let _abandoned: PyResult<Bound<'py, PyAny>> = joined(py, handle);
+                let _abandoned: PyResult<Bound<'py, PyAny>> = joined(py, handle, &run.cancel);
             }
             None
         }
@@ -408,8 +446,9 @@ fn evaluate_native<'py>(
     let (_, request): (Bound<'py, PyAny>, Bound<'py, PyAny>) = prepared?;
     let evaluated: PyResult<Bound<'py, PyAny>> =
         native(py, "evaluate_rules_request").and_then(|evaluate| evaluate.call1((request,)));
+    cancel_on_interrupt(py, &evaluated, &run.cancel);
     let custom: PyResult<Bound<'py, PyAny>> = match custom {
-        Some(handle) => joined(py, handle),
+        Some(handle) => joined(py, handle, &run.cancel),
         None => outcome(py, (Vec::new(), 0, 0), (0, 0)),
     };
     let native_result: Bound<'py, PyAny> = evaluated?;
@@ -579,32 +618,67 @@ fn start_custom_rules(
     ];
     let dialect: String = run.dialect.clone();
     let verify_determinism: bool = run.verify_determinism;
-    std::thread::Builder::new()
-        .name(CUSTOM_THREAD.to_owned())
-        .spawn(move || {
-            Python::attach(|py| {
-                let [project, config, project_dir] = inputs;
-                evaluate_custom_rules_cached(CustomRun {
-                    project: project.bind(py),
-                    config: config.bind(py),
-                    project_dir: project_dir.bind(py),
-                    rules: rules.into_iter().map(|rule| rule.into_bound(py)).collect(),
-                    dialect: &dialect,
-                    verify_determinism,
-                    implementation_fingerprints: fingerprints,
-                })
-                .map(Bound::unbind)
+    let cancel: HostCancel = run.cancel.clone();
+    PhaseThread::spawn(CUSTOM_THREAD, move || {
+        Python::attach(|py| {
+            let [project, config, project_dir] = inputs;
+            evaluate_custom_rules_cached(CustomRun {
+                project: project.bind(py),
+                config: config.bind(py),
+                project_dir: project_dir.bind(py),
+                rules: rules.into_iter().map(|rule| rule.into_bound(py)).collect(),
+                dialect: &dialect,
+                verify_determinism,
+                implementation_fingerprints: fingerprints,
+                cancel,
             })
+            .map(Bound::unbind)
         })
-        .map(Some)
-        .map_err(|error| PyRuntimeError::new_err(error.to_string()))
+    })
+    .map(Some)
 }
 
-/// Wait for a phase thread without holding the interpreter, then re-raise what it raised.
-fn joined<'py>(py: Python<'py>, handle: CustomHandle) -> PyResult<Bound<'py, PyAny>> {
-    py.detach(|| handle.join())
-        .map_err(|_| PyRuntimeError::new_err("rules thread panicked"))?
-        .map(|value| value.into_bound(py))
+/// Wait for a phase thread off the interpreter; an interrupt cancels the run's hosts first.
+fn joined<'py>(
+    py: Python<'py>,
+    phase: PhaseThread,
+    cancel: &HostCancel,
+) -> PyResult<Bound<'py, PyAny>> {
+    let finished: Mutex<Receiver<()>> = Mutex::new(phase.finished);
+    let mut signal: Option<PyErr> = None;
+    loop {
+        let waited: Result<(), RecvTimeoutError> = py.detach(|| match finished.lock() {
+            Ok(receiver) => receiver.recv_timeout(JOIN_POLL),
+            Err(_) => Err(RecvTimeoutError::Disconnected),
+        });
+        match waited {
+            Ok(()) | Err(RecvTimeoutError::Disconnected) => break,
+            Err(RecvTimeoutError::Timeout) => {
+                if signal.is_none()
+                    && let Err(error) = py.check_signals()
+                {
+                    cancel.store(true, Ordering::Release);
+                    signal = Some(error);
+                }
+            }
+        }
+    }
+    let joined: PyResult<Py<PyAny>> = py
+        .detach(|| phase.handle.join())
+        .map_err(|_| PyRuntimeError::new_err("rules thread panicked"))?;
+    if let Some(error) = signal {
+        return Err(error);
+    }
+    joined.map(|value| value.into_bound(py))
+}
+
+/// Cancel the run's custom-rule hosts when `result` is an interrupt.
+fn cancel_on_interrupt(py: Python<'_>, result: &PyResult<Bound<'_, PyAny>>, cancel: &HostCancel) {
+    if let Err(error) = result
+        && error.is_instance_of::<PyKeyboardInterrupt>(py)
+    {
+        cancel.store(true, Ordering::Release);
+    }
 }
 
 fn native<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {

@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use serde_json::json;
 
+use crate::custom_host_pool::constants::MIN_INVOCATIONS_PER_HOST;
 use crate::custom_host_pool::main::available_cores::available_cores;
 use crate::custom_host_pool::main::decode_host_response::decode_host_response;
 use crate::custom_host_pool::main::host_count::host_count;
@@ -147,24 +148,44 @@ fn given_invocation_count_when_sizing_hosts_then_hosts_follow_work_and_cores() {
             description: "hosts are capped on a large node",
             invocations: 10_000,
             cores: NODE_CPUS,
+            min_invocations_per_host: MIN_INVOCATIONS_PER_HOST,
             expected_hosts: 8,
         },
         HostCountTestCase {
             description: "few invocations run on one host",
             invocations: 63,
             cores: NODE_CPUS,
+            min_invocations_per_host: MIN_INVOCATIONS_PER_HOST,
             expected_hosts: 1,
         },
         HostCountTestCase {
             description: "cores cap the hosts",
             invocations: 1_000,
             cores: 2,
+            min_invocations_per_host: MIN_INVOCATIONS_PER_HOST,
             expected_hosts: 2,
+        },
+        HostCountTestCase {
+            description: "one invocation per host splits up to the cores",
+            invocations: 7,
+            cores: 3,
+            min_invocations_per_host: 1,
+            expected_hosts: 3,
+        },
+        HostCountTestCase {
+            description: "more cores than invocations runs one host per invocation",
+            invocations: 3,
+            cores: 8,
+            min_invocations_per_host: 1,
+            expected_hosts: 3,
         },
     ];
     for test_case in test_cases {
         assert_eq!(
-            host_count(test_case.invocations, test_case.cores),
+            host_count(
+                test_case.invocations,
+                (test_case.cores, test_case.min_invocations_per_host)
+            ),
             test_case.expected_hosts,
             "{}",
             test_case.description

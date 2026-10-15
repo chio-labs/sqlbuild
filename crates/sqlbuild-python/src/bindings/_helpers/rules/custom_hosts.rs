@@ -2,13 +2,18 @@
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
+use pyo3::exceptions::PyKeyboardInterrupt;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyBytes, PyBytesMethods, PyDict, PyDictMethods, PyTuple};
 use serde_json::{Map, Value, json};
-use sqlbuild_rules::custom_host_pool::constants::{CGROUP_ROOT, HOST_TIMEOUT_MILLIS, PROC_CGROUP};
+use sqlbuild_rules::custom_host_pool::constants::{
+    CGROUP_ROOT, HOST_TIMEOUT_MILLIS, MIN_INVOCATIONS_PER_HOST, PROC_CGROUP,
+};
 use sqlbuild_rules::custom_host_pool::main::available_cores::available_cores;
 use sqlbuild_rules::custom_host_pool::main::decode_host_response::decode_host_response;
 use sqlbuild_rules::custom_host_pool::main::host_count::host_count;
@@ -21,6 +26,9 @@ use sqlbuild_rules::custom_host_pool::types::{HostInvocation, HostPlan};
 use sqlbuild_rules::engine::main::custom_host::run_custom_host_json;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::rules::custom_host_observation::{
+    LaunchLog, ObservedHosts, before_publish, observed_hosts, record_launch,
+};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const RULES_CONSTANTS_MODULE: &str = "sqlbuild.rule_engine.constants";
@@ -49,7 +57,14 @@ const PAYLOAD_MODEL_FIELDS: [&str; 18] = [
     "rejected_sql_analysis_opt_out",
 ];
 
+/// How often a waiting run checks for interrupts and cancellation.
+const SIGNAL_POLL: Duration = Duration::from_millis(100);
+const INTERRUPTED_MESSAGE: &str = "custom rule hosts were interrupted";
+
 static INPUT_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+/// Set when the run that started these hosts was interrupted; hosts stop at their next invocation.
+pub(crate) type HostCancel = Arc<AtomicBool>;
 
 /// What every host of one run is told, before its plan and cancellation marker are added.
 pub(crate) struct HostRequest<'a, 'py> {
@@ -61,6 +76,7 @@ pub(crate) struct HostRequest<'a, 'py> {
     pub(crate) model_paths: &'a [String],
     pub(crate) track_reads: bool,
     pub(crate) verify_determinism: bool,
+    pub(crate) cancel: &'a HostCancel,
 }
 
 /// One host's outcome: its slice, or the `RulesError` message it failed with.
@@ -76,13 +92,21 @@ pub(crate) fn run_custom_hosts(
 ) -> PyResult<HostRun> {
     let invocations: Vec<HostInvocation> =
         planned_invocations(plan, request.rules, request.model_paths);
+    let observed: ObservedHosts = observed_hosts(py)?;
     let plans: Vec<HostPlan> = if request.verify_determinism {
         vec![plan.clone()]
     } else {
+        let cores: usize = match observed.cores {
+            Some(cores) => cores,
+            None => cores(py)?,
+        };
+        let min_invocations_per_host: usize = observed
+            .min_invocations_per_host
+            .unwrap_or(MIN_INVOCATIONS_PER_HOST);
         partition_host_plan(
             plan,
             &invocations,
-            host_count(invocations.len(), cores(py)?),
+            host_count(invocations.len(), (cores, min_invocations_per_host)),
         )
     };
     let input_dir: PathBuf = HOST_INPUTS
@@ -112,12 +136,16 @@ pub(crate) fn run_custom_hosts(
         json!(request.verify_determinism),
     );
     payload.insert("track_reads".to_owned(), json!(request.track_reads));
-    let launch: Launch = Launch::new(py, payload)?;
+    let launch: Launch = Launch::new(py, payload, observed.launches)?;
+    let publish = || {
+        before_publish(py, observed.publish_inputs.as_ref(), &input_path)?;
+        write_inputs(py, &input_path, request)
+    };
     let responses: PyResult<Vec<HostSlice>> = run_partitions(
         py,
         (&launch, plan, &plans),
-        &input_dir,
-        (|| write_inputs(py, &input_path, request), &abandoned),
+        (&input_dir, request.cancel),
+        (publish, &abandoned),
     );
     remove_file(&input_path);
     remove_file(&abandoned);
@@ -130,16 +158,28 @@ struct Launch {
     arguments: Vec<String>,
     runtime_version: String,
     payload: Map<String, Value>,
+    launches: Option<LaunchLog>,
 }
 
 impl Launch {
-    fn new(py: Python<'_>, payload: Map<String, Value>) -> PyResult<Self> {
+    fn new(
+        py: Python<'_>,
+        payload: Map<String, Value>,
+        launches: Option<LaunchLog>,
+    ) -> PyResult<Self> {
         Ok(Self {
             program: imported(py, "sys", "executable")?.extract()?,
             arguments: vec!["-m".to_owned(), constant(py, "CUSTOM_HOST_LAUNCH_MODULE")?],
             runtime_version: constant(py, "CUSTOM_HOST_RUNTIME_VERSION")?,
             payload,
+            launches,
         })
+    }
+
+    /// Run one host for `spec`, recording the launch when the run is observed.
+    fn run(&self, spec: &str) -> HostOutcome {
+        record_launch(self.launches.as_ref(), spec);
+        host_outcome(spec)
     }
 
     /// The `run_custom_host_json` request for one host's plan and optional cancellation marker.
@@ -164,13 +204,17 @@ impl Launch {
 fn run_partitions<'py>(
     py: Python<'py>,
     (launch, plan, plans): (&Launch, &HostPlan, &[HostPlan]),
-    input_dir: &Path,
+    (input_dir, cancel): (&Path, &HostCancel),
     (write_inputs, abandoned): (impl FnOnce() -> PyResult<()>, &Path),
 ) -> PyResult<Vec<HostSlice>> {
     if plans.len() == 1 {
         let spec: String = launch.spec(plan, None);
-        let outcomes: Vec<HostOutcome> =
-            run_hosts(py, vec![spec], (write_inputs, abandoned), None)?;
+        let outcomes: Vec<HostOutcome> = run_hosts(
+            py,
+            (launch, vec![spec]),
+            (write_inputs, abandoned),
+            (None, cancel),
+        )?;
         return outcomes
             .into_iter()
             .map(|outcome| outcome.map_err(|message| rules_error(py, message)))
@@ -182,10 +226,15 @@ fn run_partitions<'py>(
         .iter()
         .map(|partition| launch.spec(partition, Some(&marker)))
         .collect();
-    let outcomes: PyResult<Vec<HostOutcome>> =
-        run_hosts(py, specs, (write_inputs, abandoned), Some(&marker));
+    let outcomes: PyResult<Vec<HostOutcome>> = run_hosts(
+        py,
+        (launch, specs),
+        (write_inputs, abandoned),
+        (Some(&marker), cancel),
+    );
     let _removed: std::io::Result<()> = std::fs::remove_dir_all(&cancel_dir);
     let outcomes: Vec<HostOutcome> = outcomes?;
+    interrupted(py, cancel)?;
     if outcomes.iter().any(Result::is_err) {
         return single_host(py, launch, plan).map(|slice| vec![slice]);
     }
@@ -220,16 +269,16 @@ fn run_partitions<'py>(
 /// Run one host for `plan` once the payload already exists.
 fn single_host(py: Python<'_>, launch: &Launch, plan: &HostPlan) -> PyResult<HostSlice> {
     let spec: String = launch.spec(plan, None);
-    py.detach(|| host_outcome(&spec))
+    py.detach(|| launch.run(&spec))
         .map_err(|message| rules_error(py, message))
 }
 
 /// Run every host on its own thread while this thread publishes the payload they wait for.
 fn run_hosts(
     py: Python<'_>,
-    specs: Vec<String>,
+    (launch, specs): (&Launch, Vec<String>),
     (write_inputs, abandoned): (impl FnOnce() -> PyResult<()>, &Path),
-    cancel_marker: Option<&Path>,
+    (cancel_marker, cancel): (Option<&Path>, &HostCancel),
 ) -> PyResult<Vec<HostOutcome>> {
     std::thread::scope(|scope| {
         let (sender, finished): (Sender<HostStatus>, Receiver<HostStatus>) = channel();
@@ -238,7 +287,7 @@ fn run_hosts(
             .map(|spec| {
                 let sender: Sender<HostStatus> = sender.clone();
                 scope.spawn(move || {
-                    let outcome: HostOutcome = host_outcome(&spec);
+                    let outcome: HostOutcome = launch.run(&spec);
                     let status: HostStatus = outcome.as_ref().map(drop).map_err(Clone::clone);
                     let _sent: Result<(), std::sync::mpsc::SendError<HostStatus>> =
                         sender.send(status);
@@ -254,29 +303,67 @@ fn run_hosts(
             }
             return Err(error);
         }
-        let count: usize = handles.len();
-        py.detach(move || {
-            for _ in 0..count {
-                match finished.recv() {
-                    Ok(Ok(())) => {}
-                    Ok(Err(_)) | Err(_) => {
-                        if let Some(marker) = cancel_marker {
-                            let _touched: std::io::Result<()> = touch(marker);
-                        }
-                        break;
-                    }
-                }
-            }
-            Ok(handles
+        let stopped: PyResult<()> =
+            await_hosts(py, (finished, handles.len()), cancel_marker, cancel);
+        let outcomes: Vec<HostOutcome> = py.detach(move || {
+            handles
                 .into_iter()
                 .map(|handle| {
                     handle
                         .join()
                         .unwrap_or_else(|_| Err("custom rule host thread panicked".to_owned()))
                 })
-                .collect())
-        })
+                .collect()
+        });
+        stopped.map(|()| outcomes)
     })
+}
+
+/// Wait until every host finished or one failed; an interrupt cancels the rest and is returned.
+fn await_hosts(
+    py: Python<'_>,
+    (finished, count): (Receiver<HostStatus>, usize),
+    cancel_marker: Option<&Path>,
+    cancel: &HostCancel,
+) -> PyResult<()> {
+    let finished: Mutex<Receiver<HostStatus>> = Mutex::new(finished);
+    let mut remaining: usize = count;
+    while remaining > 0 {
+        let received: Result<HostStatus, RecvTimeoutError> = py.detach(|| match finished.lock() {
+            Ok(receiver) => receiver.recv_timeout(SIGNAL_POLL),
+            Err(_) => Err(RecvTimeoutError::Disconnected),
+        });
+        match received {
+            Ok(Ok(())) => remaining -= 1,
+            Ok(Err(_)) | Err(RecvTimeoutError::Disconnected) => {
+                cancel_hosts(cancel_marker);
+                return Ok(());
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                if let Err(error) = interrupted(py, cancel) {
+                    cancel_hosts(cancel_marker);
+                    return Err(error);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Raise a pending interrupt, or report that the run that started these hosts was interrupted.
+fn interrupted(py: Python<'_>, cancel: &HostCancel) -> PyResult<()> {
+    py.check_signals()?;
+    if cancel.load(Ordering::Acquire) {
+        return Err(PyKeyboardInterrupt::new_err(INTERRUPTED_MESSAGE));
+    }
+    Ok(())
+}
+
+/// Stop split hosts at their next invocation; a running invocation still ends or times out.
+fn cancel_hosts(cancel_marker: Option<&Path>) {
+    if let Some(marker) = cancel_marker {
+        let _touched: std::io::Result<()> = touch(marker);
+    }
 }
 
 /// One host run decoded, or the message `RulesError` reports for it.
@@ -307,7 +394,9 @@ fn write_inputs(py: Python<'_>, path: &Path, request: &HostRequest<'_, '_>) -> P
 }
 
 /// The project hosts decode, without model state no rule fact reads.
-fn host_payload_project<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn host_payload_project<'py>(
+    project: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project.py();
     let model_class: Bound<'py, PyAny> = imported(py, COMPILE_MODELS_MODULE, "CompiledModel")?;
     let mut models: Vec<Bound<'py, PyAny>> = Vec::new();
