@@ -54,6 +54,7 @@ fn register_project_stages(module: &Bound<'_, PyModule>) -> PyResult<()> {
     cursor::registration::register(module)?;
     exported_constants::registration::register(module)?;
     state_rows::registration::register(module)?;
+    diagnostics::console_records::register(module)?;
     diagnostics::redaction::register(module)?;
     diagnostics::trackers::register(module)?;
     analysis::sql_test_comparisons::register(module)?;

@@ -4,15 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from sqlbuild._native import CliStyle
-from sqlbuild.diagnostics._helpers.logging_formatters import (
-    _append_exception,
-    _format_console_header,
-    _get_record_sql,
-    _render_sql_inline,
-)
-
-_SQL_SEPARATOR: str = "-" * 80
+from sqlbuild._native import format_diagnostics_console_record
 
 
 class DiagnosticsConsoleFormatter(logging.Formatter):
@@ -23,15 +15,7 @@ class DiagnosticsConsoleFormatter(logging.Formatter):
         self._use_color: bool = use_color
 
     def format(self, record: logging.LogRecord) -> str:
-        header: str = _format_console_header(record=record, use_color=self._use_color)
-        sql: str | None = _get_record_sql(record)
-        if sql is None:
-            return _append_exception(record=record, rendered=header)
-        if _render_sql_inline(sql):
-            return _append_exception(record=record, rendered=f"{header}  {sql.strip()}")
-        style: CliStyle = CliStyle(use_color=self._use_color)
-        separator: str = style.muted(_SQL_SEPARATOR)
-        return _append_exception(
-            record=record,
-            rendered=f"{header}\n{separator}\n{sql.rstrip()}\n{separator}",
-        )
+        rendered: str = format_diagnostics_console_record(record, use_color=self._use_color)
+        if record.exc_info is None:
+            return rendered
+        return f"{rendered}\n{logging.Formatter().formatException(record.exc_info)}"

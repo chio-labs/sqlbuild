@@ -1,5 +1,6 @@
 """Private SQLBuild native engine bindings."""
 
+import logging
 import threading
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence, Set
@@ -5022,6 +5023,7 @@ def normalize_sql_value(
     limits: SqlValueLimits | None = None,
 ) -> SqlValue: ...
 def render_state_sql_literal(*, value: object | None, declared_type: StateSqlValueType) -> str: ...
+def format_diagnostics_console_record(record: logging.LogRecord, *, use_color: bool) -> str: ...
 def render_state_table_create_sql(
     *,
     qualified_name: str,

@@ -60,11 +60,6 @@ reason = "public-api"
 note = "Installs SQLBuild's handlers on Python's logging, which users and integrations configure."
 
 [[stays]]
-path = "diagnostics/_helpers/logging_formatters.py"
-reason = "public-api"
-note = "Python logging formatters for console and file diagnostics."
-
-[[stays]]
 path = "diagnostics/_helpers/redaction.py"
 reason = "public-api"
 note = "Collects redacted extra fields from a Python LogRecord; the redaction itself is native."
@@ -77,7 +72,7 @@ note = "Redaction entry points that Python logging handlers call per record."
 [[stays]]
 path = "diagnostics/classes/diagnostics_console_formatter.py"
 reason = "public-api"
-note = "A logging.Formatter subclass for the console stream."
+note = "Rule 4 glue: the logging.Formatter subclass for the console stream; the line text is native (format_diagnostics_console_record) and only stdlib exception formatting stays here."
 
 [[stays]]
 path = "diagnostics/classes/dynamic_stderr_handler.py"

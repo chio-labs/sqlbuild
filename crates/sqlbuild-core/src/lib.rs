@@ -24,6 +24,7 @@ pub mod dbt_graph;
 pub mod dbt_plan;
 pub mod dbt_process;
 pub mod debug_report;
+pub mod diagnostic_text;
 pub mod event_export;
 pub mod format_command;
 pub mod freshness_text;

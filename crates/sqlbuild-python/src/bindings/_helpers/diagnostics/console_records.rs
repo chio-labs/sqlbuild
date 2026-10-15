@@ -1,0 +1,71 @@
+//! The `--debug` stderr line of one Python log record.
+
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
+use pyo3::types::{PyInt, PyString};
+use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_core::cli_text::models::CliStyle;
+use sqlbuild_core::diagnostic_text::main::format_diagnostic_record::format_diagnostic_record;
+use sqlbuild_core::diagnostic_text::models::DiagnosticRecordText;
+
+/// Each context field shown as a `label=value` token, in display order.
+const CONTEXT_TOKENS: [(&str, &str); 7] = [
+    ("sqlbuild_phase", "phase"),
+    ("sqlbuild_kind", "kind"),
+    ("sqlbuild_action_name", "action"),
+    ("sqlbuild_audit_name", "audit"),
+    ("sqlbuild_column_name", "column"),
+    ("sqlbuild_window", "window"),
+    ("sqlbuild_status", "status"),
+];
+
+/// `getattr(record, field, None)` when it is a `str`.
+fn text_field(record: &Bound<'_, PyAny>, field: &str) -> PyResult<Option<String>> {
+    if !record.hasattr(field)? {
+        return Ok(None);
+    }
+    let value: Bound<'_, PyAny> = record.getattr(field)?;
+    if value.is_instance_of::<PyString>() {
+        return Ok(Some(value.extract()?));
+    }
+    Ok(None)
+}
+
+/// The console line of `record` without its exception text.
+#[pyfunction]
+#[pyo3(signature = (record, *, use_color))]
+fn format_diagnostics_console_record(
+    record: &Bound<'_, PyAny>,
+    use_color: bool,
+) -> PyResult<String> {
+    let mut tokens: Vec<(&'static str, String)> = Vec::new();
+    for (field, label) in CONTEXT_TOKENS {
+        if let Some(value) = text_field(record, field)? {
+            tokens.push((label, value));
+        }
+    }
+    let duration_ms: Option<i64> = if record.hasattr("sqlbuild_duration_ms")? {
+        let value: Bound<'_, PyAny> = record.getattr("sqlbuild_duration_ms")?;
+        value
+            .is_instance_of::<PyInt>()
+            .then(|| value.extract())
+            .transpose()?
+    } else {
+        None
+    };
+    let text = DiagnosticRecordText {
+        level_name: record.getattr("levelname")?.extract()?,
+        logger_name: record.getattr("name")?.extract()?,
+        message: record.call_method0("getMessage")?.extract()?,
+        subject: text_field(record, "sqlbuild_subject")?,
+        name: text_field(record, "sqlbuild_name")?,
+        event: text_field(record, "sqlbuild_event")?,
+        tokens,
+        duration_ms,
+        sql: text_field(record, "sqlbuild_sql")?,
+    };
+    Ok(format_diagnostic_record(&text, CliStyle { use_color }))
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(format_diagnostics_console_record, module)?)
+}
