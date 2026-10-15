@@ -11,14 +11,6 @@ GRAIN_ORDER: dict[CursorGrain, int] = {
     CursorGrain.YEAR: 5,
 }
 
-GRAIN_BATCH_SIZE: dict[CursorGrain, str] = {
-    CursorGrain.SECOND: "1s",
-    CursorGrain.MINUTE: "1m",
-    CursorGrain.HOUR: "1h",
-    CursorGrain.DAY: "1d",
-    CursorGrain.MONTH: "1mo",
-    CursorGrain.YEAR: "1y",
-}
 
 DURATION_YEAR_UNIT: str = "y"
 DURATION_MONTH_UNIT: str = "mo"

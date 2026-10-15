@@ -13,17 +13,6 @@ class DbtInvoker(Protocol):
     def __call__(self, *, argv: tuple[str, ...], cwd: Path | None) -> object: ...
 
 
-class DbtSupportedResourceType(StrEnum):
-    """dbt resource types SQLBuild currently handles with dedicated behavior."""
-
-    MODEL = "model"
-    SEED = "seed"
-    SNAPSHOT = "snapshot"
-    SOURCE = "source"
-    TEST = "test"
-    UNIT_TEST = "unit_test"
-
-
 class DbtInteropCommand(StrEnum):
     """dbt interop commands with SQLBuild participation."""
 
