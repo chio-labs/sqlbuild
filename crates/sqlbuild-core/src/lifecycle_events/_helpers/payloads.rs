@@ -14,6 +14,7 @@ use crate::lifecycle_events::constants::{
     RETRY_SCHEDULED_EVENT, RUN_STARTED_EVENT, RUN_TERMINALS, STATEMENT_EVENT_PREFIX,
 };
 use crate::lifecycle_events::models::{KnownEventFacts, PayloadValue};
+use crate::lifecycle_events::types::PayloadCheck;
 
 type Payload = [(String, PayloadValue)];
 
@@ -222,7 +223,7 @@ forbidden field(s): {}",
             ));
         }
     }
-    let checks: [(bool, fn(&[(String, PayloadValue)]) -> Option<String>); 4] = [
+    let checks: [(bool, PayloadCheck); 4] = [
         (
             event_type.starts_with(OPERATION_EVENT_PREFIX),
             operation_problem,
