@@ -2,10 +2,12 @@
 
 use crate::janitor_planning::main::build_archive_name::build_archive_name;
 use crate::janitor_planning::main::parse_archive_name::parse_archive_name;
+use crate::janitor_planning::main::query_diff_artifact_name::query_diff_artifact_name;
 use crate::janitor_planning::main::query_diff_artifact_parts::query_diff_artifact_parts;
 use crate::janitor_planning::models::ArchiveTimestamp;
 use crate::janitor_planning::tests::test_types::{
-    ArtifactNameTestCase, BuildArchiveNameTestCase, ParseArchiveNameTestCase,
+    ArtifactNameBuildTestCase, ArtifactNameTestCase, BuildArchiveNameTestCase,
+    ParseArchiveNameTestCase,
 };
 
 const ARCHIVED_AT: ArchiveTimestamp = ArchiveTimestamp {
@@ -140,6 +142,34 @@ fn given_relation_name_when_checking_query_diff_artifact_then_returns_run_and_si
     for test_case in test_cases {
         assert_eq!(
             query_diff_artifact_parts(test_case.name),
+            test_case
+                .expected_parts
+                .map(|(run_id, side)| (run_id.to_owned(), side.to_owned())),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_run_and_side_when_building_query_diff_artifact_name_then_parses_back() {
+    let test_cases = [
+        ArtifactNameBuildTestCase {
+            description: "generated run id round trips",
+            run_id: "20260115T123005Z_0123456789ab",
+            side: "right",
+            expected_parts: Some(("20260115T123005Z_0123456789ab", "right")),
+        },
+        ArtifactNameBuildTestCase {
+            description: "free-form run id is not reserved",
+            run_id: "manual",
+            side: "left",
+            expected_parts: None,
+        },
+    ];
+    for test_case in test_cases {
+        assert_eq!(
+            query_diff_artifact_parts(&query_diff_artifact_name(test_case.run_id, test_case.side)),
             test_case
                 .expected_parts
                 .map(|(run_id, side)| (run_id.to_owned(), side.to_owned())),

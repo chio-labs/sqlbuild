@@ -7,6 +7,7 @@ use pyo3::pyfunction;
 use pyo3::types::{PyBool, PyDict, PyDictMethods};
 use sqlbuild_analysis::janitor_planning::constants::OLD_NAME_VIEW_REASON;
 use sqlbuild_analysis::janitor_planning::main::build_archive_name::build_archive_name;
+use sqlbuild_analysis::janitor_planning::main::query_diff_artifact_name::query_diff_artifact_name;
 use sqlbuild_analysis::janitor_planning::main::query_diff_artifact_parts::query_diff_artifact_parts;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported, within};
@@ -398,4 +399,18 @@ pub(crate) fn build_janitor_archive_name(
         kind,
     )
     .map_err(|message| shared_error(archived_at.py(), message))
+}
+
+/// The reserved relation name of one run's query-diff artifact side.
+#[pyfunction]
+#[pyo3(signature = (*, run_id, side))]
+pub(crate) fn build_query_diff_artifact_name(run_id: &str, side: &str) -> String {
+    query_diff_artifact_name(run_id, side)
+}
+
+/// The run id and folded side of a strict query-diff artifact name, or `None`.
+#[pyfunction]
+#[pyo3(signature = (name, /))]
+pub(crate) fn parse_query_diff_artifact_name(name: &str) -> Option<(String, String)> {
+    query_diff_artifact_parts(name)
 }
