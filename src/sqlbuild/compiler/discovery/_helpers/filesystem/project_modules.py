@@ -23,7 +23,6 @@ from sqlbuild.compiler.discovery.constants import (
     PYTHON_NODE_ROOT,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProvider, DiscoveredProviderUsage
-from sqlbuild.provider.classes.provider import Provider
 from sqlbuild.runtime.event_exporting.constants import EVENT_EXPORTER_EVENT_PARAMETER_NAME
 from sqlbuild.runtime.observability.models import LifecycleEvent
 
@@ -378,6 +377,8 @@ def provider_usages(
         discovered_provider: DiscoveredProvider | None = provider_by_name.get(parameter.name)
         if discovered_provider is None:
             continue
+        from sqlbuild.provider.classes.provider import Provider
+
         annotation: object = type_hints.get(parameter.name, parameter.annotation)
         annotation_class_name: str | None = None
         annotation_module: str | None = None
