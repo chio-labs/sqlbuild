@@ -245,6 +245,7 @@ from sqlbuild.compiler.planner.models import (
     ParsedScenarioArtifactName,
     ParsedSelector,
     PathSelector,
+    PlanEntryBuildInputs,
     PlannerChangeResults,
     PlannerOverrides,
     PlannerRelationsContext,
@@ -5078,7 +5079,6 @@ def assemble_model_plan_entry(
     future_cursor_config: FutureCursorsConfig | None,
     start_cursor_config: StartCursorsConfig | None,
     invocation_time: datetime | None,
-    effective_grain: str | None,
 ) -> tuple[ModelPlanEntry, tuple[PlanWarning, ...]]: ...
 def plan_audit(
     *,
@@ -5124,21 +5124,12 @@ def check_cursor_type_consistency(
     warehouse_columns: tuple[ColumnInfo, ...],
     sql_analysis_enabled: bool,
 ) -> PlanWarning | None: ...
-def count_microbatches(
-    *,
-    bounds: CursorBounds,
-    batch_size: str,
-    cursor_type: str,
-    equal_bounds_are_batch: bool = False,
-) -> int: ...
-def cap_microbatch_bounds(
-    *,
-    bounds: CursorBounds,
-    batch_size: str,
-    cursor_type: str,
-    max_batches: int,
-    action: MicrobatchLimitAction,
-) -> CursorBounds: ...
+def apply_microbatch_limit(
+    *, entry: ModelPlanEntry, max_batches: int | None, action: MicrobatchLimitAction
+) -> tuple[ModelPlanEntry, PlanWarning | None]: ...
+def apply_configured_microbatch_limits(
+    *, entry: ModelPlanEntry, inputs: PlanEntryBuildInputs
+) -> tuple[ModelPlanEntry, tuple[PlanWarning, ...]]: ...
 def microbatch_limit_warning(
     *, model_name: str, max_batches: int | None, batch_count: int, action: MicrobatchLimitAction
 ) -> str | None: ...

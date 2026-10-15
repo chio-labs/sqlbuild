@@ -1,7 +1,7 @@
 //! Assemble model plan dataclasses from resolved plan decisions and authored model config.
 
 use pyo3::exceptions::PyValueError;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction};
 
@@ -20,9 +20,10 @@ use crate::bindings::_helpers::planner_strategy::constants::{
     ENFORCED_CONTRACT, MICROBATCH_MODE, NATIVE_MODULE, PLAN_MODELS_MODULE, PLANNER_TYPES_MODULE,
 };
 use crate::bindings::_helpers::planner_strategy::cursor_inputs::model_values;
+use crate::bindings::_helpers::planner_strategy::microbatch_limits::{replay_grain, unknown_grain};
 use crate::bindings::_helpers::planner_strategy::microbatches::microbatch_limit_config;
 use crate::bindings::_helpers::planner_strategy::values::{
-    PLANNER_EXCEPTIONS_MODULE, input_error, optional_string, text,
+    PLANNER_EXCEPTIONS_MODULE, input_error, text,
 };
 
 /// Model config keys copied to the plan entry as optional strings, with their entry fields.
@@ -182,14 +183,6 @@ fn type_enforcement<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny
     Ok(PyBool::new(py, false).to_owned().into_any())
 }
 
-/// `CursorGrain(grain)`'s error for a grain outside the known grains.
-fn unknown_grain(py: Python<'_>, grain: &str) -> PyErr {
-    imported(py, PLANNER_TYPES_MODULE, "CursorGrain")
-        .and_then(|class| class.call1((grain,)))
-        .err()
-        .unwrap_or_else(|| PyValueError::new_err("unknown cursor grain"))
-}
-
 /// The explicit or default lookback of a microbatch model at the effective grain.
 fn lookback_of(
     model: &Bound<'_, PyAny>,
@@ -210,7 +203,7 @@ fn lookback_of(
             None => read("cursor_grain")?,
         },
     };
-    microbatch_lookback(&config).map_err(|error| unknown_grain(model.py(), &error.0))
+    microbatch_lookback(&config).map_err(|error| unknown_grain(model.py(), error))
 }
 
 /// Resolve explicit or default lookback for one microbatch model.
@@ -416,7 +409,19 @@ fn config_fields<'py>(
         None => false,
     };
     let lookback: Option<String> = if microbatch {
-        let grain: Option<String> = optional_string(&request.get("effective_grain")?)?;
+        let read = |key: &str| -> PyResult<Option<String>> {
+            config_str(values, key)?
+                .map(|value| text(&value))
+                .transpose()
+        };
+        let grain: Option<String> = replay_grain(
+            (
+                read("cursor_type")?,
+                read("microbatch_strategy")?,
+                read("cursor_grain")?,
+            ),
+            &request.get("cursor_input_relations")?,
+        )?;
         lookback_of(&model, grain)?
     } else {
         config_str(values, "lookback")?

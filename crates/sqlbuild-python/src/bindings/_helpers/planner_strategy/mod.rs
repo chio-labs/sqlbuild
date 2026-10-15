@@ -13,6 +13,7 @@ pub(crate) mod fixture_sql;
 pub(crate) mod fixture_types;
 pub(crate) mod fixture_values;
 pub(crate) mod lineage;
+pub(crate) mod microbatch_limits;
 pub(crate) mod microbatches;
 pub(crate) mod model_entries;
 pub(crate) mod models;

@@ -32,3 +32,4 @@ pub(crate) const MIGRATION_RENAMED: &str = "renamed";
 pub(crate) const MIGRATION_MANUAL: &str = "manual";
 pub(crate) const MIGRATION_AUTOMATIC: &str = "automatic";
 pub(crate) const MIGRATION_INCOMPATIBLE: &str = "incompatible";
+pub(crate) const WATERMARK_STRATEGY: &str = "watermark";

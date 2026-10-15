@@ -8,21 +8,18 @@ from decimal import Decimal
 from typing import Any
 
 from sqlbuild._native import (
+    apply_configured_microbatch_limits,
     assemble_model_plan_entry,
     audit_is_selected,
     build_cursor_input_relations,
     build_source_load_map,
-    cap_microbatch_bounds,
-    count_microbatches,
     detect_model_changes,
     get_config_cursor_bound,
     get_config_str,
     get_materialization_type,
     microbatch_guidance,
-    microbatch_limit_warning,
     replaces_incremental_relation,
     resolve_bounded_cursor_override,
-    resolve_effective_microbatch_batch_size,
     resolve_microbatch_lookback,
     resolve_model_plan_action,
     runtime_cursor_producer_names,
@@ -130,7 +127,6 @@ from sqlbuild.spec.contracts.models import (
     SourceEntry,
     StartCursorsConfig,
 )
-from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 
 
 @dataclass(frozen=True)
@@ -431,7 +427,7 @@ def build_plan_entries(
                 ),
             )
             if entry.action != PlanAction.SKIP:
-                entry, limit_warnings = _apply_configured_microbatch_limits(
+                entry, limit_warnings = apply_configured_microbatch_limits(
                     entry=entry, inputs=inputs
                 )
                 warnings.extend(limit_warnings)
@@ -475,143 +471,6 @@ def build_plan_entries(
             )
         )
     return PlannerModelEntryResults(entries=tuple(entries), warnings=tuple(warnings))
-
-
-def _apply_configured_microbatch_limits(
-    *, entry: ModelPlanEntry, inputs: PlanEntryBuildInputs
-) -> tuple[ModelPlanEntry, tuple[PlanWarning, ...]]:
-    """Apply CLI, project, and model policies in their documented precedence order."""
-
-    if inputs.max_microbatches_is_override:
-        limited_entry, warning = _apply_microbatch_limit(
-            entry=entry,
-            max_batches=inputs.max_microbatches,
-            action=MicrobatchLimitAction.ERROR,
-        )
-        return limited_entry, (() if warning is None else (warning,))
-
-    if entry.declared_microbatch_limit_action is not None:
-        warnings: list[PlanWarning] = []
-        declared_action: MicrobatchLimitAction = entry.declared_microbatch_limit_action
-        if inputs.max_microbatches is not None:
-            _, safety_warning = _apply_microbatch_limit(
-                entry=entry,
-                max_batches=inputs.max_microbatches,
-                action=inputs.microbatch_limit_action,
-            )
-            entry = replace(
-                entry,
-                microbatch_safety_limit=inputs.max_microbatches,
-                microbatch_safety_limit_action=inputs.microbatch_limit_action,
-            )
-            if safety_warning is not None:
-                warnings.append(safety_warning)
-        entry, model_warning = _apply_microbatch_limit(
-            entry=entry,
-            max_batches=entry.microbatch_limit,
-            action=declared_action,
-        )
-        if model_warning is not None:
-            warnings.append(model_warning)
-        return entry, tuple(warnings)
-
-    max_batches: int | None = (
-        None
-        if entry.microbatch_strategy == MicrobatchStrategy.ROLLING_WINDOW
-        and entry.reason != PlanReason.FULL_REFRESH
-        and entry.start_cursor_override is None
-        and entry.end_cursor_override is None
-        else entry.microbatch_limit or inputs.max_microbatches
-    )
-    limited_entry, warning = _apply_microbatch_limit(
-        entry=entry,
-        max_batches=max_batches,
-        action=inputs.microbatch_limit_action,
-    )
-    return limited_entry, (() if warning is None else (warning,))
-
-
-def _apply_microbatch_limit(
-    *, entry: ModelPlanEntry, max_batches: int | None, action: MicrobatchLimitAction
-) -> tuple[ModelPlanEntry, PlanWarning | None]:
-    if entry.action == PlanAction.SKIP:
-        return entry, None
-    batch_count: int | None = None
-    effective_batch_size: str | None = None
-    if (
-        entry.microbatch_range is not None
-        and entry.batch_size is not None
-        and entry.cursor_type is not None
-    ):
-        effective_grain: str | None = resolve_effective_timestamp_grain(
-            cursor_type=entry.cursor_type,
-            downstream_grain=entry.cursor_grain,
-            microbatch_strategy=entry.microbatch_strategy,
-            cursor_input_grains=tuple(
-                relation.cursor_grain for relation in entry.cursor_input_relations
-            ),
-        )
-        effective_batch_size = (
-            resolve_effective_microbatch_batch_size(
-                batch_size=entry.batch_size,
-                effective_grain=effective_grain,
-            )
-            if effective_grain is not None
-            else entry.batch_size
-        )
-        batch_count = count_microbatches(
-            bounds=entry.microbatch_range,
-            batch_size=effective_batch_size,
-            cursor_type=entry.cursor_type,
-            equal_bounds_are_batch=entry.action == PlanAction.CREATE_TABLE,
-        )
-    warning: str | None = (
-        None
-        if batch_count is None
-        else microbatch_limit_warning(
-            model_name=entry.name,
-            max_batches=max_batches,
-            batch_count=batch_count,
-            action=action,
-        )
-    )
-    limited_range: CursorBounds | None = entry.microbatch_range
-    if (
-        warning is not None
-        and effective_batch_size is not None
-        and entry.microbatch_range is not None
-        and max_batches is not None
-        and action
-        in {
-            MicrobatchLimitAction.CAP_FROM_END,
-            MicrobatchLimitAction.CAP_FROM_START,
-        }
-    ):
-        limited_range = cap_microbatch_bounds(
-            bounds=entry.microbatch_range,
-            batch_size=effective_batch_size,
-            cursor_type=entry.cursor_type or "",
-            max_batches=max_batches,
-            action=action,
-        )
-    limited_entry: ModelPlanEntry = replace(
-        entry,
-        microbatch_range=limited_range,
-        microbatch_limit=max_batches,
-        microbatch_limit_count=batch_count,
-        microbatch_limit_action=action if max_batches is not None else None,
-        microbatch_limit_warning=warning,
-    )
-    if warning is None:
-        return limited_entry, None
-    if action == MicrobatchLimitAction.ERROR:
-        raise CompileInputError(warning)
-    return limited_entry, PlanWarning(
-        model_name=entry.name,
-        severity=WarningSeverity.WARNING,
-        code="MICROBATCH_LIMIT_EXCEEDED",
-        message=warning,
-    )
 
 
 def plan_model_from_change(
@@ -773,21 +632,6 @@ def plan_model_from_change(
         future_cursor_config=effective_future_cursor_config,
         start_cursor_config=effective_start_cursor_config,
         invocation_time=context.invocation_time,
-        effective_grain=(
-            resolve_effective_timestamp_grain(
-                cursor_type=get_config_str(values=model.config.values, key="cursor_type"),
-                downstream_grain=get_config_str(values=model.config.values, key="cursor_grain"),
-                microbatch_strategy=get_config_str(
-                    values=model.config.values, key="microbatch_strategy"
-                ),
-                cursor_input_grains=tuple(
-                    relation.cursor_grain for relation in cursor_input_relations
-                ),
-            )
-            if get_config_str(values=model.config.values, key="incremental_mode")
-            == IncrementalMode.MICROBATCH
-            else None
-        ),
     )
     return entry, _append_cursor_safety_warnings(
         warnings=warnings,

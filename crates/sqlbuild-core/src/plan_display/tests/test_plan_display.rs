@@ -1,14 +1,15 @@
 use crate::plan_display::main::cursor_bound_display::cursor_bound_display;
 use crate::plan_display::main::effective_microbatch_batch_size::effective_microbatch_batch_size;
+use crate::plan_display::main::effective_timestamp_grain::effective_timestamp_grain;
 use crate::plan_display::main::format_no_input_rows::format_no_input_rows;
 use crate::plan_display::main::format_waiting_on_empty_inputs::format_waiting_on_empty_inputs;
 use crate::plan_display::main::model_execution_annotation::model_execution_annotation;
 use crate::plan_display::main::model_materialization_label::model_materialization_label;
 use crate::plan_display::main::model_resource_type::model_resource_type;
-use crate::plan_display::models::{ModelLabelFacts, ParsedBound};
-use crate::plan_display::tests::helpers::facts;
+use crate::plan_display::models::{ModelLabelFacts, ParsedBound, TimestampGrainFacts};
+use crate::plan_display::tests::helpers::{facts, timestamp_grains};
 use crate::plan_display::tests::test_types::{
-    BatchSizeTestCase, BoundTestCase, LabelTestCase, NamesTestCase,
+    BatchSizeTestCase, BoundTestCase, LabelTestCase, NamesTestCase, TimestampGrainTestCase,
 };
 
 #[test]
@@ -201,6 +202,58 @@ fn given_batch_size_when_resolving_effective_size_then_uses_grain_unit() {
             test_case
                 .expected_size
                 .map(str::to_owned)
+                .map_err(str::to_owned),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_cursor_grains_when_resolving_replay_grain_then_coarsest_timestamp_grain_wins() {
+    let test_cases = [
+        TimestampGrainTestCase {
+            description: "an integer cursor has no grain",
+            facts: TimestampGrainFacts {
+                cursor_type: Some("integer".to_owned()),
+                downstream_grain: Some("day".to_owned()),
+                ..TimestampGrainFacts::default()
+            },
+            expected_grain: Ok(None),
+        },
+        TimestampGrainTestCase {
+            description: "no declared grain defaults to second",
+            facts: timestamp_grains(None, None, &[]),
+            expected_grain: Ok(Some("second")),
+        },
+        TimestampGrainTestCase {
+            description: "a coarser input grain wins",
+            facts: timestamp_grains(None, Some("day"), &[Some("month"), None, Some("hour")]),
+            expected_grain: Ok(Some("month")),
+        },
+        TimestampGrainTestCase {
+            description: "an empty declared grain counts as second",
+            facts: timestamp_grains(None, Some(""), &[Some("minute")]),
+            expected_grain: Ok(Some("minute")),
+        },
+        TimestampGrainTestCase {
+            description: "watermark replay keeps the declared grain",
+            facts: timestamp_grains(Some("watermark"), Some("hour"), &[Some("year")]),
+            expected_grain: Ok(Some("hour")),
+        },
+        TimestampGrainTestCase {
+            description: "an unknown input grain is an error",
+            facts: timestamp_grains(None, Some("day"), &[Some("week")]),
+            expected_grain: Err("week"),
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            effective_timestamp_grain(&test_case.facts).map_err(|error| error.0),
+            test_case
+                .expected_grain
+                .map(|grain| grain.map(str::to_owned))
                 .map_err(str::to_owned),
             "{}",
             test_case.description

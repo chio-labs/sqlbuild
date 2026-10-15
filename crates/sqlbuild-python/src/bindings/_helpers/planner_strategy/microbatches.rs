@@ -18,16 +18,14 @@ use sqlbuild_analysis::planner_strategy::types::Timeline;
 use sqlbuild_cursor::algebra::main::parse_duration::parse_duration;
 use sqlbuild_cursor::algebra::models::{DurationDigits, DurationSpan};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::cursor::durations::shifted_moment;
 use crate::bindings::_helpers::plan_output::display::aligned_timestamp_bounds;
 use crate::bindings::_helpers::planner_changes::results::MODELS_MODULE;
 use crate::bindings::_helpers::planner_strategy::values::text;
 
 const CURSOR_MODELS_MODULE: &str = "sqlbuild.cursor_algebra.models";
-const CONTRACT_TYPES_MODULE: &str = "sqlbuild.spec.contracts.types";
+pub(crate) const CONTRACT_TYPES_MODULE: &str = "sqlbuild.spec.contracts.types";
 const INTEGER_CURSOR: &str = "integer";
 const TIMESTAMP_CURSOR: &str = "timestamp";
 const MONTHS_PER_YEAR: i64 = 12;
@@ -131,9 +129,7 @@ fn timeline_bounds<'py>(
 }
 
 /// Batches in one concrete cursor range.
-#[pyfunction]
-#[pyo3(signature = (*, bounds, batch_size, cursor_type, equal_bounds_are_batch = false))]
-fn count_microbatches(
+pub(crate) fn count_microbatches(
     bounds: &Bound<'_, PyAny>,
     batch_size: &str,
     cursor_type: &str,
@@ -177,33 +173,15 @@ fn cursor_value<'py>(
     )
 }
 
-/// One concrete range capped to its earliest or latest batch windows.
-#[pyfunction]
-#[pyo3(signature = (**options))]
-fn cap_microbatch_bounds<'py>(
-    py: Python<'py>,
-    options: Option<Bound<'py, PyDict>>,
+/// One concrete range capped to `max_batches` batch windows from the end the action keeps.
+pub(crate) fn capped_microbatch_bounds<'py>(
+    bounds: Bound<'py, PyAny>,
+    (batch_size, cursor_type): (&str, &str),
+    max_batches: i128,
+    action: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let arguments: KeywordArguments<'py> = KeywordArguments::read(
-        py,
-        "cap_microbatch_bounds",
-        options,
-        (
-            &[
-                "bounds",
-                "batch_size",
-                "cursor_type",
-                "max_batches",
-                "action",
-            ],
-            &[],
-        ),
-    )?;
-    let bounds: Bound<'py, PyAny> = arguments.value("bounds")?;
-    let batch_size: String = text(&arguments.value("batch_size")?)?;
-    let cursor_type: String = text(&arguments.value("cursor_type")?)?;
-    let max_batches: i128 = arguments.value("max_batches")?.extract()?;
-    let direction: CapDirection = match text(&arguments.value("action")?)?.as_str() {
+    let py: Python<'py> = bounds.py();
+    let direction: CapDirection = match action {
         CAP_FROM_START => CapDirection::FromStart,
         CAP_FROM_END => CapDirection::FromEnd,
         _ => return Ok(bounds),
@@ -213,7 +191,7 @@ fn cap_microbatch_bounds<'py>(
         let Some(range) = integer_bounds(&bounds)? else {
             return Ok(bounds);
         };
-        let Some(capped) = cap_integer_bounds(range, &batch_size, max_batches, direction) else {
+        let Some(capped) = cap_integer_bounds(range, batch_size, max_batches, direction) else {
             return Ok(bounds);
         };
         match capped {
@@ -232,7 +210,7 @@ fn cap_microbatch_bounds<'py>(
         if cursor_type != TIMESTAMP_CURSOR {
             return Ok(bounds);
         }
-        let Some((timeline, range)) = timeline_bounds(&bounds, &batch_size)? else {
+        let Some((timeline, range)) = timeline_bounds(&bounds, batch_size)? else {
             return Ok(bounds);
         };
         match cap_timeline_bounds(&timeline, range, max_batches, direction)? {
@@ -317,8 +295,6 @@ fn resolve_microbatch_limit_config<'py>(
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(count_microbatches, module)?)?;
-    module.add_function(wrap_pyfunction!(cap_microbatch_bounds, module)?)?;
     module.add_function(wrap_pyfunction!(microbatch_limit_warning, module)?)?;
     module.add_function(wrap_pyfunction!(resolve_microbatch_limit_config, module)?)
 }

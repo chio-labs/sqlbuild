@@ -42,6 +42,14 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         super::model_entries::extract_seed_columns,
         module
     )?)?;
+    module.add_function(wrap_pyfunction!(
+        super::microbatch_limits::apply_microbatch_limit,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        super::microbatch_limits::apply_configured_microbatch_limits,
+        module
+    )?)?;
     audits::register(module)?;
     cursor_types::register(module)?;
     fixture_completion::register(module)?;

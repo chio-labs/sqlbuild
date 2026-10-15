@@ -20,7 +20,8 @@ const DECIMAL_KIND: &str = "decimal";
 const COLLECTION_KINDS: [&str; 2] = ["list", "set"];
 const SCALAR_KINDS: [&str; 5] = ["string", "integer", "boolean", "float", "null"];
 
-fn replace<'py>(
+/// `dataclasses.replace(value, **changes)`.
+pub(crate) fn replace<'py>(
     value: &Bound<'py, PyAny>,
     changes: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
