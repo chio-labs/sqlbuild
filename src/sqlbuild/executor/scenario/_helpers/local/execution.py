@@ -6,6 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from sqlbuild._native import error_code, error_help, error_message
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.types import TablePromotionMode
@@ -20,9 +21,6 @@ from sqlbuild.compiler.planner.models import (
     ScenarioRelationPlan,
 )
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
-from sqlbuild.errors.contracts.main.error_code import error_code
-from sqlbuild.errors.contracts.main.error_help import error_help
-from sqlbuild.errors.contracts.main.error_message import error_message
 from sqlbuild.executor.build.models import FunctionExecutionResult
 from sqlbuild.executor.functions.main._execute import execute_function
 from sqlbuild.executor.run.models import ModelExecutionResult

@@ -30,7 +30,7 @@ const TARGET_NAME_MODULE: &str = "sqlbuild._native";
 const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
 const EFFECTIVE_RUNTIME_MODULE: &str = "sqlbuild._native";
 const EFFECTIVE_CONFIG_MODULE: &str = "sqlbuild._native";
-const SETTING_HELP_MODULE: &str = "sqlbuild.errors.setting_help.main.setting_help";
+const SETTING_HELP_MODULE: &str = "sqlbuild._native";
 /// Connection settings that identify the warehouse two targets write to.
 const CONNECTION_IDENTITY_KEYS: [&str; 7] = [
     "account",

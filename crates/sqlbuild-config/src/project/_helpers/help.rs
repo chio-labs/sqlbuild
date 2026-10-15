@@ -13,6 +13,8 @@ use crate::project::errors::ConfigFailure;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SettingValue<'a> {
     Bool(bool),
+    /// An integer, as its decimal text.
+    Integer(&'a str),
     Text(&'a str),
 }
 
@@ -29,6 +31,7 @@ fn toml_value(value: SettingValue<'_>) -> String {
     match value {
         SettingValue::Bool(true) => "true".to_owned(),
         SettingValue::Bool(false) => "false".to_owned(),
+        SettingValue::Integer(digits) => digits.to_owned(),
         SettingValue::Text(text) => {
             format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""))
         }

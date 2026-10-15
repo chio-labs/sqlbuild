@@ -9,13 +9,13 @@ from unittest.mock import Mock
 import pytest
 
 import sqlbuild._native as _native
+from sqlbuild._native import BuildPhaseTimingTracker
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.pipeline._helpers import materializations
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
 from sqlbuild.compiler.planner.main.execution import execution
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTimingTracker
 from sqlbuild.diagnostics.models import PartialBuildPhaseTimings
 from sqlbuild.rule_engine._helpers.run import rule_threads
 from sqlbuild.rule_engine.models import RulesRunResult

@@ -17,10 +17,10 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
 use crate::bindings::_helpers::rules::lint_expansion::build_lint_expansion_context;
+use crate::bindings::_helpers::rules::lint_stop::check_stop;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const EXPANSION_MODULE: &str = "sqlbuild._native";
-const STOP_CONTEXT_MODULE: &str = "sqlbuild.lint.classes.stop_context";
 const LINT_MODELS_MODULE: &str = "sqlbuild.lint.models";
 
 fn resolved(path: &Path) -> PathBuf {
@@ -82,12 +82,6 @@ fn collect_lint_project_files<'py>(
         &selected_paths.unwrap_or_else(|| none.clone()),
         &none,
     )
-}
-
-/// `LintStopContext.check()`: abandon a speculative run its owner no longer needs.
-fn check_stop(py: Python<'_>) -> PyResult<()> {
-    imported(py, STOP_CONTEXT_MODULE, "LintStopContext")?.call_method0("check")?;
-    Ok(())
 }
 
 /// The keyword arguments of one lint run.

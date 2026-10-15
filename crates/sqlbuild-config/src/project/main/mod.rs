@@ -4,5 +4,7 @@ pub mod load_project_config;
 pub mod local_sql_analysis_failure;
 pub mod microbatch_guidance;
 pub mod resolve_config_file;
+pub mod setting_help_text;
+pub mod snippet_help_text;
 pub mod sql_analysis_off_guidance;
 pub mod unsupported_target_warehouse;

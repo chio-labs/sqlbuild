@@ -7,9 +7,9 @@ from collections.abc import Callable, Iterator
 from functools import partial
 from pathlib import Path
 
+from sqlbuild._native import snippet_help
 from sqlbuild.compiler.compile.types import PythonResourceRow, SourceInput
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredProvider
-from sqlbuild.errors.setting_help.main.snippet_help import snippet_help
 from sqlbuild.spec.contracts.models import SourceLocation
 
 

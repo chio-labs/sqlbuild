@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild._native import error_code
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.errors.contracts.main.error_code import error_code
 from sqlbuild.executor.scenario._helpers.capture.relation import (
     capture_scenario_snapshot_relation,
     scenario_capture_source_relation_name,

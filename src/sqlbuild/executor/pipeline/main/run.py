@@ -6,10 +6,9 @@ import time
 from dataclasses import replace
 from typing import Any
 
-from sqlbuild._native import CostContext
+from sqlbuild._native import BuildPhaseTimingTracker, CostContext
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTimingTracker
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.build.main._execute import execute_build_plan
 from sqlbuild.executor.build.main._external_source_loads import (

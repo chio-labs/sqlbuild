@@ -10,13 +10,13 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
 use crate::bindings::_helpers::rules::lint_headers::{lint_body_ranges, lint_file_role};
+use crate::bindings::_helpers::rules::lint_stop::check_stop;
 
 const NATIVE: &str = "sqlbuild._native";
 const MODELS: &str = "sqlbuild.lint.models";
 const EXPANSION_MODELS: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_ERRORS: &str = "sqlbuild.compiler.compile.exceptions";
 const LINT_ERRORS: &str = "sqlbuild.lint.exceptions";
-const STOP: &str = "sqlbuild.lint.classes.stop_context";
 
 /// Expand a single body and finish its native SQL preparation.
 #[pyfunction]
@@ -344,7 +344,7 @@ pub(crate) fn expand_file_bodies<'py>(
             &[],
         ),
     )?;
-    imported(py, STOP, "LintStopContext")?.call_method0("check")?;
+    check_stop(py)?;
     let path = args.value("file_path")?;
     let role = lint_file_role(
         &path,
@@ -459,7 +459,7 @@ pub(crate) fn prepare_expanded_files<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let _ = dialect;
     let py = expanded_files.py();
-    imported(py, STOP, "LintStopContext")?.call_method0("check")?;
+    check_stop(py)?;
     let files: Vec<Bound<'py, PyAny>> = expanded_files.try_iter()?.collect::<PyResult<_>>()?;
     let mut pending: Vec<Bound<'py, PyAny>> = Vec::new();
     for file in &files {

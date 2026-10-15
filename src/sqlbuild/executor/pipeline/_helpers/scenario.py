@@ -18,6 +18,9 @@ from typing import Any, ClassVar, Protocol
 from sqlbuild._native import (
     NativeProgressProjector,
     current_native_progress_projector,
+    error_code,
+    error_help,
+    error_message,
     scenario_local_type_overrides_for_dialect,
 )
 from sqlbuild._native import build_cli_scenario_plan as build_scenario_plan
@@ -28,9 +31,6 @@ from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
-from sqlbuild.errors.contracts.main.error_code import error_code
-from sqlbuild.errors.contracts.main.error_help import error_help
-from sqlbuild.errors.contracts.main.error_message import error_message
 from sqlbuild.executor.pipeline._helpers.connections import (
     close_connections,
     open_worker_connections,

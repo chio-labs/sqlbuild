@@ -17,7 +17,7 @@ use crate::bindings::_helpers::build_command::planning::{
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 
-const TIMING_TRACKER_MODULE: &str = "sqlbuild.diagnostics.classes.build_phase_timing_tracker";
+const TIMING_TRACKER_MODULE: &str = "sqlbuild._native";
 const RESOURCE_REPORTING_MODULE: &str = "sqlbuild.diagnostics.main.process_resource_reporting";
 const DEADLINE_MODULE: &str = "sqlbuild.runtime.execution_limits.main.execution_deadline_scope";
 const PROVIDER_SESSION_MODULE: &str = "sqlbuild.provider.main.session";

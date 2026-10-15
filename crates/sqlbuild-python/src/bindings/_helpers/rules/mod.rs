@@ -18,6 +18,7 @@ pub(crate) mod lint_expansion;
 pub(crate) mod lint_headers;
 pub(crate) mod lint_preparation;
 pub(crate) mod lint_sql_bodies;
+pub(crate) mod lint_stop;
 pub(crate) mod lint_text;
 pub(crate) mod registration;
 pub(crate) mod relation_keys;

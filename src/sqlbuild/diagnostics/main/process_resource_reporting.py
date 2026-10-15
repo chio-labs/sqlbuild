@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from sqlbuild.diagnostics.classes.process_resource_tracker import ProcessResourceTracker
+from sqlbuild._native import ProcessResourceTracker
 from sqlbuild.diagnostics.main._log_process_resources import log_process_resources
 from sqlbuild.diagnostics.models import ProcessResourceUsage
 

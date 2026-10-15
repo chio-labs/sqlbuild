@@ -29,6 +29,7 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     analysis::sql_tests::register(module)?;
     sqltext::registration::register(module)?;
     boundary::oracles::register(module)?;
+    boundary::expected_errors::register(module)?;
     discovery::registration::register(module)?;
     scopes::registration::register(module)?;
     model_config::registration::register(module)?;
@@ -52,6 +53,7 @@ fn register_project_stages(module: &Bound<'_, PyModule>) -> PyResult<()> {
     cursor::registration::register(module)?;
     state_rows::registration::register(module)?;
     diagnostics::redaction::register(module)?;
+    diagnostics::trackers::register(module)?;
     Ok(())
 }
 
