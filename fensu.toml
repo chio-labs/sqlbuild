@@ -75,11 +75,6 @@ reason = "Native bindings own run-cost allocation, Snowflake cost collection, th
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
-path = "src/sqlbuild/compiler/contract_adoption/__init__.py"
-reason = "Native bindings own contract comparison, edits and repository writes; this package only declares the adoption models, types and errors the native command builds and raises."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
 path = "src/sqlbuild/compiler/pipeline/__init__.py"
 reason = "Native bindings own the compile-and-plan pipeline; this package declares the pipeline models and keeps the custom materialization loader that imports project code."
 
@@ -145,11 +140,6 @@ reason = "The SQL Server backend intentionally owns behavior through its adapter
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
-path = "src/sqlbuild/compiler/contracts/__init__.py"
-reason = "Model contracts are evaluated natively; the package keeps only the validation result model its callers read."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
 path = "src/sqlbuild/compiler/fingerprints/__init__.py"
 reason = "Fingerprint hashing and storage run natively; the package keeps the stored-row models, column and node-type vocabulary adapters and the executor share."
 
@@ -165,26 +155,6 @@ reason = "SQL references are scanned natively; the package keeps the reference m
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
-path = "src/sqlbuild/compiler/resource_names/__init__.py"
-reason = "Resource identities are validated natively; the package keeps the error class the native check raises."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
-path = "src/sqlbuild/compiler/refactoring/__init__.py"
-reason = "Refactorings run natively; the package keeps the compiled-project input, manual-location model and error classes the native command reads and raises."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
-path = "src/sqlbuild/compiler/sql_test_glue/__init__.py"
-reason = "SQL test assembly and planning run natively; the package keeps the request, result and row shapes the planner and compile stage read."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
-path = "src/sqlbuild/compiler/graph/__init__.py"
-reason = "Graph algorithms and views run natively; the package keeps only the edge and view models their callers read."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
 path = "src/sqlbuild/sql_values/exceptions.py"
 reason = "Typed SQL values are normalized and state literals rendered natively; the namespace package keeps the value models, types and the rendering error adapters raise."
 
@@ -197,11 +167,6 @@ reason = "Execution-result output is rendered natively; the package keeps only t
 rule = "FFR309"
 path = "src/sqlbuild/compiler/lineage/__init__.py"
 reason = "Column lineage is built natively; the package keeps only the lineage models, enums and errors the native graph and its callers share."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
-path = "src/sqlbuild/compiler/analysis_session/__init__.py"
-reason = "Model analysis runs natively; the package keeps only the request and result models, row types and constants the native session and its callers share."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR601"
