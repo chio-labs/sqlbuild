@@ -23,7 +23,6 @@ _ALLOWED_METADATA_SQL_MODULES: frozenset[str] = frozenset(
         "adapters/snowflake/classes/snowflake_adapter.py",
         "adapters/sqlserver/classes/sqlserver_adapter.py",
         "adapters/sqlserver/constants.py",
-        "cost/_helpers/snowflake.py",
         "cost/models.py",
     }
 )
