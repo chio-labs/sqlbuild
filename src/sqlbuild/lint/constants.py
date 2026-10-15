@@ -5,7 +5,6 @@ from __future__ import annotations
 from sqlbuild.lint.types import LintSeverity
 
 LINT_ENGINE_SQLBUILD: str = "sqlbuild"
-LINT_ENGINE_NATIVE: str = "native"
 
 VIOLATION_SEVERITY_FAULT: LintSeverity = LintSeverity.FAULT
 VIOLATION_SEVERITY_WARNING: LintSeverity = LintSeverity.WARNING
@@ -26,6 +25,3 @@ SAFE_RULE_FIX_CODES: frozenset[str] = frozenset(
         "SQBRSQL042",
     }
 )
-
-RELATION_KIND_SOURCE: str = "source"
-RELATION_KIND_SEED: str = "seed"

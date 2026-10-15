@@ -4,8 +4,6 @@ from __future__ import annotations
 
 PROJECT_CONFIG_FILENAME: str = "sqlbuild_project.toml"
 LOCAL_CONFIG_FILENAME: str = "sqlbuild_local.toml"
-LEGACY_PROJECT_CONFIG_FILENAME: str = "sqlbuild_project.yml"
-LEGACY_LOCAL_CONFIG_FILENAME: str = "sqlbuild_local.yml"
 YAML_FILE_SUFFIXES: frozenset[str] = frozenset({".yml", ".yaml"})
 
 PYTHON_INIT_MODULE_STEM: str = "__init__"
@@ -102,9 +100,6 @@ SQL_MODEL_HEADER_KEYS: frozenset[str] = frozenset(
 )
 REMOVED_SQL_MODEL_HEADER_KEYS: frozenset[str] = frozenset({"run_despite_unchanged"})
 
-DLT_SOURCE_TYPE_SQL_DATABASE: str = "sql_database"
-DLT_SOURCE_TYPE_REST_API: str = "rest_api"
-DLT_SOURCE_TYPE_FILESYSTEM: str = "filesystem"
 
 SQL_ANALYSIS_CONFIG_KEY: str = "sql_analysis"
 SQL_TEST_HEADER_KEYS: frozenset[str] = frozenset(
@@ -113,27 +108,12 @@ SQL_TEST_HEADER_KEYS: frozenset[str] = frozenset(
 SQL_SCENARIO_HEADER_KEYS: frozenset[str] = frozenset({"description", "tags"})
 SQL_ANALYSIS_SETTING_KEY: str = "sql_analysis"
 SETTINGS_SECTION: str = "settings"
-QUERY_CHANGE_TRACKING_SETTING_KEY: str = "query_change_tracking"
-REFERENCES_SECTION: str = "references"
 TABLE_PROMOTION_MODE_SETTING_KEY: str = "table_promotion_mode"
 STAGED_PROMOTION_MODE: str = "staged"
-DBT_SECTION: str = "dbt"
-DEFAULTS_SECTION: str = "defaults"
-DBT_PROJECT_DIR_KEY: str = "project_dir"
 
-MODELS_DIRECTORY_NAME: str = "models"
 SQL_TESTS_OWNERSHIP_ROOT: str = "tests/unit"
 SQL_SCENARIOS_OWNERSHIP_ROOT: str = "tests/scenarios"
 
-CANONICAL_AUTHORED_ROOTS: tuple[tuple[str, ...], ...] = (
-    ("models",),
-    ("tests", "unit"),
-    ("tests", "scenarios"),
-    ("functions", "sql"),
-    ("sources",),
-)
-
-NOT_NULL_AUDIT_NAME: str = "not_null"
 
 SQL_HOOK_OUTPUT_FIELDS: tuple[str, ...] = (
     "statement",
@@ -143,4 +123,3 @@ SQL_HOOK_OUTPUT_FIELDS: tuple[str, ...] = (
     "kwargs",
     "description",
 )
-SQL_HOOK_IDENTITY_FIELDS: tuple[str, ...] = ("statement", "name", "definition_sql", "kwargs")

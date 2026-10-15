@@ -659,5 +659,4 @@ class SqlTestMode(StrEnum):
     TABLE_FN = "table_fn"
 
 
-type SqlReferenceScanFailure = tuple[str, int]
 type PythonResourceRow = tuple[str, str, str | None, Callable[[], SourceLocation], str]

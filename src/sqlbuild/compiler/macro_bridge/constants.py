@@ -21,7 +21,6 @@ COMPILES_STARTED: itertools.count[int] = itertools.count()
 STORE_MODULE_PATHS: set[str] = set()
 MACRO_CALL_STORE_FILE_NAME: str = "macro-calls.bin"
 MACRO_CALL_STORE_ENVIRONMENT_VERSION: str = "macro-call-store-v2"
-VALUE_RENDERER_FIELD: str = "_value_renderer"
 PROJECT_ROOT_SEARCH_PATH_STAMP: int = -2
 MISSING_SEARCH_PATH_STAMP: int = -1
 INSTALLED_PACKAGE_DIRECTORY_NAMES: frozenset[str] = frozenset({"site-packages", "dist-packages"})

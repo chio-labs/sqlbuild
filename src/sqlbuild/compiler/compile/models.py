@@ -193,14 +193,6 @@ class DynamicColumnContractProof:
 
 
 @dataclass(frozen=True)
-class NonNullFilterContext:
-    """Resolved relations and columns constrained by non-null filters."""
-
-    relations: tuple[tuple[str, dict[str, InferredNullability]], ...]
-    columns: frozenset[tuple[str, str]]
-
-
-@dataclass(frozen=True)
 class CompileModelConfig:
     """Pre-semantic effective config layers attached to a model input."""
 
@@ -372,15 +364,6 @@ class MacroExpansionResult:
 
 
 @dataclass(frozen=True)
-class DeclarationExpansionResult:
-    """Expanded SQL and resolved declaration usage facts from one authored string."""
-
-    sql: str
-    spans: tuple[ExpansionSpan, ...] = field(default_factory=tuple)
-    usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
 class VisibleModelDeclarations:
     """One model's visible declarations and macros, as the native model loop resolves them."""
 
@@ -466,16 +449,6 @@ class ModelInputBuildContext:
             collection_rendering=self.collection_rendering,
             resolver=self.declaration_resolver,
         )
-
-
-@dataclass(frozen=True)
-class ModelInputScopeBuild:
-    """Model inputs paired with public declaration artifacts and updated context."""
-
-    inputs: tuple[ModelInput, ...]
-    declarations: DeclarationResolutionContext
-    context: ModelInputBuildContext
-    native_project: _native.NativeCompiledProject = field(repr=False, compare=False)
 
 
 @dataclass(frozen=True)
@@ -814,17 +787,6 @@ class ModelSqlAnalysis:
     cleaned_sql: str | None = None
     validated_schema: dict[str, dict[str, str]] | None = None
     dynamic_column_contract: DynamicColumnContractProof | None = None
-
-
-@dataclass(frozen=True)
-class ModelSqlAnalysisRequest:
-    """Inputs to one model's SQL analysis."""
-
-    model_input: ModelInput
-    query_sql: str
-    placeholders: dict[str, str] | None
-    cache_key: str | None
-    binding_schema: dict[str, dict[str, str]] | None
 
 
 @dataclass(frozen=True)
@@ -1386,16 +1348,6 @@ class ExpansionSpan:
 
 
 @dataclass(frozen=True)
-class SqlInterpolation:
-    """One SQL text after `@@` interpolation, or the error that stopped it, with its reads."""
-
-    sql: str
-    spans: tuple[ExpansionSpan, ...]
-    reads: tuple[tuple[str, str], ...]
-    error: str | None
-
-
-@dataclass(frozen=True)
 class CompiledSqlExpansion:
     """Process-local authored-to-expanded SQL evidence shared with compiler checks."""
 
@@ -1481,15 +1433,6 @@ class CompiledSqlTest:
 
 
 @dataclass(frozen=True)
-class SharedBindingQuery:
-    """Relation-stubbed binding query shared by models with identical input shapes."""
-
-    sql: str
-    stubs: dict[str, str]
-    key: tuple[object, ...]
-
-
-@dataclass(frozen=True)
 class NativeModelConfigSession:
     """The native config builder, validator, and inherited storage policies for one compile."""
 
@@ -1520,12 +1463,3 @@ class ModelValidationRequest:
     references: tuple[CompileSqlReference, ...]
     declared_columns: tuple[SchemaColumn, ...] | None
     query_sql: str
-
-
-@dataclass(frozen=True)
-class ModelValidatorContext:
-    """The project facts the model validators read, and the native config session."""
-
-    settings: SettingsConfig
-    external_sql_reference_resolver: ExternalSqlReferenceResolver | None
-    native_config: NativeModelConfigSession

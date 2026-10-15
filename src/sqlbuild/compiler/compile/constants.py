@@ -6,13 +6,7 @@ from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.python_nodes.types import SqlResourceRefKind
 
-PRESERVE_TARGET_VALUE: str = "preserve"
-
-ATTACHED_AUDIT_READS_OWN_DEPENDANT_CODE: str = "P005"
-HOOK_READS_OWN_DEPENDANT_CODE: str = "P007"
-HARD_CODED_PROJECT_RELATION_CODE: str = "P008"
 UNNEEDED_SQL_ANALYSIS_OPT_OUT_CODE: str = "P009"
-REFERENCE_CALL_SYNTAX_CODE: str = "P012"
 SQL_TEST_HELPER_REFERENCE_CODE: str = "P013"
 DESCRIPTION_REQUIRED_INPUT_KINDS: dict[str, str] = {
     "model_files": "model",
@@ -47,30 +41,11 @@ DESCRIPTION_EXEMPT_INPUTS: dict[str, str] = {
     "command_output_sinks": "runtime command outputs, not graph resources",
     "native_session": "native parse state kept for later stages, not a project input",
 }
-HOOK_DIRECTORY_NAME: str = "hooks"
-MODEL_DIRECTORY_NAME: str = "models"
-NOT_NULL_AUDIT_NAME: str = "not_null"
-MODEL_AUDIT_OVERRIDE_KEYS: frozenset[str] = frozenset({"by_type", "by_column"})
-CURSOR_INPUTS_CONFIG_KEY: str = "cursor_inputs"
 MIGRATE_FROM_CONFIG_KEY: str = "migrate_from"
-MIGRATE_FORCE_CONFIG_KEY: str = "migrate_force"
-COLUMN_MIGRATE_FROM_KEY: str = "migrate_from"
-MAX_MICROBATCHES_CONFIG_KEY: str = "max_microbatches"
-
-SQL_OPEN_PAREN_TOKEN: str = "("
-SQL_ARGUMENT_SEPARATOR_TOKEN: str = ","
-SQL_STATEMENT_TERMINATOR_TOKEN: str = ";"
-SQL_WITH_KEYWORD: str = "WITH"
-SQL_CEREMONIAL_SELECT_VALUE: str = "1"
-OMITTED_CEREMONIAL_SELECT_SQL: str = f"\nSELECT {SQL_CEREMONIAL_SELECT_VALUE}"
 
 
-MACRO_TOKEN: str = "@"
-DECLARATION_REFERENCE_NAMES: frozenset[str] = frozenset({"enum", "const"})
 MACRO_CONTEXT_PARAMETER_NAME: str = "ctx"
-SQL_INTERPOLATION_TOKEN: str = "@@"
 
-TEMPLATE_OPEN_TOKEN: str = "${"
 
 EXPECTED_TEST_CTE_PREFIX: str = "__expected__"
 ASSERT_TEST_CTE_PREFIX: str = "__assert__"
@@ -79,13 +54,6 @@ SOURCE_TEST_CTE_PREFIX: str = SqlReferenceKind.SOURCE.fixture_cte_prefix
 SEED_TEST_CTE_PREFIX: str = SqlReferenceKind.SEED.fixture_cte_prefix
 DBT_REF_TEST_CTE_PREFIX: str = SqlReferenceKind.DBT_REF.fixture_cte_prefix
 TABLE_FN_TEST_CTE_PREFIX: str = SqlReferenceKind.TABLE_FUNCTION.fixture_cte_prefix
-MACRO_TEST_CTE_PREFIX: str = "__macro__"
-MACRO_ACTUAL_TEST_CTE_NAME: str = "__macro_actual__"
-MACRO_EXPECTED_TEST_CTE_NAME: str = "__macro_expected__"
-UDF_ACTUAL_TEST_CTE_NAME: str = "__udf_actual__"
-UDF_EXPECTED_TEST_CTE_NAME: str = "__udf_expected__"
-TABLE_FN_ACTUAL_TEST_CTE_NAME: str = "__table_fn_actual__"
-TABLE_FN_EXPECTED_TEST_CTE_NAME: str = "__table_fn_expected__"
 DEFAULT_SQL_TEST_MODE: SqlTestMode = SqlTestMode.MODEL
 COMPILE_CACHE_DISABLE_ENV_VAR: str = "SQLBUILD_DISABLE_COMPILE_CACHE"
 COMPILE_CACHE_DISABLE_VALUE: str = "1"

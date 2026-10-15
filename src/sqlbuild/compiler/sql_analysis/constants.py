@@ -17,4 +17,3 @@ POLYGLOT_MAX_FUNCTION_CALL_DEPTH_OPTION: str = "maxFunctionCallDepth"
 POLYGLOT_MAX_FUNCTION_CALL_DEPTH: int = 512
 
 TYPE_CHECKED_DIALECTS: frozenset[str] = frozenset({"duckdb", "snowflake", "postgresql", "bigquery"})
-NATIVE_FAILURE_PREFIX: str = "NativeCompilerError: "
