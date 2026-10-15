@@ -13,6 +13,7 @@ from scripts.planner_differential.models import ProjectDifference
 _STEP_KEY: str = "step"
 _STEPS_KEY: str = "steps"
 _MISSING: str = "<missing>"
+_TYPE_MARKERS: frozenset[str] = frozenset({"__type__", "__enum__"})
 
 
 def write_document(*, directory: Path, slug: str, document: dict[str, object]) -> Path:
@@ -45,6 +46,8 @@ def compare_documents(
         left: dict[str, object] = expected_steps[index] if index < len(expected_steps) else {}
         right: dict[str, object] = actual_steps[index] if index < len(actual_steps) else {}
         step: str = str(right.get(_STEP_KEY, left.get(_STEP_KEY, index)))
+        left = _without_type_modules(left)
+        right = _without_type_modules(right)
         for artifact in (*left, *(key for key in right if key not in left)):
             if left.get(artifact, _MISSING) == right.get(artifact, _MISSING):
                 continue
@@ -85,6 +88,26 @@ def _steps(document: dict[str, object]) -> list[dict[str, object]]:
     if not isinstance(steps, list):
         return []
     return [mapping for step in steps if (mapping := as_json_object(step)) is not None]
+
+
+def _without_type_modules(value: dict[str, object]) -> dict[str, object]:
+    """Compare captured class and enum names without their module, which moves when a type is
+    hosted natively."""
+
+    return {key: _type_names_only(key=key, value=item) for key, item in value.items()}
+
+
+def _type_names_only(*, key: str, value: object) -> object:
+    if key in _TYPE_MARKERS and isinstance(value, str):
+        return value.rpartition(":")[2]
+    if isinstance(value, dict):
+        return {
+            str(inner_key): _type_names_only(key=str(inner_key), value=item)
+            for inner_key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_type_names_only(key="", value=item) for item in value]
+    return value
 
 
 def _rendered(value: object) -> str:
