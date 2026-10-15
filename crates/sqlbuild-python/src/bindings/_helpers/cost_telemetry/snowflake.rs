@@ -474,7 +474,7 @@ fn collect<'py>(
     history.deadline = monotonic(py)? + DEADLINE_SECONDS;
     let run_id: String = collection.run_id.extract()?;
     let ledger: Vec<Bound<'py, PyAny>> = read_ledger(ledger_path, &collection.run_id)?;
-    let failure: Option<String> = consume_ledger_failure(&run_id);
+    let failure: Option<String> = consume_ledger_failure(py, &run_id)?;
     let by_query_id: Bound<'py, PyDict> = PyDict::new(py);
     for entry in &ledger {
         let id: Bound<'py, PyAny> = entry.getattr("query_id")?;

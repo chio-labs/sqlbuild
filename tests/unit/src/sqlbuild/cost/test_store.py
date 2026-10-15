@@ -6,8 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import list_cost_runs, read_cost_run, resolve_cost_run, write_cost_run
-from sqlbuild.cost.exceptions import CostArtifactError
+from sqlbuild._native import (
+    CostArtifactError,
+    list_cost_runs,
+    read_cost_run,
+    resolve_cost_run,
+    write_cost_run,
+)
 from sqlbuild.cost.models import CostRunRecord
 from tests.unit.src.sqlbuild.cost._test_types import (
     CostStoreTestCase,

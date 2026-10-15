@@ -23,7 +23,7 @@ use crate::bindings::_helpers::state_rows::timestamps::{
     date_time_typed, in_utc, offset_aware, presumed_utc,
 };
 
-const EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.source_freshness.exceptions";
+const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const TYPES_MODULE: &str = "sqlbuild.compiler.source_freshness.types";
 const TIMESTAMP_KIND: &str = "timestamp";
 const INTEGER_KIND: &str = "integer";

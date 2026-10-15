@@ -1,3 +1,4 @@
+pub(crate) mod exception_types;
 pub(crate) mod freshness_command;
 pub(crate) mod freshness_observe;
 pub(crate) mod observation;

@@ -8,7 +8,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
 use crate::bindings::_helpers::state_rows::timestamps::{date_time_typed, in_utc, offset_aware};
 
-pub(crate) const EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.source_freshness.exceptions";
+pub(crate) const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 pub(crate) const FRESHNESS_MODELS: &str = "sqlbuild.compiler.source_freshness.models";
 pub(crate) const FRESHNESS_TYPES: &str = "sqlbuild.compiler.source_freshness.types";
 pub(crate) const FRESHNESS_CONSTANTS: &str = "sqlbuild.compiler.source_freshness.constants";

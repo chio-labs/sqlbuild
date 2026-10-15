@@ -9,7 +9,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::imported;
 
 const COST_MODELS: &str = "sqlbuild.cost.models";
 const COST_TYPES: &str = "sqlbuild.cost.types";
-const COST_EXCEPTIONS: &str = "sqlbuild.cost.exceptions";
+const COST_EXCEPTIONS: &str = "sqlbuild._native";
 
 /// The `CostArtifactError` Python raised for the same artifact.
 pub(crate) fn artifact_error(py: Python<'_>, error: &CostArtifactError) -> PyErr {

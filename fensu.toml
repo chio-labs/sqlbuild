@@ -66,12 +66,12 @@ reason = "Native bindings own planning, plan entries, plan output and command pl
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
 path = "src/sqlbuild/compiler/source_freshness/__init__.py"
-reason = "Native bindings own source freshness observation, planning, propagation and state reads and writes; this package only declares the models, types, constants and errors they build and raise."
+reason = "Native bindings own source freshness observation, planning, propagation and state reads and writes; this package only declares the models, types and constants they build."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
 path = "src/sqlbuild/cost/constants.py"
-reason = "Native bindings own run-cost allocation, Snowflake cost collection, the statement ledger and the cost context; this package only declares the cost models, types, constants, errors and the telemetry health tracker they use."
+reason = "Native bindings own run-cost allocation, Snowflake cost collection, the statement ledger and the cost context; this package only declares the cost models, types and constants they use."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
