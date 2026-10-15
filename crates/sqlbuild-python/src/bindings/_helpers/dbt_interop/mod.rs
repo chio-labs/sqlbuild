@@ -12,6 +12,7 @@ pub(crate) mod plan;
 pub(crate) mod plan_output;
 pub(crate) mod profile;
 pub(crate) mod profile_connection;
+pub(crate) mod profile_load;
 pub(crate) mod reference_resolver;
 pub(crate) mod registration;
 pub(crate) mod runner;

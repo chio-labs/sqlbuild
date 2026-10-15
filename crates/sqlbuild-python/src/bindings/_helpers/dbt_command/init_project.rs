@@ -13,13 +13,16 @@ use sqlbuild_core::dbt_process::models::DbtProcessOutput;
 use sqlbuild_core::text::main::python_strip::python_strip;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::dbt_interop::profile_load::{
+    load_dbt_project_metadata, load_selected_dbt_profile_output,
+};
 use crate::bindings::_helpers::dbt_interop::runner::launch_os_error;
 use crate::bindings::types::CompilerDetach;
+use sqlbuild_config::dbt_profile::models::DbtProjectMetadata;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const DBT_MODELS: &str = "sqlbuild.integrations.dbt.models";
 const DBT_EXCEPTIONS: &str = "sqlbuild.integrations.dbt.exceptions";
-const PROFILE_LOAD_MODULE: &str = "sqlbuild.integrations.dbt._helpers.profile.load";
 const PROFILE_RENDER_MODULE: &str = "sqlbuild.integrations.dbt._helpers.profile.render";
 const PROJECT_FILE: &str = "sqlbuild_project.toml";
 const DEFAULT_OUTPUT_DIR: &str = "sqlbuild_project";
@@ -72,10 +75,7 @@ fn build_dbt_init_project<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'p
     }
     let callbacks: Bound<'py, PyAny> = request.getattr("progress_callbacks")?;
     progress(&callbacks, "start", "Inspecting dbt project and profile...")?;
-    let metadata: Bound<'py, PyAny> = call_with(
-        &imported(py, PROFILE_LOAD_MODULE, "load_dbt_project_metadata")?,
-        &[("project_dir", paths.dbt_project_dir.clone())],
-    )?;
+    let metadata: DbtProjectMetadata = load_dbt_project_metadata(&paths.dbt_project_dir)?;
     let profile_name: Bound<'py, PyAny> = profile_name(request, &metadata)?;
     let selected: Bound<'py, PyAny> = selected_output(&paths, request, &profile_name)?;
     progress(&callbacks, "complete", "Inspected dbt project and profile.")?;
@@ -98,12 +98,9 @@ fn build_dbt_init_project<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'p
     )?;
     let target_path: Bound<'py, PyAny> = resolved(
         &paths.dbt_project_dir,
-        &path_of(py, &metadata.getattr("target_path")?)?,
+        &path_of(py, &PyString::new(py, &metadata.target_path).into_any())?,
     )?;
-    let project_name: String = metadata
-        .getattr("project_name")?
-        .extract::<String>()?
-        .replace('-', "_");
+    let project_name: String = metadata.project_name.replace('-', "_");
     let target_name: Bound<'py, PyAny> = selected.getattr("target_name")?;
     let toml: Bound<'py, PyAny> = call_with(
         &imported(py, NATIVE_MODULE, "build_dbt_init_project_toml")?,
@@ -170,14 +167,7 @@ fn build_dbt_init_project<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'p
 #[pyo3(signature = (*, request))]
 fn validate_dbt_init_project(request: &Bound<'_, PyAny>) -> Result<(), PyErr> {
     let paths: InitPaths<'_> = init_paths(request)?;
-    let metadata: Bound<'_, PyAny> = call_with(
-        &imported(
-            request.py(),
-            PROFILE_LOAD_MODULE,
-            "load_dbt_project_metadata",
-        )?,
-        &[("project_dir", paths.dbt_project_dir.clone())],
-    )?;
+    let metadata: DbtProjectMetadata = load_dbt_project_metadata(&paths.dbt_project_dir)?;
     let profile_name: Bound<'_, PyAny> = profile_name(request, &metadata)?;
     selected_output(&paths, request, &profile_name)?;
     Ok(())
@@ -197,13 +187,13 @@ fn init_paths<'py>(request: &Bound<'py, PyAny>) -> PyResult<InitPaths<'py>> {
 /// `request.profile_name or metadata.profile_name`.
 fn profile_name<'py>(
     request: &Bound<'py, PyAny>,
-    metadata: &Bound<'py, PyAny>,
+    metadata: &DbtProjectMetadata,
 ) -> PyResult<Bound<'py, PyAny>> {
     let requested: Bound<'py, PyAny> = request.getattr("profile_name")?;
     if requested.is_truthy()? {
         return Ok(requested);
     }
-    metadata.getattr("profile_name")
+    Ok(PyString::new(request.py(), &metadata.profile_name).into_any())
 }
 
 fn selected_output<'py>(
@@ -211,20 +201,11 @@ fn selected_output<'py>(
     request: &Bound<'py, PyAny>,
     profile_name: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = request.py();
-    let profile: Bound<'py, PyAny> = call_with(
-        &imported(py, PROFILE_LOAD_MODULE, "load_raw_dbt_profile")?,
-        &[
-            ("profiles_dir", paths.profiles_dir.clone()),
-            ("profile_name", profile_name.clone()),
-        ],
-    )?;
-    call_with(
-        &imported(py, PROFILE_LOAD_MODULE, "select_dbt_profile_output")?,
-        &[
-            ("profile", profile),
-            ("target_name", request.getattr("target_name")?),
-        ],
+    let target_name: Option<String> = request.getattr("target_name")?.extract()?;
+    load_selected_dbt_profile_output(
+        &paths.profiles_dir,
+        &profile_name.extract::<String>()?,
+        target_name.as_deref(),
     )
 }
 

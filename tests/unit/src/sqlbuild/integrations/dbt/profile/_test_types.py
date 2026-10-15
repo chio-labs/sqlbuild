@@ -63,3 +63,13 @@ class DbtProfileConnectionErrorTestCase:
     raw_config: dict[str, object]
     adapter_name: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class DbtYamlFilesTestCase:
+    description: str
+    relative_path: str
+    contents: str
+    raw_config: dict[str, object]
+    expected_connection: dict[str, object] | None = None
+    expected_error_fragment: str | None = None

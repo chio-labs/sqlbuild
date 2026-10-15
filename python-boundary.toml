@@ -2,7 +2,7 @@
 # migration work that moves to Rust. `remaining_lines` must equal the current count of that work:
 # a PR that moves code lowers it, and adding movable Python fails the check.
 # Native failures must surface as errors; `handled_native_errors` lists the reviewed exceptions.
-remaining_lines = 9564
+remaining_lines = 9546
 
 [[stays]]
 path = "executor"
@@ -272,7 +272,7 @@ note = "Loader runtime that runs inside the executor load phase."
 [[stays]]
 path = "integrations/dbt/_helpers/profile/load.py"
 reason = "user-code"
-note = "Loads the user's dbt_project.yml and profiles.yml with PyYAML."
+note = "Rule 4: PyYAML glue only; parses dbt_project.yml and profiles.yml with yaml.safe_load and reports YAMLError as DbtProfileError. Existence, mapping, field and target validation and output selection are native (dbt_interop/profile_load.rs)."
 
 [[stays]]
 path = "integrations/dbt/_helpers/profile/render.py"

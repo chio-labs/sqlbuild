@@ -28,3 +28,9 @@ def dbt_workspace_project_config(*, adapter_name: str) -> ProjectConfig:
         adapter=adapter_name,
         dbt=DbtConfig(project_dir="dbt_project", profiles_dir="profiles"),
     )
+
+
+def replace_dbt_workspace_file(*, root: Path, relative_path: str, contents: str) -> None:
+    """Replace one of the workspace's dbt YAML files."""
+
+    (root / relative_path).write_text(contents, encoding="utf-8")

@@ -48,3 +48,6 @@ pub(crate) const DATABRICKS_OAUTH_KEYS: [&str; 6] = [
     "oauth_scopes",
 ];
 pub(crate) const BIGQUERY_METHOD_ERROR_SUFFIX: &str = "is not supported by SQLBuild dbt-profile normalization yet. Supported methods: oauth, service-account";
+
+/// The dbt target path used when `dbt_project.yml` sets none.
+pub(crate) const DEFAULT_DBT_TARGET_PATH: &str = "target";
