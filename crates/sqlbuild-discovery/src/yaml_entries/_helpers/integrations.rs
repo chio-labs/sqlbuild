@@ -8,12 +8,13 @@ use crate::yaml_entries::_helpers::fields::{
     Site, get, optional_mapping, optional_text, reject_unknown_keys, required_text,
     stripped_strings,
 };
+use crate::yaml_entries::constants::DLT_LOADER_KIND;
+use crate::yaml_entries::main::integration_loader_name::integration_loader_name;
 use crate::yaml_entries::models::{
     ParsedDltResource, ParsedDltSource, ParsedIngestrConfig, ParsedIntegrationLoader,
     ParsedSourceEntry,
 };
 
-const DLT_LOADER_KIND: &str = "dlt";
 const INGESTR_KEYS: [&str; 8] = [
     "columns",
     "extra_args",
@@ -55,15 +56,6 @@ const RAW_CONFIG_EXCLUDED: [&str; 8] = [
     "schema",
     "description",
 ];
-
-/// Python's `integration_loader_name`.
-pub(crate) fn integration_loader_name(kind: &str, source_name: &str) -> String {
-    if kind == DLT_LOADER_KIND {
-        source_name.to_owned()
-    } else {
-        format!("{kind}__{source_name}")
-    }
-}
 
 /// `parse_source_integration_loader`: the source's `ingestr` block, if any.
 pub(crate) fn source_integration_loader<N: AuthoredNode>(

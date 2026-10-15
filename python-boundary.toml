@@ -402,12 +402,12 @@ note = "Documented orchestrator integration."
 [[stays]]
 path = "integrations/dlt"
 reason = "user-code"
-note = "Loader runtime that runs inside user loaders."
+note = "Loader runtime that runs inside user loaders; synthetic loader record building and naming are native."
 
 [[stays]]
 path = "integrations/ingestr"
 reason = "user-code"
-note = "Loader runtime that runs inside the executor load phase."
+note = "Loader runtime that runs inside the executor load phase; synthetic loader record building and naming are native."
 
 [[stays]]
 path = "integrations/dbt/_helpers/profile/load.py"

@@ -1,53 +1,23 @@
-"""Synthetic loader functions for declarative ingestr sources."""
+"""Loader functions that run declarative ingestr sources."""
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable
 
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredLoaderFunction,
-    DiscoveredSourceFile,
-)
-from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.executor.load.models import LoaderContext
 from sqlbuild.integrations.ingestr._helpers.command import build_ingestr_command
 from sqlbuild.integrations.ingestr._helpers.output import record_ingestr_output
 from sqlbuild.integrations.ingestr._helpers.runner import run_ingestr_command
-from sqlbuild.integrations.ingestr.constants import INGESTR_INTEGRATION_KIND
 from sqlbuild.integrations.ingestr.exceptions import IngestrIntegrationError
 from sqlbuild.integrations.ingestr.models import IngestrCommandResult
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
-def build_ingestr_loader_functions(
-    source_files: tuple[DiscoveredSourceFile, ...],
-) -> tuple[DiscoveredLoaderFunction, ...]:
-    """Build synthetic loader functions for declarative ingestr sources."""
+def ingestr_loader_function(
+    *, source_entry: SourceEntry, name: str
+) -> Callable[[LoaderContext], None]:
+    """The loader function that runs one declarative ingestr source under `name`."""
 
-    loaders: list[DiscoveredLoaderFunction] = []
-    source_file: DiscoveredSourceFile
-    for source_file in source_files:
-        source_entry: SourceEntry
-        for source_entry in source_file.source_entries:
-            if (
-                source_entry.integration_loader is None
-                or source_entry.integration_loader.kind != INGESTR_INTEGRATION_KIND
-            ):
-                continue
-            loader_name: str = f"ingestr__{source_entry.name}"
-            loaders.append(
-                DiscoveredLoaderFunction(
-                    file_path=source_file.file_path,
-                    relative_path=source_file.relative_path,
-                    name=loader_name,
-                    function=_build_ingestr_loader(source_entry=source_entry),
-                    connection_mode=LoaderConnectionMode.EXTERNAL,
-                )
-            )
-    return tuple(loaders)
-
-
-def _build_ingestr_loader(*, source_entry: SourceEntry) -> Any:
     def run(ctx: LoaderContext) -> None:
         command: tuple[str, ...] = build_ingestr_command(
             source_entry=source_entry,
@@ -70,7 +40,7 @@ def _build_ingestr_loader(*, source_entry: SourceEntry) -> Any:
         _ = record_ingestr_output(ctx=ctx, result=result)
         return None
 
-    run.__name__ = f"ingestr__{source_entry.name}"
+    run.__name__ = name
     return run
 
 

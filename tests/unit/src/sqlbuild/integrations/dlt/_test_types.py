@@ -8,9 +8,9 @@ from dataclasses import dataclass, field
 @dataclass(frozen=True)
 class DltLoaderDiscoveryTestCase:
     description: str
+    repo_files: dict[str, str]
     expected_loader_names: tuple[str, ...]
-    expected_relative_path: str
-    expected_function_name: str
+    expected_relative_paths: tuple[str, ...]
 
 
 @dataclass(frozen=True)
