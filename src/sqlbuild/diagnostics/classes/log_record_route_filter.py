@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import logging
 
+from sqlbuild._native import LOGGER_PREFIX, SQL_TEXT_FIELD
 from sqlbuild.diagnostics.classes.diagnostic_record_redactor import DiagnosticRecordRedactor
 from sqlbuild.diagnostics.constants import (
-    LOGGER_PREFIX,
     LOGGER_ROOT_NAME,
     REDACTED_SQL_LOG_MESSAGE,
     SQL_DIGEST_FIELD,
-    SQL_TEXT_FIELD,
 )
 
 

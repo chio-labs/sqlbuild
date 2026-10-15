@@ -7,6 +7,9 @@ use pyo3::prelude::{
 use pyo3::types::{PyDict, PyString, PyStringMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::constants::SOURCE_FRESHNESS_TABLE_NAME;
+use sqlbuild_state::freshness::constants::{
+    SOURCE_FRESHNESS_COLUMN_TYPES, STRING_STATE_VALUE_TYPE, TEXT_TIMESTAMP_STATE_VALUE_TYPE,
+};
 use sqlbuild_state::state_tables::main::create_table_sql::create_table_sql;
 use sqlbuild_state::state_tables::main::values_insert_sql::values_insert_sql;
 use sqlbuild_state::state_tables::models::TableColumn;
@@ -14,15 +17,15 @@ use sqlbuild_state::state_tables::models::TableColumn;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::contracts::state_literals::render_state_sql_literal;
-use crate::bindings::_helpers::freshness::support::{ADAPTER_EXCEPTIONS, FRESHNESS_CONSTANTS};
+use crate::bindings::_helpers::freshness::support::ADAPTER_EXCEPTIONS;
 
 const ADAPTER_TYPES: &str = "sqlbuild.adapter.contract.types";
 const MISSING_SCHEMA_MESSAGE: &str = "source freshness table requires a target schema";
 /// Each state value type a state table may declare and the framework type that renders it.
 const DECLARED_TYPES: [(&str, &str); 3] = [
-    ("string", "STRING"),
+    (STRING_STATE_VALUE_TYPE, "STRING"),
     ("integer", "INTEGER"),
-    ("text_timestamp", "TIMESTAMP"),
+    (TEXT_TIMESTAMP_STATE_VALUE_TYPE, "TIMESTAMP"),
 ];
 
 /// Create-if-missing DDL whose column types the adapter renders.
@@ -114,26 +117,21 @@ fn render_insert_source_freshness_records_sql<'py>(
     if table.is_none() {
         return Err(adapter_user_error(py, MISSING_SCHEMA_MESSAGE));
     }
-    let constants: Bound<'py, PyModule> = py.import(FRESHNESS_CONSTANTS)?;
-    let column_types: Bound<'py, PyAny> = constants.getattr("SOURCE_FRESHNESS_COLUMN_TYPES")?;
-    let columns: Vec<String> = constants.getattr("SOURCE_FRESHNESS_COLUMNS")?.extract()?;
-    let declared: Vec<String> = columns
-        .iter()
-        .map(|column| column_types.get_item(column)?.str()?.extract())
-        .collect::<PyResult<_>>()?;
     let mut rows: Vec<Vec<String>> = Vec::new();
     for record in records.try_iter()? {
         let record: Bound<'py, PyAny> = record?;
-        let row: Vec<String> = columns
+        let row: Vec<String> = SOURCE_FRESHNESS_COLUMN_TYPES
             .iter()
-            .zip(&declared)
             .map(|(column, declared)| {
-                render_state_sql_literal(py, &record.getattr(column.as_str())?, declared)
+                render_state_sql_literal(py, &record.getattr(*column)?, declared)
             })
             .collect::<PyResult<_>>()?;
         rows.push(row);
     }
-    let names: Vec<&str> = columns.iter().map(String::as_str).collect();
+    let names: Vec<&str> = SOURCE_FRESHNESS_COLUMN_TYPES
+        .iter()
+        .map(|(column, _)| *column)
+        .collect();
     Ok(values_insert_sql(
         &table.extract::<String>()?,
         &names,

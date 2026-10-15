@@ -10,11 +10,11 @@ use pyo3::{pyfunction, wrap_pyfunction};
 const EXCEPTIONS_MODULE: &str = "sqlbuild.sql_values.exceptions";
 const DATETIME_MODULE: &str = "datetime";
 const JSON_MODULE: &str = "json";
-const STRING_TYPE: &str = "string";
+use sqlbuild_state::freshness::constants::STRING_STATE_VALUE_TYPE as STRING_TYPE;
 const INTEGER_TYPE: &str = "integer";
 const BOOLEAN_TYPE: &str = "boolean";
 const TIMESTAMP_TYPE: &str = "timestamp";
-const TEXT_TIMESTAMP_TYPE: &str = "text_timestamp";
+use sqlbuild_state::freshness::constants::TEXT_TIMESTAMP_STATE_VALUE_TYPE as TEXT_TIMESTAMP_TYPE;
 const DATE_TYPE: &str = "date";
 const JSON_TYPE: &str = "json";
 

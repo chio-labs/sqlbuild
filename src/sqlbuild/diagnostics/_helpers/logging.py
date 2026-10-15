@@ -8,7 +8,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
 
-from sqlbuild.diagnostics.constants import SQL_TEXT_FIELD
+from sqlbuild._native import SQL_TEXT_FIELD
 from sqlbuild.runtime.observability.main.current_execution_identity import (
     current_execution_identity,
 )

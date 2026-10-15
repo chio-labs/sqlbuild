@@ -9,16 +9,15 @@ from functools import cache
 from importlib.metadata import PackageNotFoundError, version
 from typing import cast
 
+from sqlbuild._native import LOGGER_PREFIX, SQL_TEXT_FIELD
 from sqlbuild.diagnostics.classes.diagnostic_record_redactor import DiagnosticRecordRedactor
 from sqlbuild.diagnostics.constants import (
-    LOGGER_PREFIX,
     LOGGER_ROOT_NAME,
     REDACTED_SQL_LOG_MESSAGE,
     SQL_DIGEST_FIELD,
     SQL_PRIVATE_RECORD_FIELD,
     SQL_PRIVATE_RECORD_MARKER,
 )
-from sqlbuild.runtime.compute_logs.constants import SQL_LOG_RECORD_FIELD
 from sqlbuild.runtime.compute_logs.types import ComputeLogStorage
 from sqlbuild.runtime.observability.constants import CURRENT_DIAGNOSTIC_LOG_SCHEMA_VERSION
 from sqlbuild.runtime.observability.models import DiagnosticLog
@@ -65,17 +64,17 @@ class ComputeDiagnosticLogHandler(logging.Handler):
         if not internal and record.levelno < logging.INFO:
             return
         contains_sql: bool = (
-            SQL_DIGEST_FIELD in record.__dict__ or SQL_LOG_RECORD_FIELD in record.__dict__
+            SQL_DIGEST_FIELD in record.__dict__ or SQL_TEXT_FIELD in record.__dict__
         )
         trusted_private_sql: bool = (
             record.__dict__.get(SQL_PRIVATE_RECORD_FIELD) is SQL_PRIVATE_RECORD_MARKER
         )
-        if self._include_sql_text and contains_sql and SQL_LOG_RECORD_FIELD not in record.__dict__:
+        if self._include_sql_text and contains_sql and SQL_TEXT_FIELD not in record.__dict__:
             return
         structured: dict[str, object] = {
             key: value
             for key, value in record.__dict__.items()
-            if key.startswith("sqlbuild_") and key != SQL_LOG_RECORD_FIELD
+            if key.startswith("sqlbuild_") and key != SQL_TEXT_FIELD
         }
         identities: dict[str, str | None] = {}
         for field_name in _IDENTITY_FIELDS:
@@ -109,8 +108,8 @@ class ComputeDiagnosticLogHandler(logging.Handler):
                 if not trusted_private_sql:
                     identities = {field_name: None for field_name in _IDENTITY_FIELDS}
                 identities["invocation_id"] = self._invocation_id
-                if self._include_sql_text and SQL_LOG_RECORD_FIELD in record.__dict__:
-                    fields["sql_text"] = str(record.__dict__[SQL_LOG_RECORD_FIELD])
+                if self._include_sql_text and SQL_TEXT_FIELD in record.__dict__:
+                    fields["sql_text"] = str(record.__dict__[SQL_TEXT_FIELD])
             elif not internal:
                 fields = cast(dict[str, JSONValue], DiagnosticRecordRedactor.extras(record))
             diagnostic: DiagnosticLog = DiagnosticLog(

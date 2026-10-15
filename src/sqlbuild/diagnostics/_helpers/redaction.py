@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Final
 
-from sqlbuild._native import redact_diagnostic_value
-from sqlbuild.diagnostics.constants import FORMATTER_RECORD_FIELDS, SQL_TEXT_FIELD
+from sqlbuild._native import SQL_TEXT_FIELD, redact_diagnostic_value
+from sqlbuild.diagnostics.constants import FORMATTER_RECORD_FIELDS
 
 _STANDARD_RECORD_FIELDS: Final[frozenset[str]] = frozenset(logging.makeLogRecord({}).__dict__)
 

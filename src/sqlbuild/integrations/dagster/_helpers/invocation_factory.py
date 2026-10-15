@@ -9,8 +9,11 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, cast
 
-from sqlbuild._native import dagster_cli_arguments
-from sqlbuild.cli.output.constants import INTEGRATION_RESULT_PATH_ENV
+from sqlbuild._native import (
+    INTEGRATION_RESULT_PATH_ENV,
+    INVOCATION_CONTEXT_ENV,
+    dagster_cli_arguments,
+)
 from sqlbuild.integrations.dagster._helpers.invocation import (
     _selected_asset_check_keys,
     _selected_asset_paths,
@@ -19,7 +22,6 @@ from sqlbuild.integrations.dagster._helpers.invocation_context import (
     dagster_invocation_context,
 )
 from sqlbuild.integrations.dagster.classes.sqlbuild_cli_invocation import SqlBuildCliInvocation
-from sqlbuild.runtime.output_capture.constants import INVOCATION_CONTEXT_ENV
 
 
 def start_sqlbuild_cli_invocation(

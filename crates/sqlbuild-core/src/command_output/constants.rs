@@ -1,4 +1,4 @@
-//! Python's `sqlbuild.runtime.output_capture.constants` delivery limits and text bytes.
+//! Command output delivery limits, record types and text bytes.
 
 pub const MIN_OUTPUT_RECORD_BYTES: i64 = 4;
 pub const FLUSH_INTERVAL_SECONDS: f64 = 0.25;

@@ -376,6 +376,8 @@ note = "Rule 3 shapes: CommandOutputValidationError re-exported by sqlbuild.sink
 path = "runtime/output_capture/constants.py"
 rule = 3
 note = "Rule 3 shapes: the command-output sink parameter name and producer version; INVOCATION_CONTEXT_ENV is re-exported from sqlbuild._native for integrations."
+reason = "public-api"
+note = "Rule 3 shapes: the command-output sink parameter name and the installed producer version, no logic."
 
 [[stays]]
 path = "integrations/dagster"
@@ -746,6 +748,8 @@ note = "Shape rule: data exceptions only (DbtProfileError), no logic; consumed b
 path = "diagnostics/constants.py"
 rule = 4
 note = "Shape rule: data constants only (LOGGER_ROOT_NAME, LOGGER_PREFIX, SQL_DIGEST_FIELD, SQL_TEXT_FIELD, ...), no logic; consumed by diagnostics/_helpers/logging.py, diagnostics/_helpers/redaction.py, diagnostics/classes/invocation_diagnostic_routing.py and 2 more."
+reason = "public-api"
+note = "Shape rule: Python logging policy constants only (LOGGER_ROOT_NAME, SQL_DIGEST_FIELD, SQL_PRIVATE_RECORD_FIELD, REDACTED_SQL_LOG_MESSAGE, ...), no logic; the logger prefix and SQL text field are native (sqlbuild._native)."
 
 [[stays]]
 path = "cursor_algebra/exceptions.py"
