@@ -35,7 +35,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     EnumDeclaration,
 )
-from sqlbuild.compiler.scopes.constants import CURRENT_PATH_COMPONENT, DECLARATION_LEXICAL_STEM
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
@@ -53,6 +52,9 @@ from sqlbuild.compiler.scopes.types import (
 )
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.integration.src.sqlbuild.compiler.helpers import GoldenEntry, golden_entry
+
+CURRENT_PATH_COMPONENT: str = "."
+DECLARATION_LEXICAL_STEM: str = "__declaration__.sql"
 
 PROJECT_CONFIG: str = (
     'name = "scope_parity"\nadapter = "duckdb"\n\n[connection]\ndatabase = "scope.duckdb"\n'

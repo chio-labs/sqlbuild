@@ -7,7 +7,7 @@ from pathlib import Path
 
 from scripts.compiler_differential._helpers.comparing.compare import as_json_object, shared_digest
 from scripts.compiler_differential._helpers.comparing.normalize import normalize_artifact_text
-from sqlbuild.compiler.frontier.constants import (
+from scripts.compiler_differential.constants import (
     STAGE_CAPTURE_ROOT_KEY,
     STAGE_CAPTURE_SHARED_NODES_KEY,
 )

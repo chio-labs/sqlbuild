@@ -10,10 +10,7 @@ import pytest
 
 from scripts.compiler_differential.classes.capture_file import expand_capture_text
 from sqlbuild._native import compile_frontier, render_stage_capture
-from sqlbuild.compiler.frontier.constants import (
-    STAGE_CAPTURE_DIR_ENV_VAR,
-    STAGE_CAPTURE_SHARED_NODES_KEY,
-)
+from sqlbuild.compiler.frontier.constants import STAGE_CAPTURE_DIR_ENV_VAR
 from sqlbuild.compiler.frontier.types import CompilerStage
 from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
     FrontierCaptureTestCase,
@@ -33,6 +30,8 @@ from tests.unit.src.sqlbuild.compiler.frontier.helpers import (
     orders_lineage,
     repeated_orders,
 )
+
+STAGE_CAPTURE_SHARED_NODES_KEY: str = "__shared_nodes__"
 
 _COMPILE_MODELS: str = "sqlbuild.compiler.compile.models"
 _COMPILE_TYPES: str = "sqlbuild.compiler.compile.types"

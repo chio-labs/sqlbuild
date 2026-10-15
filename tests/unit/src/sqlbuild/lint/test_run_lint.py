@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import apply_lint_suppressions, run_lint
-from sqlbuild.lint.constants import LINT_ENGINE_SQLBUILD, VIOLATION_SEVERITY_FAULT
+from sqlbuild.lint.constants import VIOLATION_SEVERITY_FAULT
 from sqlbuild.lint.models import LintConfig, LintRunResult, LintViolation
 from tests.unit.src.sqlbuild.lint._test_types import (
     FixtureCeremonyFormatTestCase,
@@ -22,6 +22,8 @@ from tests.unit.src.sqlbuild.lint.helpers import (
     formatted_files,
     violation_reports,
 )
+
+LINT_ENGINE_SQLBUILD: str = "sqlbuild"
 
 CLEAN_MODEL: str = 'MODEL (\n  materialized table,\n  description "ok"\n);\nSELECT 1 AS x FROM t\n'
 NO_DESCRIPTION_MODEL: str = "MODEL (\n  materialized table\n);\nSELECT 1 AS x FROM t\n"

@@ -5,9 +5,12 @@ from __future__ import annotations
 import json
 from typing import cast
 
-from scripts.compiler_differential.constants import MISSING_VALUE, VALUE_PREVIEW_CHARACTERS
+from scripts.compiler_differential.constants import (
+    MISSING_VALUE,
+    STAGE_CAPTURE_SHARED_MARKER,
+    VALUE_PREVIEW_CHARACTERS,
+)
 from scripts.compiler_differential.models import Divergence
-from sqlbuild.compiler.frontier.constants import STAGE_CAPTURE_SHARED_MARKER
 
 
 def first_json_difference(*, left: object, right: object, pointer: str = "") -> Divergence | None:

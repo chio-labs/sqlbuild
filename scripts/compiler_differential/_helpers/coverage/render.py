@@ -22,6 +22,7 @@ from scripts.compiler_differential._helpers.coverage.macro_sources import (
 )
 from scripts.compiler_differential.classes.capture_file import expand_capture_text
 from scripts.compiler_differential.constants import (
+    BUILT_IN_AUDIT_NAMES,
     COMPILE_INPUTS_CAPTURE_TYPE,
     RENDER_CALLABLE_CAPTURE_FIELDS,
     RENDER_DETAIL_KINDS,
@@ -31,7 +32,6 @@ from scripts.compiler_differential.constants import (
     RENDER_STAGE_CAPTURE_SUFFIX,
 )
 from sqlbuild._native import STAGE_CAPTURE_OMITTED_ATTRIBUTES
-from sqlbuild.compiler.auditing.constants import BUILT_IN_AUDIT_NAMES
 from sqlbuild.compiler.compile.models import CompileProjectInputs
 
 _MACRO_CALL: re.Pattern[str] = re.compile(r"@([A-Za-z_]\w*)\(")

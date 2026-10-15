@@ -1,4 +1,4 @@
-//! Scope layout names, mirroring the Python scope builder and `sqlbuild.compiler.scopes.constants`.
+//! Scope layout names.
 
 use crate::scope_index::models::ResourceKind;
 

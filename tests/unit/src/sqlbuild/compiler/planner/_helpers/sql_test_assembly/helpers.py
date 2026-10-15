@@ -18,15 +18,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
-from sqlbuild.compiler.compile.constants import (
-    ASSERT_TEST_CTE_PREFIX,
-    DBT_REF_TEST_CTE_PREFIX,
-    EXPECTED_TEST_CTE_PREFIX,
-    REF_TEST_CTE_PREFIX,
-    SEED_TEST_CTE_PREFIX,
-    SOURCE_TEST_CTE_PREFIX,
-    TABLE_FN_TEST_CTE_PREFIX,
-)
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModel,
@@ -63,6 +54,14 @@ from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_compari
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     PlanTestChainTestCase,
 )
+
+ASSERT_TEST_CTE_PREFIX: str = "__assert__"
+DBT_REF_TEST_CTE_PREFIX: str = "__dbt_ref__"
+EXPECTED_TEST_CTE_PREFIX: str = "__expected__"
+REF_TEST_CTE_PREFIX: str = "__ref__"
+SEED_TEST_CTE_PREFIX: str = "__seed__"
+SOURCE_TEST_CTE_PREFIX: str = "__source__"
+TABLE_FN_TEST_CTE_PREFIX: str = "__table_fn__"
 
 _STUB_TEST_FILE: DiscoveredSqlTestFile = DiscoveredSqlTestFile(
     file_path=Path("tests/unit/test_chain.sql"),

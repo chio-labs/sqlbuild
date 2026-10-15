@@ -19,11 +19,11 @@ use crate::bindings::_helpers::compiled_project::source_loop::SourceRow;
 use crate::bindings::_helpers::compiled_project::sql_test_loop::{
     TestBlockRow, TestCaseRow, TestFileRow,
 };
+use crate::bindings::_helpers::sql_test_glue::constants::SQL_TEST_CTE_SCAN_ALGORITHM;
 
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";
 const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
 const SCOPE_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
 const AUDITING_TYPES_MODULE: &str = "sqlbuild.compiler.auditing.types";
@@ -31,7 +31,7 @@ const BUILTIN_AUDITS_MODULE: &str = "sqlbuild.compiler.auditing.main._builtins";
 const PROFILING_MODULE: &str = "sqlbuild.compiler.profiling.main._record";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
 const SQL_VALUE_ERRORS_MODULE: &str = "sqlbuild.sql_values.exceptions";
-const DISCOVERY_CONSTANTS_MODULE: &str = "sqlbuild.compiler.discovery.constants";
+const YAML_FILE_SUFFIXES: [&str; 2] = [".yml", ".yaml"];
 const PYTHON_RESOURCES_MODULE: &str =
     "sqlbuild.compiler.compile._helpers.diagnostics.python_resources";
 const PATHLIB_MODULE: &str = "pathlib";
@@ -362,10 +362,7 @@ fn sql_test_settings<'py>(
     settings.set_item("scan_store", scan_cache.call_method0("opened")?)?;
     settings.set_item(
         "scan_key",
-        (
-            imported(py, COMPILE_CONSTANTS_MODULE, "SQL_TEST_CTE_SCAN_ALGORITHM")?,
-            syntax.getattr("cache_key")?,
-        ),
+        (SQL_TEST_CTE_SCAN_ALGORITHM, syntax.getattr("cache_key")?),
     )?;
     Ok(settings)
 }
@@ -457,9 +454,6 @@ fn audit_settings<'py>(
 
 /// Each loader's description, relative path and whether that path is a YAML file.
 fn loader_rows<'py>(discovered: &Bound<'py, PyAny>) -> PyResult<HashMap<String, LoaderRow>> {
-    let py: Python<'py> = discovered.py();
-    let suffixes: Bound<'py, PyAny> =
-        imported(py, DISCOVERY_CONSTANTS_MODULE, "YAML_FILE_SUFFIXES")?;
     let mut rows: HashMap<String, LoaderRow> = HashMap::new();
     for loader in items(discovered, "loader_functions")? {
         let relative_path: Bound<'py, PyAny> = loader.getattr("relative_path")?;
@@ -468,7 +462,12 @@ fn loader_rows<'py>(discovered: &Bound<'py, PyAny>) -> PyResult<HashMap<String, 
             (
                 attr(&loader, DESCRIPTION_KEY)?,
                 relative_path.str()?.to_string(),
-                suffixes.contains(relative_path.getattr("suffix")?)?,
+                YAML_FILE_SUFFIXES.contains(
+                    &relative_path
+                        .getattr("suffix")?
+                        .extract::<String>()?
+                        .as_str(),
+                ),
             ),
         );
     }

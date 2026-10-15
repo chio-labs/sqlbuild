@@ -14,12 +14,12 @@ use sqlbuild_rules::fix_verification::models::{FixEdit, FixEligibility};
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::rules::constants::SAFE_RULE_FIX_CODES;
 use crate::bindings::_helpers::rules::fix_facts::compile_facts;
 use crate::bindings::_helpers::rules::fix_verdict::fix_verdict;
 
 const NATIVE: &str = "sqlbuild._native";
 const MODELS: &str = "sqlbuild.lint.models";
-const CONSTANTS: &str = "sqlbuild.lint.constants";
 const ADAPTER: &str = "sqlbuild.adapter.contract.classes.base_adapter";
 const COMPILE_ERRORS: &str = "sqlbuild.compiler.compile.exceptions";
 const LINT_ERRORS: &str = "sqlbuild.lint.exceptions";
@@ -235,14 +235,13 @@ impl<'py> FixSession<'py> {
         violation: &Bound<'py, PyAny>,
         model_paths: &Bound<'py, PyAny>,
     ) -> PyResult<Option<String>> {
-        let py = violation.py();
         let code = violation.getattr("code")?;
         let path = violation.getattr("file_path")?;
         let has_fix = !violation.getattr("fix")?.is_none();
         let facts = FixEligibility {
             model_body: model_paths.contains(&path)?,
             has_fix,
-            safe_code: imported(py, CONSTANTS, "SAFE_RULE_FIX_CODES")?.contains(&code)?,
+            safe_code: SAFE_RULE_FIX_CODES.contains(&code.extract::<String>()?.as_str()),
             conditionless_join: code.eq("SQBRSQL003")?,
             snowflake: self.config.getattr("dialect")?.eq("snowflake")?,
         };

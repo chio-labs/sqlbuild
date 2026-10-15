@@ -9,10 +9,10 @@ use crate::bindings::_helpers::render::declaration_values::declaration_scope_res
 use crate::bindings::_helpers::scopes::scope_index::open_native_scope_index;
 use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
 use crate::bindings::_helpers::scopes::scope_validation::validate_scope_index;
+use crate::bindings::_helpers::sql_test_glue::constants::SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const SCAN_CACHE_MODULE: &str = "sqlbuild._native";
-const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const SCOPE_ERRORS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
@@ -100,11 +100,8 @@ pub(crate) fn build_declaration_scope<'py>(
                         py,
                         [
                             scan_cache.call_method0("opened")?,
-                            imported(
-                                py,
-                                COMPILE_CONSTANTS_MODULE,
-                                "SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM",
-                            )?,
+                            pyo3::types::PyString::new(py, SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM)
+                                .into_any(),
                         ],
                     )?
                     .into_any(),

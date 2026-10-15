@@ -41,13 +41,7 @@ pub(crate) fn sql_lint_config<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = dialect.py();
     let threshold = |key: &str, default: &str| -> PyResult<Bound<'py, PyAny>> {
-        thresholds.call_method1(
-            "get",
-            (
-                imported(py, LINT_CONSTANTS_MODULE, key)?,
-                imported(py, LINT_CONSTANTS_MODULE, default)?,
-            ),
-        )
+        thresholds.call_method1("get", (key, imported(py, LINT_CONSTANTS_MODULE, default)?))
     };
     call_with(
         &imported(py, LINT_MODELS_MODULE, "LintConfig")?,
@@ -57,14 +51,11 @@ pub(crate) fn sql_lint_config<'py>(
             ("header_rules_enabled", false.into_bound_py_any(py)?),
             (
                 "max_literal_length",
-                threshold("MAX_LITERAL_LENGTH_THRESHOLD", "DEFAULT_MAX_LITERAL_LENGTH")?,
+                threshold("max_literal_length", "DEFAULT_MAX_LITERAL_LENGTH")?,
             ),
             (
                 "max_ranking_order_by",
-                threshold(
-                    "MAX_RANKING_ORDER_BY_THRESHOLD",
-                    "DEFAULT_MAX_RANKING_ORDER_BY",
-                )?,
+                threshold("max_ranking_order_by", "DEFAULT_MAX_RANKING_ORDER_BY")?,
             ),
             ("relation_keys", relation_keys),
             ("allow_suppressions", allow_suppressions),

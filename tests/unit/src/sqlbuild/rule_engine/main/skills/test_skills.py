@@ -6,7 +6,6 @@ from stat import S_IMODE
 import pytest
 
 from sqlbuild._native import install_rules_skills as install_skills
-from sqlbuild.rule_engine.constants import RULES_SKILL_PATHS
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.models import RuleExemption, RulesConfig
 from tests.unit.src.sqlbuild.rule_engine.main.skills._test_types import (
@@ -16,6 +15,12 @@ from tests.unit.src.sqlbuild.rule_engine.main.skills._test_types import (
     SkillInstallationTestCase,
 )
 from tests.unit.src.sqlbuild.rule_engine.main.skills.helpers import write_custom_rule
+
+RULES_SKILL_PATHS: tuple[str, ...] = (
+    ".agents/skills/sqlbuild-rules/SKILL.md",
+    ".claude/skills/sqlbuild-rules/SKILL.md",
+    ".opencode/skills/sqlbuild-rules/SKILL.md",
+)
 
 
 @pytest.mark.parametrize(

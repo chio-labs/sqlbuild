@@ -18,30 +18,24 @@ use crate::bindings::_helpers::scopes::scope_cache::{
 use crate::bindings::_helpers::scopes::scope_index::open_native_scope_index;
 use crate::bindings::_helpers::scopes::scope_tolerant::scope_tolerant_index;
 use crate::bindings::_helpers::scopes::scope_validation::scope_index_with_compile_usages;
+use crate::bindings::_helpers::sql_test_glue::constants::SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const SCOPE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.scopes.constants";
+const SCOPE_CACHE_DIRECTORY_NAME: &str = "declaration-scopes-v2";
+const SCOPE_CACHE_FILENAME: &str = "scope-index.json";
 const SQL_ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.sql_analysis.models";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const COLLECTION_RENDERING_MODULE: &str = "sqlbuild._native";
 const RESOLVE_ADAPTER_MODULE: &str = "sqlbuild.adapter.discovery.main.resolve_adapter";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
-const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";
 const FRONTIER_TYPES_MODULE: &str = "sqlbuild.compiler.frontier.types";
 const MACRO_INVENTORY_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.user_macros";
 
 /// Where the scope index cache file of a project lives: `(directory, file name)`.
 fn cache_location(project_dir: &Bound<'_, PyAny>) -> PyResult<(PathBuf, String)> {
-    let py: Python<'_> = project_dir.py();
-    let directory: Bound<'_, PyAny> = cache_directory(project_dir)?.div(imported(
-        py,
-        SCOPE_CONSTANTS_MODULE,
-        "SCOPE_CACHE_DIRECTORY_NAME",
-    )?)?;
-    Ok((
-        directory.extract()?,
-        imported(py, SCOPE_CONSTANTS_MODULE, "SCOPE_CACHE_FILENAME")?.extract()?,
-    ))
+    let directory: Bound<'_, PyAny> =
+        cache_directory(project_dir)?.div(SCOPE_CACHE_DIRECTORY_NAME)?;
+    Ok((directory.extract()?, SCOPE_CACHE_FILENAME.to_owned()))
 }
 
 /// Whether `error` is a project input error that selects the tolerant index.
@@ -158,11 +152,7 @@ fn tolerant_index<'py>(
         py,
         [
             py.None().into_bound(py),
-            imported(
-                py,
-                COMPILE_CONSTANTS_MODULE,
-                "SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM",
-            )?,
+            pyo3::types::PyString::new(py, SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM).into_any(),
         ],
     )?;
     let relationship_faults: Bound<'py, PyAny> = call_with(

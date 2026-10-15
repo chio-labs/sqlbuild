@@ -1,5 +1,6 @@
 //! `sqb diff`: validate, discover, run a model or raw-query comparison and publish its output.
 
+use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python, pyfunction};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyInt, PyTuple};
 use sqlbuild_cli::diff_report::errors::DiffUserError;
@@ -33,7 +34,7 @@ const NATIVE_MODULE: &str = "sqlbuild._native";
 const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
 const TARGET_NAME_MODULE: &str = "sqlbuild._native";
 const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
-const CONTRACT_CONSTANTS_MODULE: &str = "sqlbuild.spec.contracts.constants";
+const DEFAULT_DIFF_MAX_FULL_ROWS: i64 = 10_000_000;
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
 const EXECUTE_MODULE: &str = "sqlbuild.executor.diff.main.execute";
 const DIFF_MODELS_MODULE: &str = "sqlbuild.executor.diff.models";
@@ -239,7 +240,7 @@ fn target_max_full_rows<'py>(
     .getattr("diff")?
     .getattr("max_full_rows")?;
     if configured.is_none() {
-        return imported(py, CONTRACT_CONSTANTS_MODULE, "DEFAULT_DIFF_MAX_FULL_ROWS");
+        return DEFAULT_DIFF_MAX_FULL_ROWS.into_bound_py_any(py);
     }
     if configured.is_instance_of::<PyInt>() && !configured.is_instance_of::<PyBool>() {
         return Ok(configured);

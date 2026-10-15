@@ -5,10 +5,18 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import serialize_hook_entries
-from sqlbuild.compiler.discovery.constants import SQL_HOOK_OUTPUT_FIELDS
 from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
 from tests.unit.src.sqlbuild.compiler.discovery.main._test_types import (
     SerializeHookEntriesTestCase,
+)
+
+SQL_HOOK_OUTPUT_FIELDS: tuple[str, ...] = (
+    "statement",
+    "name",
+    "relative_path",
+    "definition_sql",
+    "kwargs",
+    "description",
 )
 
 _NAMED_SQL_HOOK: SqlHookEntry = SqlHookEntry(

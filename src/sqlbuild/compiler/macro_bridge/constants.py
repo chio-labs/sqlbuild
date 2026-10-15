@@ -9,11 +9,7 @@ from sqlbuild.compiler.frontier.constants import (
     COMPILE_REUSE_DISABLE_ENV_VAR,
     STAGE_CAPTURE_DIR_ENV_VAR,
 )
-from sqlbuild.compiler.references.types import SqlReferenceKind
 
-GENERATED_REFERENCE_MARKERS: tuple[str, ...] = tuple(
-    f"{kind.function_name}(" for kind in SqlReferenceKind
-)
 ACTIVE_MACRO_BRIDGE: ContextVar[object | None] = ContextVar(
     "sqlbuild_active_macro_bridge", default=None
 )

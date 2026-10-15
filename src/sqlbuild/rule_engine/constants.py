@@ -1,12 +1,5 @@
 """Rules engine constants."""
 
-RULES_SKILL_PATHS: tuple[str, ...] = (
-    ".agents/skills/sqlbuild-rules/SKILL.md",
-    ".claude/skills/sqlbuild-rules/SKILL.md",
-    ".opencode/skills/sqlbuild-rules/SKILL.md",
-)
-
-RULES_NATIVE_API_VERSION: int = 1
 CUSTOM_HOST_PROTOCOL_VERSION: int = 1
 CUSTOM_HOST_RUNTIME_VERSION: str = "sqlbuild-rules-custom-v2"
 CUSTOM_HOST_MAX_TRACKED_READS: int = 100_000
@@ -72,15 +65,11 @@ CONTRACT_ENFORCED: str = "enforced"
 TYPE_PROOF_RULE_CODES: frozenset[str] = frozenset({"SQBRCONTRACT105"})
 
 
-TARGET_DIRECTORY_NAME: str = "target"
 RULE_DECORATOR_TOKEN: str = "@rule"
 INIT_MODULE_NAME: str = "__init__"
 PARENT_DIRECTORY_TOKEN: str = ".."
 
 MIN_CUSTOM_RULE_TEST_CASES: str = "min_custom_rule_test_cases"
-RULE_FIX_AVAILABLE_NOTE: str = (
-    "Fix available: `sqb format --fix` applies it after compiler verification"
-)
 FACT_PROJECT_MODELS: str = "project.models"
 FACT_PROJECT_SOURCES: str = "project.sources"
 FACT_PROJECT_SEEDS: str = "project.seeds"

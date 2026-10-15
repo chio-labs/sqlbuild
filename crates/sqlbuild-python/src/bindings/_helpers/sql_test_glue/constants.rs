@@ -24,3 +24,9 @@ pub(super) const DEFAULT_INTEGER_END: &str = "1000000000000000";
 pub(super) const CURSOR_START_KEY: &str = "cursor_start";
 pub(super) const CURSOR_END_KEY: &str = "cursor_end";
 pub(super) const SENTINEL: &str = "__SQLBUILD_CALL_SUFFIX__";
+/// The diagnostic code of a SQL test that references a helper it may not read.
+pub(crate) const SQL_TEST_HELPER_REFERENCE_CODE: &str = "P013";
+/// The scan store namespace of expanded SQL-test CTEs.
+pub(crate) const SQL_TEST_CTE_SCAN_ALGORITHM: &str = "expanded-sql-test-ctes-v1";
+/// The scan store namespace of the models SQL tests expect.
+pub(crate) const SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM: &str = "sql-test-expected-models-v1";

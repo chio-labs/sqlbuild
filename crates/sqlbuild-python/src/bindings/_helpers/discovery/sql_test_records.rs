@@ -16,6 +16,7 @@ use sqlbuild_discovery::sql_tests::models::{
 use sqlbuild_discovery::tree::models::ProjectTree;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::discovery::constants;
 use crate::bindings::_helpers::discovery::faults::{FileFaults, record_tuple};
 use crate::bindings::_helpers::discovery::project_files::path_object;
 use crate::bindings::_helpers::discovery::raised::{
@@ -47,10 +48,10 @@ type Discoverer<T> = fn(
 type RecordBuilder<'py, T> =
     fn((&Bound<'py, PyAny>, &Bound<'py, PyAny>), T) -> PyResult<Bound<'py, PyAny>>;
 
-fn options(py: Python<'_>) -> PyResult<SqlTestFileOptions> {
+fn options() -> PyResult<SqlTestFileOptions> {
     Ok(SqlTestFileOptions {
-        test_keys: sorted_keys(py, "SQL_TEST_HEADER_KEYS")?,
-        scenario_keys: sorted_keys(py, "SQL_SCENARIO_HEADER_KEYS")?,
+        test_keys: sorted_keys(&constants::SQL_TEST_HEADER_KEYS),
+        scenario_keys: sorted_keys(&constants::SQL_SCENARIO_HEADER_KEYS),
     })
 }
 
@@ -72,7 +73,7 @@ fn discovered_files<'py, T: Send>(
     in_snapshot(project_dir, || {
         let tree: Bound<'py, NativeProjectTree> = project_tree(project_dir)?;
         let root = project_root(project_dir)?;
-        let options: SqlTestFileOptions = options(py)?;
+        let options: SqlTestFileOptions = options()?;
         let discovered: Result<Vec<DiscoveredFile<T>>, StageFailure> = {
             let inner = &tree.get().inner;
             py.detach(|| discover(&root, inner, &options))
@@ -284,7 +285,7 @@ pub(crate) fn parse_sql_test_file<'py>(
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = file_path.py();
     let path: String = file_path.str()?.to_str()?.to_owned();
-    let options: SqlTestFileOptions = options(py)?;
+    let options: SqlTestFileOptions = options()?;
     let parsed = py.detach(|| parse_sql_test_text(&path, contents, &options));
     let file: DiscoveredSqlTestFile = parsed.map_err(|failure| failure_error(py, failure))?;
     test_blocks(file_path, file.blocks, file.failure)
@@ -300,7 +301,7 @@ pub(crate) fn parse_sql_scenario_file<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = file_path.py();
     let path: String = file_path.str()?.to_str()?.to_owned();
-    let options: SqlTestFileOptions = options(py)?;
+    let options: SqlTestFileOptions = options()?;
     let parsed = py.detach(|| parse_scenario_text(&path, contents, &options));
     let file: DiscoveredScenarioFile = parsed.map_err(|failure| failure_error(py, failure))?;
     scenario_file((file_path, relative_path), file)

@@ -11,7 +11,6 @@ use crate::bindings::_helpers::sql_test_glue::assembly::{
 
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";
 const GLUE_MODELS_MODULE: &str = "sqlbuild.compiler.sql_test_glue.models";
 const SPEC_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
 /// Fields a direct-logic compiled payload copies from its input payload, in order.
@@ -74,9 +73,7 @@ impl<'py> Classes<'py> {
             assembly: glue.getattr("NativeSqlTestAssembly")?,
             failure: glue.getattr("NativeSqlTestFailure")?,
             location: py.import(SPEC_MODELS_MODULE)?.getattr("SourceLocation")?,
-            code: py
-                .import(COMPILE_CONSTANTS_MODULE)?
-                .getattr("SQL_TEST_HELPER_REFERENCE_CODE")?,
+            code: PyString::new(py, super::constants::SQL_TEST_HELPER_REFERENCE_CODE).into_any(),
             models,
         })
     }

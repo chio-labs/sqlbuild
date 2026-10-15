@@ -693,3 +693,10 @@ ANALYSIS_UNREACHABLE_CODES: dict[str, str] = {
     ),
     "B219": _NEVER_REPORTED_BY_POLYGLOT,
 }
+BUILT_IN_AUDIT_NAMES: frozenset[str] = frozenset(
+    {"accepted_values", "not_null", "relationships", "unique"}
+)
+BUILT_IN_AUDIT_SHADOW_CODE: str = "P003"
+STAGE_CAPTURE_ROOT_KEY: str = "__capture__"
+STAGE_CAPTURE_SHARED_MARKER: str = "__shared__"
+STAGE_CAPTURE_SHARED_NODES_KEY: str = "__shared_nodes__"

@@ -15,5 +15,3 @@ POLYGLOT_COMPLEXITY_GUARD_PARAMETER: str = "complexity_guard"
 POLYGLOT_COMPLEXITY_GUARD_OPTION: str = "complexityGuard"
 POLYGLOT_MAX_FUNCTION_CALL_DEPTH_OPTION: str = "maxFunctionCallDepth"
 POLYGLOT_MAX_FUNCTION_CALL_DEPTH: int = 512
-
-TYPE_CHECKED_DIALECTS: frozenset[str] = frozenset({"duckdb", "snowflake", "postgresql", "bigquery"})
