@@ -116,7 +116,7 @@ fn execute_dbt_sqlbuild_work<'py>(
         ],
     )?;
     let style = call_with(
-        &imported(py, "sqlbuild.presentation.classes.cli_style", "CliStyle")?,
+        &imported(py, "sqlbuild._native", "CliStyle")?,
         &[("use_color", color.clone())],
     )?;
     emit(

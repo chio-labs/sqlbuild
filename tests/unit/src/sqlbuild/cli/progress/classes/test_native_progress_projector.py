@@ -8,7 +8,7 @@ from typing import cast
 
 import pytest
 
-from sqlbuild._native import NativeProgressProjector
+from sqlbuild._native import NativeProgressProjector, shared_transient_line_coordinator
 from sqlbuild.observability import (
     EventDispatcher,
     LifecycleEvent,
@@ -18,7 +18,6 @@ from sqlbuild.observability import (
     invocation_scope,
     run_scope,
 )
-from sqlbuild.presentation.main.transient_line_coordinator import shared_transient_line_coordinator
 from sqlbuild.runtime.observability.classes.operation_lifecycle import publish_retry_scheduled
 from tests.unit.src.sqlbuild.cli.progress.classes._test_types import (
     CursorCleanupCase,

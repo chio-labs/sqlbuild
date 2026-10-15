@@ -22,7 +22,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 const CONTEXT_ATTRIBUTE: &str = "_native_progress_projector_context";
 const CONTEXT_NAME: &str = "sqlbuild_native_progress_projector";
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COORDINATOR_MODULE: &str = "sqlbuild.presentation.main.transient_line_coordinator";
+const COORDINATOR_MODULE: &str = "sqlbuild._native";
 const COORDINATOR_FUNCTION: &str = "shared_transient_line_coordinator";
 const CLAIM_OPTIONS: (&[&str], &[&str]) = (
     &["resource_name"],

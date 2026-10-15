@@ -19,36 +19,10 @@ from scripts.fensu_policy.constants import (
     NAME_REFERENCE_KIND,
     PLANNER_PATH_PREFIX,
     POLICY_EVALUATION_SCOPES,
-    PUBLIC_COLOR_ENTRY_PARTS,
     ROOT_SCOPE_NAME,
     SOURCE_FRESHNESS_MARKERS,
     SOURCE_FRESHNESS_SINGULAR_WRITER,
 )
-
-
-@rule(
-    code="XSB041",
-    family=Family.CUSTOM,
-    slug="color-capability-entry",
-    message="terminal capability imports must use the presentation main entry",
-    remediation="Import terminal_columns from sqlbuild.presentation.main.terminal_columns.",
-)
-def color_capability_entry(*, module: object, ctx: RuleContext) -> list[Fault]:
-    del module
-    if ctx.repo_relative_parts() in PUBLIC_COLOR_ENTRY_PARTS:
-        return []
-    raw_module_parts: tuple[str, ...] = tuple(
-        "sqlbuild.presentation._helpers.terminal_capabilities".split(".")
-    )
-    faults: list[Fault] = []
-    imported: ImportFact
-    for imported in ctx.facts.references().imports:
-        imports_raw_module: bool = imported.module_parts == raw_module_parts or any(
-            alias.imported_parts == raw_module_parts for alias in imported.aliases
-        )
-        if imports_raw_module:
-            faults.append(ctx.fault_at(location=imported.location))
-    return faults
 
 
 @rule(

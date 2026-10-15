@@ -9,13 +9,13 @@ from collections.abc import Callable
 from functools import partial
 from typing import TextIO
 
+from sqlbuild._native import CliStyle
 from sqlbuild.executor.clone.classes.prephase_progress_reporter import (
     ClonePrephaseProgressReporter,
 )
 from sqlbuild.executor.clone.classes.progress_state import CloneProgressState
 from sqlbuild.executor.clone.models import CloneItemResult, PrephaseProgressRow
 from sqlbuild.executor.clone.types import CloneAction, CloneItemCallback, CloneStatus
-from sqlbuild.presentation.classes.cli_style import CliStyle
 
 _TYPE_WIDTH: int = 10
 _NAME_WIDTH: int = 40

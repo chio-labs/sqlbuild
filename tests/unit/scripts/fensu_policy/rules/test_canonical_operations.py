@@ -4,7 +4,6 @@ import pytest
 from fensu import RuleCase, RuleResult, evaluate_rule
 
 from scripts.fensu_policy.rules.canonical_operations import (
-    color_capability_entry,
     dbt_graph_projection,
     dbt_reference_resolution,
     selector_marker_parsing,
@@ -13,45 +12,6 @@ from scripts.fensu_policy.rules.canonical_operations import (
     source_freshness_sql_ownership,
 )
 from tests.unit.scripts.fensu_policy.rules._test_types import CustomRuleTestCase
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        CustomRuleTestCase(
-            description="raw terminal capability import faults",
-            path="src/sqlbuild/example/main/build.py",
-            source=(
-                "from sqlbuild.presentation._helpers.terminal_capabilities import terminal_columns\n"
-            ),
-            expected_fault_count=1,
-        ),
-        CustomRuleTestCase(
-            description="public terminal capability import passes",
-            path="src/sqlbuild/example/main/build.py",
-            source="from sqlbuild.presentation.main.terminal_columns import terminal_columns\n",
-            expected_fault_count=0,
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_import_when_checking_color_entry_then_matches_contract(
-    test_case: CustomRuleTestCase,
-) -> None:
-    result: RuleResult = evaluate_rule(
-        rule=color_capability_entry,
-        test_case=RuleCase(
-            description=test_case.description,
-            source=test_case.source,
-            expected_fault_count=test_case.expected_fault_count,
-            path=test_case.path,
-            scope=test_case.scope,
-            scope_root=test_case.scope_root,
-            files=test_case.files,
-        ),
-    )
-
-    assert result.fault_count == test_case.expected_fault_count
 
 
 @pytest.mark.parametrize(

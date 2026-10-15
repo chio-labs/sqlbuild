@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild._native import CliStyle
 
 _LOGGER_ROOT_NAME: str = "sqlbuild"
 _INLINE_SQL_TRANSACTION_STATEMENTS: tuple[str, ...] = ("BEGIN", "COMMIT", "ROLLBACK")

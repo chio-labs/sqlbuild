@@ -4,10 +4,10 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::build_progress::transient_lines::shared_coordinator;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
-const COLUMNS_MODULE: &str = "sqlbuild.presentation.main.terminal_columns";
-const LINES_MODULE: &str = "sqlbuild.presentation.main.transient_line_coordinator";
+const DEFAULT_TERMINAL_SIZE: (i64, i64) = (120, 24);
 const SPINNER_JOIN_SECONDS: f64 = 0.2;
 const EXIT_JOIN_SECONDS: f64 = 1.0;
 const SPINNER_THREAD_NAME: &str = "sqlbuild-progress-spinner";
@@ -21,17 +21,20 @@ pub(crate) const SPINNER_FRAMES: [&str; 10] = [
     "\u{2807}", "\u{280f}",
 ];
 
-/// The current terminal width.
+/// The current terminal width, `shutil.get_terminal_size(fallback=(120, 24)).columns`.
 pub(crate) fn terminal_columns(py: Python<'_>) -> PyResult<usize> {
-    let columns: i64 = imported(py, COLUMNS_MODULE, "terminal_columns")?
-        .call0()?
+    let options: Bound<'_, PyDict> = PyDict::new(py);
+    options.set_item("fallback", DEFAULT_TERMINAL_SIZE)?;
+    let columns: i64 = imported(py, "shutil", "get_terminal_size")?
+        .call((), Some(&options))?
+        .getattr("columns")?
         .extract()?;
     Ok(usize::try_from(columns).unwrap_or(0))
 }
 
 /// The process-wide coordinator of the one live transient line.
 pub(crate) fn shared_lines(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    imported(py, LINES_MODULE, "shared_transient_line_coordinator")?.call0()
+    Ok(shared_coordinator(py)?.into_any())
 }
 
 /// Whether `stream` reports a terminal.

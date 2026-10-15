@@ -86,6 +86,21 @@ impl CliStyle {
     }
 
     #[must_use]
+    pub fn dbt_object_name(self, text: &str) -> String {
+        self.apply("", text)
+    }
+
+    #[must_use]
+    pub fn dbt_execution_label(self, text: &str) -> String {
+        self.apply(ORANGE, text)
+    }
+
+    #[must_use]
+    pub fn log_label(self, text: &str) -> String {
+        self.apply(DIM, text)
+    }
+
+    #[must_use]
     pub fn success(self, text: &str) -> String {
         self.apply(GREEN, text)
     }

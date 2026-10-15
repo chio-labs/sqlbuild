@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import count_header_style
-from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild._native import CliStyle, count_header_style
 from tests.unit.src.sqlbuild.presentation.main._test_types import CountHeaderTestCase
 
 

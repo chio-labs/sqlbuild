@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import logging
 
+from sqlbuild._native import CliStyle
 from sqlbuild.diagnostics._helpers.logging_formatters import (
     _append_exception,
     _format_console_header,
     _get_record_sql,
     _render_sql_inline,
 )
-from sqlbuild.presentation.classes.cli_style import CliStyle
 
 _SQL_SEPARATOR: str = "-" * 80
 

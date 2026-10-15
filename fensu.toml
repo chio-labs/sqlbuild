@@ -100,6 +100,11 @@ reason = "Native bindings read expected-error codes, messages and help; this pac
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
+path = "src/sqlbuild/presentation/__init__.py"
+reason = "Native bindings own CLI styling, terminal width and the transient line coordinator; this package only declares the display options and presentation types callers pass."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
 path = "src/sqlbuild/compiler/dag/types.py"
 reason = "The native DAG builder owns DAG behavior; this package only declares the node kinds integrations read from the artifact."
 

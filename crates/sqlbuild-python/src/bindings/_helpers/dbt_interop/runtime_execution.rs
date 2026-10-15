@@ -108,7 +108,7 @@ fn execute_dbt_commands<'py>(
     let argv = arguments.value("merged_argv")?;
     let output = arguments.value("progress_stream")?;
     let style = call_with(
-        &imported(py, "sqlbuild.presentation.classes.cli_style", "CliStyle")?,
+        &imported(py, "sqlbuild._native", "CliStyle")?,
         &[("use_color", arguments.value("use_color")?)],
     )?;
     let result_type = imported(

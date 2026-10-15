@@ -7,9 +7,9 @@ from io import StringIO
 import pytest
 
 from sqlbuild._native import (
+    CliStyle,
     PlanningProgressReporter,
 )
-from sqlbuild.presentation.classes.cli_style import CliStyle
 from tests.unit.src.sqlbuild.cli.commands.shared._helpers._test_types import (
     PlanningFinishTestCase,
     PlanningProgressTestCase,

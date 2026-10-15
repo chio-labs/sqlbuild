@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild._native import CliStyle
 from tests.unit.src.sqlbuild.presentation.classes._test_types import CliStyleTestCase
 
 

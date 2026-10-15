@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from functools import partial
 from io import StringIO
 
 import pytest
@@ -36,7 +35,6 @@ from sqlbuild.executor.run.types import ExecutionPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
-from sqlbuild.presentation.main import terminal_columns as terminal_columns_module
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from tests.unit.src.sqlbuild.cli.commands.shared._helpers._test_types import (
     BuildFooterTestCase,
@@ -695,11 +693,7 @@ def test_given_failed_top_level_node_when_reporting_progress_then_writes_error_d
 ) -> None:
     stream: StringIO = StringIO()
     monkeypatch.setattr("sys.stdout", stream)
-    monkeypatch.setattr(
-        terminal_columns_module,
-        "terminal_columns",
-        partial(int, test_case.terminal_width),
-    )
+    monkeypatch.setenv("COLUMNS", str(test_case.terminal_width))
     callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
         plan=PlanOutput(),
         use_color=test_case.use_color,

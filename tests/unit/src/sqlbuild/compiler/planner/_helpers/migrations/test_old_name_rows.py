@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import old_name_rows
-from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild._native import CliStyle, old_name_rows
 from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations._test_types import (
     OldNameRowsTestCase,
 )
