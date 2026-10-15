@@ -8,11 +8,13 @@ use pyo3::prelude::{
 use pyo3::types::{PyCFunction, PyDict, PyFrozenSet, PyString, PyTuple, PyTupleMethods};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
+use sqlbuild_core::build_command::errors::BuildCommandError;
+
 use crate::bindings::_helpers::build_command::invocation::BuildContext;
+use crate::bindings::_helpers::build_command::policies::build_command_error;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const CONSTANTS_MODULE: &str = "sqlbuild.cli.commands.constants";
 const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
 const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
@@ -37,14 +39,14 @@ fn text<'py>(py: Python<'py>, value: &str) -> Bound<'py, PyAny> {
 }
 
 fn user_error(py: Python<'_>, message: String, code: &str) -> PyErr {
-    let created = || -> PyResult<PyErr> {
-        let error: Bound<'_, PyAny> = imported(py, ERRORS_MODULE, "CliUserError")?.call(
-            (message,),
-            Some(&keywords(py, &[("code", text(py, code))])?),
-        )?;
-        Ok(PyErr::from_value(error))
-    };
-    created().unwrap_or_else(|failure| failure)
+    build_command_error(
+        py,
+        BuildCommandError {
+            code: Some(code.to_owned()),
+            message,
+            help: None,
+        },
+    )
 }
 
 fn resource_type(key: &Bound<'_, PyAny>) -> PyResult<String> {

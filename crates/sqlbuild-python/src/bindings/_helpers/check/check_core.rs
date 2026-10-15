@@ -7,12 +7,14 @@ use pyo3::prelude::{
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyFrozenSetMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
+use sqlbuild_core::build_command::errors::BuildCommandError;
+
+use crate::bindings::_helpers::build_command::policies::build_command_error;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const BUILD_TYPES: &str = "sqlbuild.executor.build.types";
 const PYTHON_NODE_TYPES: &str = "sqlbuild.compiler.python_nodes.types";
 const EXECUTOR_MODELS: &str = "sqlbuild.executor.python_nodes.models";
@@ -38,14 +40,14 @@ const READ_SIDE_OPTIONS: (&[&str], &[&str]) = (
 );
 
 fn user_error(py: Python<'_>, message: String) -> PyErr {
-    let created = || -> PyResult<PyErr> {
-        let keywords: Bound<'_, PyDict> = PyDict::new(py);
-        keywords.set_item("code", MISSING_RELATION_CODE)?;
-        let error: Bound<'_, PyAny> =
-            imported(py, ERRORS_MODULE, "CliUserError")?.call((message,), Some(&keywords))?;
-        Ok(PyErr::from_value(error))
-    };
-    created().unwrap_or_else(|failure| failure)
+    build_command_error(
+        py,
+        BuildCommandError {
+            code: Some(MISSING_RELATION_CODE.to_owned()),
+            message,
+            help: None,
+        },
+    )
 }
 
 /// The loader node result a load result stands for.
