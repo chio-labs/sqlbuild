@@ -8,7 +8,8 @@ use crate::bindings::_helpers::contract_records::constants::CONTRACT_RECORDS;
 use crate::bindings::_helpers::freshness::observation::normalize_observation;
 use crate::bindings::_helpers::planner_records::constants::PLANNER_RECORDS;
 use crate::bindings::_helpers::record_behaviours::constants::{
-    BEHAVIOUR_FINISHERS, BEHAVIOUR_METHODS, BEHAVIOUR_ORDERED, BEHAVIOUR_PROPERTIES,
+    BEHAVIOUR_CACHED_PROPERTIES, BEHAVIOUR_FINISHERS, BEHAVIOUR_METHODS, BEHAVIOUR_ORDERED,
+    BEHAVIOUR_PROPERTIES,
 };
 use crate::bindings::_helpers::records::models::{
     ClassValue, EnumSpec, ErrorSpec, FieldDefault, FieldSpec, RecordSpec,
@@ -165,6 +166,9 @@ pub(crate) const RECORD_FINISHERS: &[&[(&str, RecordFinish)]] = &[
 ];
 /// `(class, attribute, getter)` computed attributes set on native classes after registration.
 pub(crate) const CLASS_PROPERTIES: &[&[(&str, &str, ClassProperty)]] = &[BEHAVIOUR_PROPERTIES];
+/// `(class, attribute, getter)` computed attributes a record computes once and keeps.
+pub(crate) const CACHED_PROPERTIES: &[&[(&str, &str, ClassProperty)]] =
+    &[BEHAVIOUR_CACHED_PROPERTIES];
 /// `(class, attribute, method)` methods set on native classes after registration.
 pub(crate) const CLASS_METHODS: &[&[(&str, &str, ClassMethod)]] = &[BEHAVIOUR_METHODS];
 /// Records ordered by their compared fields, as `order=True` dataclasses are.

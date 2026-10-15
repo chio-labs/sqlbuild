@@ -76,6 +76,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     CompiledSeedView,
     CompiledSourceView,
+    ExternalSqlReferenceResolver,
     FunctionLanguage,
     RelationKeyRow,
     SourceInput,
@@ -105,10 +106,6 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.lineage.types import (
     InferredNullability,
-)
-from sqlbuild.compiler.pipeline.models import (
-    CompilePipelineResult,
-    ProjectGraph,
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.compiler.references.models import (
@@ -172,10 +169,10 @@ from sqlbuild.integrations.dbt.models import (
 )
 from sqlbuild.integrations.dbt.types import DbtInvoker
 from sqlbuild.microbatches.models import MicrobatchInterval
-from sqlbuild.presentation.types import TransientLineOwner
 from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.provider.classes.session import ProviderSession
 from sqlbuild.python_nodes.models import (
+    AuditCase,
     ColumnLineageRef,
     RetryPolicy,
     SqlResourceRef,
@@ -405,8 +402,15 @@ type NativeSqlTestPlanRow = tuple[
 
 type SqlTestAssemblyFailureKind = Literal["input", "internal", "decimal_overflow"]
 
+type ProjectProvider = Provider
 type SqlScalar = str | int | bool | float | Decimal | None
 type SqlValuePayload = SqlScalar | tuple[object, ...]
+
+class TransientLineOwner(Protocol):
+    """A renderer that owns the transient line currently drawn in place on a terminal."""
+
+    def clear_transient_line(self) -> None: ...
+    def redraw_transient_line(self) -> None: ...
 
 class DbtInvoker(Protocol):
     """Callable dbt process invocation contract."""
@@ -16783,3 +16787,694 @@ class PlanOutput(NativeRecord):
     ) -> None: ...
     @property
     def python_source_entries(self) -> dict[str, SourceEntry]: ...
+
+class CompileInputError(ValueError):
+    """Raised when discovered inputs cannot be attached into a compile view."""
+
+    code: str
+    message: str
+    help: str | None
+    def __init__(
+        self, message: str, *, code: str | None = None, help: str | None = None
+    ) -> None: ...
+
+class MacroArgumentError(CompileInputError):
+    """Raised when one macro call's arguments do not parse; `offset` is in the expanded SQL."""
+
+    detail: str
+    macro_name: str
+    file_path: Path
+    offset: int
+    relative_position: tuple[int, int]
+    location: SourceLocation | None
+    def __init__(
+        self,
+        *,
+        detail: str,
+        help: str,
+        macro_name: str,
+        file_path: Path,
+        offset: int,
+        relative_position: tuple[int, int],
+        location: SourceLocation | None = None,
+    ) -> None: ...
+    def shifted(self, by: int) -> MacroArgumentError: ...
+    def located(self, location: SourceLocation) -> MacroArgumentError: ...
+
+class SqlTestReferenceError(CompileInputError):
+    """Raised when a SQL-test CTE calls a reference the test query cannot resolve."""
+
+    location: SourceLocation
+    def __init__(self, message: str, *, location: SourceLocation, help: str) -> None: ...
+
+class RulesError(RuntimeError):
+    """Raised for invalid compiler rules or execution."""
+
+class RulesConfigError(RulesError):
+    """Raised when rules configuration breaks a project policy; help shows the setting to change."""
+
+    message: str
+    help: str
+    def __init__(self, message: str, *, help: str) -> None: ...
+
+class RuleUsageError(RulesError):
+    """Raised when a rule or rule test uses the public API incorrectly."""
+
+class NonHermeticRuleError(RulesError):
+    """Raised when a custom rule observes state the Rules cache cannot track."""
+
+class RuleAssertionError(RulesError):
+    """Raised when a custom-rule harness case produces an unexpected result."""
+
+class FactDigestError(RulesError):
+    """Raised when a recorded custom-rule fact cannot be recomputed or encoded deterministically."""
+
+class OpaqueModuleStateError(RulesError):
+    """Raised when custom-rule module state holds a value whose mutations cannot be observed."""
+
+class HostCancelledError(RulesError):
+    """Raised in a custom-rule host that stops because another host already failed."""
+
+class SqlReferenceKind(StrEnum):
+    REF = "ref"
+    SEED = "seed"
+    SOURCE = "source"
+    DBT_REF = "dbt_ref"
+    UDF = "udf"
+    TABLE_FUNCTION = "table_fn"
+    @property
+    def function_name(self) -> str: ...
+    @property
+    def fixture_cte_prefix(self) -> str: ...
+    def example_call(self, *args: str, quote: Literal["'", '"'] = "'") -> str: ...
+    def placeholder_call(self, placeholder: str = "") -> str: ...
+
+class HardCodedRelationOwnerKind(StrEnum):
+    """The kind of Python code that names a project relation in SQL."""
+
+    NODE = "node"
+    HOOK = "hook"
+    LOADER = "loader"
+
+class LoaderConnectionMode(StrEnum):
+    """How a source loader owns the destination warehouse connection."""
+
+    SQLBUILD = "sqlbuild"
+    EXTERNAL = "external"
+
+class SqlHookEntry(NativeRecord):
+    """A model lifecycle hook that executes SQL."""
+
+    statement: str
+    name: str | None
+    relative_path: Path | None
+    definition_sql: str | None
+    kwargs: dict[str, object] | None
+    description: str | None
+    reads: tuple[SqlResourceRef, ...]
+    def __init__(
+        self,
+        statement: str,
+        name: str | None = ...,
+        relative_path: Path | None = ...,
+        definition_sql: str | None = ...,
+        kwargs: dict[str, object] | None = ...,
+        description: str | None = ...,
+        reads: tuple[SqlResourceRef, ...] = ...,
+    ) -> None: ...
+
+class PythonHookEntry(NativeRecord):
+    """A model lifecycle hook that invokes a discovered Python hook."""
+
+    name: str
+    kwargs: dict[str, object]
+    def __init__(
+        self,
+        name: str,
+        kwargs: dict[str, object],
+    ) -> None: ...
+
+class EnumDeclaration(NativeRecord):
+    """One validated public or model-local enum declaration."""
+
+    name: str
+    members: tuple[EnumMember, ...]
+    scalar_type: str
+    relative_path: Path
+    model_name: str | None
+    def __init__(
+        self,
+        name: str,
+        members: tuple[EnumMember, ...],
+        scalar_type: str,
+        relative_path: Path,
+        model_name: str | None = ...,
+    ) -> None: ...
+
+class ConstantDeclaration(NativeRecord):
+    """One validated public or model-local constant declaration."""
+
+    name: str
+    value: SqlValue
+    relative_path: Path
+    model_name: str | None
+    render_as: CollectionRendering | None
+    def __init__(
+        self,
+        name: str,
+        value: SqlValue,
+        relative_path: Path,
+        model_name: str | None = ...,
+        render_as: CollectionRendering | None = ...,
+    ) -> None: ...
+    @property
+    def logical_type(self) -> SqlLogicalType: ...
+    @property
+    def scalar_type(self) -> str: ...
+
+class DiscoveredSourceFile(NativeRecord):
+    """A discovered source declaration file and its raw contents."""
+
+    file_path: Path
+    relative_path: Path
+    contents: str
+    source_entries: tuple[SourceEntry, ...]
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        contents: str,
+        source_entries: tuple[SourceEntry, ...],
+    ) -> None: ...
+
+class DiscoveredSqlTestFile(NativeRecord):
+    """A discovered SQL-native test file and its raw contents."""
+
+    file_path: Path
+    relative_path: Path
+    contents: str
+    blocks: tuple[DiscoveredSqlTestBlock, ...]
+    ownership_root: Path
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        contents: str,
+        blocks: tuple[DiscoveredSqlTestBlock, ...],
+        ownership_root: Path = ...,
+    ) -> None: ...
+
+class SqlTestParameterDeclaration(NativeRecord):
+    """One typed parameter declared by a SQL-native test template."""
+
+    name: str
+    value_type: SqlValueKind
+    nullable: bool
+    def __init__(
+        self,
+        name: str,
+        value_type: SqlValueKind,
+        nullable: bool = ...,
+    ) -> None: ...
+
+class DiscoveredSqlScenarioFile(NativeRecord):
+    """A discovered SQL-native scenario file and its raw contents."""
+
+    file_path: Path
+    relative_path: Path
+    contents: str
+    header_values: dict[str, object]
+    sql_body: str
+    name: str
+    ownership_root: Path
+    sql_body_span: tuple[int, int] | None
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        contents: str,
+        header_values: dict[str, object],
+        sql_body: str,
+        name: str,
+        ownership_root: Path = ...,
+        sql_body_span: tuple[int, int] | None = ...,
+    ) -> None: ...
+
+class DiscoveredMacroFile(NativeRecord):
+    """A discovered project macro file and its raw contents."""
+
+    file_path: Path
+    relative_path: Path
+    contents: str
+    scope_kind: ScopeKind
+    ownership_root: Path | None
+    owning_path: Path | None
+    declaration_root: Path | None
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        contents: str,
+        scope_kind: ScopeKind = ...,
+        ownership_root: Path | None = ...,
+        owning_path: Path | None = ...,
+        declaration_root: Path | None = ...,
+    ) -> None: ...
+
+class DiscoveredMaterializationFile(NativeRecord):
+    """A discovered custom materialization Python file."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    provider_usages: tuple[DiscoveredProviderUsage, ...]
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        name: str,
+        provider_usages: tuple[DiscoveredProviderUsage, ...] = ...,
+    ) -> None: ...
+
+class DiscoveredProviderUsage(NativeRecord):
+    """Framework-owned metadata for provider usage by a Python callable surface."""
+
+    provider_name: str
+    parameter_name: str
+    annotation_class_name: str | None
+    annotation_module: str | None
+    def __init__(
+        self,
+        provider_name: str,
+        parameter_name: str,
+        annotation_class_name: str | None = ...,
+        annotation_module: str | None = ...,
+    ) -> None: ...
+
+class DiscoveredLoaderFunction(NativeRecord):
+    """A discovered project source loader function."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    function: Callable[..., object]
+    depends_on: tuple[Callable[..., object] | SqlResourceRef, ...]
+    destination: str | None
+    write_strategy: SourceWriteStrategy | None
+    cursor_column: str | None
+    unique_key: tuple[str, ...]
+    columns: tuple[SourceColumnEntry, ...]
+    contract: str | None
+    description: str | None
+    connection_mode: LoaderConnectionMode
+    provider_usages: tuple[DiscoveredProviderUsage, ...]
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        name: str,
+        function: Callable[..., object],
+        depends_on: tuple[Callable[..., object] | SqlResourceRef, ...] = ...,
+        destination: str | None = ...,
+        write_strategy: SourceWriteStrategy | None = ...,
+        cursor_column: str | None = ...,
+        unique_key: tuple[str, ...] = ...,
+        columns: tuple[SourceColumnEntry, ...] = ...,
+        contract: str | None = ...,
+        description: str | None = ...,
+        connection_mode: LoaderConnectionMode = ...,
+        provider_usages: tuple[DiscoveredProviderUsage, ...] = ...,
+    ) -> None: ...
+
+class DiscoveredTaskFunction(NativeRecord):
+    """A discovered project task function."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    function: Callable[..., object]
+    depends_on: tuple[Callable[..., object] | SqlResourceRef, ...]
+    tags: tuple[str, ...]
+    group: str | None
+    description: str | None
+    meta: dict[str, object] | None
+    retry: RetryPolicy | None
+    provider_usages: tuple[DiscoveredProviderUsage, ...]
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        name: str,
+        function: Callable[..., object],
+        depends_on: tuple[Callable[..., object] | SqlResourceRef, ...] = ...,
+        tags: tuple[str, ...] = ...,
+        group: str | None = ...,
+        description: str | None = ...,
+        meta: dict[str, object] | None = ...,
+        retry: RetryPolicy | None = ...,
+        provider_usages: tuple[DiscoveredProviderUsage, ...] = ...,
+    ) -> None: ...
+
+class DiscoveredAssetFunction(NativeRecord):
+    """A discovered project asset function."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    function: Callable[..., object]
+    depends_on: tuple[Callable[..., object] | SqlResourceRef, ...]
+    tags: tuple[str, ...]
+    group: str | None
+    description: str | None
+    meta: dict[str, object] | None
+    columns: tuple[SourceColumnEntry, ...]
+    column_lineage: dict[str, tuple[ColumnLineageRef, ...]] | None
+    retry: RetryPolicy | None
+    provider_usages: tuple[DiscoveredProviderUsage, ...]
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        name: str,
+        function: Callable[..., object],
+        depends_on: tuple[Callable[..., object] | SqlResourceRef, ...] = ...,
+        tags: tuple[str, ...] = ...,
+        group: str | None = ...,
+        description: str | None = ...,
+        meta: dict[str, object] | None = ...,
+        columns: tuple[SourceColumnEntry, ...] = ...,
+        column_lineage: dict[str, tuple[ColumnLineageRef, ...]] | None = ...,
+        retry: RetryPolicy | None = ...,
+        provider_usages: tuple[DiscoveredProviderUsage, ...] = ...,
+    ) -> None: ...
+
+class DiscoveredCheckFunction(NativeRecord):
+    """A discovered project check function."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    function: Callable[..., object]
+    depends_on: tuple[Callable[..., object] | SqlResourceRef, ...]
+    severity: PythonCheckSeverity
+    tags: tuple[str, ...]
+    group: str | None
+    description: str | None
+    meta: dict[str, object] | None
+    provider_usages: tuple[DiscoveredProviderUsage, ...]
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        name: str,
+        function: Callable[..., object],
+        depends_on: tuple[Callable[..., object] | SqlResourceRef, ...],
+        severity: PythonCheckSeverity = ...,
+        tags: tuple[str, ...] = ...,
+        group: str | None = ...,
+        description: str | None = ...,
+        meta: dict[str, object] | None = ...,
+        provider_usages: tuple[DiscoveredProviderUsage, ...] = ...,
+    ) -> None: ...
+
+class DiscoveredHookFunction(NativeRecord):
+    """A discovered project model lifecycle hook function."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    function: Callable[..., object]
+    description: str | None
+    reads: tuple[SqlResourceRef, ...]
+    provider_usages: tuple[DiscoveredProviderUsage, ...]
+    scope_kind: ScopeKind
+    ownership_root: Path | None
+    owning_path: Path | None
+    declaration_root: Path | None
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        name: str,
+        function: Callable[..., object],
+        description: str | None = ...,
+        reads: tuple[SqlResourceRef, ...] = ...,
+        provider_usages: tuple[DiscoveredProviderUsage, ...] = ...,
+        scope_kind: ScopeKind = ...,
+        ownership_root: Path | None = ...,
+        owning_path: Path | None = ...,
+        declaration_root: Path | None = ...,
+    ) -> None: ...
+
+class DiscoveredAuditFactory(NativeRecord):
+    """A discovered audit factory and its normalized cases."""
+
+    name: str
+    function: Callable[..., object]
+    file_path: Path
+    relative_path: Path
+    line: int
+    cases: tuple[AuditCase, ...]
+    def __init__(
+        self,
+        name: str,
+        function: Callable[..., object],
+        file_path: Path,
+        relative_path: Path,
+        line: int,
+        cases: tuple[AuditCase, ...] = ...,
+    ) -> None: ...
+
+class DiscoveredEventExporterDeclaration(NativeRecord):
+    """A discovered exporter declaration before provider binding."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    function: Callable[..., object]
+    event_kinds: frozenset[str]
+    min_severity: EventExportSeverity
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        name: str,
+        function: Callable[..., object],
+        event_kinds: frozenset[str],
+        min_severity: EventExportSeverity,
+    ) -> None: ...
+
+class DiscoveredEventExporter(NativeRecord):
+    """A discovered canonical lifecycle event exporter function."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    function: Callable[..., object]
+    event_kinds: frozenset[str]
+    min_severity: EventExportSeverity
+    provider_usages: tuple[DiscoveredProviderUsage, ...]
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        name: str,
+        function: Callable[..., object],
+        event_kinds: frozenset[str] = ...,
+        min_severity: EventExportSeverity = ...,
+        provider_usages: tuple[DiscoveredProviderUsage, ...] = ...,
+    ) -> None: ...
+
+class DiscoveredCommandOutputSinkDeclaration(NativeRecord):
+    """A command-output sink declaration before provider binding."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    function: Callable[..., object]
+    streams: frozenset[CommandOutputStream]
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        name: str,
+        function: Callable[..., object],
+        streams: frozenset[CommandOutputStream],
+    ) -> None: ...
+
+class DiscoveredCommandOutputSink(NativeRecord):
+    """A discovered command-output sink function."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    function: Callable[..., object]
+    streams: frozenset[CommandOutputStream]
+    provider_usages: tuple[DiscoveredProviderUsage, ...]
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        name: str,
+        function: Callable[..., object],
+        streams: frozenset[CommandOutputStream],
+        provider_usages: tuple[DiscoveredProviderUsage, ...] = ...,
+    ) -> None: ...
+
+class DiscoveredProvider(NativeRecord):
+    """A discovered project provider class and validated settings object."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    provider_class: type[ProjectProvider]
+    settings: ProjectProvider
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        name: str,
+        provider_class: type[ProjectProvider],
+        settings: ProjectProvider,
+    ) -> None: ...
+
+class DiscoveredPythonNodeFunctions(NativeRecord):
+    """Discovered project Python DAG node functions grouped by kind."""
+
+    loaders: tuple[DiscoveredLoaderFunction, ...]
+    tasks: tuple[DiscoveredTaskFunction, ...]
+    assets: tuple[DiscoveredAssetFunction, ...]
+    checks: tuple[DiscoveredCheckFunction, ...]
+    audit_factories: tuple[DiscoveredAuditFactory, ...]
+    def __init__(
+        self,
+        loaders: tuple[DiscoveredLoaderFunction, ...] = ...,
+        tasks: tuple[DiscoveredTaskFunction, ...] = ...,
+        assets: tuple[DiscoveredAssetFunction, ...] = ...,
+        checks: tuple[DiscoveredCheckFunction, ...] = ...,
+        audit_factories: tuple[DiscoveredAuditFactory, ...] = ...,
+    ) -> None: ...
+
+class DiscoveredProjectInputs(NativeRecord):
+    """All raw project inputs discovered from disk before semantic resolution."""
+
+    project_config: ProjectConfig
+    local_config: LocalConfig
+    project_dir: Path | None
+    model_files: tuple[DiscoveredSqlModelFile, ...]
+    enum_files: tuple[DiscoveredEnumFile, ...]
+    constant_files: tuple[DiscoveredConstantFile, ...]
+    model_schema_files: tuple[DiscoveredModelSchemaFile, ...]
+    sql_function_files: tuple[DiscoveredSqlFunctionFile, ...]
+    sql_hook_files: tuple[DiscoveredSqlHookFile, ...]
+    python_function_files: tuple[DiscoveredPythonFunctionFile, ...]
+    schema_files: tuple[DiscoveredSchemaFile, ...]
+    source_files: tuple[DiscoveredSourceFile, ...]
+    seed_files: tuple[DiscoveredSeedFile, ...]
+    test_files: tuple[DiscoveredSqlTestFile, ...]
+    scenario_files: tuple[DiscoveredSqlScenarioFile, ...]
+    audit_files: tuple[DiscoveredAuditFile, ...]
+    macro_files: tuple[DiscoveredMacroFile, ...]
+    materialization_files: tuple[DiscoveredMaterializationFile, ...]
+    loader_functions: tuple[DiscoveredLoaderFunction, ...]
+    task_functions: tuple[DiscoveredTaskFunction, ...]
+    asset_functions: tuple[DiscoveredAssetFunction, ...]
+    check_functions: tuple[DiscoveredCheckFunction, ...]
+    audit_factories: tuple[DiscoveredAuditFactory, ...]
+    hook_functions: tuple[DiscoveredHookFunction, ...]
+    event_exporters: tuple[DiscoveredEventExporter, ...]
+    command_output_sinks: tuple[DiscoveredCommandOutputSink, ...]
+    providers: tuple[DiscoveredProvider, ...]
+    adapter_file: DiscoveredAdapterFile | None
+    native_session: NativeDiscoverySession | None
+    def __init__(
+        self,
+        project_config: ProjectConfig,
+        local_config: LocalConfig,
+        project_dir: Path | None = ...,
+        model_files: tuple[DiscoveredSqlModelFile, ...] = ...,
+        enum_files: tuple[DiscoveredEnumFile, ...] = ...,
+        constant_files: tuple[DiscoveredConstantFile, ...] = ...,
+        model_schema_files: tuple[DiscoveredModelSchemaFile, ...] = ...,
+        sql_function_files: tuple[DiscoveredSqlFunctionFile, ...] = ...,
+        sql_hook_files: tuple[DiscoveredSqlHookFile, ...] = ...,
+        python_function_files: tuple[DiscoveredPythonFunctionFile, ...] = ...,
+        schema_files: tuple[DiscoveredSchemaFile, ...] = ...,
+        source_files: tuple[DiscoveredSourceFile, ...] = ...,
+        seed_files: tuple[DiscoveredSeedFile, ...] = ...,
+        test_files: tuple[DiscoveredSqlTestFile, ...] = ...,
+        scenario_files: tuple[DiscoveredSqlScenarioFile, ...] = ...,
+        audit_files: tuple[DiscoveredAuditFile, ...] = ...,
+        macro_files: tuple[DiscoveredMacroFile, ...] = ...,
+        materialization_files: tuple[DiscoveredMaterializationFile, ...] = ...,
+        loader_functions: tuple[DiscoveredLoaderFunction, ...] = ...,
+        task_functions: tuple[DiscoveredTaskFunction, ...] = ...,
+        asset_functions: tuple[DiscoveredAssetFunction, ...] = ...,
+        check_functions: tuple[DiscoveredCheckFunction, ...] = ...,
+        audit_factories: tuple[DiscoveredAuditFactory, ...] = ...,
+        hook_functions: tuple[DiscoveredHookFunction, ...] = ...,
+        event_exporters: tuple[DiscoveredEventExporter, ...] = ...,
+        command_output_sinks: tuple[DiscoveredCommandOutputSink, ...] = ...,
+        providers: tuple[DiscoveredProvider, ...] = ...,
+        adapter_file: DiscoveredAdapterFile | None = ...,
+        native_session: NativeDiscoverySession | None = ...,
+    ) -> None: ...
+
+class DiscoveredRuntimeExtensions(NativeRecord):
+    """Command-startup providers, typed sinks, and lifecycle delivery settings."""
+
+    providers: tuple[DiscoveredProvider, ...]
+    event_exporters: tuple[DiscoveredEventExporter, ...]
+    command_output_sinks: tuple[DiscoveredCommandOutputSink, ...]
+    lifecycle_shutdown_timeout_seconds: int | None
+    def __init__(
+        self,
+        providers: tuple[DiscoveredProvider, ...] = ...,
+        event_exporters: tuple[DiscoveredEventExporter, ...] = ...,
+        command_output_sinks: tuple[DiscoveredCommandOutputSink, ...] = ...,
+        lifecycle_shutdown_timeout_seconds: int | None = ...,
+    ) -> None: ...
+
+class ProjectGraph(NativeRecord):
+    """Static compiled project graph held natively; dict views are built only when read."""
+
+    project: CompiledProjectView
+    native: _native.NativeProjectGraph
+    def __init__(
+        self,
+        project: CompiledProjectView,
+        native: _native.NativeProjectGraph,
+    ) -> None: ...
+    @property
+    def lineage_views(self) -> LineageGraphViews: ...
+    @property
+    def upstream_deps(self) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]: ...
+    @property
+    def downstream_deps(self) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]: ...
+    @property
+    def tag_index(self) -> dict[str, frozenset[CompiledObjectKey]]: ...
+    @property
+    def path_index(self) -> dict[CompiledObjectKey, str]: ...
+    @property
+    def all_keys(self) -> dict[str, CompiledObjectKey]: ...
+
+class CompilePipelineResult(NativeRecord):
+    """Complete output from the compile-and-plan pipeline."""
+
+    project: CompiledProjectView
+    plan_output: PlanOutput
+    custom_materializations: dict[str, Callable[..., Any]]
+    python_node_names: frozenset[str]
+    python_plan_entries: tuple[PythonPlanEntry, ...]
+    compile_seconds: float | None
+    planning_seconds: float | None
+    def __init__(
+        self,
+        project: CompiledProjectView,
+        plan_output: PlanOutput,
+        custom_materializations: dict[str, Callable[..., Any]] = ...,
+        python_node_names: frozenset[str] = ...,
+        python_plan_entries: tuple[PythonPlanEntry, ...] = ...,
+        compile_seconds: float | None = ...,
+        planning_seconds: float | None = ...,
+    ) -> None: ...

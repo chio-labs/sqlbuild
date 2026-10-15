@@ -25,7 +25,7 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compiled_project::values::plain_value;
 use crate::bindings::_helpers::rules::findings::{FindingClasses, invalid_finding};
 
-const RULES_ERRORS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
+const RULES_ERRORS_MODULE: &str = "sqlbuild._native";
 const RULES_ERROR: &str = "RulesError";
 
 /// One custom rule's cache identity from its metadata, source fingerprint and settings.

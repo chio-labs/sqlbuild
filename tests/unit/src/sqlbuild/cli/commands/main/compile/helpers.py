@@ -18,6 +18,7 @@ from sqlbuild._native import (
     PlanOutput,
     PlanReason,
     PreparedCompileArtifacts,
+    ProjectGraph,
     SeedCsvSettings,
     SeedPlanEntry,
     SqlTestPlanEntry,
@@ -44,7 +45,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     FunctionLanguage,
 )
-from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
     FunctionExecutionResult,

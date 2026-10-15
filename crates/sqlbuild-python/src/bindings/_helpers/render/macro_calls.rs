@@ -16,7 +16,7 @@ use crate::bindings::_helpers::render::macro_call_rows::{SiteRow, SpanRow, site_
 use crate::bindings::_helpers::render::macro_expansion::raised;
 use crate::bindings::types::CompilerDetach;
 
-const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
+const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const DECLARATION_CALLS: [&str; 2] = ["enum", "const"];
 
 /// `(call start or None, call name or None, message)` of the error Python's scan raises.

@@ -9,11 +9,17 @@ from typing import Any, cast
 import duckdb
 import pytest
 
-from sqlbuild._native import AuditPlanEntry, ModelPlanEntry, PlanReason
+from sqlbuild._native import (
+    AuditPlanEntry,
+    DiscoveredHookFunction,
+    ModelPlanEntry,
+    PlanReason,
+    PythonHookEntry,
+    SqlHookEntry,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, PythonHookEntry, SqlHookEntry
 from sqlbuild.executor.custom.models import (
     MaterializationContext,
     MaterializationResult,

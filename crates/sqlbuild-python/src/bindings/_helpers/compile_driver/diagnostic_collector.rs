@@ -9,7 +9,7 @@ use pyo3::{PyErr, pyclass, pyfunction, pymethods, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{context_variable, imported};
 
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
+const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
 const CONTEXT_VARIABLE_NAME: &str = "sqlbuild_collected_compile_diagnostics";
 
 static ACTIVE_COLLECTOR: PyOnceLock<Py<PyAny>> = PyOnceLock::new();

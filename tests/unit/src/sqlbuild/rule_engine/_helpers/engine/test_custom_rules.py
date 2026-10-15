@@ -8,13 +8,13 @@ import pytest
 from sqlbuild._native import (
     RuleExemption,
     RuleIgnore,
+    RulesError,
     compiled_model_record,
     project_with,
 )
 from sqlbuild._native import evaluate_project_rules as evaluate
 from sqlbuild.compiler.compile.models import CompactLineageFacts
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.models import RulesConfig, RulesResult
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (
     CustomRuleCacheDependencyTestCase,

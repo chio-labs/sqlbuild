@@ -12,6 +12,9 @@ from sqlbuild._native import (
     DeclarationIdentity,
     DeclarationKind,
     DeclarationRecord,
+    DiscoveredProjectInputs,
+    DiscoveredSqlModelFile,
+    EnumDeclaration,
     EnumMemberMetadata,
     EnumMetadata,
     GrantRecord,
@@ -30,11 +33,6 @@ from sqlbuild._native import (
     UsageRecord,
     build_scope_lookup,
     get_placement_validated_scope_index,
-)
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredProjectInputs,
-    DiscoveredSqlModelFile,
-    EnumDeclaration,
 )
 
 SCOPE_CACHE_PROJECT: str = 'name = "demo"\nadapter = "duckdb"\n'

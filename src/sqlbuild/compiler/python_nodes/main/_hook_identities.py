@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild._native import PythonNodeIdentity
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
+from sqlbuild._native import DiscoveredHookFunction, PythonNodeIdentity
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_HOOK
 from sqlbuild.compiler.python_nodes.main.identity import build_python_node_identity
 

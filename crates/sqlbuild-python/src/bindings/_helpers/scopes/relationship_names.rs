@@ -18,7 +18,7 @@ use crate::bindings::types::CompilerDetach;
 
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
+const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
 
 /// One scan's error, or its values.
 type Scanned<T> = (Option<String>, Vec<T>);

@@ -8,12 +8,13 @@ import pytest
 
 from sqlbuild._native import (
     ModelPlanContext,
+    PythonHookEntry,
     SourceEntry,
+    SqlHookEntry,
     resolve_model_hook_entries,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledModelView
-from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
 from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types import (
     HookSqlResolutionTestCase,
 )

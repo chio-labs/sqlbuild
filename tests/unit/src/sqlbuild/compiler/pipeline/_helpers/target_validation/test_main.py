@@ -5,6 +5,8 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    DiscoveredProjectInputs,
+    DiscoveredSourceFile,
     LocalConfig,
     LocalTargetConfig,
     ProjectConfig,
@@ -27,7 +29,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile
 from tests.unit.src.sqlbuild.compiler.pipeline._helpers.target_validation._test_types import (
     ValidateManagedLoaderConnectionTestCase,
     ValidateManagedWriteSchemaTestCase,

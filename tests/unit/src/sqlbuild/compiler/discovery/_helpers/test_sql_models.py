@@ -8,13 +8,15 @@ import sqlbuild._native as native_module
 from sqlbuild._native import (
     AuthoredSqlSet,
     AuthoredSqlValueCall,
+    DiscoveredSqlModelFile,
     DiscoveryFileFault,
     NamedSqlHookEntry,
+    PythonHookEntry,
     SourceLocation,
+    SqlHookEntry,
     discover_model_files,
     model_output_column_locations,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile, PythonHookEntry, SqlHookEntry
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DeferredModelOutputLocationTestCase,
     ExpectedBooleanTestCase,

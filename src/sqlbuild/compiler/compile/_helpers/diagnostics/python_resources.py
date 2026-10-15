@@ -7,9 +7,13 @@ from collections.abc import Callable, Iterator
 from functools import partial
 from pathlib import Path
 
-from sqlbuild._native import SourceLocation, snippet_help
+from sqlbuild._native import (
+    DiscoveredProjectInputs,
+    DiscoveredProvider,
+    SourceLocation,
+    snippet_help,
+)
 from sqlbuild.compiler.compile.types import PythonResourceRow, SourceInput
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredProvider
 
 
 def python_resource_rows(

@@ -12,9 +12,13 @@ from pathlib import Path
 import pytest
 
 import sqlbuild._native as native_module
-from sqlbuild._native import NativeColumnQuery, NativeModelAnalyses, infer_native_query_columns
+from sqlbuild._native import (
+    CompileInputError,
+    NativeColumnQuery,
+    NativeModelAnalyses,
+    infer_native_query_columns,
+)
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import (
     FallbackColumnsTestCase,

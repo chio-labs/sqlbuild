@@ -1,7 +1,7 @@
 """Declaration facts for custom rules."""
 
+from sqlbuild._native import ConstantDeclaration, EnumDeclaration
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
 
 
 class DeclarationFacts:

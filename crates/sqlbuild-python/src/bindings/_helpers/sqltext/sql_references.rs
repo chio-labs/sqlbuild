@@ -20,8 +20,8 @@ const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
-const REFERENCE_TYPES_MODULE: &str = "sqlbuild.compiler.references.types";
+const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
+const REFERENCE_TYPES_MODULE: &str = "sqlbuild._native";
 const COLLECTOR_MODULE: &str = "sqlbuild._native";
 const REFERENCE_CALL_SYNTAX_CODE: &str = "P012";
 

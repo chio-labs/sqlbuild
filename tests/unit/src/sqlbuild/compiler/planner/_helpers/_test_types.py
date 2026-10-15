@@ -23,6 +23,7 @@ from sqlbuild._native import (
     SourceEntry,
     SourceLoadPlanEntry,
     SqlLexicalSyntax,
+    SqlReferenceKind,
     WarningSeverity,
 )
 from sqlbuild.compiler.auditing.types import (
@@ -35,7 +36,6 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledProjectView
-from sqlbuild.compiler.references.types import SqlReferenceKind
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     PlanTestChainTestCase as PlanTestChainTestCase,
 )

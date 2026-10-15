@@ -9,7 +9,7 @@ use sqlbuild_attachments::sql_lexing::main::unclosed_message::unclosed_message;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
+const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
 /// The reference function and diagnostic code of each marker kind, in the scanner's order.
 const MARKER_KINDS: [(&str, &str); 5] = [
     ("__ref", "R001"),

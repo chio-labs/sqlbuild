@@ -20,6 +20,8 @@ from sqlbuild._native import (
     DbtEventStream,
     DbtEventStreamUpdate,
     DbtRunner,
+    DiscoveredProjectInputs,
+    DiscoveredSqlModelFile,
     LocalConfig,
     MaterializationType,
     ModelPlanEntry,
@@ -40,7 +42,6 @@ from sqlbuild.compiler.compile.models import (
     CompileModelInput,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 
 _GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
 

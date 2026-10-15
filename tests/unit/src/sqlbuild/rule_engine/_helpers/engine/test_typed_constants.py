@@ -4,10 +4,10 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    ConstantDeclaration,
     declaration_rows,
     normalize_sql_value,
 )
-from sqlbuild.compiler.discovery.models import ConstantDeclaration
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (
     TypedConstantPayloadTestCase,
 )

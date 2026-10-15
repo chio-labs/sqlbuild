@@ -13,7 +13,12 @@ from typing import Any, ClassVar, cast
 
 from sqlbuild._native import (
     CostContext,
+    DiscoveredAssetFunction,
+    DiscoveredCheckFunction,
+    DiscoveredLoaderFunction,
+    DiscoveredProjectInputs,
     DiscoveredPythonNode,
+    DiscoveredTaskFunction,
     LocalConfig,
     ProjectConfig,
     PythonNodeGraph,
@@ -27,13 +32,6 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.assets import AssetContext, asset
 from sqlbuild.checks import CheckContext
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredAssetFunction,
-    DiscoveredCheckFunction,
-    DiscoveredLoaderFunction,
-    DiscoveredProjectInputs,
-    DiscoveredTaskFunction,
-)
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError

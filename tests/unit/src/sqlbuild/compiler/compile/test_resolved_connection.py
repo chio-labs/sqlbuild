@@ -6,8 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from sqlbuild._native import build_compile_inputs, discover_project_inputs
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild._native import DiscoveredProjectInputs, build_compile_inputs, discover_project_inputs
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     DUCKDB_COMPILE_ADAPTER_CONTEXT,
 )

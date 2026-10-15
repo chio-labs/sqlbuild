@@ -18,9 +18,12 @@ from sqlbuild._native import (
     CompiledSource,
     CompileModelConfig,
     CompilePipelineOptions,
+    CompilePipelineResult,
     DeferralInputs,
+    DiscoveredProjectInputs,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
+    DiscoveredSourceFile,
     Fingerprint,
     FunctionArgument,
     PlannerOverrides,
@@ -30,6 +33,7 @@ from sqlbuild._native import (
     SchemaSeedEntry,
     SettingsConfig,
     SourceEntry,
+    SqlReferenceKind,
     build_compiled_function_fingerprint_sql,
     build_execution_plan,
     compiled_model_record,
@@ -57,9 +61,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledSourceView,
     FunctionLanguage,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     BuildExecutionPlanTestCase,

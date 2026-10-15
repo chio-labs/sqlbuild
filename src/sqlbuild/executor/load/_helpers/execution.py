@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from sqlbuild._native import SourceEntry
-from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
+from sqlbuild._native import DiscoveredLoaderFunction, SourceEntry
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.load.models import LoadExecutionIndexes, LoadExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus

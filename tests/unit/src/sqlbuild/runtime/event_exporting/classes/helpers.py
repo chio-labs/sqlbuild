@@ -8,6 +8,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredEventExporter,
     DiscoveredProvider,
     DiscoveredProviderUsage,
+    EventExportSeverity,
 )
 from sqlbuild.observability import LifecycleEvent
 from sqlbuild.providers import Provider

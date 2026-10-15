@@ -22,7 +22,7 @@ use crate::bindings::_helpers::contracts::sql_values::{
 
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
-const MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
+const MODELS_MODULE: &str = "sqlbuild._native";
 const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
 const IDENTITY_ERRORS_MODULE: &str = "sqlbuild._native";
 

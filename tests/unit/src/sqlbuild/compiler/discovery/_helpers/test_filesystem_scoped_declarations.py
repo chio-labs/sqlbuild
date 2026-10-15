@@ -12,6 +12,8 @@ from sqlbuild._native import (
     DeclarationParseError,
     DiscoveredConstantFile,
     DiscoveredEnumFile,
+    DiscoveredMacroFile,
+    DiscoveredProjectInputs,
     discover_audit_files,
     discover_hook_functions,
     discover_macro_files,

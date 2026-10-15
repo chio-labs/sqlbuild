@@ -5,12 +5,12 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
+    DiscoveredProjectInputs,
     PlannerInputError,
     SqlTestSelection,
     UnitTestSelectorSplit,
     split_project_unit_test_selectors,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.unit.src.sqlbuild.compiler.planner._helpers.selection._test_types import (
     UnitTestSelectorErrorTestCase,
     UnitTestSelectorSplitTestCase,

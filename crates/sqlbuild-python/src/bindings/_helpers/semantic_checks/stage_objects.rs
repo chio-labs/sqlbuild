@@ -16,7 +16,7 @@ const BINDING_DIAGNOSTICS_MODULE: &str = "sqlbuild._native";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const NORMALIZE_TYPE_MODULE: &str = "sqlbuild.adapter.type_system.main.normalize_type";
 const DATACLASSES_MODULE: &str = "dataclasses";
-const REFERENCE_TYPES_MODULE: &str = "sqlbuild.compiler.references.types";
+const REFERENCE_TYPES_MODULE: &str = "sqlbuild._native";
 
 /// Imported once per stage run.
 pub(crate) struct StageClasses<'py> {

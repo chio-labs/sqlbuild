@@ -8,7 +8,10 @@ from unittest.mock import Mock
 import pytest
 
 from sqlbuild._native import (
+    CompilePipelineResult,
+    DiscoveredProjectInputs,
     ModelPlanEntry,
+    RulesError,
     build_compiled_project,
     build_project_graph,
     discover_project_inputs,
@@ -18,10 +21,7 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.rule_engine.exceptions import RulesError
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     AppendCursorPipelineIntegrationTestCase,
     CompileProgressIntegrationTestCase,

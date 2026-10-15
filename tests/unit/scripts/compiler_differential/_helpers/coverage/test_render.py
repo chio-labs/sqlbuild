@@ -17,12 +17,12 @@ from scripts.compiler_differential._helpers.coverage.render import (
 from scripts.compiler_differential.constants import RENDER_NON_COLLECTION_FIELDS
 from sqlbuild._native import (
     CompileProjectInputs,
+    DiscoveredProjectInputs,
     LocalConfig,
     ProjectConfig,
     SqlLexicalSyntax,
     render_stage_capture,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.unit.scripts.compiler_differential._helpers.coverage._test_types import (
     CaptureProblemsTestCase,
     RenderCaptureKindsTestCase,

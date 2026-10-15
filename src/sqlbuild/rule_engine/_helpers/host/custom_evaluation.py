@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
 
+from sqlbuild._native import HostCancelledError, NonHermeticRuleError, RulesError
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.rule_engine._helpers.host.module_state import rule_namespaces
 from sqlbuild.rule_engine._helpers.host.tracked_facts import tracked_fact_views
@@ -24,11 +25,6 @@ from sqlbuild.rule_engine.classes.runtime_guard import RuntimeGuard
 from sqlbuild.rule_engine.constants import (
     CUSTOM_HOST_CANCELLED_MESSAGE,
     CUSTOM_RULE_PROJECT_SUBJECT,
-)
-from sqlbuild.rule_engine.exceptions import (
-    HostCancelledError,
-    NonHermeticRuleError,
-    RulesError,
 )
 from sqlbuild.rule_engine.models import (
     CustomHostPartition,

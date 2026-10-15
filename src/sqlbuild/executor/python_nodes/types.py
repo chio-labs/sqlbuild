@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol
 
-from sqlbuild._native import PythonNodeIdentity
-from sqlbuild.compiler.discovery.models import DiscoveredAssetFunction, DiscoveredTaskFunction
+from sqlbuild._native import DiscoveredAssetFunction, DiscoveredTaskFunction, PythonNodeIdentity
 
 type ExecutablePythonNode = DiscoveredTaskFunction | DiscoveredAssetFunction
 

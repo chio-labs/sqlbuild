@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from sqlbuild._native import CompileModelConfig, EnumMember
+from sqlbuild._native import CompileModelConfig, EnumDeclaration, EnumMember
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
@@ -15,7 +15,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.discovery.models import EnumDeclaration
 
 _ENUM_DECLARATION: EnumDeclaration = EnumDeclaration(
     name="status",

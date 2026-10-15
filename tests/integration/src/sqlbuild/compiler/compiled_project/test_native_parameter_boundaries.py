@@ -11,6 +11,7 @@ import pytest
 from sqlbuild._native import (
     CollectionRendering,
     CompileAdapterContext,
+    SqlHookEntry,
     build_compile_inputs,
     discover_project_inputs,
 )
@@ -18,7 +19,6 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
-from sqlbuild.compiler.discovery.models import SqlHookEntry
 from tests.integration.src.sqlbuild.compiler.compiled_project._test_types import (
     AdapterParameterBoundaryTestCase,
     QuotedHookBoundaryTestCase,

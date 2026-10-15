@@ -5,9 +5,10 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 
 use crate::bindings::_helpers::records::constants::{
-    BUILTIN_PARENT_PREFIX, BUILTINS_MODULE, CLASS_METHODS, CLASS_PROPERTIES, DATACLASS_FIELD_KIND,
-    DATACLASS_FIELDS_ATTRIBUTE, DATACLASSES_MODULE, ENUM_MODULE, ENUMS, ERROR_SPEC_ATTRIBUTE,
-    ERRORS, EXCEPTION_PARENT, NATIVE_MODULE, RECORD_SPEC_ATTRIBUTE, STR_ENUM, VALUE_ERROR_PARENT,
+    BUILTIN_PARENT_PREFIX, BUILTINS_MODULE, CACHED_PROPERTIES, CLASS_METHODS, CLASS_PROPERTIES,
+    DATACLASS_FIELD_KIND, DATACLASS_FIELDS_ATTRIBUTE, DATACLASSES_MODULE, ENUM_MODULE, ENUMS,
+    ERROR_SPEC_ATTRIBUTE, ERRORS, EXCEPTION_PARENT, NATIVE_MODULE, RECORD_SPEC_ATTRIBUTE, STR_ENUM,
+    VALUE_ERROR_PARENT,
 };
 use crate::bindings::_helpers::records::error_classes::{
     BoundErrorInitializer, ErrorInitializer, class_value,
@@ -59,6 +60,18 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
             NativeProperty {
                 property: *property,
                 name,
+                cached: false,
+            },
+        )?;
+        module.getattr(*class)?.setattr(*name, descriptor)?;
+    }
+    for (class, name, property) in CACHED_PROPERTIES.iter().flat_map(|group| group.iter()) {
+        let descriptor: Py<NativeProperty> = Py::new(
+            py,
+            NativeProperty {
+                property: *property,
+                name,
+                cached: true,
             },
         )?;
         module.getattr(*class)?.setattr(*name, descriptor)?;

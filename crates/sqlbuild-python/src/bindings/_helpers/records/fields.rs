@@ -1,7 +1,7 @@
 //! Construction, comparison and display of native record field values.
 
 use pyo3::IntoPyObjectExt;
-use pyo3::exceptions::{PyAttributeError, PyTypeError};
+use pyo3::exceptions::{PyAttributeError, PyRuntimeError, PyTypeError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::pyclass::CompareOp;
 use pyo3::types::{
@@ -177,4 +177,39 @@ pub(crate) fn ordered_comparison(
         .as_any()
         .rich_compare(compared_values(other)?, op)?
         .into_py_any(py)
+}
+
+/// The cached value of `name` on `record`, if computed before.
+pub(crate) fn cached_value(
+    record: &Bound<'_, NativeRecord>,
+    name: &str,
+) -> PyResult<Option<Py<PyAny>>> {
+    let py: Python<'_> = record.py();
+    let cached = record
+        .get()
+        .cached
+        .lock()
+        .map_err(|_| PyRuntimeError::new_err("native record cache is poisoned"))?;
+    Ok(cached
+        .iter()
+        .find(|(cached_name, _)| *cached_name == name)
+        .map(|(_, value)| value.clone_ref(py)))
+}
+
+/// Keep `value` as the cached value of `name` on `record`.
+pub(crate) fn store_cached(
+    record: &Bound<'_, NativeRecord>,
+    name: &'static str,
+    value: &Py<PyAny>,
+) -> PyResult<()> {
+    let py: Python<'_> = record.py();
+    let mut cached = record
+        .get()
+        .cached
+        .lock()
+        .map_err(|_| PyRuntimeError::new_err("native record cache is poisoned"))?;
+    if !cached.iter().any(|(cached_name, _)| *cached_name == name) {
+        cached.push((name, value.clone_ref(py)));
+    }
+    Ok(())
 }

@@ -10,6 +10,8 @@ from sqlbuild._native import (
     CompileLineageMode,
     CompileModelConfig,
     ProjectColumnLineage,
+    ProjectGraph,
+    SqlHookEntry,
     WrittenTarget,
     compiled_model_record,
     format_compile_json,
@@ -18,8 +20,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
-from sqlbuild.compiler.discovery.models import SqlHookEntry
-from sqlbuild.compiler.pipeline.models import ProjectGraph
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileJsonExecutionLayersTestCase,
     CompileJsonLargeIntegerTestCase,

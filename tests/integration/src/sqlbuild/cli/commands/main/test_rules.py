@@ -17,6 +17,8 @@ import sqlbuild.compiler.compile._helpers.render.user_macros as macros_module
 from sqlbuild._native import (
     CustomHostObserver,
     DeclarationScopeBuild,
+    DiscoveredMacroFile,
+    DiscoveredProjectInputs,
     LintRunResult,
     SqlLexicalSyntax,
     active_lint_stop,
@@ -24,7 +26,6 @@ from sqlbuild._native import (
 )
 from sqlbuild._native import run_cli as main
 from sqlbuild.compiler.compile.models import LoadedMacro
-from sqlbuild.compiler.discovery.models import DiscoveredMacroFile, DiscoveredProjectInputs
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     CustomHostFailureIntegrationTestCase,
     CustomHostInterruptIntegrationTestCase,

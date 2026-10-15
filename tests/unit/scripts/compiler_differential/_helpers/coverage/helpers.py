@@ -6,9 +6,12 @@ import dataclasses
 from itertools import filterfalse
 from typing import cast
 
-from sqlbuild._native import STAGE_CAPTURE_OMITTED_ATTRIBUTES, CompileProjectInputs
+from sqlbuild._native import (
+    STAGE_CAPTURE_OMITTED_ATTRIBUTES,
+    CompileProjectInputs,
+    DiscoveredProjectInputs,
+)
 from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 
 _VALUE_KIND: str = "sqlbuild.sql_values.types:SqlValueKind"
 

@@ -23,6 +23,7 @@ from sqlbuild._native import (
     ScopeIndex,
     ScopeKind,
     SourceColumnEntry,
+    SqlHookEntry,
     SqlTestPlanEntry,
     build_manifest,
     project_with,
@@ -37,7 +38,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledSeedView,
     CompiledSourceView,
 )
-from sqlbuild.compiler.discovery.models import SqlHookEntry
 from tests.unit.src.sqlbuild.compiler.manifest._test_types import (
     FqnTestCase,
     ManifestAuditNodeTestCase,

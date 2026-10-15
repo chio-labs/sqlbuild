@@ -6,7 +6,13 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
-from sqlbuild._native import assemble_project, build_compile_inputs, discover_project_inputs
+from sqlbuild._native import (
+    DiscoveredProjectInputs,
+    SqlHookEntry,
+    assemble_project,
+    build_compile_inputs,
+    discover_project_inputs,
+)
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
@@ -17,7 +23,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     CompiledSeedView,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, SqlHookEntry
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     AssembleCompiledProjectEffectiveTargetTestCase,
     AssembleCompiledProjectTestCase,

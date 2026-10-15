@@ -584,11 +584,7 @@ const R_DISCOVERED_PYTHON_LOADER_METADATA: RecordSpec = RecordSpec {
         FieldSpec::new("contract", FieldDefault::None),
         FieldSpec::new(
             "connection_mode",
-            FieldDefault::Member(
-                "sqlbuild.compiler.discovery.types",
-                "LoaderConnectionMode",
-                "SQLBUILD",
-            ),
+            FieldDefault::Member("sqlbuild._native", "LoaderConnectionMode", "SQLBUILD"),
         ),
     ],
 };
@@ -957,6 +953,31 @@ const R_SQL_LEXICAL_SYNTAX: RecordSpec = RecordSpec {
         ),
     ],
 };
+const R_PROJECT_GRAPH: RecordSpec = RecordSpec {
+    name: "ProjectGraph",
+    doc: "Static compiled project graph held natively; dict views are built only when read.",
+    fields: &[
+        FieldSpec::required("project"),
+        FieldSpec {
+            name: "native",
+            default: FieldDefault::Required,
+            compared: false,
+        },
+    ],
+};
+const R_COMPILE_PIPELINE_RESULT: RecordSpec = RecordSpec {
+    name: "CompilePipelineResult",
+    doc: "Complete output from the compile-and-plan pipeline.",
+    fields: &[
+        FieldSpec::required("project"),
+        FieldSpec::required("plan_output"),
+        FieldSpec::new("custom_materializations", FieldDefault::EmptyDict),
+        FieldSpec::new("python_node_names", FieldDefault::EmptyFrozenset),
+        FieldSpec::new("python_plan_entries", FieldDefault::EmptyTuple),
+        FieldSpec::new("compile_seconds", FieldDefault::None),
+        FieldSpec::new("planning_seconds", FieldDefault::None),
+    ],
+};
 
 /// The compiler, lint and config value records.
 pub(crate) const COMPILER_RECORDS: &[RecordSpec] = &[
@@ -1040,4 +1061,6 @@ pub(crate) const COMPILER_RECORDS: &[RecordSpec] = &[
     R_PYTHON_IDENTITY_DEPENDENCY,
     R_PYTHON_NODE_IDENTITY,
     R_SQL_LEXICAL_SYNTAX,
+    R_PROJECT_GRAPH,
+    R_COMPILE_PIPELINE_RESULT,
 ];

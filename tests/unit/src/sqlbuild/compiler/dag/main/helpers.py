@@ -9,10 +9,15 @@ from sqlbuild._native import (
     CompileModelConfig,
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
+    DiscoveredLoaderFunction,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
+    DiscoveredSourceFile,
+    DiscoveredSqlScenarioFile,
     DiscoveredSqlTestBlock,
+    DiscoveredSqlTestFile,
     FunctionArgument,
+    ProjectGraph,
     SchemaColumn,
     SchemaModelEntry,
     SchemaSeedEntry,
@@ -35,13 +40,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     FunctionLanguage,
 )
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredLoaderFunction,
-    DiscoveredSourceFile,
-    DiscoveredSqlScenarioFile,
-    DiscoveredSqlTestFile,
-)
-from sqlbuild.compiler.pipeline.models import ProjectGraph
 from tests.unit.src.sqlbuild.compiler.graph.helpers import project_graph_from_indexes
 
 

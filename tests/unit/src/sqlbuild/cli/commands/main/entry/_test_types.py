@@ -5,11 +5,11 @@ from pathlib import Path
 from sqlbuild._native import (
     CliUserError,
     ColumnLineageMode,
+    CompileInputError,
     CompileLineageMode,
     ProjectConfigError,
     SpecConfigError,
 )
-from sqlbuild.compiler.compile.exceptions import CompileInputError
 
 
 @dataclass(frozen=True)

@@ -42,8 +42,7 @@ pub(crate) const RENDER_SOURCE_READ: (&str, &str) =
 pub(crate) const YAML_ENTRY_LINE: (&str, &str) = ("sqlbuild._native", "yaml_entry_line");
 pub(crate) const RUN_SCOPE: (&str, &str) =
     ("sqlbuild.runtime.observability.main.run_scope", "run_scope");
-pub(crate) const SQL_HOOK_ENTRY: (&str, &str) =
-    ("sqlbuild.compiler.discovery.models", "SqlHookEntry");
+pub(crate) const SQL_HOOK_ENTRY: (&str, &str) = ("sqlbuild._native", "SqlHookEntry");
 pub(crate) const CURSOR_ALGEBRA_ERROR: (&str, &str) =
     ("sqlbuild.cursor_algebra.exceptions", "CursorAlgebraError");
 pub(crate) const DATE_VALUE: (&str, &str) = ("sqlbuild._native", "DateValue");

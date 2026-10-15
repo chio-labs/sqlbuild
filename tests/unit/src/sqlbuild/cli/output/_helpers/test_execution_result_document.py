@@ -16,6 +16,7 @@ from sqlbuild._native import (
     MeasurementThresholdBound,
     MeasurementThresholds,
     SqlLogicalType,
+    SqlTestParameterDeclaration,
     SqlValue,
     SqlValueKind,
     format_audit_execution_json,
@@ -31,7 +32,6 @@ from sqlbuild.compiler.auditing.types import (
     ThresholdOperator,
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
-from sqlbuild.compiler.discovery.models import SqlTestParameterDeclaration
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.models import (
     MicrobatchAccountingInterval,

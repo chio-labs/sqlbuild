@@ -10,12 +10,12 @@ const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
+const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
 const AUDITING_TYPES_MODULE: &str = "sqlbuild.compiler.auditing.types";
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
+const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const PLANNER_TYPES_MODULE: &str = "sqlbuild._native";
-const REFERENCE_TYPES_MODULE: &str = "sqlbuild.compiler.references.types";
+const REFERENCE_TYPES_MODULE: &str = "sqlbuild._native";
 const SCOPE_ERRORS_MODULE: &str = "sqlbuild._native";
 const SCOPE_MODELS_MODULE: &str = "sqlbuild._native";
 const SCOPE_TYPES_MODULE: &str = "sqlbuild._native";

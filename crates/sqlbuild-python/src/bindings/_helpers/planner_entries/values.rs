@@ -12,10 +12,10 @@ pub(super) const PLANNER_TYPES: &str = "sqlbuild._native";
 pub(super) const PLANNER_EXCEPTIONS: &str = "sqlbuild._native";
 pub(super) const MICROBATCH_CONCURRENCY_MESSAGE: &str =
     "batch_concurrency > 1 requires concurrent microbatches; selected model(s): ";
-pub(super) const COMPILE_EXCEPTIONS: &str = "sqlbuild.compiler.compile.exceptions";
+pub(super) const COMPILE_EXCEPTIONS: &str = "sqlbuild._native";
 pub(super) const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
 pub(super) const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
-pub(super) const DISCOVERY_MODELS: &str = "sqlbuild.compiler.discovery.models";
+pub(super) const DISCOVERY_MODELS: &str = "sqlbuild._native";
 
 /// `sqlbuild._native.name(**pairs)`.
 pub(super) fn native<'py>(

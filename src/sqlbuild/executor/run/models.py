@@ -14,6 +14,7 @@ from sqlbuild._native import (
     CursorGrain,
     CursorType,
     DateValue,
+    DiscoveredHookFunction,
     Duration,
     FutureCursorSafetyEvidence,
     FutureCursorsConfig,
@@ -21,6 +22,7 @@ from sqlbuild._native import (
     MaximumStartSafetyEvidence,
     MicrobatchLimitAction,
     ModelPlanEntry,
+    PythonHookEntry,
     SourceEntry,
     StartCursorsConfig,
     TimestampValue,
@@ -31,7 +33,6 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import LifeCycleEvent, QueryResult
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, PythonHookEntry
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError
 from sqlbuild.cursor_algebra.types import BoundSentinel, CursorScalar

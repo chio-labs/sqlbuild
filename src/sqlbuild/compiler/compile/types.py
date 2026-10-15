@@ -18,12 +18,18 @@ if TYPE_CHECKING:
         CompiledSource,
         CompiledSqlExpansion,
         CompileModelConfig,
+        ConstantDeclaration,
         DiscoveredAuditBlock,
         DiscoveredAuditFile,
+        DiscoveredHookFunction,
+        DiscoveredLoaderFunction,
+        DiscoveredMaterializationFile,
         DiscoveredSchemaFile,
         DiscoveredSeedFile,
+        DiscoveredSourceFile,
         DiscoveredSqlHookFile,
         DynamicColumnContractProof,
+        EnumDeclaration,
         FunctionArgument,
         FunctionReturnColumn,
         LiteralSqlRelation,
@@ -50,15 +56,6 @@ if TYPE_CHECKING:
         InferredColumn,
         LoadedMacro,
     )
-    from sqlbuild.compiler.discovery.models import (
-        ConstantDeclaration,
-        DiscoveredHookFunction,
-        DiscoveredLoaderFunction,
-        DiscoveredMaterializationFile,
-        DiscoveredSourceFile,
-        EnumDeclaration,
-    )
-    from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 
 
 type RelationKeyRow = tuple[
@@ -458,3 +455,38 @@ class AuditInput(Protocol):
     def assembly_row(
         self,
     ) -> tuple[list[tuple[str, str, str | None]], tuple[str, str] | None]: ...
+
+
+class ExternalSqlReferenceResolver(Protocol):
+    """Resolve first-class SQLBuild references backed by external metadata."""
+
+    def validate_model_names(self, *, known_model_names: set[str]) -> None:
+        """Validate SQLBuild model names against external integration resources."""
+
+    def extend_sql_test_model_names(self, *, known_model_names: set[str]) -> set[str]:
+        """Return extra model names valid for SQL-native test targets."""
+
+    def extend_sql_test_source_names(self, *, known_source_names: set[str]) -> set[str]:
+        """Return extra source names valid for SQL-native test mocks."""
+
+    def extend_sql_test_seed_names(self, *, known_seed_names: set[str]) -> set[str]:
+        """Return extra seed names valid for SQL-native test mocks."""
+
+    def validate_reference(
+        self,
+        *,
+        ref_kind: str,
+        ref_name: str,
+        ref_package: str | None,
+        owner_relative_sql_path: Path,
+    ) -> None:
+        """Validate one external SQL reference from a SQLBuild-owned file."""
+
+    def resolve_reference(
+        self,
+        *,
+        ref_kind: str,
+        ref_name: str,
+        ref_package: str | None,
+    ) -> str | None:
+        """Return the physical relation for an external reference, if resolvable."""

@@ -1,10 +1,15 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from sqlbuild._native import MaterializationType, PlanAction, RetentionDirection, RetentionPlanPhase
+from sqlbuild._native import (
+    DiscoveredLoaderFunction,
+    MaterializationType,
+    PlanAction,
+    RetentionDirection,
+    RetentionPlanPhase,
+)
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.adapter.contract.types import RetentionChangePhase
-from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind

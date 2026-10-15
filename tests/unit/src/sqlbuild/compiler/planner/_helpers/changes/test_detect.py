@@ -16,6 +16,7 @@ from sqlbuild._native import (
     PlannerScope,
     PlanReason,
     PlanWarning,
+    SqlHookEntry,
     WarehouseFingerprints,
     WarehouseSnapshot,
     WarningSeverity,
@@ -29,7 +30,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.compile.types import CompiledModelView
-from sqlbuild.compiler.discovery.models import SqlHookEntry
 from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_helpers import (
     build_function_caller_metadata_case,
     build_metadata_json_with_audit_gate,

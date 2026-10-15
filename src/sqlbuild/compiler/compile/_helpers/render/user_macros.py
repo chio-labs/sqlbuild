@@ -15,17 +15,18 @@ from typing import cast
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    CompileInputError,
+    ConstantDeclaration,
     DeclarationIdentity,
     DeclarationKind,
     DeclarationRecord,
+    DiscoveredMacroFile,
+    EnumDeclaration,
     SqlValue,
     SqlValueKind,
     validate_resource_identity,
 )
-from sqlbuild.compiler.compile.exceptions import (
-    CompileInputError,
-    MacroDeclarationLookupError,
-)
+from sqlbuild.compiler.compile.exceptions import MacroDeclarationLookupError
 from sqlbuild.compiler.compile.models import (
     DeclarationResolutionContext,
     LoadedMacro,
@@ -33,11 +34,6 @@ from sqlbuild.compiler.compile.models import (
     StaticMacroExport,
     StaticMacroFault,
     StaticMacroInventory,
-)
-from sqlbuild.compiler.discovery.models import (
-    ConstantDeclaration,
-    DiscoveredMacroFile,
-    EnumDeclaration,
 )
 
 _OBJECT_ENTRY_LENGTH: int = 2

@@ -8,6 +8,7 @@ from typing import Any, cast
 
 from sqlbuild._native import (
     AuditPlanEntry,
+    DiscoveredHookFunction,
     MaterializationType,
     ModelPlanEntry,
     PlanAction,
@@ -24,7 +25,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.executor.run._helpers.materializations.view import execute_view_entry
 from sqlbuild.executor.run.models import (
     HookContext,

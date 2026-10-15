@@ -28,7 +28,7 @@ const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const RULES_CONSTANTS_MODULE: &str = "sqlbuild.rule_engine.constants";
-const RULES_ERRORS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
+const RULES_ERRORS_MODULE: &str = "sqlbuild._native";
 const RULE_CONTEXT_MODULE: &str = "sqlbuild.rule_engine.classes.rule_context";
 const FACT_REPLAY_MODULE: &str = "sqlbuild.rule_engine._helpers.engine.fact_replay";
 const SCOPE_MODELS_MODULE: &str = "sqlbuild._native";

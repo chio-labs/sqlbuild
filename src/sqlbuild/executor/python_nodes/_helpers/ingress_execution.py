@@ -10,17 +10,15 @@ from typing import Any
 
 from sqlbuild._native import (
     CostContext,
+    DiscoveredAssetFunction,
+    DiscoveredLoaderFunction,
     DiscoveredPythonNode,
+    DiscoveredTaskFunction,
     PythonNodeGraph,
     PythonSqlRunLifecyclePlan,
     SourceEntry,
 )
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredAssetFunction,
-    DiscoveredLoaderFunction,
-    DiscoveredTaskFunction,
-)
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus, SkipMode
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.load.main._execute import execute_source_load

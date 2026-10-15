@@ -5,8 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild._native import SqlValue
-from sqlbuild.compiler.discovery.models import SqlTestParameterDeclaration
+from sqlbuild._native import SqlTestParameterDeclaration, SqlValue
 from sqlbuild.executor.testing.types import SqlTestOutcome
 
 

@@ -11,6 +11,7 @@ from sqlbuild._native import (
     ResolvedTimeTravelRetention,
     SourceLocation,
     SqlLexicalSyntax,
+    SqlReferenceKind,
     SqlValue,
     UsageRecord,
 )
@@ -20,7 +21,6 @@ from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.compiler.lineage.types import (
     InferredNullability,
 )
-from sqlbuild.compiler.references.types import SqlReferenceKind
 
 if TYPE_CHECKING:
     from sqlbuild._native import CompileInputsView

@@ -8,9 +8,9 @@ import stat
 from pathlib import Path
 
 import sqlbuild._native as _native
+from sqlbuild._native import RuleUsageError
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine.constants import PARENT_DIRECTORY_TOKEN
-from sqlbuild.rule_engine.exceptions import RuleUsageError
 from sqlbuild.rule_engine.models import Model, ProjectPath
 
 _EXCLUDED_ROOTS: frozenset[str] = frozenset({".git", ".venv", "logs", "target", "venv"})

@@ -22,11 +22,11 @@ const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const EFFECTIVE_CONFIG_MODULE: &str = "sqlbuild._native";
-const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
+const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const ANALYSIS_SELECTION_MODULE: &str = "sqlbuild._native";
 const TIMING_TRACKER_MODULE: &str = "sqlbuild._native";
-const RULE_EXCEPTIONS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
+const RULE_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const RULE_THREADS_MODULE: &str = "sqlbuild._native";
 const RULE_MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
 const RUNTIME_MODELS_MODULE: &str = "sqlbuild.runtime.contracts.models";

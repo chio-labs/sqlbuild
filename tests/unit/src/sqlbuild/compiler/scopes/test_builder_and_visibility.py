@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    ConstantDeclaration,
     DeclarationIdentity,
     DeclarationKind,
     DeclarationRecord,
@@ -14,9 +15,14 @@ from sqlbuild._native import (
     DiscoveredAuditFile,
     DiscoveredConstantFile,
     DiscoveredEnumFile,
+    DiscoveredMacroFile,
+    DiscoveredSourceFile,
     DiscoveredSqlFunctionFile,
     DiscoveredSqlHookFile,
+    DiscoveredSqlScenarioFile,
     DiscoveredSqlTestBlock,
+    DiscoveredSqlTestFile,
+    EnumDeclaration,
     EnumMember,
     InaccessibleReason,
     OwnershipRoot,
@@ -40,14 +46,6 @@ from sqlbuild._native import (
     validate_scope_index,
 )
 from sqlbuild.compiler.compile.models import LoadedMacro
-from sqlbuild.compiler.discovery.models import (
-    ConstantDeclaration,
-    DiscoveredMacroFile,
-    DiscoveredSourceFile,
-    DiscoveredSqlScenarioFile,
-    DiscoveredSqlTestFile,
-    EnumDeclaration,
-)
 from tests.unit.src.sqlbuild.compiler.scopes._test_types import (
     ExpectedBooleanCase,
     ResourceExpectation,

@@ -42,7 +42,6 @@ COMPILE_ONLY_MODULES: tuple[str, ...] = (
     "yaml",
     "sqlbuild.adapter.contract.classes.base_adapter",
     "sqlbuild.compiler.compile.models",
-    "sqlbuild.compiler.discovery.models",
     "sqlbuild.lint",
     "sqlbuild.rule_engine",
     "sqlbuild.runtime.compute_logs",

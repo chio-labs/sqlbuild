@@ -10,11 +10,15 @@ from typing import TYPE_CHECKING, cast
 import pytest
 
 from sqlbuild._native import (
+    CompileInputError,
     DeclarationIdentity,
     DeclarationKind,
+    DiscoveredProjectInputs,
+    DiscoveredSourceFile,
     ResourceIdentity,
     ResourceKind,
     SourceEntry,
+    SqlHookEntry,
     UsageKind,
     UsageRecord,
     assemble_project,
@@ -22,13 +26,7 @@ from sqlbuild._native import (
     discover_project_inputs,
     scope_metadata_projection,
 )
-from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredProjectInputs,
-    DiscoveredSourceFile,
-    SqlHookEntry,
-)
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ExpectedBooleanTestCase,
     ExpectedModelDeclarationGrantTestCase,

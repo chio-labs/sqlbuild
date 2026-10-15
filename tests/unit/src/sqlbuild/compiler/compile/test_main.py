@@ -13,25 +13,23 @@ from sqlbuild._native import (
     ClonePolicy,
     CompileModelConfig,
     DefaultsConfig,
+    DiscoveredProjectInputs,
     LocalClonePolicy,
     LocalConfig,
     LocalTargetConfig,
     MaterializationDefaultsConfig,
     MaterializationRetentionDefaults,
     ProjectConfig,
+    PythonHookEntry,
     ResolvedTimeTravelRetention,
     ResourceIdentityError,
     SpecConfigError,
+    SqlHookEntry,
     TargetConfig,
     TimeTravelRetentionSource,
     build_compile_inputs,
     discover_project_inputs,
     resolve_target_config,
-)
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredProjectInputs,
-    PythonHookEntry,
-    SqlHookEntry,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.config.helpers import build_config_natively
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (

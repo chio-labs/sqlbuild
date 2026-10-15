@@ -6,7 +6,7 @@ from dataclasses import fields
 
 import pytest
 
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild._native import DiscoveredProjectInputs
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     DescriptionInputClassificationCase,
 )

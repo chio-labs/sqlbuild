@@ -20,7 +20,7 @@ const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
-const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
+const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const FRONTIER_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const SCOPES_MODELS_MODULE: &str = "sqlbuild._native";
 const SCOPES_TYPES_MODULE: &str = "sqlbuild._native";

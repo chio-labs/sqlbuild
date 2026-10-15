@@ -9,7 +9,7 @@ const MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
 const FINDING_CLASS: &str = "Finding";
 const PATHLIB_MODULE: &str = "pathlib";
 const PATH_CLASS: &str = "Path";
-const ERRORS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
+const ERRORS_MODULE: &str = "sqlbuild._native";
 const RULES_ERROR: &str = "RulesError";
 const INVALID_FINDING: &str = "native rules engine returned an invalid finding";
 

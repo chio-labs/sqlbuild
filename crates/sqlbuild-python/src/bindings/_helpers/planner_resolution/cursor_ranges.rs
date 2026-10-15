@@ -25,7 +25,7 @@ use std::cmp::Ordering;
 const MODELS: &str = "sqlbuild._native";
 const CURSOR_TYPES: &str = "sqlbuild.cursor_algebra.types";
 const CURSOR_MODELS: &str = "sqlbuild._native";
-const COMPILE_EXCEPTIONS: &str = "sqlbuild.compiler.compile.exceptions";
+const COMPILE_EXCEPTIONS: &str = "sqlbuild._native";
 const INCREMENTAL: &str = "incremental";
 const MICROBATCH: &str = "microbatch";
 const ROLLING_WINDOW: &str = "rolling_window";

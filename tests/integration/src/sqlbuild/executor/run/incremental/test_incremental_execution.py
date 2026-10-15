@@ -8,10 +8,16 @@ from typing import Any, ClassVar
 
 import pytest
 
-from sqlbuild._native import FutureCursorAction, FutureCursorsConfig, OnSchemaChange
+from sqlbuild._native import (
+    DiscoveredHookFunction,
+    FutureCursorAction,
+    FutureCursorsConfig,
+    OnSchemaChange,
+    PythonHookEntry,
+    SqlHookEntry,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import AuditRunScope
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.run.types import ExecutionPhase

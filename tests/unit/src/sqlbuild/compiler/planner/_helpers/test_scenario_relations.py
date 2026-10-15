@@ -8,6 +8,7 @@ import pytest
 
 from sqlbuild._native import (
     CompileSqlScenarioCte,
+    DiscoveredHookFunction,
     PlannerInputError,
     ScenarioExecutionPlan,
     ScenarioFixturePlan,
@@ -28,7 +29,6 @@ from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapt
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     ScenarioCheckSqlResolutionErrorTestCase,
     ScenarioCheckSqlResolutionTestCase,

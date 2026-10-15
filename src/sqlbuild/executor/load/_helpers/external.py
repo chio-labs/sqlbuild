@@ -6,10 +6,9 @@ import logging
 import time
 from collections.abc import Callable
 
-from sqlbuild._native import SourceEntry
+from sqlbuild._native import DiscoveredLoaderFunction, SourceEntry
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.load.models import (
     LoaderContext,

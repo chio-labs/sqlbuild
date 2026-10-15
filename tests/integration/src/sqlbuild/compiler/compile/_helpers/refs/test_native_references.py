@@ -9,8 +9,7 @@ from typing import Any
 import pytest
 
 import sqlbuild._native as _native
-from sqlbuild._native import SqlLexicalSyntax, extract_sql_references
-from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild._native import CompileInputError, SqlLexicalSyntax, extract_sql_references
 from tests.integration.src.sqlbuild.compiler.compile._helpers.refs._test_types import (
     CraftedReferenceTestCase,
     ReferenceExtractionTestCase,

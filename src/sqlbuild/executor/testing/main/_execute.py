@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild._native import SqlTestPlanEntry, render_sql_test_comparison_sql
+from sqlbuild._native import CompileInputError, SqlTestPlanEntry, render_sql_test_comparison_sql
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.executor.testing._helpers.difference_samples import add_difference_samples
 from sqlbuild.executor.testing._helpers.expected_column_probe import (
     missing_expected_columns_message,

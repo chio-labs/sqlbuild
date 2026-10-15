@@ -8,11 +8,11 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    DiscoveredSqlModelFile,
     directory_snapshot_scope,
     discover_model_files,
     discover_python_module_files,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     NativeRuntimeTestCase,
     SharedSnapshotTestCase,

@@ -16,7 +16,7 @@ from pathlib import Path, PurePath
 from types import BuiltinFunctionType, CellType, FunctionType, MethodType, ModuleType
 from typing import Any, cast
 
-from sqlbuild.rule_engine.exceptions import OpaqueModuleStateError
+from sqlbuild._native import OpaqueModuleStateError
 from sqlbuild.rule_engine.models import ModuleStateFingerprint, ModuleStateTrace
 
 _MAX_STATE_NODES: int = 50_000

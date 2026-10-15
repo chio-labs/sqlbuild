@@ -4,8 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild._native import LocalConfig, ProjectConfig, TargetConfig, TargetWarehousesConfig
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild._native import (
+    DiscoveredProjectInputs,
+    LocalConfig,
+    ProjectConfig,
+    TargetConfig,
+    TargetWarehousesConfig,
+)
 from tests.unit.src.sqlbuild.cli.commands._helpers.runtime._test_types import (
     CommandWarehouseResolutionTestCase,
 )

@@ -11,7 +11,7 @@ use sqlbuild_rules::rules::main::selected_codes::selected_codes_json;
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::rules::constants::RULES_NATIVE_API_VERSION;
 
-const RULES_EXCEPTIONS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
+const RULES_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const JSON_MODULE: &str = "json";
 const BUILTINS_MODULE: &str = "builtins";

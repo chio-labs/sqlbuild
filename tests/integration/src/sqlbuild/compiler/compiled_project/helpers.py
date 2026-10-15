@@ -19,6 +19,8 @@ from sqlbuild._native import (
     CompileAdapterContext,
     CompileModelConfig,
     CompileProjectInputs,
+    DiscoveredProjectInputs,
+    DiscoveredSqlModelFile,
     LocalConfig,
     MeasurementThresholdBound,
     MeasurementThresholds,
@@ -41,7 +43,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from tests.integration.src.sqlbuild.compiler.graph.helpers import write_files
 
 if TYPE_CHECKING:

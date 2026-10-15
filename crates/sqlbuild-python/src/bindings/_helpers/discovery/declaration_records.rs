@@ -33,7 +33,7 @@ use crate::bindings::models::{NativeDiscoverySession, NativeProjectTree};
 
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
-const MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
+const MODELS_MODULE: &str = "sqlbuild._native";
 const SCOPE_TYPES_MODULE: &str = "sqlbuild._native";
 const AUDITING_MODELS_MODULE: &str = "sqlbuild._native";
 const AUDITING_TYPES_MODULE: &str = "sqlbuild.compiler.auditing.types";

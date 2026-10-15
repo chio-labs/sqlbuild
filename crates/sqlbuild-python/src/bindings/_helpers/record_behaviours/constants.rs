@@ -9,10 +9,18 @@ use crate::bindings::_helpers::record_behaviours::cursors::{
     finish_input_relation, finish_maximum_evidence, input_relation_runtime_owned,
     snapshot_watermarks_available,
 };
+use crate::bindings::_helpers::record_behaviours::discovery::{
+    constant_logical_type, constant_scalar_type, graph_all_keys, graph_downstream_deps,
+    graph_lineage_views, graph_path_index, graph_tag_index, graph_upstream_deps,
+};
 use crate::bindings::_helpers::record_behaviours::durations::{
     duration_add_to, duration_fixed_seconds, duration_has_calendar_component,
     duration_is_single_unit_in, duration_is_zero, duration_parse, duration_subtract_from,
     duration_total_months, duration_units, finish_aligned_interval,
+};
+use crate::bindings::_helpers::record_behaviours::error_inits::{
+    macro_argument_error_init, macro_argument_error_located, macro_argument_error_shifted,
+    rules_config_error_init, sql_test_reference_error_init,
 };
 use crate::bindings::_helpers::record_behaviours::freshness::{
     finish_freshness_record, freshness_record_identity,
@@ -34,6 +42,10 @@ use crate::bindings::_helpers::record_behaviours::planner::{
     plan_python_source_entries, retention_decreases,
 };
 use crate::bindings::_helpers::record_behaviours::python_nodes::graph_selected_sql_refs;
+use crate::bindings::_helpers::record_behaviours::references::{
+    reference_example_call, reference_fixture_cte_prefix, reference_function_name,
+    reference_placeholder_call,
+};
 use crate::bindings::_helpers::record_behaviours::scopes::{
     completeness_complete, target_query_unknown,
 };
@@ -163,7 +175,23 @@ pub(crate) const BEHAVIOUR_PROPERTIES: &[(&str, &str, ClassProperty)] = &[
         "python_source_entries",
         plan_python_source_entries,
     ),
+    ("SqlReferenceKind", "function_name", reference_function_name),
+    (
+        "SqlReferenceKind",
+        "fixture_cte_prefix",
+        reference_fixture_cte_prefix,
+    ),
+    ("ConstantDeclaration", "logical_type", constant_logical_type),
+    ("ConstantDeclaration", "scalar_type", constant_scalar_type),
+    ("ProjectGraph", "upstream_deps", graph_upstream_deps),
+    ("ProjectGraph", "downstream_deps", graph_downstream_deps),
+    ("ProjectGraph", "tag_index", graph_tag_index),
+    ("ProjectGraph", "path_index", graph_path_index),
+    ("ProjectGraph", "all_keys", graph_all_keys),
 ];
+/// Computed attributes of compiler shapes that a record computes once and keeps.
+pub(crate) const BEHAVIOUR_CACHED_PROPERTIES: &[(&str, &str, ClassProperty)] =
+    &[("ProjectGraph", "lineage_views", graph_lineage_views)];
 /// Methods of compiler shapes.
 pub(crate) const BEHAVIOUR_METHODS: &[(&str, &str, ClassMethod)] = &[
     (
@@ -190,6 +218,29 @@ pub(crate) const BEHAVIOUR_METHODS: &[(&str, &str, ClassMethod)] = &[
         materialization_is_table_backed,
     ),
     ("CursorOverrides", "typed_as", overrides_typed_as),
+    ("SqlReferenceKind", "example_call", reference_example_call),
+    (
+        "SqlReferenceKind",
+        "placeholder_call",
+        reference_placeholder_call,
+    ),
+    ("MacroArgumentError", "__init__", macro_argument_error_init),
+    (
+        "MacroArgumentError",
+        "shifted",
+        macro_argument_error_shifted,
+    ),
+    (
+        "MacroArgumentError",
+        "located",
+        macro_argument_error_located,
+    ),
+    (
+        "SqlTestReferenceError",
+        "__init__",
+        sql_test_reference_error_init,
+    ),
+    ("RulesConfigError", "__init__", rules_config_error_init),
     ("Duration", "subtract_from", duration_subtract_from),
 ];
 /// Compiler records ordered by their compared fields.

@@ -14,6 +14,8 @@ from sqlbuild._native import (
     CompileAdapterContext,
     CompiledLineageColumnFact,
     CompilePipelineOptions,
+    CompilePipelineResult,
+    DiscoveredProjectInputs,
     build_compile_inputs,
     build_compiled_project,
     build_manifest,
@@ -26,8 +28,6 @@ from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 
 if TYPE_CHECKING:

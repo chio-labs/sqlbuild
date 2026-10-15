@@ -8,6 +8,7 @@ from typing import cast
 
 from sqlbuild._native import (
     CompiledSource,
+    DiscoveredSourceFile,
     PlannerRelationsContext,
     PlannerScope,
     SourceEntry,
@@ -17,7 +18,6 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledResourceType, CompiledSourceView
-from sqlbuild.compiler.discovery.models import DiscoveredSourceFile
 
 
 def column_names(columns: tuple[ColumnInfo, ...]) -> tuple[str, ...]:

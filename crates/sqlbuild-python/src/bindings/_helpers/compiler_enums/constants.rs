@@ -676,6 +676,28 @@ const E_SCENARIO_ARTIFACT_KIND: EnumSpec = EnumSpec {
         ("MODEL", "model"),
     ],
 };
+const E_SQL_REFERENCE_KIND: EnumSpec = EnumSpec {
+    name: "SqlReferenceKind",
+    doc: "",
+    members: &[
+        ("REF", "ref"),
+        ("SEED", "seed"),
+        ("SOURCE", "source"),
+        ("DBT_REF", "dbt_ref"),
+        ("UDF", "udf"),
+        ("TABLE_FUNCTION", "table_fn"),
+    ],
+};
+const E_HARD_CODED_RELATION_OWNER_KIND: EnumSpec = EnumSpec {
+    name: "HardCodedRelationOwnerKind",
+    doc: "The kind of Python code that names a project relation in SQL.",
+    members: &[("NODE", "node"), ("HOOK", "hook"), ("LOADER", "loader")],
+};
+const E_LOADER_CONNECTION_MODE: EnumSpec = EnumSpec {
+    name: "LoaderConnectionMode",
+    doc: "How a source loader owns the destination warehouse connection.",
+    members: &[("SQLBUILD", "sqlbuild"), ("EXTERNAL", "external")],
+};
 
 /// Compiler, rule, lint and config string enums.
 pub(crate) const COMPILER_ENUMS: &[EnumSpec] = &[
@@ -746,4 +768,7 @@ pub(crate) const COMPILER_ENUMS: &[EnumSpec] = &[
     E_CURSOR_GRAIN,
     E_MATERIALIZATION_TYPE,
     E_SCENARIO_ARTIFACT_KIND,
+    E_SQL_REFERENCE_KIND,
+    E_HARD_CODED_RELATION_OWNER_KIND,
+    E_LOADER_CONNECTION_MODE,
 ];

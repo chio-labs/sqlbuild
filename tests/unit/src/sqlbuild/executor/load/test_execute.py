@@ -9,10 +9,14 @@ from typing import cast
 
 import pytest
 
-from sqlbuild._native import CostContext, SourceEntry, SourceWriteStrategy
+from sqlbuild._native import (
+    CostContext,
+    DiscoveredLoaderFunction,
+    LoaderConnectionMode,
+    SourceEntry,
+    SourceWriteStrategy,
+)
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.executor.load.main._execute import execute_source_load
 from sqlbuild.executor.load.models import (

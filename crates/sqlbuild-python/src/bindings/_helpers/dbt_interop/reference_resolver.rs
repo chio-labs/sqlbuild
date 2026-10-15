@@ -12,7 +12,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
+const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const VALIDATE_OPTIONS: (&[&str], &[&str]) = (

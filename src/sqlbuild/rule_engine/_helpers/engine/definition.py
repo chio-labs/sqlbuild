@@ -6,7 +6,7 @@ import inspect
 from collections.abc import Callable
 from typing import cast, get_type_hints
 
-from sqlbuild.rule_engine.exceptions import RulesError
+from sqlbuild._native import RulesError
 from sqlbuild.rule_engine.models import Model, Project, Rule, RuleOption
 from sqlbuild.rule_engine.types import RuleCheck, RuleContext, RuleSubject
 

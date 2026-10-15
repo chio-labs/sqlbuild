@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import Mock
 
 from sqlbuild._native import (
+    DiscoveredLoaderFunction,
     MaterializationType,
     ModelPlanEntry,
     PlanAction,
@@ -31,7 +32,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 
 

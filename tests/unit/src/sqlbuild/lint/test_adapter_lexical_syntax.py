@@ -10,9 +10,8 @@ import pytest
 
 import sqlbuild._native as fixture_formatting_module
 import sqlbuild._native as native_module
-from sqlbuild._native import SqlLexicalSyntax, discover_project_inputs
+from sqlbuild._native import DiscoveredProjectInputs, SqlLexicalSyntax, discover_project_inputs
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.unit.src.sqlbuild.lint._test_types import PassedAdapterSyntaxTestCase
 from tests.unit.src.sqlbuild.lint.helpers import write_fixture_format_project
 

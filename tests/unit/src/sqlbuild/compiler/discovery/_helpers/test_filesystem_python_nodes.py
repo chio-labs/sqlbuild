@@ -19,6 +19,11 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredCheckFunction,
     DiscoveredPythonNodeFunctions,
     DiscoveredTaskFunction,
+    PythonNodeDiscoveryError,
+    PythonNodeIdentity,
+)
+from sqlbuild.compiler.discovery._helpers.filesystem.core import (
+    discover_python_node_functions,
 )
 from sqlbuild.compiler.python_nodes.main.identity import build_python_node_identity
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (

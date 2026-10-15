@@ -3,7 +3,7 @@
 /// The extension module hosting the shapes.
 pub const NATIVE_MODULE: &str = "sqlbuild._native";
 /// The Python model type a natively hosted compiler shape is captured as.
-pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
+pub const HOSTED_SHAPE_TYPES: [(&str, &str); 450] = [
     (
         "sqlbuild._native:AlignedInterval",
         "sqlbuild.cursor_algebra.models:AlignedInterval",
@@ -121,6 +121,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
         "sqlbuild.lint.models:CompileFacts",
     ),
     (
+        "sqlbuild._native:CompileInputError",
+        "sqlbuild.compiler.compile.exceptions:CompileInputError",
+    ),
+    (
         "sqlbuild._native:CompileModelConfig",
         "sqlbuild.compiler.compile.models:CompileModelConfig",
     ),
@@ -131,6 +135,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
     (
         "sqlbuild._native:CompilePipelineOptions",
         "sqlbuild.compiler.pipeline.models:CompilePipelineOptions",
+    ),
+    (
+        "sqlbuild._native:CompilePipelineResult",
+        "sqlbuild.compiler.pipeline.models:CompilePipelineResult",
     ),
     (
         "sqlbuild._native:CompileProjectInputs",
@@ -195,6 +203,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
     (
         "sqlbuild._native:ConfigValueTypeError",
         "sqlbuild.spec.contracts.exceptions:ConfigValueTypeError",
+    ),
+    (
+        "sqlbuild._native:ConstantDeclaration",
+        "sqlbuild.compiler.discovery.models:ConstantDeclaration",
     ),
     (
         "sqlbuild._native:ConstantMetadata",
@@ -405,12 +417,32 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
         "sqlbuild.compiler.discovery.models:DiscoveredAdapterFile",
     ),
     (
+        "sqlbuild._native:DiscoveredAssetFunction",
+        "sqlbuild.compiler.discovery.models:DiscoveredAssetFunction",
+    ),
+    (
         "sqlbuild._native:DiscoveredAuditBlock",
         "sqlbuild.compiler.discovery.models:DiscoveredAuditBlock",
     ),
     (
+        "sqlbuild._native:DiscoveredAuditFactory",
+        "sqlbuild.compiler.discovery.models:DiscoveredAuditFactory",
+    ),
+    (
         "sqlbuild._native:DiscoveredAuditFile",
         "sqlbuild.compiler.discovery.models:DiscoveredAuditFile",
+    ),
+    (
+        "sqlbuild._native:DiscoveredCheckFunction",
+        "sqlbuild.compiler.discovery.models:DiscoveredCheckFunction",
+    ),
+    (
+        "sqlbuild._native:DiscoveredCommandOutputSink",
+        "sqlbuild.compiler.discovery.models:DiscoveredCommandOutputSink",
+    ),
+    (
+        "sqlbuild._native:DiscoveredCommandOutputSinkDeclaration",
+        "sqlbuild.compiler.discovery.models:DiscoveredCommandOutputSinkDeclaration",
     ),
     (
         "sqlbuild._native:DiscoveredConstantFile",
@@ -421,8 +453,44 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
         "sqlbuild.compiler.discovery.models:DiscoveredEnumFile",
     ),
     (
+        "sqlbuild._native:DiscoveredEventExporter",
+        "sqlbuild.compiler.discovery.models:DiscoveredEventExporter",
+    ),
+    (
+        "sqlbuild._native:DiscoveredEventExporterDeclaration",
+        "sqlbuild.compiler.discovery.models:DiscoveredEventExporterDeclaration",
+    ),
+    (
+        "sqlbuild._native:DiscoveredHookFunction",
+        "sqlbuild.compiler.discovery.models:DiscoveredHookFunction",
+    ),
+    (
+        "sqlbuild._native:DiscoveredLoaderFunction",
+        "sqlbuild.compiler.discovery.models:DiscoveredLoaderFunction",
+    ),
+    (
+        "sqlbuild._native:DiscoveredMacroFile",
+        "sqlbuild.compiler.discovery.models:DiscoveredMacroFile",
+    ),
+    (
+        "sqlbuild._native:DiscoveredMaterializationFile",
+        "sqlbuild.compiler.discovery.models:DiscoveredMaterializationFile",
+    ),
+    (
         "sqlbuild._native:DiscoveredModelSchemaFile",
         "sqlbuild.compiler.discovery.models:DiscoveredModelSchemaFile",
+    ),
+    (
+        "sqlbuild._native:DiscoveredProjectInputs",
+        "sqlbuild.compiler.discovery.models:DiscoveredProjectInputs",
+    ),
+    (
+        "sqlbuild._native:DiscoveredProvider",
+        "sqlbuild.compiler.discovery.models:DiscoveredProvider",
+    ),
+    (
+        "sqlbuild._native:DiscoveredProviderUsage",
+        "sqlbuild.compiler.discovery.models:DiscoveredProviderUsage",
     ),
     (
         "sqlbuild._native:DiscoveredPythonAssetMetadata",
@@ -445,8 +513,16 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
         "sqlbuild.compiler.python_nodes.models:DiscoveredPythonNode",
     ),
     (
+        "sqlbuild._native:DiscoveredPythonNodeFunctions",
+        "sqlbuild.compiler.discovery.models:DiscoveredPythonNodeFunctions",
+    ),
+    (
         "sqlbuild._native:DiscoveredPythonTaskMetadata",
         "sqlbuild.compiler.python_nodes.models:DiscoveredPythonTaskMetadata",
+    ),
+    (
+        "sqlbuild._native:DiscoveredRuntimeExtensions",
+        "sqlbuild.compiler.discovery.models:DiscoveredRuntimeExtensions",
     ),
     (
         "sqlbuild._native:DiscoveredSchemaFile",
@@ -457,6 +533,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
         "sqlbuild.compiler.discovery.models:DiscoveredSeedFile",
     ),
     (
+        "sqlbuild._native:DiscoveredSourceFile",
+        "sqlbuild.compiler.discovery.models:DiscoveredSourceFile",
+    ),
+    (
         "sqlbuild._native:DiscoveredSqlFunctionFile",
         "sqlbuild.compiler.discovery.models:DiscoveredSqlFunctionFile",
     ),
@@ -465,12 +545,24 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
         "sqlbuild.compiler.discovery.models:DiscoveredSqlHookFile",
     ),
     (
+        "sqlbuild._native:DiscoveredSqlScenarioFile",
+        "sqlbuild.compiler.discovery.models:DiscoveredSqlScenarioFile",
+    ),
+    (
         "sqlbuild._native:DiscoveredSqlTestBlock",
         "sqlbuild.compiler.discovery.models:DiscoveredSqlTestBlock",
     ),
     (
         "sqlbuild._native:DiscoveredSqlTestCase",
         "sqlbuild.compiler.discovery.models:DiscoveredSqlTestCase",
+    ),
+    (
+        "sqlbuild._native:DiscoveredSqlTestFile",
+        "sqlbuild.compiler.discovery.models:DiscoveredSqlTestFile",
+    ),
+    (
+        "sqlbuild._native:DiscoveredTaskFunction",
+        "sqlbuild.compiler.discovery.models:DiscoveredTaskFunction",
     ),
     (
         "sqlbuild._native:DiscoveryConflictError",
@@ -505,6 +597,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
         "sqlbuild.compiler.planner.models:EmptyCursorInputDecision",
     ),
     (
+        "sqlbuild._native:EnumDeclaration",
+        "sqlbuild.compiler.discovery.models:EnumDeclaration",
+    ),
+    (
         "sqlbuild._native:EnumMember",
         "sqlbuild.compiler.discovery.models:EnumMember",
     ),
@@ -535,6 +631,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
     (
         "sqlbuild._native:ExpansionSpan",
         "sqlbuild.compiler.compile.models:ExpansionSpan",
+    ),
+    (
+        "sqlbuild._native:FactDigestError",
+        "sqlbuild.rule_engine.exceptions:FactDigestError",
     ),
     (
         "sqlbuild._native:Fingerprint",
@@ -601,6 +701,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
         "sqlbuild.compiler.compile.models:HandBuiltAnalysis",
     ),
     (
+        "sqlbuild._native:HardCodedRelationOwnerKind",
+        "sqlbuild.compiler.references.types:HardCodedRelationOwnerKind",
+    ),
+    (
         "sqlbuild._native:HeaderSpan",
         "sqlbuild.lint.models:HeaderSpan",
     ),
@@ -615,6 +719,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
     (
         "sqlbuild._native:HookReadType",
         "sqlbuild.compiler.graph.types:HookReadType",
+    ),
+    (
+        "sqlbuild._native:HostCancelledError",
+        "sqlbuild.rule_engine.exceptions:HostCancelledError",
     ),
     (
         "sqlbuild._native:InaccessibleReason",
@@ -711,6 +819,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
         "sqlbuild.compiler.references.models:LiteralSqlRelation",
     ),
     (
+        "sqlbuild._native:LoaderConnectionMode",
+        "sqlbuild.compiler.discovery.types:LoaderConnectionMode",
+    ),
+    (
         "sqlbuild._native:LoaderDestinationParts",
         "sqlbuild.spec.contracts.models:LoaderDestinationParts",
     ),
@@ -729,6 +841,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
     (
         "sqlbuild._native:LocalTargetConfig",
         "sqlbuild.spec.contracts.models:LocalTargetConfig",
+    ),
+    (
+        "sqlbuild._native:MacroArgumentError",
+        "sqlbuild.compiler.compile.exceptions:MacroArgumentError",
     ),
     (
         "sqlbuild._native:MacroExpansionResult",
@@ -935,6 +1051,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
         "sqlbuild.compiler.frontier.exceptions:NativeStageMismatchError",
     ),
     (
+        "sqlbuild._native:NonHermeticRuleError",
+        "sqlbuild.rule_engine.exceptions:NonHermeticRuleError",
+    ),
+    (
         "sqlbuild._native:NormalizedDbtProfileConnection",
         "sqlbuild.integrations.dbt.models:NormalizedDbtProfileConnection",
     ),
@@ -973,6 +1093,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
     (
         "sqlbuild._native:OnSchemaChange",
         "sqlbuild.compiler.planner.types:OnSchemaChange",
+    ),
+    (
+        "sqlbuild._native:OpaqueModuleStateError",
+        "sqlbuild.rule_engine.exceptions:OpaqueModuleStateError",
     ),
     (
         "sqlbuild._native:OwnershipRoot",
@@ -1063,6 +1187,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
         "sqlbuild.compiler.discovery.exceptions:ProjectConfigError",
     ),
     (
+        "sqlbuild._native:ProjectGraph",
+        "sqlbuild.compiler.pipeline.models:ProjectGraph",
+    ),
+    (
         "sqlbuild._native:ProjectPathError",
         "sqlbuild.compiler.discovery.exceptions:ProjectPathError",
     ),
@@ -1073,6 +1201,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
     (
         "sqlbuild._native:ProviderDiscoveryError",
         "sqlbuild.compiler.discovery.exceptions:ProviderDiscoveryError",
+    ),
+    (
+        "sqlbuild._native:PythonHookEntry",
+        "sqlbuild.compiler.discovery.models:PythonHookEntry",
     ),
     (
         "sqlbuild._native:PythonIdentityDependency",
@@ -1195,6 +1327,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
         "sqlbuild.compiler.planner.types:RetentionPlanPhase",
     ),
     (
+        "sqlbuild._native:RuleAssertionError",
+        "sqlbuild.rule_engine.exceptions:RuleAssertionError",
+    ),
+    (
         "sqlbuild._native:RuleExemption",
         "sqlbuild.rule_engine.models:RuleExemption",
     ),
@@ -1215,8 +1351,20 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
         "sqlbuild.rule_engine.models:RuleRunPlan",
     ),
     (
+        "sqlbuild._native:RuleUsageError",
+        "sqlbuild.rule_engine.exceptions:RuleUsageError",
+    ),
+    (
         "sqlbuild._native:RulesCacheConfig",
         "sqlbuild.rule_engine.models:RulesCacheConfig",
+    ),
+    (
+        "sqlbuild._native:RulesConfigError",
+        "sqlbuild.rule_engine.exceptions:RulesConfigError",
+    ),
+    (
+        "sqlbuild._native:RulesError",
+        "sqlbuild.rule_engine.exceptions:RulesError",
     ),
     (
         "sqlbuild._native:RulesRunResult",
@@ -1479,6 +1627,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
         "sqlbuild.rule_engine.models:SqlExpansionReuse",
     ),
     (
+        "sqlbuild._native:SqlHookEntry",
+        "sqlbuild.compiler.discovery.models:SqlHookEntry",
+    ),
+    (
         "sqlbuild._native:SqlHookParseError",
         "sqlbuild.compiler.discovery.exceptions:SqlHookParseError",
     ),
@@ -1489,6 +1641,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
     (
         "sqlbuild._native:SqlLogicalType",
         "sqlbuild.sql_values.models:SqlLogicalType",
+    ),
+    (
+        "sqlbuild._native:SqlReferenceKind",
+        "sqlbuild.compiler.references.types:SqlReferenceKind",
     ),
     (
         "sqlbuild._native:SqlReferenceScan",
@@ -1511,12 +1667,20 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 409] = [
         "sqlbuild.compiler.planner.models:SqlTestAssertionStep",
     ),
     (
+        "sqlbuild._native:SqlTestParameterDeclaration",
+        "sqlbuild.compiler.discovery.models:SqlTestParameterDeclaration",
+    ),
+    (
         "sqlbuild._native:SqlTestParseError",
         "sqlbuild.compiler.discovery.exceptions:SqlTestParseError",
     ),
     (
         "sqlbuild._native:SqlTestPlanEntry",
         "sqlbuild.compiler.planner.models:SqlTestPlanEntry",
+    ),
+    (
+        "sqlbuild._native:SqlTestReferenceError",
+        "sqlbuild.compiler.compile.exceptions:SqlTestReferenceError",
     ),
     (
         "sqlbuild._native:SqlTestRulesConfig",

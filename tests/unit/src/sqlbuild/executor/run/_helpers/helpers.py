@@ -4,10 +4,12 @@ from typing import Any
 
 from sqlbuild._native import (
     AuditPlanEntry,
+    DiscoveredHookFunction,
     MaterializationType,
     ModelPlanEntry,
     PlanAction,
     PlanReason,
+    PythonHookEntry,
     SchemaDynamicColumnFamily,
     SourceEntry,
 )
@@ -29,7 +31,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, PythonHookEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run._helpers.execution.hooks import execute_hooks
 from sqlbuild.executor.run.models import HookContext, HookRelationLookup, HookRunContext

@@ -16,6 +16,7 @@ from sqlbuild._native import (
     ModelCursorSnapshot,
     ModelPlanContext,
     SourceEntry,
+    SqlReferenceKind,
     WarehouseSnapshot,
     assemble_project,
     build_compile_inputs,
@@ -35,7 +36,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.references.types import SqlReferenceKind
 
 
 class OrchestrationOverrideAdapter(DuckDbAdapter):

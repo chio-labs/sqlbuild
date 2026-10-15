@@ -11,6 +11,7 @@ from sqlbuild._native import (
     DeclarationIdentity,
     DeclarationKind,
     DeclarationScopeBuild,
+    DiscoveredProjectInputs,
     SqlLexicalSyntax,
     build_declaration_scope,
     discover_project_inputs,
@@ -18,7 +19,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
 from sqlbuild.compiler.compile.models import LoadedMacro
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     RebindDeclarationScopeTestCase,
 )

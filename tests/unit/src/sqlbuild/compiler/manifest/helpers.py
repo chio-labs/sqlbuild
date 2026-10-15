@@ -14,6 +14,7 @@ from sqlbuild._native import (
     CompileModelConfig,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
+    DiscoveredSourceFile,
     DiscoveredSqlHookFile,
     MaterializationType,
     ModelPlanEntry,
@@ -48,7 +49,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledSeedView,
     CompiledSourceView,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredSourceFile
 
 
 def model_key(name: str) -> CompiledObjectKey:

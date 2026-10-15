@@ -7,11 +7,11 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    DiscoveredProjectInputs,
     ProjectConfigError,
     discover_project_inputs,
     resolve_effective_scenario_config,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.unit.src.sqlbuild.spec.contracts.main._test_types import (
     InvalidScenarioNamespaceConfigTestCase,
     ScenarioNamespaceConfigTestCase,

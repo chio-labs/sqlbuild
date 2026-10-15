@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, cast
 import pytest
 
 from sqlbuild._native import (
+    DiscoveredProjectInputs,
+    ProjectGraph,
     assemble_project,
     build_compile_inputs,
     build_dag_json,
@@ -21,8 +23,6 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.dag.types import NodeKind
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.models import ProjectGraph
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     DUCKDB_COMPILE_ADAPTER_CONTEXT,
 )

@@ -9,6 +9,7 @@ from typing import Any, cast
 
 from sqlbuild._native import (
     AuditPlanEntry,
+    DiscoveredHookFunction,
     MaterializationType,
     ModelPlanEntry,
     PlanAction,
@@ -26,7 +27,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.executor.run.main._execute import execute_table_entry
 from sqlbuild.executor.run.models import (
     HookContext,

@@ -79,16 +79,11 @@ pub(super) fn planning_error(
             "CompileInputError"
         };
         return Ok(PyErr::from_value(
-            imported(py, "sqlbuild.compiler.compile.exceptions", class)?
-                .call((message,), Some(&kwargs))?,
+            imported(py, "sqlbuild._native", class)?.call((message,), Some(&kwargs))?,
         ));
     }
     let (module, class, message) = if let Some(message) = message.strip_prefix("compile_input:") {
-        (
-            "sqlbuild.compiler.compile.exceptions",
-            "CompileInputError",
-            message.to_owned(),
-        )
+        ("sqlbuild._native", "CompileInputError", message.to_owned())
     } else if let Some(message) = message.strip_prefix("planner_input:") {
         ("sqlbuild._native", "PlannerInputError", message.to_owned())
     } else {

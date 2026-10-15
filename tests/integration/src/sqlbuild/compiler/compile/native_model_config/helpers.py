@@ -8,15 +8,15 @@ from typing import cast
 import sqlbuild._native as _native
 from sqlbuild._native import (
     CompileModelConfig,
+    DiscoveredSqlModelFile,
     ModelValidationRequest,
     NativeModelConfigInputs,
     NativeModelConfigSession,
     ProjectConfig,
+    SqlReferenceKind,
     native_model_config_session,
 )
 from sqlbuild.compiler.compile.models import CompileSqlReference
-from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
-from sqlbuild.compiler.references.types import SqlReferenceKind
 
 _ACCEPTED: str = "accepted"
 

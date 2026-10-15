@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
+    CompileInputError,
     CompileModelConfig,
     DefaultsConfig,
     MaterializationDefaultsConfig,
@@ -12,7 +13,6 @@ from sqlbuild._native import (
     TableTypeSource,
     TargetConfig,
 )
-from sqlbuild.compiler.compile.exceptions import CompileInputError
 from tests.unit.src.sqlbuild.compiler.compile._helpers.config._test_types import (
     TableTypeResolutionErrorTestCase,
     TableTypeResolutionTestCase,

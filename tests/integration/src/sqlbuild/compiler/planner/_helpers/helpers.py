@@ -15,10 +15,12 @@ from sqlbuild._native import (
     CompileModelConfig,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
+    DiscoveredSourceFile,
     SchemaColumn,
     SchemaModelEntry,
     SchemaSeedEntry,
     SourceEntry,
+    SqlReferenceKind,
     WarehouseSnapshot,
     compiled_model_record,
     gather_warehouse_snapshot,
@@ -41,8 +43,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledSeedView,
     CompiledSourceView,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredSourceFile
-from sqlbuild.compiler.references.types import SqlReferenceKind
 
 
 class RecordingDuckDbAdapter(DuckDbAdapter):

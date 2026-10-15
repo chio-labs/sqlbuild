@@ -1,5 +1,7 @@
 //! Native frozen value records and the field layouts they are built from.
 
+use std::sync::Mutex;
+
 use pyo3::exceptions::PyAttributeError;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyclass::CompareOp;
@@ -7,7 +9,8 @@ use pyo3::types::{PyDict, PyTuple, PyType};
 use pyo3::{IntoPyObjectExt, pyclass, pymethods};
 
 use crate::bindings::_helpers::records::fields::{
-    build_values, compared_values, frozen_error, ordered_comparison, record_spec, repr_text,
+    build_values, cached_value, compared_values, frozen_error, ordered_comparison, record_spec,
+    repr_text, store_cached,
 };
 use crate::bindings::_helpers::records::types::{ClassMethod, ClassProperty, RecordFactory};
 
@@ -89,6 +92,8 @@ pub(crate) struct ErrorSpec {
 #[pyclass(module = "sqlbuild._native", subclass, frozen)]
 pub(crate) struct NativeRecord {
     pub(crate) values: Vec<Py<PyAny>>,
+    /// Values of the record's cached computed attributes, by attribute name.
+    pub(crate) cached: Mutex<Vec<(&'static str, Py<PyAny>)>>,
 }
 
 #[pymethods]
@@ -104,6 +109,7 @@ impl NativeRecord {
         let spec: &RecordSpec = record_spec(cls)?;
         Ok(Self {
             values: build_values(spec, args, kwargs)?,
+            cached: Mutex::new(Vec::new()),
         })
     }
 
@@ -156,6 +162,8 @@ impl NativeRecord {
 pub(crate) struct NativeProperty {
     pub(crate) property: ClassProperty,
     pub(crate) name: &'static str,
+    /// Whether a record computes the attribute once and keeps it.
+    pub(crate) cached: bool,
 }
 
 #[pymethods]
@@ -168,7 +176,17 @@ impl NativeProperty {
         if instance.is_none() {
             return Ok(slf.clone().into_any().unbind());
         }
-        (slf.get().property)(instance)
+        let descriptor: &Self = slf.get();
+        if !descriptor.cached || !instance.is_instance_of::<NativeRecord>() {
+            return (descriptor.property)(instance);
+        }
+        let record: &Bound<'_, NativeRecord> = instance.cast::<NativeRecord>()?;
+        if let Some(value) = cached_value(record, descriptor.name)? {
+            return Ok(value);
+        }
+        let value: Py<PyAny> = (descriptor.property)(instance)?;
+        store_cached(record, descriptor.name, &value)?;
+        Ok(value)
     }
 
     fn __set__(&self, instance: &Bound<'_, PyAny>, _value: &Bound<'_, PyAny>) -> PyResult<()> {

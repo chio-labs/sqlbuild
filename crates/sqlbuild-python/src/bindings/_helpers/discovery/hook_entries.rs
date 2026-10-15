@@ -6,7 +6,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
+const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
 const RELATIVE_PATH_FIELD: &str = "relative_path";
 const SQL_HOOK_FIELDS: [&str; 6] = [
     "statement",

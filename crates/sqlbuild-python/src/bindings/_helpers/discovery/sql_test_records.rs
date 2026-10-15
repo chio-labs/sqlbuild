@@ -30,8 +30,9 @@ use crate::bindings::_helpers::discovery::sql_test_blocks::{
 use crate::bindings::_helpers::sqltext::authored_values::map_to_python;
 use crate::bindings::models::NativeProjectTree;
 
-const MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
-const CONSTANTS_MODULE: &str = "sqlbuild.compiler.discovery.constants";
+const MODELS_MODULE: &str = "sqlbuild._native";
+const SQL_TESTS_OWNERSHIP_ROOT: &str = "tests/unit";
+const SQL_SCENARIOS_OWNERSHIP_ROOT: &str = "tests/scenarios";
 const PATHLIB_MODULE: &str = "pathlib";
 const SCENARIO_KIND: &str = "sql_scenario";
 const DESCRIPTION_KEY: &str = "description";
@@ -60,8 +61,8 @@ fn path_class(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 }
 
 /// `Path(constants.<name>)`.
-fn ownership_root<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    path_class(py)?.call1((imported(py, CONSTANTS_MODULE, name)?,))
+fn ownership_root<'py>(py: Python<'py>, root: &str) -> PyResult<Bound<'py, PyAny>> {
+    path_class(py)?.call1((root,))
 }
 
 /// Discover the files natively in the pass's snapshot: each relative path text and outcome.
@@ -137,7 +138,7 @@ fn test_file<'py>(
             ),
             (
                 "ownership_root",
-                ownership_root(py, "SQL_TESTS_OWNERSHIP_ROOT")?,
+                ownership_root(py, SQL_TESTS_OWNERSHIP_ROOT)?,
             ),
         ],
     )
@@ -190,7 +191,7 @@ fn scenario_file<'py>(
             ("name", file_path.getattr("stem")?),
             (
                 "ownership_root",
-                ownership_root(py, "SQL_SCENARIOS_OWNERSHIP_ROOT")?,
+                ownership_root(py, SQL_SCENARIOS_OWNERSHIP_ROOT)?,
             ),
         ],
     )

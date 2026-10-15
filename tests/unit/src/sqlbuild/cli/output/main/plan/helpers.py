@@ -10,6 +10,7 @@ from sqlbuild._native import (
     ColumnRenameHint,
     CursorBounds,
     CursorInputRelation,
+    DiscoveredProviderUsage,
     FunctionPlanEntry,
     MaterializationType,
     MicrobatchLimitAction,
@@ -34,7 +35,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
-from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
 
 
 def build_model_entry(

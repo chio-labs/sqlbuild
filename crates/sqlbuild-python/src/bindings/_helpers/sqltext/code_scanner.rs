@@ -12,7 +12,7 @@ use sqlbuild_sqltext::sql_scan::models::Unclosed;
 
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
+const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
 const COMPILE_INPUT_ERROR: &str = "CompileInputError";
 
 /// One SQL text scanned under an adapter's lexical rules, or the generic compiler rules.

@@ -13,8 +13,16 @@ from typing import Any, cast
 from sqlbuild._native import (
     CompiledSource,
     CompileModelConfig,
+    DiscoveredAssetFunction,
+    DiscoveredCheckFunction,
+    DiscoveredLoaderFunction,
+    DiscoveredProjectInputs,
+    DiscoveredSourceFile,
+    DiscoveredTaskFunction,
+    LoaderConnectionMode,
     LocalConfig,
     ProjectConfig,
+    ProjectGraph,
     PythonNodeGraph,
     PythonSqlRunSelection,
     SourceColumnEntry,
@@ -35,16 +43,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     CompiledSourceView,
 )
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredAssetFunction,
-    DiscoveredCheckFunction,
-    DiscoveredLoaderFunction,
-    DiscoveredProjectInputs,
-    DiscoveredSourceFile,
-    DiscoveredTaskFunction,
-)
-from sqlbuild.compiler.discovery.types import LoaderConnectionMode
-from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.providers import Provider
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.python_nodes.types import PythonCheckSeverity

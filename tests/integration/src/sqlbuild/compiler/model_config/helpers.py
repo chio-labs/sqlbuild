@@ -14,6 +14,9 @@ import pytest
 import sqlbuild._native as _native
 from sqlbuild._native import (
     CompileAdapterContext,
+    CompileInputError,
+    DiscoveredProjectInputs,
+    DiscoveredSqlModelFile,
     SchemaModelEntry,
     SourceLocation,
     build_compile_inputs,
@@ -22,8 +25,6 @@ from sqlbuild._native import (
     resolve_effective_collection_rendering,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance

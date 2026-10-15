@@ -9,12 +9,12 @@ from importlib.machinery import ModuleSpec
 from pathlib import Path
 from types import ModuleType
 
+from sqlbuild._native import RulesError
 from sqlbuild.rule_engine._helpers.engine.definition import (
     resolve_rule_signature,
     rule_from_value,
 )
 from sqlbuild.rule_engine.constants import INIT_MODULE_NAME, RULE_DECORATOR_TOKEN
-from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.models import Rule
 
 

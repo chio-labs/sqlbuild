@@ -14,7 +14,7 @@ use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
+const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
 const COMPILE_INPUT_ERROR: &str = "CompileInputError";
 const MODEL_MODE: &str = "model";
 

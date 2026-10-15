@@ -32,7 +32,7 @@ use crate::bindings::_helpers::rules::custom_host_observation::{
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const RULES_CONSTANTS_MODULE: &str = "sqlbuild.rule_engine.constants";
-const RULES_ERRORS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
+const RULES_ERRORS_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const HOST_INPUTS: [&str; 3] = ["target", "rules-cache", "host-inputs"];
 /// The model fields hosts decode; every other model field is dropped from their payload.

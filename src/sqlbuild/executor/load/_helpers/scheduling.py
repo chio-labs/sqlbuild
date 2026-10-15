@@ -10,10 +10,8 @@ from contextvars import copy_context
 from functools import partial
 from typing import Any
 
-from sqlbuild._native import SourceEntry
+from sqlbuild._native import DiscoveredLoaderFunction, LoaderConnectionMode, SourceEntry
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.load._helpers.dag_runtime import (

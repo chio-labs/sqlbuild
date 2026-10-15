@@ -25,7 +25,7 @@ use crate::bindings::_helpers::project_assembly::models::{
 };
 use crate::bindings::types::CompilerDetach;
 
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
+const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
 const OS_MODULE: &str = "os";
 const PROJECT_ASSEMBLY_CONTEXT: &str = "native project assembly";
 const GENERIC_DIALECT: &str = "generic";

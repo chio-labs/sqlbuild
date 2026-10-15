@@ -8,6 +8,7 @@ from typing import Any, cast
 
 from sqlbuild._native import (
     AuditPlanEntry,
+    DiscoveredHookFunction,
     MaterializationType,
     ModelPlanEntry,
     PlanAction,
@@ -25,7 +26,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.custom.models import (
     MaterializationContext,
@@ -432,13 +432,13 @@ def run_scheduler_build(
 
     from sqlbuild._native import (
         CompilePipelineOptions,
+        CompilePipelineResult,
+        DiscoveredProjectInputs,
         PlanOutput,
         discover_project_inputs,
         run_compile_pipeline,
     )
     from sqlbuild.adapter.contract.types import TablePromotionMode
-    from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-    from sqlbuild.compiler.pipeline.models import CompilePipelineResult
     from sqlbuild.executor.build.main._execute import execute_build_plan
     from sqlbuild.executor.build.models import (
         BuildCustomizations,

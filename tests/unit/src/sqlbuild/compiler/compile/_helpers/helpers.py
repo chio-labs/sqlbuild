@@ -21,6 +21,8 @@ from sqlbuild._native import (
     DeclarationRecord,
     DeclarationRuntimeProjection,
     DeclarationScopeResolver,
+    DiscoveredMacroFile,
+    DiscoveredProjectInputs,
     MacroMetadata,
     NativeColumnQuery,
     NativeQueryColumns,
@@ -67,10 +69,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
-)
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredMacroFile,
-    DiscoveredProjectInputs,
 )
 from sqlbuild.compiler.lineage.types import InferredNullability
 

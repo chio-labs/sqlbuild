@@ -12,6 +12,7 @@ from sqlbuild._native import (
     PlannerRelationsContext,
     PlannerScope,
     SourceEntry,
+    SqlReferenceKind,
     build_cursor_input_relations,
     build_planner_relations_context,
     gather_source_columns,
@@ -31,7 +32,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.references.types import SqlReferenceKind
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     CursorRuntimeOwnershipTestCase,
     KnownSourceColumnsReuseTestCase,

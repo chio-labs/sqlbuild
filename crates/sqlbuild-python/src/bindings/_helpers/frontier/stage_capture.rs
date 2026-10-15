@@ -6,6 +6,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 
 use sqlbuild_cache::stage_capture::constants::OMITTED_ATTRIBUTES;
 use sqlbuild_cache::stage_capture::main::mask_capture_noise::mask_capture_noise as masked;
+use sqlbuild_cache::stage_capture::main::next_capture_number::next_capture_number;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{
     call_with, imported, keywords, within,
@@ -16,7 +17,6 @@ const CAPTURE_DIR_ENV_VAR: &str = "SQLBUILD_COMPILER_STAGE_CAPTURE_DIR";
 const CAPTURE_SUFFIX: &str = ".json";
 const PLAN_CAPTURE_DIR_ENV_VAR: &str = "SQLBUILD_PLANNER_CAPTURE_DIR";
 const PLAN_CAPTURE_NAME: &str = "plan_output";
-const FRONTIER_CONSTANTS_MODULE: &str = "sqlbuild.compiler.frontier.constants";
 
 /// The capture document of `value`, or the shared nodes written before encoding failed.
 fn capture_text(py: Python<'_>, value: &Bound<'_, PyAny>) -> Result<String, (String, pyo3::PyErr)> {
@@ -32,6 +32,20 @@ fn capture_text(py: Python<'_>, value: &Bound<'_, PyAny>) -> Result<String, (Str
     }
 }
 
+/// The number of the next capture in `directory`: one more than the captures it already holds.
+fn capture_number(directory: &Bound<'_, PyAny>) -> PyResult<u64> {
+    let directory: String = directory.str()?.extract()?;
+    let names: Vec<String> = match std::fs::read_dir(&directory) {
+        Ok(entries) => entries
+            .filter_map(Result::ok)
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .collect(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(error) => return Err(pyo3::exceptions::PyOSError::new_err(error.to_string())),
+    };
+    Ok(next_capture_number(names.iter().map(String::as_str)))
+}
+
 /// Write one frontier object when SQLBUILD_COMPILER_STAGE_CAPTURE_DIR names a directory.
 pub(crate) fn write_stage_capture(
     stage: &Bound<'_, PyAny>,
@@ -43,13 +57,7 @@ pub(crate) fn write_stage_capture(
     if !directory.is_truthy()? {
         return Ok(());
     }
-    let number: u64 = imported(py, "builtins", "next")?
-        .call1((imported(
-            py,
-            FRONTIER_CONSTANTS_MODULE,
-            "STAGE_CAPTURE_SEQUENCE",
-        )?,))?
-        .extract()?;
+    let number: u64 = capture_number(&directory)?;
     let stage_name: String = stage.getattr("value")?.str()?.extract()?;
     let path: Bound<'_, PyAny> = imported(py, "pathlib", "Path")?
         .call1((directory,))?
@@ -68,13 +76,7 @@ pub(crate) fn write_plan_capture(plan_output: &Bound<'_, PyAny>) -> PyResult<()>
     if !directory.is_truthy()? {
         return Ok(());
     }
-    let number: u64 = imported(py, "builtins", "next")?
-        .call1((imported(
-            py,
-            FRONTIER_CONSTANTS_MODULE,
-            "STAGE_CAPTURE_SEQUENCE",
-        )?,))?
-        .extract()?;
+    let number: u64 = capture_number(&directory)?;
     let path: Bound<'_, PyAny> = imported(py, "pathlib", "Path")?
         .call1((directory,))?
         .call_method1(

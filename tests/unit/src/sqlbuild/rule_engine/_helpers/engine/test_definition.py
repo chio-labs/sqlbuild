@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import RulesError
 from sqlbuild.rule_engine._helpers.engine.definition import (
     resolve_rule_signature,
     rule_from_value,
 )
-from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.models import Rule
 from sqlbuild.rules import Finding, Model, Project, RuleContext, rule
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (

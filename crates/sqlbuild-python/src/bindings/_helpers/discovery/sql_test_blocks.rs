@@ -13,7 +13,7 @@ use crate::bindings::_helpers::contracts::sql_values::{SqlValueClasses, raw_valu
 
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
-const MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
+const MODELS_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild._native";
 const TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const SQL_VALUE_TYPES_MODULE: &str = "sqlbuild._native";

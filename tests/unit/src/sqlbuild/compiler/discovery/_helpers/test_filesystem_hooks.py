@@ -14,6 +14,11 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredHookFunction,
     DiscoveredProvider,
     DiscoveredProviderUsage,
+    PythonNodeDiscoveryError,
+)
+from sqlbuild.compiler.discovery._helpers.filesystem.core import (
+    discover_hook_functions,
+    discover_provider_classes,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DiscoverHookFunctionsErrorTestCase,

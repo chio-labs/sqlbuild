@@ -9,14 +9,14 @@ from typing import Any, cast
 
 from sqlbuild._native import (
     CompilePipelineOptions,
+    CompilePipelineResult,
+    DiscoveredProjectInputs,
     PlanOutput,
     discover_project_inputs,
     run_compile_pipeline,
 )
 from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.build.main._execute import execute_build_plan
 from sqlbuild.executor.build.models import (
     BuildCustomizations,

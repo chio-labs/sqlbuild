@@ -12,6 +12,7 @@ from typing import cast
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    DiscoveredProjectInputs,
     discover_audit_files,
     discover_constant_files,
     discover_enum_files,
@@ -24,7 +25,6 @@ from sqlbuild._native import (
     discover_sql_hook_files,
     discover_test_files,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
     load_local_config,
     load_project_config,

@@ -10,10 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import PlanReason
+from sqlbuild._native import CompilePipelineResult, PlanReason
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.relations.constants import INSPECTION_IN_LIST_LIMIT
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     SnowflakeCursorBoundsBudgetTestCase,
     SnowflakeFreshTargetTestCase,

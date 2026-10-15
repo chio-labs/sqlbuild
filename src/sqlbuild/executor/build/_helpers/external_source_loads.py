@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from sqlbuild._native import PlanOutput, SourceEntry, SourceLoadPlanEntry
+from sqlbuild._native import (
+    DiscoveredLoaderFunction,
+    LoaderConnectionMode,
+    PlanOutput,
+    SourceEntry,
+    SourceLoadPlanEntry,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledObjectKey
-from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.build._helpers.source_node import execute_build_source_node
 from sqlbuild.executor.build.models import (

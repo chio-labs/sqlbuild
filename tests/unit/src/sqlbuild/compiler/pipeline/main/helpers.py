@@ -5,6 +5,7 @@ from typing import Any, ClassVar
 
 from sqlbuild._native import (
     CompiledSource,
+    DiscoveredSourceFile,
     MaterializationType,
     ModelPlanEntry,
     PlanAction,
@@ -19,7 +20,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredSourceFile
 
 
 class RelationTargetTestAdapter(BaseAdapter):

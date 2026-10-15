@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import CompileInputError
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
@@ -11,7 +12,6 @@ from sqlbuild.adapters.motherduck.classes.motherduck_adapter import MotherDuckAd
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
-from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.executor.testing.main._sql_length import validate_unit_test_sql_length
 from tests.unit.src.sqlbuild.adapter.contract.classes.base_adapter._test_types import (
     StatementSizeLimitTestCase,

@@ -14,7 +14,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const RESOLVE_ADAPTER_MODULE: &str = "sqlbuild.adapter.discovery.main.resolve_adapter";
 const ADAPTER_EXCEPTIONS_MODULE: &str = "sqlbuild.adapter.contract.exceptions";
-const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
+const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const DISCOVERY_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const LINT_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const COMPILE_FIRST_MESSAGE: &str = "compiler-integrated Rules check the SQL your project \

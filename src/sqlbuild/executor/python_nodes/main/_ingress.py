@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from sqlbuild._native import PythonNodeGraph, SourceEntry
-from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
+from sqlbuild._native import DiscoveredLoaderFunction, PythonNodeGraph, SourceEntry
 from sqlbuild.executor.python_nodes._helpers.ingress_execution import (
     execute_ingress_python_loader_nodes,
 )

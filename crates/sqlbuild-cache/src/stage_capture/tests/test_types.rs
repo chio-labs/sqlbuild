@@ -18,3 +18,9 @@ pub(crate) struct SortKeyTestCase {
     pub(crate) item: JsonValue,
     pub(crate) expected_key: &'static str,
 }
+
+pub(crate) struct CaptureNumberTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) file_names: &'static [&'static str],
+    pub(crate) expected_number: u64,
+}

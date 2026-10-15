@@ -5,10 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild._native import (
+    DiscoveredProjectInputs,
     TargetConfig,
     build_compile_target_context,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 from sqlbuild.compiler.macro_bridge.main._claim_first_compile import claim_first_compile
 from sqlbuild.compiler.macro_bridge.main.active_macro_bridge import active_macro_bridge

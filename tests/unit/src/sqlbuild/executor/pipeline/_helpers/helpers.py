@@ -10,6 +10,8 @@ from unittest.mock import MagicMock
 
 from sqlbuild._native import (
     AuditPlanEntry,
+    CompilePipelineResult,
+    DiscoveredSqlScenarioFile,
     PlanOutput,
     ScenarioExecutionPlan,
     ScenarioGraphPlan,
@@ -35,8 +37,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledSqlScenario,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredSqlScenarioFile
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.scenario.constants import SCENARIO_LOCAL_JSONL_INVALID

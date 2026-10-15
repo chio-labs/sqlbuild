@@ -22,14 +22,19 @@ from sqlbuild._native import (
     CompiledSeed,
     CompiledSource,
     CompileModelConfig,
+    CompilePipelineResult,
     CompileSqlScenarioCte,
     CompileSqlTestCte,
     DefaultsConfig,
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
+    DiscoveredLoaderFunction,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
+    DiscoveredSourceFile,
+    DiscoveredSqlScenarioFile,
     DiscoveredSqlTestBlock,
+    DiscoveredSqlTestFile,
     Fingerprint,
     FunctionArgument,
     PlannerChangeResults,
@@ -45,6 +50,7 @@ from sqlbuild._native import (
     SourceEntry,
     SourceWriteStrategy,
     SqlLexicalSyntax,
+    SqlReferenceKind,
     WarehouseSnapshot,
     build_downstream_deps,
     build_scenario_relation_map,
@@ -78,14 +84,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledSourceView,
     SqlTestMode,
 )
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredLoaderFunction,
-    DiscoveredSourceFile,
-    DiscoveredSqlScenarioFile,
-    DiscoveredSqlTestFile,
-)
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.references.types import SqlReferenceKind
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     BuildModelWarningsTestCase,
     IncrementalStrategyErrorTestCase,

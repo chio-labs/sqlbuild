@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import (
+    DiscoveredHookFunction,
     ModelPlanEntry,
     PlanAction,
     PlannerInputError,
@@ -16,7 +17,6 @@ from sqlbuild._native import (
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
     DirectSourceFreshnessPlanOutputTestCase,
     ExternalBlockedPlanOutputTestCase,

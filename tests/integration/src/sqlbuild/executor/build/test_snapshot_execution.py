@@ -10,14 +10,14 @@ import pytest
 
 from sqlbuild._native import (
     CompilePipelineOptions,
+    CompilePipelineResult,
+    DiscoveredProjectInputs,
     ModelPlanEntry,
     PlanOutput,
     discover_project_inputs,
     run_compile_pipeline,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.scheduling.types import ExecutionStatus

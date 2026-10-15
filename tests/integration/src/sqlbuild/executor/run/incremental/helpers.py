@@ -11,6 +11,7 @@ from sqlbuild._native import (
     AuditPlanEntry,
     CursorBounds,
     CursorInputRelation,
+    DiscoveredHookFunction,
     IncrementalStrategy,
     MaterializationType,
     ModelPlanEntry,
@@ -30,7 +31,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.executor.run._helpers.materializations.incremental import execute_incremental_entry
 from sqlbuild.executor.run.models import (
     HookContext,

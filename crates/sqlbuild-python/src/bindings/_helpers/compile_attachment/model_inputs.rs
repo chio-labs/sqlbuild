@@ -20,9 +20,9 @@ const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
-const DISCOVERY_CONSTANTS_MODULE: &str = "sqlbuild.compiler.discovery.constants";
+const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
+const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
+const PROJECT_CONFIG_FILENAME: &str = "sqlbuild_project.toml";
 const SCOPE_MODELS_MODULE: &str = "sqlbuild._native";
 const SCOPE_TYPES_MODULE: &str = "sqlbuild._native";
 const COLLECTOR_MODULE: &str = "sqlbuild._native";
@@ -211,11 +211,7 @@ pub(crate) fn build_model_inputs<'py>(
     } else {
         imported(py, "pathlib", "Path")?.call0()?
     };
-    let project_config_path: Bound<'py, PyAny> = root.div(imported(
-        py,
-        DISCOVERY_CONSTANTS_MODULE,
-        "PROJECT_CONFIG_FILENAME",
-    )?)?;
+    let project_config_path: Bound<'py, PyAny> = root.div(PROJECT_CONFIG_FILENAME)?;
     let config_inputs: Bound<'py, PyAny> = call_with(
         &imported(py, NATIVE_RECORDS_MODULE, "NativeModelConfigInputs")?,
         &[

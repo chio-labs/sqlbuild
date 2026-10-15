@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    CompileInputError,
     CursorBounds,
     CursorInputRelation,
     IncrementalMode,
@@ -19,7 +20,6 @@ from sqlbuild._native import (
     apply_microbatch_limit,
 )
 from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
-from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,

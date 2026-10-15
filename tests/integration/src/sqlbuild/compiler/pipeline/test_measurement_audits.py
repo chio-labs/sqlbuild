@@ -5,11 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import AuditPlanEntry
+from sqlbuild._native import AuditPlanEntry, CompilePipelineResult
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, ThresholdOperator
 from sqlbuild.compiler.compile.types import CompiledAuditView
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     MeasurementCompileErrorIntegrationTestCase,
     MeasurementCompileIntegrationTestCase,

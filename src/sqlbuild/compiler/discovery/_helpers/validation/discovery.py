@@ -6,7 +6,7 @@ from collections.abc import Callable
 from typing import Protocol
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.discovery.models import (
+from sqlbuild._native import (
     DiscoveredAssetFunction,
     DiscoveredCheckFunction,
     DiscoveredLoaderFunction,

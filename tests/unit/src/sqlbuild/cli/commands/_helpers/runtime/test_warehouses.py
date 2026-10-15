@@ -9,6 +9,7 @@ import pytest
 from sqlbuild._native import (
     CliCommand,
     CliUserError,
+    DiscoveredProjectInputs,
     LocalTargetConfig,
     ParsedCliInvocation,
     ResolvedWarehouse,
@@ -20,7 +21,6 @@ from sqlbuild._native import (
     parse_cli_invocation,
     resolve_project_connection_config,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.unit.src.sqlbuild.cli.commands._helpers.runtime._test_types import (
     CommandWarehouseErrorTestCase,
     CommandWarehouseGroupTestCase,

@@ -19,8 +19,10 @@ from sqlbuild._native import (
     CompiledModelSqlTestPayload,
     CompiledSqlExpansion,
     CompiledSqlTestResource,
+    CompileInputError,
     CompileModelConfig,
     CompileSqlScenarioCte,
+    ConstantDeclaration,
     DeclarationExpansionContext,
     DeclarationIdentity,
     DeclarationRecord,
@@ -29,10 +31,17 @@ from sqlbuild._native import (
     DiagnosticSeverity,
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
+    DiscoveredHookFunction,
+    DiscoveredLoaderFunction,
+    DiscoveredMaterializationFile,
     DiscoveredSchemaFile,
     DiscoveredSqlHookFile,
+    DiscoveredSqlModelFile,
+    DiscoveredSqlScenarioFile,
     DiscoveredSqlTestBlock,
+    DiscoveredSqlTestFile,
     DynamicColumnContractProof,
+    EnumDeclaration,
     LiteralSqlRelation,
     MeasurementContract,
     MeasurementThresholds,
@@ -45,6 +54,8 @@ from sqlbuild._native import (
     SettingsConfig,
     SourceLocation,
     SqlLexicalSyntax,
+    SqlReferenceKind,
+    SqlTestParameterDeclaration,
     SqlValue,
     TargetConfig,
     UsageRecord,
@@ -52,7 +63,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE, MACRO_CONTEXT_PARAMETER_NAME
-from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledAuditView,
@@ -61,23 +71,12 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     CompiledSeedView,
     CompiledSourceView,
+    ExternalSqlReferenceResolver,
     RelationKeyRow,
     SqlTestMode,
     TypedSqlValueRenderer,
 )
-from sqlbuild.compiler.discovery.models import (
-    ConstantDeclaration,
-    DiscoveredHookFunction,
-    DiscoveredLoaderFunction,
-    DiscoveredMaterializationFile,
-    DiscoveredSqlModelFile,
-    DiscoveredSqlScenarioFile,
-    DiscoveredSqlTestFile,
-    EnumDeclaration,
-    SqlTestParameterDeclaration,
-)
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
 
 
 @dataclass(frozen=True)

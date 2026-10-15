@@ -20,6 +20,12 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredEventExporter,
     DiscoveredProvider,
     DiscoveredProviderUsage,
+    EventExporterDiscoveryError,
+)
+from sqlbuild.compiler.discovery._helpers.filesystem.core import (
+    _load_sink_module,
+    _provider_by_name,
+    _provider_usages,
 )
 from sqlbuild.runtime.event_exporting.main.get_command_output_sink_definition import (
     get_command_output_sink_definition,

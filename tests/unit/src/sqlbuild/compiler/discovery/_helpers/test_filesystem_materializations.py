@@ -15,6 +15,10 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProvider,
     DiscoveredProviderUsage,
 )
+from sqlbuild.compiler.discovery._helpers.filesystem.core import (
+    discover_materialization_files,
+    discover_provider_classes,
+)
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DiscoverMaterializationFilesTestCase,
 )

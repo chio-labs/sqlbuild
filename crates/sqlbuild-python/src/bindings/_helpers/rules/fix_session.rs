@@ -21,7 +21,7 @@ use crate::bindings::_helpers::rules::fix_verdict::fix_verdict;
 const NATIVE: &str = "sqlbuild._native";
 const MODELS: &str = "sqlbuild._native";
 const ADAPTER: &str = "sqlbuild.adapter.contract.classes.base_adapter";
-const COMPILE_ERRORS: &str = "sqlbuild.compiler.compile.exceptions";
+const COMPILE_ERRORS: &str = "sqlbuild._native";
 const LINT_ERRORS: &str = "sqlbuild._native";
 const VERIFICATION_FAILURE: &str =
     "Compilation could not prove unchanged output columns, types, dependencies and lineage";

@@ -18,6 +18,7 @@ from typing import Any, cast
 from sqlbuild._native import (
     AuditPlanEntry,
     CostContext,
+    DiscoveredLoaderFunction,
     FunctionPlanEntry,
     IncrementalMode,
     IncrementalStrategy,
@@ -38,7 +39,6 @@ from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.cost.models import StatementExecutionTelemetry
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event

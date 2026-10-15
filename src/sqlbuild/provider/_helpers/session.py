@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlbuild.compiler.discovery.models import DiscoveredProvider
+from sqlbuild._native import DiscoveredProvider
 from sqlbuild.provider.classes.session import ProviderSession
 
 if TYPE_CHECKING:

@@ -7,13 +7,13 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    DiscoveredProjectInputs,
     LintConfig,
     LintRunResult,
     collect_lint_project_files,
     discover_project_inputs,
     run_lint,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.unit.src.sqlbuild.lint._helpers._test_types import (
     CollectProjectFilesTestCase,
     SelectedProjectFilesTestCase,

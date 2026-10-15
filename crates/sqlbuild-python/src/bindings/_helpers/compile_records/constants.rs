@@ -792,6 +792,381 @@ const R_TOLERANT_SCOPE_DISCOVERY: RecordSpec = RecordSpec {
         FieldSpec::new("config_faults", FieldDefault::EmptyTuple),
     ],
 };
+const R_SQL_HOOK_ENTRY: RecordSpec = RecordSpec {
+    name: "SqlHookEntry",
+    doc: "A model lifecycle hook that executes SQL.",
+    fields: &[
+        FieldSpec::required("statement"),
+        FieldSpec::new("name", FieldDefault::None),
+        FieldSpec::new("relative_path", FieldDefault::None),
+        FieldSpec::new("definition_sql", FieldDefault::None),
+        FieldSpec::new("kwargs", FieldDefault::None),
+        FieldSpec::new("description", FieldDefault::None),
+        FieldSpec::new("reads", FieldDefault::EmptyTuple),
+    ],
+};
+const R_PYTHON_HOOK_ENTRY: RecordSpec = RecordSpec {
+    name: "PythonHookEntry",
+    doc: "A model lifecycle hook that invokes a discovered Python hook.",
+    fields: &[FieldSpec::required("name"), FieldSpec::required("kwargs")],
+};
+const R_ENUM_DECLARATION: RecordSpec = RecordSpec {
+    name: "EnumDeclaration",
+    doc: "One validated public or model-local enum declaration.",
+    fields: &[
+        FieldSpec::required("name"),
+        FieldSpec::required("members"),
+        FieldSpec::required("scalar_type"),
+        FieldSpec::required("relative_path"),
+        FieldSpec::new("model_name", FieldDefault::None),
+    ],
+};
+const R_CONSTANT_DECLARATION: RecordSpec = RecordSpec {
+    name: "ConstantDeclaration",
+    doc: "One validated public or model-local constant declaration.",
+    fields: &[
+        FieldSpec::required("name"),
+        FieldSpec::required("value"),
+        FieldSpec::required("relative_path"),
+        FieldSpec::new("model_name", FieldDefault::None),
+        FieldSpec::new("render_as", FieldDefault::None),
+    ],
+};
+const R_DISCOVERED_SOURCE_FILE: RecordSpec = RecordSpec {
+    name: "DiscoveredSourceFile",
+    doc: "A discovered source declaration file and its raw contents.",
+    fields: &[
+        FieldSpec::required("file_path"),
+        FieldSpec::required("relative_path"),
+        FieldSpec::required("contents"),
+        FieldSpec::required("source_entries"),
+    ],
+};
+const R_DISCOVERED_SQL_TEST_FILE: RecordSpec = RecordSpec {
+    name: "DiscoveredSqlTestFile",
+    doc: "A discovered SQL-native test file and its raw contents.",
+    fields: &[
+        FieldSpec::required("file_path"),
+        FieldSpec::required("relative_path"),
+        FieldSpec::required("contents"),
+        FieldSpec::required("blocks"),
+        FieldSpec::new(
+            "ownership_root",
+            FieldDefault::CallText("pathlib", "Path", "tests/unit"),
+        ),
+    ],
+};
+const R_SQL_TEST_PARAMETER_DECLARATION: RecordSpec = RecordSpec {
+    name: "SqlTestParameterDeclaration",
+    doc: "One typed parameter declared by a SQL-native test template.",
+    fields: &[
+        FieldSpec::required("name"),
+        FieldSpec::required("value_type"),
+        FieldSpec::new("nullable", FieldDefault::False),
+    ],
+};
+const R_DISCOVERED_SQL_SCENARIO_FILE: RecordSpec = RecordSpec {
+    name: "DiscoveredSqlScenarioFile",
+    doc: "A discovered SQL-native scenario file and its raw contents.",
+    fields: &[
+        FieldSpec::required("file_path"),
+        FieldSpec::required("relative_path"),
+        FieldSpec::required("contents"),
+        FieldSpec::required("header_values"),
+        FieldSpec::required("sql_body"),
+        FieldSpec::required("name"),
+        FieldSpec::new(
+            "ownership_root",
+            FieldDefault::CallText("pathlib", "Path", "tests/scenarios"),
+        ),
+        FieldSpec::new("sql_body_span", FieldDefault::None),
+    ],
+};
+const R_DISCOVERED_MACRO_FILE: RecordSpec = RecordSpec {
+    name: "DiscoveredMacroFile",
+    doc: "A discovered project macro file and its raw contents.",
+    fields: &[
+        FieldSpec::required("file_path"),
+        FieldSpec::required("relative_path"),
+        FieldSpec::required("contents"),
+        FieldSpec::new(
+            "scope_kind",
+            FieldDefault::Member("sqlbuild._native", "ScopeKind", "GLOBAL"),
+        ),
+        FieldSpec::new("ownership_root", FieldDefault::None),
+        FieldSpec::new("owning_path", FieldDefault::None),
+        FieldSpec::new("declaration_root", FieldDefault::None),
+    ],
+};
+const R_DISCOVERED_MATERIALIZATION_FILE: RecordSpec = RecordSpec {
+    name: "DiscoveredMaterializationFile",
+    doc: "A discovered custom materialization Python file.",
+    fields: &[
+        FieldSpec::required("file_path"),
+        FieldSpec::required("relative_path"),
+        FieldSpec::required("name"),
+        FieldSpec::new("provider_usages", FieldDefault::EmptyTuple),
+    ],
+};
+const R_DISCOVERED_PROVIDER_USAGE: RecordSpec = RecordSpec {
+    name: "DiscoveredProviderUsage",
+    doc: "Framework-owned metadata for provider usage by a Python callable surface.",
+    fields: &[
+        FieldSpec::required("provider_name"),
+        FieldSpec::required("parameter_name"),
+        FieldSpec::new("annotation_class_name", FieldDefault::None),
+        FieldSpec::new("annotation_module", FieldDefault::None),
+    ],
+};
+const R_DISCOVERED_LOADER_FUNCTION: RecordSpec = RecordSpec {
+    name: "DiscoveredLoaderFunction",
+    doc: "A discovered project source loader function.",
+    fields: &[
+        FieldSpec::required("file_path"),
+        FieldSpec::required("relative_path"),
+        FieldSpec::required("name"),
+        FieldSpec::required("function"),
+        FieldSpec::new("depends_on", FieldDefault::EmptyTuple),
+        FieldSpec::new("destination", FieldDefault::None),
+        FieldSpec::new("write_strategy", FieldDefault::None),
+        FieldSpec::new("cursor_column", FieldDefault::None),
+        FieldSpec::new("unique_key", FieldDefault::EmptyTuple),
+        FieldSpec::new("columns", FieldDefault::EmptyTuple),
+        FieldSpec::new("contract", FieldDefault::None),
+        FieldSpec::new("description", FieldDefault::None),
+        FieldSpec::new(
+            "connection_mode",
+            FieldDefault::Member("sqlbuild._native", "LoaderConnectionMode", "SQLBUILD"),
+        ),
+        FieldSpec::new("provider_usages", FieldDefault::EmptyTuple),
+    ],
+};
+const R_DISCOVERED_TASK_FUNCTION: RecordSpec = RecordSpec {
+    name: "DiscoveredTaskFunction",
+    doc: "A discovered project task function.",
+    fields: &[
+        FieldSpec::required("file_path"),
+        FieldSpec::required("relative_path"),
+        FieldSpec::required("name"),
+        FieldSpec::required("function"),
+        FieldSpec::new("depends_on", FieldDefault::EmptyTuple),
+        FieldSpec::new("tags", FieldDefault::EmptyTuple),
+        FieldSpec::new("group", FieldDefault::None),
+        FieldSpec::new("description", FieldDefault::None),
+        FieldSpec::new("meta", FieldDefault::None),
+        FieldSpec::new("retry", FieldDefault::None),
+        FieldSpec::new("provider_usages", FieldDefault::EmptyTuple),
+    ],
+};
+const R_DISCOVERED_ASSET_FUNCTION: RecordSpec = RecordSpec {
+    name: "DiscoveredAssetFunction",
+    doc: "A discovered project asset function.",
+    fields: &[
+        FieldSpec::required("file_path"),
+        FieldSpec::required("relative_path"),
+        FieldSpec::required("name"),
+        FieldSpec::required("function"),
+        FieldSpec::new("depends_on", FieldDefault::EmptyTuple),
+        FieldSpec::new("tags", FieldDefault::EmptyTuple),
+        FieldSpec::new("group", FieldDefault::None),
+        FieldSpec::new("description", FieldDefault::None),
+        FieldSpec::new("meta", FieldDefault::None),
+        FieldSpec::new("columns", FieldDefault::EmptyTuple),
+        FieldSpec::new("column_lineage", FieldDefault::None),
+        FieldSpec::new("retry", FieldDefault::None),
+        FieldSpec::new("provider_usages", FieldDefault::EmptyTuple),
+    ],
+};
+const R_DISCOVERED_CHECK_FUNCTION: RecordSpec = RecordSpec {
+    name: "DiscoveredCheckFunction",
+    doc: "A discovered project check function.",
+    fields: &[
+        FieldSpec::required("file_path"),
+        FieldSpec::required("relative_path"),
+        FieldSpec::required("name"),
+        FieldSpec::required("function"),
+        FieldSpec::required("depends_on"),
+        FieldSpec::new(
+            "severity",
+            FieldDefault::Member(
+                "sqlbuild.python_nodes.types",
+                "PythonCheckSeverity",
+                "ERROR",
+            ),
+        ),
+        FieldSpec::new("tags", FieldDefault::EmptyTuple),
+        FieldSpec::new("group", FieldDefault::None),
+        FieldSpec::new("description", FieldDefault::None),
+        FieldSpec::new("meta", FieldDefault::None),
+        FieldSpec::new("provider_usages", FieldDefault::EmptyTuple),
+    ],
+};
+const R_DISCOVERED_HOOK_FUNCTION: RecordSpec = RecordSpec {
+    name: "DiscoveredHookFunction",
+    doc: "A discovered project model lifecycle hook function.",
+    fields: &[
+        FieldSpec::required("file_path"),
+        FieldSpec::required("relative_path"),
+        FieldSpec::required("name"),
+        FieldSpec::required("function"),
+        FieldSpec::new("description", FieldDefault::None),
+        FieldSpec::new("reads", FieldDefault::EmptyTuple),
+        FieldSpec::new("provider_usages", FieldDefault::EmptyTuple),
+        FieldSpec::new(
+            "scope_kind",
+            FieldDefault::Member("sqlbuild._native", "ScopeKind", "GLOBAL"),
+        ),
+        FieldSpec::new("ownership_root", FieldDefault::None),
+        FieldSpec::new("owning_path", FieldDefault::None),
+        FieldSpec::new("declaration_root", FieldDefault::None),
+    ],
+};
+const R_DISCOVERED_AUDIT_FACTORY: RecordSpec = RecordSpec {
+    name: "DiscoveredAuditFactory",
+    doc: "A discovered audit factory and its normalized cases.",
+    fields: &[
+        FieldSpec::required("name"),
+        FieldSpec::required("function"),
+        FieldSpec::required("file_path"),
+        FieldSpec::required("relative_path"),
+        FieldSpec::required("line"),
+        FieldSpec::new("cases", FieldDefault::EmptyTuple),
+    ],
+};
+const R_DISCOVERED_EVENT_EXPORTER_DECLARATION: RecordSpec = RecordSpec {
+    name: "DiscoveredEventExporterDeclaration",
+    doc: "A discovered exporter declaration before provider binding.",
+    fields: &[
+        FieldSpec::required("file_path"),
+        FieldSpec::required("relative_path"),
+        FieldSpec::required("name"),
+        FieldSpec::required("function"),
+        FieldSpec::required("event_kinds"),
+        FieldSpec::required("min_severity"),
+    ],
+};
+const R_DISCOVERED_EVENT_EXPORTER: RecordSpec = RecordSpec {
+    name: "DiscoveredEventExporter",
+    doc: "A discovered canonical lifecycle event exporter function.",
+    fields: &[
+        FieldSpec::required("file_path"),
+        FieldSpec::required("relative_path"),
+        FieldSpec::required("name"),
+        FieldSpec::required("function"),
+        FieldSpec::new(
+            "event_kinds",
+            FieldDefault::TextFrozenset(&[
+                "audit",
+                "invocation",
+                "microbatch",
+                "operation",
+                "resource",
+                "retry",
+                "run",
+                "statement",
+            ]),
+        ),
+        FieldSpec::new(
+            "min_severity",
+            FieldDefault::Member("sqlbuild._native", "EventExportSeverity", "DEBUG"),
+        ),
+        FieldSpec::new("provider_usages", FieldDefault::EmptyTuple),
+    ],
+};
+const R_DISCOVERED_COMMAND_OUTPUT_SINK_DECLARATION: RecordSpec = RecordSpec {
+    name: "DiscoveredCommandOutputSinkDeclaration",
+    doc: "A command-output sink declaration before provider binding.",
+    fields: &[
+        FieldSpec::required("file_path"),
+        FieldSpec::required("relative_path"),
+        FieldSpec::required("name"),
+        FieldSpec::required("function"),
+        FieldSpec::required("streams"),
+    ],
+};
+const R_DISCOVERED_COMMAND_OUTPUT_SINK: RecordSpec = RecordSpec {
+    name: "DiscoveredCommandOutputSink",
+    doc: "A discovered command-output sink function.",
+    fields: &[
+        FieldSpec::required("file_path"),
+        FieldSpec::required("relative_path"),
+        FieldSpec::required("name"),
+        FieldSpec::required("function"),
+        FieldSpec::required("streams"),
+        FieldSpec::new("provider_usages", FieldDefault::EmptyTuple),
+    ],
+};
+const R_DISCOVERED_PROVIDER: RecordSpec = RecordSpec {
+    name: "DiscoveredProvider",
+    doc: "A discovered project provider class and validated settings object.",
+    fields: &[
+        FieldSpec::required("file_path"),
+        FieldSpec::required("relative_path"),
+        FieldSpec::required("name"),
+        FieldSpec::required("provider_class"),
+        FieldSpec::required("settings"),
+    ],
+};
+const R_DISCOVERED_PYTHON_NODE_FUNCTIONS: RecordSpec = RecordSpec {
+    name: "DiscoveredPythonNodeFunctions",
+    doc: "Discovered project Python DAG node functions grouped by kind.",
+    fields: &[
+        FieldSpec::new("loaders", FieldDefault::EmptyTuple),
+        FieldSpec::new("tasks", FieldDefault::EmptyTuple),
+        FieldSpec::new("assets", FieldDefault::EmptyTuple),
+        FieldSpec::new("checks", FieldDefault::EmptyTuple),
+        FieldSpec::new("audit_factories", FieldDefault::EmptyTuple),
+    ],
+};
+const R_DISCOVERED_PROJECT_INPUTS: RecordSpec = RecordSpec {
+    name: "DiscoveredProjectInputs",
+    doc: "All raw project inputs discovered from disk before semantic resolution.",
+    fields: &[
+        FieldSpec::required("project_config"),
+        FieldSpec::required("local_config"),
+        FieldSpec::new("project_dir", FieldDefault::None),
+        FieldSpec::new("model_files", FieldDefault::EmptyTuple),
+        FieldSpec::new("enum_files", FieldDefault::EmptyTuple),
+        FieldSpec::new("constant_files", FieldDefault::EmptyTuple),
+        FieldSpec::new("model_schema_files", FieldDefault::EmptyTuple),
+        FieldSpec::new("sql_function_files", FieldDefault::EmptyTuple),
+        FieldSpec::new("sql_hook_files", FieldDefault::EmptyTuple),
+        FieldSpec::new("python_function_files", FieldDefault::EmptyTuple),
+        FieldSpec::new("schema_files", FieldDefault::EmptyTuple),
+        FieldSpec::new("source_files", FieldDefault::EmptyTuple),
+        FieldSpec::new("seed_files", FieldDefault::EmptyTuple),
+        FieldSpec::new("test_files", FieldDefault::EmptyTuple),
+        FieldSpec::new("scenario_files", FieldDefault::EmptyTuple),
+        FieldSpec::new("audit_files", FieldDefault::EmptyTuple),
+        FieldSpec::new("macro_files", FieldDefault::EmptyTuple),
+        FieldSpec::new("materialization_files", FieldDefault::EmptyTuple),
+        FieldSpec::new("loader_functions", FieldDefault::EmptyTuple),
+        FieldSpec::new("task_functions", FieldDefault::EmptyTuple),
+        FieldSpec::new("asset_functions", FieldDefault::EmptyTuple),
+        FieldSpec::new("check_functions", FieldDefault::EmptyTuple),
+        FieldSpec::new("audit_factories", FieldDefault::EmptyTuple),
+        FieldSpec::new("hook_functions", FieldDefault::EmptyTuple),
+        FieldSpec::new("event_exporters", FieldDefault::EmptyTuple),
+        FieldSpec::new("command_output_sinks", FieldDefault::EmptyTuple),
+        FieldSpec::new("providers", FieldDefault::EmptyTuple),
+        FieldSpec::new("adapter_file", FieldDefault::None),
+        FieldSpec {
+            name: "native_session",
+            default: FieldDefault::None,
+            compared: false,
+        },
+    ],
+};
+const R_DISCOVERED_RUNTIME_EXTENSIONS: RecordSpec = RecordSpec {
+    name: "DiscoveredRuntimeExtensions",
+    doc: "Command-startup providers, typed sinks, and lifecycle delivery settings.",
+    fields: &[
+        FieldSpec::new("providers", FieldDefault::EmptyTuple),
+        FieldSpec::new("event_exporters", FieldDefault::EmptyTuple),
+        FieldSpec::new("command_output_sinks", FieldDefault::EmptyTuple),
+        FieldSpec::new("lifecycle_shutdown_timeout_seconds", FieldDefault::None),
+    ],
+};
 
 /// The compile and discovery value records.
 pub(crate) const COMPILE_VALUE_RECORDS: &[RecordSpec] = &[
@@ -857,4 +1232,29 @@ pub(crate) const COMPILE_VALUE_RECORDS: &[RecordSpec] = &[
     R_DISCOVERED_ADAPTER_FILE,
     R_DISCOVERY_FILE_FAULT,
     R_TOLERANT_SCOPE_DISCOVERY,
+    R_SQL_HOOK_ENTRY,
+    R_PYTHON_HOOK_ENTRY,
+    R_ENUM_DECLARATION,
+    R_CONSTANT_DECLARATION,
+    R_DISCOVERED_SOURCE_FILE,
+    R_DISCOVERED_SQL_TEST_FILE,
+    R_SQL_TEST_PARAMETER_DECLARATION,
+    R_DISCOVERED_SQL_SCENARIO_FILE,
+    R_DISCOVERED_MACRO_FILE,
+    R_DISCOVERED_MATERIALIZATION_FILE,
+    R_DISCOVERED_PROVIDER_USAGE,
+    R_DISCOVERED_LOADER_FUNCTION,
+    R_DISCOVERED_TASK_FUNCTION,
+    R_DISCOVERED_ASSET_FUNCTION,
+    R_DISCOVERED_CHECK_FUNCTION,
+    R_DISCOVERED_HOOK_FUNCTION,
+    R_DISCOVERED_AUDIT_FACTORY,
+    R_DISCOVERED_EVENT_EXPORTER_DECLARATION,
+    R_DISCOVERED_EVENT_EXPORTER,
+    R_DISCOVERED_COMMAND_OUTPUT_SINK_DECLARATION,
+    R_DISCOVERED_COMMAND_OUTPUT_SINK,
+    R_DISCOVERED_PROVIDER,
+    R_DISCOVERED_PYTHON_NODE_FUNCTIONS,
+    R_DISCOVERED_PROJECT_INPUTS,
+    R_DISCOVERED_RUNTIME_EXTENSIONS,
 ];

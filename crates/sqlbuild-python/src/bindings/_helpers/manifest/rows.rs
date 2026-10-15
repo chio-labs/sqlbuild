@@ -14,7 +14,7 @@ use sqlbuild_analysis::python_values::models::PythonValue;
 
 use crate::bindings::_helpers::python_values::values::python_value;
 
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
+const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
 const DECIMAL_KIND: &str = "decimal";
 const MACRO_KIND: &str = "macro";
 const DEFAULT_MATERIALIZATION: &str = "view";

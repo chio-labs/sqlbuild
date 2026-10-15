@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import CompileInputError
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.types import StatementSizeLimit
-from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.executor.testing.constants import SQL_TEST_SIZE_BYTES
 
 

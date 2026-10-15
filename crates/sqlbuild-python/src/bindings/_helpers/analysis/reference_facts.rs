@@ -8,7 +8,7 @@ use sqlbuild_analysis::explicit_references::models::{
 };
 use sqlbuild_analysis::explicit_references::types::ResourceKey;
 
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
+const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
 const PYTHON_HOOK_ENTRY: &str = "PythonHookEntry";
 const SQL_HOOK_ENTRY: &str = "SqlHookEntry";
 const MODEL_HOOK_KEYS: [&str; 2] = ["pre_hooks", "post_hooks"];

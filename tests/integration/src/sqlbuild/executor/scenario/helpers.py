@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild._native import (
+    DiscoveredHookFunction,
     MaterializationType,
     ModelPlanEntry,
     PlanAction,
@@ -22,7 +23,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.executor.run.models import HookContext
 
 SCENARIO_NAME: str = "revenue__customer_refund"

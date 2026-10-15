@@ -11,9 +11,8 @@ from typing import TYPE_CHECKING
 import pytest
 
 import sqlbuild._native as native_module
-from sqlbuild._native import assemble_project
+from sqlbuild._native import CompileInputError, assemble_project
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from tests.integration.src.sqlbuild.compiler.helpers import (
     GoldenEntry,

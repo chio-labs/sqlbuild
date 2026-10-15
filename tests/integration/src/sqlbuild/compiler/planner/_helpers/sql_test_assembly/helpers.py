@@ -9,6 +9,8 @@ from sqlbuild._native import (
     CompileModelConfig,
     CompileSqlTestCte,
     DiscoveredSqlTestBlock,
+    DiscoveredSqlTestFile,
+    SqlReferenceKind,
 )
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
@@ -22,8 +24,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredSqlTestFile
-from sqlbuild.compiler.references.types import SqlReferenceKind
 from tests.integration.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     ExecuteChainTestCase,
 )

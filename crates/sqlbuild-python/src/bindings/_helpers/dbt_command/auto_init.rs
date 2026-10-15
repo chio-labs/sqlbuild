@@ -17,15 +17,12 @@ use crate::bindings::_helpers::dbt_command::support::{color_enabled, flag, path,
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const DISCOVERY_CONSTANTS: &str = "sqlbuild.compiler.discovery.constants";
+const PROJECT_CONFIG_FILENAME: &str = "sqlbuild_project.toml";
 const PROGRESS_REPORTER_MODULE: &str = "sqlbuild._native";
 
 fn project_config_found(directory: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let name: Bound<'_, PyAny> = imported(
-        directory.py(),
-        DISCOVERY_CONSTANTS,
-        "PROJECT_CONFIG_FILENAME",
-    )?;
+    let name: Bound<'_, PyAny> =
+        pyo3::types::PyString::new(directory.py(), PROJECT_CONFIG_FILENAME).into_any();
     directory
         .call_method1("__truediv__", (name,))?
         .call_method0("exists")?

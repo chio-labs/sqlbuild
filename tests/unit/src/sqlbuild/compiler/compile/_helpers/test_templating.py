@@ -3,11 +3,11 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
+    CompileInputError,
     UnicodeEnvironment,
     expand_effective_vars,
     expand_template_data,
 )
-from sqlbuild.compiler.compile.exceptions import CompileInputError
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ExpandTemplateDataErrorTestCase,
     ExpandTemplateDataTestCase,

@@ -4,6 +4,7 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import (
+    DiscoveredSqlScenarioFile,
     project_with,
 )
 from sqlbuild.compiler.compile.models import (
@@ -12,9 +13,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledSqlTest,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType, SqlTestMode
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredSqlScenarioFile,
-)
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (
     NativeFactPayloadTestCase,
 )

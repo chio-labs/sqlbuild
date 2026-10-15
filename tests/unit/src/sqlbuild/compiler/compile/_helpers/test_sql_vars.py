@@ -6,8 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import substitute_sql_vars_with_spans
-from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild._native import CompileInputError, substitute_sql_vars_with_spans
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     SubstituteSqlVarsErrorTestCase,
     SubstituteSqlVarsTestCase,

@@ -10,8 +10,10 @@ from sqlbuild._native import (
     CompiledDirectLogicSqlTestPayload,
     CompiledFunction,
     CompiledModelSqlTestPayload,
+    CompileInputError,
     CompileSqlTestCte,
     DiscoveredSqlTestBlock,
+    DiscoveredSqlTestFile,
     NativeSqlTestPlan,
     PlannerInputError,
     PlannerScope,
@@ -20,6 +22,7 @@ from sqlbuild._native import (
     PlanWarning,
     SqlTestPlanEntry,
     SqlTestPlanResult,
+    SqlTestReferenceError,
     WarningSeverity,
     build_test_command_plan,
     plan_compiled_sql_test_artifacts,
@@ -32,7 +35,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
-from sqlbuild.compiler.compile.exceptions import CompileInputError, SqlTestReferenceError
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
@@ -40,7 +42,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledSqlTest,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType, SqlTestMode
-from sqlbuild.compiler.discovery.models import DiscoveredSqlTestFile
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     AssertionChainCteErrorTestCase,
     NativePlanningDifferentialTestCase,
