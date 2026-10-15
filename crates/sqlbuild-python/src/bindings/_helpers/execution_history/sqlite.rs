@@ -1,8 +1,7 @@
 //! `SQLiteExecutionHistory`: project-local SQLite event-log and run-projection storage.
 
-use std::fs::{DirBuilder, Permissions};
+use std::fs::DirBuilder;
 use std::io::ErrorKind;
-use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 use std::path::Path;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
@@ -13,12 +12,12 @@ use pyo3::types::{PyDict, PyTuple};
 use sqlbuild_state::execution_history::constants::{
     DEFAULT_PAGE_LIMIT, MEMORY_PATH, RUN_CURSOR_TIMESTAMP, SCHEMA_VERSION, SQLITE_ALL_EVENTS,
     SQLITE_ALL_RUNS, SQLITE_BEGIN, SQLITE_BUSY_TIMEOUT_MS, SQLITE_COMMIT, SQLITE_DELETE_RUNS,
-    SQLITE_DIRECTORY_MODE, SQLITE_EVENT_BY_ID, SQLITE_EVENT_BY_STORAGE_ID, SQLITE_EVENT_EXISTS,
-    SQLITE_FILE_MODE, SQLITE_FOREIGN_KEYS, SQLITE_HEALTHY_CHECK_RESULT, SQLITE_INSERT_NAMESPACE,
-    SQLITE_INSERT_SCHEMA_VERSION, SQLITE_JOURNAL_MODE, SQLITE_METADATA_EXISTS,
-    SQLITE_METADATA_TABLE, SQLITE_METADATA_VALUE, SQLITE_NAMESPACE_KEY, SQLITE_QUICK_CHECK,
-    SQLITE_ROLLBACK, SQLITE_RUN_BY_ID, SQLITE_RUN_EXISTS, SQLITE_RUN_INSERT, SQLITE_SCHEMA,
-    SQLITE_SCHEMA_VERSION_KEY, UNKNOWN_EVENT_CURSOR, UNKNOWN_RUN_CURSOR,
+    SQLITE_EVENT_BY_ID, SQLITE_EVENT_BY_STORAGE_ID, SQLITE_EVENT_EXISTS, SQLITE_FOREIGN_KEYS,
+    SQLITE_HEALTHY_CHECK_RESULT, SQLITE_INSERT_NAMESPACE, SQLITE_INSERT_SCHEMA_VERSION,
+    SQLITE_JOURNAL_MODE, SQLITE_METADATA_EXISTS, SQLITE_METADATA_TABLE, SQLITE_METADATA_VALUE,
+    SQLITE_NAMESPACE_KEY, SQLITE_QUICK_CHECK, SQLITE_ROLLBACK, SQLITE_RUN_BY_ID, SQLITE_RUN_EXISTS,
+    SQLITE_RUN_INSERT, SQLITE_SCHEMA, SQLITE_SCHEMA_VERSION_KEY, UNKNOWN_EVENT_CURSOR,
+    UNKNOWN_RUN_CURSOR,
 };
 use sqlbuild_state::execution_history::errors::HistoryErrorKind;
 use sqlbuild_state::execution_history::main::decoded_run_cursor::decoded_run_cursor;
@@ -77,10 +76,25 @@ fn prepare_history_directory(path: &str) -> std::io::Result<()> {
     {
         std::fs::create_dir_all(grandparent)?;
     }
-    match DirBuilder::new().mode(SQLITE_DIRECTORY_MODE).create(parent) {
+    match private_directory_builder().create(parent) {
         Err(error) if error.kind() == ErrorKind::AlreadyExists && parent.is_dir() => Ok(()),
         result => result,
     }
+}
+
+/// A directory builder with the owner-only mode Python's `os.mkdir(mode=0o700)` applies.
+#[cfg(unix)]
+fn private_directory_builder() -> DirBuilder {
+    use std::os::unix::fs::DirBuilderExt;
+    let mut builder: DirBuilder = DirBuilder::new();
+    builder.mode(sqlbuild_state::execution_history::constants::SQLITE_DIRECTORY_MODE);
+    builder
+}
+
+/// Windows ignores the directory mode, as `os.mkdir` does there.
+#[cfg(not(unix))]
+fn private_directory_builder() -> DirBuilder {
+    DirBuilder::new()
 }
 
 /// `os.chmod(path, 0o600)` for a file-backed history.
@@ -88,7 +102,24 @@ fn restrict_history_file(path: &str) -> std::io::Result<()> {
     if path == MEMORY_PATH {
         return Ok(());
     }
-    std::fs::set_permissions(path, Permissions::from_mode(SQLITE_FILE_MODE))
+    set_owner_only(path)
+}
+
+#[cfg(unix)]
+fn set_owner_only(path: &str) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(
+        path,
+        std::fs::Permissions::from_mode(
+            sqlbuild_state::execution_history::constants::SQLITE_FILE_MODE,
+        ),
+    )
+}
+
+/// `os.chmod(path, 0o600)` on Windows only keeps the file writable, which it already is.
+#[cfg(not(unix))]
+fn set_owner_only(_path: &str) -> std::io::Result<()> {
+    Ok(())
 }
 
 /// Whether `error` is a `sqlite3.Error`.
