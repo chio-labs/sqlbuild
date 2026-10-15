@@ -48,6 +48,8 @@ fn register_project_stages(module: &Bound<'_, PyModule>) -> PyResult<()> {
     plan_output::registration::register(module)?;
     planner_changes::registration::register(module)?;
     crate::bindings::_helpers::planner_migrations::registration::register(module)?;
+    crate::bindings::_helpers::planner_phases::registration::register(module)?;
+    crate::bindings::_helpers::planner_warehouse::registration::register(module)?;
     planner_identity::registration::register(module)?;
     planner_selection::registration::register(module)?;
     planner_scope::registration::register(module)?;

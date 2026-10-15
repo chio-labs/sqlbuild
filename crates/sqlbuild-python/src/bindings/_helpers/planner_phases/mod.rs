@@ -1,0 +1,13 @@
+//! Native execution-planning phases over Python planner models and adapter callbacks.
+
+pub(crate) mod buildability;
+pub(crate) mod constants;
+pub(crate) mod execution_changes;
+pub(crate) mod full_refresh;
+pub(crate) mod identities;
+pub(crate) mod objects;
+pub(crate) mod output_assembly;
+pub(crate) mod registration;
+pub(crate) mod retention;
+pub(crate) mod scopes;
+pub(crate) mod warehouse_state;

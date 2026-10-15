@@ -6,6 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from sqlbuild._native import plan_retention, plan_table_types
 from sqlbuild.adapter.contract.models import (
     RelationInfo,
     RenderedRetentionChange,
@@ -18,7 +19,6 @@ from sqlbuild.adapter.contract.types import (
 )
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner._helpers.planning.retention import plan_retention, plan_table_types
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     PlannerRuntime,

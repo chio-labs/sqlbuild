@@ -8,11 +8,8 @@ from pathlib import Path
 
 import pytest
 
-import sqlbuild.compiler.planner.classes.migration_fingerprint_cache as fingerprint_cache
-from sqlbuild._native import build_migration_fingerprint
-from sqlbuild.compiler.planner.classes.migration_fingerprint_cache import (
-    MigrationFingerprintCache,
-)
+import sqlbuild._native as native_module
+from sqlbuild._native import MigrationFingerprintCache, build_migration_fingerprint
 from tests.unit.src.sqlbuild.compiler.planner.classes._test_types import (
     MigrationFingerprintCacheTestCase,
     PersistedMigrationFingerprintTestCase,
@@ -106,7 +103,7 @@ def test_given_fingerprint_requests_when_cached_then_matches_direct_build_with_m
             dialect=dialect,
         )
 
-    monkeypatch.setattr(fingerprint_cache, "build_migration_fingerprint", counting)
+    monkeypatch.setattr(native_module, "build_migration_fingerprint", counting)
     cache: MigrationFingerprintCache = MigrationFingerprintCache()
 
     results: list[str | None] = [

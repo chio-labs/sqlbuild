@@ -8,7 +8,7 @@ from pathlib import Path
 import duckdb
 import pytest
 
-import sqlbuild.compiler.planner._helpers.planning.output_assembly as planner_assembly_module
+import sqlbuild._native as planner_assembly_module
 import sqlbuild.executor.build.classes.build_scheduler as build_scheduler_module
 from tests.integration.src.sqlbuild.executor.build._test_types import TableTypeRoutingTestCase
 from tests.integration.src.sqlbuild.executor.build.helpers import (

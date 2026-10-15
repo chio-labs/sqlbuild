@@ -8,6 +8,7 @@ from sqlbuild._native import (
     build_compiled_function_fingerprint_sql,
     build_downstream_deps,
     build_execution_upstream_deps,
+    gather_source_columns,
     get_materialization_type,
     resolve_graph_selection,
     topologically_order_keys,
@@ -32,7 +33,6 @@ from sqlbuild.compiler.planner._helpers.resolve.resolve import (
     resolve_function_sql,
     resolve_model_sql,
 )
-from sqlbuild.compiler.planner._helpers.warehouse.source_columns import gather_source_columns
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CloneSourcePlanEntry,

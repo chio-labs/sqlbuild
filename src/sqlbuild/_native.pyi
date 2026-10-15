@@ -206,7 +206,6 @@ from sqlbuild.compiler.pipeline.models import (
     PythonRunPlanOutputs,
     StaticCommandContext,
 )
-from sqlbuild.compiler.planner.classes.migration_fingerprint_cache import MigrationFingerprintCache
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
@@ -220,6 +219,7 @@ from sqlbuild.compiler.planner.models import (
     CursorInputRelation,
     CursorOverridePair,
     CursorOverrides,
+    CursorSnapshotScope,
     DeferralInputs,
     DirectModelVersionIdentities,
     EmptyCursorInputDecision,
@@ -246,12 +246,21 @@ from sqlbuild.compiler.planner.models import (
     ParsedSelector,
     PathSelector,
     PlanEntryBuildInputs,
+    PlannedSqlTests,
+    PlannerChangeReconciliation,
     PlannerChangeResults,
+    PlannerEntryResults,
+    PlannerIdentityContext,
     PlannerOverrides,
+    PlannerPolicies,
     PlannerRelationsContext,
     PlannerResolvedActions,
     PlannerRuntime,
     PlannerScope,
+    PlannerScopePruningResult,
+    PlannerScopeResolution,
+    PlannerSelection,
+    PlannerWarehouseState,
     PlanOutput,
     PlanWarning,
     QueryShape,
@@ -259,6 +268,7 @@ from sqlbuild.compiler.planner.models import (
     RelationFixtureCompletion,
     RelationFixtureDiagnostic,
     RelationFixturePlanningContext,
+    RetentionPlanEntry,
     ScenarioArtifactIdentity,
     ScenarioExecutionPlan,
     ScenarioFixturePlan,
@@ -275,6 +285,7 @@ from sqlbuild.compiler.planner.models import (
     SqlTestPlanEntry,
     SqlTestPlanResult,
     SqlTestSelection,
+    TableTypePlanEntry,
     UnitTestSelectorSplit,
     WarehouseFingerprints,
     WarehouseSnapshot,
@@ -5325,3 +5336,228 @@ def format_model_migrations(
     *, lines: list[str], plan: PlanOutput, display_options: DisplayOptions
 ) -> list[str]: ...
 def old_name_rows(*, entry: OldNameViewPlanEntry, style: CliStyle) -> list[str]: ...
+
+class MigrationFingerprintCache:
+    def __init__(self, *, root: Path | None = None) -> None: ...
+    def fingerprint(
+        self,
+        *,
+        query_sql: str,
+        metadata_json: str,
+        ref_identities: Mapping[str, str],
+        dialect: str | None,
+    ) -> str | None: ...
+    def persist(self) -> None: ...
+
+def gather_warehouse_snapshot(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    connection: Any,
+    execute: AdapterExecute[Any, Any],
+    selected_keys: frozenset[CompiledObjectKey] | None = None,
+    full_refresh: bool = False,
+    full_refresh_model_names: frozenset[str] | None = None,
+    on_progress: Callable[[str], None] | None = None,
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None,
+    cursor_scope: CursorSnapshotScope | None = None,
+) -> WarehouseSnapshot: ...
+def gather_redirected_cursor_snapshots(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    connection: Any,
+    existing_relations: dict[str, RelationInfo],
+    target_relations: dict[str, str],
+    cursor_scope: CursorSnapshotScope,
+    full_refresh_model_names: frozenset[str],
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None,
+    on_progress: Callable[[str], None] | None = None,
+    origin_cursor_columns: dict[str, str] | None = None,
+) -> dict[str, ModelCursorSnapshot]: ...
+def watermark_type_is_compatible(*, declared_type: str, cursor_type: str | None) -> bool: ...
+def gather_source_columns(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    connection: Any,
+    source_entries: tuple[SourceEntry, ...] | None = None,
+) -> dict[str, tuple[ColumnInfo, ...]]: ...
+def gather_source_inspection(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    connection: Any,
+    source_entries: tuple[SourceEntry, ...] | None,
+) -> tuple[dict[str, tuple[ColumnInfo, ...]], frozenset[str]]: ...
+def get_semantic_source_columns(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    connection: Any,
+    source_read_map: dict[str, SourceEntry],
+    columns: dict[str, tuple[ColumnInfo, ...]],
+    selected_keys: frozenset[CompiledObjectKey],
+) -> dict[str, tuple[ColumnInfo, ...]]: ...
+def check_selected_source_tables_exist(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    connection: Any,
+    scope: PlannerScope,
+    relations: PlannerRelationsContext,
+) -> None: ...
+def build_source_read_map(
+    *,
+    project: CompiledProjectView,
+    source_map: dict[str, SourceEntry],
+    selected_keys: frozenset[CompiledObjectKey],
+    project_config: ProjectConfig | None,
+    local_config: LocalConfig | None,
+    defer_sources_to: str | None,
+    read_source_names: frozenset[str] | None = None,
+) -> dict[str, SourceEntry]: ...
+def with_declared_source_reads(
+    *,
+    project: CompiledProjectView,
+    source_map: dict[str, SourceEntry],
+    source_names: frozenset[str],
+) -> dict[str, SourceEntry]: ...
+def build_source_freshness_unknown_warnings(
+    *, source_freshness: DirectSourceFreshnessPlanningResult
+) -> tuple[PlanWarning, ...]: ...
+def build_planner_source_freshness_result(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    connection: Any,
+    scope: PlannerScope,
+    relations: PlannerRelationsContext,
+    freshness_state_schemas: frozenset[str] | None = None,
+) -> DirectSourceFreshnessPlanningResult: ...
+def resolve_planner_scopes(
+    *,
+    project: CompiledProjectView,
+    selection: PlannerSelection,
+    policies: PlannerPolicies,
+) -> PlannerScopeResolution: ...
+def build_planner_identity_context(
+    *,
+    project: CompiledProjectView,
+    scopes: PlannerScopeResolution,
+    include_stale_warning_identities: bool = True,
+) -> PlannerIdentityContext: ...
+def detect_stale_warning_changes(
+    *,
+    project: CompiledProjectView,
+    scopes: PlannerScopeResolution,
+    snapshot: WarehouseSnapshot,
+    identities: PlannerIdentityContext,
+    execution_changes: PlannerChangeResults,
+) -> PlannerChangeResults: ...
+def check_selected_scope_buildability(
+    *,
+    runtime: PlannerRuntime,
+    scopes: PlannerScopeResolution,
+    warehouse: PlannerWarehouseState,
+    deferral: DeferralInputs,
+) -> None: ...
+def prune_planner_execution_scope(
+    *, scopes: PlannerScopeResolution, resolved_actions: PlannerResolvedActions
+) -> PlannerScopePruningResult: ...
+def reconcile_execution_changes(
+    *,
+    warehouse: PlannerWarehouseState,
+    identities: PlannerIdentityContext,
+    pruning: PlannerScopePruningResult,
+    changes: PlannerChangeResults,
+) -> PlannerChangeReconciliation: ...
+def build_planner_entry_results(
+    *,
+    runtime: PlannerRuntime,
+    warehouse: PlannerWarehouseState,
+    identities: PlannerIdentityContext,
+    overrides: PlannerOverrides,
+    policies: PlannerPolicies,
+    deferral: DeferralInputs,
+    pruning: PlannerScopePruningResult,
+    reconciliation: PlannerChangeReconciliation,
+    source_freshness: DirectSourceFreshnessPlanningResult,
+) -> PlannerEntryResults: ...
+def resolve_model_full_refresh(*, model: CompiledModelView, cli_full_refresh: bool) -> bool: ...
+def effectively_full_refreshed_model_names(
+    *, project: CompiledProjectView, cli_full_refresh: bool
+) -> frozenset[str]: ...
+def describe_full_rebuild_cause(
+    *, change_result: ChangeDetectionResult, full_refresh: bool
+) -> str: ...
+def check_full_rebuild_allowed(
+    *, model: CompiledModelView, change_result: ChangeDetectionResult, full_rebuild_cause: str
+) -> None: ...
+def effective_target_config(*, runtime: PlannerRuntime) -> TargetConfig: ...
+def table_type_copy_name(*, target_name: str, identifier_limit: int) -> str: ...
+def plan_table_types(
+    *, runtime: PlannerRuntime, warehouse: PlannerWarehouseState, scope: PlannerScope
+) -> tuple[TableTypePlanEntry, ...]: ...
+def plan_retention(
+    *, runtime: PlannerRuntime, warehouse: PlannerWarehouseState, scope: PlannerScope
+) -> tuple[RetentionPlanEntry, ...]: ...
+def assemble_base_plan_output(
+    *,
+    runtime: PlannerRuntime,
+    warehouse: PlannerWarehouseState,
+    identities: PlannerIdentityContext,
+    overrides: PlannerOverrides,
+    pruning: PlannerScopePruningResult,
+    reconciliation: PlannerChangeReconciliation,
+    entries: PlannerEntryResults,
+    source_freshness: DirectSourceFreshnessPlanningResult,
+    planned_sql_tests: PlannedSqlTests | None = None,
+) -> PlanOutput: ...
+def with_column_rename_hints(
+    *, entries: tuple[ModelPlanEntry, ...], hints: tuple[ColumnRenameHint, ...]
+) -> tuple[ModelPlanEntry, ...]: ...
+def with_storage_policies(
+    *,
+    plan_output: PlanOutput,
+    runtime: PlannerRuntime,
+    warehouse: PlannerWarehouseState,
+    scopes: PlannerScopeResolution,
+    policies: PlannerPolicies,
+) -> PlanOutput: ...
+def with_plan_warnings(
+    *,
+    runtime: PlannerRuntime,
+    scopes: PlannerScopeResolution,
+    warehouse: PlannerWarehouseState,
+    identities: PlannerIdentityContext,
+    stale_warning_changes: PlannerChangeResults,
+    pruning: PlannerScopePruningResult,
+    source_freshness: DirectSourceFreshnessPlanningResult,
+    plan_output: PlanOutput,
+    policies: PlannerPolicies,
+) -> PlanOutput: ...
+def with_plan_metadata(
+    *,
+    plan_output: PlanOutput,
+    pruning: PlannerScopePruningResult,
+    source_freshness: DirectSourceFreshnessPlanningResult,
+    policies: PlannerPolicies,
+) -> PlanOutput: ...
+def gather_planner_warehouse_state(
+    *,
+    runtime: PlannerRuntime,
+    scopes: PlannerScopeResolution,
+    overrides: PlannerOverrides,
+    deferral: DeferralInputs,
+) -> PlannerWarehouseState: ...
+def planner_metadata_name_filter(
+    *, project: CompiledProjectView, selected_keys: frozenset[CompiledObjectKey] | None = None
+) -> tuple[str, ...] | None: ...
+def list_source_candidates(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    database: str | None,
+    entries: tuple[SourceEntry, ...],
+) -> tuple[RelationInfo, ...]: ...

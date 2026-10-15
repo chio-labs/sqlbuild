@@ -15,7 +15,6 @@ from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledPro
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
-    EmptyCursorInputDecision,
     MissingUpstream,
     ParsedSelector,
     PathSelector,
@@ -122,32 +121,6 @@ class MetadataNameFilterTestCase:
 
 
 @dataclass(frozen=True)
-class CursorQueryShapeTestCase:
-    description: str
-    min_tags: tuple[str, ...]
-    max_tags: tuple[str, ...]
-    row: tuple[str | None, ...]
-    expected_sql: str
-    expected_results: dict[str, str]
-    expected_bounds: str
-
-
-@dataclass(frozen=True)
-class CursorQueryGroupingTestCase:
-    description: str
-    expected_physical_queries: tuple[tuple[str, str, tuple[str, ...], tuple[str, ...]], ...]
-
-
-@dataclass(frozen=True)
-class CursorQueryFailureTestCase:
-    description: str
-    expected_results: dict[str, str]
-    expected_failure_progress: str
-    expected_success_progress: str
-    expected_failed_tags: frozenset[str] = frozenset()
-
-
-@dataclass(frozen=True)
 class MicrobatchCursorEndPlanTestCase:
     description: str
     cursor_type: str
@@ -159,13 +132,6 @@ class MicrobatchCursorEndPlanTestCase:
     upstream_min: str
     upstream_max: str
     expected_microbatch_range: CursorBounds
-
-
-@dataclass(frozen=True)
-class CursorFetchFailureTestCase:
-    description: str
-    expected_results: dict[str, str]
-    expected_progress: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -270,16 +236,6 @@ class WatermarkLineageTestCase:
     watermark_column: str
     expected_valid: bool
     expected_error_fragment: str | None = None
-
-
-@dataclass(frozen=True)
-class CursorSnapshotAvailabilityTestCase:
-    description: str
-    target_tag: str | None
-    target_relation: str | None
-    results: dict[str, str]
-    expected_available: bool
-    expected_unavailable_tags: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -653,16 +609,6 @@ class ApplyDeferredTargetsTestCase:
 
 
 @dataclass(frozen=True)
-class CursorUpstreamResolutionTestCase:
-    description: str
-    ref_name: str
-    model_qualified_name: str | None
-    deferred_qualified_name: str | None
-    selected_names: frozenset[str] | None
-    expected_qualified_name: str | None
-
-
-@dataclass(frozen=True)
 class CursorOverrideResolutionTestCase:
     description: str
     cursor_type: str | None
@@ -862,16 +808,6 @@ class MissingUpstreamMessageTestCase:
     missing: tuple[MissingUpstream, ...]
     edge_origins: dict[tuple[CompiledObjectKey, CompiledObjectKey], str]
     expected_message: str
-
-
-@dataclass(frozen=True)
-class EmptyCursorInputsSnapshotTestCase:
-    description: str
-    results: dict[str, str]
-    failed_tags: frozenset[str]
-    expected_empty_input_names: tuple[str, ...]
-    expected_unreadable_input_names: tuple[str, ...]
-    expected_decision: EmptyCursorInputDecision
 
 
 @dataclass(frozen=True)

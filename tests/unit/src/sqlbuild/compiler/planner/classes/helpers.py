@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.metadata
 import json
 import sqlite3
 from collections.abc import Mapping
@@ -9,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
+import sqlbuild._native as native_module
 import sqlbuild.compiler.planner.classes.fixture_column_inferences as fixture_inferences
-import sqlbuild.compiler.planner.classes.migration_fingerprint_cache as fingerprint_cache
 from sqlbuild._native import build_migration_fingerprint, infer_fixture_column_facts
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.models import FixtureColumnInference
@@ -48,7 +49,7 @@ def count_fingerprint_computations(monkeypatch: pytest.MonkeyPatch) -> list[int]
             dialect=dialect,
         )
 
-    monkeypatch.setattr(fingerprint_cache, "build_migration_fingerprint", counting)
+    monkeypatch.setattr(native_module, "build_migration_fingerprint", counting)
     return computations
 
 
@@ -98,7 +99,7 @@ def upgrade_sqlbuild(root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Report a different installed sqlbuild version for the next run."""
 
     del root
-    monkeypatch.setattr(fingerprint_cache, "_package_version", lambda package: f"{package}-next")
+    monkeypatch.setattr(importlib.metadata, "version", lambda package: f"{package}-next")
 
 
 FIXTURE_PROFILES: dict[str, ExpressionInferenceProfile] = {

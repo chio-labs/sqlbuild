@@ -8,6 +8,7 @@ import pytest
 from sqlbuild._native import (
     build_stale_out_of_selection_warnings,
     compiled_model_record,
+    resolve_planner_scopes,
 )
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.compile.types import (
@@ -17,7 +18,6 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_SEED
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner._helpers.planning.scopes import resolve_planner_scopes
 from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     DirectModelVersionIdentities,

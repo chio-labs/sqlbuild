@@ -8,6 +8,7 @@ from sqlbuild._native import (
     build_selected_audit_entries,
     extract_seed_columns,
     get_materialization_type,
+    resolve_planner_scopes,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledObjectKey
@@ -19,7 +20,6 @@ from sqlbuild.compiler.planner._helpers.output.plan_output import (
     plan_function,
     sql_test_is_selected,
 )
-from sqlbuild.compiler.planner._helpers.planning.scopes import resolve_planner_scopes
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     DeferralInputs,
