@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
-from sqlbuild.compiler.compile.types import AuditInput
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     AuditFactoryCompileIntegrationTestCase,
 )
@@ -15,6 +15,9 @@ from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
     audit_input_projection,
     compile_audits_for_project,
 )
+
+if TYPE_CHECKING:
+    from sqlbuild.compiler.compile.types import AuditInput
 
 
 @pytest.mark.parametrize(

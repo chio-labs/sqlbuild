@@ -6,7 +6,7 @@ import itertools
 import random
 from itertools import product
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -20,7 +20,7 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
-from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.lineage.types import InferredNullability
 from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import (
     AdapterRuleCallbackTestCase,
@@ -54,6 +54,9 @@ from tests.integration.src.sqlbuild.compiler.helpers import (
     mismatches,
     read_golden,
 )
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView
 
 _DIALECT_PROFILES: tuple[ExpressionInferenceProfile, ...] = tuple(
     ExpressionInferenceProfile(sql_analysis_dialect=dialect)

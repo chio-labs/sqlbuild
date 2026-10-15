@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from sqlbuild._native import build_compile_inputs, discover_project_inputs
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.spec.contracts.models import SchemaModelEntry, SourceLocation
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     AuditFactoryAttachmentTestCase,
@@ -17,6 +17,9 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     DUCKDB_COMPILE_ADAPTER_CONTEXT,
 )
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView
 
 _PROJECT_FILE: str = 'name = "demo"\nadapter = "duckdb"\n'
 _AUDIT_FILE: str = 'AUDIT (); SELECT * FROM __ref("@model") WHERE NOT (@expression)'

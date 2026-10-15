@@ -9,7 +9,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import replace
 from pathlib import Path
 from types import ModuleType
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
@@ -35,13 +35,14 @@ from sqlbuild.compiler.compile.types import (
     CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
-    CompileInputsView,
-    ModelInput,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SourceColumnEntry
 from tests.integration.src.sqlbuild.compiler.graph.helpers import write_files
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView, ModelInput
 
 TYPE_PROOF_FILES: dict[str, str] = {
     "sqlbuild_project.toml": (
@@ -86,7 +87,7 @@ def skip_model_retention(*, monkeypatch: pytest.MonkeyPatch) -> None:
     """
 
     build_inputs: Callable[..., tuple[ModelInput, ...]] = cast(
-        Callable[..., tuple[ModelInput, ...]], _native.build_model_inputs
+        "Callable[..., tuple[ModelInput, ...]]", _native.build_model_inputs
     )
 
     def discarded(**kwargs: Any) -> tuple[ModelInput, ...]:

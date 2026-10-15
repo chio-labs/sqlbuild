@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from itertools import chain, compress
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
@@ -23,8 +23,11 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledSqlTest,
 )
-from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from tests.integration.src.sqlbuild.compiler.helpers import GoldenEntry, golden_entry
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView
 
 
 @dataclass(frozen=True)

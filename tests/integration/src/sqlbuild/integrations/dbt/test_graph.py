@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -17,7 +18,7 @@ from sqlbuild._native import (
     build_dbt_manifest_index,
     discover_project_inputs,
 )
-from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.integration.src.sqlbuild.integrations.dbt._test_types import (
     RealDbtCombinedGraphTestCase,
@@ -28,6 +29,9 @@ from tests.integration.src.sqlbuild.integrations.dbt.helpers import (
     build_sqlbuild_project_with_manifest,
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import downstream_stable_ids
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView
 
 pytestmark: pytest.MarkDecorator = pytest.mark.dbt
 

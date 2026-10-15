@@ -5,7 +5,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import replace
 from itertools import chain
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
@@ -16,7 +16,7 @@ from sqlbuild._native import (
     scope_metadata_projection,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView, ModelInput
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSourceFile,
@@ -48,6 +48,9 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     render_compile_diagnostics,
     usage_consumers,
 )
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView, ModelInput
 
 _PROJECT_FILE: str = """
 name = "demo"

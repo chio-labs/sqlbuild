@@ -744,6 +744,11 @@ path = "cli/output/constants.py"
 reason = "public-api"
 note = "Shape rule: data constants only (INTEGRATION_RESULT_PATH_ENV), no logic; consumed by integrations/dagster/_helpers/invocation_factory.py."
 
+[[stays]]
+path = "compiler/compile/types.py"
+reason = "executor"
+note = "Shape rule: typing protocols, enums and aliases only (CompiledProjectView, CompiledModelView, CompiledResourceType, AuditInput, ...), no logic; consumed by executor/janitor/_helpers/plan.py, executor/pipeline/_helpers/testing.py, executor/scenario/_helpers/local/execution.py and project audit factories that annotate AuditInput."
+
 [[handled_native_errors]]
 location = "compiler/planner/models.py::CursorBounds._parse_inferred"
 note = "A bound that is not integer text is parsed as a timestamp instead; CursorAlgebraError is an input error, and native compiler failures are not caught."

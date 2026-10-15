@@ -6,6 +6,7 @@ import os
 import random
 from collections import Counter
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -13,7 +14,7 @@ import sqlbuild._native as native_module
 from sqlbuild._native import assemble_project
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from tests.integration.src.sqlbuild.compiler.helpers import (
     GoldenEntry,
     golden_differences,
@@ -41,6 +42,9 @@ from tests.integration.src.sqlbuild.compiler.project_assembly.helpers import (
     seed_yml,
     windows_environ,
 )
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView
 
 _PROJECT_TOML: str = (
     'name = "assembly"\nadapter = "duckdb"\n\n[connection]\ndatabase = ":memory:"\n\n'

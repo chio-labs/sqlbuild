@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -11,7 +12,6 @@ from sqlbuild._native import (
     build_compile_inputs,
     discover_project_inputs,
 )
-from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.integration.src.sqlbuild.integrations.dbt._test_types import (
     RealDbtManifestCompileTestCase,
@@ -20,6 +20,9 @@ from tests.integration.src.sqlbuild.integrations.dbt.helpers import (
     DUCKDB_COMPILE_ADAPTER_CONTEXT,
     build_external_sql_reference_resolver,
 )
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView
 
 pytestmark: pytest.MarkDecorator = pytest.mark.dbt
 

@@ -41,11 +41,7 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.entry.main.entry import main
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompactLineageFacts, InferredColumn
-from sqlbuild.compiler.compile.types import (
-    CompiledProjectView,
-    CompileInputsView,
-    ModelInput,
-)
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import (
@@ -54,7 +50,7 @@ from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import
 from tests.integration.src.sqlbuild.compiler.helpers import GoldenEntry, golden_entry
 
 if TYPE_CHECKING:
-    from sqlbuild._native import ProofRow
+    from sqlbuild._native import CompileInputsView, ModelInput, ProofRow
 
 LINEAGE_NATIVE: str = "native"
 

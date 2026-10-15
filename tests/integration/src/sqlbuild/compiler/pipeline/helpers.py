@@ -4,7 +4,7 @@ import functools
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -25,10 +25,13 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
-from sqlbuild.compiler.compile.types import AuditInput, CompiledModelView, CompiledProjectView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.runtime.contracts.models import ConnectionHooks
+
+if TYPE_CHECKING:
+    from sqlbuild.compiler.compile.types import AuditInput
 
 _REPOSITORY_ROOT: Path = Path(__file__).resolve().parents[6]
 _ANALYSIS_CACHE_METRICS: tuple[str, ...] = (

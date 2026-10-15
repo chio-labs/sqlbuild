@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import itertools
 import json
 from collections.abc import Callable
 from pathlib import Path
 from types import MappingProxyType
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from sqlbuild._native import (
     CollectionRendering,
@@ -54,8 +56,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
-    CompileInputsView,
-    ModelInput,
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredMacroFile,
@@ -73,6 +73,9 @@ from sqlbuild.compiler.scopes.models import (
     ScopeLookup,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, ScopeKind
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView, ModelInput
 
 DUCKDB_COMPILE_ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(
     value_renderer=DuckDbAdapter(),

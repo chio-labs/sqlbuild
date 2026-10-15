@@ -1,8 +1,10 @@
 """Adapter literals and quoted hook arguments cross real native attachment boundaries."""
 
+from __future__ import annotations
+
 import json
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
@@ -16,13 +18,15 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
-from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.discovery.models import SqlHookEntry
 from tests.integration.src.sqlbuild.compiler.compiled_project._test_types import (
     AdapterParameterBoundaryTestCase,
     QuotedHookBoundaryTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.graph.helpers import write_files
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView
 
 
 @pytest.mark.parametrize(

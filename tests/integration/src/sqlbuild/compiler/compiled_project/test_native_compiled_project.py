@@ -1,10 +1,12 @@
 """The rules request reads model facts the compile-input stage retained natively."""
 
+from __future__ import annotations
+
 import json
 import pickle
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -17,7 +19,7 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.entry.main.entry import main
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import InferredColumn
-from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from tests.integration.src.sqlbuild.compiler.compiled_project._test_types import (
     ImmediateSyntaxErrorTestCase,
     ModelLoopErrorTestCase,
@@ -49,6 +51,9 @@ from tests.integration.src.sqlbuild.compiler.compiled_project.helpers import (
     skip_model_retention,
 )
 from tests.integration.src.sqlbuild.compiler.graph.helpers import ORDERS_PROJECT_FILES, write_files
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView
 
 
 @pytest.mark.parametrize(

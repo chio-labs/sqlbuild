@@ -4,6 +4,7 @@ import re
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -15,7 +16,6 @@ from sqlbuild._native import (
     discover_project_inputs,
     resolve_target_config,
 )
-from sqlbuild.compiler.compile.types import CompileInputsView, FunctionInput
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     PythonHookEntry,
@@ -61,6 +61,9 @@ from tests.unit.src.sqlbuild.compiler.compile._test_types import (
     ResolveTargetConfigTestCase,
     SeedRefRegressionTestCase,
 )
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView, FunctionInput
 
 
 @pytest.mark.parametrize(

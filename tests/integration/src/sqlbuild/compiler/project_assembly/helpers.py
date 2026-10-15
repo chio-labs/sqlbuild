@@ -8,7 +8,7 @@ import random
 from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -23,7 +23,10 @@ from sqlbuild._native import (
     record_compile_input_reads,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
+from sqlbuild.compiler.compile.types import CompiledProjectView
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView
 
 _PYTHON_RESOURCE_FUNCTIONS: tuple[str, ...] = ("validate_sql_syntax", "validate_hook_sql_syntax")
 _ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(

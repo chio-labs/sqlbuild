@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
-from sqlbuild.compiler.compile.types import CompileInputsView
 from tests.unit.src.sqlbuild.compiler.compile._helpers.config._test_types import (
     AttachedColumnsTestCase,
 )
@@ -13,6 +13,9 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.config.helpers import (
     compile_input_schema_columns,
     compile_with_native_config,
 )
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView
 
 
 @pytest.mark.parametrize(
