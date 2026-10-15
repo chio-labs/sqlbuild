@@ -11,7 +11,8 @@ from decimal import Decimal
 from enum import StrEnum
 from pathlib import Path, PurePath
 from threading import Event
-from typing import Any, ClassVar, Literal, Protocol, TextIO, TypedDict
+from types import TracebackType
+from typing import Any, ClassVar, Literal, Protocol, Self, TextIO, TypedDict
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
@@ -341,10 +342,19 @@ from sqlbuild.rule_engine.models import (
     SqlExpansionReuse,
     SqlRulesEvaluation,
 )
+from sqlbuild.runtime.compute_logs.models import (
+    CaptureByteCounts,
+    CaptureInventory,
+    CaptureMetadata,
+    ComputeLogReadChunk,
+    FinalCaptureMetadata,
+    PruneResult,
+)
+from sqlbuild.runtime.compute_logs.types import ComputeLogStream
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
-from sqlbuild.runtime.observability.models import LifecycleEvent
+from sqlbuild.runtime.observability.models import DiagnosticLog, LifecycleEvent
 from sqlbuild.spec.contracts.models import (
     CostConfig,
     DbtConfig,
@@ -3441,6 +3451,48 @@ class CliObservabilityScope:
     def __exit__(self, *exc_info: object) -> bool: ...
 
 def cli_observability_scope(*, args: CliNamespace, project_dir: Path) -> CliObservabilityScope: ...
+
+class LocalFilesystemComputeLogStorage:
+    """Ordered fsync capture storage subject to underlying filesystem and hardware guarantees."""
+
+    def __init__(
+        self,
+        *,
+        project_dir: Path,
+        root: Path | None = None,
+        retention_count: int | None = 20,
+    ) -> None: ...
+    @property
+    def root(self) -> Path: ...
+    def start_capture(self, metadata: CaptureMetadata) -> None: ...
+    def append(self, *, invocation_id: str, stream: ComputeLogStream, data: bytes) -> None: ...
+    def append_diagnostic(self, *, invocation_id: str, record: DiagnosticLog) -> None: ...
+    def read(
+        self,
+        *,
+        invocation_id: str,
+        stream: ComputeLogStream,
+        cursor: int = 0,
+        max_bytes: int = 1_048_576,
+    ) -> ComputeLogReadChunk: ...
+    def get_metadata(self, *, invocation_id: str) -> CaptureMetadata | FinalCaptureMetadata: ...
+    def get_byte_count(self, *, invocation_id: str, stream: ComputeLogStream) -> int: ...
+    def get_byte_counts(self, *, invocation_id: str) -> CaptureByteCounts: ...
+    def is_complete(self, *, invocation_id: str) -> bool: ...
+    def mark_complete(self, metadata: FinalCaptureMetadata) -> None: ...
+    def delete(self, *, invocation_id: str) -> None: ...
+    def prune(self, retain_count: int | None = None) -> PruneResult: ...
+    def inventory(self) -> CaptureInventory: ...
+    def close(self) -> None: ...
+    def dispose(self) -> None: ...
+    def __enter__(self) -> Self: ...
+    def __exit__(
+        self,
+        exception_type: type[BaseException] | None,
+        exception: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None: ...
+
 def current_native_progress_projector() -> NativeProgressProjector | None: ...
 
 class ConnectionProgressReporter:

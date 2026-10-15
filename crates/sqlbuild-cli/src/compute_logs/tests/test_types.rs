@@ -20,3 +20,12 @@ pub(crate) struct PruneTestCase {
     pub(crate) existing: usize,
     pub(crate) expected_complete: usize,
 }
+
+/// A staged capture whose publication fails at one step, and what stays on disk.
+pub(crate) struct PublicationTestCase {
+    pub(crate) description: &'static str,
+    /// Names created as non-empty directories inside staging before publication.
+    pub(crate) blocking_entries: &'static [&'static str],
+    pub(crate) expected_published: bool,
+    pub(crate) expected_entries: usize,
+}

@@ -1,8 +1,6 @@
 import logging
-from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, BinaryIO
 
 from sqlbuild.compute_logs import (
     COMPUTE_LOG_FORMAT_VERSION,
@@ -28,6 +26,10 @@ class AccessFailureTextSink:
         return None
 
 
+class PatchableComputeLogStorage(LocalFilesystemComputeLogStorage):
+    """Native storage whose instance methods tests may replace."""
+
+
 class InvalidLogMessage:
     def __str__(self) -> str:
         raise ValueError("controlled invalid message")
@@ -45,30 +47,6 @@ class HostRecordingLogHandler(logging.Handler):
     def close(self) -> None:
         self.was_closed = True
         super().close()
-
-
-class FailOnceBinaryWriter:
-    def __init__(self, writer: BinaryIO) -> None:
-        self._writer: BinaryIO = writer
-        self.close_calls: int = 0
-        self._close_actions: Iterator[Callable[[], None]] = iter(
-            (self._fail_first_close, writer.close)
-        )
-
-    def close(self) -> None:
-        self.close_calls += 1
-        next(self._close_actions)()
-
-    @property
-    def closed(self) -> bool:
-        return self._writer.closed
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._writer, name)
-
-    @staticmethod
-    def _fail_first_close() -> None:
-        raise OSError("controlled first close failure")
 
 
 def build_capture_metadata(

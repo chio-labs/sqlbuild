@@ -235,9 +235,44 @@ reason = "executor"
 note = "Deadline the executor scheduler and warehouse cursors enforce."
 
 [[stays]]
-path = "runtime/compute_logs"
-reason = "executor"
-note = "Captures compute logs while the executor runs models, loaders and tasks."
+path = "runtime/compute_logs/classes"
+reason = "user-code"
+note = "Rule 1 capture shim: sys.stdout/sys.stderr tees and a logging handler that record Python output from user code, adapters and the executor (_dispatch_with_compute_logs.py, compile_command/reuse_attempt.rs); storage itself is native LocalFilesystemComputeLogStorage."
+
+[[stays]]
+path = "runtime/compute_logs/main"
+reason = "user-code"
+note = "Rule 1 capture shim entry: installs the stream tees around the CLI command (_dispatch_with_compute_logs.py)."
+
+[[stays]]
+path = "runtime/compute_logs/_helpers"
+reason = "user-code"
+note = "Rule 1 tee shim: how much of a write the wrapped Python stream accepted (text_tee.py, binary_tee.py)."
+
+[[stays]]
+path = "runtime/compute_logs/__init__.py"
+reason = "public-api"
+note = "Package marker of the public compute log shapes below."
+
+[[stays]]
+path = "runtime/compute_logs/models.py"
+reason = "public-api"
+note = "Rule 3 shapes: capture metadata and result dataclasses re-exported by sqlbuild.compute_logs."
+
+[[stays]]
+path = "runtime/compute_logs/types.py"
+reason = "public-api"
+note = "Rule 3 shapes: ComputeLogStream and the ComputeLogStorage protocol re-exported by sqlbuild.compute_logs."
+
+[[stays]]
+path = "runtime/compute_logs/exceptions.py"
+reason = "public-api"
+note = "Rule 3 shapes: public storage errors re-exported by sqlbuild.compute_logs and raised by the native storage."
+
+[[stays]]
+path = "runtime/compute_logs/constants.py"
+reason = "public-api"
+note = "Rule 3 shapes: format version, retention and read-limit constants re-exported by sqlbuild.compute_logs."
 
 [[stays]]
 path = "runtime/event_exporting"

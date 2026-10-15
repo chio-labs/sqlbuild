@@ -7,11 +7,9 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlbuild._native import LocalFilesystemComputeLogStorage
 from sqlbuild.diagnostics.classes.invocation_diagnostic_routing import InvocationDiagnosticRouting
 from sqlbuild.diagnostics.models import DiagnosticRoutingOptions
-from sqlbuild.runtime.compute_logs.classes.local_filesystem_compute_log_storage import (
-    LocalFilesystemComputeLogStorage,
-)
 from sqlbuild.runtime.compute_logs.classes.text_tee import TextComputeLogTee
 from sqlbuild.runtime.compute_logs.models import (
     CaptureByteCounts,

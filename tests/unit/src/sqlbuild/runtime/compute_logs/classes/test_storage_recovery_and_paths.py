@@ -3,15 +3,12 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import BinaryIO, cast
-from unittest.mock import Mock, patch
 
 import pytest
 
 from sqlbuild.compute_logs import (
     CaptureInventory,
     CaptureMetadata,
-    CaptureStateError,
     ComputeLogMetadataError,
     ComputeLogPathError,
     ComputeLogReadChunk,
@@ -26,7 +23,6 @@ from tests.unit.src.sqlbuild.runtime.compute_logs.classes._test_types import (
     RetentionTestCase,
 )
 from tests.unit.src.sqlbuild.runtime.compute_logs.classes.helpers import (
-    FailOnceBinaryWriter,
     build_capture_metadata,
     build_final_metadata,
 )
@@ -83,99 +79,6 @@ def test_given_mismatched_completion_counts_when_retrying_then_capture_remains_r
 
     assert retained.data == test_case.expected_bytes
     assert retained.is_complete is test_case.expected_complete
-    storage.close()
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    (
-        RecoveryTestCase(
-            description="writer close failure deactivates capture and closes retryable handle",
-            initial_bytes=b"captured",
-            retry_bytes=b"",
-            expected_bytes=b"captured",
-            expected_complete=False,
-        ),
-    ),
-    ids=lambda case: case.description,
-)
-def test_given_writer_close_failure_when_completing_then_incomplete_state_remains_coherent(
-    tmp_path: Path, test_case: RecoveryTestCase
-) -> None:
-    storage: LocalFilesystemComputeLogStorage = LocalFilesystemComputeLogStorage(
-        project_dir=tmp_path
-    )
-    initial: CaptureMetadata = build_capture_metadata(
-        project_dir=tmp_path, invocation_id="writer_close_failure", started_at=datetime.now(UTC)
-    )
-    storage.start_capture(initial)
-    storage.append(
-        invocation_id=initial.invocation_id,
-        stream=ComputeLogStream.STDOUT,
-        data=test_case.initial_bytes,
-    )
-    original_writer: BinaryIO = storage._writers[initial.invocation_id][ComputeLogStream.STDOUT]
-    failing_writer: FailOnceBinaryWriter = FailOnceBinaryWriter(original_writer)
-    storage._writers[initial.invocation_id][ComputeLogStream.STDOUT] = cast(
-        BinaryIO, failing_writer
-    )
-    final_metadata: FinalCaptureMetadata = build_final_metadata(
-        storage=storage, initial=initial, completed_at=datetime.now(UTC)
-    )
-
-    with pytest.raises(CaptureStateError, match="stream close failed"):
-        storage.mark_complete(final_metadata)
-    retained: ComputeLogReadChunk = storage.read(
-        invocation_id=initial.invocation_id, stream=ComputeLogStream.STDOUT
-    )
-
-    assert retained.data == test_case.expected_bytes
-    assert retained.is_complete is test_case.expected_complete
-    assert failing_writer.closed is True
-    assert failing_writer.close_calls == 2
-    storage.close()
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    (
-        RecoveryTestCase(
-            description="failed staged publication leaves no visible capture",
-            initial_bytes=b"",
-            retry_bytes=b"",
-            expected_bytes=b"",
-            expected_complete=False,
-        ),
-    ),
-    ids=lambda case: case.description,
-)
-def test_given_initial_metadata_failure_when_publishing_then_staging_directory_is_cleaned(
-    tmp_path: Path, test_case: RecoveryTestCase
-) -> None:
-    storage: LocalFilesystemComputeLogStorage = LocalFilesystemComputeLogStorage(
-        project_dir=tmp_path
-    )
-    initial: CaptureMetadata = build_capture_metadata(
-        project_dir=tmp_path, invocation_id="staged_failure", started_at=datetime.now(UTC)
-    )
-
-    with (
-        patch.object(
-            LocalFilesystemComputeLogStorage,
-            "_write_metadata",
-            Mock(side_effect=OSError("controlled metadata failure")),
-        ),
-        pytest.raises(OSError, match="controlled metadata failure"),
-    ):
-        storage.start_capture(initial)
-    date_dir: Path = storage.root / initial.capture_date
-    entries: tuple[Path, ...] = tuple(date_dir.iterdir())
-    inventory: CaptureInventory = storage.inventory()
-
-    assert entries == ()
-    assert inventory.captures == ()
-    assert test_case.expected_bytes == b""
-    assert test_case.expected_complete is False
     storage.close()
 
 

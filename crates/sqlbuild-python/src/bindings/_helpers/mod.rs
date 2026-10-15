@@ -17,6 +17,7 @@ pub(crate) mod compile_command;
 pub(crate) mod compile_driver;
 pub(crate) mod compile_outputs;
 pub(crate) mod compiled_project;
+pub(crate) mod compute_logs;
 pub(crate) mod contract_command;
 pub(crate) mod contracts;
 pub(crate) mod cost_command;

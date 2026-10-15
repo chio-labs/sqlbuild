@@ -27,3 +27,9 @@ pub const EPOCH_DAY_OFFSET: i64 = 719_468;
 /// `YYYY-MM-DD`: the length of a capture date directory name and its hyphen positions.
 pub const CAPTURE_DATE_LENGTH: usize = 10;
 pub const CAPTURE_DATE_HYPHENS: [usize; 2] = [4, 7];
+pub const MAX_READ_BYTES: u64 = 1_048_576;
+pub const MAX_CAPTURE_ID_LENGTH: usize = 128;
+pub const DEFAULT_LOG_DIRECTORY: &str = "logs";
+pub const MONTHS_PER_YEAR: i64 = 12;
+pub const MAX_DAY_OF_MONTH: i64 = 31;
+pub const HOURS_PER_DAY: i64 = 24;

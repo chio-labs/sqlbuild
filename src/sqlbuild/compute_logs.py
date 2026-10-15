@@ -2,9 +2,7 @@
 
 from pathlib import Path
 
-from sqlbuild.runtime.compute_logs.classes.local_filesystem_compute_log_storage import (
-    LocalFilesystemComputeLogStorage,
-)
+from sqlbuild._native import LocalFilesystemComputeLogStorage
 from sqlbuild.runtime.compute_logs.constants import (
     COMPUTE_LOG_FORMAT_VERSION,
     DEFAULT_RETENTION_COUNT,
@@ -20,9 +18,6 @@ from sqlbuild.runtime.compute_logs.exceptions import (
     InvalidCaptureIdError,
     InvalidComputeLogCursorError,
     InvalidComputeLogLimitError,
-)
-from sqlbuild.runtime.compute_logs.main.open_local_compute_log_storage import (
-    open_local_compute_log_storage as _open_local_compute_log_storage,
 )
 from sqlbuild.runtime.compute_logs.models import (
     CaptureByteCounts,
@@ -73,7 +68,7 @@ def open_local_compute_log_storage(
 ) -> LocalFilesystemComputeLogStorage:
     """Open the supported project-local backend, defaulting to project logs."""
 
-    return _open_local_compute_log_storage(
+    return LocalFilesystemComputeLogStorage(
         project_dir=project_dir,
         root=root,
         retention_count=retention_count,

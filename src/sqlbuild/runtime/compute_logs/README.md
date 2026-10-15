@@ -1,7 +1,8 @@
 # Compute log storage contract
 
-This package owns backend-neutral raw invocation stream storage and the host-local filesystem
-implementation. It stores exact stdout/stderr bytes and structured `DiagnosticLog` JSONL separately
+This package owns the backend-neutral compute log shapes and the Python stream capture around a
+command. The host-local filesystem storage is native (`sqlbuild._native.LocalFilesystemComputeLogStorage`,
+built on `crates/sqlbuild-cli/src/compute_logs`) and is re-exported by `sqlbuild.compute_logs`. It stores exact stdout/stderr bytes and structured `DiagnosticLog` JSONL separately
 from canonical lifecycle history.
 
 The default root is `logs/`, with captures at

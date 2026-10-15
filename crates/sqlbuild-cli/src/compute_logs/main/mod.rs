@@ -1,2 +1,14 @@
+pub mod capture_inventory;
+pub mod capture_is_complete;
+pub mod check_completion;
+pub mod complete_capture;
+pub mod delete_capture;
 pub mod finish_capture;
+pub mod open_log_root;
+pub mod prune_captures;
+pub mod publish_capture;
+pub mod read_capture_document;
+pub mod read_stream_chunk;
 pub mod start_capture;
+pub mod stream_byte_counts;
+pub mod validate_capture_id;

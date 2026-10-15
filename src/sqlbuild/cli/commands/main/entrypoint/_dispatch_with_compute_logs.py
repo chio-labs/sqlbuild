@@ -6,20 +6,17 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlbuild._native import CliNamespace, supports_color
+from sqlbuild._native import CliNamespace, LocalFilesystemComputeLogStorage, supports_color
 from sqlbuild.cli.commands._helpers.entry.compute_log_diagnostics import (
     log_compute_capture_failure,
 )
 from sqlbuild.diagnostics.classes.invocation_diagnostic_routing import InvocationDiagnosticRouting
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
 from sqlbuild.diagnostics.models import DiagnosticRoutingOptions
-from sqlbuild.runtime.compute_logs.classes.local_filesystem_compute_log_storage import (
-    LocalFilesystemComputeLogStorage,
-)
-from sqlbuild.runtime.compute_logs.classes.scoped_compute_log_capture import (
-    ScopedComputeLogCapture,
-)
 from sqlbuild.runtime.compute_logs.constants import COMPUTE_LOG_FORMAT_VERSION
+from sqlbuild.runtime.compute_logs.main.run_with_compute_log_capture import (
+    run_with_compute_log_capture,
+)
 from sqlbuild.runtime.compute_logs.models import CaptureMetadata
 from sqlbuild.runtime.observability.models import ExecutionIdentity
 
@@ -72,12 +69,12 @@ def dispatch_with_compute_logs(
             for failure, channel in failures:
                 log_compute_capture_failure(error=failure, channel=channel)
             return operation()
-    capture: ScopedComputeLogCapture = ScopedComputeLogCapture(
+    return run_with_compute_log_capture(
         storage=storage,
         metadata=metadata,
         failure_callback=lambda error, channel: log_compute_capture_failure(
             error=error, channel=channel
         ),
         routing_options=routing_options,
+        operation=operation,
     )
-    return capture.run(operation=operation)
