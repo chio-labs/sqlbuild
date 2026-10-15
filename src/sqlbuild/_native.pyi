@@ -295,6 +295,7 @@ from sqlbuild.diagnostics.models import ProcessResourceUsage
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
+    FunctionExecutionResult,
     SchedulerState,
     SeedExecutionResult,
 )
@@ -306,6 +307,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonCheckExecutionResult,
     PythonNodeExecutionResult,
 )
+from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotCaptureRunResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
@@ -4927,6 +4929,16 @@ def resolve_row_diff_sampling(
 def merge_row_diff_tolerances(
     *, base: RowDiffTolerances, override: RowDiffTolerances | None
 ) -> RowDiffTolerances: ...
+def aggregate_build_result(
+    *,
+    model_results: tuple[ModelExecutionResult, ...],
+    seed_results: tuple[SeedExecutionResult, ...],
+    function_results: tuple[FunctionExecutionResult, ...],
+    load_results: tuple[LoadExecutionResult, ...],
+    test_results: tuple[SqlTestExecutionResult, ...],
+    source_audit_results: tuple[AuditExecutionResult, ...],
+    end_audit_results: tuple[AuditExecutionResult, ...],
+) -> BuildExecutionResult: ...
 def fit_artifact_logical_name(
     *, logical_name: str, fixed_prefix: str, identifier_limit: int, artifact_label: str
 ) -> str: ...

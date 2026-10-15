@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 pub mod audit_command;
+pub mod build_aggregate;
 pub mod build_command;
 pub mod build_progress;
 pub mod check_command;
