@@ -12,6 +12,7 @@ from sqlbuild._native import (
     BoundEventExporter,
     EventExporterCounts,
     EventExporterDispatcher,
+    EventExportSeverity,
     EventExportSummary,
 )
 from sqlbuild.observability import LifecycleEvent

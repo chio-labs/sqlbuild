@@ -13,7 +13,7 @@ from enum import StrEnum
 from pathlib import Path, PurePath
 from threading import Event
 from types import TracebackType
-from typing import Any, ClassVar, Literal, Protocol, Self, TextIO, TypedDict
+from typing import Any, ClassVar, Literal, Protocol, Self, TextIO, TypedDict, overload
 
 from sqlbuild.adapter.contract.classes.base_adapter import (
     BaseAdapter,
@@ -64,27 +64,6 @@ from sqlbuild.compiler.compile.types import (
     SqlTestMode,
     TypedSqlValueRenderer,
 )
-from sqlbuild.compiler.discovery.models import (
-    ConstantDeclaration,
-    DiscoveredCheckFunction,
-    DiscoveredCommandOutputSink,
-    DiscoveredEventExporter,
-    DiscoveredEventExporterDeclaration,
-    DiscoveredHookFunction,
-    DiscoveredLoaderFunction,
-    DiscoveredMacroFile,
-    DiscoveredMaterializationFile,
-    DiscoveredProjectInputs,
-    DiscoveredProvider,
-    DiscoveredProviderUsage,
-    DiscoveredPythonNodeFunctions,
-    DiscoveredSourceFile,
-    DiscoveredSqlScenarioFile,
-    DiscoveredSqlTestFile,
-    EnumDeclaration,
-    SqlTestParameterDeclaration,
-)
-from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.lineage.types import (
     InferredNullability,
 )
@@ -94,20 +73,8 @@ from sqlbuild.compiler.references.models import (
     ProjectRelationIndex,
     RelationName,
 )
-from sqlbuild.compiler.references.types import (
-    ExternalSqlReferenceResolver,
-    HardCodedRelationOwnerKind,
-    SqlReferenceKind,
-)
-from sqlbuild.compiler.source_freshness.models import (
-    SourceFreshnessRecord,
-)
-from sqlbuild.compiler.sql_analysis.models import (
-    SqlLexicalSyntax,
-)
 from sqlbuild.cost.models import CostResourceContext, RunCostSummary, StatementExecutionTelemetry
 from sqlbuild.cost.types import CostStatus
-from sqlbuild.cursor_algebra.models import AlignedInterval, DateValue, Duration, TimestampValue
 from sqlbuild.cursor_algebra.types import Bound, BoundSentinel, CursorScalar
 from sqlbuild.diagnostics.models import ProcessResourceUsage
 from sqlbuild.executor.auditing.models import (
@@ -145,12 +112,9 @@ from sqlbuild.executor.testing.models import (
     SqlTestExecutionResult,
     StepResult,
 )
-from sqlbuild.integrations.dbt.models import (
-    ResolvedDbtProfileOutput,
-)
-from sqlbuild.integrations.dbt.types import DbtInvoker
 from sqlbuild.microbatches.models import MicrobatchInterval
 from sqlbuild.provider.classes.container import ProviderContainer
+from sqlbuild.provider.classes.provider import Provider
 from sqlbuild.provider.classes.session import ProviderSession
 from sqlbuild.python_nodes.models import (
     AuditCase,
@@ -159,12 +123,7 @@ from sqlbuild.python_nodes.models import (
     SqlResourceRef,
 )
 from sqlbuild.python_nodes.types import PythonCheckSeverity
-from sqlbuild.rule_engine.models import (
-    Finding,
-    Rule,
-    RulesConfig,
-    RulesResult,
-)
+from sqlbuild.rule_engine.types import RuleCheck, RuleOptionValue
 from sqlbuild.runtime.compute_logs.models import (
     CaptureByteCounts,
     CaptureInventory,
@@ -198,46 +157,6 @@ from sqlbuild.runtime.output_capture.models import (
     OutputCaptureContext,
 )
 from sqlbuild.runtime.output_capture.types import CommandOutputStream
-from sqlbuild.spec.contracts.models import (
-    CostConfig,
-    DbtConfig,
-    DefaultsConfig,
-    ExecutionLimitsConfig,
-    FutureCursorsConfig,
-    LoaderDestinationParts,
-    LocalConfig,
-    LocalDbtConfig,
-    ProjectConfig,
-    ResolvedTableType,
-    ResolvedTimeTravelRetention,
-    ScenarioConfig,
-    SchemaAuditInstance,
-    SchemaColumn,
-    SchemaDynamicColumnFamily,
-    SchemaModelEntry,
-    SchemaSeedEntry,
-    SettingsConfig,
-    SnapshotsConfig,
-    SourceColumnEntry,
-    SourceEntry,
-    SourceFreshnessAgePolicy,
-    SourceLocation,
-    StartCursorsConfig,
-    TargetConfig,
-)
-from sqlbuild.spec.contracts.types import (
-    EventExportSeverity,
-    MicrobatchLimitAction,
-    MissingMigrationOriginPolicy,
-    SourceFreshnessStrategy,
-    SourceFreshnessValueKind,
-    SourceWriteStrategy,
-    WarehouseGroup,
-)
-from sqlbuild.sql_values.models import SqlValue
-from sqlbuild.sql_values.types import (
-    StateSqlValueType,
-)
 
 BUILD_IDENTITY: str
 

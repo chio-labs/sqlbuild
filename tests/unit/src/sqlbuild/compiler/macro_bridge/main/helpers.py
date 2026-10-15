@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import cast
 
-from sqlbuild._native import CompileInputError, NativeStageMismatchError
+from sqlbuild._native import NativeStageMismatchError
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 from sqlbuild.compiler.macro_bridge.main.active_macro_bridge import active_macro_bridge
 

@@ -14,7 +14,6 @@ from sqlbuild._native import (
     CompiledProject,
     CompiledRelationLocation,
     CompiledSqlTest,
-    CompileInputError,
     CompileSqlTestCte,
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
@@ -39,6 +38,7 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType, SqlTestMode
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     AssertionChainCteErrorTestCase,

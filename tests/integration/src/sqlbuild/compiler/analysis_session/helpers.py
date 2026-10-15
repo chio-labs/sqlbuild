@@ -20,7 +20,6 @@ from sqlbuild._native import (
     ColumnLineageMode,
     CompactLineageFacts,
     CompileAdapterContext,
-    CompileInputError,
     DynamicColumnContractProof,
     InferredColumn,
     ModelSqlAnalysis,
@@ -43,6 +42,7 @@ from sqlbuild._native import dynamic_contract_proof as contract_proof
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.entry.main.entry import main
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.lineage.types import InferredNullability
 from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import (

@@ -9,12 +9,12 @@ from typing import Any
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
-    CompileInputError,
     SqlLexicalSyntax,
     SqlReferenceScan,
     find_macro_call_names,
     scan_sql_reference_calls,
 )
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import SqlTestMode
 
 _SQL_PIECES: tuple[str, ...] = (

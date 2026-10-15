@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-import sqlbuild._native as compile_models
+import sqlbuild.compiler.compile.models as compile_models
 from sqlbuild._native import (
     CompiledModel,
     CompiledProject,

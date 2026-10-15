@@ -9,12 +9,12 @@ from typing import TYPE_CHECKING
 import pytest
 
 from sqlbuild._native import (
-    CompileInputError,
     SchemaModelEntry,
     SourceLocation,
     build_compile_inputs,
     discover_project_inputs,
 )
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     AuditFactoryAttachmentTestCase,
 )

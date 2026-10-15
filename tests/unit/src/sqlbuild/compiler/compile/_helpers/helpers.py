@@ -31,7 +31,6 @@ from sqlbuild._native import (
     DiscoveredMacroFile,
     DiscoveredProjectInputs,
     LoadedMacro,
-    MacroContext,
     MacroMetadata,
     NativeColumnQuery,
     NativeQueryColumns,
@@ -63,6 +62,7 @@ from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
+from sqlbuild.compiler.compile.models import MacroContext
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,

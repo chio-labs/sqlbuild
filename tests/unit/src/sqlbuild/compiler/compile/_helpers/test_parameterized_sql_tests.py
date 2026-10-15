@@ -10,7 +10,6 @@ import pytest
 from sqlbuild._native import (
     CompiledObjectKey,
     CompiledSqlTest,
-    CompileInputError,
     SqlLogicalType,
     SqlValue,
     SqlValueKind,
@@ -19,6 +18,7 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,

@@ -5,7 +5,6 @@ from datetime import date, datetime
 import pytest
 
 from sqlbuild._native import (
-    CompileInputError,
     CompileModelConfig,
     CursorBounds,
     CursorInputRelation,
@@ -16,6 +15,7 @@ from sqlbuild._native import (
     resolve_effective_timestamp_grain,
     watermark_type_is_compatible,
 )
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
     resolve_effective_timestamp_grain as resolve_runtime_effective_timestamp_grain,
 )

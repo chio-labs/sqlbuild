@@ -2,7 +2,6 @@
 
 from sqlbuild._native import EventExportSeverity
 from sqlbuild.runtime.event_exporting.types import LifecycleEventKind
-from sqlbuild.spec.contracts.types import EventExportSeverity
 
 EVENT_EXPORTER_EVENT_PARAMETER_NAME: str = "event"
 EVENT_EXPORT_SEVERITIES: tuple[str, ...] = tuple(item.value for item in EventExportSeverity)

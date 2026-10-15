@@ -9,12 +9,7 @@ from types import ModuleType
 from typing import get_type_hints
 
 import sqlbuild._native as _native
-from sqlbuild._native import EventExporterDiscoveryError
-from sqlbuild.compiler.discovery._helpers.filesystem.project_modules import (
-    load_sink_module,
-    provider_usages,
-)
-from sqlbuild.compiler.discovery.models import (
+from sqlbuild._native import (
     DiscoveredCommandOutputSink,
     DiscoveredCommandOutputSinkDeclaration,
     DiscoveredEventExporter,
@@ -22,10 +17,9 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProviderUsage,
     EventExporterDiscoveryError,
 )
-from sqlbuild.compiler.discovery._helpers.filesystem.core import (
-    _load_sink_module,
-    _provider_by_name,
-    _provider_usages,
+from sqlbuild.compiler.discovery._helpers.filesystem.project_modules import (
+    load_sink_module,
+    provider_usages,
 )
 from sqlbuild.runtime.event_exporting.main.get_command_output_sink_definition import (
     get_command_output_sink_definition,

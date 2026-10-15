@@ -20,7 +20,6 @@ from sqlbuild._native import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
     LoadedMacro,
-    MacroContext,
     NativeSqlTestPlan,
     PlanWarning,
     SqlLexicalSyntax,
@@ -38,6 +37,7 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
+from sqlbuild.compiler.compile.models import MacroContext
 from sqlbuild.compiler.compile.types import (
     CompiledFunctionView,
     CompiledModelView,

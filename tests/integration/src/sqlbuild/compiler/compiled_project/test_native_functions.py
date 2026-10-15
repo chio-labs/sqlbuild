@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from sqlbuild._native import CompileInputError
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import CompiledFunctionView
 from tests.integration.src.sqlbuild.compiler.compiled_project._test_types import (
     NativeFunctionAttachmentTestCase,

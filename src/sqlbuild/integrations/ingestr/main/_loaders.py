@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from sqlbuild._native import SourceEntry
 from sqlbuild.executor.load.models import LoaderContext
 from sqlbuild.integrations.ingestr._helpers.command import build_ingestr_command
 from sqlbuild.integrations.ingestr._helpers.output import record_ingestr_output

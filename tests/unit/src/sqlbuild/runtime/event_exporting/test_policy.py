@@ -1,6 +1,7 @@
 import pytest
 
 from sqlbuild._native import (
+    EventExportSeverity,
     event_export_severity_at_least,
     lifecycle_export_policy_catalog,
     stricter_event_export_severity,
@@ -8,7 +9,6 @@ from sqlbuild._native import (
 from sqlbuild.runtime.event_exporting.constants import EVENT_EXPORT_KINDS
 from sqlbuild.runtime.event_exporting.types import LifecycleEventKind
 from sqlbuild.runtime.observability.constants import LIFECYCLE_EVENT_CATALOG
-from sqlbuild.spec.contracts.types import EventExportSeverity
 from tests.unit.src.sqlbuild.runtime.event_exporting._test_types import (
     EventExportPolicyTestCase,
     SeverityNarrowingTestCase,

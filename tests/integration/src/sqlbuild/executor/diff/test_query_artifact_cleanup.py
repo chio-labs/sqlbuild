@@ -10,6 +10,7 @@ import duckdb
 import pytest
 
 from sqlbuild._native import (
+    CompiledProject,
     DiffCommandRequest,
     QueryDiffPreparation,
     build_janitor_plan,

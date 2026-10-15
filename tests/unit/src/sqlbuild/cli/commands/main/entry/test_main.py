@@ -16,7 +16,6 @@ from sqlbuild._native import (
     CloneCommandRequest,
     ColumnLineageMode,
     CompileCommandRequest,
-    CompileInputError,
     CompileLineageMode,
     CostCommandRequest,
     CursorOverrides,
@@ -36,6 +35,7 @@ from sqlbuild._native import (
 )
 from sqlbuild._native import run_cli as _main_with_dependencies
 from sqlbuild._native import run_cli as main
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.executor.pipeline.exceptions import AuditExecutionError
 from sqlbuild.executor.pipeline.models import AuditExecutionFailure
 from sqlbuild.observability import EventDispatcher, ExecutionIdentity, current_execution_identity

@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, cast
 import pytest
 
 from sqlbuild._native import (
-    CompileInputError,
     DeclarationIdentity,
     DeclarationKind,
     DiscoveredProjectInputs,
@@ -26,6 +25,7 @@ from sqlbuild._native import (
     discover_project_inputs,
     scope_metadata_projection,
 )
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ExpectedBooleanTestCase,

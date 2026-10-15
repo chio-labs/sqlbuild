@@ -8,9 +8,7 @@ from typing import Any, cast
 
 import pytest
 
-from sqlbuild._native import discover_project_inputs
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.discovery.types import LoaderConnectionMode
+from sqlbuild._native import DiscoveredProjectInputs, LoaderConnectionMode, discover_project_inputs
 from tests.unit.src.sqlbuild.integrations.ingestr._test_types import (
     IngestrLoaderDiscoveryTestCase,
 )

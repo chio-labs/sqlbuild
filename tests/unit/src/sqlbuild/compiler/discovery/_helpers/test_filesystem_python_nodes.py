@@ -11,18 +11,12 @@ from types import ModuleType
 import pytest
 
 from sqlbuild._native import (
-    PythonNodeDiscoveryError,
-    discover_python_node_functions,
-)
-from sqlbuild.compiler.discovery.models import (
     DiscoveredAssetFunction,
     DiscoveredCheckFunction,
     DiscoveredPythonNodeFunctions,
     DiscoveredTaskFunction,
     PythonNodeDiscoveryError,
     PythonNodeIdentity,
-)
-from sqlbuild.compiler.discovery._helpers.filesystem.core import (
     discover_python_node_functions,
 )
 from sqlbuild.compiler.python_nodes.main.identity import build_python_node_identity

@@ -38,7 +38,7 @@ const NATIVE_MODULE: &str = "sqlbuild._native";
 const SQL_ANALYSIS_SETTING_KEY: &str = "sql_analysis";
 const FILESYSTEM_MODULE: &str = "sqlbuild._native";
 const SINKS_MODULE: &str = "sqlbuild.compiler.discovery._helpers.filesystem.command_output_sinks";
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
+const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
 
 /// Declaration file collections counted into the declaration-parse lifecycle, in field order.
 const DECLARATION_COLLECTIONS: [&str; 14] = [

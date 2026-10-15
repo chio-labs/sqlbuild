@@ -9,6 +9,15 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlbuild._native import (
+    ColumnMigrationEvent,
+    CompiledRelationLocation,
+    Duration,
+    MigrationRelation,
+    OldNameView,
+    OldNameViewEvent,
+    OldNameViewEventType,
+    OldNameViewPlanEntry,
+    PlanOutput,
     build_janitor_archive_name,
     deterministic_migration_event_id,
     read_recorded_column_renames,

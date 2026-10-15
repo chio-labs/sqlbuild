@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.spec.contracts.types import EventExportSeverity
+from sqlbuild._native import EventExportSeverity
 
 
 @dataclass(frozen=True)

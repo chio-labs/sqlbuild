@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, cast
 import pytest
 
 from sqlbuild._native import (
-    CompileInputError,
     DeclarationParseError,
     DiscoveredProjectInputs,
     ResourceIdentityError,
@@ -19,6 +18,7 @@ from sqlbuild._native import (
     compute_query_hash,
     discover_project_inputs,
 )
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     CompileDeclarationsErrorTestCase,

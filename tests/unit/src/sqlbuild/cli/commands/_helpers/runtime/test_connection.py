@@ -6,7 +6,6 @@ import pytest
 
 from sqlbuild import _native as native
 from sqlbuild._native import (
-    CompileInputError,
     DiscoveredProjectInputs,
     LocalConfig,
     LocalTargetConfig,
@@ -19,6 +18,7 @@ from sqlbuild._native import (
     resolve_target_connection_config,
 )
 from sqlbuild.adapter.contract.types import BuiltinAdapter
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from tests.unit.src.sqlbuild.cli.commands._helpers.runtime._test_types import (
     ExplicitMemoryConnectionTestCase,
     MissingConnectionTestCase,

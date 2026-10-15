@@ -762,7 +762,7 @@ note = "Shape rule: data exceptions only (DbtProfileError), no logic; consumed b
 [[stays]]
 path = "compiler/migrations/constants.py"
 reason = "executor"
-note = "Shape rule: data constants only (MIGRATION_TABLE_NAME, MIGRATION_WRITE_ATTEMPTS, COLUMN_MIGRATION_TABLE_NAME, OLD_NAME_VIEW_TABLE_NAME), no logic; consumed by adapters/sqlserver/classes/sqlserver_adapter.py, executor/janitor/constants.py, executor/migrations/_helpers/columns.py and 4 more."
+note = "Shape rule: data constants only (MIGRATION_TABLE_NAME, MIGRATION_WRITE_ATTEMPTS, COLUMN_MIGRATION_TABLE_NAME, OLD_NAME_VIEW_TABLE_NAME), no logic; consumed by adapters/sqlserver/classes/sqlserver_adapter.py, executor/migrations/_helpers/columns.py, executor/migrations/_helpers/old_name_facts.py and 2 more."
 
 [[stays]]
 path = "diagnostics/constants.py"
@@ -802,7 +802,7 @@ note = "Shape rule: data constants only (INTEGRATION_RESULT_PATH_ENV), no logic;
 [[stays]]
 path = "compiler/compile/types.py"
 reason = "executor"
-note = "Shape rule: typing protocols, enums and aliases only (CompiledProjectView, CompiledModelView, CompiledResourceType, AuditInput, ...), no logic; consumed by executor/janitor/_helpers/plan.py, executor/pipeline/_helpers/testing.py, executor/scenario/_helpers/local/execution.py and project audit factories that annotate AuditInput."
+note = "Shape rule: typing protocols, enums and aliases only (CompiledProjectView, CompiledModelView, CompiledResourceType, AuditInput, ...), no logic; consumed by executor/pipeline/_helpers/testing.py, executor/scenario/_helpers/local/execution.py and project audit factories that annotate AuditInput."
 
 [[stays]]
 path = "rule_engine/types.py"
@@ -817,12 +817,7 @@ note = "Shape rule: data constants only (CUSTOM_HOST_PROTOCOL_VERSION, CUSTOM_HO
 [[stays]]
 path = "compiler/discovery/constants.py"
 reason = "executor"
-note = "Shape rule: data constants only (PROJECT_CONFIG_FILENAME, SETTINGS_SECTION, TABLE_PROMOTION_MODE_SETTING_KEY, PYTHON_NODE_ROOT, ...), no logic; consumed by executor/run/main/_execute.py, compiler/discovery/_helpers/filesystem/core.py."
-
-[[stays]]
-path = "compiler/compile/constants.py"
-reason = "executor"
-note = "Shape rule: data constants only (MIGRATE_FROM_CONFIG_KEY), no logic; consumed by executor/janitor/_helpers/plan.py."
+note = "Shape rule: data constants only (PROJECT_CONFIG_FILENAME, SETTINGS_SECTION, TABLE_PROMOTION_MODE_SETTING_KEY, PYTHON_NODE_ROOT, ...), no logic; consumed by executor/run/main/_execute.py, compiler/discovery/_helpers/filesystem/project_modules.py."
 
 [[stays]]
 path = "compiler/compile/exceptions.py"

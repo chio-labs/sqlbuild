@@ -15,7 +15,6 @@ from typing import cast
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
-    CompileInputError,
     ConstantDeclaration,
     DeclarationIdentity,
     DeclarationKind,
@@ -24,7 +23,6 @@ from sqlbuild._native import (
     DiscoveredMacroFile,
     EnumDeclaration,
     LoadedMacro,
-    MacroContext,
     SqlValue,
     SqlValueKind,
     StaticMacroExport,
@@ -32,7 +30,11 @@ from sqlbuild._native import (
     StaticMacroInventory,
     validate_resource_identity,
 )
-from sqlbuild.compiler.compile.exceptions import MacroDeclarationLookupError
+from sqlbuild.compiler.compile.exceptions import (
+    CompileInputError,
+    MacroDeclarationLookupError,
+)
+from sqlbuild.compiler.compile.models import MacroContext
 
 _OBJECT_ENTRY_LENGTH: int = 2
 _MACRO_MODULE_LOAD_LOCK: threading.RLock = threading.RLock()

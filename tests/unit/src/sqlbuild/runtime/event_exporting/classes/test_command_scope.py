@@ -8,15 +8,13 @@ from threading import Event
 import pytest
 
 from sqlbuild._native import (
-    EventExporterCommandScope,
-    EventExporterDispatcher,
-    EventExportSummary,
-)
-from sqlbuild.compiler.discovery.models import (
     DiscoveredCommandOutputSink,
     DiscoveredEventExporter,
     DiscoveredProvider,
     DiscoveredProviderUsage,
+    EventExporterCommandScope,
+    EventExporterDispatcher,
+    EventExportSummary,
 )
 from sqlbuild.providers import Provider
 from sqlbuild.sinks import CommandOutputRecord, CommandOutputStream

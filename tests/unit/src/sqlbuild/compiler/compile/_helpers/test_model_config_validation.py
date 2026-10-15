@@ -7,12 +7,12 @@ from typing import cast
 import pytest
 
 from sqlbuild._native import (
-    CompileInputError,
     CompileModelConfig,
     ConfigValueTypeError,
     ResolvedTimeTravelRetention,
     TimeTravelRetentionSource,
 )
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ChangePolicyHelpTestCase,
     ContractConfigErrorTestCase,

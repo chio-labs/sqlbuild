@@ -15,7 +15,7 @@ use crate::bindings::_helpers::janitor::janitor_keys::{
     Folded, Key, SchemaKey, optional, record, sorted_schemas, text, tuple,
 };
 
-const MIGRATION_TYPES: &str = "sqlbuild.compiler.migrations.types";
+const MIGRATION_TYPES: &str = "sqlbuild._native";
 const IS_COMPATIBILITY_VIEW: (&str, &str) = (
     "sqlbuild.executor.old_name_views._helpers.janitor",
     "is_compatibility_view",
