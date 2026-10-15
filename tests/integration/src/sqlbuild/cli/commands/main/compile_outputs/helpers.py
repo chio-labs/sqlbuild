@@ -13,19 +13,18 @@ import pytest
 import sqlbuild._native as native_module
 from sqlbuild._native import PreparedCompileArtifacts
 from sqlbuild._native import run_cli as main
-from sqlbuild.cli.compile_reuse import constants as reuse_constants_module
 from sqlbuild.cli.compile_reuse._helpers import provider_settings as provider_settings_module
 from sqlbuild.cli.compile_reuse._helpers import runtime_identity as runtime_identity_module
 from sqlbuild.cli.compile_reuse._helpers.runtime_identity import runtime_identity
-from sqlbuild.cli.compile_reuse.constants import (
-    NATIVE_REUSE_DIRECTORY_NAME,
-    NATIVE_REUSE_SUFFIX,
-    REUSE_DISABLE_ENV_VAR,
+from sqlbuild.compiler.frontier.constants import (
+    COMPILE_REUSE_DISABLE_ENV_VAR as REUSE_DISABLE_ENV_VAR,
 )
 from sqlbuild.compiler.frontier.constants import STAGE_CAPTURE_DIR_ENV_VAR
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 
 STAGING_PREFIX: str = ".sqlbuild-staging-"
+NATIVE_REUSE_DIRECTORY_NAME: str = "project-reuse-v2"
+NATIVE_REUSE_SUFFIX: str = ".store"
 
 
 class _StagingEveryProject(PreparedCompileArtifacts):
@@ -110,7 +109,7 @@ def prepare_output_compiles(*, monkeypatch: pytest.MonkeyPatch, reuse_disabled: 
 
     monkeypatch.setenv(REUSE_DISABLE_ENV_VAR, reuse_disabled)
     monkeypatch.setattr(native_module, "PreparedCompileArtifacts", _StagingEveryProject)
-    monkeypatch.setattr(reuse_constants_module, "RACY_WINDOW_NS", 0)
+    monkeypatch.setattr(native_module, "COMPILE_REUSE_RACY_WINDOW_NS", 0)
 
 
 def main_compile_json(*, project_dir: Path) -> int:

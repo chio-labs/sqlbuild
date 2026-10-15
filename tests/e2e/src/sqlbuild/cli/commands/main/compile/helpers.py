@@ -33,7 +33,6 @@ import sqlbuild._native as native_module
 import sqlbuild._native as plan_artifacts_module
 import sqlbuild.adapter.type_system._helpers.type_normalization as type_normalization
 import sqlbuild.cli.compile_reuse._helpers.provider_settings as provider_settings
-import sqlbuild.cli.compile_reuse.constants as reuse_constants
 import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
 import sqlbuild.compiler.frontier.main.compiled_code_identity as compiled_code_identity_module
 import sqlbuild.compiler.macro_bridge.classes.macro_bridge as macro_bridge_class
@@ -45,14 +44,6 @@ from scripts.compiler_differential.constants import FAILURE_BASE_FILES
 from sqlbuild._native import run_cli as main
 from sqlbuild.adapter.contract.classes.duckdb_backed_adapter import DuckDbBackedAdapter
 from sqlbuild.adapter.contract.types import TypeDialect
-from sqlbuild.cli.compile_reuse.constants import (
-    EXCLUDED_ROOT_DIRECTORIES,
-    NATIVE_REUSE_DIRECTORY_NAME,
-    NATIVE_REUSE_SUFFIX,
-    RETIRED_REUSE_DIRECTORY_NAME,
-    REUSE_DISABLE_ENV_VAR,
-    REUSE_LOGGER_NAME,
-)
 from sqlbuild.compiler.analysis_session.constants import NATIVE_ANALYSIS_STORE_FILE_NAME
 from sqlbuild.compiler.compile.constants import (
     RETIRED_FACT_CACHE_DIRECTORY_NAME,
@@ -60,6 +51,9 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.contracts.models import ContractValidationResult
+from sqlbuild.compiler.frontier.constants import (
+    COMPILE_REUSE_DISABLE_ENV_VAR as REUSE_DISABLE_ENV_VAR,
+)
 from sqlbuild.compiler.frontier.constants import (
     COMPILER_CACHE_DIRECTORY_NAME,
     RETIRED_CACHE_NAMESPACE_SUFFIXES,
@@ -83,6 +77,10 @@ from tests.integration.src.sqlbuild.compiler.contracts.helpers import (
     contract_statuses,
 )
 
+NATIVE_REUSE_DIRECTORY_NAME: str = "project-reuse-v2"
+NATIVE_REUSE_SUFFIX: str = ".store"
+RETIRED_REUSE_DIRECTORY_NAME: str = "project-reuse-v1"
+REUSE_LOGGER_NAME: str = "sqlbuild.compile.reuse"
 _DBT_SHAPED_SQL_SIZE_PROFILE: tuple[tuple[float, int], ...] = (
     (0.50, 1_800),
     (0.75, 4_500),
@@ -3395,7 +3393,7 @@ def record_digested_files(*, monkeypatch: pytest.MonkeyPatch) -> list[int]:
 def settle_racy_window(*, monkeypatch: pytest.MonkeyPatch) -> None:
     """Treat files written before a compile starts as settled instead of waiting two seconds."""
 
-    monkeypatch.setattr(reuse_constants, "RACY_WINDOW_NS", 0)
+    monkeypatch.setattr(native_module, "COMPILE_REUSE_RACY_WINDOW_NS", 0)
 
 
 def write_large_file(*, project_dir: Path, relative_path: str, size_bytes: int) -> Path:
@@ -4219,7 +4217,9 @@ def ignore_project_changes(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make compile reuse stop watching the models folder, so a model edit goes unseen."""
 
     monkeypatch.setattr(
-        reuse_constants, "EXCLUDED_ROOT_DIRECTORIES", EXCLUDED_ROOT_DIRECTORIES | {"models"}
+        native_module,
+        "COMPILE_REUSE_EXCLUDED_ROOT_DIRECTORIES",
+        native_module.COMPILE_REUSE_EXCLUDED_ROOT_DIRECTORIES | {"models"},
     )
 
 

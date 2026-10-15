@@ -8,13 +8,17 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString};
 use pyo3::{IntoPyObjectExt, pyclass, pyfunction, pymethods, wrap_pyfunction};
 
+use crate::bindings::_helpers::compile_command::constants::{
+    BYTES_PER_MEBIBYTE, REUSE_BYPASS_TIMING, REUSE_CHECK_TIMING, REUSE_HIT_TIMING,
+    REUSE_LOGGER_NAME, REUSE_MISS_TIMING, REUSE_STORE_DONE_PREFIX, REUSE_STORE_NOTICE_BYTES,
+    REUSE_STORE_NOTICE_PATHS, REUSE_STORE_SKIPPED_PREFIX,
+};
 use crate::bindings::_helpers::compile_command::reuse_attempt::{reuse_rules, write_launch_record};
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
 use crate::bindings::_helpers::compile_outputs::reuse::artifact_digest;
 
-const REUSE_CONSTANTS_MODULE: &str = "sqlbuild.cli.compile_reuse.constants";
 const PROVIDER_SETTINGS_MODULE: &str = "sqlbuild.cli.compile_reuse._helpers.provider_settings";
 const MACRO_STORE_PATHS_MODULE: &str =
     "sqlbuild.compiler.macro_bridge.main._macro_store_module_paths";
@@ -260,28 +264,18 @@ pub(crate) fn compile_reuse_timings<'py>(
     let outcome: String = attempt.getattr("outcome")?.str()?.to_string();
     let timings: Bound<'py, PyDict> = PyDict::new(py);
     for (name, counted) in [
-        ("REUSE_HIT_TIMING", HIT_OUTCOME),
-        ("REUSE_MISS_TIMING", MISS_OUTCOME),
-        ("REUSE_BYPASS_TIMING", BYPASS_OUTCOME),
+        (REUSE_HIT_TIMING, HIT_OUTCOME),
+        (REUSE_MISS_TIMING, MISS_OUTCOME),
+        (REUSE_BYPASS_TIMING, BYPASS_OUTCOME),
     ] {
-        timings.set_item(
-            imported(py, REUSE_CONSTANTS_MODULE, name)?,
-            i64::from(outcome == counted),
-        )?;
+        timings.set_item(name, i64::from(outcome == counted))?;
     }
-    timings.set_item(
-        imported(py, REUSE_CONSTANTS_MODULE, "REUSE_CHECK_TIMING")?,
-        attempt.getattr("check_ms")?,
-    )?;
+    timings.set_item(REUSE_CHECK_TIMING, attempt.getattr("check_ms")?)?;
     Ok(timings)
 }
 
 fn reuse_logger(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    imported(py, "logging", "getLogger")?.call1((imported(
-        py,
-        REUSE_CONSTANTS_MODULE,
-        "REUSE_LOGGER_NAME",
-    )?,))
+    imported(py, "logging", "getLogger")?.call1((REUSE_LOGGER_NAME,))
 }
 
 /// Loaded module files, then the macro store's extra module paths, as Python lists them.
@@ -315,46 +309,29 @@ fn module_paths(py: Python<'_>) -> PyResult<Bound<'_, PyList>> {
 
 /// The notice a long reuse record prints first, with when it started.
 fn start_notice(py: Python<'_>, native: &Bound<'_, PyAny>) -> PyResult<Option<f64>> {
-    let pending: i64 = native.call_method0("pending_digest_bytes")?.extract()?;
-    let paths: i64 = native.call_method0("snapshot_paths")?.extract()?;
-    let constant = |name: &str| imported(py, REUSE_CONSTANTS_MODULE, name);
-    if pending < constant("REUSE_STORE_NOTICE_BYTES")?.extract::<i64>()?
-        && paths < constant("REUSE_STORE_NOTICE_PATHS")?.extract::<i64>()?
-    {
+    let pending: u64 = native.call_method0("pending_digest_bytes")?.extract()?;
+    let paths: usize = native.call_method0("snapshot_paths")?.extract()?;
+    if pending < REUSE_STORE_NOTICE_BYTES && paths < REUSE_STORE_NOTICE_PATHS {
         return Ok(None);
     }
-    let mebibytes: Bound<'_, PyAny> = pending
-        .into_bound_py_any(py)?
-        .call_method1("__truediv__", (constant("BYTES_PER_MEBIBYTE")?,))?;
-    let message: Bound<'_, PyAny> = constant("REUSE_STORE_START_MESSAGE")?.call_method(
-        "format",
-        (),
-        Some(&keywords(
-            py,
-            &[
-                ("paths", paths.into_bound_py_any(py)?),
-                ("mebibytes", mebibytes),
-            ],
-        )?),
-    )?;
-    print_to(py, "stderr", &message)?;
+    let mebibytes: f64 = pending as f64 / BYTES_PER_MEBIBYTE;
+    let message: String =
+        format!("Recording compile for reuse ({paths} paths, {mebibytes:.0} MiB to hash)...");
+    print_to(py, "stderr", &message.into_bound_py_any(py)?)?;
     Ok(Some(imported(py, "time", "monotonic")?.call0()?.extract()?))
 }
 
-fn finish_notice(py: Python<'_>, started: Option<f64>, message: &str) -> PyResult<()> {
+fn finish_notice(py: Python<'_>, started: Option<f64>, prefix: &str) -> PyResult<()> {
     let Some(started) = started else {
         return Ok(());
     };
     let now: f64 = imported(py, "time", "monotonic")?.call0()?.extract()?;
-    let text: Bound<'_, PyAny> = imported(py, REUSE_CONSTANTS_MODULE, message)?.call_method(
-        "format",
-        (),
-        Some(&keywords(
-            py,
-            &[("seconds", (now - started).into_bound_py_any(py)?)],
-        )?),
-    )?;
-    print_to(py, "stderr", &text)
+    let seconds: f64 = now - started;
+    print_to(
+        py,
+        "stderr",
+        &format!("{prefix}{seconds:.1} s)").into_bound_py_any(py)?,
+    )
 }
 
 /// What `write_reusable_compile` records about one full compile.
@@ -478,9 +455,9 @@ fn record<'py>(facts: &CompileFacts<'py>) -> PyResult<bool> {
         py,
         notice_started,
         if outcome == SKIPPED {
-            "REUSE_STORE_SKIPPED_MESSAGE"
+            REUSE_STORE_SKIPPED_PREFIX
         } else {
-            "REUSE_STORE_DONE_MESSAGE"
+            REUSE_STORE_DONE_PREFIX
         },
     )?;
     Ok(outcome == STORED)

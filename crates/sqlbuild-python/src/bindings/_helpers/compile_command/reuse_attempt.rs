@@ -6,18 +6,30 @@ use pyo3::exceptions::PyOSError;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyDict, PyDictMethods, PyList, PyString};
+use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyList, PyString};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_cli::replay::main::write_launch_record::write_launch_record as write_record_file;
 
+use sqlbuild_cli::replay::constants::{LAUNCH_RECORD_DIRECTORY, LAUNCH_RECORD_FORMAT};
+
 use crate::bindings::_helpers::cli::launch_state::launch_record_path;
+use crate::bindings::_helpers::compile_command::constants::{
+    COMPILE_COMMAND_NAME, COMPILED_DIRECTORY_NAME, COMPUTE_LOG_DIRECTORY_NAME,
+    EXCLUDED_DIRECTORIES, EXCLUDED_ROOT_ATTRIBUTE, EXCLUDED_ROOT_DIRECTORIES,
+    MILLISECONDS_PER_SECOND, MISSING_ENVIRONMENT_VALUE, MISSING_FILE_DIGEST, MISSING_PATH_MTIME_NS,
+    NATIVE_REUSE_DIRECTORY_NAME, PRESENCE_ONLY_FILE_SUFFIXES, PROJECT_CONFIG_FILENAMES,
+    PROJECT_ROOT_PATH_MTIME_NS, RACY_WINDOW_ATTRIBUTE, RACY_WINDOW_NS,
+    RETIRED_REUSE_DIRECTORY_NAME, REUSE_BYPASS_TIMING, REUSE_CHECK_TIMING, REUSE_DISABLE_ENV_VAR,
+    REUSE_DISABLE_VALUE, REUSE_HIT_MESSAGE, REUSE_HIT_TIMING, REUSE_LOGGER_NAME,
+    REUSE_MAX_ENTRY_BYTES, REUSE_MAX_STORED_ENTRIES, REUSE_MISS_TIMING, TARGET_DIRECTORY_NAME,
+    TOTAL_TIMING, TRACKED_ENVIRONMENT_PREFIXES, UNTRACKED_ENVIRONMENT_NAMES,
+};
 use crate::bindings::_helpers::compile_driver::phases::{elapsed_ms, monotonic};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::compile_outputs::json_report::plain_json;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const REUSE_CONSTANTS: &str = "sqlbuild.cli.compile_reuse.constants";
 const REUSE_MODELS: &str = "sqlbuild.cli.compile_reuse.models";
 const REUSE_TYPES: &str = "sqlbuild.cli.compile_reuse.types";
 const COMPILE_CONSTANTS: &str = "sqlbuild.compiler.compile.constants";
@@ -26,40 +38,35 @@ const STARTUP_INPUTS_MODULE: &str = "sqlbuild.cli.compile_reuse._helpers.startup
 const CACHE_DIRECTORY_MODULE: &str = "sqlbuild.compiler.frontier.main.compiler_cache_directory";
 const COMPUTE_LOG_TEE_MODULE: &str = "sqlbuild.runtime.compute_logs.classes.text_tee";
 const OUTPUT_CAPTURE_CONSTANTS: &str = "sqlbuild.runtime.output_capture.constants";
-const SECONDS_FIELD: &str = "{seconds:.1f}";
 const HIT: &str = "HIT";
 const CHECKED_HIT: &str = "hit";
 const CHECKED_BYPASS: &str = "bypass";
 const MISS: &str = "MISS";
 const BYPASS: &str = "BYPASS";
 
-fn constant<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, REUSE_CONSTANTS, name)
-}
-
-fn sorted<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    imported(value.py(), "builtins", "sorted")?.call1((value,))
-}
-
 fn listed<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     Ok(PyList::new(value.py(), value.try_iter()?.collect::<PyResult<Vec<_>>>()?)?.into_any())
 }
 
 fn reuse_logger(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    imported(py, "logging", "getLogger")?.call1((constant(py, "REUSE_LOGGER_NAME")?,))
+    imported(py, "logging", "getLogger")?.call1((REUSE_LOGGER_NAME,))
 }
 
 /// The reuse constants the native check, the stored compile and the launch record share.
 pub(crate) fn reuse_rules(py: Python<'_>, with_output_files: bool) -> PyResult<Bound<'_, PyDict>> {
     let rules: Bound<'_, PyDict> = PyDict::new(py);
-    rules.set_item("excluded", sorted(constant(py, "EXCLUDED_DIRECTORIES")?)?)?;
+    rules.set_item("excluded", PyList::new(py, EXCLUDED_DIRECTORIES)?)?;
     rules.set_item(
         "excluded_root",
-        sorted(constant(py, "EXCLUDED_ROOT_DIRECTORIES")?)?,
+        imported(py, "builtins", "sorted")?.call1((imported(
+            py,
+            NATIVE_MODULE,
+            EXCLUDED_ROOT_ATTRIBUTE,
+        )?,))?,
     )?;
     rules.set_item(
         "presence_suffixes",
-        listed(constant(py, "PRESENCE_ONLY_FILE_SUFFIXES")?)?,
+        PyList::new(py, PRESENCE_ONLY_FILE_SUFFIXES)?,
     )?;
     let output_files: Bound<'_, PyAny> =
         imported(py, RUNTIME_IDENTITY_MODULE, "redirected_output_files")?.call0()?;
@@ -68,11 +75,11 @@ pub(crate) fn reuse_rules(py: Python<'_>, with_output_files: bool) -> PyResult<B
     }
     rules.set_item(
         "tracked_prefixes",
-        listed(constant(py, "TRACKED_ENVIRONMENT_PREFIXES")?)?,
+        PyList::new(py, TRACKED_ENVIRONMENT_PREFIXES)?,
     )?;
     rules.set_item(
         "untracked_names",
-        sorted(constant(py, "UNTRACKED_ENVIRONMENT_NAMES")?)?,
+        PyList::new(py, UNTRACKED_ENVIRONMENT_NAMES)?,
     )?;
     rules.set_item(
         "disabling_variables",
@@ -84,37 +91,40 @@ pub(crate) fn reuse_rules(py: Python<'_>, with_output_files: bool) -> PyResult<B
                     imported(py, COMPILE_CONSTANTS, "COMPILE_CACHE_DISABLE_VALUE")?,
                 ),
                 (
-                    constant(py, "REUSE_DISABLE_ENV_VAR")?,
-                    constant(py, "REUSE_DISABLE_VALUE")?,
+                    REUSE_DISABLE_ENV_VAR.into_bound_py_any(py)?,
+                    REUSE_DISABLE_VALUE.into_bound_py_any(py)?,
                 ),
             ],
         )?,
     )?;
     rules.set_item(
         "config_filenames",
-        listed(constant(py, "PROJECT_CONFIG_FILENAMES")?)?,
+        PyList::new(py, PROJECT_CONFIG_FILENAMES)?,
     )?;
-    for (key, name) in [
-        ("racy_window_ns", "RACY_WINDOW_NS"),
-        ("max_stored_entries", "REUSE_MAX_STORED_ENTRIES"),
-        ("max_entry_bytes", "REUSE_MAX_ENTRY_BYTES"),
-        ("missing_environment_value", "MISSING_ENVIRONMENT_VALUE"),
-        ("missing_file_digest", "MISSING_FILE_DIGEST"),
-        ("missing_path_mtime_ns", "MISSING_PATH_MTIME_NS"),
-        ("project_root_path_mtime_ns", "PROJECT_ROOT_PATH_MTIME_NS"),
+    for (key, value) in [
+        ("max_stored_entries", REUSE_MAX_STORED_ENTRIES),
+        ("max_entry_bytes", REUSE_MAX_ENTRY_BYTES),
+        ("missing_path_mtime_ns", MISSING_PATH_MTIME_NS),
+        ("project_root_path_mtime_ns", PROJECT_ROOT_PATH_MTIME_NS),
     ] {
-        rules.set_item(key, constant(py, name)?)?;
+        rules.set_item(key, value)?;
     }
     rules.set_item(
+        "racy_window_ns",
+        imported(py, NATIVE_MODULE, RACY_WINDOW_ATTRIBUTE)?,
+    )?;
+    rules.set_item("missing_environment_value", MISSING_ENVIRONMENT_VALUE)?;
+    rules.set_item("missing_file_digest", MISSING_FILE_DIGEST)?;
+    rules.set_item(
         "compiled_root",
-        imported(py, "os.path", "join")?.call1((
-            constant(py, "TARGET_DIRECTORY_NAME")?,
-            constant(py, "COMPILED_DIRECTORY_NAME")?,
-        ))?,
+        format!(
+            "{TARGET_DIRECTORY_NAME}{}{COMPILED_DIRECTORY_NAME}",
+            std::path::MAIN_SEPARATOR
+        ),
     )?;
     rules.set_item(
         "retired_directories",
-        PyList::new(py, [constant(py, "RETIRED_REUSE_DIRECTORY_NAME")?])?,
+        PyList::new(py, [RETIRED_REUSE_DIRECTORY_NAME])?,
     )?;
     Ok(rules)
 }
@@ -139,34 +149,29 @@ fn launch_payload<'py>(
         .is_instance(&imported(py, COMPUTE_LOG_TEE_MODULE, "TextComputeLogTee")?)?
     {
         let logs: Bound<'py, PyAny> = resolved
-            .call_method1(
-                "__truediv__",
-                (constant(py, "COMPUTE_LOG_DIRECTORY_NAME")?,),
-            )?
+            .call_method1("__truediv__", (COMPUTE_LOG_DIRECTORY_NAME,))?
             .call_method0("resolve")?;
         let capture: Bound<'py, PyDict> = PyDict::new(py);
         capture.set_item("root", logs.str()?)?;
-        capture.set_item("command", constant(py, "COMPILE_COMMAND_NAME")?)?;
+        capture.set_item("command", COMPILE_COMMAND_NAME)?;
         capture.set_item("project_dir", resolved.str()?)?;
         capture.set_item("target", attempt.getattr("selected_target")?)?;
         capture.into_any()
     } else {
         py.None().into_bound(py)
     };
-    let hit_message: Bound<'py, PyAny> =
-        constant(py, "REUSE_HIT_MESSAGE")?.call_method1("split", (SECONDS_FIELD,))?;
     let timings: Bound<'py, PyDict> = PyDict::new(py);
     for (key, name) in [
-        ("hit", "REUSE_HIT_TIMING"),
-        ("miss", "REUSE_MISS_TIMING"),
-        ("bypass", "REUSE_BYPASS_TIMING"),
-        ("check", "REUSE_CHECK_TIMING"),
-        ("total", "TOTAL_TIMING"),
+        ("hit", REUSE_HIT_TIMING),
+        ("miss", REUSE_MISS_TIMING),
+        ("bypass", REUSE_BYPASS_TIMING),
+        ("check", REUSE_CHECK_TIMING),
+        ("total", TOTAL_TIMING),
     ] {
-        timings.set_item(key, constant(py, name)?)?;
+        timings.set_item(key, name)?;
     }
     let payload: Bound<'py, PyDict> = PyDict::new(py);
-    payload.set_item("format", constant(py, "LAUNCH_RECORD_FORMAT")?)?;
+    payload.set_item("format", LAUNCH_RECORD_FORMAT)?;
     payload.set_item("key", key)?;
     payload.set_item("project_dir", project_dir.str()?)?;
     payload.set_item("store_path", native.call_method0("store_path")?)?;
@@ -180,7 +185,7 @@ fn launch_payload<'py>(
     payload.set_item("json_output", attempt.getattr("json_output")?)?;
     payload.set_item("rules", reuse_rules(py, false)?)?;
     payload.set_item("capture", capture)?;
-    payload.set_item("hit_message", listed(hit_message)?)?;
+    payload.set_item("hit_message", PyList::new(py, REUSE_HIT_MESSAGE)?)?;
     payload.set_item("timings", timings)?;
     Ok(payload)
 }
@@ -213,8 +218,8 @@ pub(crate) fn write_launch_record(attempt: &Bound<'_, PyAny>) -> PyResult<()> {
         return Ok(());
     }
     let mut directory: Bound<'_, PyAny> = attempt.getattr("project_dir")?;
-    for part in constant(py, "LAUNCH_RECORD_DIRECTORY")?.try_iter()? {
-        directory = directory.call_method1("__truediv__", (part?,))?;
+    for part in LAUNCH_RECORD_DIRECTORY {
+        directory = directory.call_method1("__truediv__", (part,))?;
     }
     if path
         .getattr("parent")?
@@ -265,10 +270,7 @@ fn reuse_check<'py>(
         "store_directory",
         imported(py, CACHE_DIRECTORY_MODULE, "compiler_cache_directory")?
             .call1((imported(py, "pathlib", "Path")?.call1((project_dir,))?,))?
-            .call_method1(
-                "__truediv__",
-                (constant(py, "NATIVE_REUSE_DIRECTORY_NAME")?,),
-            )?,
+            .call_method1("__truediv__", (NATIVE_REUSE_DIRECTORY_NAME,))?,
     )?;
     check.set_item("selected_target", request.getattr("selected_target")?)?;
     check.set_item(
@@ -330,16 +332,13 @@ fn replayed<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = native.py();
     let check_ms: i64 = elapsed_ms(py, started)?;
-    let mut timings: Vec<(Bound<'py, PyAny>, i64)> = Vec::new();
-    for (name, counted) in [
-        ("REUSE_HIT_TIMING", 1),
-        ("REUSE_MISS_TIMING", 0),
-        ("REUSE_BYPASS_TIMING", 0),
-        ("REUSE_CHECK_TIMING", check_ms),
-    ] {
-        timings.push((constant(py, name)?, counted));
-    }
-    timings.push((constant(py, "TOTAL_TIMING")?, elapsed_ms(py, started)?));
+    let timings: Vec<(&str, i64)> = vec![
+        (REUSE_HIT_TIMING, 1),
+        (REUSE_MISS_TIMING, 0),
+        (REUSE_BYPASS_TIMING, 0),
+        (REUSE_CHECK_TIMING, check_ms),
+        (TOTAL_TIMING, elapsed_ms(py, started)?),
+    ];
     let rows: Bound<'py, PyList> = if json_output {
         PyList::new(py, timings)?
     } else {
@@ -357,16 +356,11 @@ fn replayed<'py>(
         Bound<'py, PyAny>,
         Bound<'py, PyAny>,
     ) = replay.extract()?;
-    let seconds: Bound<'py, PyAny> = check_ms
-        .into_bound_py_any(py)?
-        .call_method1("__truediv__", (constant(py, "MILLISECONDS_PER_SECOND")?,))?;
+    let [prefix, suffix] = REUSE_HIT_MESSAGE;
+    let seconds: f64 = check_ms as f64 / MILLISECONDS_PER_SECOND;
     print_stderr(
         py,
-        &constant(py, "REUSE_HIT_MESSAGE")?.call_method(
-            "format",
-            (),
-            Some(&keywords(py, &[("seconds", seconds)])?),
-        )?,
+        &format!("{prefix}{seconds:.1}{suffix}").into_bound_py_any(py)?,
     )?;
     for line in stderr_lines.try_iter()? {
         print_stderr(py, &line?)?;
@@ -503,6 +497,12 @@ fn run_compile<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> 
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    let py: Python<'_> = module.py();
+    module.add(RACY_WINDOW_ATTRIBUTE, RACY_WINDOW_NS)?;
+    module.add(
+        EXCLUDED_ROOT_ATTRIBUTE,
+        PyFrozenSet::new(py, EXCLUDED_ROOT_DIRECTORIES)?,
+    )?;
     module.add_function(wrap_pyfunction!(attempt_compile_reuse, module)?)?;
     module.add_function(wrap_pyfunction!(run_compile, module)?)
 }

@@ -1654,6 +1654,10 @@ class NativeReuseAttempt:
 
 def check_compile_reuse(check: dict[str, object]) -> NativeReuseAttempt: ...
 def run_compile(request: CompileCommandRequest) -> int: ...
+
+COMPILE_REUSE_RACY_WINDOW_NS: int
+COMPILE_REUSE_EXCLUDED_ROOT_DIRECTORIES: frozenset[str]
+
 def attempt_compile_reuse(*, request: CompileReuseRequest) -> CompileReuseAttempt: ...
 
 class CompileArtifactWrites:
