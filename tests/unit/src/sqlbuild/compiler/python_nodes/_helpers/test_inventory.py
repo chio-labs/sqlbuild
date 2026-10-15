@@ -9,6 +9,7 @@ from typing import cast
 
 import pytest
 
+from sqlbuild._native import build_python_node_graph
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAssetFunction,
     DiscoveredCheckFunction,
@@ -18,10 +19,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredTaskFunction,
 )
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
-from sqlbuild.compiler.python_nodes._helpers.user_inventory import (
-    build_python_node_graph,
-    build_python_nodes,
-)
 from sqlbuild.compiler.python_nodes.models import (
     DiscoveredPythonNode,
     PythonNodeGraph,
@@ -271,63 +268,67 @@ def test_given_fully_configured_python_nodes_when_building_then_identity_config_
     retry: RetryPolicy = RetryPolicy(max_attempts=2, retry_on=RuntimeError, jitter=False)
     columns: tuple[SourceColumnEntry, ...] = (SourceColumnEntry(name="order_id", type="INTEGER"),)
 
-    nodes: tuple[DiscoveredPythonNode, ...] = build_python_nodes(
-        loader_functions=(
-            DiscoveredLoaderFunction(
-                file_path=Path("/project/loaders/events.py"),
-                relative_path=Path("python/loaders/events.py"),
-                name="load_events",
-                function=load_events,
-                destination="raw.events",
-                cursor_column="updated_at",
-                unique_key=("event_id",),
-                columns=columns,
-                contract="enforced",
-                connection_mode=LoaderConnectionMode.EXTERNAL,
+    nodes: tuple[DiscoveredPythonNode, ...] = build_python_node_graph(
+        discovered_inputs=DiscoveredProjectInputs(
+            project_config=ProjectConfig(name="demo", adapter="duckdb"),
+            local_config=LocalConfig(),
+            loader_functions=(
+                DiscoveredLoaderFunction(
+                    file_path=Path("/project/loaders/events.py"),
+                    relative_path=Path("python/loaders/events.py"),
+                    name="load_events",
+                    function=load_events,
+                    destination="raw.events",
+                    cursor_column="updated_at",
+                    unique_key=("event_id",),
+                    columns=columns,
+                    contract="enforced",
+                    connection_mode=LoaderConnectionMode.EXTERNAL,
+                ),
             ),
-        ),
-        task_functions=(
-            DiscoveredTaskFunction(
-                file_path=Path("/project/tasks/orders.py"),
-                relative_path=Path("python/tasks/orders.py"),
-                name="prepare_orders",
-                function=prepare_orders,
-                tags=("orders",),
-                group="ingestion",
-                description="Prepare order export inputs.",
-                meta={"owner": "data-eng"},
-                retry=retry,
+            task_functions=(
+                DiscoveredTaskFunction(
+                    file_path=Path("/project/tasks/orders.py"),
+                    relative_path=Path("python/tasks/orders.py"),
+                    name="prepare_orders",
+                    function=prepare_orders,
+                    tags=("orders",),
+                    group="ingestion",
+                    description="Prepare order export inputs.",
+                    meta={"owner": "data-eng"},
+                    retry=retry,
+                ),
             ),
-        ),
-        asset_functions=(
-            DiscoveredAssetFunction(
-                file_path=Path("/project/assets/orders.py"),
-                relative_path=Path("python/assets/orders.py"),
-                name="export_orders",
-                function=export_orders,
-                tags=("orders",),
-                group="exports",
-                description="Export orders.",
-                meta={"owner": "data-eng"},
-                columns=columns,
-                retry=retry,
+            asset_functions=(
+                DiscoveredAssetFunction(
+                    file_path=Path("/project/assets/orders.py"),
+                    relative_path=Path("python/assets/orders.py"),
+                    name="export_orders",
+                    function=export_orders,
+                    tags=("orders",),
+                    group="exports",
+                    description="Export orders.",
+                    meta={"owner": "data-eng"},
+                    columns=columns,
+                    retry=retry,
+                ),
             ),
-        ),
-        check_functions=(
-            DiscoveredCheckFunction(
-                file_path=Path("/project/checks/orders.py"),
-                relative_path=Path("python/checks/orders.py"),
-                name="check_orders_export",
-                function=check_orders_export,
-                depends_on=(export_orders,),
-                severity=PythonCheckSeverity.WARN,
-                tags=("orders",),
-                group="exports",
-                description="Check exported orders.",
-                meta={"owner": "data-eng"},
+            check_functions=(
+                DiscoveredCheckFunction(
+                    file_path=Path("/project/checks/orders.py"),
+                    relative_path=Path("python/checks/orders.py"),
+                    name="check_orders_export",
+                    function=check_orders_export,
+                    depends_on=(export_orders,),
+                    severity=PythonCheckSeverity.WARN,
+                    tags=("orders",),
+                    group="exports",
+                    description="Check exported orders.",
+                    meta={"owner": "data-eng"},
+                ),
             ),
-        ),
-    )
+        )
+    ).nodes
 
     assert {
         f"{node.kind.value}:{node.name}": tuple(

@@ -11,10 +11,10 @@ use crate::bindings::_helpers::compile_command::target_writer::{
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{Status, call_with, imported};
 use crate::bindings::_helpers::dag_artifact::artifact::build_dag_json;
+use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const PYTHON_NODES_MODULE: &str = "sqlbuild.compiler.python_nodes.main._graph";
 const OUTPUT_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
@@ -113,14 +113,7 @@ pub(crate) fn write_dag_artifact<'py>(
     let started: f64 = monotonic(py)?;
     status.start("Writing DAG artifact...")?;
     let discovered: Bound<'py, PyAny> = analysis.getattr("discovered_inputs")?;
-    let python_graph: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            PYTHON_NODES_MODULE,
-            "build_discovered_python_node_graph",
-        )?,
-        &[("discovered_inputs", discovered.clone())],
-    )?;
+    let python_graph: Bound<'py, PyAny> = python_node_graph(&discovered)?;
     let path: Bound<'py, PyAny> = resolved_dag_path(project_dir, dag_path)?;
     let project_name: String = discovered
         .getattr("project_config")?

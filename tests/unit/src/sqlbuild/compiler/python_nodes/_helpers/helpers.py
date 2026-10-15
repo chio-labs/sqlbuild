@@ -10,7 +10,11 @@ from pathlib import Path
 from types import MappingProxyType, ModuleType
 from typing import Any, cast
 
-from sqlbuild._native import compiled_graph_keys, resolve_python_sql_run_selection
+from sqlbuild._native import (
+    build_python_node_graph,
+    compiled_graph_keys,
+    resolve_python_sql_run_selection,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
@@ -35,7 +39,6 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.python_nodes._helpers.user_inventory import build_python_node_graph
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunSelection
 from sqlbuild.providers import Provider
 from sqlbuild.python_nodes.models import SqlResourceRef

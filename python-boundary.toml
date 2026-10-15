@@ -402,7 +402,7 @@ note = "Tracks the loaded user modules macro call results depend on, and runs a 
 [[stays]]
 path = "compiler/python_nodes/_helpers/user_inventory.py"
 reason = "user-code"
-note = "Builds Python nodes from loaded user functions: signatures, provider annotations and decorated dependencies."
+note = "Reads loaded user node functions: provider parameter annotations, identities over live functions and decorated dependency names; graph construction is native."
 
 [[stays]]
 path = "compiler/discovery/_helpers/filesystem/core.py"
@@ -463,16 +463,6 @@ note = "Identity entry point over live user node functions."
 path = "compiler/python_nodes/main/_hook_identities.py"
 reason = "user-code"
 note = "Builds identities of loaded user hook functions."
-
-[[stays]]
-path = "compiler/python_nodes/main/_graph.py"
-reason = "user-code"
-note = "Builds the Python node graph from loaded user functions."
-
-[[stays]]
-path = "compiler/python_nodes/main/_run_selection.py"
-reason = "user-code"
-note = "Builds the Python node graph from loaded user functions for run selection."
 
 [[stays]]
 path = "compiler/auditing/main/above.py"
