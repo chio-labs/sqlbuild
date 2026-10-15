@@ -32,7 +32,10 @@ fn redacted_mapping<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny
 }
 
 /// A persistence-safe value for one structured logging field.
-fn redacted_value<'py>(name: &str, value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn redacted_value<'py>(
+    name: &str,
+    value: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = value.py();
     if secret_field_name(name) {
         return Ok(PyString::new(py, REDACTED).into_any());

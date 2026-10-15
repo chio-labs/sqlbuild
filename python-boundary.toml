@@ -60,17 +60,12 @@ note = "Public custom-rule API and test helper."
 [[stays]]
 path = "diagnostics/_helpers/logging.py"
 rule = 4
-note = "Installs SQLBuild's handlers on Python's logging, which users and integrations configure."
-
-[[stays]]
-path = "diagnostics/_helpers/redaction.py"
-rule = 4
-note = "Collects redacted extra fields from a Python LogRecord; the redaction itself is native."
+note = "Installs SQLBuild's handlers on Python's logging and owns the diagnostics context variables; SQL digests and record field sets are native (sql_log_record, debug_event_record_fields)."
 
 [[stays]]
 path = "diagnostics/classes/diagnostic_record_redactor.py"
 rule = 4
-note = "Redaction entry points that Python logging handlers call per record."
+note = "Redaction entry points that Python logging handlers call per record; text, value and extra-field redaction are native."
 
 [[stays]]
 path = "diagnostics/classes/diagnostics_console_formatter.py"
@@ -90,7 +85,7 @@ note = "Attaches and removes per-invocation logging handlers."
 [[stays]]
 path = "diagnostics/classes/log_record_route_filter.py"
 rule = 4
-note = "A logging.Filter that routes records to destinations."
+note = "A logging.Filter subclass; routing and SQL redaction of the record copy are native (route_diagnostic_log_record)."
 
 [[stays]]
 path = "diagnostics/main"
@@ -215,7 +210,7 @@ note = "Encodes the Python fact-view values user rules read, for their digests."
 [[stays]]
 path = "runtime/observability"
 rule = 1
-note = "Documented observability API used throughout the executor: lifecycle emitters, dispatcher, scopes and envelope shapes. The event catalogue, payload validation and JSON freezing are native (sqlbuild-core lifecycle_events)."
+note = "Documented observability API used throughout the executor: lifecycle emitters, dispatcher, scopes and envelope shapes. The event catalogue, envelope, diagnostic log, run bound, operation metadata, hook and producer validation and JSON freezing are native (sqlbuild-core lifecycle_events)."
 
 [[stays]]
 path = "runtime/execution_history/__init__.py"
@@ -245,7 +240,7 @@ note = "Deadline the executor scheduler and warehouse cursors enforce."
 [[stays]]
 path = "runtime/compute_logs/classes"
 rule = 1
-note = "Rule 1 capture shim: sys.stdout/sys.stderr tees and a logging handler that record Python output from user code, adapters and the executor (_dispatch_with_compute_logs.py, compile_command/reuse_attempt.rs); storage itself is native LocalFilesystemComputeLogStorage."
+note = "Rule 1 capture shim: sys.stdout/sys.stderr tees and a logging.Handler that record Python output from user code, adapters and the executor (_dispatch_with_compute_logs.py, compile_command/reuse_attempt.rs); record retention, SQL redaction, identity and severity are native (compute_diagnostic_log_fields) and storage is native LocalFilesystemComputeLogStorage."
 
 [[stays]]
 path = "runtime/compute_logs/main"
@@ -735,7 +730,7 @@ note = "Shape rule: data exceptions only (DbtProfileError), no logic; consumed b
 [[stays]]
 path = "diagnostics/constants.py"
 rule = 4
-note = "Shape rule: Python logging policy constants only (LOGGER_ROOT_NAME, SQL_DIGEST_FIELD, SQL_PRIVATE_RECORD_FIELD, REDACTED_SQL_LOG_MESSAGE, ...), no logic; the logger prefix and SQL text field are native (sqlbuild._native)."
+note = "Shape rule: data constants only (SQL_DIGEST_FIELD, SQL_TEXT_FIELD, SQL_PRIVATE_RECORD_FIELD, SQL_PRIVATE_RECORD_MARKER), no logic; the marker object identifies trusted private SQL records for the native compute log handler; consumed by diagnostics/classes/invocation_diagnostic_routing.py."
 
 [[stays]]
 path = "cursor_algebra/exceptions.py"

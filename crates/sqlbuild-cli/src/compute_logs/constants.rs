@@ -1,4 +1,4 @@
-//! Compute log format version, retention and read limits, and storage file names.
+//! Compute log format version, retention defaults and storage file names.
 
 pub const COMPUTE_LOG_FORMAT_VERSION: i64 = 1;
 pub const DEFAULT_RETENTION_COUNT: usize = 20;

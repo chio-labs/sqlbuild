@@ -6,6 +6,18 @@ use crate::lifecycle_events::types::CatalogEntry;
 pub const CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION: i64 = 2;
 /// Every lifecycle event schema version with a catalogue, oldest first.
 pub const LIFECYCLE_EVENT_SCHEMA_VERSIONS: [i64; 2] = [1, 2];
+/// The only lifecycle event schema version without invocation metadata.
+pub(crate) const UNSEQUENCED_SCHEMA_VERSION: i128 = 1;
+/// The diagnostic log schema version SQLBuild produces and reads.
+pub const CURRENT_DIAGNOSTIC_LOG_SCHEMA_VERSION: i64 = 1;
+/// Every diagnostic log severity.
+pub const DIAGNOSTIC_SEVERITIES: [&str; 6] =
+    ["critical", "debug", "error", "info", "trace", "warning"];
+/// The producer whose version SQLBuild supplies itself.
+pub const DEFAULT_PRODUCER: &str = "sqlbuild";
+/// The message for an invalid invocation sequence.
+pub const INVOCATION_SEQUENCE_PROBLEM: &str =
+    "invocation_sequence must be a non-negative integer excluding bool";
 pub(crate) const MAX_METADATA_BYTES: usize = 4096;
 /// The smallest duration a payload may carry.
 pub(crate) const MINIMUM_DURATION_MS: f64 = 0.0;

@@ -35,3 +35,23 @@ pub struct KnownEventFacts {
     pub correlations: Vec<(&'static str, bool)>,
     pub payload: Vec<(String, PayloadValue)>,
 }
+
+/// The invocation sequence an event carries.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SequenceFact {
+    Absent,
+    /// A non-negative integer other than a bool.
+    Valid,
+    Invalid,
+}
+
+/// The supplied hook phase, type and index of an operation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HookFacts<'a> {
+    /// The phase when it is a string.
+    pub phase: Option<&'a str>,
+    /// The hook type when it is a string.
+    pub hook_type: Option<&'a str>,
+    /// The index is a non-negative integer other than a bool.
+    pub valid_index: bool,
+}

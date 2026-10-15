@@ -4,10 +4,6 @@ from collections.abc import Mapping
 from types import MappingProxyType
 
 LIFECYCLE_INVOCATION_METADATA_SCHEMA_VERSION: int = 2
-CURRENT_DIAGNOSTIC_LOG_SCHEMA_VERSION: int = 1
-DIAGNOSTIC_SEVERITIES: frozenset[str] = frozenset(
-    {"trace", "debug", "info", "warning", "error", "critical"}
-)
 RESOURCE_ATTEMPT_SKIPPED_EVENT: str = "resource_attempt_skipped"
 RENAME_OPERATION_STRATEGY: str = "rename"
 RETRY_SCHEDULED_EVENT: str = "retry_scheduled"

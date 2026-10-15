@@ -8,12 +8,12 @@ from datetime import datetime
 from typing import Any, cast
 
 from sqlbuild._native import (
+    CURRENT_DIAGNOSTIC_LOG_SCHEMA_VERSION,
     lifecycle_event_catalogued,
     lifecycle_event_terminal,
     validate_lifecycle_schema_version,
 )
 from sqlbuild.runtime.observability.constants import (
-    CURRENT_DIAGNOSTIC_LOG_SCHEMA_VERSION,
     DIAGNOSTIC_ENVELOPE_FIELDS,
     LIFECYCLE_ENVELOPE_FIELDS_BY_VERSION,
     LIFECYCLE_INVOCATION_METADATA_SCHEMA_VERSION,

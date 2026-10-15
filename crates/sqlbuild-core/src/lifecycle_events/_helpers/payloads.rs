@@ -40,7 +40,7 @@ pub(crate) fn forbidden_statement_fields(value: &PayloadValue) -> BTreeSet<Strin
     found
 }
 
-fn safe_hook_name(name: &str) -> bool {
+pub(crate) fn safe_hook_name(name: &str) -> bool {
     let mut characters = name.chars();
     let Some(first) = characters.next() else {
         return false;

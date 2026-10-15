@@ -5094,6 +5094,7 @@ OPERATION_METADATA_FIELDS: frozenset[str]
 OPERATION_NAMES: frozenset[str]
 OPERATION_PHASES: frozenset[str]
 OPERATION_SCOPES: frozenset[str]
+CURRENT_DIAGNOSTIC_LOG_SCHEMA_VERSION: int
 OPERATION_STRATEGIES: frozenset[str]
 OPERATION_TARGET_KINDS: frozenset[str]
 RESOURCE_SKIP_CODES: frozenset[str]
@@ -5116,6 +5117,21 @@ def render_state_table_create_sql(
     render_framework_type: Callable[[FrameworkType], str],
 ) -> str: ...
 def render_insert_source_freshness_records_sql(
+def validate_lifecycle_event(*, event: LifecycleEvent) -> None: ...
+def validate_lifecycle_invocation_sequence(*, value: object) -> None: ...
+def validate_diagnostic_log(*, record: DiagnosticLog) -> None: ...
+def validate_run_bounds(
+    *, selected_count: int, configured_concurrency: int, worker_count: int
+) -> None: ...
+def validated_operation_metadata(*, metadata: Mapping[str, int] | None) -> dict[str, int]: ...
+def validated_operation_hook_fields(
+    *,
+    hook_phase: str | None,
+    hook_index: int | None,
+    hook_type: str | None,
+    hook_name: str | None,
+) -> dict[str, JSONValue]: ...
+def validate_lifecycle_producer(*, producer: str, producer_version: str | None) -> None: ...
     *,
     database: str | None,
     schema: str,
@@ -6637,6 +6653,32 @@ def sql_file_rule_key(
 ) -> str | None: ...
 def load_sql_rule_cache(*, path: Path) -> dict[str, tuple[str, str]]: ...
 def lookup_sql_rule_cache(
+def sql_log_record(
+    *,
+    context: Mapping[str, object] | None,
+    identity: Mapping[str, str | None] | None,
+    sql: str,
+    action: str,
+    intent: str | None,
+    query_id: str | None,
+) -> tuple[str, dict[str, object]]: ...
+def debug_event_record_fields(
+    *,
+    context: Mapping[str, object] | None,
+    event_fields: Mapping[str, object],
+    identity: Mapping[str, str | None] | None,
+) -> dict[str, object]: ...
+def route_diagnostic_log_record(
+    *,
+    record: logging.LogRecord,
+    internal_only: bool,
+    allow_internal: bool,
+    include_sql_text: bool,
+) -> dict[str, object] | None: ...
+def safe_diagnostic_extra_fields(record: logging.LogRecord) -> dict[str, object]: ...
+def compute_diagnostic_log_fields(
+    *, record: logging.LogRecord, invocation_id: str, include_sql_text: bool
+) -> dict[str, object] | None: ...
     *, entries: dict[str, tuple[str, str]], keys: list[tuple[str, str]]
 ) -> dict[str, list[Finding]]: ...
 def encode_sql_rule_findings(*, findings: list[Finding]) -> str: ...
