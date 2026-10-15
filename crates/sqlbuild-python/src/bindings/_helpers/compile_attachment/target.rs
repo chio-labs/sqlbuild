@@ -92,7 +92,7 @@ fn compile_cache_root<'py>(
     {
         return Ok(py.None().into_bound(py));
     }
-    let root: Bound<'py, PyAny> = cache_directory(&project_dir)?;
+    let root: Bound<'py, PyAny> = cache_directory(project_dir)?;
     remove_retired_caches(&root)?;
     Ok(root)
 }

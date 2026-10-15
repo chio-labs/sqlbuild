@@ -7,7 +7,7 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyType};
 use pyo3::{pyclass, pymethods};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::compile_driver::python_calls::{context_variable, imported};
 
 const DIAGNOSTICS_MODELS_MODULE: &str = "sqlbuild.diagnostics.models";
 const PROCESS_RESOURCES_MODULE: &str = "sqlbuild.diagnostics._helpers.process_resources";
@@ -25,15 +25,7 @@ static CURRENT_TRACKER: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
 /// The context variable holding the active build timing tracker.
 fn current_variable(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    CURRENT_TRACKER
-        .get_or_try_init(py, || {
-            let keywords: Bound<'_, PyDict> = PyDict::new(py);
-            keywords.set_item("default", py.None())?;
-            imported(py, "contextvars", "ContextVar")?
-                .call((TRACKER_VARIABLE,), Some(&keywords))
-                .map(Bound::unbind)
-        })
-        .map(|variable| variable.bind(py).clone())
+    context_variable(py, &CURRENT_TRACKER, TRACKER_VARIABLE)
 }
 
 /// `monotonic`, or `time.monotonic` when none is given.

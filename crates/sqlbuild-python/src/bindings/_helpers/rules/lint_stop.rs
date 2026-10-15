@@ -6,10 +6,10 @@ use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use pyo3::types::PyTuple;
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::compile_driver::python_calls::{context_variable, imported};
 
 const LINT_EXCEPTIONS_MODULE: &str = "sqlbuild.lint.exceptions";
 const STOP_VARIABLE: &str = "active_lint_stop";
@@ -18,15 +18,7 @@ static ACTIVE_STOP: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
 /// The context variable holding the active lint run's stop event, if any.
 fn active_stop_variable(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    ACTIVE_STOP
-        .get_or_try_init(py, || {
-            let keywords: Bound<'_, PyDict> = PyDict::new(py);
-            keywords.set_item("default", py.None())?;
-            imported(py, "contextvars", "ContextVar")?
-                .call((STOP_VARIABLE,), Some(&keywords))
-                .map(Bound::unbind)
-        })
-        .map(|variable| variable.bind(py).clone())
+    context_variable(py, &ACTIVE_STOP, STOP_VARIABLE)
 }
 
 /// Abandon a speculative lint run on this thread once its owner no longer needs it.

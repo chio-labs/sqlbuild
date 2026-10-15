@@ -1,4 +1,4 @@
-//! Python's setting help texts (`sqlbuild.errors.setting_help`) for string settings.
+//! Setting help texts for string settings, matching the shared native setting help.
 
 use crate::contracts::constants::{ADDITIONAL_HELP_SEPARATOR, SETTING_SNIPPET_INDENT};
 

@@ -7,7 +7,7 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{PyErr, pyclass, pyfunction, pymethods, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::compile_driver::python_calls::{context_variable, imported};
 
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const CONTEXT_VARIABLE_NAME: &str = "sqlbuild_collected_compile_diagnostics";
@@ -16,15 +16,7 @@ static ACTIVE_COLLECTOR: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
 /// The context variable holding the collection diagnostics are reported into, if any.
 fn active_collector(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    ACTIVE_COLLECTOR
-        .get_or_try_init(py, || {
-            let keywords: Bound<'_, PyDict> = PyDict::new(py);
-            keywords.set_item("default", py.None())?;
-            imported(py, "contextvars", "ContextVar")?
-                .call((CONTEXT_VARIABLE_NAME,), Some(&keywords))
-                .map(Bound::unbind)
-        })
-        .map(|variable| variable.bind(py).clone())
+    context_variable(py, &ACTIVE_COLLECTOR, CONTEXT_VARIABLE_NAME)
 }
 
 /// Deduplicated compile diagnostics gathered while the collection is entered.
