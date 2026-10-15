@@ -9,7 +9,15 @@ import pytest
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    DeclarationIdentity,
+    DeclarationKind,
+    DeclarationRecord,
     DiscoveredSqlHookFile,
+    MacroMetadata,
+    OwnershipRoot,
+    ResourceKind,
+    ScopeIndex,
+    ScopeKind,
     build_manifest,
     project_with,
 )
@@ -25,14 +33,6 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ChainStep, PlanOutput, SqlTestPlanEntry
-from sqlbuild.compiler.scopes.models import (
-    DeclarationIdentity,
-    DeclarationRecord,
-    MacroMetadata,
-    OwnershipRoot,
-    ScopeIndex,
-)
-from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, ScopeKind
 from sqlbuild.spec.contracts.models import SchemaColumn, SourceColumnEntry
 from tests.unit.src.sqlbuild.compiler.manifest._test_types import (
     FqnTestCase,

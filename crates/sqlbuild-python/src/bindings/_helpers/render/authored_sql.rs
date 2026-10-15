@@ -24,7 +24,7 @@ const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
-const SCOPE_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
+const SCOPE_MODELS_MODULE: &str = "sqlbuild._native";
 const FUNCTOOLS_MODULE: &str = "functools";
 const DECLARATION_FIELDS: [&str; 4] = [
     "enums",

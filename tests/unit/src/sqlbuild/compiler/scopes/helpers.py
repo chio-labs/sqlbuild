@@ -8,6 +8,24 @@ from pathlib import Path
 from typing import cast
 
 from sqlbuild._native import (
+    ConstantMetadata,
+    DeclarationIdentity,
+    DeclarationKind,
+    DeclarationRecord,
+    EnumMemberMetadata,
+    EnumMetadata,
+    GrantRecord,
+    MacroMetadata,
+    OwnershipRoot,
+    OwnershipRootKind,
+    ResourceIdentity,
+    ResourceKind,
+    ResourceRecord,
+    ScopeCompleteness,
+    ScopeIndex,
+    ScopeKind,
+    ScopeLookup,
+    UsageRecord,
     build_scope_lookup,
     get_placement_validated_scope_index,
 )
@@ -15,28 +33,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSqlModelFile,
     EnumDeclaration,
-)
-from sqlbuild.compiler.scopes.models import (
-    ConstantMetadata,
-    DeclarationIdentity,
-    DeclarationRecord,
-    EnumMemberMetadata,
-    EnumMetadata,
-    GrantRecord,
-    MacroMetadata,
-    OwnershipRoot,
-    ResourceIdentity,
-    ResourceRecord,
-    ScopeCompleteness,
-    ScopeIndex,
-    ScopeLookup,
-    UsageRecord,
-)
-from sqlbuild.compiler.scopes.types import (
-    DeclarationKind,
-    OwnershipRootKind,
-    ResourceKind,
-    ScopeKind,
 )
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 

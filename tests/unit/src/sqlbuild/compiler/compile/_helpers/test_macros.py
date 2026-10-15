@@ -5,7 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from sqlbuild._native import expand_sql_macros, find_macro_call_names
+from sqlbuild._native import ScopeKind, expand_sql_macros, find_macro_call_names
 from sqlbuild.compiler.compile._helpers.render import user_macros as macros_module
 from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
 from sqlbuild.compiler.compile.models import (
@@ -13,7 +13,6 @@ from sqlbuild.compiler.compile.models import (
     MacroContext,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile
-from sqlbuild.compiler.scopes.types import ScopeKind
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ExpandSqlMacrosErrorTestCase,
     ExpandSqlMacrosTestCase,

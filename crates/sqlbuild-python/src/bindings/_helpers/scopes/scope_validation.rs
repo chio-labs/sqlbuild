@@ -25,7 +25,7 @@ use crate::bindings::_helpers::scopes::scope_objects::{
 use crate::bindings::types::CompilerDetach;
 
 const DATACLASSES_MODULE: &str = "dataclasses";
-const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
+const SCOPE_TYPES_MODULE: &str = "sqlbuild._native";
 const SCOPE_ERRORS_MODULE: &str = "sqlbuild._native";
 const RUNTIME_USAGE: usize = 2;
 /// Compile input groups whose items carry declaration usages, after the model inputs.
@@ -219,7 +219,7 @@ fn placement_validated_index<'py>(
     }
     let classes: ScopeClasses<'py> = ScopeClasses::new(py)?;
     let severity: Bound<'py, PyAny> = classes.member(
-        "DiagnosticSeverity",
+        "ScopeDiagnosticSeverity",
         if enforce_placement {
             "error"
         } else {
@@ -379,7 +379,7 @@ pub(crate) fn validate_scope_index(index: &Bound<'_, PyAny>) -> Result<(), PyErr
     let py: Python<'_> = index.py();
     let error: Bound<'_, PyAny> = py
         .import(SCOPE_TYPES_MODULE)?
-        .getattr("DiagnosticSeverity")?
+        .getattr("ScopeDiagnosticSeverity")?
         .getattr("ERROR")?;
     let mut errors: Vec<Bound<'_, PyAny>> = Vec::new();
     for item in index.getattr("diagnostics")?.try_iter()? {

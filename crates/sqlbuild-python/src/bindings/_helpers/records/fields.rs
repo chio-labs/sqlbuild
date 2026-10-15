@@ -3,6 +3,7 @@
 use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyAttributeError, PyTypeError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::pyclass::CompareOp;
 use pyo3::types::{
     PyBool, PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple, PyTupleMethods, PyType,
     PyTypeMethods,
@@ -10,7 +11,7 @@ use pyo3::types::{
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::records::constants::{
-    FROZEN_INSTANCE_ERROR, RECORD_FINISHERS, RECORD_SPEC_ATTRIBUTE, RECORDS,
+    FROZEN_INSTANCE_ERROR, ORDERED_RECORDS, RECORD_FINISHERS, RECORD_SPEC_ATTRIBUTE, RECORDS,
 };
 use crate::bindings::_helpers::records::models::{FieldDefault, NativeRecord, RecordSpec};
 
@@ -81,7 +82,11 @@ pub(crate) fn build_values(
         };
         values.push(value.unbind());
     }
-    match RECORD_FINISHERS.iter().find(|(record, _)| *record == name) {
+    match RECORD_FINISHERS
+        .iter()
+        .flat_map(|group| group.iter())
+        .find(|(record, _)| *record == name)
+    {
         Some((_, finish)) => finish(py, values),
         None => Ok(values),
     }
@@ -102,6 +107,7 @@ fn default_value<'py>(
         FieldDefault::True => Ok(PyBool::new(py, true).to_owned().into_any()),
         FieldDefault::Int(value) => value.into_bound_py_any(py),
         FieldDefault::Text(value) => Ok(PyString::new(py, value).into_any()),
+        FieldDefault::TextTuple(texts) => Ok(PyTuple::new(py, texts)?.into_any()),
         FieldDefault::EmptyTuple => Ok(PyTuple::empty(py).into_any()),
         FieldDefault::EmptyDict => Ok(PyDict::new(py).into_any()),
         FieldDefault::EmptyFrozenset => Ok(PyFrozenSet::empty(py)?.into_any()),
@@ -149,4 +155,23 @@ pub(crate) fn frozen_error(py: Python<'_>, name: &str) -> PyErr {
         Ok(error) => PyErr::from_value(error),
         Err(_) => PyAttributeError::new_err(message),
     }
+}
+
+/// `slf <op> other` over the compared fields, as an `order=True` dataclass compares.
+pub(crate) fn ordered_comparison(
+    slf: &Bound<'_, NativeRecord>,
+    other: &Bound<'_, PyAny>,
+    op: CompareOp,
+) -> PyResult<Py<PyAny>> {
+    let py: Python<'_> = slf.py();
+    let name: &str = record_spec(&slf.get_type())?.name;
+    let ordered: bool = ORDERED_RECORDS.iter().any(|group| group.contains(&name));
+    if !ordered || !other.get_type().is(slf.get_type()) {
+        return Ok(py.NotImplemented());
+    }
+    let other: &Bound<'_, NativeRecord> = other.cast::<NativeRecord>()?;
+    compared_values(slf)?
+        .as_any()
+        .rich_compare(compared_values(other)?, op)?
+        .into_py_any(py)
 }

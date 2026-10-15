@@ -22,6 +22,8 @@ from sqlbuild._native import (
     CompileModelConfig,
     CompileSqlScenarioCte,
     DeclarationExpansionContext,
+    DeclarationIdentity,
+    DeclarationRecord,
     DeclarationScopeResolver,
     DiagnosticPhase,
     DiagnosticSeverity,
@@ -34,6 +36,10 @@ from sqlbuild._native import (
     LiteralSqlRelation,
     ModelSchemaDeclaration,
     RelatedLocation,
+    ResourceIdentity,
+    ScopeIndex,
+    UsageRecord,
+    VisibilityRecord,
 )
 from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
@@ -64,14 +70,6 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
-from sqlbuild.compiler.scopes.models import (
-    DeclarationIdentity,
-    DeclarationRecord,
-    ResourceIdentity,
-    ScopeIndex,
-    UsageRecord,
-    VisibilityRecord,
-)
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import (
     ScenarioConfig,

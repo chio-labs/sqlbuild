@@ -5,13 +5,11 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
-    relocate_declarations_for_move,
-)
-from sqlbuild.compiler.scopes.models import (
     DeclarationRecord,
     ResourceIdentity,
+    ResourceKind,
+    relocate_declarations_for_move,
 )
-from sqlbuild.compiler.scopes.types import ResourceKind
 from tests.unit.src.sqlbuild.compiler.scopes._test_types import RelocationCase
 from tests.unit.src.sqlbuild.compiler.scopes.helpers import relocation_index
 

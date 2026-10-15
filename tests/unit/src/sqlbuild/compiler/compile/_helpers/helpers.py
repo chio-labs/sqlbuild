@@ -16,10 +16,21 @@ from sqlbuild._native import (
     CompiledLineageColumnFact,
     CompiledModelSqlTestPayload,
     DeclarationExpansionContext,
+    DeclarationIdentity,
+    DeclarationKind,
+    DeclarationRecord,
     DeclarationRuntimeProjection,
     DeclarationScopeResolver,
+    MacroMetadata,
     NativeColumnQuery,
     NativeQueryColumns,
+    OwnershipRoot,
+    ResourceIdentity,
+    ResourceKind,
+    ResourceRecord,
+    ScopeIndex,
+    ScopeKind,
+    ScopeLookup,
     assemble_project,
     build_compile_inputs,
     build_execution_upstream_deps,
@@ -62,17 +73,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
 )
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.compiler.scopes.models import (
-    DeclarationIdentity,
-    DeclarationRecord,
-    MacroMetadata,
-    OwnershipRoot,
-    ResourceIdentity,
-    ResourceRecord,
-    ScopeIndex,
-    ScopeLookup,
-)
-from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, ScopeKind
 
 if TYPE_CHECKING:
     from sqlbuild._native import CompileInputsView, ModelInput

@@ -6,9 +6,9 @@ from typing import cast
 
 import pytest
 
+from sqlbuild._native import DeclarationRecord
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.scopes.models import DeclarationRecord
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     MacroCompositionIntegrationTestCase,
     MacroLoadCountIntegrationTestCase,

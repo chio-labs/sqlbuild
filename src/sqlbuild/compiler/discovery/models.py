@@ -22,6 +22,7 @@ from sqlbuild._native import (
     DiscoveredSqlTestBlock,
     EnumMember,
     NativeDiscoverySession,
+    ScopeKind,
 )
 from sqlbuild.compiler.discovery.constants import (
     SQL_SCENARIOS_OWNERSHIP_ROOT,
@@ -31,7 +32,6 @@ from sqlbuild.compiler.discovery.types import (
     LoaderConnectionMode,
     ProjectProvider,
 )
-from sqlbuild.compiler.scopes.types import ScopeKind
 from sqlbuild.python_nodes.models import AuditCase, ColumnLineageRef, RetryPolicy, SqlResourceRef
 from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.runtime.event_exporting.constants import EVENT_EXPORT_KINDS

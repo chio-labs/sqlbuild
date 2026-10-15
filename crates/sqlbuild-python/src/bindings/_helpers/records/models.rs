@@ -2,12 +2,14 @@
 
 use pyo3::exceptions::PyAttributeError;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::pyclass::CompareOp;
 use pyo3::types::{PyDict, PyTuple, PyType};
 use pyo3::{IntoPyObjectExt, pyclass, pymethods};
 
 use crate::bindings::_helpers::records::fields::{
-    build_values, compared_values, frozen_error, record_spec, repr_text,
+    build_values, compared_values, frozen_error, ordered_comparison, record_spec, repr_text,
 };
+use crate::bindings::_helpers::records::types::{ClassMethod, ClassProperty};
 
 /// How a record field is filled when the caller does not pass it.
 #[derive(Debug, Clone, Copy)]
@@ -18,6 +20,8 @@ pub(crate) enum FieldDefault {
     True,
     Int(i64),
     Text(&'static str),
+    /// A tuple of texts.
+    TextTuple(&'static [&'static str]),
     EmptyTuple,
     EmptyDict,
     EmptyFrozenset,
@@ -107,6 +111,22 @@ impl NativeRecord {
             .into_py_any(py)
     }
 
+    fn __lt__(slf: &Bound<'_, Self>, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        ordered_comparison(slf, other, CompareOp::Lt)
+    }
+
+    fn __le__(slf: &Bound<'_, Self>, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        ordered_comparison(slf, other, CompareOp::Le)
+    }
+
+    fn __gt__(slf: &Bound<'_, Self>, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        ordered_comparison(slf, other, CompareOp::Gt)
+    }
+
+    fn __ge__(slf: &Bound<'_, Self>, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        ordered_comparison(slf, other, CompareOp::Ge)
+    }
+
     fn __hash__(slf: &Bound<'_, Self>) -> PyResult<isize> {
         compared_values(slf)?.as_any().hash()
     }
@@ -119,6 +139,78 @@ impl NativeRecord {
         let py: Python<'py> = slf.py();
         let values: Bound<'py, PyTuple> = PyTuple::new(py, slf.get().values.iter())?;
         PyTuple::new(py, [slf.get_type().into_any(), values.into_any()])
+    }
+}
+
+/// A computed attribute of a native class, evaluated by its native function.
+#[derive(Debug)]
+#[pyclass(module = "sqlbuild._native", frozen)]
+pub(crate) struct NativeProperty {
+    pub(crate) property: ClassProperty,
+    pub(crate) name: &'static str,
+}
+
+#[pymethods]
+impl NativeProperty {
+    fn __get__(
+        slf: &Bound<'_, Self>,
+        instance: &Bound<'_, PyAny>,
+        _owner: &Bound<'_, PyAny>,
+    ) -> PyResult<Py<PyAny>> {
+        if instance.is_none() {
+            return Ok(slf.clone().into_any().unbind());
+        }
+        (slf.get().property)(instance)
+    }
+
+    fn __set__(&self, instance: &Bound<'_, PyAny>, _value: &Bound<'_, PyAny>) -> PyResult<()> {
+        Err(frozen_error(instance.py(), self.name))
+    }
+}
+
+/// A method of a native class, run by its native function.
+#[derive(Debug)]
+#[pyclass(module = "sqlbuild._native", frozen)]
+pub(crate) struct NativeMethod {
+    pub(crate) method: ClassMethod,
+}
+
+#[pymethods]
+impl NativeMethod {
+    fn __get__(
+        slf: &Bound<'_, Self>,
+        instance: &Bound<'_, PyAny>,
+        owner: &Bound<'_, PyAny>,
+    ) -> PyResult<Py<PyAny>> {
+        let receiver: &Bound<'_, PyAny> = if instance.is_none() { owner } else { instance };
+        Ok(Py::new(
+            slf.py(),
+            BoundNativeMethod {
+                method: slf.get().method,
+                receiver: receiver.clone().unbind(),
+            },
+        )?
+        .into_any())
+    }
+}
+
+/// A `NativeMethod` bound to the instance or class it was read from.
+#[derive(Debug)]
+#[pyclass(module = "sqlbuild._native", frozen)]
+pub(crate) struct BoundNativeMethod {
+    method: ClassMethod,
+    receiver: Py<PyAny>,
+}
+
+#[pymethods]
+impl BoundNativeMethod {
+    #[pyo3(signature = (*args, **kwargs))]
+    fn __call__(
+        &self,
+        args: &Bound<'_, PyTuple>,
+        kwargs: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<Py<PyAny>> {
+        (self.method)(self.receiver.bind(args.py()), args, kwargs)
     }
 }
 

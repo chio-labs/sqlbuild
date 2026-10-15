@@ -383,7 +383,7 @@ pub const CANONICAL_TYPES: [(&str, &str); 11] = [
 /// Sequence types captured as their items.
 pub const DECODED_SEQUENCES: [&str; 1] = ["sqlbuild.compiler.compile.models:CompactLineageFacts"];
 /// The Python model type a natively hosted compiler shape is captured as.
-pub const HOSTED_SHAPE_TYPES: [(&str, &str); 213] = [
+pub const HOSTED_SHAPE_TYPES: [(&str, &str); 257] = [
     (
         "sqlbuild._native:AnalysisCacheContext",
         "sqlbuild.compiler.compile.models:AnalysisCacheContext",
@@ -525,6 +525,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 213] = [
         "sqlbuild.spec.contracts.exceptions:ConfigValueTypeError",
     ),
     (
+        "sqlbuild._native:ConstantMetadata",
+        "sqlbuild.compiler.scopes.models:ConstantMetadata",
+    ),
+    (
         "sqlbuild._native:ContractAdoptionError",
         "sqlbuild.compiler.contract_adoption.exceptions:ContractAdoptionError",
     ),
@@ -605,8 +609,28 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 213] = [
         "sqlbuild.compiler.compile.models:DeclarationExpansionContext",
     ),
     (
+        "sqlbuild._native:DeclarationExplanation",
+        "sqlbuild.compiler.scopes.models:DeclarationExplanation",
+    ),
+    (
+        "sqlbuild._native:DeclarationIdentity",
+        "sqlbuild.compiler.scopes.models:DeclarationIdentity",
+    ),
+    (
+        "sqlbuild._native:DeclarationKind",
+        "sqlbuild.compiler.scopes.types:DeclarationKind",
+    ),
+    (
         "sqlbuild._native:DeclarationParseError",
         "sqlbuild.compiler.discovery.exceptions:DeclarationParseError",
+    ),
+    (
+        "sqlbuild._native:DeclarationRecord",
+        "sqlbuild.compiler.scopes.models:DeclarationRecord",
+    ),
+    (
+        "sqlbuild._native:DeclarationReport",
+        "sqlbuild.compiler.scopes.models:DeclarationReport",
     ),
     (
         "sqlbuild._native:DeclarationRuntimeProjection",
@@ -619,6 +643,14 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 213] = [
     (
         "sqlbuild._native:DeclarationScopeResolver",
         "sqlbuild.compiler.compile.models:DeclarationScopeResolver",
+    ),
+    (
+        "sqlbuild._native:DeclarationVisibility",
+        "sqlbuild.compiler.scopes.models:DeclarationVisibility",
+    ),
+    (
+        "sqlbuild._native:DeclarationVisibilityIndex",
+        "sqlbuild.compiler.scopes.models:DeclarationVisibilityIndex",
     ),
     (
         "sqlbuild._native:DeferralInputs",
@@ -737,6 +769,14 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 213] = [
         "sqlbuild.compiler.discovery.models:EnumMember",
     ),
     (
+        "sqlbuild._native:EnumMemberMetadata",
+        "sqlbuild.compiler.scopes.models:EnumMemberMetadata",
+    ),
+    (
+        "sqlbuild._native:EnumMetadata",
+        "sqlbuild.compiler.scopes.models:EnumMetadata",
+    ),
+    (
         "sqlbuild._native:EventExporterDiscoveryError",
         "sqlbuild.compiler.discovery.exceptions:EventExporterDiscoveryError",
     ),
@@ -769,6 +809,14 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 213] = [
         "sqlbuild.compiler.compile.models:FunctionReturnColumn",
     ),
     (
+        "sqlbuild._native:GrantKind",
+        "sqlbuild.compiler.scopes.types:GrantKind",
+    ),
+    (
+        "sqlbuild._native:GrantRecord",
+        "sqlbuild.compiler.scopes.models:GrantRecord",
+    ),
+    (
         "sqlbuild._native:GraphEdgeExclusion",
         "sqlbuild.rule_engine.models:GraphEdgeExclusion",
     ),
@@ -787,6 +835,14 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 213] = [
     (
         "sqlbuild._native:HookReadType",
         "sqlbuild.compiler.graph.types:HookReadType",
+    ),
+    (
+        "sqlbuild._native:InaccessibleReason",
+        "sqlbuild.compiler.scopes.types:InaccessibleReason",
+    ),
+    (
+        "sqlbuild._native:InaccessibleRecord",
+        "sqlbuild.compiler.scopes.models:InaccessibleRecord",
     ),
     (
         "sqlbuild._native:InterpolationSite",
@@ -847,6 +903,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 213] = [
         "sqlbuild.compiler.compile.models:MacroExpansionResult",
     ),
     (
+        "sqlbuild._native:MacroMetadata",
+        "sqlbuild.compiler.scopes.models:MacroMetadata",
+    ),
+    (
         "sqlbuild._native:ManualLocation",
         "sqlbuild.compiler.refactoring.models:ManualLocation",
     ),
@@ -885,6 +945,10 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 213] = [
     (
         "sqlbuild._native:ModelValidationRequest",
         "sqlbuild.compiler.compile.models:ModelValidationRequest",
+    ),
+    (
+        "sqlbuild._native:MovePreview",
+        "sqlbuild.compiler.scopes.models:MovePreview",
     ),
     (
         "sqlbuild._native:NamedSqlHookEntry",
@@ -953,6 +1017,14 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 213] = [
     (
         "sqlbuild._native:OldNameViewAction",
         "sqlbuild.compiler.migrations.types:OldNameViewAction",
+    ),
+    (
+        "sqlbuild._native:OwnershipRoot",
+        "sqlbuild.compiler.scopes.models:OwnershipRoot",
+    ),
+    (
+        "sqlbuild._native:OwnershipRootKind",
+        "sqlbuild.compiler.scopes.types:OwnershipRootKind",
     ),
     (
         "sqlbuild._native:ParsedSelector",
@@ -1083,8 +1155,20 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 213] = [
         "sqlbuild.compiler.compile.models:RelatedLocation",
     ),
     (
+        "sqlbuild._native:ResourceIdentity",
+        "sqlbuild.compiler.scopes.models:ResourceIdentity",
+    ),
+    (
         "sqlbuild._native:ResourceIdentityError",
         "sqlbuild.compiler.resource_names.exceptions:ResourceIdentityError",
+    ),
+    (
+        "sqlbuild._native:ResourceKind",
+        "sqlbuild.compiler.scopes.types:ResourceKind",
+    ),
+    (
+        "sqlbuild._native:ResourceRecord",
+        "sqlbuild.compiler.scopes.models:ResourceRecord",
     ),
     (
         "sqlbuild._native:RuleExemption",
@@ -1119,8 +1203,76 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 213] = [
         "sqlbuild.compiler.discovery.exceptions:SchemaParseError",
     ),
     (
+        "sqlbuild._native:ScopeBrowseResult",
+        "sqlbuild.compiler.scopes.models:ScopeBrowseResult",
+    ),
+    (
+        "sqlbuild._native:ScopeChainEntry",
+        "sqlbuild.compiler.scopes.models:ScopeChainEntry",
+    ),
+    (
+        "sqlbuild._native:ScopeCompleteness",
+        "sqlbuild.compiler.scopes.models:ScopeCompleteness",
+    ),
+    (
+        "sqlbuild._native:ScopeDiagnostic",
+        "sqlbuild.compiler.scopes.models:ScopeDiagnostic",
+    ),
+    (
+        "sqlbuild._native:ScopeDiagnosticCode",
+        "sqlbuild.compiler.scopes.types:ScopeDiagnosticCode",
+    ),
+    (
+        "sqlbuild._native:ScopeDiagnosticSeverity",
+        "sqlbuild.compiler.scopes.types:DiagnosticSeverity",
+    ),
+    (
         "sqlbuild._native:ScopeError",
         "sqlbuild.compiler.scopes.exceptions:ScopeError",
+    ),
+    (
+        "sqlbuild._native:ScopeFolder",
+        "sqlbuild.compiler.scopes.models:ScopeFolder",
+    ),
+    (
+        "sqlbuild._native:ScopeIndex",
+        "sqlbuild.compiler.scopes.models:ScopeIndex",
+    ),
+    (
+        "sqlbuild._native:ScopeKind",
+        "sqlbuild.compiler.scopes.types:ScopeKind",
+    ),
+    (
+        "sqlbuild._native:ScopeListResult",
+        "sqlbuild.compiler.scopes.models:ScopeListResult",
+    ),
+    (
+        "sqlbuild._native:ScopeLookup",
+        "sqlbuild.compiler.scopes.models:ScopeLookup",
+    ),
+    (
+        "sqlbuild._native:ScopeReport",
+        "sqlbuild.compiler.scopes.models:ScopeReport",
+    ),
+    (
+        "sqlbuild._native:ScopeReportFilters",
+        "sqlbuild.compiler.scopes.models:ScopeReportFilters",
+    ),
+    (
+        "sqlbuild._native:ScopeResourceReport",
+        "sqlbuild.compiler.scopes.models:ScopeResourceReport",
+    ),
+    (
+        "sqlbuild._native:ScopeSection",
+        "sqlbuild.compiler.scopes.models:ScopeSection",
+    ),
+    (
+        "sqlbuild._native:ScopeSourceLocation",
+        "sqlbuild.compiler.scopes.models:SourceLocation",
+    ),
+    (
+        "sqlbuild._native:ScopeTargetQuery",
+        "sqlbuild.compiler.scopes.models:ScopeTargetQuery",
     ),
     (
         "sqlbuild._native:ScopeValidationError",
@@ -1225,6 +1377,30 @@ pub const HOSTED_SHAPE_TYPES: [(&str, &str); 213] = [
     (
         "sqlbuild._native:UnsupportedLexicalSyntaxError",
         "sqlbuild.compiler.sql_analysis.exceptions:UnsupportedLexicalSyntaxError",
+    ),
+    (
+        "sqlbuild._native:UsageKind",
+        "sqlbuild.compiler.scopes.types:UsageKind",
+    ),
+    (
+        "sqlbuild._native:UsageRecord",
+        "sqlbuild.compiler.scopes.models:UsageRecord",
+    ),
+    (
+        "sqlbuild._native:VisibilityProvenance",
+        "sqlbuild.compiler.scopes.models:VisibilityProvenance",
+    ),
+    (
+        "sqlbuild._native:VisibilityReason",
+        "sqlbuild.compiler.scopes.types:VisibilityReason",
+    ),
+    (
+        "sqlbuild._native:VisibilityRecord",
+        "sqlbuild.compiler.scopes.models:VisibilityRecord",
+    ),
+    (
+        "sqlbuild._native:VisibilityResolution",
+        "sqlbuild.compiler.scopes.models:VisibilityResolution",
     ),
     (
         "sqlbuild._native:VisibleModelDeclarations",

@@ -10,6 +10,12 @@ from typing import TYPE_CHECKING, cast
 import pytest
 
 from sqlbuild._native import (
+    DeclarationIdentity,
+    DeclarationKind,
+    ResourceIdentity,
+    ResourceKind,
+    UsageKind,
+    UsageRecord,
     assemble_project,
     build_compile_inputs,
     discover_project_inputs,
@@ -21,16 +27,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSourceFile,
     SqlHookEntry,
-)
-from sqlbuild.compiler.scopes.models import (
-    DeclarationIdentity,
-    ResourceIdentity,
-    UsageRecord,
-)
-from sqlbuild.compiler.scopes.types import (
-    DeclarationKind,
-    ResourceKind,
-    UsageKind,
 )
 from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (

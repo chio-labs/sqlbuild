@@ -34,7 +34,6 @@ struct PositionRow(Py<PyAny>, Py<PyAny>, Py<PyAny>, u8, Py<PyAny>, u8, u32);
 pub(crate) struct ContextClasses {
     visibility_record: Py<PyAny>,
     pub(crate) resolution_context: Py<PyAny>,
-    allocate: Py<PyAny>,
     reasons: Py<PyDict>,
 }
 
@@ -293,7 +292,7 @@ impl NativeDeclarationContexts {
         )
     }
 
-    /// A `VisibilityRecord` built without running its dataclass initializer.
+    /// A `VisibilityRecord` of `resource`, `declaration`, `reason` and `through`.
     pub(crate) fn visibility_record_for<'py>(
         &self,
         resource: &Bound<'py, PyAny>,
@@ -303,13 +302,7 @@ impl NativeDeclarationContexts {
     ) -> PyResult<Bound<'py, PyAny>> {
         let py: Python<'py> = resource.py();
         let class: &Bound<'py, PyAny> = self.classes.visibility_record.bind(py);
-        let record: Bound<'py, PyAny> = self.classes.allocate.bind(py).call1((class,))?;
-        let attributes: Bound<'py, PyDict> =
-            record.getattr("__dict__")?.downcast_into::<PyDict>()?;
-        attributes.set_item("resource", resource)?;
-        attributes.set_item("declaration", declaration)?;
-        attributes.set_item("reason", reason)?;
-        attributes.set_item("through", through)?;
+        let record: Bound<'py, PyAny> = class.call1((resource, declaration, reason, through))?;
         Ok(record)
     }
 }

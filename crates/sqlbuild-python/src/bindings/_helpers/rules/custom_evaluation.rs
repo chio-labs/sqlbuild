@@ -31,7 +31,7 @@ const RULES_CONSTANTS_MODULE: &str = "sqlbuild.rule_engine.constants";
 const RULES_ERRORS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
 const RULE_CONTEXT_MODULE: &str = "sqlbuild.rule_engine.classes.rule_context";
 const FACT_REPLAY_MODULE: &str = "sqlbuild.rule_engine._helpers.engine.fact_replay";
-const SCOPE_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
+const SCOPE_MODELS_MODULE: &str = "sqlbuild._native";
 const PROJECT_SUBJECT: &str = "project";
 const MODEL_SUBJECT: &str = "model";
 /// Project fields no rule fact reads, cleared before digests and host payloads use the project.

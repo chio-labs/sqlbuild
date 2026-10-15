@@ -14,7 +14,12 @@ from types import MappingProxyType, ModuleType
 from typing import cast
 
 import sqlbuild._native as _native
-from sqlbuild._native import validate_resource_identity
+from sqlbuild._native import (
+    DeclarationIdentity,
+    DeclarationKind,
+    DeclarationRecord,
+    validate_resource_identity,
+)
 from sqlbuild.compiler.compile.exceptions import (
     CompileInputError,
     MacroDeclarationLookupError,
@@ -32,11 +37,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredMacroFile,
     EnumDeclaration,
 )
-from sqlbuild.compiler.scopes.models import (
-    DeclarationIdentity,
-    DeclarationRecord,
-)
-from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
 

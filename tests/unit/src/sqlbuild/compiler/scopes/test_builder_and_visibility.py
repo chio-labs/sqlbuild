@@ -7,6 +7,9 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    DeclarationIdentity,
+    DeclarationKind,
+    DeclarationRecord,
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
     DiscoveredConstantFile,
@@ -15,7 +18,19 @@ from sqlbuild._native import (
     DiscoveredSqlHookFile,
     DiscoveredSqlTestBlock,
     EnumMember,
+    InaccessibleReason,
+    OwnershipRoot,
+    ResourceIdentity,
+    ResourceKind,
+    ResourceRecord,
+    ScopeDiagnosticCode,
+    ScopeIndex,
+    ScopeKind,
+    ScopeLookup,
+    ScopeTargetQuery,
     ScopeValidationError,
+    VisibilityReason,
+    VisibilityResolution,
     build_scope_index,
     build_scope_lookup,
     normalize_sql_value,
@@ -31,25 +46,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlScenarioFile,
     DiscoveredSqlTestFile,
     EnumDeclaration,
-)
-from sqlbuild.compiler.scopes.models import (
-    DeclarationIdentity,
-    DeclarationRecord,
-    OwnershipRoot,
-    ResourceIdentity,
-    ResourceRecord,
-    ScopeIndex,
-    ScopeLookup,
-    ScopeTargetQuery,
-    VisibilityResolution,
-)
-from sqlbuild.compiler.scopes.types import (
-    DeclarationKind,
-    InaccessibleReason,
-    ResourceKind,
-    ScopeDiagnosticCode,
-    ScopeKind,
-    VisibilityReason,
 )
 from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.scopes._test_types import (

@@ -27,6 +27,8 @@ if TYPE_CHECKING:
         FunctionArgument,
         FunctionReturnColumn,
         LiteralSqlRelation,
+        ScopeIndex,
+        UsageRecord,
     )
     from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
     from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
@@ -49,7 +51,6 @@ if TYPE_CHECKING:
         EnumDeclaration,
     )
     from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
-    from sqlbuild.compiler.scopes.models import ScopeIndex, UsageRecord
     from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
     from sqlbuild.spec.contracts.models import (
         ScenarioConfig,

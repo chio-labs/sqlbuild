@@ -14,9 +14,20 @@ import pytest
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    DeclarationIdentity,
+    DeclarationKind,
+    DeclarationRecord,
     DeclarationScopeBuild,
     DeclarationScopeResolver,
+    DeclarationVisibility,
     DiscoveryError,
+    ResourceIdentity,
+    ResourceKind,
+    ScopeIndex,
+    ScopeKind,
+    ScopeLookup,
+    VisibilityReason,
+    VisibilityRecord,
     build_declaration_scope,
     discover_project_inputs,
     resolve_declaration_context,
@@ -31,21 +42,6 @@ from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredProjectInputs,
     EnumDeclaration,
-)
-from sqlbuild.compiler.scopes.models import (
-    DeclarationIdentity,
-    DeclarationRecord,
-    DeclarationVisibility,
-    ResourceIdentity,
-    ScopeIndex,
-    ScopeLookup,
-    VisibilityRecord,
-)
-from sqlbuild.compiler.scopes.types import (
-    DeclarationKind,
-    ResourceKind,
-    ScopeKind,
-    VisibilityReason,
 )
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.integration.src.sqlbuild.compiler.helpers import GoldenEntry, golden_entry

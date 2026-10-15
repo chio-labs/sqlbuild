@@ -10,18 +10,17 @@ from typing import cast
 import pytest
 
 from sqlbuild._native import (
+    DeclarationIdentity,
+    DeclarationKind,
+    GrantKind,
+    ResourceKind,
+    ScopeDiagnosticCode,
+    ScopeIndex,
     compiler_cache_directory,
     load_or_build_scope_index,
     scope_index_fingerprint,
 )
-from sqlbuild.compiler.scopes.models import DeclarationIdentity, ScopeIndex
-from sqlbuild.compiler.scopes.types import (
-    DeclarationKind,
-    DiagnosticSeverity,
-    GrantKind,
-    ResourceKind,
-    ScopeDiagnosticCode,
-)
+from sqlbuild._native import ScopeDiagnosticSeverity as DiagnosticSeverity
 from tests.unit.src.sqlbuild.compiler.scopes._test_types import (
     CacheFaultCase,
     FingerprintMutationCase,

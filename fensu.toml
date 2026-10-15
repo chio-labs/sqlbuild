@@ -175,11 +175,6 @@ reason = "Refactorings run natively; the package keeps the compiled-project inpu
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
-path = "src/sqlbuild/compiler/scopes/__init__.py"
-reason = "Declaration scopes are built, queried and validated natively; the package keeps the index, lookup and report models and the errors the native bindings raise."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
 path = "src/sqlbuild/compiler/sql_test_glue/__init__.py"
 reason = "SQL test assembly and planning run natively; the package keeps the request, result and row shapes the planner and compile stage read."
 

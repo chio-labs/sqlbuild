@@ -224,7 +224,7 @@ fn declaration_object<'py>(
         report.kind.into_bound_py_any(py)?,
         report.name.into_bound_py_any(py)?,
         report.owner.into_bound_py_any(py)?,
-        classes.model("SourceLocation")?.call1((
+        classes.model("ScopeSourceLocation")?.call1((
             report.definition.path,
             report.definition.line,
             report.definition.column,

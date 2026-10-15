@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import ScopeDiagnosticSeverity as DiagnosticSeverity
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.scopes.types import DiagnosticSeverity
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     NamedDeclarationAcceptedTestCase,
     NamedDeclarationErrorTestCase,

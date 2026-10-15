@@ -182,29 +182,6 @@ from sqlbuild.compiler.references.types import (
     HardCodedRelationOwnerKind,
     SqlReferenceKind,
 )
-from sqlbuild.compiler.scopes.models import (
-    DeclarationExplanation,
-    DeclarationIdentity,
-    DeclarationRecord,
-    DeclarationVisibility,
-    MovePreview,
-    ResourceIdentity,
-    ScopeBrowseResult,
-    ScopeDiagnostic,
-    ScopeIndex,
-    ScopeListResult,
-    ScopeLookup,
-    ScopeReport,
-    ScopeReportFilters,
-    ScopeTargetQuery,
-    UsageRecord,
-    VisibilityRecord,
-    VisibilityResolution,
-)
-from sqlbuild.compiler.scopes.types import (
-    DeclarationKind,
-    ScopeKind,
-)
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRecord,
 )
@@ -13361,4 +13338,719 @@ class CustomRulesOutcome(NativeRecord):
         cache_misses: int,
         custom_ms: int,
         custom_cpu_ms: int = ...,
+    ) -> None: ...
+
+class ResourceKind(StrEnum):
+    """Kinds of authored resources represented in a scope index."""
+
+    MODEL = "model"
+    TEST = "test"
+    SCENARIO = "scenario"
+    FUNCTION = "function"
+    SOURCE = "source"
+    SEED = "seed"
+
+class DeclarationKind(StrEnum):
+    """Independent public declaration namespaces."""
+
+    MACRO = "macro"
+    ENUM = "enum"
+    CONSTANT = "constant"
+    AUDIT = "audit"
+    SINGULAR_AUDIT = "singular_audit"
+    SCHEMA = "schema"
+    SQL_HOOK = "sql_hook"
+    PYTHON_HOOK = "python_hook"
+
+class ScopeKind(StrEnum):
+    """Compiler-enforced declaration visibility tiers."""
+
+    GLOBAL = "global"
+    INHERITED = "inherited"
+    LOCAL = "local"
+    PRIVATE = "private"
+
+class OwnershipRootKind(StrEnum):
+    """How an ownership root participates in authored resource scope."""
+
+    RESOURCE = "resource"
+    GLOBAL = "global"
+
+class UsageKind(StrEnum):
+    """Why one indexed identity consumes a declaration."""
+
+    RUNTIME = "runtime"
+    GENERATED = "generated"
+    DECLARATION_DEPENDENCY = "declaration_dependency"
+
+class GrantKind(StrEnum):
+    """Compiler relationships that grant additional public vocabulary."""
+
+    EXPECTED_MODEL = "expected_model"
+    TESTED_MACRO = "tested_macro"
+
+class VisibilityReason(StrEnum):
+    """Positive explanations emitted by the canonical resolver."""
+
+    GLOBAL = "global"
+    INHERITED_ANCESTOR = "inherited_ancestor"
+    LOCAL_OWNER = "local_owner"
+    PRIVATE_OWNER = "private_owner"
+    EXPECTED_MODEL = "expected_model"
+    TESTED_MACRO = "tested_macro"
+
+class InaccessibleReason(StrEnum):
+    """Stable explanations for declarations outside effective scope."""
+
+    LOCAL_BOUNDARY = "local_boundary"
+    SIBLING_SCOPE = "sibling_scope"
+    DESCENDANT_SCOPE = "descendant_scope"
+    UNRELATED_SCOPE = "unrelated_scope"
+    PRIVATE_OWNER = "private_owner"
+    UNSUPPORTED_RESOURCE_KIND = "unsupported_resource_kind"
+
+class ScopeDiagnosticSeverity(StrEnum):
+    """Severity of a stable scope diagnostic."""
+
+    ERROR = "error"
+    WARNING = "warning"
+
+class ScopeDiagnosticCode(StrEnum):
+    """Stable diagnostic identities shared by future scope consumers."""
+
+    UNKNOWN_TARGET = "S001"
+    UNQUALIFIED_TARGET = "S002"
+    DUPLICATE_DECLARATION = "S003"
+    INVALID_DECLARATION_NAME = "S004"
+    RESERVED_DECLARATION_NAME = "S005"
+    INACCESSIBLE_DECLARATION = "S006"
+    LOCAL_NEEDED_BY_DESCENDANT = "S007"
+    OVER_BROAD_INHERITED = "S008"
+    REQUIRES_GLOBAL_PLACEMENT = "S009"
+    UNUSED_DECLARATION = "S010"
+    INVALID_PROSPECTIVE_PATH = "S011"
+    NESTED_DECLARATION_ROOT = "S012"
+    INCOMPLETE_USAGE = "S013"
+    INVALID_CURSOR = "S014"
+    MACRO_MODULE_IMPORT = "S015"
+    INVALID_MACRO_DEPENDENCY = "S016"
+    MACRO_DEPENDENCY_CYCLE = "S017"
+    DUPLICATE_RESOURCE = "S018"
+    RESOURCE_PARSE_ERROR = "S019"
+    DECLARATION_PARSE_ERROR = "S020"
+    MACRO_PARSE_ERROR = "S021"
+    RELATIONSHIP_PARSE_ERROR = "S022"
+    CONFIG_PARSE_ERROR = "S023"
+    OVER_BROAD_GLOBAL = "S024"
+
+class ResourceIdentity(NativeRecord):
+    """Stable kind-qualified identity of one authored resource."""
+
+    kind: ResourceKind
+    name: str
+    def __init__(
+        self,
+        kind: ResourceKind,
+        name: str,
+    ) -> None: ...
+
+class DeclarationIdentity(NativeRecord):
+    """Stable declaration identity, including a private declaration owner."""
+
+    kind: DeclarationKind
+    name: str
+    owner: ResourceIdentity | None
+    def __init__(
+        self,
+        kind: DeclarationKind,
+        name: str,
+        owner: ResourceIdentity | None = ...,
+    ) -> None: ...
+
+class OwnershipRoot(NativeRecord):
+    """Normalized project-relative directory that owns resource scope."""
+
+    path: str
+    kind: OwnershipRootKind
+    resource_kind: ResourceKind | None
+    def __init__(
+        self,
+        path: str,
+        kind: OwnershipRootKind = ...,
+        resource_kind: ResourceKind | None = ...,
+    ) -> None: ...
+
+class ResourceRecord(NativeRecord):
+    """One resource participating in lexical declaration scope."""
+
+    identity: ResourceIdentity
+    path: str
+    ownership_root: OwnershipRoot
+    def __init__(
+        self,
+        identity: ResourceIdentity,
+        path: str,
+        ownership_root: OwnershipRoot,
+    ) -> None: ...
+
+class MacroMetadata(NativeRecord):
+    """Safe macro metadata required by scope and dependency inspection."""
+
+    parameters: tuple[str, ...]
+    dependencies: tuple[DeclarationIdentity, ...]
+    source_digest: str
+    def __init__(
+        self,
+        parameters: tuple[str, ...] = ...,
+        dependencies: tuple[DeclarationIdentity, ...] = ...,
+        source_digest: str = ...,
+    ) -> None: ...
+
+class EnumMemberMetadata(NativeRecord):
+    """One value-free authored enum member identity."""
+
+    name: str
+    def __init__(
+        self,
+        name: str,
+    ) -> None: ...
+
+class EnumMetadata(NativeRecord):
+    """Safe enum metadata containing member names and their shared scalar type."""
+
+    members: tuple[EnumMemberMetadata, ...]
+    scalar_type: str
+    def __init__(
+        self,
+        members: tuple[EnumMemberMetadata, ...],
+        scalar_type: str,
+    ) -> None: ...
+
+class ConstantMetadata(NativeRecord):
+    """Value-free normalized metadata for one typed constant."""
+
+    logical_type: str
+    collection_kind: str | None
+    item_count: int | None
+    nullable: bool
+    render_as: str | None
+    def __init__(
+        self,
+        logical_type: str,
+        collection_kind: str | None = ...,
+        item_count: int | None = ...,
+        nullable: bool = ...,
+        render_as: str | None = ...,
+    ) -> None: ...
+
+class DeclarationRecord(NativeRecord):
+    """One declaration definition and its compiler-owned scope metadata."""
+
+    identity: DeclarationIdentity
+    path: str
+    line: int
+    column: int
+    scope: ScopeKind
+    ownership_root: OwnershipRoot
+    owning_path: str | None
+    macro: MacroMetadata | None
+    enum: EnumMetadata | None
+    constant: ConstantMetadata | None
+    def __init__(
+        self,
+        identity: DeclarationIdentity,
+        path: str,
+        line: int,
+        column: int,
+        scope: ScopeKind,
+        ownership_root: OwnershipRoot,
+        owning_path: str | None = ...,
+        macro: MacroMetadata | None = ...,
+        enum: EnumMetadata | None = ...,
+        constant: ConstantMetadata | None = ...,
+    ) -> None: ...
+
+class UsageRecord(NativeRecord):
+    """A runtime or declaration dependency edge."""
+
+    consumer: ResourceIdentity | DeclarationIdentity
+    declaration: DeclarationIdentity
+    kind: UsageKind
+    through: ResourceIdentity | DeclarationIdentity | None
+    enum_member: str | None
+    def __init__(
+        self,
+        consumer: ResourceIdentity | DeclarationIdentity,
+        declaration: DeclarationIdentity,
+        kind: UsageKind = ...,
+        through: ResourceIdentity | DeclarationIdentity | None = ...,
+        enum_member: str | None = ...,
+    ) -> None: ...
+
+class GrantRecord(NativeRecord):
+    """A compiler relationship granting a public declaration to a resource."""
+
+    resource: ResourceIdentity
+    declaration: DeclarationIdentity
+    through: ResourceIdentity | DeclarationIdentity
+    kind: GrantKind
+    def __init__(
+        self,
+        resource: ResourceIdentity,
+        declaration: DeclarationIdentity,
+        through: ResourceIdentity | DeclarationIdentity,
+        kind: GrantKind = ...,
+    ) -> None: ...
+
+class VisibilityRecord(NativeRecord):
+    """A resolved positive visibility fact with stable provenance."""
+
+    resource: ResourceIdentity
+    declaration: DeclarationIdentity
+    reason: VisibilityReason
+    through: ResourceIdentity | DeclarationIdentity | None
+    def __init__(
+        self,
+        resource: ResourceIdentity,
+        declaration: DeclarationIdentity,
+        reason: VisibilityReason,
+        through: ResourceIdentity | DeclarationIdentity | None = ...,
+    ) -> None: ...
+
+class InaccessibleRecord(NativeRecord):
+    """A resolved negative visibility fact with stable provenance."""
+
+    resource: ResourceIdentity
+    declaration: DeclarationIdentity
+    reason: InaccessibleReason
+    def __init__(
+        self,
+        resource: ResourceIdentity,
+        declaration: DeclarationIdentity,
+        reason: InaccessibleReason,
+    ) -> None: ...
+
+class ScopeDiagnostic(NativeRecord):
+    """Stable diagnostic retained even when an index is partial."""
+
+    code: ScopeDiagnosticCode
+    message: str
+    severity: ScopeDiagnosticSeverity
+    path: str | None
+    line: int | None
+    column: int | None
+    declaration: DeclarationIdentity | None
+    resource: ResourceIdentity | None
+    def __init__(
+        self,
+        code: ScopeDiagnosticCode,
+        message: str,
+        severity: ScopeDiagnosticSeverity = ...,
+        path: str | None = ...,
+        line: int | None = ...,
+        column: int | None = ...,
+        declaration: DeclarationIdentity | None = ...,
+        resource: ResourceIdentity | None = ...,
+    ) -> None: ...
+
+class ScopeCompleteness(NativeRecord):
+    """Independent completeness facts for partially invalid projects."""
+
+    discovery: bool
+    static_visibility: bool
+    runtime_usage: bool
+    relationships: bool
+    placement: bool
+    promotion_impact: bool
+    def __init__(
+        self,
+        discovery: bool = ...,
+        static_visibility: bool = ...,
+        runtime_usage: bool = ...,
+        relationships: bool = ...,
+        placement: bool = ...,
+        promotion_impact: bool = ...,
+    ) -> None: ...
+    @property
+    def complete(self) -> bool: ...
+
+class ScopeIndex(NativeRecord):
+    """Canonical deterministic facts used by every future scope consumer."""
+
+    ownership_roots: tuple[OwnershipRoot, ...]
+    resources: tuple[ResourceRecord, ...]
+    declarations: tuple[DeclarationRecord, ...]
+    usages: tuple[UsageRecord, ...]
+    grants: tuple[GrantRecord, ...]
+    visibility: tuple[VisibilityRecord, ...]
+    inaccessible: tuple[InaccessibleRecord, ...]
+    diagnostics: tuple[ScopeDiagnostic, ...]
+    completeness: ScopeCompleteness
+    def __init__(
+        self,
+        ownership_roots: tuple[OwnershipRoot, ...] = ...,
+        resources: tuple[ResourceRecord, ...] = ...,
+        declarations: tuple[DeclarationRecord, ...] = ...,
+        usages: tuple[UsageRecord, ...] = ...,
+        grants: tuple[GrantRecord, ...] = ...,
+        visibility: tuple[VisibilityRecord, ...] = ...,
+        inaccessible: tuple[InaccessibleRecord, ...] = ...,
+        diagnostics: tuple[ScopeDiagnostic, ...] = ...,
+        completeness: ScopeCompleteness = ...,
+    ) -> None: ...
+
+class DeclarationVisibilityIndex(NativeRecord):
+    """Declaration positions grouped by the scope facts that make them visible."""
+
+    identities: tuple[DeclarationIdentity, ...]
+    global_positions: tuple[int, ...]
+    private_positions: Mapping[ResourceIdentity, tuple[int, ...]]
+    local_positions: Mapping[str, tuple[int, ...]]
+    inherited_positions: Mapping[str, tuple[int, ...]]
+    def __init__(
+        self,
+        identities: tuple[DeclarationIdentity, ...],
+        global_positions: tuple[int, ...],
+        private_positions: Mapping[ResourceIdentity, tuple[int, ...]],
+        local_positions: Mapping[str, tuple[int, ...]],
+        inherited_positions: Mapping[str, tuple[int, ...]],
+    ) -> None: ...
+
+class ScopeLookup(NativeRecord):
+    """Immutable indexes over one canonical ``ScopeIndex``."""
+
+    index: ScopeIndex
+    resources: Mapping[ResourceIdentity, tuple[ResourceRecord, ...]]
+    resources_by_path: Mapping[str, tuple[ResourceRecord, ...]]
+    declarations: Mapping[DeclarationIdentity, tuple[DeclarationRecord, ...]]
+    usages_by_consumer: Mapping[ResourceIdentity | DeclarationIdentity, tuple[UsageRecord, ...]]
+    usages_by_declaration: Mapping[DeclarationIdentity, tuple[UsageRecord, ...]]
+    grants_by_resource: Mapping[ResourceIdentity, tuple[GrantRecord, ...]]
+    visibility_index: DeclarationVisibilityIndex
+    native: object | None
+    def __init__(
+        self,
+        index: ScopeIndex,
+        resources: Mapping[ResourceIdentity, tuple[ResourceRecord, ...]],
+        resources_by_path: Mapping[str, tuple[ResourceRecord, ...]],
+        declarations: Mapping[DeclarationIdentity, tuple[DeclarationRecord, ...]],
+        usages_by_consumer: Mapping[
+            ResourceIdentity | DeclarationIdentity, tuple[UsageRecord, ...]
+        ],
+        usages_by_declaration: Mapping[DeclarationIdentity, tuple[UsageRecord, ...]],
+        grants_by_resource: Mapping[ResourceIdentity, tuple[GrantRecord, ...]],
+        visibility_index: DeclarationVisibilityIndex,
+        native: object | None = ...,
+    ) -> None: ...
+
+class ScopeTargetQuery(NativeRecord):
+    """Non-throwing qualified-identity or path lookup result."""
+
+    value: str | ResourceIdentity | DeclarationIdentity
+    matches: tuple[ResourceRecord, ...]
+    declaration_matches: tuple[DeclarationRecord, ...]
+    def __init__(
+        self,
+        value: str | ResourceIdentity | DeclarationIdentity,
+        matches: tuple[ResourceRecord, ...] = ...,
+        declaration_matches: tuple[DeclarationRecord, ...] = ...,
+    ) -> None: ...
+    @property
+    def unknown(self) -> bool: ...
+
+class VisibilityResolution(NativeRecord):
+    """Complete static visibility classification for one queried target."""
+
+    target: ScopeTargetQuery
+    visible: tuple[VisibilityRecord, ...]
+    inaccessible: tuple[InaccessibleRecord, ...]
+    def __init__(
+        self,
+        target: ScopeTargetQuery,
+        visible: tuple[VisibilityRecord, ...] = ...,
+        inaccessible: tuple[InaccessibleRecord, ...] = ...,
+    ) -> None: ...
+
+class DeclarationVisibility(NativeRecord):
+    """Visible facts and inaccessible declaration identities for one queried target."""
+
+    target: ScopeTargetQuery
+    visible: tuple[VisibilityRecord, ...]
+    inaccessible: tuple[DeclarationIdentity, ...]
+    def __init__(
+        self,
+        target: ScopeTargetQuery,
+        visible: tuple[VisibilityRecord, ...] = ...,
+        inaccessible: tuple[DeclarationIdentity, ...] = ...,
+    ) -> None: ...
+
+class ScopeReportFilters(NativeRecord):
+    """Orthogonal declaration filters applied in their documented fixed order."""
+
+    sections: tuple[str, ...]
+    include_nearby: bool
+    defined_under: str | None
+    kinds: tuple[DeclarationKind, ...]
+    glob: str | None
+    used_only: bool
+    dependency_depth: int
+    sort: str
+    cursor: str | None
+    page_size: int
+    nearby_depth: int
+    globals: str
+    def __init__(
+        self,
+        sections: tuple[str, ...] = ...,
+        include_nearby: bool = ...,
+        defined_under: str | None = ...,
+        kinds: tuple[DeclarationKind, ...] = ...,
+        glob: str | None = ...,
+        used_only: bool = ...,
+        dependency_depth: int = ...,
+        sort: str = ...,
+        cursor: str | None = ...,
+        page_size: int = ...,
+        nearby_depth: int = ...,
+        globals: str = ...,
+    ) -> None: ...
+
+class ScopeSourceLocation(NativeRecord):
+    """Safe project-relative source location."""
+
+    path: str
+    line: int
+    column: int
+    def __init__(
+        self,
+        path: str,
+        line: int,
+        column: int,
+    ) -> None: ...
+
+class VisibilityProvenance(NativeRecord):
+    """Why a declaration is visible or inaccessible."""
+
+    reason: str
+    through: str | None
+    def __init__(
+        self,
+        reason: str,
+        through: str | None = ...,
+    ) -> None: ...
+
+class DeclarationReport(NativeRecord):
+    """Value-free declaration projection used by every report section."""
+
+    identity: str
+    kind: str
+    name: str
+    owner: str | None
+    definition: SourceLocation
+    scope: str
+    owning_path: str | None
+    visibility: VisibilityProvenance | None
+    inaccessible_reason: str | None
+    metadata: tuple[tuple[str, object], ...]
+    consumers: tuple[str, ...]
+    dependencies: tuple[str, ...]
+    grants: tuple[str, ...]
+    required_scope: str | None
+    required_path: str | None
+    promotion_impact: tuple[str, ...]
+    def __init__(
+        self,
+        identity: str,
+        kind: str,
+        name: str,
+        owner: str | None,
+        definition: SourceLocation,
+        scope: str,
+        owning_path: str | None,
+        visibility: VisibilityProvenance | None = ...,
+        inaccessible_reason: str | None = ...,
+        metadata: tuple[tuple[str, object], ...] = ...,
+        consumers: tuple[str, ...] = ...,
+        dependencies: tuple[str, ...] = ...,
+        grants: tuple[str, ...] = ...,
+        required_scope: str | None = ...,
+        required_path: str | None = ...,
+        promotion_impact: tuple[str, ...] = ...,
+    ) -> None: ...
+
+class ScopeChainEntry(NativeRecord):
+    """One exact or inherited lexical scope in deterministic path order."""
+
+    kind: str
+    path: str
+    declaration_count: int
+    def __init__(
+        self,
+        kind: str,
+        path: str,
+        declaration_count: int,
+    ) -> None: ...
+
+class ScopeSection(NativeRecord):
+    """Pagination and completeness metadata for one report section."""
+
+    name: str
+    total: int
+    returned: int
+    collapsed: bool
+    collapsed_count: int
+    truncated: bool
+    complete: bool
+    next_cursor: str | None
+    cursor: str | None
+    page_size: int
+    def __init__(
+        self,
+        name: str,
+        total: int,
+        returned: int,
+        collapsed: bool = ...,
+        collapsed_count: int = ...,
+        truncated: bool = ...,
+        complete: bool = ...,
+        next_cursor: str | None = ...,
+        cursor: str | None = ...,
+        page_size: int = ...,
+    ) -> None: ...
+
+class ScopeResourceReport(NativeRecord):
+    """Resolved existing resource or prospective authored path."""
+
+    target: str
+    identity: str | None
+    path: str | None
+    prospective: bool
+    directory: bool
+    duplicate_count: int
+    def __init__(
+        self,
+        target: str,
+        identity: str | None,
+        path: str | None,
+        prospective: bool = ...,
+        directory: bool = ...,
+        duplicate_count: int = ...,
+    ) -> None: ...
+
+class DeclarationExplanation(NativeRecord):
+    """Detailed explanation for one qualified declaration."""
+
+    declaration: DeclarationReport | None
+    complete: bool
+    def __init__(
+        self,
+        declaration: DeclarationReport | None,
+        complete: bool,
+    ) -> None: ...
+
+class MovePreview(NativeRecord):
+    """Pure visibility delta for moving one existing resource."""
+
+    resource: str
+    destination: str
+    new_ownership_root: str | None
+    retained: tuple[DeclarationReport, ...]
+    gained: tuple[DeclarationReport, ...]
+    lost: tuple[DeclarationReport, ...]
+    invalidated_usages: tuple[str, ...]
+    private_retained: tuple[DeclarationReport, ...]
+    relationship_retained: tuple[DeclarationReport, ...]
+    complete: bool
+    def __init__(
+        self,
+        resource: str,
+        destination: str,
+        new_ownership_root: str | None,
+        retained: tuple[DeclarationReport, ...] = ...,
+        gained: tuple[DeclarationReport, ...] = ...,
+        lost: tuple[DeclarationReport, ...] = ...,
+        invalidated_usages: tuple[str, ...] = ...,
+        private_retained: tuple[DeclarationReport, ...] = ...,
+        relationship_retained: tuple[DeclarationReport, ...] = ...,
+        complete: bool = ...,
+    ) -> None: ...
+
+class ScopeFolder(NativeRecord):
+    """One declaration-definition folder with exact recursive counts."""
+
+    path: str
+    name: str
+    descendant_count: int
+    child_count: int
+    used_count: int
+    kind_counts: tuple[tuple[str, int], ...]
+    def __init__(
+        self,
+        path: str,
+        name: str,
+        descendant_count: int,
+        child_count: int,
+        used_count: int,
+        kind_counts: tuple[tuple[str, int], ...],
+    ) -> None: ...
+
+class ScopeBrowseResult(NativeRecord):
+    """Folder-first browse result."""
+
+    folder: str
+    folders: tuple[ScopeFolder, ...]
+    diagnostics: tuple[ScopeDiagnostic, ...]
+    complete: bool
+    def __init__(
+        self,
+        folder: str,
+        folders: tuple[ScopeFolder, ...],
+        diagnostics: tuple[ScopeDiagnostic, ...] = ...,
+        complete: bool = ...,
+    ) -> None: ...
+
+class ScopeListResult(NativeRecord):
+    """Recursive declaration list beneath one definition folder."""
+
+    folder: str
+    declarations: tuple[DeclarationReport, ...]
+    section: ScopeSection
+    diagnostics: tuple[ScopeDiagnostic, ...]
+    def __init__(
+        self,
+        folder: str,
+        declarations: tuple[DeclarationReport, ...],
+        section: ScopeSection,
+        diagnostics: tuple[ScopeDiagnostic, ...] = ...,
+    ) -> None: ...
+
+class ScopeReport(NativeRecord):
+    """Canonical payload shared by all non-rendering scope consumers."""
+
+    resource: ScopeResourceReport
+    scope_chain: tuple[ScopeChainEntry, ...]
+    available: tuple[DeclarationReport, ...]
+    used: tuple[DeclarationReport, ...]
+    relationship_scope: tuple[DeclarationReport, ...]
+    nearby_unavailable: tuple[DeclarationReport, ...]
+    filters: ScopeReportFilters
+    sections: tuple[ScopeSection, ...]
+    explanation: DeclarationExplanation | None
+    move_preview: MovePreview | None
+    diagnostics: tuple[ScopeDiagnostic, ...]
+    complete: bool
+    def __init__(
+        self,
+        resource: ScopeResourceReport,
+        scope_chain: tuple[ScopeChainEntry, ...] = ...,
+        available: tuple[DeclarationReport, ...] = ...,
+        used: tuple[DeclarationReport, ...] = ...,
+        relationship_scope: tuple[DeclarationReport, ...] = ...,
+        nearby_unavailable: tuple[DeclarationReport, ...] = ...,
+        filters: ScopeReportFilters = ...,
+        sections: tuple[ScopeSection, ...] = ...,
+        explanation: DeclarationExplanation | None = ...,
+        move_preview: MovePreview | None = ...,
+        diagnostics: tuple[ScopeDiagnostic, ...] = ...,
+        complete: bool = ...,
     ) -> None: ...

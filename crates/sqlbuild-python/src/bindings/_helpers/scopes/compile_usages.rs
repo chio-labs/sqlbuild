@@ -21,7 +21,7 @@ use sqlbuild_scopes::scope_index::models::{
 use crate::bindings::_helpers::compiled_project::model_loop_named::scope_path_message;
 
 const SCOPE_ERRORS_MODULE: &str = "sqlbuild._native";
-const SCOPE_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
+const SCOPE_MODELS_MODULE: &str = "sqlbuild._native";
 const COLLECTOR_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const INACCESSIBLE_DECLARATION_CODE: &str = "S006";

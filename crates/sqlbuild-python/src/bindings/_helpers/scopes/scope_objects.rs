@@ -23,8 +23,8 @@ use crate::bindings::_helpers::scopes::placement::{
 };
 use crate::bindings::_helpers::scopes::scope_lookup::grant_kind;
 
-const MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
-const TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
+const MODELS_MODULE: &str = "sqlbuild._native";
+const TYPES_MODULE: &str = "sqlbuild._native";
 const ENUM_MODULE: &str = "enum";
 
 /// The scope model and enum modules every built object comes from.
@@ -670,7 +670,7 @@ pub(crate) fn diagnostic_object<'py>(
     classes.model("ScopeDiagnostic")?.call1((
         classes.member("ScopeDiagnosticCode", &item.code)?,
         item.message.as_str(),
-        classes.member("DiagnosticSeverity", &item.severity)?,
+        classes.member("ScopeDiagnosticSeverity", &item.severity)?,
         item.path.as_deref(),
         item.line,
         item.column,

@@ -5,19 +5,17 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
+    DeclarationExplanation,
+    DeclarationIdentity,
+    DeclarationKind,
     InvalidQualifiedIdentityError,
+    ScopeDiagnostic,
+    ScopeLookup,
+    ScopeReport,
     build_scope_lookup,
     explain_scope_declaration,
     query_scope_report,
 )
-from sqlbuild.compiler.scopes.models import (
-    DeclarationExplanation,
-    DeclarationIdentity,
-    ScopeDiagnostic,
-    ScopeLookup,
-    ScopeReport,
-)
-from sqlbuild.compiler.scopes.types import DeclarationKind
 from tests.unit.src.sqlbuild.compiler.scopes._test_types import (
     IdentityReportCase,
     InvalidIdentityCase,

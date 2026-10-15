@@ -9,34 +9,30 @@ from itertools import compress
 from pathlib import PurePath
 
 from sqlbuild._native import (
+    DeclarationIdentity,
+    DeclarationKind,
+    DeclarationRecord,
+    DeclarationVisibility,
+    GrantKind,
+    GrantRecord,
+    InaccessibleReason,
+    InaccessibleRecord,
+    OwnershipRoot,
+    ResourceIdentity,
+    ResourceKind,
+    ResourceRecord,
+    ScopeIndex,
+    ScopeKind,
+    ScopeLookup,
+    ScopeTargetQuery,
+    VisibilityReason,
+    VisibilityRecord,
+    VisibilityResolution,
     build_scope_lookup,
     normalize_scope_path,
     query_scope_target,
     resolve_scope_declaration_visibility,
     resolve_scope_visibility,
-)
-from sqlbuild.compiler.scopes.models import (
-    DeclarationIdentity,
-    DeclarationRecord,
-    DeclarationVisibility,
-    GrantRecord,
-    InaccessibleRecord,
-    OwnershipRoot,
-    ResourceIdentity,
-    ResourceRecord,
-    ScopeIndex,
-    ScopeLookup,
-    ScopeTargetQuery,
-    VisibilityRecord,
-    VisibilityResolution,
-)
-from sqlbuild.compiler.scopes.types import (
-    DeclarationKind,
-    GrantKind,
-    InaccessibleReason,
-    ResourceKind,
-    ScopeKind,
-    VisibilityReason,
 )
 
 _FOLDERS: tuple[str, ...] = ("sales", "sale", "finance", "daily", "orders")

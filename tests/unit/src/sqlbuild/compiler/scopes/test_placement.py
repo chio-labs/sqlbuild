@@ -5,28 +5,24 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
-    ScopeValidationError,
-    get_placement_validated_scope_index,
-    validate_scope_index,
-)
-from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
+    DeclarationKind,
     DeclarationRecord,
     OwnershipRoot,
     ResourceIdentity,
+    ResourceKind,
     ResourceRecord,
     ScopeCompleteness,
     ScopeDiagnostic,
-    ScopeIndex,
-    UsageRecord,
-)
-from sqlbuild.compiler.scopes.types import (
-    DeclarationKind,
-    DiagnosticSeverity,
-    ResourceKind,
     ScopeDiagnosticCode,
+    ScopeIndex,
     ScopeKind,
+    ScopeValidationError,
+    UsageRecord,
+    get_placement_validated_scope_index,
+    validate_scope_index,
 )
+from sqlbuild._native import ScopeDiagnosticSeverity as DiagnosticSeverity
 from tests.unit.src.sqlbuild.compiler.scopes._test_types import (
     DeclarationChainPlacementCase,
     DiamondLadderPlacementCase,

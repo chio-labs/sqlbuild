@@ -1,14 +1,20 @@
 //! The layouts of every native record class.
 
 use crate::bindings::_helpers::compile_records::constants::COMPILE_VALUE_RECORDS;
-use crate::bindings::_helpers::compiler_records::constants::{
-    COMPILER_ENUMS, COMPILER_ERRORS, COMPILER_RECORDS,
-};
+use crate::bindings::_helpers::compiler_enums::constants::COMPILER_ENUMS;
+use crate::bindings::_helpers::compiler_errors::constants::COMPILER_ERRORS;
+use crate::bindings::_helpers::compiler_records::constants::COMPILER_RECORDS;
 use crate::bindings::_helpers::freshness::observation::normalize_observation;
+use crate::bindings::_helpers::planner_records::constants::PLANNER_RECORDS;
+use crate::bindings::_helpers::record_behaviours::constants::{
+    BEHAVIOUR_FINISHERS, BEHAVIOUR_METHODS, BEHAVIOUR_ORDERED, BEHAVIOUR_PROPERTIES,
+};
 use crate::bindings::_helpers::records::models::{
     ClassValue, EnumSpec, ErrorSpec, FieldDefault, FieldSpec, RecordSpec,
 };
-use crate::bindings::_helpers::records::types::RecordFinish;
+use crate::bindings::_helpers::records::types::{ClassMethod, ClassProperty, RecordFinish};
+use crate::bindings::_helpers::rule_records::constants::RULE_RECORDS;
+use crate::bindings::_helpers::scope_records::constants::SCOPE_RECORDS;
 
 pub(crate) const NATIVE_MODULE: &str = "sqlbuild._native";
 /// The class attribute holding a record class's index into `RECORDS`.
@@ -137,11 +143,22 @@ pub(crate) const RECORDS: &[&[RecordSpec]] = &[
     DIAGNOSTIC_RECORDS,
     COMPILER_RECORDS,
     COMPILE_VALUE_RECORDS,
+    SCOPE_RECORDS,
+    PLANNER_RECORDS,
+    RULE_RECORDS,
 ];
 
-/// Records whose bound values are normalized before the record is created.
-pub(crate) const RECORD_FINISHERS: &[(&str, RecordFinish)] =
-    &[("SourceFreshnessObservation", normalize_observation)];
+/// Records whose bound values are normalized or validated before the record is created.
+pub(crate) const RECORD_FINISHERS: &[&[(&str, RecordFinish)]] = &[
+    &[("SourceFreshnessObservation", normalize_observation)],
+    BEHAVIOUR_FINISHERS,
+];
+/// `(class, attribute, getter)` computed attributes set on native classes after registration.
+pub(crate) const CLASS_PROPERTIES: &[&[(&str, &str, ClassProperty)]] = &[BEHAVIOUR_PROPERTIES];
+/// `(class, attribute, method)` methods set on native classes after registration.
+pub(crate) const CLASS_METHODS: &[&[(&str, &str, ClassMethod)]] = &[BEHAVIOUR_METHODS];
+/// Records ordered by their compared fields, as `order=True` dataclasses are.
+pub(crate) const ORDERED_RECORDS: &[&[&str]] = &[BEHAVIOUR_ORDERED];
 /// `SourceFreshnessObservation` field positions.
 pub(crate) const DATA_VERSION_FIELD: usize = 2;
 pub(crate) const OBSERVED_AT_FIELD: usize = 4;

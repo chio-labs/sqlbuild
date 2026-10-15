@@ -322,7 +322,7 @@ const R_COMPILE_PROJECT_INPUTS: RecordSpec = RecordSpec {
         FieldSpec::new("external_sql_reference_resolver", FieldDefault::None),
         FieldSpec::new(
             "scope_index",
-            FieldDefault::Call("sqlbuild.compiler.scopes.models", "ScopeIndex"),
+            FieldDefault::Call("sqlbuild._native", "ScopeIndex"),
         ),
         FieldSpec {
             name: "declaration_scope",
@@ -596,7 +596,7 @@ const R_DISCOVERED_SQL_HOOK_FILE: RecordSpec = RecordSpec {
         FieldSpec::new("description", FieldDefault::None),
         FieldSpec::new(
             "scope_kind",
-            FieldDefault::Member("sqlbuild.compiler.scopes.types", "ScopeKind", "GLOBAL"),
+            FieldDefault::Member("sqlbuild._native", "ScopeKind", "GLOBAL"),
         ),
         FieldSpec::new("ownership_root", FieldDefault::None),
         FieldSpec::new("owning_path", FieldDefault::None),
@@ -618,7 +618,7 @@ const R_DISCOVERED_ENUM_FILE: RecordSpec = RecordSpec {
         FieldSpec::required("declarations"),
         FieldSpec::new(
             "scope_kind",
-            FieldDefault::Member("sqlbuild.compiler.scopes.types", "ScopeKind", "GLOBAL"),
+            FieldDefault::Member("sqlbuild._native", "ScopeKind", "GLOBAL"),
         ),
         FieldSpec::new("ownership_root", FieldDefault::None),
         FieldSpec::new("owning_path", FieldDefault::None),
@@ -635,7 +635,7 @@ const R_DISCOVERED_CONSTANT_FILE: RecordSpec = RecordSpec {
         FieldSpec::required("declarations"),
         FieldSpec::new(
             "scope_kind",
-            FieldDefault::Member("sqlbuild.compiler.scopes.types", "ScopeKind", "GLOBAL"),
+            FieldDefault::Member("sqlbuild._native", "ScopeKind", "GLOBAL"),
         ),
         FieldSpec::new("ownership_root", FieldDefault::None),
         FieldSpec::new("owning_path", FieldDefault::None),
@@ -663,7 +663,7 @@ const R_DISCOVERED_MODEL_SCHEMA_FILE: RecordSpec = RecordSpec {
         FieldSpec::required("declarations"),
         FieldSpec::new(
             "scope_kind",
-            FieldDefault::Member("sqlbuild.compiler.scopes.types", "ScopeKind", "GLOBAL"),
+            FieldDefault::Member("sqlbuild._native", "ScopeKind", "GLOBAL"),
         ),
         FieldSpec::new("ownership_root", FieldDefault::None),
         FieldSpec::new("owning_path", FieldDefault::None),
@@ -739,11 +739,11 @@ const R_DISCOVERED_AUDIT_FILE: RecordSpec = RecordSpec {
         FieldSpec::required("blocks"),
         FieldSpec::new(
             "declaration_kind",
-            FieldDefault::Member("sqlbuild.compiler.scopes.types", "DeclarationKind", "AUDIT"),
+            FieldDefault::Member("sqlbuild._native", "DeclarationKind", "AUDIT"),
         ),
         FieldSpec::new(
             "scope_kind",
-            FieldDefault::Member("sqlbuild.compiler.scopes.types", "ScopeKind", "GLOBAL"),
+            FieldDefault::Member("sqlbuild._native", "ScopeKind", "GLOBAL"),
         ),
         FieldSpec::new("ownership_root", FieldDefault::None),
         FieldSpec::new("owning_path", FieldDefault::None),
@@ -796,7 +796,7 @@ const R_TOLERANT_SCOPE_DISCOVERY: RecordSpec = RecordSpec {
     ],
 };
 
-/// Compile and discovery value records.
+/// The compile and discovery value records.
 pub(crate) const COMPILE_VALUE_RECORDS: &[RecordSpec] = &[
     R_RELATED_LOCATION,
     R_FIXTURE_COLUMN_INFERENCE,

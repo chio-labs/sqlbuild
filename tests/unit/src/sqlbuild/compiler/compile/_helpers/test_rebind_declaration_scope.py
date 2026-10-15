@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    DeclarationIdentity,
+    DeclarationKind,
     DeclarationScopeBuild,
     build_declaration_scope,
     discover_project_inputs,
@@ -16,8 +18,6 @@ from sqlbuild._native import (
 from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
 from sqlbuild.compiler.compile.models import LoadedMacro
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.scopes.models import DeclarationIdentity
-from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     RebindDeclarationScopeTestCase,

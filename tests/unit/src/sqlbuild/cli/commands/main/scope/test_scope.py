@@ -8,9 +8,8 @@ from io import StringIO
 import pytest
 
 from sqlbuild import _native as native
-from sqlbuild._native import ScopeCommandRequest, run_scope_command
+from sqlbuild._native import ScopeCommandRequest, ScopeCompleteness, ScopeIndex, run_scope_command
 from sqlbuild.adapter.discovery.main import resolve_adapter as adapter_registry
-from sqlbuild.compiler.scopes.models import ScopeCompleteness, ScopeIndex
 from tests.unit.src.sqlbuild.cli.commands.main.scope._test_types import ScopeCommandCase
 from tests.unit.src.sqlbuild.compiler.scopes.helpers import report_scope_lookup
 from tests.unit.src.sqlbuild.presentation.helpers import use_color_terminal
