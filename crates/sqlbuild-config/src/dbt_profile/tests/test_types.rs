@@ -1,7 +1,7 @@
 use crate::dbt_profile::errors::DbtProfileError;
 use crate::dbt_profile::models::{
-    DbtInitConfig, DbtProfileOutputs, DbtProjectMetadata, DbtYamlValue, LoadedDbtProfile,
-    NormalizedProfile, ProfileEntry,
+    DbtInitConfig, DbtNumberParse, DbtProfileOutputs, DbtProjectMetadata, DbtYamlValue,
+    LoadedDbtProfile, NormalizedProfile, ProfileEntry,
 };
 
 pub(super) struct NormalizeTestCase {
@@ -33,4 +33,16 @@ pub(super) struct SelectTargetTestCase {
     pub(super) profile: DbtProfileOutputs,
     pub(super) requested: Option<&'static str>,
     pub(super) expected_result: Result<(String, usize), DbtProfileError>,
+}
+
+pub(super) struct DbtBoolTestCase {
+    pub(super) description: &'static str,
+    pub(super) text: &'static str,
+    pub(super) expected_bool: Option<bool>,
+}
+
+pub(super) struct DbtNumberTestCase {
+    pub(super) description: &'static str,
+    pub(super) text: &'static str,
+    pub(super) expected_parse: (&'static str, DbtNumberParse),
 }

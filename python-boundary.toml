@@ -395,7 +395,7 @@ note = "Rule 4: PyYAML glue only; parses dbt_project.yml and profiles.yml with y
 [[stays]]
 path = "integrations/dbt/_helpers/profile/render.py"
 rule = 4
-note = "Renders the selected dbt profile output with Jinja, env_var and var as dbt does."
+note = "Renders the selected dbt profile output with Jinja, env_var and var as dbt does; as_bool and as_number coercions are native."
 
 [[stays]]
 path = "cli/commands/main/entrypoint/_dispatch_with_compute_logs.py"

@@ -100,3 +100,10 @@ pub struct DbtProfileOutputs {
     /// Stripped output names in first-seen order; a repeated name keeps its last entry.
     pub outputs: Vec<(String, usize)>,
 }
+
+/// How dbt's `as_number` parses one stripped text.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DbtNumberParse {
+    Integer,
+    Float,
+}
