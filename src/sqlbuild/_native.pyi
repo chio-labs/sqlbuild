@@ -54,7 +54,7 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode, ScopeIndexLoader
 from sqlbuild.cli.compile.models import CompileAnalysis
-from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt, CompileReuseRequest
+from sqlbuild.cli.compile_reuse.models import CompileReuseRequest
 from sqlbuild.cli.entry.models import (
     AuthoredTargetWarehouse,
     CommandWarehouseScope,
@@ -1654,6 +1654,32 @@ class NativeReuseAttempt:
 
 def check_compile_reuse(check: dict[str, object]) -> NativeReuseAttempt: ...
 def run_compile(request: CompileCommandRequest) -> int: ...
+
+class CompileReuseAttempt:
+    """Result of checking for a reusable compile, carried into a full compile on a miss."""
+
+    outcome: str
+    project_dir: Path
+    started: float
+    check_ms: int
+    exit_code: int | None
+    entry_path: Path | None
+    native: NativeReuseAttempt | None
+    selected_target: str | None
+    json_output: bool
+    def __init__(
+        self,
+        *,
+        outcome: str,
+        project_dir: Path,
+        started: float,
+        check_ms: int = 0,
+        exit_code: int | None = None,
+        entry_path: Path | None = None,
+        native: NativeReuseAttempt | None = None,
+        selected_target: str | None = None,
+        json_output: bool = False,
+    ) -> None: ...
 
 COMPILE_REUSE_RACY_WINDOW_NS: int
 COMPILE_REUSE_EXCLUDED_ROOT_DIRECTORIES: frozenset[str]

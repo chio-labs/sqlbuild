@@ -24,25 +24,25 @@ use crate::bindings::_helpers::compile_command::constants::{
     REUSE_MAX_ENTRY_BYTES, REUSE_MAX_STORED_ENTRIES, REUSE_MISS_TIMING, TARGET_DIRECTORY_NAME,
     TOTAL_TIMING, TRACKED_ENVIRONMENT_PREFIXES, UNTRACKED_ENVIRONMENT_NAMES,
 };
+use crate::bindings::_helpers::compile_command::models::CompileReuseAttempt;
 use crate::bindings::_helpers::compile_driver::phases::{elapsed_ms, monotonic};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::compile_outputs::json_report::plain_json;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const REUSE_MODELS: &str = "sqlbuild.cli.compile_reuse.models";
-const REUSE_TYPES: &str = "sqlbuild.cli.compile_reuse.types";
+const REUSE_REQUEST: (&str, &str) = ("sqlbuild.cli.compile_reuse.models", "CompileReuseRequest");
 const COMPILE_CONSTANTS: &str = "sqlbuild.compiler.compile.constants";
 const RUNTIME_IDENTITY_MODULE: &str = "sqlbuild.cli.compile_reuse._helpers.runtime_identity";
 const STARTUP_INPUTS_MODULE: &str = "sqlbuild.cli.compile_reuse._helpers.startup_inputs";
 const CACHE_DIRECTORY_MODULE: &str = "sqlbuild.compiler.frontier.main.compiler_cache_directory";
 const COMPUTE_LOG_TEE_MODULE: &str = "sqlbuild.runtime.compute_logs.classes.text_tee";
 const OUTPUT_CAPTURE_CONSTANTS: &str = "sqlbuild.runtime.output_capture.constants";
-const HIT: &str = "HIT";
+const HIT: &str = "hit";
 const CHECKED_HIT: &str = "hit";
 const CHECKED_BYPASS: &str = "bypass";
-const MISS: &str = "MISS";
-const BYPASS: &str = "BYPASS";
+const MISS: &str = "miss";
+const BYPASS: &str = "bypass";
 
 fn listed<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     Ok(PyList::new(value.py(), value.try_iter()?.collect::<PyResult<Vec<_>>>()?)?.into_any())
@@ -245,7 +245,7 @@ pub(crate) fn write_launch_record(attempt: &Bound<'_, PyAny>) -> PyResult<()> {
 }
 
 fn outcome<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, REUSE_TYPES, "CompileReuseOutcome")?.getattr(name)
+    name.into_bound_py_any(py)
 }
 
 /// A `CompileReuseAttempt` with `fields`.
@@ -253,7 +253,7 @@ fn reuse_attempt<'py>(
     py: Python<'py>,
     fields: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(&imported(py, REUSE_MODELS, "CompileReuseAttempt")?, fields)
+    call_with(py.get_type::<CompileReuseAttempt>().as_any(), fields)
 }
 
 /// The native reuse check request for this invocation.
@@ -481,7 +481,7 @@ fn reuse_request<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>
         fields.push((name, request.getattr(name)?));
     }
     fields.push(("profiling", profiling.into_bound_py_any(py)?));
-    call_with(&imported(py, REUSE_MODELS, "CompileReuseRequest")?, &fields)
+    call_with(&imported(py, REUSE_REQUEST.0, REUSE_REQUEST.1)?, &fields)
 }
 
 /// Run one compile command request, replaying the previous compile when nothing changed.
@@ -490,7 +490,7 @@ fn run_compile<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> 
     let py: Python<'py> = request.py();
     let attempt: Bound<'py, PyAny> = attempt_compile_reuse(&reuse_request(request)?)?;
     let exit_code: Bound<'py, PyAny> = attempt.getattr("exit_code")?;
-    if attempt.getattr("outcome")?.is(&outcome(py, HIT)?) && !exit_code.is_none() {
+    if attempt.getattr("outcome")?.eq(outcome(py, HIT)?)? && !exit_code.is_none() {
         return Ok(exit_code);
     }
     imported(py, NATIVE_MODULE, "run_compile_command")?.call1((request, attempt))
