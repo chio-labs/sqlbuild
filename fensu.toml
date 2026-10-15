@@ -60,6 +60,11 @@ reason = "Native bindings own planning, plan entries, plan output, command plans
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
+path = "src/sqlbuild/compiler/migrations/__init__.py"
+reason = "Native bindings own migration planning and state rows; this package only declares the migration models, decisions and table names the executor imports."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
 path = "src/sqlbuild/compiler/source_freshness/__init__.py"
 reason = "Native bindings own source freshness observation, planning, propagation and state reads and writes; this package only declares the models, types and constants they build."
 

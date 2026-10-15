@@ -13,10 +13,12 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.migrations.constants import MIGRATION_WRITE_ATTEMPTS
-from sqlbuild.compiler.migrations.main.relation_for_location import migration_relation_for_location
 from sqlbuild.compiler.migrations.models import MigrationRelation, OldNameViewEvent
 from sqlbuild.compiler.migrations.types import OldNameViewEventType
 from sqlbuild.compiler.planner.models import OldNameViewPlanEntry
+from sqlbuild.executor.migrations._helpers.relation_for_location import (
+    migration_relation_for_location,
+)
 
 
 def old_name_fact(

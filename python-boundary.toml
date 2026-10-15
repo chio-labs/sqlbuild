@@ -614,6 +614,136 @@ path = "tasks.py"
 reason = "public-api"
 note = "Public facade."
 
+[[stays]]
+path = "cost/models.py"
+reason = "executor"
+note = "Shape rule: data records only (StatementExecutionTelemetry, CostResourceContext, RunCostSummary), no logic; consumed by adapters/snowflake/classes/snowflake_adapter.py, adapters/snowflake/classes/snowflake_cursor.py, executor/build/classes/build_scheduler.py and 2 more."
+
+[[stays]]
+path = "cli/compile_reuse/models.py"
+reason = "user-code"
+note = "Shape rule: data records only (CompileReuseRequest, SettingsEnvironmentInputs, SettingsInputsResult), no logic; consumed by cli/compile_reuse/_helpers/provider_settings.py, cli/compile_reuse/_helpers/runtime_identity.py."
+
+[[stays]]
+path = "compiler/source_freshness/constants.py"
+reason = "adapter"
+note = "Shape rule: data constants only (SOURCE_FRESHNESS_TABLE_NAME, COLUMN_SOURCE_NAME, COLUMN_TARGET_DATABASE, COLUMN_TARGET_SCHEMA, ...), no logic; consumed by adapter/contract/classes/duckdb_backed_adapter.py, adapter/state_sql/_helpers/source_freshness.py, adapters/bigquery/classes/bigquery_adapter.py and 6 more."
+
+[[stays]]
+path = "compiler/auditing/types.py"
+reason = "executor"
+note = "Shape rule: data enums and aliases only (AuditSeverity, AuditRunScope, AuditAttachmentKind, AuditEvaluationMode, ...), no logic; consumed by audits.py, compiler/auditing/main/above.py, compiler/auditing/main/below.py and 17 more."
+
+[[stays]]
+path = "compiler/python_nodes/types.py"
+reason = "executor"
+note = "Shape rule: data enums and aliases only (PythonNodeKind, PythonNodeStatus, SkipMode, PythonNodeFanInAction), no logic; consumed by assets.py, assets.pyi, executor/load/_helpers/dag_runtime.py and 16 more."
+
+[[stays]]
+path = "compiler/macro_bridge/constants.py"
+reason = "user-code"
+note = "Shape rule: data constants only (ACTIVE_MACRO_BRIDGE, COMPILES_STARTED, STORE_MODULE_PATHS, MACRO_CALL_STORE_FILE_NAME, ...), no logic; consumed by compiler/macro_bridge/_helpers/store_environment.py, compiler/macro_bridge/classes/macro_bridge.py, compiler/macro_bridge/main/_claim_first_compile.py and 2 more."
+
+[[stays]]
+path = "compiler/references/models.py"
+reason = "executor"
+note = "Shape rule: data records only (RelationName, ProjectRelation, ProjectRelationIndex), no logic; consumed by executor/python_nodes/classes/runtime_relation_guard.py."
+
+[[stays]]
+path = "runtime/contracts/types.py"
+reason = "executor"
+note = "Shape rule: data enums and aliases only (ExecutionResourceKind, ConnectionElapsedCallback, NodeStartCallback), no logic; consumed by executor/build/_helpers/scheduler.py, executor/build/_helpers/source_node.py, executor/build/classes/build_scheduler.py and 15 more."
+
+[[stays]]
+path = "errors/contracts/exceptions.py"
+reason = "executor"
+note = "Shape rule: data exceptions only (SharedInputError, ExecutorInputError), no logic; consumed by executor/audit_results/_helpers/sql.py, executor/build/_helpers/external_source_loads.py, executor/build/_helpers/retention.py and 53 more."
+
+[[stays]]
+path = "compiler/fingerprints/constants.py"
+reason = "executor"
+note = "Shape rule: data constants only (FINGERPRINT_TABLE_NAME, COLUMN_NODE_TYPE, COLUMN_NODE_NAME, COLUMN_TARGET_DATABASE, ...), no logic; consumed by adapter/contract/classes/duckdb_backed_adapter.py, adapters/bigquery/classes/bigquery_adapter.py, adapters/databricks/classes/databricks_adapter.py and 13 more."
+
+[[stays]]
+path = "diagnostics/models.py"
+reason = "public-api"
+note = "Shape rule: data records only (ProcessResourceUsage, DiagnosticRoutingOptions), no logic; consumed by cli/commands/main/entrypoint/_dispatch_with_compute_logs.py, diagnostics/classes/invocation_diagnostic_routing.py, diagnostics/main/_log_process_resources.py and 3 more."
+
+[[stays]]
+path = "compiler/dag/types.py"
+reason = "public-api"
+note = "Shape rule: data enums and aliases only (NodeKind), no logic; consumed by integrations/dagster/constants.py, integrations/rivers/constants.py."
+
+[[stays]]
+path = "runtime/contracts/models.py"
+reason = "executor"
+note = "Shape rule: data records only (ConnectionHooks), no logic; consumed by executor/pipeline/_helpers/scenario.py."
+
+[[stays]]
+path = "cursor_algebra/types.py"
+reason = "executor"
+note = "Shape rule: data enums and aliases only (CursorScalar, BoundSentinel, Bound), no logic; consumed by executor/load/_helpers/cursors.py, executor/load/main/_execute.py, executor/run/_helpers/materializations/microbatch.py and 2 more."
+
+[[stays]]
+path = "cost/types.py"
+reason = "adapter"
+note = "Shape rule: data enums and aliases only (CostCapability, CostStatus), no logic; consumed by adapters/snowflake/classes/snowflake_adapter.py."
+
+[[stays]]
+path = "compiler/lineage/types.py"
+reason = "adapter"
+note = "Shape rule: data enums and aliases only (InferredNullability), no logic; consumed by adapter/contract/types.py, adapter/type_system/_helpers/inference_rules.py, adapter/type_system/main/conditional_result_nullability.py and 2 more."
+
+[[stays]]
+path = "compiler/macro_bridge/models.py"
+reason = "user-code"
+note = "Shape rule: data records only (ModuleSources), no logic; consumed by compiler/macro_bridge/_helpers/store_environment.py, compiler/macro_bridge/classes/macro_bridge.py."
+
+[[stays]]
+path = "integrations/dbt/exceptions.py"
+reason = "user-code"
+note = "Shape rule: data exceptions only (DbtProfileError), no logic; consumed by integrations/dbt/_helpers/profile/load.py, integrations/dbt/_helpers/profile/render.py."
+
+[[stays]]
+path = "compiler/migrations/constants.py"
+reason = "executor"
+note = "Shape rule: data constants only (MIGRATION_TABLE_NAME, MIGRATION_WRITE_ATTEMPTS, COLUMN_MIGRATION_TABLE_NAME, OLD_NAME_VIEW_TABLE_NAME), no logic; consumed by adapters/sqlserver/classes/sqlserver_adapter.py, executor/janitor/constants.py, executor/migrations/_helpers/columns.py and 4 more."
+
+[[stays]]
+path = "diagnostics/constants.py"
+reason = "public-api"
+note = "Shape rule: data constants only (LOGGER_ROOT_NAME, LOGGER_PREFIX, SQL_DIGEST_FIELD, SQL_TEXT_FIELD, ...), no logic; consumed by diagnostics/_helpers/logging.py, diagnostics/_helpers/redaction.py, diagnostics/classes/invocation_diagnostic_routing.py and 2 more."
+
+[[stays]]
+path = "cursor_algebra/exceptions.py"
+reason = "executor"
+note = "Shape rule: data exceptions only (CursorAlgebraError), no logic; consumed by executor/run/models.py."
+
+[[stays]]
+path = "spec/contracts/constants.py"
+reason = "adapter"
+note = "Shape rule: data constants only (DEFAULT_SEED_CSV_SETTINGS, ZERO_DAY_CURSOR_DURATION), no logic; consumed by adapter/contract/classes/base_adapter.py, adapter/contract/classes/duckdb_backed_adapter.py, adapter/contract/classes/materialization.py and 6 more."
+
+[[stays]]
+path = "cli/entry/constants.py"
+reason = "public-api"
+note = "Shape rule: data constants only (NATIVE_ALLOCATOR_PURGE_DELAY_VARIABLE, NATIVE_ALLOCATOR_PURGE_DELAY_MILLISECONDS, OUTPUT_STREAM_ENCODING, OUTPUT_STREAM_ERRORS, ...), no logic; consumed by cli/entry/_helpers/streams.py, cli/entry/main/entry.py, cli/entry/main/launched.py."
+
+[[stays]]
+path = "cli/compile_reuse/constants.py"
+reason = "user-code"
+note = "Shape rule: data constants only (REUSE_FORMAT_VERSION, OUTPUT_FILE_DESCRIPTORS), no logic; consumed by cli/compile_reuse/_helpers/runtime_identity.py."
+
+[[stays]]
+path = "sql_values/exceptions.py"
+reason = "adapter"
+note = "Shape rule: data exceptions only (SqlValueRenderingError), no logic; consumed by adapter/contract/classes/base_adapter.py, adapter/contract/exceptions.py."
+
+[[stays]]
+path = "cli/output/constants.py"
+reason = "public-api"
+note = "Shape rule: data constants only (INTEGRATION_RESULT_PATH_ENV), no logic; consumed by integrations/dagster/_helpers/invocation_factory.py."
+
 [[handled_native_errors]]
 location = "compiler/planner/models.py::CursorBounds._parse_inferred"
 note = "A bound that is not integer text is parsed as a timestamp instead; CursorAlgebraError is an input error, and native compiler failures are not caught."

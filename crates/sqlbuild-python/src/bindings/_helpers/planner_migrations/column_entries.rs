@@ -59,7 +59,7 @@ pub(super) fn decide<'py>(
     }
     let relation = imported(
         py,
-        "sqlbuild.compiler.migrations.main.relation_for_location",
+        "sqlbuild.executor.migrations._helpers.relation_for_location",
         "migration_relation_for_location",
     )?
     .call1((candidate.model.getattr("destination")?,))?;
