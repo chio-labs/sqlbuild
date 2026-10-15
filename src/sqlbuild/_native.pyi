@@ -8,9 +8,8 @@ from contextvars import Token
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path, PurePath
-from typing import Any, Literal, TextIO, TypedDict
 from threading import Event
-from typing import Any, Literal, TextIO, TypedDict, overload
+from typing import Any, Literal, TextIO, TypedDict
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
