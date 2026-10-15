@@ -3,15 +3,16 @@
 use crate::ingestr_command::_helpers::connection::{optional, present, required};
 use crate::ingestr_command::_helpers::url_quote::{query_suffix, quote, urlencode};
 use crate::ingestr_command::constants::{
-    BIGQUERY_PARAMETERS, DATABRICKS_PARAMETERS, MOTHERDUCK_PREFIX, POSTGRES_DEFAULT_PORT,
-    SNOWFLAKE_PARAMETERS, SQLSERVER_DEFAULT_DRIVER, SQLSERVER_DEFAULT_PORT,
-    SQLSERVER_DRIVER_PARAMETER, SQLSERVER_PARAMETERS, SQLSERVER_TRUST_SERVER_CERTIFICATE_PARAMETER,
+    BIGQUERY_PARAMETERS, DATABRICKS_PARAMETERS, SNOWFLAKE_PARAMETERS, SQLSERVER_DEFAULT_DRIVER,
+    SQLSERVER_DEFAULT_PORT, SQLSERVER_DRIVER_PARAMETER, SQLSERVER_PARAMETERS,
+    SQLSERVER_TRUST_SERVER_CERTIFICATE_PARAMETER,
 };
 use crate::ingestr_command::errors::IngestrCommandError;
-use crate::ingestr_command::models::IngestrConnection;
+use crate::loader_connection::constants::{DEFAULT_HOST, MOTHERDUCK_PREFIX, POSTGRES_DEFAULT_PORT};
+use crate::loader_connection::models::LoaderConnection;
 
 /// DuckDB's database file URI.
-pub(crate) fn duckdb(connection: &IngestrConnection) -> Result<String, IngestrCommandError> {
+pub(crate) fn duckdb(connection: &LoaderConnection) -> Result<String, IngestrCommandError> {
     Ok(format!(
         "duckdb:///{}",
         required(connection, "database", "duckdb")?
@@ -19,7 +20,7 @@ pub(crate) fn duckdb(connection: &IngestrConnection) -> Result<String, IngestrCo
 }
 
 /// MotherDuck's database URI with its optional token.
-pub(crate) fn motherduck(connection: &IngestrConnection) -> String {
+pub(crate) fn motherduck(connection: &LoaderConnection) -> String {
     let database: &str = optional(connection, "database").unwrap_or_default();
     let database: &str = database.strip_prefix(MOTHERDUCK_PREFIX).unwrap_or(database);
     let token: Vec<(&str, &str)> = optional(connection, "token")
@@ -30,8 +31,8 @@ pub(crate) fn motherduck(connection: &IngestrConnection) -> String {
 }
 
 /// Postgres's URI with its optional SSL mode.
-pub(crate) fn postgres(connection: &IngestrConnection) -> Result<String, IngestrCommandError> {
-    let host: &str = optional(connection, "host").unwrap_or("localhost");
+pub(crate) fn postgres(connection: &LoaderConnection) -> Result<String, IngestrCommandError> {
+    let host: &str = optional(connection, "host").unwrap_or(DEFAULT_HOST);
     let port: &str = connection.port.as_deref().unwrap_or(POSTGRES_DEFAULT_PORT);
     let user: &str = required(connection, "user", "postgres")?;
     let password: &str = optional(connection, "password").unwrap_or_default();
@@ -50,7 +51,7 @@ pub(crate) fn postgres(connection: &IngestrConnection) -> Result<String, Ingestr
 }
 
 /// BigQuery's project URI with its optional credentials.
-pub(crate) fn bigquery(connection: &IngestrConnection) -> Result<String, IngestrCommandError> {
+pub(crate) fn bigquery(connection: &LoaderConnection) -> Result<String, IngestrCommandError> {
     let project: &str = match optional(connection, "project") {
         Some(project) => project,
         None => required(connection, "database", "bigquery")?,
@@ -62,7 +63,7 @@ pub(crate) fn bigquery(connection: &IngestrConnection) -> Result<String, Ingestr
 }
 
 /// Snowflake's account URI with its optional session settings.
-pub(crate) fn snowflake(connection: &IngestrConnection) -> Result<String, IngestrCommandError> {
+pub(crate) fn snowflake(connection: &LoaderConnection) -> Result<String, IngestrCommandError> {
     let account: &str = required(connection, "account", "snowflake")?;
     let user: &str = required(connection, "user", "snowflake")?;
     let password: &str = optional(connection, "password").unwrap_or_default();
@@ -79,7 +80,7 @@ pub(crate) fn snowflake(connection: &IngestrConnection) -> Result<String, Ingest
 }
 
 /// Databricks's token URI with its warehouse path.
-pub(crate) fn databricks(connection: &IngestrConnection) -> Result<String, IngestrCommandError> {
+pub(crate) fn databricks(connection: &LoaderConnection) -> Result<String, IngestrCommandError> {
     let host: &str = required(connection, "server_hostname", "databricks")?;
     let token: &str = required(connection, "token", "databricks")?;
     let mut parameters: Vec<(&str, &str)> = vec![(
@@ -95,14 +96,14 @@ pub(crate) fn databricks(connection: &IngestrConnection) -> Result<String, Inges
 }
 
 /// SQL Server's URI with its ODBC defaults.
-pub(crate) fn sqlserver(connection: &IngestrConnection) -> String {
+pub(crate) fn sqlserver(connection: &LoaderConnection) -> String {
     let first = |keys: [&str; 2], default: &'static str| -> String {
         keys.iter()
             .find_map(|key| optional(connection, key))
             .unwrap_or(default)
             .to_owned()
     };
-    let host: String = first(["host", "server"], "localhost");
+    let host: String = first(["host", "server"], DEFAULT_HOST);
     let port: &str = connection.port.as_deref().unwrap_or(SQLSERVER_DEFAULT_PORT);
     let user: String = first(["user", "username"], "sa");
     let password: &str = optional(connection, "password").unwrap_or_default();

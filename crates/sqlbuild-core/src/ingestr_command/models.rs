@@ -1,16 +1,5 @@
 //! Inputs of one ingestr command line.
 
-use std::collections::BTreeMap;
-
-/// The adapter connection settings an ingestr destination URI reads.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct IngestrConnection {
-    /// Connection settings whose values are Python strings, unstripped.
-    pub strings: BTreeMap<String, String>,
-    /// `str(connection["port"])` when the connection sets a port.
-    pub port: Option<String>,
-}
-
 /// A resolved ingestr source configuration.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct IngestrSource {

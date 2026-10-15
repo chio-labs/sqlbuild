@@ -4,12 +4,12 @@ use crate::ingestr_command::_helpers::destinations::{
     bigquery, databricks, duckdb, motherduck, postgres, snowflake, sqlserver,
 };
 use crate::ingestr_command::errors::IngestrCommandError;
-use crate::ingestr_command::models::IngestrConnection;
+use crate::loader_connection::models::LoaderConnection;
 
 /// The ingestr destination URI for the connection of the adapter named `adapter_name`.
 pub fn ingestr_destination_uri(
     adapter_name: &str,
-    connection: &IngestrConnection,
+    connection: &LoaderConnection,
 ) -> Result<String, IngestrCommandError> {
     match adapter_name {
         "duckdb" => duckdb(connection),

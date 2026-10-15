@@ -11,9 +11,8 @@ use sqlbuild_core::ingestr_command::main::format_ingestr_command::format_ingestr
 use sqlbuild_core::ingestr_command::main::ingestr_command_arguments::ingestr_command_arguments;
 use sqlbuild_core::ingestr_command::main::ingestr_destination_table::ingestr_destination_table;
 use sqlbuild_core::ingestr_command::main::ingestr_destination_uri::ingestr_destination_uri;
-use sqlbuild_core::ingestr_command::models::{
-    IngestrConnection, IngestrDestination, IngestrSource,
-};
+use sqlbuild_core::ingestr_command::models::{IngestrDestination, IngestrSource};
+use sqlbuild_core::loader_connection::models::LoaderConnection;
 use sqlbuild_model_config::templates::models::TemplateOptions;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
@@ -157,7 +156,7 @@ fn resolved_source(
 }
 
 /// The string settings of a connection and its rendered port.
-fn connection(connection_config: &Bound<'_, PyDict>) -> PyResult<IngestrConnection> {
+pub(crate) fn connection(connection_config: &Bound<'_, PyDict>) -> PyResult<LoaderConnection> {
     let mut strings: BTreeMap<String, String> = BTreeMap::new();
     for (key, value) in connection_config.iter() {
         if let (Ok(key), Ok(value)) = (key.extract::<String>(), value.downcast::<PyString>()) {
@@ -168,7 +167,7 @@ fn connection(connection_config: &Bound<'_, PyDict>) -> PyResult<IngestrConnecti
         .get_item("port")?
         .map(|port| port.str()?.extract())
         .transpose()?;
-    Ok(IngestrConnection { strings, port })
+    Ok(LoaderConnection { strings, port })
 }
 
 /// The ingestr CLI command for one source entry.

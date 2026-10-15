@@ -4,8 +4,9 @@ use crate::ingestr_command::main::format_ingestr_command::format_ingestr_command
 use crate::ingestr_command::main::ingestr_command_arguments::ingestr_command_arguments;
 use crate::ingestr_command::main::ingestr_destination_table::ingestr_destination_table;
 use crate::ingestr_command::main::ingestr_destination_uri::ingestr_destination_uri;
-use crate::ingestr_command::models::{IngestrConnection, IngestrDestination, IngestrSource};
+use crate::ingestr_command::models::{IngestrDestination, IngestrSource};
 use crate::ingestr_command::tests::test_types::{CommandTestCase, DestinationUriTestCase};
+use crate::loader_connection::models::LoaderConnection;
 
 #[test]
 fn given_connection_when_building_destination_uri_then_matches_python_quoting() {
@@ -61,7 +62,7 @@ fn given_connection_when_building_destination_uri_then_matches_python_quoting() 
         },
     ];
     for test_case in test_cases {
-        let connection: IngestrConnection = IngestrConnection {
+        let connection: LoaderConnection = LoaderConnection {
             strings: test_case
                 .strings
                 .iter()

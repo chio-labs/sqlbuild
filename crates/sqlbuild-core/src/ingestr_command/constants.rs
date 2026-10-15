@@ -6,8 +6,6 @@ pub(crate) const COMMAND_PREFIX: [&str; 2] = ["ingestr", "ingest"];
 pub(crate) const COMMAND_PROGRESS: [&str; 3] = ["--yes", "--progress", "log"];
 /// Characters Python's `urllib.parse.quote` never escapes.
 pub(crate) const URL_ALWAYS_SAFE: &[u8] = b"_.-~";
-/// Postgres's default port.
-pub(crate) const POSTGRES_DEFAULT_PORT: &str = "5432";
 /// SQL Server's default port.
 pub(crate) const SQLSERVER_DEFAULT_PORT: &str = "1433";
 /// The SQL Server ODBC driver ingestr uses unless the connection names one.
@@ -33,5 +31,5 @@ pub(crate) const SQLSERVER_PARAMETERS: [&str; 3] =
 pub(crate) const SQLSERVER_DRIVER_PARAMETER: &str = "driver";
 /// The SQL Server certificate trust query parameter.
 pub(crate) const SQLSERVER_TRUST_SERVER_CERTIFICATE_PARAMETER: &str = "TrustServerCertificate";
-/// The MotherDuck database prefix the URI omits.
-pub(crate) const MOTHERDUCK_PREFIX: &str = "md:";
+/// The integration loader name ingestr connection errors cite.
+pub(crate) const INGESTR_LOADER: &str = "ingestr";

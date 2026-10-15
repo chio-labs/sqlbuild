@@ -380,7 +380,7 @@ note = "Documented orchestrator integration and rule 4 Rivers glue: translator i
 [[stays]]
 path = "integrations/dlt"
 rule = 4
-note = "Loader runtime that runs inside user loaders; synthetic loader record building and naming are native."
+note = "Loader runtime that runs inside user loaders and calls the dlt destination factories; synthetic loader record building, naming and adapter-config to destination mapping are native (dlt_destination_arguments)."
 
 [[stays]]
 path = "integrations/ingestr"

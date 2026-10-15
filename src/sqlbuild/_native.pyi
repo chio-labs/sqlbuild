@@ -4003,6 +4003,13 @@ def build_ingestr_command(
 def format_ingestr_command(command: Sequence[str], /) -> str: ...
 def format_clone_execution_json(
     *, result: CloneExecutionResult, resource_types_by_name: Mapping[str, str]
+def dlt_destination_arguments(
+    *,
+    adapter_name: str,
+    connection_config: Mapping[str, object],
+    destination_config: Mapping[str, object] | None,
+    dataset_name: str | None,
+) -> tuple[str, dict[str, Any], dict[str, Any], str | None]: ...
 ) -> str: ...
 def format_test_execution_json(*, results: tuple[SqlTestExecutionResult, ...]) -> str: ...
 def format_audit_execution_json(
