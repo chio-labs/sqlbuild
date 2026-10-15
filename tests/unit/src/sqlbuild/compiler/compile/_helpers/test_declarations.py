@@ -610,6 +610,14 @@ def test_given_declaration_change_when_compiling_then_updates_dependent_identity
                 "constants/groups.sql constant 'groups'.*adapter 'duckdb'.*value_list"
             ),
         ),
+        CompileDeclarationsErrorTestCase(
+            description="constant rendered over the SQL value size limit",
+            repo_files={
+                "constants/big.sql": f'CONSTANT (name big, value "{"'" * 600_000}");',
+                "models/orders.sql": 'MODEL (description "Test model orders.");\nSELECT @const("big") AS big\n',
+            },
+            expected_error_fragment="constants/big.sql constant 'big'.*maximum is 1000000 bytes",
+        ),
     ],
     ids=lambda case: case.description,
 )

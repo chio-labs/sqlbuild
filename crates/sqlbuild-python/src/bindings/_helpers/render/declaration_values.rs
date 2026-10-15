@@ -368,11 +368,7 @@ fn rendered_constant<'py>(
             declaration.getattr("name")?.str()?
         );
         return Err(PyErr::from_value(
-            imported(
-                declaration.py(),
-                SQL_VALUE_ERRORS_MODULE,
-                "SqlValueValidationError",
-            )?
+            imported(declaration.py(), NATIVE_MODULE, "SqlValueValidationError")?
             .call1((format!(
                 "{context} rendered value is {size} bytes; maximum is {MAX_SQL_VALUE_SIZE} bytes"
             ),))?,
