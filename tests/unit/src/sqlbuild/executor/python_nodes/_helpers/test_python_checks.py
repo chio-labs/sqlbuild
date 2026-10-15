@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    CostContext,
     ExecutionEventWriter,
     TerminalEventIndex,
     format_check_json,
@@ -17,7 +18,6 @@ from sqlbuild._native import (
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus, SkipMode
-from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.python_nodes._helpers.python_checks import execute_python_check_nodes

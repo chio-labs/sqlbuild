@@ -7,13 +7,13 @@ from collections.abc import Callable, Mapping
 from dataclasses import replace
 from typing import Any
 
+from sqlbuild._native import CostContext
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
-from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.cursor_algebra.types import CursorScalar
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.load._helpers.cursors import (

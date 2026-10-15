@@ -8,10 +8,10 @@ use crate::bindings::_helpers::cli::{
 };
 use crate::bindings::_helpers::{
     audit_command, build_command, build_progress, check, clone, command_runtime, contract_command,
-    cost_command, cost_report, dbt_command, dbt_events, dbt_interop, debug_command, diff_report,
-    format_command, freshness, init_command, janitor, load, plan_command, presentation_text,
-    query_command, result_output, scenario_command, seed_command, sql_test_command,
-    workspace_commands,
+    cost_command, cost_report, cost_telemetry, dbt_command, dbt_events, dbt_interop, debug_command,
+    diff_report, format_command, freshness, init_command, janitor, load, plan_command,
+    presentation_text, query_command, result_output, scenario_command, seed_command,
+    sql_test_command, workspace_commands,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -30,6 +30,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     load::registration::register(module)?;
     result_output::registration::register(module)?;
     cost_report::registration::register(module)?;
+    cost_telemetry::registration::register(module)?;
     debug_command::registration::register(module)?;
     dbt_events::registration::register(module)?;
     dbt_interop::registration::register(module)?;

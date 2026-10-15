@@ -15,6 +15,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, cast
 
+from sqlbuild._native import CostContext
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import RelationInfo
@@ -37,7 +38,6 @@ from sqlbuild.compiler.planner.types import (
     IncrementalStrategy,
     PlanAction,
 )
-from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.cost.models import StatementExecutionTelemetry
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event

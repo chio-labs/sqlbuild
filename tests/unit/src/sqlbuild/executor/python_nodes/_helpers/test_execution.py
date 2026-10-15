@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import CostContext
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredAssetFunction, DiscoveredTaskFunction
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
-from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.executor.node_results.classes.direct_store import DirectNodeResultStore
 from sqlbuild.executor.node_results.main._direct_store import build_direct_node_result_store

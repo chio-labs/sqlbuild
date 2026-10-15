@@ -7,9 +7,8 @@ from typing import Any
 
 import pytest
 
+from sqlbuild._native import CostContext, collect_snowflake_cost
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
-from sqlbuild.cost.classes.cost_context import CostContext
-from sqlbuild.cost.main.collection import collect_snowflake_cost
 from sqlbuild.cost.models import RunCostSummary
 from sqlbuild.cost.types import CostStatus
 from tests.integration.src.sqlbuild.adapters.snowflake._test_types import (

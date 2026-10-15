@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.cost.classes.cost_context import CostContext
+from sqlbuild._native import CostContext
 from sqlbuild.cost.models import CostResourceContext
 from tests.unit.src.sqlbuild.cost._test_types import CostResourceScopeTestCase
 

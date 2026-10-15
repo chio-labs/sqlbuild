@@ -109,6 +109,11 @@ impl<'py> KeywordArguments<'py> {
         Ok(Self { values })
     }
 
+    /// Whether the argument `name` was passed.
+    pub(crate) fn contains(&self, name: &str) -> PyResult<bool> {
+        self.values.contains(name)
+    }
+
     /// The argument `name`, or `None` when it was not passed.
     pub(crate) fn value(&self, name: &str) -> PyResult<Bound<'py, PyAny>> {
         let py: Python<'py> = self.values.py();

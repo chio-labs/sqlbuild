@@ -1,0 +1,823 @@
+//! Snowflake query-history cost collection for one run, attributed through the statement ledger.
+
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+
+use pyo3::exceptions::{PyTimeoutError, PyValueError};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::{PyDict, PyList, PyListMethods, PyString, PyTuple};
+use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
+use sqlbuild_analysis::snowflake_cost::main::metadata_only_statement::metadata_only_statement;
+use sqlbuild_analysis::snowflake_cost::main::sqlbuild_query_tag::sqlbuild_query_tag;
+use sqlbuild_analysis::snowflake_cost::models::QueryTag;
+use sqlbuild_core::cost_allocation::constants::QUERY_HISTORY_RESULT_LIMIT;
+use sqlbuild_core::cost_allocation::main::query_history_sql::query_history_sql;
+use sqlbuild_core::cost_allocation::models::{QueryHistoryWindow, RunAllocation};
+
+use crate::bindings::_helpers::compile_driver::python_calls::{
+    KeywordArguments, call_with, imported,
+};
+use crate::bindings::_helpers::cost_telemetry::allocation::{
+    SummaryState, allocate_observations, priced, summary_object,
+};
+use crate::bindings::_helpers::cost_telemetry::ledger::read_ledger;
+use crate::bindings::_helpers::cost_telemetry::values::{COST_CONSTANTS, COST_MODELS};
+use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
+
+const DEADLINE_SECONDS: f64 = 10.0;
+const QUERY_TIMEOUT_SECONDS: &str = "5";
+const RUNNING_STATUS: &str = "RUNNING";
+const HOOK_RESOURCE_TYPE: &str = "hook";
+const ROW_WIDTH: usize = 14;
+const NO_WAREHOUSE_COMPUTE: &str = "no_warehouse_compute";
+const MISSING_WAREHOUSE_METADATA: &str = "missing_warehouse_metadata";
+const INCOMPLETE_HISTORY: &str = "incomplete_history";
+const DEADLINE_MESSAGE: &str = "Snowflake cost collection deadline exceeded";
+const VISIBLE_QUERY_LIMITATION: &str =
+    "Concurrency sharing includes only queries visible to the executing Snowflake role.";
+const RESULT_LIMIT_LIMITATION: &str = "Snowflake query-history result limit was reached.";
+const LEDGER_FAILURE_PREFIX: &str = "Statement-ledger persistence failed (";
+const PENDING_STATUS: &str = "PENDING";
+const PARTIAL_STATUS: &str = "PARTIAL";
+const COMPLETE_STATUS: &str = "COMPLETE";
+const UNAVAILABLE_STATUS: &str = "UNAVAILABLE";
+
+/// The connection, window inputs and deadline every query-history read shares.
+struct History<'py> {
+    connection: Bound<'py, PyAny>,
+    database: Option<String>,
+    classification_query_ids: Vec<String>,
+    deadline: f64,
+    result_limit: usize,
+}
+
+/// One query-history snapshot: observations, observed IDs, skip reasons and saturation.
+struct Observed<'py> {
+    observations: Vec<Bound<'py, PyAny>>,
+    observed: HashSet<String>,
+    skipped: Vec<(String, &'static str)>,
+    saturated: bool,
+}
+
+fn monotonic(py: Python<'_>) -> PyResult<f64> {
+    imported(py, "time", "monotonic")?.call0()?.extract()
+}
+
+fn timedelta<'py>(py: Python<'py>, (unit, amount): (&str, i64)) -> PyResult<Bound<'py, PyAny>> {
+    let options: Bound<'py, PyDict> = PyDict::new(py);
+    options.set_item(unit, amount)?;
+    imported(py, DATETIME_MODULE, "timedelta")?.call((), Some(&options))
+}
+
+fn check_deadline(history: &History<'_>, py: Python<'_>) -> PyResult<()> {
+    if monotonic(py)? >= history.deadline {
+        return Err(PyTimeoutError::new_err(DEADLINE_MESSAGE));
+    }
+    Ok(())
+}
+
+fn history_rows<'py>(
+    history: &History<'py>,
+    (start, end): (&Bound<'py, PyAny>, Option<&Bound<'py, PyAny>>),
+) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    let py: Python<'py> = start.py();
+    check_deadline(history, py)?;
+    let start_text: String = start.call_method0("isoformat")?.extract()?;
+    let end_text: Option<String> = match end {
+        Some(end) => Some(end.call_method0("isoformat")?.extract()?),
+        None => None,
+    };
+    let sql: String = query_history_sql(&QueryHistoryWindow {
+        database: history.database.as_deref(),
+        start: &start_text,
+        end: end_text.as_deref(),
+        classification_query_ids: &history.classification_query_ids,
+        result_limit: history.result_limit,
+    });
+    let parameters: Bound<'py, PyDict> = PyDict::new(py);
+    parameters.set_item("STATEMENT_TIMEOUT_IN_SECONDS", QUERY_TIMEOUT_SECONDS)?;
+    let options: Bound<'py, PyDict> = PyDict::new(py);
+    options.set_item("statement_params", parameters)?;
+    let cursor: Bound<'py, PyAny> =
+        history
+            .connection
+            .call_method("execute", (sql,), Some(&options))?;
+    check_deadline(history, py)?;
+    let rows: Vec<Bound<'py, PyAny>> = cursor
+        .call_method0("fetchall")?
+        .try_iter()?
+        .map(|row| {
+            Ok(PyTuple::new(py, row?.try_iter()?.collect::<PyResult<Vec<_>>>()?)?.into_any())
+        })
+        .collect::<PyResult<_>>()?;
+    check_deadline(history, py)?;
+    Ok(rows)
+}
+
+fn strings(values: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+    values.try_iter()?.map(|value| value?.extract()).collect()
+}
+
+fn query_id(row: &Bound<'_, PyAny>) -> PyResult<String> {
+    row.get_item(0)?.str()?.extract()
+}
+
+/// Rows keyed by query ID, later rows replacing earlier ones, in query-ID order.
+fn merged_rows<'py>(
+    rows: impl Iterator<Item = Bound<'py, PyAny>>,
+) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    let mut by_query_id: BTreeMap<String, Bound<'py, PyAny>> = BTreeMap::new();
+    for row in rows {
+        by_query_id.insert(query_id(&row)?, row);
+    }
+    Ok(by_query_id.into_values().collect())
+}
+
+/// End-time-bounded rows, halving the window while a read reaches the result limit.
+fn bounded_rows<'py>(
+    history: &History<'py>,
+    (start, end): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+) -> PyResult<(Vec<Bound<'py, PyAny>>, bool)> {
+    let py: Python<'py> = start.py();
+    let rows: Vec<Bound<'py, PyAny>> = history_rows(history, (start, Some(end)))?;
+    if rows.len() < history.result_limit {
+        return Ok((rows, false));
+    }
+    let width: Bound<'py, PyAny> = end.sub(start)?;
+    if width.le(timedelta(py, ("milliseconds", 1))?)? {
+        return Ok((rows, true));
+    }
+    let midpoint: Bound<'py, PyAny> = start.add(width.div(2)?)?;
+    let (left, left_saturated) = bounded_rows(history, (start, &midpoint))?;
+    let (right, right_saturated) = bounded_rows(history, (&midpoint, end))?;
+    Ok((
+        merged_rows(left.into_iter().chain(right))?,
+        left_saturated || right_saturated,
+    ))
+}
+
+fn running(end_time: &Bound<'_, PyAny>, status: &Bound<'_, PyAny>) -> PyResult<bool> {
+    Ok(end_time.is_none() || status.str()?.extract::<String>()?.to_uppercase() == RUNNING_STATUS)
+}
+
+fn unpacked<'py>(row: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    let fields: Vec<Bound<'py, PyAny>> = row.try_iter()?.collect::<PyResult<_>>()?;
+    match fields.len() {
+        ROW_WIDTH => Ok(fields),
+        width if width > ROW_WIDTH => Err(PyValueError::new_err(format!(
+            "too many values to unpack (expected {ROW_WIDTH})"
+        ))),
+        width => Err(PyValueError::new_err(format!(
+            "not enough values to unpack (expected {ROW_WIDTH}, got {width})"
+        ))),
+    }
+}
+
+fn python_int<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = value.py();
+    let value: Bound<'py, PyAny> = if value.is_truthy()? {
+        value.clone()
+    } else {
+        0_i64.into_bound_py_any(py)?
+    };
+    py.get_type::<pyo3::types::PyInt>().call1((value,))
+}
+
+fn optional_str<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    if value.is_none() {
+        return Ok(value.clone());
+    }
+    Ok(value.str()?.into_any())
+}
+
+/// A history row as an observation, or the reason it carries no attributable compute.
+fn row_observation<'py>(
+    row: &Bound<'py, PyAny>,
+    require_complete: bool,
+) -> PyResult<Result<Bound<'py, PyAny>, &'static str>> {
+    let py: Python<'py> = row.py();
+    let fields: Vec<Bound<'py, PyAny>> = unpacked(row)?;
+    let [
+        query_id,
+        query_tag,
+        warehouse_name,
+        warehouse_size,
+        warehouse_type,
+        cluster_number,
+        start_time,
+        end_time,
+        execution_ms,
+        bytes_scanned,
+        execution_status,
+        query_type,
+        query_text,
+        observed_at,
+    ] = <[Bound<'py, PyAny>; ROW_WIDTH]>::try_from(fields)
+        .map_err(|_| PyValueError::new_err("query history row width changed"))?;
+    let mut milliseconds: Bound<'py, PyAny> = python_int(&execution_ms)?;
+    if milliseconds.lt(0)? {
+        milliseconds = 0_i64.into_bound_py_any(py)?;
+    }
+    let query_type: String = if query_type.is_truthy()? {
+        query_type.str()?.extract()?
+    } else {
+        String::new()
+    };
+    let query_text: Option<String> = if query_text.is_instance_of::<PyString>() {
+        Some(query_text.extract()?)
+    } else {
+        None
+    };
+    if metadata_only_statement(&query_type, query_text.as_deref()) {
+        return Ok(Err(NO_WAREHOUSE_COMPUTE));
+    }
+    let running: bool = running(&end_time, &execution_status)?;
+    if require_complete && running {
+        return Ok(Err(INCOMPLETE_HISTORY));
+    }
+    if milliseconds.eq(0)? || warehouse_name.is_none() || warehouse_size.is_none() {
+        return Ok(Err(MISSING_WAREHOUSE_METADATA));
+    }
+    let tag: Option<QueryTag> = if query_tag.is_instance_of::<PyString>() {
+        sqlbuild_query_tag(&query_tag.extract::<String>()?)
+    } else {
+        None
+    };
+    let effective_end: Bound<'py, PyAny> = if running { observed_at } else { end_time };
+    let options: Bound<'py, PyDict> = PyDict::new(py);
+    options.set_item("milliseconds", &milliseconds)?;
+    let busy_start: Bound<'py, PyAny> =
+        effective_end.sub(imported(py, DATETIME_MODULE, "timedelta")?.call((), Some(&options))?)?;
+    let active_start: Bound<'py, PyAny> = if busy_start.gt(&start_time)? {
+        busy_start
+    } else {
+        start_time
+    };
+    if effective_end.le(&active_start)? {
+        return Ok(Err(NO_WAREHOUSE_COMPUTE));
+    }
+    let tag: QueryTag = tag.unwrap_or_default();
+    let observation: Bound<'py, PyAny> = call_with(
+        &imported(py, COST_MODELS, "QueryCostObservation")?,
+        &[
+            ("query_id", query_id.str()?.into_any()),
+            ("warehouse_name", warehouse_name.str()?.into_any()),
+            ("warehouse_size", warehouse_size.str()?.into_any()),
+            ("warehouse_type", optional_str(&warehouse_type)?),
+            (
+                "cluster_number",
+                if cluster_number.is_none() {
+                    cluster_number
+                } else {
+                    py.get_type::<pyo3::types::PyInt>()
+                        .call1((cluster_number,))?
+                },
+            ),
+            ("started_at", active_start),
+            ("completed_at", effective_end),
+            ("execution_ms", milliseconds),
+            ("bytes_scanned", python_int(&bytes_scanned)?),
+            ("execution_status", execution_status.str()?.into_any()),
+            ("run_id", tag.run_id.into_bound_py_any(py)?),
+            ("resource_type", tag.resource_type.into_bound_py_any(py)?),
+            ("resource_name", tag.resource_name.into_bound_py_any(py)?),
+        ],
+    )?;
+    Ok(Ok(observation))
+}
+
+/// Observations of the run window: open-ended history, bounded windows when saturated.
+fn query_observations<'py>(
+    history: &History<'py>,
+    (started_at, completed_at): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    expected: &HashSet<String>,
+) -> PyResult<Observed<'py>> {
+    let py: Python<'py> = started_at.py();
+    let skew: Bound<'py, PyAny> = timedelta(py, ("minutes", 10))?;
+    let window_start: Bound<'py, PyAny> = started_at.sub(&skew)?;
+    let open_rows: Vec<Bound<'py, PyAny>> = history_rows(history, (&window_start, None))?;
+    let mut saturated: bool = open_rows.len() >= history.result_limit;
+    let rows: Vec<Bound<'py, PyAny>> = if saturated {
+        let (bounded, bounded_saturated) =
+            bounded_rows(history, (&window_start, &completed_at.add(&skew)?))?;
+        let mut still_running: Vec<Bound<'py, PyAny>> = Vec::new();
+        for row in open_rows {
+            if running(&row.get_item(7)?, &row.get_item(10)?)? {
+                still_running.push(row);
+            }
+        }
+        saturated = bounded_saturated;
+        merged_rows(still_running.into_iter().chain(bounded))?
+    } else {
+        open_rows
+    };
+    let observations: Bound<'py, PyList> = PyList::empty(py);
+    let mut observed: HashSet<String> = HashSet::new();
+    let mut skipped: Vec<(String, &'static str)> = Vec::new();
+    for row in rows {
+        let id: String = query_id(&row)?;
+        observed.insert(id.clone());
+        match row_observation(&row, expected.contains(&id))? {
+            Ok(observation) => observations.append(observation)?,
+            Err(reason) => match skipped.iter_mut().find(|(skipped_id, _)| *skipped_id == id) {
+                Some(entry) => entry.1 = reason,
+                None => skipped.push((id, reason)),
+            },
+        }
+    }
+    let key: Bound<'py, PyAny> =
+        imported(py, "operator", "attrgetter")?.call1(("started_at", "query_id"))?;
+    let options: Bound<'py, PyDict> = PyDict::new(py);
+    options.set_item("key", key)?;
+    observations.call_method("sort", (), Some(&options))?;
+    Ok(Observed {
+        observations: observations.iter().collect(),
+        observed,
+        skipped,
+        saturated,
+    })
+}
+
+/// A collected summary: the allocation it prices, if any, and its derived fields.
+struct Summary {
+    allocation: Option<RunAllocation>,
+    state: SummaryState,
+}
+
+/// Sorted unique limitations after adding `added`.
+fn with_limitations(
+    limitations: &[String],
+    added: impl IntoIterator<Item = String>,
+) -> Vec<String> {
+    let limitations: BTreeSet<String> = limitations.iter().cloned().chain(added).collect();
+    limitations.into_iter().collect()
+}
+
+fn partial(message: &str) -> Summary {
+    Summary {
+        allocation: None,
+        state: SummaryState {
+            status: PARTIAL_STATUS,
+            message: Some(message.to_owned()),
+            limitations: Vec::new(),
+            counts: [0; 4],
+        },
+    }
+}
+
+fn with_ledger_failure(mut summary: Summary, failure: Option<&str>) -> Summary {
+    let Some(failure) = failure else {
+        return summary;
+    };
+    summary.state.status = PARTIAL_STATUS;
+    summary.state.limitations = with_limitations(
+        &summary.state.limitations,
+        [format!("{LEDGER_FAILURE_PREFIX}{failure}).")],
+    );
+    if summary.state.message.is_none() {
+        summary.state.message = Some("Cost telemetry was only partially persisted.".to_owned());
+    }
+    summary
+}
+
+/// Ledger expectations a summary is checked against.
+struct Expected<'a> {
+    statement_count: usize,
+    query_ids: &'a HashSet<String>,
+}
+
+fn with_observation_gaps(
+    mut summary: Summary,
+    expected: &Expected<'_>,
+    observed: &Observed<'_>,
+) -> Summary {
+    let relevant: Vec<&'static str> = observed
+        .skipped
+        .iter()
+        .filter(|(id, _)| expected.query_ids.contains(id))
+        .map(|(_, reason)| *reason)
+        .collect();
+    let missing_metadata: bool = relevant.contains(&MISSING_WAREHOUSE_METADATA);
+    let incomplete: bool = relevant.contains(&INCOMPLETE_HISTORY);
+    let mut added: Vec<String> = Vec::new();
+    if missing_metadata {
+        added.push(
+            "One or more run statements had missing Snowflake warehouse metadata.".to_owned(),
+        );
+    }
+    if incomplete {
+        added.push("One or more run statements were still incomplete in query history.".to_owned());
+    }
+    summary.state.limitations = with_limitations(&summary.state.limitations, added);
+    let query_count: usize = summary
+        .allocation
+        .as_ref()
+        .map_or(0, |allocation| allocation.query_count);
+    if missing_metadata || (incomplete && query_count > 0) {
+        summary.state.status = PARTIAL_STATUS;
+    }
+    let visible: usize = expected.query_ids.intersection(&observed.observed).count();
+    summary.state.counts = [
+        expected.statement_count,
+        visible,
+        expected.statement_count - visible,
+        relevant.len(),
+    ];
+    summary
+}
+
+fn incomplete_observation(expected: &HashSet<String>, observed: &Observed<'_>) -> bool {
+    observed.skipped.iter().any(|(id, reason)| {
+        expected.contains(id)
+            && (*reason == MISSING_WAREHOUSE_METADATA || *reason == INCOMPLETE_HISTORY)
+    })
+}
+
+/// `replace(observation, run_id=..., resource_type=..., resource_name=...)` from the ledger entry.
+fn ledger_attributed<'py>(
+    observation: &Bound<'py, PyAny>,
+    ledger: &Bound<'py, PyDict>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = observation.py();
+    let entry: Option<Bound<'py, PyAny>> =
+        pyo3::types::PyDictMethods::get_item(ledger, observation.getattr("query_id")?)?;
+    let field = |name: &str| -> PyResult<Bound<'py, PyAny>> {
+        match &entry {
+            Some(entry) => entry.getattr(name),
+            None => Ok(py.None().into_bound(py)),
+        }
+    };
+    let changes: Bound<'py, PyDict> = PyDict::new(py);
+    changes.set_item("run_id", field("run_id")?)?;
+    changes.set_item("resource_type", field("resource_type")?)?;
+    changes.set_item("resource_name", field("resource_name")?)?;
+    imported(py, "dataclasses", "replace")?.call((observation,), Some(&changes))
+}
+
+/// Collection inputs read from the keyword arguments.
+struct Collection<'py> {
+    run_id: Bound<'py, PyAny>,
+    started_at: Bound<'py, PyAny>,
+    completed_at: Bound<'py, PyAny>,
+    usd_per_credit: Bound<'py, PyAny>,
+    rate_source: Bound<'py, PyAny>,
+    attempts: i64,
+    retry_delay_seconds: f64,
+}
+
+fn collect<'py>(
+    collection: &Collection<'py>,
+    mut history: History<'py>,
+    ledger_path: &Bound<'py, PyAny>,
+) -> PyResult<Summary> {
+    let py: Python<'py> = ledger_path.py();
+    history.deadline = monotonic(py)? + DEADLINE_SECONDS;
+    let run_id: String = collection.run_id.extract()?;
+    let ledger: Vec<Bound<'py, PyAny>> = read_ledger(ledger_path, &collection.run_id)?;
+    let failure: Option<String> = call_with(
+        &imported(py, COST_CONSTANTS, "COST_TELEMETRY_HEALTH")?
+            .getattr("consume_ledger_failure")?,
+        &[("run_id", collection.run_id.clone())],
+    )?
+    .extract()?;
+    let by_query_id: Bound<'py, PyDict> = PyDict::new(py);
+    for entry in &ledger {
+        let id: Bound<'py, PyAny> = entry.getattr("query_id")?;
+        if !id.is_none() {
+            by_query_id.set_item(id, entry)?;
+        }
+    }
+    let mut expected_ids: HashSet<String> = HashSet::new();
+    let mut classification: Vec<String> = Vec::new();
+    for (id, entry) in pyo3::types::PyDictMethods::iter(&by_query_id) {
+        let id: String = id.extract()?;
+        if !entry.getattr("resource_type")?.eq(HOOK_RESOURCE_TYPE)? {
+            classification.push(id.clone());
+        }
+        expected_ids.insert(id);
+    }
+    history.classification_query_ids = classification;
+    if !ledger.is_empty() && expected_ids.is_empty() {
+        let mut summary: Summary = with_ledger_failure(
+            partial("No Snowflake query IDs were available in the statement ledger."),
+            failure.as_deref(),
+        );
+        summary.state.counts = [ledger.len(), 0, ledger.len(), 0];
+        return Ok(summary);
+    }
+    let expected: Expected<'_> = Expected {
+        statement_count: ledger.len(),
+        query_ids: &expected_ids,
+    };
+    let mut summary: Option<Summary> = None;
+    let mut observed: Observed<'py> = Observed {
+        observations: Vec::new(),
+        observed: HashSet::new(),
+        skipped: Vec::new(),
+        saturated: false,
+    };
+    for attempt in 0..collection.attempts {
+        observed = query_observations(
+            &history,
+            (&collection.started_at, &collection.completed_at),
+            &expected_ids,
+        )?;
+        let attributed: Vec<Bound<'py, PyAny>> = observed
+            .observations
+            .iter()
+            .map(|observation| ledger_attributed(observation, &by_query_id))
+            .collect::<PyResult<_>>()?;
+        let allocation: RunAllocation = allocate_observations(
+            &attributed,
+            (&run_id, &collection.usd_per_credit),
+            observed.saturated,
+        )?;
+        let (allocation, mut state) = priced(allocation);
+        state.limitations =
+            with_limitations(&state.limitations, [VISIBLE_QUERY_LIMITATION.to_owned()]);
+        let current: Summary = Summary { allocation, state };
+        if expected_ids.is_subset(&observed.observed)
+            && !incomplete_observation(&expected_ids, &observed)
+        {
+            let mut complete: Summary = with_observation_gaps(current, &expected, &observed);
+            if complete.state.status == PENDING_STATUS {
+                complete.state.status = COMPLETE_STATUS;
+                complete.state.message =
+                    Some("No cost-bearing Snowflake warehouse queries were observed.".to_owned());
+            }
+            return Ok(with_ledger_failure(complete, failure.as_deref()));
+        }
+        summary = Some(current);
+        if attempt + 1 < collection.attempts {
+            if history.deadline - monotonic(py)? <= collection.retry_delay_seconds {
+                break;
+            }
+            imported(py, "time", "sleep")?.call1((collection.retry_delay_seconds,))?;
+        }
+    }
+    let mut summary: Summary =
+        summary.unwrap_or_else(|| partial("Snowflake query history could not be collected."));
+    let missing: usize = expected_ids.difference(&observed.observed).count();
+    let mut added: Vec<String> = Vec::new();
+    if missing > 0 {
+        added.push(format!(
+            "{missing} statement ledger query ID(s) were not visible in query history."
+        ));
+    }
+    if observed.saturated {
+        added.push(RESULT_LIMIT_LIMITATION.to_owned());
+    }
+    summary.state.limitations = with_limitations(&summary.state.limitations, added);
+    let visible: bool = expected_ids
+        .intersection(&observed.observed)
+        .next()
+        .is_some();
+    let now: Bound<'py, PyAny> = imported(py, DATETIME_MODULE, "datetime")?
+        .call_method1("now", (imported(py, DATETIME_MODULE, "UTC")?,))?;
+    let expired: bool = now
+        .sub(&collection.completed_at)?
+        .ge(timedelta(py, ("days", 7))?)?;
+    if expired && !visible {
+        summary.state.status = UNAVAILABLE_STATUS;
+        summary.state.message =
+            Some("Snowflake query history is no longer available for this run.".to_owned());
+    } else if !visible && !observed.saturated {
+        summary.state.status = PENDING_STATUS;
+        summary.state.message = Some(
+            "Snowflake query history is not complete yet. Run `sqb cost latest` to refresh."
+                .to_owned(),
+        );
+    } else {
+        summary.state.status = PARTIAL_STATUS;
+        if summary.state.message.is_none() {
+            summary.state.message =
+                Some("Snowflake query history was only partially available.".to_owned());
+        }
+    }
+    let summary: Summary = with_observation_gaps(summary, &expected, &observed);
+    Ok(with_ledger_failure(summary, failure.as_deref()))
+}
+
+/// Collect visible history and attribute exact ledger query IDs to one run.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+fn collect_snowflake_cost<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let arguments: KeywordArguments<'py> = KeywordArguments::read(
+        py,
+        "collect_snowflake_cost",
+        options,
+        (
+            &[
+                "connection",
+                "run_id",
+                "started_at",
+                "completed_at",
+                "statement_ledger_path",
+                "usd_per_credit",
+                "rate_source",
+            ],
+            &[
+                "database",
+                "attempts",
+                "retry_delay_seconds",
+                "result_limit",
+            ],
+        ),
+    )?;
+    let optional = |name: &str, default: Bound<'py, PyAny>| -> PyResult<Bound<'py, PyAny>> {
+        Ok(if arguments.contains(name)? {
+            arguments.value(name)?
+        } else {
+            default
+        })
+    };
+    let collection: Collection<'py> = Collection {
+        run_id: arguments.value("run_id")?,
+        started_at: arguments.value("started_at")?,
+        completed_at: arguments.value("completed_at")?,
+        usd_per_credit: arguments.value("usd_per_credit")?,
+        rate_source: arguments.value("rate_source")?,
+        attempts: optional("attempts", 3_i64.into_bound_py_any(py)?)?.extract()?,
+        retry_delay_seconds: optional("retry_delay_seconds", 1.0_f64.into_bound_py_any(py)?)?
+            .extract()?,
+    };
+    let history: History<'py> = History {
+        connection: arguments.value("connection")?,
+        database: arguments.value("database")?.extract()?,
+        classification_query_ids: Vec::new(),
+        deadline: 0.0,
+        result_limit: optional(
+            "result_limit",
+            QUERY_HISTORY_RESULT_LIMIT.into_bound_py_any(py)?,
+        )?
+        .extract()?,
+    };
+    let summary: Summary = collect(
+        &collection,
+        history,
+        &arguments.value("statement_ledger_path")?,
+    )?;
+    summary_object(
+        summary.allocation.as_ref(),
+        &summary.state,
+        (&collection.usd_per_credit, &collection.rate_source),
+    )
+}
+
+/// Query-history observations of one window, as cost collection reads them.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+fn snowflake_query_observations<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let arguments: KeywordArguments<'py> = KeywordArguments::read(
+        py,
+        "snowflake_query_observations",
+        options,
+        (
+            &[
+                "connection",
+                "started_at",
+                "completed_at",
+                "expected_query_ids",
+                "classification_query_ids",
+                "deadline",
+            ],
+            &["database", "result_limit"],
+        ),
+    )?;
+    let result_limit: Bound<'py, PyAny> = arguments.value("result_limit")?;
+    let history: History<'py> = History {
+        connection: arguments.value("connection")?,
+        database: arguments.value("database")?.extract()?,
+        classification_query_ids: strings(&arguments.value("classification_query_ids")?)?,
+        deadline: arguments.value("deadline")?.extract()?,
+        result_limit: if result_limit.is_none() {
+            QUERY_HISTORY_RESULT_LIMIT
+        } else {
+            result_limit.extract()?
+        },
+    };
+    let expected: HashSet<String> = strings(&arguments.value("expected_query_ids")?)?
+        .into_iter()
+        .collect();
+    let observed: Observed<'py> = query_observations(
+        &history,
+        (
+            &arguments.value("started_at")?,
+            &arguments.value("completed_at")?,
+        ),
+        &expected,
+    )?;
+    let skipped: Bound<'py, PyDict> = PyDict::new(py);
+    for (id, reason) in &observed.skipped {
+        skipped.set_item(id, reason)?;
+    }
+    PyTuple::new(
+        py,
+        [
+            PyTuple::new(py, &observed.observations)?.into_any(),
+            pyo3::types::PyFrozenSet::new(py, &observed.observed)?.into_any(),
+            skipped.into_any(),
+            observed.saturated.into_bound_py_any(py)?,
+        ],
+    )
+}
+
+/// The query-history SQL of one window; an absent end reads every query ending after the start.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+fn render_snowflake_query_history_sql(
+    py: Python<'_>,
+    options: Option<Bound<'_, PyDict>>,
+) -> PyResult<String> {
+    let arguments: KeywordArguments<'_> = KeywordArguments::read(
+        py,
+        "render_snowflake_query_history_sql",
+        options,
+        (
+            &["started_at", "classification_query_ids"],
+            &["database", "completed_at", "result_limit"],
+        ),
+    )?;
+    let start: String = arguments
+        .value("started_at")?
+        .call_method0("isoformat")?
+        .extract()?;
+    let completed_at: Bound<'_, PyAny> = arguments.value("completed_at")?;
+    let end: Option<String> = if completed_at.is_none() {
+        None
+    } else {
+        Some(completed_at.call_method0("isoformat")?.extract()?)
+    };
+    let result_limit: Bound<'_, PyAny> = arguments.value("result_limit")?;
+    let database: Option<String> = arguments.value("database")?.extract()?;
+    Ok(query_history_sql(&QueryHistoryWindow {
+        database: database.as_deref(),
+        start: &start,
+        end: end.as_deref(),
+        classification_query_ids: &strings(&arguments.value("classification_query_ids")?)?,
+        result_limit: if result_limit.is_none() {
+            QUERY_HISTORY_RESULT_LIMIT
+        } else {
+            result_limit.extract()?
+        },
+    }))
+}
+
+/// Whether Snowflake runs a statement of this type and text without warehouse compute.
+#[pyfunction]
+#[pyo3(signature = (*, query_type, query_text))]
+fn snowflake_statement_is_metadata_only(
+    query_type: &Bound<'_, PyAny>,
+    query_text: &Bound<'_, PyAny>,
+) -> PyResult<bool> {
+    let query_type: String = if query_type.is_truthy()? {
+        query_type.str()?.extract()?
+    } else {
+        String::new()
+    };
+    let query_text: Option<String> = if query_text.is_instance_of::<PyString>() {
+        Some(query_text.extract()?)
+    } else {
+        None
+    };
+    Ok(metadata_only_statement(&query_type, query_text.as_deref()))
+}
+
+/// The run attribution of a SQLBuild query tag, or `None` for any other tag.
+#[pyfunction]
+fn parse_sqlbuild_query_tag<'py>(
+    value: &Bound<'py, PyAny>,
+) -> PyResult<Option<Bound<'py, PyDict>>> {
+    let py: Python<'py> = value.py();
+    if !value.is_instance_of::<PyString>() {
+        return Ok(None);
+    }
+    let Some(tag) = sqlbuild_query_tag(&value.extract::<String>()?) else {
+        return Ok(None);
+    };
+    let attribution: Bound<'py, PyDict> = PyDict::new(py);
+    attribution.set_item("run_id", tag.run_id)?;
+    attribution.set_item("resource_type", tag.resource_type)?;
+    attribution.set_item("resource_name", tag.resource_name)?;
+    Ok(Some(attribution))
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(collect_snowflake_cost, module)?)?;
+    module.add_function(wrap_pyfunction!(snowflake_query_observations, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        render_snowflake_query_history_sql,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        snowflake_statement_is_metadata_only,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(parse_sqlbuild_query_tag, module)?)?;
+    Ok(())
+}

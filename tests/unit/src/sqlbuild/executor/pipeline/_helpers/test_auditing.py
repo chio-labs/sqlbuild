@@ -18,7 +18,12 @@ from unittest.mock import DEFAULT, Mock
 
 import pytest
 
-from sqlbuild._native import AuditProgressReporter
+from sqlbuild._native import (
+    AuditProgressReporter,
+    CostContext,
+    read_statement_ledger,
+    record_statement,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import (
@@ -30,8 +35,6 @@ from sqlbuild.compiler.auditing.types import (
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledResourceType
 from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput
-from sqlbuild.cost._helpers.ledger import read_statement_ledger, record_statement
-from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.cost.models import CostResourceContext, StatementLedgerEntry
 from sqlbuild.executor.auditing.main.resource_id import audit_resource_id
 from sqlbuild.executor.auditing.models import AuditExecutionResult

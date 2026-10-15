@@ -9,8 +9,8 @@ from typing import Any
 
 import pytest
 
+from sqlbuild._native import CostContext
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
 from tests.integration.src.sqlbuild.executor.build.concurrent._test_types import (

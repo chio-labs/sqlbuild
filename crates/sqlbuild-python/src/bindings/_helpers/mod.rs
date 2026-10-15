@@ -21,6 +21,7 @@ pub(crate) mod contract_command;
 pub(crate) mod contracts;
 pub(crate) mod cost_command;
 pub(crate) mod cost_report;
+pub(crate) mod cost_telemetry;
 pub(crate) mod cursor;
 pub(crate) mod dag_artifact;
 pub(crate) mod dbt_command;

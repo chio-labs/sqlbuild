@@ -5,6 +5,7 @@ from concurrent.futures import Future
 from contextlib import AbstractContextManager
 from contextvars import Token
 from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path, PurePath
 from typing import Any, Literal, TextIO, TypedDict
 
@@ -367,7 +368,14 @@ from sqlbuild.compiler.sql_test_glue.models import (
     NativeSqlTestPlanningRequest,
 )
 from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestPlanRow
-from sqlbuild.cost.models import CostRunRecord, StatementExecutionTelemetry
+from sqlbuild.cost.models import (
+    CostResourceContext,
+    CostRunRecord,
+    QueryCostObservation,
+    RunCostSummary,
+    StatementExecutionTelemetry,
+    StatementLedgerEntry,
+)
 from sqlbuild.cursor_algebra.models import (
     AlignedInterval,
     DateValue,
@@ -6099,3 +6107,86 @@ def list_source_candidates(
     database: str | None,
     entries: tuple[SourceEntry, ...],
 ) -> tuple[RelationInfo, ...]: ...
+
+class CostScope:
+    def __enter__(self) -> None: ...
+    def __exit__(self, *exception: object) -> None: ...
+
+class CostContext:
+    @staticmethod
+    def current() -> CostResourceContext | None: ...
+    @staticmethod
+    def scope(
+        *,
+        run_id: str,
+        resource_type: str,
+        resource_name: str,
+        ledger_path: Path | None = None,
+        phase: str = "execute",
+        attempt: int = 1,
+        on_statement_complete: Callable[[StatementExecutionTelemetry], None] | None = None,
+    ) -> CostScope: ...
+    @staticmethod
+    def resource_scope(
+        *,
+        resource_type: str,
+        resource_name: str,
+        phase: str | None = None,
+        attempt: int = 1,
+    ) -> CostScope: ...
+
+def allocate_run_cost(
+    *,
+    observations: Iterable[QueryCostObservation],
+    run_id: str,
+    usd_per_credit: Decimal,
+    rate_source: str,
+    result_limit_reached: bool = False,
+) -> RunCostSummary: ...
+def record_statement(
+    *,
+    context: CostResourceContext,
+    statement_id: str,
+    sql: str,
+    query_id: object,
+    status: str,
+    started_at: datetime,
+    completed_at: datetime,
+    error: BaseException | None = None,
+) -> None: ...
+def read_statement_ledger(*, path: Path, run_id: str) -> tuple[StatementLedgerEntry, ...]: ...
+def collect_snowflake_cost(
+    *,
+    connection: Any,
+    run_id: str,
+    started_at: datetime,
+    completed_at: datetime,
+    statement_ledger_path: Path,
+    usd_per_credit: Decimal,
+    rate_source: str,
+    database: str | None = None,
+    attempts: int = 3,
+    retry_delay_seconds: float = 1.0,
+    result_limit: int = 10000,
+) -> RunCostSummary: ...
+def snowflake_query_observations(
+    *,
+    connection: Any,
+    started_at: datetime,
+    completed_at: datetime,
+    expected_query_ids: Iterable[str],
+    classification_query_ids: Iterable[str],
+    deadline: float,
+    database: str | None = None,
+    result_limit: int | None = None,
+) -> tuple[tuple[QueryCostObservation, ...], frozenset[str], dict[str, str], bool]: ...
+def render_snowflake_query_history_sql(
+    *,
+    started_at: datetime,
+    classification_query_ids: Iterable[str],
+    database: str | None = None,
+    completed_at: datetime | None = None,
+    result_limit: int = 10000,
+) -> str: ...
+def snowflake_statement_is_metadata_only(*, query_type: object, query_text: object) -> bool: ...
+def parse_sqlbuild_query_tag(value: object) -> dict[str, str | None] | None: ...

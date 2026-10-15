@@ -12,6 +12,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
+from sqlbuild._native import collect_snowflake_cost
 from sqlbuild.adapter.contract.classes.base_adapter import (
     BaseAdapter,
     _encode_typed_json,
@@ -152,7 +153,6 @@ from sqlbuild.adapters.snowflake.constants import (
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.cost.main.collection import collect_snowflake_cost
 from sqlbuild.cost.models import RunCostSummary
 from sqlbuild.cost.types import CostCapability, CostStatus
 from sqlbuild.diagnostics.main.log_sql import log_sql

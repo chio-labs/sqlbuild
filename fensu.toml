@@ -70,6 +70,11 @@ reason = "Native bindings own source freshness observation, planning, propagatio
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
+path = "src/sqlbuild/cost/constants.py"
+reason = "Native bindings own run-cost allocation, Snowflake cost collection, the statement ledger and the cost context; this package only declares the cost models, types, constants, errors and the telemetry health tracker they use."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
 path = "src/sqlbuild/compiler/dag/types.py"
 reason = "The native DAG builder owns DAG behavior; this package only declares the node kinds integrations read from the artifact."
 

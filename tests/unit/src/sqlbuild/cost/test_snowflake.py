@@ -9,15 +9,14 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.cost._helpers.snowflake import (
-    _is_metadata_only_statement,
-    _parse_sqlbuild_tag,
-    _query_observations,
-    _render_open_query_history_sql,
-    _render_query_history_sql,
+from sqlbuild._native import (
+    collect_snowflake_cost,
+    parse_sqlbuild_query_tag,
+    render_snowflake_query_history_sql,
+    snowflake_query_observations,
+    snowflake_statement_is_metadata_only,
 )
 from sqlbuild.cost.constants import COST_TELEMETRY_HEALTH
-from sqlbuild.cost.main.collection import collect_snowflake_cost
 from sqlbuild.cost.models import RunCostSummary
 from sqlbuild.cost.types import CostStatus
 from tests.unit.src.sqlbuild.cost._test_types import (
@@ -88,7 +87,7 @@ class _SequencedConnection:
 def test_given_time_range_when_rendering_query_history_then_uses_valid_bounded_table_function(
     test_case: RenderQueryHistorySqlTestCase,
 ) -> None:
-    sql: str = _render_query_history_sql(
+    sql: str = render_snowflake_query_history_sql(
         database="analytics",
         started_at=datetime(2026, 8, 23, 10, 0, tzinfo=UTC),
         completed_at=datetime(2026, 8, 23, 10, 5, tzinfo=UTC),
@@ -123,7 +122,7 @@ def test_given_time_range_when_rendering_query_history_then_uses_valid_bounded_t
 def test_given_start_time_when_rendering_open_history_then_running_queries_are_requested(
     test_case: RenderQueryHistorySqlTestCase,
 ) -> None:
-    sql: str = _render_open_query_history_sql(
+    sql: str = render_snowflake_query_history_sql(
         database="analytics",
         started_at=datetime(2026, 8, 23, 10, 0, tzinfo=UTC),
         classification_query_ids=frozenset({"q-create"}),
@@ -148,7 +147,7 @@ def test_given_start_time_when_rendering_open_history_then_running_queries_are_r
 def test_given_no_classifiable_create_ids_when_rendering_history_then_query_text_is_masked(
     test_case: RenderQueryHistorySqlTestCase,
 ) -> None:
-    sql: str = _render_open_query_history_sql(
+    sql: str = render_snowflake_query_history_sql(
         started_at=datetime(2026, 8, 23, 10, 0, tzinfo=UTC),
         classification_query_ids=frozenset(),
     )
@@ -224,7 +223,6 @@ def test_given_exact_create_hook_when_collecting_then_hook_query_text_is_not_req
 )
 def test_given_saturated_open_history_when_bounded_fallback_is_complete_then_not_saturated(
     test_case: SnowflakeSaturationTestCase,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     origin: datetime = datetime(2026, 8, 23, 10, tzinfo=UTC)
     row: tuple[Any, ...] = (
@@ -247,9 +245,9 @@ def test_given_saturated_open_history_when_bounded_fallback_is_complete_then_not
     connection: _SequencedConnection = _SequencedConnection(
         ((row, ("q-open-2", *row[1:])), (bounded_row,))
     )
-    monkeypatch.setattr("sqlbuild.cost._helpers.snowflake._RESULT_LIMIT", 2)
 
-    _, observed_query_ids, _, saturated = _query_observations(
+    _, observed_query_ids, _, saturated = snowflake_query_observations(
+        result_limit=2,
         connection=connection,
         started_at=origin,
         completed_at=origin + timedelta(seconds=1),
@@ -277,8 +275,6 @@ def test_given_saturated_open_history_when_bounded_fallback_is_complete_then_not
                 }
             ),
             expected_payload={
-                "app": "sqlbuild",
-                "v": 1,
                 "run_id": "run-1",
                 "resource_type": "model",
                 "resource_name": "orders",
@@ -290,7 +286,7 @@ def test_given_saturated_open_history_when_bounded_fallback_is_complete_then_not
 def test_given_sqlbuild_query_tag_when_parsing_then_context_is_returned(
     test_case: ParseQueryTagTestCase,
 ) -> None:
-    parsed: dict[str, Any] | None = _parse_sqlbuild_tag(test_case.query_tag)
+    parsed: dict[str, Any] | None = parse_sqlbuild_query_tag(test_case.query_tag)
 
     assert parsed == test_case.expected_payload
 
@@ -319,7 +315,7 @@ def test_given_sqlbuild_query_tag_when_parsing_then_context_is_returned(
 def test_given_unrelated_or_invalid_query_tag_when_parsing_then_none_is_returned(
     test_case: ParseQueryTagTestCase,
 ) -> None:
-    assert _parse_sqlbuild_tag(test_case.query_tag) == test_case.expected_payload
+    assert parse_sqlbuild_query_tag(test_case.query_tag) == test_case.expected_payload
 
 
 @pytest.mark.parametrize(
@@ -386,7 +382,7 @@ def test_given_snowflake_statement_when_classifying_then_compute_capability_is_c
     test_case: SnowflakeStatementClassificationTestCase,
 ) -> None:
     assert (
-        _is_metadata_only_statement(
+        snowflake_statement_is_metadata_only(
             query_type=test_case.query_type,
             query_text=test_case.query_text,
         )
@@ -871,11 +867,11 @@ def test_given_retry_delay_exceeds_remaining_deadline_when_collecting_then_parti
     )
     monotonic_values: Iterator[float] = iter((0.0, 0.0, 0.0, 0.0, 9.5))
     monkeypatch.setattr(
-        "sqlbuild.cost._helpers.snowflake.time.monotonic",
+        "time.monotonic",
         lambda: next(monotonic_values),
     )
     monkeypatch.setattr(
-        "sqlbuild.cost._helpers.snowflake.time.sleep",
+        "time.sleep",
         lambda seconds: pytest.fail(f"unexpected sleep for {seconds} seconds"),
     )
 
@@ -1168,7 +1164,6 @@ def test_given_visible_running_competitor_when_collecting_then_busy_time_is_shar
 def test_given_saturated_open_history_when_bounded_fallback_completes_then_running_share_is_retained(
     test_case: CollectSnowflakeCostTestCase,
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     origin: datetime = datetime(2026, 8, 23, 10, tzinfo=UTC)
     ledger_path: Path = tmp_path / "statements.jsonl"
@@ -1225,10 +1220,10 @@ def test_given_saturated_open_history_when_bounded_fallback_completes_then_runni
     connection: _SequencedConnection = _SequencedConnection(
         ((completed, running_competitor), (completed,))
     )
-    monkeypatch.setattr("sqlbuild.cost._helpers.snowflake._RESULT_LIMIT", 2)
 
     summary: RunCostSummary = collect_snowflake_cost(
         connection=connection,
+        result_limit=2,
         run_id="run-saturated-share",
         started_at=origin,
         completed_at=origin + timedelta(seconds=1),

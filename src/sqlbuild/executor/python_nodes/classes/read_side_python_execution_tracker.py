@@ -5,10 +5,10 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
+from sqlbuild._native import CostContext
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
-from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.executor.node_results.main._direct_store import build_direct_node_result_store
 from sqlbuild.executor.python_nodes._helpers.fingerprinting import (
     try_write_python_node_identity_fingerprint,
