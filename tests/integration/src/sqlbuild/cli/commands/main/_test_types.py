@@ -940,6 +940,15 @@ class WarmTargetEditTestCase:
 
 
 @dataclass(frozen=True)
+class WarmTargetProjectConfigEditTestCase:
+    description: str
+    edited_project_config: str
+    expected_edit_changed: tuple[str, ...] = ()
+    expected_after_edit_changed: tuple[str, ...] = ()
+    expected_exit_codes: tuple[int, int] = (0, 0)
+
+
+@dataclass(frozen=True)
 class RuleExceptionPolicyTestCase:
     """One `[rules] allow_exceptions` value with one escape hatch, compiled through the CLI."""
 
