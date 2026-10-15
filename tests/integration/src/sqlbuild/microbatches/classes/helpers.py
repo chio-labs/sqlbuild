@@ -5,11 +5,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlbuild._native import deterministic_microbatch_event_id
 from sqlbuild.microbatches.classes.event_codec import MicrobatchEventCodec
 from sqlbuild.microbatches.constants import MICROBATCH_COLUMNS
-from sqlbuild.microbatches.main.deterministic_event_id import (
-    deterministic_microbatch_event_id,
-)
 from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
 from sqlbuild.microbatches.types import (
     MicrobatchCompletionType,

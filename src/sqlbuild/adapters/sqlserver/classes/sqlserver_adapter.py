@@ -361,10 +361,10 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
 
     def render_create_microbatch_state_table_sql(self, *, database: str | None, schema: str) -> str:
+        from sqlbuild._native import build_microbatch_create_table_sql
         from sqlbuild.microbatches.constants import MICROBATCH_TABLE_NAME
-        from sqlbuild.microbatches.main.create_table_sql import build_create_table_sql
 
-        create_sql: str = build_create_table_sql(
+        create_sql: str = build_microbatch_create_table_sql(
             database=database,
             schema=schema,
             render_qualified_name=self.render_qualified_name,

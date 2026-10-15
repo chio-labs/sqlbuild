@@ -110,4 +110,3 @@ pub(crate) fn redirected_output_files(py: Python<'_>) -> PyResult<Bound<'_, PyLi
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(interpreter_identity, module)?)
 }
-

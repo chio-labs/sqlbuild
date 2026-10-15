@@ -53,6 +53,7 @@ pub(crate) mod lineage;
 pub(crate) mod load;
 pub(crate) mod macro_bridge;
 pub(crate) mod manifest;
+pub(crate) mod microbatches;
 pub(crate) mod model_config;
 pub(crate) mod native_threads;
 pub(crate) mod output_capture;

@@ -36,7 +36,12 @@ reason = "Native bindings own lint entry points, expansion preparation and compi
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
 path = "src/sqlbuild/cli/compile_reuse/__init__.py"
-reason = "Native bindings own the compile reuse check, replay and launch records; this package declares the reuse models and constants and keeps the provider settings, runtime identity and startup inputs the native code reads from the interpreter."
+reason = "Native bindings own the compile reuse check, runtime identity, replay and launch records; this package declares the reuse models and keeps the provider settings and startup inputs the native code reads from the interpreter."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/microbatches/__init__.py"
+reason = "Native bindings own microbatch coverage and replay projection, event IDs and state SQL; this package keeps the executor's direct event store, the event row codec and the event, scope and projection models it consumes."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"

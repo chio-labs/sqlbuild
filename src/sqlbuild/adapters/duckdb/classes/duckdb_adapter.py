@@ -62,9 +62,9 @@ class DuckDbAdapter(MicrobatchMixin, DuckDbBackedAdapter):
     def render_create_microbatch_state_index_sqls(
         self, *, database: str | None, schema: str
     ) -> tuple[str, ...]:
-        from sqlbuild.microbatches.main.create_index_sqls import build_create_index_sqls
+        from sqlbuild._native import build_microbatch_create_index_sqls
 
-        return build_create_index_sqls(
+        return build_microbatch_create_index_sqls(
             database=database,
             schema=schema,
             render_identifier=self.render_identifier,

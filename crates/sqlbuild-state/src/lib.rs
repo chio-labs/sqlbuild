@@ -5,4 +5,5 @@
 pub mod events;
 pub mod execution_history;
 pub mod freshness;
+pub mod microbatches;
 pub mod state_tables;

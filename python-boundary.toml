@@ -47,7 +47,7 @@ note = "Decorators that run when user modules are imported."
 [[stays]]
 path = "microbatches"
 reason = "executor"
-note = "Microbatch state store the executor and adapters use."
+note = "Rule 1: the executor's direct-mode event store (warehouse I/O and retries), the event row codec and the event, scope and projection shapes it consumes. Coverage and replay projection, event IDs and state SQL are native (sqlbuild-state microbatches)."
 
 [[stays]]
 path = "rules"

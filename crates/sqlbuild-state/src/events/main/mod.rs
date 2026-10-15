@@ -7,6 +7,7 @@ pub mod event_exists_sql;
 pub mod event_insert_sql;
 pub mod event_read_sql;
 pub mod grants_json;
+pub mod microbatch_event_id;
 pub mod migration_event_id;
 pub mod newest_column_event;
 pub mod newest_fingerprint;

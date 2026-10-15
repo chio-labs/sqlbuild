@@ -113,7 +113,14 @@ from sqlbuild.executor.testing.models import (
     SqlTestExecutionResult,
     StepResult,
 )
-from sqlbuild.microbatches.models import MicrobatchInterval
+from sqlbuild.microbatches.models import (
+    MicrobatchCoverageProjection,
+    MicrobatchEvent,
+    MicrobatchInterval,
+    MicrobatchScope,
+    ReplayRequirementProjection,
+)
+from sqlbuild.microbatches.types import MicrobatchRecordType
 from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.provider.classes.provider import Provider
 from sqlbuild.provider.classes.session import ProviderSession
@@ -5025,6 +5032,54 @@ def normalize_sql_value(
 def render_state_sql_literal(*, value: object | None, declared_type: StateSqlValueType) -> str: ...
 def format_diagnostics_console_record(record: logging.LogRecord, *, use_color: bool) -> str: ...
 def interpreter_identity() -> tuple[str, str, str, str]: ...
+def project_microbatch_coverage(
+    *,
+    events: tuple[MicrobatchEvent, ...],
+    expected_intervals: tuple[MicrobatchInterval, ...],
+    cursor_type: str,
+) -> MicrobatchCoverageProjection: ...
+def project_replay_requirement(
+    *,
+    requirement: MicrobatchEvent,
+    current_model_version_hash: str,
+    expected_intervals: tuple[MicrobatchInterval, ...],
+    coverage: MicrobatchCoverageProjection,
+    cursor_type: str,
+) -> ReplayRequirementProjection: ...
+def latest_active_replay_requirement(
+    *, events: tuple[MicrobatchEvent, ...], current_model_version_hash: str
+) -> MicrobatchEvent | None: ...
+def deterministic_microbatch_event_id(
+    *,
+    scope: MicrobatchScope,
+    record_type: MicrobatchRecordType,
+    partition_start: str | None,
+    partition_end: str | None,
+    completion_reason: str,
+) -> str: ...
+def build_microbatch_insert_many_sql(
+    *, events: tuple[MicrobatchEvent, ...], render_qualified_name: Callable[..., str | None]
+) -> str: ...
+def build_microbatch_existing_event_ids_sql(
+    *, events: tuple[MicrobatchEvent, ...], render_qualified_name: Callable[..., str | None]
+) -> str: ...
+def build_microbatch_read_scope_sql(
+    *, scope: MicrobatchScope, render_qualified_name: Callable[..., str | None]
+) -> str: ...
+def build_microbatch_create_table_sql(
+    *,
+    database: str | None,
+    schema: str,
+    render_qualified_name: Callable[..., str | None],
+    render_framework_type: Callable[[FrameworkType], str],
+) -> str: ...
+def build_microbatch_create_index_sqls(
+    *,
+    database: str | None,
+    schema: str,
+    render_identifier: Callable[[str], str],
+    render_qualified_name: Callable[..., str | None],
+) -> tuple[str, ...]: ...
 def render_state_table_create_sql(
     *,
     qualified_name: str,

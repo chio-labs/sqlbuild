@@ -30,13 +30,17 @@ from sqlbuild._native import (
     aligned_timestamp_bounds,
     compute_query_hash,
     cursor_bound_display,
+    deterministic_microbatch_event_id,
     empty_cursor_window,
     fit_auxiliary_relation_name,
     future_cursor_cap_warning,
     inclusive_cursor_end,
+    latest_active_replay_requirement,
     maximum_start_cap_warning,
     merge_microbatch_intervals,
     microbatch_limit_warning,
+    project_microbatch_coverage,
+    project_replay_requirement,
     resolve_effective_microbatch_batch_size,
 )
 from sqlbuild._native import cursor_cap_from_end as cap_from_end
@@ -126,14 +130,6 @@ from sqlbuild.microbatches.constants import (
     MICROBATCH_REPLAY_GENERATION_PREFIX,
 )
 from sqlbuild.microbatches.exceptions import MicrobatchStateError
-from sqlbuild.microbatches.main.deterministic_event_id import (
-    deterministic_microbatch_event_id,
-)
-from sqlbuild.microbatches.main.latest_replay_requirement import (
-    latest_active_replay_requirement,
-)
-from sqlbuild.microbatches.main.project_coverage import project_microbatch_coverage
-from sqlbuild.microbatches.main.project_replay import project_replay_requirement
 from sqlbuild.microbatches.models import (
     MicrobatchCoverageProjection,
     MicrobatchEvent,
