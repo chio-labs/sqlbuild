@@ -25,6 +25,7 @@ from sqlbuild.adapter.relations.models import InspectionQueryRecord
 from sqlbuild.cli.commands.models import (
     AuditCommandRequest,
     BuildCommandRequest,
+    BuildCostFinalization,
     CheckCommandRequest,
     CloneCommandRequest,
     ContractCommandRequest,
@@ -424,6 +425,7 @@ from sqlbuild.lint.types import RelationKeyRow, RelationKeys
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.presentation.types import CompletionState
+from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.rule_engine.models import (
     Finding,
@@ -1752,6 +1754,21 @@ def read_cost_run(*, project_dir: Path, run_id: str) -> CostRunRecord | None: ..
 def list_cost_runs(*, project_dir: Path) -> tuple[CostRunRecord, ...]: ...
 def resolve_cost_run(*, project_dir: Path, selector: str) -> CostRunRecord | None: ...
 def format_cost_json(record: CostRunRecord) -> str: ...
+def resolve_defer_clone_selection(*, scope: PlannerScope) -> tuple[list[str], list[str], int]: ...
+def run_check_read_side_dependencies(
+    *,
+    adapter: BaseAdapter,
+    connection_config: dict[str, object],
+    connection: Any,
+    pipeline_result: CompilePipelineResult,
+    python_graph: PythonNodeGraph,
+    lifecycle_plan: PythonSqlRunLifecyclePlan,
+    relation_targets: dict[SqlResourceRef, str],
+    validation_refs: frozenset[SqlResourceRef] | None = None,
+    project_relations: dict[SqlResourceRef, str] | None = None,
+    providers: ProviderContainer | None = None,
+) -> tuple[PythonNodeExecutionResult, ...]: ...
+def finalize_build_cost(finalization: BuildCostFinalization) -> CostRunRecord | None: ...
 def persist_cost_run(
     *, project_dir: Path, record: CostRunRecord, output_stream: TextIO, stage: str
 ) -> None: ...

@@ -1,5 +1,6 @@
 pub(crate) mod command;
 pub(crate) mod completion;
+pub(crate) mod defer_clone;
 pub(crate) mod execution;
 pub(crate) mod invocation;
 pub(crate) mod lifecycle;

@@ -18,10 +18,10 @@ const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
 const CLONE_MODELS: &str = "sqlbuild.executor.clone.models";
-const RETENTION_REQUESTS_MODULE: &str = "sqlbuild.executor.clone.main.build_retention_requests";
+const RETENTION_REQUESTS_MODULE: &str = "sqlbuild.executor.clone.main._build_retention_requests";
 const TRANSIENT_MODELS_MODULE: &str =
-    "sqlbuild.executor.clone.main.build_destination_transient_models";
-const FINGERPRINTING_MODULE: &str = "sqlbuild.executor.clone.main.fingerprinting";
+    "sqlbuild.executor.clone.main._build_destination_transient_models";
+const FINGERPRINTING_MODULE: &str = "sqlbuild.executor.clone.main._fingerprinting";
 const EXECUTE_MODULE: &str = "sqlbuild.executor.clone.main.execute";
 const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
 const CONTRACT_TYPES: &str = "sqlbuild.spec.contracts.types";

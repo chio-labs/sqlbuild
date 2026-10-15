@@ -6,13 +6,15 @@ from unittest.mock import Mock
 
 import pytest
 
+from sqlbuild._native import run_check_read_side_dependencies
 from sqlbuild.adapter.contract.models import RelationLookup
-from sqlbuild.cli.commands._helpers.check import core as check_core
+from sqlbuild.adapter.relations.main import relation_lookup as relation_lookup_module
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.compile.models import CompiledProject, CompiledRelationLocation
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.python_nodes.models import PythonSqlRunLifecyclePlan
+from sqlbuild.executor.python_nodes.main import read_side as read_side_module
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.python_nodes.types import SqlResourceRefKind
@@ -27,7 +29,7 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.check._test_types import (
     (
         CheckPlanningTestCase(
             description="direct model and source refs are validated without dependency execution",
-            expected_names=frozenset({"orders", "raw_orders"}),
+            expected_names=frozenset({"analytics.orders", "raw.orders"}),
         ),
     ),
     ids=lambda case: case.description,
@@ -39,15 +41,17 @@ def test_given_direct_check_sql_refs_when_preflighting_then_refs_are_validated_w
     model_ref: SqlResourceRef = SqlResourceRef(SqlResourceRefKind.MODEL, "orders")
     source_ref: SqlResourceRef = SqlResourceRef(SqlResourceRefKind.SOURCE, "raw_orders")
     refs: frozenset[SqlResourceRef] = frozenset({model_ref, source_ref})
-    validated: list[SqlResourceRef] = []
-    monkeypatch.setattr(check_core, "build_relation_lookup", lambda **_: Mock())
+    looked_up: list[tuple[str | None, str | None, str]] = []
+
+    def build_relation_lookup(
+        *, locations: tuple[tuple[str | None, str | None, str], ...], **_: object
+    ) -> Mock:
+        looked_up.extend(locations)
+        return Mock()
+
+    monkeypatch.setattr(relation_lookup_module, "build_relation_lookup", build_relation_lookup)
     monkeypatch.setattr(
-        check_core,
-        "_validate_check_sql_ref_exists",
-        lambda *, ref, **_: validated.append(ref),
-    )
-    monkeypatch.setattr(
-        check_core,
+        read_side_module,
         "create_read_side_python_execution_tracker",
         lambda **_: pytest.fail("direct check refs must not execute as dependencies"),
     )
@@ -77,7 +81,7 @@ def test_given_direct_check_sql_refs_when_preflighting_then_refs_are_validated_w
         ),
     )
 
-    results: tuple[PythonNodeExecutionResult, ...] = check_core.run_check_read_side_dependencies(
+    results: tuple[PythonNodeExecutionResult, ...] = run_check_read_side_dependencies(
         adapter=Mock(),
         connection_config={},
         connection=object(),
@@ -93,7 +97,9 @@ def test_given_direct_check_sql_refs_when_preflighting_then_refs_are_validated_w
     )
 
     assert results == ()
-    assert frozenset(ref.name for ref in validated) == test_case.expected_names
+    assert frozenset(f"{schema}.{name}" for _, schema, name in looked_up) == (
+        test_case.expected_names
+    )
 
 
 @pytest.mark.parametrize(
@@ -125,7 +131,7 @@ def test_given_missing_direct_check_sql_ref_when_preflighting_then_existing_rela
         next(iter(test_case.expected_names)),
     )
     monkeypatch.setattr(
-        check_core,
+        relation_lookup_module,
         "build_relation_lookup",
         lambda **_: RelationLookup(relations_by_key={}),
     )
@@ -158,7 +164,7 @@ def test_given_missing_direct_check_sql_ref_when_preflighting_then_existing_rela
     )
 
     with pytest.raises(CliUserError, match=test_case.expected_error_fragment):
-        check_core.run_check_read_side_dependencies(
+        run_check_read_side_dependencies(
             adapter=adapter,
             connection_config={},
             connection=object(),

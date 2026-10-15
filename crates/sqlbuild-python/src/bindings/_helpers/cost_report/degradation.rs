@@ -6,23 +6,34 @@ use pyo3::exceptions::PyException;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyDict, PyDictMethods, PyTypeMethods};
+use pyo3::types::{PyDict, PyDictMethods, PyString, PyTypeMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::cost_report::main::format_cost_breakdown::format_cost_breakdown;
 use sqlbuild_core::cost_report::models::BreakdownOptions;
 
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::cost_report::records::cost_run;
 use crate::bindings::_helpers::cost_report::store;
 
 const LOGGER_NAME: &str = "sqlbuild.cli.commands._helpers.cost.collection";
+const COLLECTION_LOGGER_NAME: &str = "sqlbuild.cost";
+const COST_TYPES: &str = "sqlbuild.cost.types";
+const COST_MODELS: &str = "sqlbuild.cost.models";
+const COST_CONSTANTS: &str = "sqlbuild.cost.constants";
+const CONFIGURED_RATE_SOURCE: &str = "configured";
+const STATEMENT_LEDGER_PATH: [&str; 4] = ["target", "executions", "", "statements.jsonl"];
 const BUILD_BREAKDOWN_LIMIT: usize = 5;
 const FALLBACK_TERMINAL_COLUMNS: usize = 100;
 
 /// Log the failure with its traceback, as `_LOGGER.exception` inside the handler did.
 fn log_failure(py: Python<'_>, message: &str, error: &PyErr) -> PyResult<()> {
+    log_to(py, LOGGER_NAME, message, error)
+}
+
+fn log_to(py: Python<'_>, logger_name: &str, message: &str, error: &PyErr) -> PyResult<()> {
     let logger: Bound<'_, PyAny> = py
         .import("logging")?
-        .call_method1("getLogger", (LOGGER_NAME,))?;
+        .call_method1("getLogger", (logger_name,))?;
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
     keywords.set_item("exc_info", error.value(py))?;
     logger.call_method("exception", (message,), Some(&keywords))?;
@@ -118,7 +129,194 @@ fn write_build_cost_breakdown(
     )
 }
 
+/// One build's cost record with `cost` as its summary.
+fn cost_record<'py>(
+    finalization: &Bound<'py, PyAny>,
+    summary: Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = finalization.py();
+    let mut fields: Vec<(&str, Bound<'py, PyAny>)> = Vec::new();
+    for name in [
+        "run_id",
+        "adapter_name",
+        "target_name",
+        "build_status",
+        "started_at",
+        "completed_at",
+    ] {
+        fields.push((name, finalization.getattr(name)?));
+    }
+    fields.push(("cost", summary));
+    fields.push((
+        "had_executable_work",
+        finalization.getattr("had_executable_work")?,
+    ));
+    call_with(&imported(py, COST_MODELS, "CostRunRecord")?, &fields)
+}
+
+fn summary<'py>(
+    py: Python<'py>,
+    status: Bound<'py, PyAny>,
+    (config, rate_source): (&Bound<'py, PyAny>, &str),
+    message: Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    call_with(
+        &imported(py, COST_MODELS, "RunCostSummary")?,
+        &[
+            ("status", status),
+            ("usd_per_credit", config.getattr("usd_per_credit")?),
+            ("rate_source", PyString::new(py, rate_source).into_any()),
+            ("message", message),
+        ],
+    )
+}
+
+fn persist<'py>(
+    finalization: &Bound<'py, PyAny>,
+    record: &Bound<'py, PyAny>,
+    stage: &str,
+) -> PyResult<()> {
+    persist_cost_run(
+        finalization.getattr("project_dir")?.extract()?,
+        record,
+        &finalization.getattr("output_stream")?,
+        stage,
+    )
+}
+
+/// `_persist_collection_failure`: log, warn and persist a failed-collection record.
+fn collection_failure<'py>(
+    finalization: &Bound<'py, PyAny>,
+    (config, rate_source): (&Bound<'py, PyAny>, &str),
+    stage: &str,
+    error: &PyErr,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = finalization.py();
+    log_to(
+        py,
+        COLLECTION_LOGGER_NAME,
+        &format!("automatic run-cost {stage} failed"),
+        error,
+    )?;
+    let error_type: String = error_type(py, error)?;
+    warn(
+        &finalization.getattr("output_stream")?,
+        &format!("Cost telemetry failed during {stage} ({error_type}); build result unchanged."),
+    )?;
+    let status: Bound<'py, PyAny> =
+        imported(py, COST_TYPES, "CostStatus")?.getattr("COLLECTION_FAILED")?;
+    let message: Bound<'py, PyAny> = PyString::new(
+        py,
+        &format!("Cost telemetry failed during {stage} ({error_type})."),
+    )
+    .into_any();
+    let record: Bound<'py, PyAny> = cost_record(
+        finalization,
+        summary(py, status, (config, rate_source), message)?,
+    )?;
+    persist(finalization, &record, "failure artifact persistence")?;
+    Ok(record)
+}
+
+fn collected_summary<'py>(
+    finalization: &Bound<'py, PyAny>,
+    adapter: &Bound<'py, PyAny>,
+    (config, rate_source): (&Bound<'py, PyAny>, &str),
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = finalization.py();
+    let run_id: Bound<'py, PyAny> = finalization.getattr("run_id")?;
+    let mut ledger: Bound<'py, PyAny> = finalization.getattr("project_dir")?;
+    for part in STATEMENT_LEDGER_PATH {
+        ledger = if part.is_empty() {
+            ledger.div(&run_id)?
+        } else {
+            ledger.div(part)?
+        };
+    }
+    call_with(
+        &adapter.getattr("collect_run_cost")?,
+        &[
+            (
+                "connection_config",
+                finalization.getattr("connection_config")?,
+            ),
+            ("target_database", finalization.getattr("target_database")?),
+            ("run_id", run_id),
+            ("started_at", finalization.getattr("started_at")?),
+            ("completed_at", finalization.getattr("completed_at")?),
+            ("statement_ledger_path", ledger),
+            ("usd_per_credit", config.getattr("usd_per_credit")?),
+            ("rate_source", PyString::new(py, rate_source).into_any()),
+        ],
+    )
+}
+
+/// Collect, persist, and render without allowing cost failures to affect a build.
+#[pyfunction]
+pub(crate) fn finalize_build_cost<'py>(
+    finalization: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = finalization.py();
+    let adapter: Bound<'py, PyAny> = finalization.getattr("adapter")?;
+    if !adapter.is_instance(&imported(py, COST_TYPES, "CostAwareAdapter")?)? {
+        return Ok(py.None().into_bound(py));
+    }
+    let config: Bound<'py, PyAny> = finalization.getattr("config")?;
+    let rate_source: String = if config.getattr("usd_per_credit_is_default")?.is_truthy()? {
+        imported(py, COST_CONSTANTS, "DEFAULT_RATE_SOURCE")?.extract()?
+    } else {
+        CONFIGURED_RATE_SOURCE.to_owned()
+    };
+    let rate: (&Bound<'py, PyAny>, &str) = (&config, &rate_source);
+    let capability: Bound<'py, PyAny> = match adapter.call_method0("cost_capability") {
+        Ok(capability) => capability,
+        Err(error) => {
+            return collection_failure(finalization, rate, "capability detection", &error);
+        }
+    };
+    if capability.eq(imported(py, COST_TYPES, "CostCapability")?.getattr("NONE")?)? {
+        return Ok(py.None().into_bound(py));
+    }
+    let cost: Bound<'py, PyAny> = if finalization.getattr("collect")?.is_truthy()? {
+        match collected_summary(finalization, &adapter, rate) {
+            Ok(summary) => summary,
+            Err(error) => return collection_failure(finalization, rate, "collection", &error),
+        }
+    } else {
+        summary(
+            py,
+            finalization.getattr("cost_status")?,
+            rate,
+            finalization.getattr("cost_message")?,
+        )?
+    };
+    let record: Bound<'py, PyAny> = cost_record(finalization, cost)?;
+    persist(finalization, &record, "artifact persistence")?;
+    if !finalization.getattr("render")?.is_truthy()? {
+        return Ok(record);
+    }
+    write_build_cost_breakdown(
+        &record,
+        &finalization.getattr("output_stream")?,
+        finalization.getattr("use_color")?.is_truthy()?,
+    )?;
+    Ok(record)
+}
+
+/// Render a previously finalized record without affecting native build output.
+pub(crate) fn render_build_cost(
+    record: &Bound<'_, PyAny>,
+    output_stream: &Bound<'_, PyAny>,
+    use_color: bool,
+) -> PyResult<()> {
+    if record.is_none() {
+        return Ok(());
+    }
+    write_build_cost_breakdown(record, output_stream, use_color)
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(finalize_build_cost, module)?)?;
     module.add_function(wrap_pyfunction!(persist_cost_run, module)?)?;
     module.add_function(wrap_pyfunction!(write_build_cost_breakdown, module)?)
 }

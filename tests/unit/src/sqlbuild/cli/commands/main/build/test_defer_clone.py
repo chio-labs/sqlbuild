@@ -4,11 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.cli.commands._helpers.build_planning.defer_clone import (
-    defer_clone_boundary_selectors,
-    defer_clone_view_chain_selectors,
-    selected_executable_model_count,
-)
+from sqlbuild._native import resolve_defer_clone_selection
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
@@ -78,9 +74,9 @@ def test_given_scope_when_resolving_defer_clone_boundary_then_returns_expected_s
         execution_order=(),
     )
 
-    result: tuple[str, ...] = defer_clone_boundary_selectors(scope=scope)
+    boundary, _, _ = resolve_defer_clone_selection(scope=scope)
 
-    assert result == test_case.expected_selectors
+    assert tuple(boundary) == test_case.expected_selectors
 
 
 @pytest.mark.parametrize(
@@ -110,8 +106,10 @@ def test_given_function_between_model_and_seed_when_resolving_then_recreates_fun
         execution_order=(),
     )
 
-    assert defer_clone_boundary_selectors(scope=scope) == test_case.expected_boundary_selectors
-    assert defer_clone_view_chain_selectors(scope=scope) == test_case.expected_view_chain_selectors
+    boundary, view_chain, _ = resolve_defer_clone_selection(scope=scope)
+
+    assert tuple(boundary) == test_case.expected_boundary_selectors
+    assert tuple(view_chain) == test_case.expected_view_chain_selectors
 
 
 @pytest.mark.parametrize(
@@ -158,6 +156,6 @@ def test_given_disabled_model_in_defer_clone_scope_when_counting_then_only_enabl
         execution_order=tuple(keys_by_name.values()),
     )
 
-    result: int = selected_executable_model_count(scope=scope)
+    _, _, result = resolve_defer_clone_selection(scope=scope)
 
     assert result == test_case.expected_model_count

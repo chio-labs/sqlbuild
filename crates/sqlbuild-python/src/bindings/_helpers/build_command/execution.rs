@@ -14,6 +14,10 @@ use crate::bindings::_helpers::build_command::lifecycle::{
 use crate::bindings::_helpers::build_command::support::{
     boolean, display_text, emit, frozenset, joined, keyword_relay, line_writer, none, text, tuple,
 };
+use crate::bindings::_helpers::check::check_core::{
+    build_check_relation_targets, load_results_by_loader_name, record_python_run_state_results,
+    relevant_check_functions,
+};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 use crate::bindings::_helpers::cursor::overrides::{cursor_integer, cursor_timestamp};
 
@@ -25,7 +29,6 @@ const BUILD_MODELS: &str = "sqlbuild.executor.build.models";
 const PIPELINE_RUN_MODULE: &str = "sqlbuild.executor.pipeline.main.run";
 const FRESHNESS_MODULE: &str = "sqlbuild.cli.commands._helpers.freshness.source_freshness";
 const COST_CONTEXT_MODULE: &str = "sqlbuild.cost.classes.cost_context";
-const CHECK_CORE_MODULE: &str = "sqlbuild.cli.commands._helpers.check.core";
 const GRAPH_MODULE: &str = "sqlbuild.compiler.python_nodes.main._graph";
 const CHECKS_MODULE: &str = "sqlbuild.executor.python_nodes.main._checks";
 const EXECUTOR_PYTHON_MODELS: &str = "sqlbuild.executor.python_nodes.models";
@@ -452,15 +455,7 @@ fn check_runtime<'py>(
             ("default_schema", adapter.call_method0("default_schema")?),
             (
                 "relation_targets",
-                call_with(
-                    &imported(py, CHECK_CORE_MODULE, "build_check_relation_targets")?,
-                    &[
-                        ("adapter", adapter.clone()),
-                        ("pipeline_result", pipeline.clone()),
-                        ("python_graph", graph.clone()),
-                        ("selected_python_names", frozenset(py, &names)?),
-                    ],
-                )?,
+                build_check_relation_targets(&adapter, pipeline, graph, frozenset(py, &names)?)?,
             ),
             (
                 "project_relations",
@@ -503,14 +498,8 @@ pub(crate) fn run_post_build_python_checks<'py>(
         &imported(py, GRAPH_MODULE, "build_discovered_python_node_graph")?,
         &[("discovered_inputs", discovered.clone())],
     )?;
-    let by_loader = || {
-        call_with(
-            &imported(py, CHECK_CORE_MODULE, "load_results_by_loader_name")?,
-            &[
-                ("source_map", plan.getattr("source_map")?),
-                ("load_results", load_results.clone()),
-            ],
-        )
+    let by_loader = || -> PyResult<Bound<'py, PyAny>> {
+        Ok(load_results_by_loader_name(&plan.getattr("source_map")?, &load_results)?.into_any())
     };
     let mut dependencies: Vec<Bound<'py, PyAny>> = names_of(&outcome.python_results, "node_name")?;
     for name in by_loader()?.try_iter()? {
@@ -520,18 +509,12 @@ pub(crate) fn run_post_build_python_checks<'py>(
         names_of(&result.getattr("model_results")?, "model_name")?;
     completed.extend(names_of(&result.getattr("seed_results")?, "seed_name")?);
     completed.extend(names_of(&load_results, "source_name")?);
-    let checks: Vec<Bound<'py, PyAny>> = call_with(
-        &imported(py, CHECK_CORE_MODULE, "relevant_check_functions")?,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("python_graph", graph.clone()),
-            ("exclude", context.request.getattr("exclude")?),
-            ("selected_dependency_names", frozenset(py, &dependencies)?),
-            ("completed_sql_names", frozenset(py, &completed)?),
-        ],
-    )?
-    .try_iter()?
-    .collect::<PyResult<_>>()?;
+    let checks: Vec<Bound<'py, PyAny>> = relevant_check_functions(
+        &discovered,
+        &graph,
+        context.request.getattr("exclude")?,
+        (&frozenset(py, &dependencies)?, &frozenset(py, &completed)?),
+    )?;
     if checks.is_empty() {
         return tuple(py, &[]);
     }
@@ -541,15 +524,11 @@ pub(crate) fn run_post_build_python_checks<'py>(
     let executed: PyResult<Bound<'py, PyAny>> = (|| {
         let run_state: Bound<'py, PyAny> =
             imported(py, EXECUTOR_PYTHON_MODELS, "PythonNodeRunState")?.call0()?;
-        call_with(
-            &imported(py, CHECK_CORE_MODULE, "record_python_run_state_results")?,
-            &[
-                ("discovered_inputs", discovered.clone()),
-                ("run_state", run_state.clone()),
-                ("python_results", outcome.python_results.clone()),
-                ("load_results", load_results.clone()),
-                ("source_map", plan.getattr("source_map")?),
-            ],
+        record_python_run_state_results(
+            &discovered,
+            &run_state,
+            (&outcome.python_results, Some(&load_results)),
+            Some(&plan.getattr("source_map")?),
         )?;
         let callbacks: Bound<'py, PyAny> = call_with(
             &imported(py, EXECUTOR_PYTHON_MODELS, "PythonCheckCallbacks")?,
