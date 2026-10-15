@@ -4,20 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.compiler.analysis_session.types import ProofRow
-from sqlbuild.compiler.project_assembly.types import NamespaceRow, ObjectKeyRow
-
 
 @dataclass(frozen=True, slots=True)
 class NativeProjectResources:
     """Per-resource facts in input order, and whether each model's SQL passed syntax validation."""
 
-    model_deps: tuple[list[ObjectKeyRow], ...]
+    model_deps: tuple[list[tuple[str, str]], ...]
     model_syntax_valid: tuple[bool, ...]
     source_namespaces: tuple[tuple[str | None, str | None] | None, ...]
-    seed_namespaces: tuple[NamespaceRow, ...]
-    function_deps: tuple[list[ObjectKeyRow], ...]
-    audit_scope_deps: tuple[list[ObjectKeyRow], ...]
+    seed_namespaces: tuple[tuple[str | None, str | None, str | None, str | None], ...]
+    function_deps: tuple[list[tuple[str, str]], ...]
+    audit_scope_deps: tuple[list[tuple[str, str]], ...]
     failure: NativeResourceFailure | None = None
 
 
@@ -34,8 +31,18 @@ class NativeResourceFailure:
 class NativeModelFacts:
     """One model's native facts; its dependencies as `(resource type, name)` rows."""
 
-    deps: list[ObjectKeyRow]
-    dynamic_contract: ProofRow | None
+    deps: list[tuple[str, str]]
+    dynamic_contract: (
+        tuple[
+            bool,
+            list[tuple[str, str | None, str]],
+            list[tuple[str, str | None]],
+            list[str],
+            str | None,
+            bool,
+        ]
+        | None
+    )
     syntax_valid: bool = False
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from sqlbuild._native import (
     lint_native_sql_bodies,
@@ -18,7 +19,10 @@ from sqlbuild.lint.models import (
     LintConfig,
     LintViolation,
 )
-from sqlbuild.lint.types import NativeLintPreparationRequest, NativePreparedSql
+
+if TYPE_CHECKING:
+    from sqlbuild._native import NativePreparedSql
+    from sqlbuild.lint.types import NativeLintPreparationRequest
 
 
 def lint_bodies_for(*, file_path: Path, contents: str) -> tuple[LintBody, ...]:

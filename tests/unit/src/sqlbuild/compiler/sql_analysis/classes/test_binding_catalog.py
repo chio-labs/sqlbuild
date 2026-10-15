@@ -1,11 +1,13 @@
 """Prepared compact analysis jobs keep their catalog snapshot and run beside catalog updates."""
 
+from __future__ import annotations
+
 from concurrent.futures import Future, ThreadPoolExecutor
+from typing import TYPE_CHECKING
 
 import pytest
 
 from sqlbuild._native import BindingCatalog
-from sqlbuild.compiler.sql_analysis.types import NativeCompactAnalysisJob
 from tests.unit.src.sqlbuild.compiler.sql_analysis.classes._test_types import (
     CompactJobRerunCase,
     CompactJobSnapshotCase,
@@ -17,6 +19,9 @@ from tests.unit.src.sqlbuild.compiler.sql_analysis.classes.helpers import (
     orders_payload,
     retype_orders,
 )
+
+if TYPE_CHECKING:
+    from sqlbuild._native import NativeCompactAnalysisJob
 
 
 @pytest.mark.parametrize(

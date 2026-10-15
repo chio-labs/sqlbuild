@@ -9,7 +9,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path, PurePath
 from threading import Event
-from typing import Any, Literal, TextIO, TypedDict
+from typing import Any, Literal, Protocol, TextIO, TypedDict
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
@@ -82,7 +82,6 @@ from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
     CompileAdapterContext,
     CompileAnalysisSelection,
-    CompileAuditInput,
     CompiledAudit,
     CompiledFunction,
     CompiledLineageColumnFact,
@@ -98,9 +97,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledSqlTest,
     CompileModelConfig,
     CompilerDiagnostic,
-    CompileSeedInput,
-    CompileSourceInput,
-    CompileSqlFunctionInput,
     CompileSqlReference,
     CompileSqlScenarioInput,
     CompileSqlTestCte,
@@ -177,7 +173,6 @@ from sqlbuild.compiler.discovery.models import (
     TolerantScopeDiscovery,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
-from sqlbuild.compiler.fingerprints.types import FingerprintWriteProgress
 from sqlbuild.compiler.frontier.types import CompilerStage
 from sqlbuild.compiler.graph.models import AttachedAuditGateEdge, HookReadEdge, LineageGraphViews
 from sqlbuild.compiler.lineage.models import (
@@ -343,7 +338,9 @@ from sqlbuild.compiler.scopes.models import (
     UsageRecord,
     VisibilityResolution,
 )
-from sqlbuild.compiler.scopes.types import DeclarationKind, JsonValue, ScopeQueryTarget
+from sqlbuild.compiler.scopes.types import (
+    DeclarationKind,
+)
 from sqlbuild.compiler.source_freshness.models import (
     AdapterSourceFreshnessBatch,
     DirectSourceFreshnessPlanningResult,
@@ -363,13 +360,11 @@ from sqlbuild.compiler.sql_analysis.models import (
     SqlLexicalSyntax,
     SqlSchemaValidationRequest,
 )
-from sqlbuild.compiler.sql_analysis.types import NativeProjectCatalog
 from sqlbuild.compiler.sql_test_glue.models import (
     NativeSqlTestAssembly,
     NativeSqlTestChainRequest,
     NativeSqlTestPlanningRequest,
 )
-from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestPlanRow
 from sqlbuild.cost.models import (
     CostResourceContext,
     CostRunRecord,
@@ -442,7 +437,9 @@ from sqlbuild.lint.models import (
     PreparedLintFiles,
     RuleFixResult,
 )
-from sqlbuild.lint.types import RelationKeyRow, RelationKeys
+from sqlbuild.lint.types import (
+    RelationKeyRow,
+)
 from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.presentation.types import CompletionState, TransientLineOwner
 from sqlbuild.provider.classes.container import ProviderContainer
@@ -602,6 +599,104 @@ def build_rules_request(
 def evaluate_rules_request(request: NativeRulesRequest) -> NativeRulesEvaluation: ...
 def emit_orjson_report(report: object) -> str: ...
 def emit_json_report(report: object) -> str: ...
+
+type ColumnRow = tuple[str, str | None, str]
+
+type DiagnosticRow = tuple[str, str, int | None, int | None, int | None, int | None, str]
+
+type ProofRow = tuple[
+    bool, list[ColumnRow], list[tuple[str, str | None]], list[str], str | None, bool
+]
+
+type QueryColumnsMode = Literal["batch", "reanalysis", "parse", "legacy"]
+
+type CtePairRow = tuple[str, str]
+
+type NativeChainStepRow = tuple[
+    str,
+    str,
+    str | None,
+    list[CtePairRow],
+    str | None,
+    list[str] | None,
+    list[CtePairRow],
+]
+
+type NativeAssertionStepRow = tuple[str, str, list[CtePairRow], str | None]
+
+type NativePlanWarningRow = tuple[str | None, str, str]
+
+type NativeSqlTestPlanRow = tuple[
+    str | None,
+    list[NativeChainStepRow],
+    list[NativeAssertionStepRow],
+    list[str],
+    list[NativePlanWarningRow],
+    list[str],
+]
+
+type SqlTestAssemblyFailureKind = Literal["input", "internal", "decimal_overflow"]
+
+class FingerprintWriteProgress(Protocol):
+    def __call__(self, *, completed: int, total: int) -> None: ...
+
+type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
+
+type ScopeQueryTarget = str | PurePath | ResourceIdentity | DeclarationIdentity
+
+type NativeDiagnosticRow = tuple[str, str, int | None, int | None, int | None, int | None, str]
+
+type NativeNormalizationRequest = tuple[str, dict[str, str], dict[str, str]]
+
+class NativeCompactAnalysisJob(Protocol):
+    def run(self) -> bytes: ...
+
+class NativeProjectCatalog(Protocol):
+    def inferred_schema(
+        self, *, sql: str, columns: Mapping[str, str], inputs: Mapping[str, Mapping[str, str]]
+    ) -> list[tuple[str, str]]: ...
+    def with_relations(
+        self, relations: Mapping[str, Mapping[str, str]]
+    ) -> NativeProjectCatalog: ...
+    def validation_payload(
+        self, requests: list[tuple[str, list[tuple[str, bool]], dict[str, Mapping[str, str]]]]
+    ) -> str: ...
+    def update_analysis(
+        self, relations: Mapping[str, tuple[Mapping[str, str], Mapping[str, str]]]
+    ) -> None: ...
+    def register_override(self, relations: Mapping[str, Mapping[str, str]]) -> int: ...
+    def prepare_compact(self, payload: bytes) -> NativeCompactAnalysisJob: ...
+    def update_relations(self, relations: Mapping[str, Mapping[str, str]]) -> None: ...
+    def normalize_analysis_sqls(
+        self, *, dialect: str, requests: list[NativeNormalizationRequest]
+    ) -> list[str | Exception]: ...
+
+class NativeBindingPositions(Protocol):
+    def position(
+        self, *, start: int | None, line: int | None, column: int | None, message: str
+    ) -> tuple[int | None, int | None]: ...
+
+class NativePositionsModule(Protocol):
+    def normalize_analysis_sqls(
+        self, *, dialect: str, requests: list[NativeNormalizationRequest]
+    ) -> list[str | Exception]: ...
+    def binding_diagnostics(
+        self, *, sql: str, dialect: str, rows: list[NativeDiagnosticRow]
+    ) -> list[NativeDiagnosticRow]: ...
+    def BindingPositions(
+        self,
+        request: dict[str, object],
+    ) -> NativeBindingPositions: ...
+    def normalize_analysis_sql(self, request: dict[str, object]) -> str: ...
+    def normalize_dialect_sql(self, *, sql: str, dialect: str) -> str: ...
+
+type RelationKeys = dict[str, tuple[tuple[str, ...], ...]]
+
+type NativePreparedSql = tuple[str, list[tuple[str, int, int, int, int, str]], list[str]]
+
+type ObjectKeyRow = tuple[str, str]
+
+type NamespaceRow = tuple[str | None, str | None, str | None, str | None]
 
 type _GraphKey = tuple[str, str]
 type _GraphEdges = list[tuple[_GraphKey, list[_GraphKey]]]
@@ -792,17 +887,17 @@ class NativeInputsView:
     @property
     def model_inputs(self) -> tuple[NativeModelInput, ...]: ...
     @property
-    def seed_inputs(self) -> tuple[CompileSeedInput, ...]: ...
+    def seed_inputs(self) -> tuple[SeedInput, ...]: ...
     @property
-    def source_inputs(self) -> tuple[CompileSourceInput, ...]: ...
+    def source_inputs(self) -> tuple[SourceInput, ...]: ...
     @property
-    def sql_function_inputs(self) -> tuple[CompileSqlFunctionInput, ...]: ...
+    def sql_function_inputs(self) -> tuple[FunctionInput, ...]: ...
     @property
     def test_inputs(self) -> tuple[CompileSqlTestInput, ...]: ...
     @property
     def scenario_inputs(self) -> tuple[CompileSqlScenarioInput, ...]: ...
     @property
-    def audit_inputs(self) -> tuple[CompileAuditInput, ...]: ...
+    def audit_inputs(self) -> tuple[AuditInput, ...]: ...
     @property
     def diagnostics(self) -> tuple[CompilerDiagnostic, ...]: ...
     @property

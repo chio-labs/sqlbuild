@@ -1,17 +1,21 @@
 """Helpers for SQL analysis public-entry tests."""
 
+from __future__ import annotations
+
 from collections.abc import Callable, Mapping, Sequence
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import sqlbuild._native as _native
 from sqlbuild._native import BindingCatalog
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic, SqlBindingResult
-from sqlbuild.compiler.sql_analysis.types import (
-    NativeDiagnosticRow,
-    NativeNormalizationRequest,
-    NativePositionsModule,
-    NativeProjectCatalog,
-)
+
+if TYPE_CHECKING:
+    from sqlbuild._native import (
+        NativeDiagnosticRow,
+        NativeNormalizationRequest,
+        NativePositionsModule,
+        NativeProjectCatalog,
+    )
 
 
 def nested_coalesce_sql(*, function_depth: int) -> str:
@@ -44,7 +48,7 @@ def mapped_binding_result(
 ) -> SqlBindingResult:
     """Native polyglot diagnostic rows mapped to SQLBuild binding diagnostics for `sql`."""
 
-    mapped: list[NativeDiagnosticRow] = cast(NativePositionsModule, _native).binding_diagnostics(
+    mapped: list[NativeDiagnosticRow] = cast("NativePositionsModule", _native).binding_diagnostics(
         sql=sql, dialect=dialect, rows=rows
     )
     return SqlBindingResult(diagnostics=tuple(SqlBindingDiagnostic(*row) for row in mapped))
@@ -61,7 +65,7 @@ def normalize_analysis_sql_results(
     normalize: Callable[..., list[str | Exception]] = getattr(
         catalog,
         "normalize_analysis_sqls",
-        cast(NativePositionsModule, _native).normalize_analysis_sqls,
+        cast("NativePositionsModule", _native).normalize_analysis_sqls,
     )
     batch: list[NativeNormalizationRequest] = [
         (sql, dict(stubs or {}), dict(placeholders or {})) for sql, stubs, placeholders in requests
@@ -72,7 +76,7 @@ def normalize_analysis_sql_results(
 def normalize_sql_for_polyglot(*, sql: str, dialect: str | None) -> str:
     """Return analysis-equivalent SQL for Polyglot's supported dialect surface."""
 
-    return cast(NativePositionsModule, _native).normalize_dialect_sql(
+    return cast("NativePositionsModule", _native).normalize_dialect_sql(
         sql=sql, dialect=dialect or "generic"
     )
 
@@ -86,7 +90,7 @@ def normalize_analysis_sql(
 ) -> str:
     """Normalize one analysis SQL natively."""
 
-    return cast(NativePositionsModule, _native).normalize_analysis_sql(
+    return cast("NativePositionsModule", _native).normalize_analysis_sql(
         {
             "sql": sql,
             "dialect": dialect or "generic",

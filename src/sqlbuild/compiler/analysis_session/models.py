@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.analysis_session.types import QueryColumnsMode
 from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
     CompileSqlReference,
@@ -59,7 +58,7 @@ class NativeColumnQuery:
     """One query outside the session whose output columns Python's analysis inferred."""
 
     sql: str
-    mode: QueryColumnsMode
+    mode: Literal["batch", "reanalysis", "parse", "legacy"]
     placeholders: dict[str, str] | None = None
     references: tuple[CompileSqlReference, ...] = ()
     recover_cte_facts: bool = True

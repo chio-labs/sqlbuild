@@ -25,8 +25,6 @@ if TYPE_CHECKING:
         CompiledSqlTest,
         CompileModelConfig,
         CompilerDiagnostic,
-        CompileSeedInput,
-        CompileSourceInput,
         CompileSqlReference,
         CompileSqlScenarioInput,
         CompileSqlTestInput,
@@ -74,7 +72,7 @@ if TYPE_CHECKING:
 
 
 class SourceInput(Protocol):
-    """One attached source: a native owner view, or a hand-built `CompileSourceInput`."""
+    """One attached source, as the native owner view holds it."""
 
     @property
     def source_entry(self) -> SourceEntry: ...
@@ -102,7 +100,7 @@ class CompiledSourceView(Protocol):
 
 
 class SeedInput(Protocol):
-    """One seed paired with its declaration: a native owner view, or a `CompileSeedInput`."""
+    """One seed paired with its declaration, as the native owner view holds it."""
 
     @property
     def seed_file(self) -> DiscoveredSeedFile: ...
@@ -134,7 +132,7 @@ class CompiledSeedView(Protocol):
 
 
 class FunctionInput(Protocol):
-    """One attached function: a native owner view, or a hand-built `CompileSqlFunctionInput`."""
+    """One attached function, as the native owner view holds it."""
 
     @property
     def function_file(self) -> DiscoveredSqlFunctionFile | DiscoveredPythonFunctionFile: ...
@@ -228,7 +226,7 @@ class CompiledFunctionView(Protocol):
 
 
 class AuditInput(Protocol):
-    """One attached audit: a native owner view, or a hand-built `CompileAuditInput`."""
+    """One attached audit, as the native owner view holds it."""
 
     @property
     def audit_file(self) -> DiscoveredAuditFile: ...
@@ -363,9 +361,9 @@ class CompileInputsView(Protocol):
     @property
     def model_inputs(self) -> tuple[ModelInput, ...]: ...
     @property
-    def seed_inputs(self) -> tuple[CompileSeedInput, ...]: ...
+    def seed_inputs(self) -> tuple[SeedInput, ...]: ...
     @property
-    def source_inputs(self) -> tuple[CompileSourceInput, ...]: ...
+    def source_inputs(self) -> tuple[SourceInput, ...]: ...
     @property
     def sql_function_inputs(self) -> tuple[FunctionInput, ...]: ...
     @property
@@ -596,12 +594,6 @@ class TypedSqlValueRenderer(Protocol):
     def render_typed_object(self, *, value: SqlValue) -> str: ...
 
 
-class CompileInputsReadyCallback(Protocol):
-    """Invocation-local observer for the completed pre-semantic input snapshot."""
-
-    def __call__(self, *, inputs: CompileInputsView) -> None: ...
-
-
 class AttachedAuditTargetKind(StrEnum):
     MODEL = "model"
     SOURCE = "source"
@@ -660,3 +652,9 @@ class SqlTestMode(StrEnum):
 
 
 type PythonResourceRow = tuple[str, str, str | None, Callable[[], SourceLocation], str]
+
+
+class CompileInputsReadyCallback(Protocol):
+    """Invocation-local observer for the completed pre-semantic input snapshot."""
+
+    def __call__(self, *, inputs: CompileInputsView) -> None: ...

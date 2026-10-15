@@ -3,15 +3,6 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pathlib import PurePath
-
-    from sqlbuild.compiler.scopes.models import DeclarationIdentity, ResourceIdentity
-
-type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
-type ScopeQueryTarget = str | PurePath | ResourceIdentity | DeclarationIdentity
 
 
 class ResourceKind(StrEnum):
