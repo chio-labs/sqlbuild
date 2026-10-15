@@ -10,8 +10,12 @@ from typing import cast
 
 from sqlbuild._native import (
     BackfillResult,
+    CompileModelConfig,
+    CompileProjectInputs,
     DbtCliConfigOverrides,
+    DbtCliOptions,
     DbtCombinedGraph,
+    DbtCommandResult,
     DbtEventStream,
     DbtEventStreamUpdate,
     DbtRunner,
@@ -25,9 +29,7 @@ from sqlbuild._native import (
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
-    CompileModelConfig,
     CompileModelInput,
-    CompileProjectInputs,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
@@ -39,7 +41,6 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
 )
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
 _GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()

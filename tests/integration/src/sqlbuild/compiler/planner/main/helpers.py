@@ -13,6 +13,18 @@ from types import MappingProxyType
 from typing import Any, cast
 
 from sqlbuild._native import (
+    CompiledFunction,
+    CompiledSeed,
+    CompiledSource,
+    CompileModelConfig,
+    CompilePipelineOptions,
+    DeferralInputs,
+    DiscoveredSchemaFile,
+    DiscoveredSeedFile,
+    FunctionArgument,
+    PlannerOverrides,
+    PlannerPolicies,
+    PlannerSelection,
     build_compiled_function_fingerprint_sql,
     build_execution_plan,
     compiled_model_record,
@@ -25,16 +37,11 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.models import RelationInfo, RelationReadProbe
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
-    CompiledSeed,
-    CompiledSource,
-    CompileModelConfig,
     CompileSqlReference,
-    FunctionArgument,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledFunctionView,
@@ -45,21 +52,10 @@ from sqlbuild.compiler.compile.types import (
     CompiledSourceView,
     FunctionLanguage,
 )
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredProjectInputs,
-    DiscoveredSchemaFile,
-    DiscoveredSeedFile,
-    DiscoveredSourceFile,
-)
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
-from sqlbuild.compiler.planner.models import (
-    DeferralInputs,
-    PlannerOverrides,
-    PlannerPolicies,
-    PlannerSelection,
-    PlanOutput,
-)
+from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.spec.contracts.models import (

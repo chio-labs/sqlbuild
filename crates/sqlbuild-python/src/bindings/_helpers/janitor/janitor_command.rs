@@ -1,11 +1,13 @@
 //! `sqb janitor`: preview stale warehouse objects, confirm, and clean them up.
 
+use pyo3::IntoPyObject;
 use pyo3::exceptions::PyKeyboardInterrupt;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
 use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_analysis::janitor_planning::main::resolve_retention_days::resolve_retention_days;
 use sqlbuild_core::cli_text::models::CliStyle;
 use sqlbuild_core::janitor_text::errors::JanitorSettingsError;
 use sqlbuild_core::janitor_text::main::janitor_completion_text::janitor_completion_text;
@@ -30,7 +32,6 @@ const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild._native";
 const PREVIEW_TARGET_MODULE: &str = "sqlbuild._native";
 const TARGET_NAME_MODULE: &str = "sqlbuild._native";
-const RETENTION_MODULE: &str = "sqlbuild.executor.janitor.main.resolve_retention_days";
 const COMMAND_NAME: &str = "janitor";
 
 fn imported<'py>(py: Python<'py>, module: &str, name: &str) -> PyResult<Bound<'py, PyAny>> {
@@ -125,17 +126,12 @@ fn settings<'py>(
     request: &Bound<'py, PyAny>,
     janitor: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let retention_days: Bound<'py, PyAny> =
-        imported(py, RETENTION_MODULE, "resolve_janitor_retention_days")?.call(
-            (),
-            Some(&keywords(
-                py,
-                &[
-                    ("override", &request.getattr("retention_days")?),
-                    ("configured", &janitor.getattr("retention_days")?),
-                ],
-            )?),
-        )?;
+    let retention_days: Bound<'py, PyAny> = resolve_retention_days(
+        request.getattr("retention_days")?.extract()?,
+        janitor.getattr("retention_days")?.extract()?,
+    )
+    .into_pyobject(py)?
+    .into_any();
     validate_janitor_settings(retention_days.extract()?, 0)
         .map_err(|error| settings_error(py, error))?;
     let requested: Bound<'py, PyAny> = request.getattr("direct_state_history_versions")?;

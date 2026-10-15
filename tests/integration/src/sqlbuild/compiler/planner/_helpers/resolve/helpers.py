@@ -8,6 +8,9 @@ from typing import Any, cast
 
 from sqlbuild._native import (
     BackfillResult,
+    CollectionRendering,
+    CompileAdapterContext,
+    CompileModelConfig,
     CursorOverridePair,
     ModelPlanContext,
     WarehouseSnapshot,
@@ -19,11 +22,9 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
-    CompileAdapterContext,
     CompiledModel,
     CompiledObjectKey,
     CompiledRelationLocation,
-    CompileModelConfig,
     CompileSqlReference,
 )
 from sqlbuild.compiler.compile.types import (
@@ -37,7 +38,6 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import BackfillAction
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import SourceEntry
-from sqlbuild.sql_values.types import CollectionRendering
 
 
 class OrchestrationOverrideAdapter(DuckDbAdapter):

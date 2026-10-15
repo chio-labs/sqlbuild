@@ -23,6 +23,9 @@ from sqlbuild import _native
 from sqlbuild._native import (
     AuthoredSqlSet,
     AuthoredSqlValueCall,
+    DiscoveryFileFault,
+    NamedSqlHookEntry,
+    TolerantScopeDiscovery,
     discover_audit_files,
     discover_constant_files,
     discover_enum_files,
@@ -38,11 +41,8 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSourceFile,
     DiscoveredSqlModelFile,
-    DiscoveryFileFault,
-    NamedSqlHookEntry,
     PythonHookEntry,
     SqlHookEntry,
-    TolerantScopeDiscovery,
 )
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     GeneratedDeclarationFileTestCase,

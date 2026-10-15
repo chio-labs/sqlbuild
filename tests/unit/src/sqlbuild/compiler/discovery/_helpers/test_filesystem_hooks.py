@@ -5,11 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery._helpers.filesystem.core import (
+from sqlbuild._native import (
+    PythonNodeDiscoveryError,
     discover_hook_functions,
     discover_provider_classes,
 )
-from sqlbuild.compiler.discovery.exceptions import PythonNodeDiscoveryError
 from sqlbuild.compiler.discovery.models import (
     DiscoveredHookFunction,
     DiscoveredProvider,

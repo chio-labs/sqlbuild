@@ -6,7 +6,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
-const EXCEPTIONS_MODULE: &str = "sqlbuild.spec.contracts.exceptions";
+const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const DATETIME_MODULE: &str = "datetime";
 
 /// `values.get(key)`, or `None` when the value is absent or `None`.
@@ -17,22 +17,36 @@ fn authored<'py>(values: &Bound<'py, PyAny>, key: &str) -> PyResult<Option<Bound
 
 /// `ConfigValueTypeError(key=key, expected=expected, actual_type=type(value))`.
 fn wrong_type(key: &str, expected: &str, value: &Bound<'_, PyAny>) -> PyErr {
-    let py = value.py();
-    let raised: PyResult<Bound<'_, PyAny>> =
-        imported(py, EXCEPTIONS_MODULE, "ConfigValueTypeError").and_then(|class| {
-            call_with(
-                &class,
-                &[
-                    ("key", PyString::new(py, key).into_any()),
-                    ("expected", PyString::new(py, expected).into_any()),
-                    ("actual_type", value.get_type().into_any()),
-                ],
-            )
-        });
-    match raised {
+    match config_value_type_error(key, expected, &value.get_type().into_any()) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }
+}
+
+/// The `ConfigValueTypeError` naming `key`, the `expected` kind and the value's `actual_type`.
+pub(crate) fn config_value_type_error<'py>(
+    key: &str,
+    expected: &str,
+    actual_type: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = actual_type.py();
+    let type_name: String = actual_type.getattr("__name__")?.extract()?;
+    call_with(
+        &imported(py, EXCEPTIONS_MODULE, "ConfigValueTypeError")?,
+        &[
+            (
+                "message",
+                PyString::new(
+                    py,
+                    &format!("config key '{key}' expected {expected}, got {type_name}"),
+                )
+                .into_any(),
+            ),
+            ("key", PyString::new(py, key).into_any()),
+            ("expected", PyString::new(py, expected).into_any()),
+            ("actual_type", actual_type.clone()),
+        ],
+    )
 }
 
 /// An authored string, preserving a present empty string.

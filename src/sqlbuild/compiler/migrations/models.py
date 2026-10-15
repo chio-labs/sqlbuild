@@ -5,10 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from sqlbuild._native import MigrationDiscovery
 from sqlbuild.compiler.migrations.types import (
     ColumnMigrationDecision,
     MigrationDecision,
-    MigrationDiscovery,
     OldNameViewDropReason,
     OldNameViewEventType,
     OldNameViewStatus,

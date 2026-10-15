@@ -118,14 +118,6 @@ class JanitorAddressingPlanTestCase:
 
 
 @dataclass(frozen=True)
-class JanitorRetentionResolutionTestCase:
-    description: str
-    override: int | None
-    configured: int | None
-    expected_retention_days: int
-
-
-@dataclass(frozen=True)
 class JanitorFoldedIdentifierPlanTestCase:
     description: str
     relation_infos: tuple[RelationInfo, ...]

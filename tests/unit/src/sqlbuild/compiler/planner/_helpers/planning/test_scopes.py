@@ -3,14 +3,12 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
+    PlannerPolicies,
     PlannerScopeResolution,
+    PlannerSelection,
     resolve_planner_scopes,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.planner.models import (
-    PlannerPolicies,
-    PlannerSelection,
-)
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import build_test_project
 from tests.unit.src.sqlbuild.compiler.planner._helpers.planning._test_types import (
     PlannerScopesTestCase,

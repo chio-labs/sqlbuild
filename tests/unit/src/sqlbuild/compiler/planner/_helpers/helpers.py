@@ -15,6 +15,20 @@ import sqlbuild._native as _native
 from sqlbuild._native import (
     BackfillResult,
     ChangeDetectionResult,
+    CompiledDirectLogicSqlTestPayload,
+    CompiledFunction,
+    CompiledModelSqlTestPayload,
+    CompiledSeed,
+    CompiledSource,
+    CompileModelConfig,
+    CompileSqlScenarioCte,
+    CompileSqlTestCte,
+    DiscoveredAuditBlock,
+    DiscoveredAuditFile,
+    DiscoveredSchemaFile,
+    DiscoveredSeedFile,
+    DiscoveredSqlTestBlock,
+    FunctionArgument,
     PlannerChangeResults,
     ScenarioArtifactIdentity,
     WarehouseSnapshot,
@@ -31,22 +45,13 @@ from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
-    CompiledDirectLogicSqlTestPayload,
-    CompiledFunction,
     CompiledModel,
-    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
-    CompiledSeed,
-    CompiledSource,
     CompiledSqlScenario,
     CompiledSqlTest,
-    CompileModelConfig,
     CompileSqlReference,
-    CompileSqlScenarioCte,
-    CompileSqlTestCte,
-    FunctionArgument,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
@@ -60,14 +65,9 @@ from sqlbuild.compiler.compile.types import (
     SqlTestMode,
 )
 from sqlbuild.compiler.discovery.models import (
-    DiscoveredAuditBlock,
-    DiscoveredAuditFile,
     DiscoveredLoaderFunction,
-    DiscoveredSchemaFile,
-    DiscoveredSeedFile,
     DiscoveredSourceFile,
     DiscoveredSqlScenarioFile,
-    DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint

@@ -126,7 +126,11 @@ fn initialize(
     error.setattr("message", message)?;
     match code {
         Some(code) if !code.is_none() => error.setattr("code", code)?,
-        _ => error.setattr("code", class.getattr("code")?)?,
+        _ => {
+            if let Ok(code) = class.getattr("code") {
+                error.setattr("code", code)?;
+            }
+        }
     }
     error.setattr(
         "help",
@@ -152,7 +156,9 @@ fn initialize(
 
 fn error_spec(index: &usize) -> PyResult<&'static ErrorSpec> {
     ERRORS
-        .get(*index)
+        .iter()
+        .flat_map(|group| group.iter())
+        .nth(*index)
         .ok_or_else(|| PyTypeError::new_err("unknown native error class"))
 }
 

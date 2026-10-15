@@ -18,13 +18,6 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     records::registration::register(module)?;
     rules::registration::register(module)?;
     cli::registration::register(module)?;
-    module.add(
-        "NativeCompilerError",
-        module.py().get_type::<NativeCompilerError>(),
-    )?;
-    module.add_class::<models::ProjectCatalog>()?;
-    module.add_class::<models::CompactAnalysisJob>()?;
-    module.add_class::<models::BindingPositions>()?;
     analysis::normalization::register(module)?;
     analysis::queries::register(module)?;
     analysis::sql_tests::register(module)?;
@@ -43,6 +36,13 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 
 fn register_project_stages(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add(
+        "NativeCompilerError",
+        module.py().get_type::<NativeCompilerError>(),
+    )?;
+    module.add_class::<models::ProjectCatalog>()?;
+    module.add_class::<models::CompactAnalysisJob>()?;
+    module.add_class::<models::BindingPositions>()?;
     cache::registration::register(module)?;
     attachments::registration::register(module)?;
     refactor::registration::register(module)?;

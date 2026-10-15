@@ -10,7 +10,7 @@ use sqlbuild_pysource::string_literals::models::StringQuery;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 
-const REFACTORING_MODELS_MODULE: &str = "sqlbuild.compiler.refactoring.models";
+const REFACTORING_MODELS_MODULE: &str = "sqlbuild._native";
 /// The discovered Python declarations whose files a refactoring searches.
 const PYTHON_DECLARATIONS: [&str; 8] = [
     "loader_functions",

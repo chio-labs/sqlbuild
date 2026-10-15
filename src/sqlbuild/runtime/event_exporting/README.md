@@ -4,6 +4,9 @@ Project exporters receive only validated, immutable `LifecycleEvent` values. The
 exporter observer after canonical history and native projections, and diagnostics remain on the
 separate diagnostic channel.
 
+The dispatcher, queue, accounting and command scope are native (`sqlbuild._native`); Python keeps
+only the public sink declarations and the two calls into user sink functions.
+
 Each command owns one bounded event queue and one daemon dispatcher. Exporters run in deterministic
 declaration order. An invocation runs on a daemon isolation thread so an exporter blocked in
 destination code cannot keep the command's non-daemon teardown alive. The dispatcher waits at most
@@ -39,7 +42,8 @@ Project config can only narrow that opt-in. `[sinks.lifecycle]` supplies global 
 kinds are the intersection of declaration, global, and named sets. Effective minimum severity is
 the strictest of those three values. Unknown names, kinds, and severities fail before execution.
 
-The single authoritative lifecycle mapping is `LIFECYCLE_EXPORT_DIMENSIONS`: failed terminal event
+The single authoritative lifecycle mapping is the native `lifecycle_export_policy`
+(`crates/sqlbuild-core/src/event_export`), derived from the lifecycle event catalogue: failed terminal event
 types are `error`; completed and skipped terminals are `info`; `retry_scheduled` is `warning`; and
 starts plus `statement_submitted` are `debug`. Diagnostics are not lifecycle events and never enter
 this queue.

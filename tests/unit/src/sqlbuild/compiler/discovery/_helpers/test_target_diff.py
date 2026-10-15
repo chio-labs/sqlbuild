@@ -6,8 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import resolve_target_config
-from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
+from sqlbuild._native import ProjectConfigError, resolve_target_config
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     TargetDiffConfigErrorTestCase,
     TargetDiffConfigTestCase,

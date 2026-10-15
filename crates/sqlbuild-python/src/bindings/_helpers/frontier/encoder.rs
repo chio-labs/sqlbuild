@@ -10,8 +10,9 @@ use pyo3::types::{
 };
 
 use sqlbuild_cache::stage_capture::constants::{
-    CANONICAL_TYPES, DECODED_SEQUENCES, OMITTED_ATTRIBUTES, PROJECTED_ATTRIBUTES, RESERVED_KEYS,
-    SHARED_MARKER, SHARED_MIN_CHARS, SKIPPED_SLOTS, UNORDERED_ATTRIBUTES,
+    CANONICAL_TYPES, DECODED_SEQUENCES, HOSTED_SHAPE_TYPES, OMITTED_ATTRIBUTES,
+    PROJECTED_ATTRIBUTES, RESERVED_KEYS, SHARED_MARKER, SHARED_MIN_CHARS, SKIPPED_SLOTS,
+    UNORDERED_ATTRIBUTES,
 };
 use sqlbuild_cache::stage_capture::main::capture_sort_key::capture_sort_key;
 use sqlbuild_cache::stage_capture::main::compact_capture_json::compact_capture_json;
@@ -60,6 +61,12 @@ fn lookup<'a, T: Copy>(table: &'a [(&'a str, T)], name: &str) -> Option<T> {
         .iter()
         .find(|(type_name, _)| *type_name == name)
         .map(|(_, value)| *value)
+}
+
+/// The `module:qualname` a captured class is written as, natively hosted shapes keeping their Python name.
+fn captured_type_name(class: &Bound<'_, PyAny>) -> PyResult<String> {
+    let name: String = qualified_name(class)?;
+    Ok(lookup(&HOSTED_SHAPE_TYPES, &name).map_or(name, str::to_owned))
 }
 
 /// `module:qualname` of a callable or class, as Python's `qualified_name` writes it.
@@ -155,7 +162,7 @@ impl<'py> CaptureEncoder<'py> {
                 "__enum__",
                 JsonValue::String(format!(
                     "{}.{name}",
-                    qualified_name(&value.get_type().into_any())?
+                    captured_type_name(&value.get_type().into_any())?
                 )),
             ));
         }
@@ -238,7 +245,7 @@ impl<'py> CaptureEncoder<'py> {
     }
 
     fn encode_container(&mut self, value: &Bound<'py, PyAny>) -> PyResult<JsonValue> {
-        let type_name: String = qualified_name(&value.get_type().into_any())?;
+        let type_name: String = captured_type_name(&value.get_type().into_any())?;
         if DECODED_SEQUENCES.contains(&type_name.as_str())
             && value.is_instance(&self.types.sequence)?
         {

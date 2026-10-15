@@ -13,12 +13,13 @@ use sqlbuild_cache::digest::main::sha256_hex::sha256_hex;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::compile_outputs::json_report::{compact_sorted_json, orjson_sorted};
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const CACHE_VERSION: i64 = 4;
 const ALGORITHM_FINGERPRINT: &str = "sql-test-artifact-v4-orjson-identity";
 const CACHE_FILE_NAME: &str = "sql-test-artifacts.json";
 const MAX_CACHE_BYTES: u64 = 10_000_000;
 const MAX_CACHE_RECORDS: usize = 100_000;
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const METADATA_MODULE: &str = "importlib.metadata";
 
 /// The digest shared by every test artifact identity, and each model's own identity.
@@ -217,7 +218,7 @@ fn test_payload<'py>(test: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let test_payload: Bound<'py, PyAny> = test.getattr("payload")?;
     if test_payload.is_instance(&imported(
         py,
-        COMPILE_MODELS_MODULE,
+        NATIVE_RECORDS_MODULE,
         "CompiledModelSqlTestPayload",
     )?)? {
         let block: Bound<'py, PyAny> = test.getattr("test_block")?;
@@ -256,7 +257,7 @@ fn test_payload<'py>(test: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
         )?;
     } else if test_payload.is_instance(&imported(
         py,
-        COMPILE_MODELS_MODULE,
+        NATIVE_RECORDS_MODULE,
         "CompiledDirectLogicSqlTestPayload",
     )?)? {
         payload.set_item(

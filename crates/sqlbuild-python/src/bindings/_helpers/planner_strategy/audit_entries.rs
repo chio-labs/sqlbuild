@@ -177,9 +177,11 @@ pub(crate) fn audit_is_selected(
     let kind = audit.getattr("attached_target_kind")?;
     let name = audit.getattr("attached_target_name")?;
     if !kind.is_none() && !name.is_none() {
-        let resource_type = imported(py, COMPILE_TYPES_MODULE, "AttachedAuditTargetKind")?
+        let target_value = imported(py, COMPILE_TYPES_MODULE, "AttachedAuditTargetKind")?
             .call1((kind,))?
-            .getattr("resource_type")?;
+            .getattr("value")?;
+        let resource_type =
+            imported(py, COMPILE_TYPES_MODULE, "CompiledResourceType")?.call1((target_value,))?;
         let key = call_with(
             &imported(py, COMPILE_MODELS_MODULE, "CompiledObjectKey")?,
             &[("resource_type", resource_type), ("name", name)],

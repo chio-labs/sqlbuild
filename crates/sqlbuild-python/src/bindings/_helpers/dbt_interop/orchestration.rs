@@ -64,12 +64,8 @@ fn listed<'py>(
         || py.None().into_bound(py),
         |detail| PyString::new(py, &detail).into_any(),
     );
-    let error: Bound<'py, PyAny> = imported(
-        py,
-        "sqlbuild.integrations.dbt.exceptions",
-        "DbtInteropRuntimeError",
-    )?
-    .call(("dbt ls failed",), Some(&keywords(py, &[("help", help)])?))?;
+    let error: Bound<'py, PyAny> = imported(py, "sqlbuild._native", "DbtInteropRuntimeError")?
+        .call(("dbt ls failed",), Some(&keywords(py, &[("help", help)])?))?;
     Err(PyErr::from_value(error))
 }
 

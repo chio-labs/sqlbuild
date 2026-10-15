@@ -13,6 +13,7 @@ from sqlbuild._native import (
     PlanWarning,
     RelationFixtureCompletion,
     RelationFixturePlanningContext,
+    SqlTestSelection,
     build_selected_test_entries,
     compiled_model_record,
     project_with,
@@ -27,10 +28,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.planner.models import (
-    SqlTestPlanEntry,
-    SqlTestSelection,
-)
+from sqlbuild.compiler.planner.models import SqlTestPlanEntry
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import SettingsConfig
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (

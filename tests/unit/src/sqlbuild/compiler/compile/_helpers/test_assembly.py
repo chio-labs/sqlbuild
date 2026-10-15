@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
@@ -16,7 +16,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
     CompiledSeedView,
-    CompileInputsView,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, SqlHookEntry
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
@@ -34,6 +33,9 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
 from tests.unit.src.sqlbuild.compiler.compile._test_helpers import (
     base_repo_files,
 )
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView
 
 
 @pytest.mark.parametrize(

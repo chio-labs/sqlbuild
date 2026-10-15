@@ -1,11 +1,14 @@
 """Audits attached by the native model loop and assembled into the native compiled project."""
 
+from __future__ import annotations
+
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.types import AuditInput, CompiledAuditView
+from sqlbuild.compiler.compile.types import CompiledAuditView
 from tests.integration.src.sqlbuild.compiler.compiled_project._test_types import (
     NativeAuditAttachmentTestCase,
     NativeAuditErrorTestCase,
@@ -17,6 +20,9 @@ from tests.integration.src.sqlbuild.compiler.compiled_project.helpers import (
     compile_function_project,
     measurement_policy,
 )
+
+if TYPE_CHECKING:
+    from sqlbuild.compiler.compile.types import AuditInput
 
 
 @pytest.mark.parametrize(

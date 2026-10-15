@@ -11,7 +11,7 @@ use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{context_variable, imported};
 
-const LINT_EXCEPTIONS_MODULE: &str = "sqlbuild.lint.exceptions";
+const LINT_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const STOP_VARIABLE: &str = "active_lint_stop";
 
 static ACTIVE_STOP: PyOnceLock<Py<PyAny>> = PyOnceLock::new();

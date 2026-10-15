@@ -1,5 +1,6 @@
 //! Logical SQL references extracted natively under one adapter's lexical rules.
 
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
@@ -14,6 +15,8 @@ use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
+
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
@@ -116,7 +119,7 @@ fn scanned<'py>(
     let reference_type: Bound<'py, PyAny> =
         imported(py, COMPILE_MODELS_MODULE, "CompileSqlReference")?;
     let invalid_type: Bound<'py, PyAny> =
-        imported(py, COMPILE_MODELS_MODULE, "InvalidSqlReferenceCall")?;
+        imported(py, NATIVE_RECORDS_MODULE, "InvalidSqlReferenceCall")?;
     let references: Vec<Bound<'py, PyAny>> = scan
         .references
         .into_iter()
@@ -165,7 +168,7 @@ fn scan_sql_reference_calls<'py>(
     let py: Python<'py> = syntax.py();
     let (references, invalid_calls) = scanned(py, sql, syntax)?;
     call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "SqlReferenceScan")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "SqlReferenceScan")?,
         &[
             ("references", PyTuple::new(py, references)?.into_any()),
             ("invalid_calls", PyTuple::new(py, invalid_calls)?.into_any()),
@@ -192,11 +195,11 @@ pub(crate) fn extract_references<'py>(
             &[
                 (
                     "phase",
-                    types.getattr("DiagnosticPhase")?.getattr("COMPILE")?,
+                    shape_class(types.as_any(), "DiagnosticPhase")?.getattr("COMPILE")?,
                 ),
                 (
                     "severity",
-                    types.getattr("DiagnosticSeverity")?.getattr("ERROR")?,
+                    shape_class(types.as_any(), "DiagnosticSeverity")?.getattr("ERROR")?,
                 ),
                 ("code", text(py, REFERENCE_CALL_SYNTAX_CODE)?),
                 ("message", call.getattr("message")?),

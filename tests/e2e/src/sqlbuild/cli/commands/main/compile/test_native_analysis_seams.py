@@ -8,10 +8,14 @@ from unittest.mock import ANY, Mock
 import pytest
 
 import sqlbuild._native as native_module
-from sqlbuild._native import NativeProjectResources, NativeSqlTestArtifact, ProjectColumnLineage
-from sqlbuild.compiler.analysis_session.models import NativeModelAnalyses
-from sqlbuild.compiler.contracts.models import ContractValidationResult
-from sqlbuild.compiler.sql_test_glue.models import NativeSqlTestAssembly
+from sqlbuild._native import (
+    ContractValidationResult,
+    NativeModelAnalyses,
+    NativeProjectResources,
+    NativeSqlTestArtifact,
+    NativeSqlTestAssembly,
+    ProjectColumnLineage,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     NativeAnalysisSeamTestCase,
 )

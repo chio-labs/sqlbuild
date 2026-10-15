@@ -5,10 +5,10 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
+    ScopeValidationError,
     get_placement_validated_scope_index,
     validate_scope_index,
 )
-from sqlbuild.compiler.scopes.exceptions import ScopeValidationError
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,

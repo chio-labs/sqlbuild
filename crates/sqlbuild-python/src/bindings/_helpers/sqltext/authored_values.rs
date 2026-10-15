@@ -1,5 +1,6 @@
 //! Authored header values as the Python header objects: scalars, sets, constants and hooks.
 
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class_at;
 use pyo3::prelude::{IntoPyObject, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyTuple};
 use sqlbuild_sqltext::compiler::main::header_word_value::header_word_value;
@@ -30,9 +31,7 @@ fn instance(
     (module, class): (&str, &str),
     arguments: &pyo3::Bound<'_, PyDict>,
 ) -> PyResult<Py<PyAny>> {
-    Ok(py
-        .import(module)?
-        .getattr(class)?
+    Ok(shape_class_at(py, module, class)?
         .call((), Some(arguments))?
         .unbind())
 }

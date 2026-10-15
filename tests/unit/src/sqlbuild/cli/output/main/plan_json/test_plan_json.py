@@ -8,10 +8,12 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import (
+    PythonIdentityStatus,
+    PythonPlanEntry,
+    PythonRunPhase,
     WarningSeverity,
     format_plan_json,
 )
-from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
     CursorInputEvidence,
@@ -26,11 +28,7 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
-from sqlbuild.compiler.python_nodes.types import (
-    PythonIdentityStatus,
-    PythonNodeKind,
-    PythonRunPhase,
-)
+from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.spec.contracts.types import FutureCursorAction, MicrobatchLimitAction
 from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
     build_discovered_provider_usage,

@@ -8,13 +8,16 @@ import pytest
 
 from sqlbuild._native import (
     ColumnRenameHint,
+    DisplayOptions,
     GraphResourceKind,
+    PythonIdentityStatus,
+    PythonPlanEntry,
+    PythonRunPhase,
     SchemaChangeKind,
     WarningSeverity,
     format_plan,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
     CursorInputRelation,
@@ -26,12 +29,7 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
-from sqlbuild.compiler.python_nodes.types import (
-    PythonIdentityStatus,
-    PythonNodeKind,
-    PythonRunPhase,
-)
-from sqlbuild.presentation.models import DisplayOptions
+from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.cli.output.main.plan._test_types import (
     FormatPlanColorTestCase,

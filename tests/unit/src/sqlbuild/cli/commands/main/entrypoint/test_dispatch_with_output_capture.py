@@ -7,8 +7,8 @@ import sys
 
 import pytest
 
+from sqlbuild._native import EventExporterCommandScope
 from sqlbuild.observability import ExecutionIdentity
-from sqlbuild.runtime.event_exporting.classes.command_scope import EventExporterCommandScope
 from sqlbuild.runtime.output_capture.constants import INVOCATION_CONTEXT_ENV
 from sqlbuild.runtime.output_capture.main.configured_output_capture_scope import (
     configured_output_capture_scope,

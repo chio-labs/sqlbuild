@@ -5,10 +5,10 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
+    FixtureColumnInference,
     FixtureColumnInferences,
     infer_fixture_column_facts,
 )
-from sqlbuild.compiler.compile.models import FixtureColumnInference
 from tests.unit.src.sqlbuild.compiler.planner.classes._test_types import (
     FixtureColumnInferencesTestCase,
 )

@@ -15,7 +15,7 @@ use crate::bindings::_helpers::cache::native_store::current_code_identity;
 use crate::bindings::_helpers::compile_driver::analysis_cache::record_analysis_cache_metrics;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.analysis_session.models";
+const ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
 const PLANNER_TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const LOG_DEBUG_MODULE: &str = "sqlbuild.diagnostics.main.log_debug_event";

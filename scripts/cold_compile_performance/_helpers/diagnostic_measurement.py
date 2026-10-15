@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import sqlbuild._native as _native
 from scripts.cold_compile_performance.exceptions import CompileBenchmarkFixtureError
-from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
+from sqlbuild._native import SqlBindingDiagnostic
 
 if TYPE_CHECKING:
     from sqlbuild._native import NativeDiagnosticRow, NativePositionsModule

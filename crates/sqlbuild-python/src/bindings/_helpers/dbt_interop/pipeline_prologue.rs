@@ -145,12 +145,7 @@ fn load_compiled_dbt_manifest<'py>(
     )?;
     if result.getattr("returncode")?.extract::<i64>()? != 0 {
         let detail = imported(py, "sqlbuild._native", "dbt_failure_detail")?.call1((result,))?;
-        let error = imported(
-            py,
-            "sqlbuild.integrations.dbt.exceptions",
-            "DbtInteropRuntimeError",
-        )?
-        .call(
+        let error = imported(py, "sqlbuild._native", "DbtInteropRuntimeError")?.call(
             ("dbt compile failed",),
             Some(
                 &crate::bindings::_helpers::compile_driver::python_calls::keywords(

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild._native import (
+    CompileModelConfig,
     ModelPlanContext,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
@@ -12,7 +13,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledRelationLocation,
-    CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 

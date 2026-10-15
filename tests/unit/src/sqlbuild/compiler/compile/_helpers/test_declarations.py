@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
 from sqlbuild._native import (
+    DeclarationParseError,
+    ResourceIdentityError,
     assemble_project,
     build_compile_inputs,
     build_model_version_identity_metadata_json,
@@ -15,15 +17,8 @@ from sqlbuild._native import (
     discover_project_inputs,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.types import (
-    CompiledModelView,
-    CompiledProjectView,
-    CompileInputsView,
-    ModelInput,
-)
-from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, SqlHookEntry
-from sqlbuild.compiler.resource_names.exceptions import ResourceIdentityError
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     CompileDeclarationsErrorTestCase,
     CompileDeclarationsTestCase,
@@ -35,6 +30,9 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     DUCKDB_COMPILE_ADAPTER_CONTEXT,
     compile_first_model,
 )
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView, ModelInput
 
 _PROJECT_FILE: str = """
 name = "demo"

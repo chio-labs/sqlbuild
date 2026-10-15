@@ -10,9 +10,8 @@ use crate::yaml_entries::_helpers::fields::{
     stripped_strings,
 };
 use crate::yaml_entries::_helpers::freshness::freshness;
-use crate::yaml_entries::_helpers::integrations::{
-    integration_loader_name, source_integration_loader,
-};
+use crate::yaml_entries::_helpers::integrations::source_integration_loader;
+use crate::yaml_entries::main::integration_loader_name::integration_loader_name;
 use crate::yaml_entries::models::{ParsedIntegrationLoader, ParsedSourceEntry, ParsedYamlColumn};
 
 const ENTRY_KEYS: [&str; 18] = [

@@ -8,12 +8,14 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods};
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_adapter_connection_context;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::janitor::janitor_facts::Warehouse;
+use crate::bindings::_helpers::janitor::janitor_planning::{
+    JanitorSettings, RelationScope, build_plan,
+};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
-const JANITOR_PLAN_MODULE: &str = "sqlbuild.executor.janitor.main.plan";
 const JANITOR_EXECUTE_MODULE: &str = "sqlbuild.executor.janitor.main.execute";
-const JANITOR_MODELS: &str = "sqlbuild.executor.janitor.models";
 const ERRORS_MODULE: &str = "sqlbuild._native";
 const UNKNOWN_VIEW_CODE: &str = "C503";
 const UNKNOWN_VIEW_HELP: &str =
@@ -212,38 +214,34 @@ pub(crate) fn build_janitor_execution_plan<'py>(
     let plan: Bound<'py, PyAny> = within(
         &lifecycle(py, ("janitor", "janitor_candidate_planning"))?,
         |lifecycle| {
-            let direct_settings: Bound<'py, PyAny> = call_with(
-                &imported(py, JANITOR_MODELS, "JanitorDirectModeSettings")?,
-                &[
-                    ("enabled", PyBool::new(py, true).to_owned().into_any()),
-                    (
-                        "state_history_versions",
-                        settings.getattr("direct_state_history_versions")?,
-                    ),
-                    (
-                        "archive_retention_days",
-                        settings.getattr("archive_retention_days")?,
-                    ),
-                ],
-            )?;
-            let plan: Bound<'py, PyAny> = call_with(
-                &imported(py, JANITOR_PLAN_MODULE, "build_janitor_plan")?,
-                &[
-                    ("project", compiled.project.clone()),
-                    ("adapter", compiled.adapter.clone()),
-                    ("connection", connection.clone()),
-                    ("retention_days", settings.getattr("retention_days")?),
-                    (
-                        "delete_tracked_only",
-                        janitor.getattr("delete_tracked_only")?,
-                    ),
-                    ("exclude_patterns", janitor.getattr("exclude_patterns")?),
-                    ("direct_settings", direct_settings),
-                    (
-                        "early_old_name_view_drops",
-                        settings.getattr("drop_old_name_views")?,
-                    ),
-                ],
+            let plan: Bound<'py, PyAny> = build_plan(
+                (
+                    &compiled.project,
+                    &Warehouse {
+                        adapter: compiled.adapter.clone(),
+                        connection: connection.clone(),
+                    },
+                ),
+                &JanitorSettings {
+                    retention_days: settings.getattr("retention_days")?.extract()?,
+                    delete_tracked_only: janitor.getattr("delete_tracked_only")?.is_truthy()?,
+                    exclude_patterns: janitor.getattr("exclude_patterns")?.extract()?,
+                    direct_mode: true,
+                    state_history_versions: settings
+                        .getattr("direct_state_history_versions")?
+                        .extract()?,
+                    archive_retention_days: settings
+                        .getattr("archive_retention_days")?
+                        .extract()?,
+                    early_old_name_view_drops: settings
+                        .getattr("drop_old_name_views")?
+                        .extract()?,
+                },
+                &RelationScope {
+                    scan_keys: Vec::new(),
+                    protected_keys: Vec::new(),
+                    reasons: Vec::new(),
+                },
             )?;
             let metadata: Bound<'py, PyDict> = PyDict::new(py);
             metadata.set_item("item_count", candidate_count(&plan)?)?;

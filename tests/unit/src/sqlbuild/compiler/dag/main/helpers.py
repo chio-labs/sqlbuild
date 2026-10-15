@@ -2,20 +2,27 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild._native import (
+    CompiledFunction,
+    CompiledSeed,
+    CompiledSource,
+    CompileModelConfig,
+    DiscoveredAuditBlock,
+    DiscoveredAuditFile,
+    DiscoveredSchemaFile,
+    DiscoveredSeedFile,
+    DiscoveredSqlTestBlock,
+    FunctionArgument,
+)
 from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
-    CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
-    CompiledSeed,
-    CompiledSource,
     CompiledSqlScenario,
     CompiledSqlTest,
-    CompileModelConfig,
-    FunctionArgument,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
@@ -24,14 +31,9 @@ from sqlbuild.compiler.compile.types import (
     FunctionLanguage,
 )
 from sqlbuild.compiler.discovery.models import (
-    DiscoveredAuditBlock,
-    DiscoveredAuditFile,
     DiscoveredLoaderFunction,
-    DiscoveredSchemaFile,
-    DiscoveredSeedFile,
     DiscoveredSourceFile,
     DiscoveredSqlScenarioFile,
-    DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.pipeline.models import ProjectGraph

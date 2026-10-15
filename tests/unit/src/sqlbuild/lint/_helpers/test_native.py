@@ -6,9 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import format_native_headers, lint_native_headers, scan_headers
-from sqlbuild.compiler.discovery.exceptions import SqlScenarioParseError
-from sqlbuild.lint.models import LintConfig
+from sqlbuild._native import (
+    LintConfig,
+    SqlScenarioParseError,
+    format_native_headers,
+    lint_native_headers,
+    scan_headers,
+)
 from tests.unit.src.sqlbuild.compiler.discovery.helpers import (
     parse_model_sql,
     parse_sql_scenario_file,

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from sqlbuild._native import build_compile_inputs, discover_project_inputs
-from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     DUCKDB_COMPILE_ADAPTER_CONTEXT,
@@ -16,6 +16,9 @@ from tests.unit.src.sqlbuild.compiler.compile._test_types import (
     CursorStartCompileErrorTestCase,
     CursorStartCompileInputsTestCase,
 )
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView
 
 
 @pytest.mark.parametrize(

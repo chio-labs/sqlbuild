@@ -1,21 +1,20 @@
 """Helpers for model configuration reuse and native validation tests."""
 
+from __future__ import annotations
+
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    CompileModelConfig,
+    NativeModelConfigInputs,
+    NativeModelConfigSession,
     build_compile_inputs,
     discover_project_inputs,
     native_model_config_session,
     record_template_reads,
 )
-from sqlbuild.compiler.compile.models import (
-    CompileModelConfig,
-    NativeModelConfigInputs,
-    NativeModelConfigSession,
-)
-from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     MaterializationDefaultsConfig,
@@ -29,6 +28,9 @@ from sqlbuild.spec.contracts.types import TableType, TableTypeSource, TimeTravel
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     DUCKDB_COMPILE_ADAPTER_CONTEXT,
 )
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView
 
 _NO_MATERIALIZATION_DEFAULTS: MaterializationDefaultsConfig = MaterializationDefaultsConfig()
 

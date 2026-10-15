@@ -8,8 +8,9 @@ use pyo3::types::{
 };
 use std::collections::HashSet;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_RECORDS: &str = "sqlbuild._native";
-const MODELS: &str = "sqlbuild.integrations.dbt.models";
 
 pub(crate) fn result_ids(results: &Bound<'_, PyAny>) -> PyResult<HashSet<String>> {
     results
@@ -129,7 +130,7 @@ pub(crate) fn append_missing<'py>(
             py.None().into_bound(py)
         };
         appended.push(call_with(
-            &imported(py, MODELS, "DbtNodeExecutionResult")?,
+            &imported(py, NATIVE_RECORDS_MODULE, "DbtNodeExecutionResult")?,
             &[
                 ("unique_id", unique_id),
                 ("resource_type", PyString::new(py, resource_type).into_any()),

@@ -24,7 +24,7 @@ use crate::bindings::_helpers::scopes::scope_objects::{
 use crate::bindings::types::CompilerDetach;
 
 const TYPES_MODULE: &str = "types";
-const EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
+const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 
 /// `(declarations, canonical positions)` matched, else identity and path error messages.
 pub(crate) type TargetRows = (bool, Vec<usize>, Option<String>, Option<String>);

@@ -18,16 +18,16 @@ use crate::bindings::_helpers::compile_driver::targets::{
     project_targets,
 };
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const FRONTIER_MODULE: &str = "sqlbuild._native";
-const FRONTIER_TYPES_MODULE: &str = "sqlbuild.compiler.frontier.types";
+const FRONTIER_TYPES_MODULE: &str = "sqlbuild._native";
 const BUILD_INPUTS_MODULE: &str = "sqlbuild._native";
 const ASSEMBLE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const PROJECT_WITH_MODULE: &str = "sqlbuild._native";
 const PROMOTION_MODULE: &str = "sqlbuild._native";
 const DISCOVERY_CONSTANTS_MODULE: &str = "sqlbuild.compiler.discovery.constants";
 const LOCAL_CONFIG_FILENAME: &str = "sqlbuild_local.toml";
-const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const ANALYSIS_SELECTION_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const COLLECTION_RENDERING_MODULE: &str = "sqlbuild._native";
@@ -62,7 +62,7 @@ pub(crate) fn lineage_mode<'py>(arguments: &KeywordArguments<'py>) -> PyResult<B
     if arguments.passed("column_lineage_mode")? {
         return Ok(mode);
     }
-    imported(mode.py(), LINEAGE_TYPES_MODULE, "ColumnLineageMode")?.getattr("FAST")
+    imported(mode.py(), NATIVE_RECORDS_MODULE, "ColumnLineageMode")?.getattr("FAST")
 }
 
 /// `value` as a Python `bool`.
@@ -292,7 +292,7 @@ fn frontier_compile_inputs<'py>(
         ],
     )?;
     let adapter_context: Bound<'py, PyAny> = call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "CompileAdapterContext")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "CompileAdapterContext")?,
         &[
             ("value_renderer", adapter.clone()),
             ("collection_rendering", collection_rendering),
@@ -374,7 +374,7 @@ fn build_project_graph<'py>(
         (&["discovered_inputs", "adapter"], &optional),
     )?;
     let selection: Bound<'py, PyAny> = call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "CompileAnalysisSelection")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "CompileAnalysisSelection")?,
         &[("no_cache", py_bool(py, arguments.flag("no_cache")?))],
     )?;
     selected_graph(&arguments, selection)

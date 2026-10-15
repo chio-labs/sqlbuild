@@ -15,31 +15,30 @@ use crate::bindings::_helpers::rules::early_sql_lint::EarlySqlLint;
 use crate::bindings::_helpers::rules::results::rules_progress;
 use crate::bindings::_helpers::rules::rules_config::load_rules_config;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const DISCOVER_MODULE: &str = "sqlbuild._native";
 const REJECT_SELECTORS_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const SELECTED_GRAPH_MODULE: &str = "sqlbuild._native";
-const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const RICH_LINEAGE: &str = "rich";
 const FAST_LINEAGE: &str = "fast";
 const RICH_COLUMN_LINEAGE: &str = "RICH";
 const FAST_COLUMN_LINEAGE: &str = "FAST";
 
 const CONTRACTS_MODULE: &str = "sqlbuild._native";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild.compiler.contracts.models";
+const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
 const SELECTION_MODULE: &str = "sqlbuild._native";
 const RULE_THREADS_MODULE: &str = "sqlbuild._native";
-const RULE_MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const CLI_COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const GENERIC_DIALECT: &str = "generic";
 const TARGET_DIRECTORY: &str = "target";
 
 /// `ColumnLineageMode.<member>`.
 fn column_lineage_mode<'py>(py: Python<'py>, member: &str) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, LINEAGE_TYPES_MODULE, "ColumnLineageMode")?.getattr(member)
+    imported(py, NATIVE_RECORDS_MODULE, "ColumnLineageMode")?.getattr(member)
 }
 
 /// Column lineage in the compile's mode; `none` skips the analyzer.
@@ -264,7 +263,7 @@ fn analyzed<'py>(
 fn empty_rules_result(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     let zero: Bound<'_, PyAny> = 0_i64.into_pyobject(py)?.into_any();
     call_with(
-        &imported(py, RULE_MODELS_MODULE, "RulesRunResult")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "RulesRunResult")?,
         &[
             ("findings", PyTuple::empty(py).into_any()),
             ("evaluated_models", zero.clone()),
@@ -525,9 +524,9 @@ fn with_rule_diagnostics<'py>(
     let diagnostic_class: Bound<'py, PyAny> =
         imported(py, COMPILE_MODELS_MODULE, "CompilerDiagnostic")?;
     let phase: Bound<'py, PyAny> =
-        imported(py, COMPILE_TYPES_MODULE, "DiagnosticPhase")?.getattr("RULE")?;
+        imported(py, NATIVE_RECORDS_MODULE, "DiagnosticPhase")?.getattr("RULE")?;
     let severity: Bound<'py, PyAny> =
-        imported(py, COMPILE_TYPES_MODULE, "DiagnosticSeverity")?.getattr("ERROR")?;
+        imported(py, NATIVE_RECORDS_MODULE, "DiagnosticSeverity")?.getattr("ERROR")?;
     let fix_note: Bound<'py, PyAny> = PyString::new(py, RULE_FIX_AVAILABLE_NOTE).into_any();
     let mut diagnostics: Vec<Bound<'py, PyAny>> = core.iter().collect();
     for fault in rules_result.getattr("findings")?.try_iter()? {

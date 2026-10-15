@@ -1,6 +1,7 @@
 //! Python boundary values shared by plan entry and plan output assembly.
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class_at;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::PyString;
@@ -31,7 +32,7 @@ pub(super) fn planner_model<'py>(
     name: &str,
     pairs: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(&imported(py, PLANNER_MODELS, name)?, pairs)
+    call_with(&shape_class_at(py, PLANNER_MODELS, name)?, pairs)
 }
 
 /// One member of a planner enumeration.

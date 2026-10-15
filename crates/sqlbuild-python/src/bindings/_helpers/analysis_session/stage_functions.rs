@@ -32,7 +32,7 @@ const LINEAGE_RESOURCE_TYPES: [(&str, &str); 4] = [
     ("seed", "seed"),
     ("table_fn", "table_fn"),
 ];
-const ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.analysis_session.models";
+const ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 

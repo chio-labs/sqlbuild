@@ -7,6 +7,11 @@ from threading import Event
 
 import pytest
 
+from sqlbuild._native import (
+    EventExporterCommandScope,
+    EventExporterDispatcher,
+    EventExportSummary,
+)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredCommandOutputSink,
     DiscoveredEventExporter,
@@ -14,9 +19,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProviderUsage,
 )
 from sqlbuild.providers import Provider
-from sqlbuild.runtime.event_exporting.classes.command_scope import EventExporterCommandScope
-from sqlbuild.runtime.event_exporting.classes.dispatcher import EventExporterDispatcher
-from sqlbuild.runtime.event_exporting.models import EventExportSummary
 from sqlbuild.sinks import CommandOutputRecord, CommandOutputStream
 from tests.unit.src.sqlbuild.runtime.event_exporting.classes._test_types import (
     EventExporterTeardownTestCase,

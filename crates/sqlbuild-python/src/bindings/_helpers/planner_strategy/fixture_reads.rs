@@ -126,7 +126,7 @@ fn lineage_reads(model: &Bound<'_, PyAny>) -> PyResult<Vec<ColumnRead>> {
         let fact = fact?;
         if !fact.getattr("confidence")?.eq(model
             .py()
-            .import("sqlbuild.compiler.lineage.types")?
+            .import("sqlbuild._native")?
             .getattr("ColumnLineageConfidence")?
             .getattr("HIGH")?)?
         {

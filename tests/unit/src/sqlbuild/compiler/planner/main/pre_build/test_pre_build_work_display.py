@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import format_plan, format_pre_build_work
-from sqlbuild.compiler.migrations.types import (
-    ColumnMigrationDecision,
+from sqlbuild._native import (
+    DisplayOptions,
     MigrationCompatibility,
-    MigrationDecision,
     MigrationDiscovery,
+    format_plan,
+    format_pre_build_work,
 )
+from sqlbuild.compiler.migrations.types import ColumnMigrationDecision, MigrationDecision
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.presentation.models import DisplayOptions
 from tests.unit.src.sqlbuild.compiler.planner.main.pre_build._test_types import (
     ColumnMigrationPlainTextTestCase,
     ColumnMigrationStyleTestCase,

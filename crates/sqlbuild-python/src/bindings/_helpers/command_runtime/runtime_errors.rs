@@ -7,7 +7,7 @@ use sqlbuild_config::command_connection::errors::CommandConnectionError;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 
 const CLI_ERRORS_MODULE: &str = "sqlbuild._native";
-const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild.compiler.discovery.exceptions";
+const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 
 /// The `CliUserError` or `ProjectConfigError` for `error`.

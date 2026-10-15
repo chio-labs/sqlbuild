@@ -15,10 +15,12 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyBool, PyTuple};
 use sqlbuild_analysis::planner_migrations::main::model_decision::model_decision;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 pub(super) fn relation<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     imported(
         location.py(),
-        "sqlbuild.compiler.migrations.main.relation_for_location",
+        "sqlbuild.executor.migrations._helpers.relation_for_location",
         "migration_relation_for_location",
     )?
     .call1((location,))
@@ -106,7 +108,8 @@ pub(super) fn decide<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, P
             ),
             (
                 "compatibility",
-                imported(py, MIGRATION_TYPES, "MigrationCompatibility")?.getattr("NOT_CHECKED")?,
+                imported(py, NATIVE_RECORDS_MODULE, "MigrationCompatibility")?
+                    .getattr("NOT_CHECKED")?,
             ),
             ("origin_model", args.value("origin_model")?),
             ("origin", origin.clone()),

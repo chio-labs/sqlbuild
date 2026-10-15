@@ -12,7 +12,7 @@ use crate::bindings::_helpers::semantic_shapes::declarations::{declared_types, f
 use crate::bindings::models::ProjectCatalog;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.analysis_session.models";
+const ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
 
 /// The column names a metadata config value lists: a name, or the names of a list or tuple.
 pub(crate) fn column_names(value: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {

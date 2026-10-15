@@ -10,7 +10,7 @@ use sqlbuild_rules::fix_verification::models::{DiagnosticComparison, ModelCompar
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
-const LINT_MODELS: &str = "sqlbuild.lint.models";
+const LINT_MODELS: &str = "sqlbuild._native";
 
 /// Compare compile facts using native decisions and the existing Python boundary models.
 #[pyfunction]

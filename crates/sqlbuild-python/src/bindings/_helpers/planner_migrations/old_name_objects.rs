@@ -8,7 +8,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 pub(super) fn relation<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     imported(
         location.py(),
-        "sqlbuild.compiler.migrations.main.relation_for_location",
+        "sqlbuild.executor.migrations._helpers.relation_for_location",
         "migration_relation_for_location",
     )?
     .call1((location,))

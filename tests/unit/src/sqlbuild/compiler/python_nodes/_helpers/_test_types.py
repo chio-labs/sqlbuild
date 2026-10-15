@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 
-from sqlbuild.compiler.planner.models import ParsedSelector
-from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
+from sqlbuild._native import ParsedSelector, PythonSqlRunSelection
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.python_nodes.models import SqlResourceRef
 

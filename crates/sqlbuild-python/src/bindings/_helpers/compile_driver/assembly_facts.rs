@@ -9,7 +9,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::project_assembly::models::{NativeModelFacts, NativeProjectFacts};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.analysis_session.models";
+const ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
 
 /// `NativeProjectFacts` of `inputs`: resources, syntax validity, deps and standalone pivot proofs.
 pub(crate) fn native_project_facts<'py>(

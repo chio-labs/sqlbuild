@@ -12,7 +12,7 @@ use sqlbuild_rules::lint_text::models::FormatSettings;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const LINT_MODELS_MODULE: &str = "sqlbuild.lint.models";
+const LINT_MODELS_MODULE: &str = "sqlbuild._native";
 
 /// Format settings and whether lint suppressions are allowed.
 pub(crate) struct FormatConfig {

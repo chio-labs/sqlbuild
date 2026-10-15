@@ -10,94 +10,77 @@ from pathlib import Path
 from typing import Any, overload
 
 import sqlbuild._native as _native
-from sqlbuild._native import SqlTestScanCache
+from sqlbuild._native import (
+    CollectionRendering,
+    ColumnLineageConfidence,
+    ColumnTransformKind,
+    CompiledDirectLogicSqlTestPayload,
+    CompiledLineageColumnFact,
+    CompiledModelSqlTestPayload,
+    CompiledSqlExpansion,
+    CompiledSqlTestResource,
+    CompileModelConfig,
+    CompileSqlScenarioCte,
+    DeclarationExpansionContext,
+    DeclarationScopeResolver,
+    DiagnosticPhase,
+    DiagnosticSeverity,
+    DiscoveredAuditBlock,
+    DiscoveredAuditFile,
+    DiscoveredSchemaFile,
+    DiscoveredSqlHookFile,
+    DiscoveredSqlTestBlock,
+    DynamicColumnContractProof,
+    LiteralSqlRelation,
+    ModelSchemaDeclaration,
+    RelatedLocation,
+)
 from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE, MACRO_CONTEXT_PARAMETER_NAME
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
-    AuditInput,
     CompiledAuditView,
     CompiledFunctionView,
     CompiledModelView,
     CompiledResourceType,
     CompiledSeedView,
     CompiledSourceView,
-    CompileInputsReadyCallback,
-    DiagnosticPhase,
-    DiagnosticSeverity,
-    FunctionInput,
-    FunctionLanguage,
-    ModelInput,
-    SeedInput,
-    SourceInput,
+    RelationKeyRow,
     SqlTestMode,
     TypedSqlValueRenderer,
 )
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
-    DiscoveredAuditBlock,
-    DiscoveredAuditFile,
     DiscoveredHookFunction,
     DiscoveredLoaderFunction,
     DiscoveredMaterializationFile,
-    DiscoveredProjectInputs,
-    DiscoveredSchemaFile,
-    DiscoveredSeedFile,
-    DiscoveredSourceFile,
-    DiscoveredSqlHookFile,
     DiscoveredSqlModelFile,
     DiscoveredSqlScenarioFile,
-    DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
     EnumDeclaration,
-    ModelSchemaDeclaration,
     SqlTestParameterDeclaration,
 )
-from sqlbuild.compiler.lineage.types import (
-    ColumnLineageConfidence,
-    ColumnTransformKind,
-    InferredNullability,
-)
-from sqlbuild.compiler.references.models import LiteralSqlRelation
+from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
     ResourceIdentity,
     ScopeIndex,
-    ScopeLookup,
     UsageRecord,
     VisibilityRecord,
 )
-from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic, SqlLexicalSyntax
-from sqlbuild.lint.types import RelationKeyRow
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import (
-    LocalConfig,
-    ProjectConfig,
-    ResolvedTableType,
-    ResolvedTimeTravelRetention,
     ScenarioConfig,
-    SchemaColumn,
     SchemaModelEntry,
-    SchemaSeedEntry,
     SettingsConfig,
-    SourceEntry,
     SourceLocation,
     TargetConfig,
 )
 from sqlbuild.sql_values.models import SqlValue
-from sqlbuild.sql_values.types import CollectionRendering
-
-
-@dataclass(frozen=True)
-class RelatedLocation:
-    """A secondary authored location that adds context to a diagnostic."""
-
-    label: str
-    location: SourceLocation
-    message: str | None = None
 
 
 @dataclass(frozen=True)
@@ -162,59 +145,6 @@ class InferredColumn:
 
 
 @dataclass(frozen=True)
-class FixtureColumnInference:
-    """Inferred fixture columns plus outputs that are explicitly bare NULL literals."""
-
-    columns: tuple[InferredColumn, ...]
-    null_literal_names: frozenset[str]
-    quoted_names: frozenset[str]
-
-
-@dataclass(frozen=True)
-class DynamicColumnFamilyProof:
-    """Compiler evidence for one declared runtime-generated column family."""
-
-    name: str
-    inferred_type: str | None = None
-
-
-@dataclass(frozen=True)
-class DynamicColumnContractProof:
-    """Closed output-shape evidence for a dynamic column contract."""
-
-    output_proven: bool
-    fixed_columns: tuple[InferredColumn, ...] = field(default_factory=tuple)
-    families: tuple[DynamicColumnFamilyProof, ...] = field(default_factory=tuple)
-    input_relations: tuple[str, ...] = field(default_factory=tuple)
-    failure_reason: str | None = None
-    bare_dynamic_pivot: bool = False
-
-
-@dataclass(frozen=True)
-class CompileModelConfig:
-    """Pre-semantic effective config layers attached to a model input."""
-
-    values: dict[str, object] = field(default_factory=dict)
-    model_header_keys: tuple[str, ...] = field(default_factory=tuple)
-    matched_path_default: str | None = None
-    logical_schema: str | None = None
-    layer_schema: str | None = None
-    logical_database: str | None = None
-    time_travel_retention: ResolvedTimeTravelRetention = field(
-        default_factory=ResolvedTimeTravelRetention
-    )
-    table_type: ResolvedTableType = field(default_factory=ResolvedTableType)
-
-
-@dataclass(frozen=True)
-class CursorInputRoles:
-    """Effective filter and watermark inputs for one compiled model."""
-
-    filter_inputs: dict[str, str]
-    watermark_inputs: dict[str, str]
-
-
-@dataclass(frozen=True)
 class LoadedMacro:
     """One loaded project macro available for compile-time SQL expansion."""
 
@@ -269,39 +199,6 @@ class StaticMacroInventory:
 
 
 @dataclass(frozen=True)
-class DeclarationRuntimeProjection:
-    """Process-only declaration values keyed by canonical static identity."""
-
-    declarations: Mapping[
-        DeclarationIdentity, EnumDeclaration | ConstantDeclaration | LoadedMacro
-    ] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class DeclarationScopeResolver:
-    """Process-only lookup state used to project visible runtime declarations."""
-
-    project_dir: Path | None
-    lookup: ScopeLookup
-    projection: DeclarationRuntimeProjection
-    native_contexts: _native.NativeDeclarationContexts = field(compare=False, repr=False)
-    resource_specific: frozenset[ResourceIdentity] | None = None
-    contexts_by_directory: dict[tuple[str, str], DeclarationResolutionContext] = field(
-        default_factory=dict, compare=False, repr=False
-    )
-
-
-@dataclass(frozen=True)
-class DeclarationScopeBuild:
-    """Static artifact and process-local values shared by compile attachment phases."""
-
-    loaded_macros: dict[str, LoadedMacro]
-    index: ScopeIndex
-    resolver: DeclarationScopeResolver
-    sql_test_scans: SqlTestScanCache
-
-
-@dataclass(frozen=True)
 class MacroContext:
     """Expose target settings and caller-visible declarations to a Python SQL macro."""
 
@@ -351,34 +248,6 @@ class MacroContext:
 
 
 @dataclass(frozen=True)
-class MacroExpansionResult:
-    """Expanded SQL and resolved macro usage facts from one authored string."""
-
-    sql: str
-    spans: tuple[ExpansionSpan, ...] = field(default_factory=tuple)
-    dependencies: tuple[DeclarationIdentity, ...] = field(default_factory=tuple)
-    usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
-    argument_references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class VisibleModelDeclarations:
-    """One model's visible declarations and macros, as the native model loop resolves them."""
-
-    local_enums: dict[str, EnumDeclaration]
-    local_constants: dict[str, ConstantDeclaration]
-    enums: dict[str, EnumDeclaration]
-    constants: dict[str, ConstantDeclaration]
-    inaccessible_enums: dict[str, DeclarationRecord]
-    inaccessible_constants: dict[str, DeclarationRecord]
-    enum_visibility: dict[str, tuple[VisibilityRecord, ...]]
-    constant_visibility: dict[str, tuple[VisibilityRecord, ...]]
-    macros: dict[str, LoadedMacro]
-    macro_records: dict[str, DeclarationRecord]
-    inaccessible_macros: dict[str, DeclarationRecord]
-
-
-@dataclass(frozen=True)
 class DeclarationResolutionContext:
     """Declarations visible during one authored SQL expansion."""
 
@@ -393,26 +262,6 @@ class DeclarationResolutionContext:
     macro_visibility: dict[str, tuple[VisibilityRecord, ...]] = field(default_factory=dict)
     inaccessible_macros: dict[str, DeclarationRecord] = field(default_factory=dict)
     consumer: ResourceIdentity | DeclarationIdentity | None = None
-
-
-@dataclass(frozen=True)
-class DeclarationExpansionContext:
-    """Declarations and adapter rendering used by one authored SQL owner."""
-
-    declarations: DeclarationResolutionContext
-    value_renderer: TypedSqlValueRenderer
-    collection_rendering: CollectionRendering
-    resolver: DeclarationScopeResolver | None = None
-
-
-@dataclass(frozen=True)
-class CompileAdapterContext:
-    """Cycle-free adapter behavior required while building compile inputs."""
-
-    value_renderer: TypedSqlValueRenderer
-    collection_rendering: CollectionRendering
-    python_functions_inherit_default_namespace: bool
-    sql_lexical_syntax: SqlLexicalSyntax
 
 
 @dataclass(frozen=True)
@@ -463,26 +312,6 @@ class CompileSqlReference:
 
 
 @dataclass(frozen=True)
-class InvalidSqlReferenceCall:
-    """One reference call whose arguments compile could not replace with a relation."""
-
-    ref_kind: SqlReferenceKind
-    call: str
-    start: int
-    message: str
-    help: str
-    corrected_call: str
-
-
-@dataclass(frozen=True)
-class SqlReferenceScan:
-    """Valid references and rejected reference calls found in one SQL text."""
-
-    references: tuple[CompileSqlReference, ...]
-    invalid_calls: tuple[InvalidSqlReferenceCall, ...] = ()
-
-
-@dataclass(frozen=True)
 class CompiledLineageSourceFact:
     """Compact upstream column fact extracted during SQL analysis."""
 
@@ -492,16 +321,6 @@ class CompiledLineageSourceFact:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "resource_type", CompiledResourceType(self.resource_type))
-
-
-@dataclass(frozen=True)
-class CompiledLineageColumnFact:
-    """Compact output column lineage fact extracted during SQL analysis."""
-
-    output_column: str
-    upstream_columns: tuple[CompiledLineageSourceFact, ...] = field(default_factory=tuple)
-    transform_kind: ColumnTransformKind = ColumnTransformKind.UNKNOWN
-    confidence: ColumnLineageConfidence = ColumnLineageConfidence.UNKNOWN
 
 
 @dataclass(frozen=True, eq=False)
@@ -596,41 +415,6 @@ class CompactLineageFacts(Sequence[CompiledLineageColumnFact]):
 
 
 @dataclass(frozen=True)
-class PolyglotAnalysisResult:
-    """Outcome of one Polyglot column and lineage analysis pass."""
-
-    analysis_succeeded: bool
-    columns: tuple[InferredColumn, ...] | None = None
-    lineage_columns: Sequence[CompiledLineageColumnFact] = field(default_factory=tuple)
-    has_star: bool = False
-    star_resolved: bool = False
-    binding_diagnostics: tuple[SqlBindingDiagnostic, ...] = field(default_factory=tuple)
-    binding_validated: bool = False
-
-
-@dataclass(frozen=True)
-class AnalysisCacheContext:
-    """Shared project-local analysis cache identity for one compile invocation."""
-
-    root: Path
-    shared_fingerprint: str
-    signature_namespace: str = "default"
-
-
-@dataclass(frozen=True)
-class CompileAnalysisSelection:
-    """Deep-analysis selection and invocation-local preparation observer."""
-
-    select: tuple[str, ...] = ()
-    exclude: tuple[str, ...] = ()
-    auto_load_sources: bool = False
-    no_cache: bool = False
-    on_inputs_ready: CompileInputsReadyCallback | None = field(
-        default=None, compare=False, repr=False
-    )
-
-
-@dataclass(frozen=True)
 class CompiledObjectKey:
     """Stable logical identity for one compiled resource or external dependency."""
 
@@ -639,30 +423,6 @@ class CompiledObjectKey:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "resource_type", CompiledResourceType(self.resource_type))
-
-
-@dataclass(frozen=True)
-class CompileSqlScenarioCte:
-    """One top-level SQL-native scenario CTE extracted after macro expansion."""
-
-    name: str
-    sql_body: str
-
-
-@dataclass(frozen=True)
-class FunctionArgument:
-    """One SQL function argument with an adapter-native type string."""
-
-    name: str
-    type: str
-
-
-@dataclass(frozen=True)
-class FunctionReturnColumn:
-    """One named table-function return column with an adapter-native type string."""
-
-    name: str
-    type: str
 
 
 @dataclass(frozen=True)
@@ -711,94 +471,6 @@ class CompileModelInput:
     sql_expansion: CompiledSqlExpansion | None = field(default=None, compare=False, repr=False)
     lint_expansion: CompiledSqlExpansion | None = field(default=None, compare=False, repr=False)
     """The compile's whole expansion, variables included, which early SQL lint reuses."""
-
-
-@dataclass(frozen=True)
-class HandBuiltAnalysis:
-    """A hand-built model input's session position, fallback columns and standalone proof."""
-
-    session: tuple[Any, int] | None
-    fallback: list[tuple[str, str | None, str]] | None
-    standalone_proof: (
-        tuple[
-            bool,
-            list[tuple[str, str | None, str]],
-            list[tuple[str, str | None]],
-            list[str],
-            str | None,
-            bool,
-        ]
-        | None
-    )
-
-
-@dataclass(frozen=True)
-class ModelSqlAnalysis:
-    """Completed model analysis and its in-memory binding proof."""
-
-    polyglot_analysis: PolyglotAnalysisResult
-    placeholders: dict[str, str] | None
-    cached: bool = False
-    fused_binding_validated: bool = False
-    cleaned_sql: str | None = None
-    validated_schema: dict[str, dict[str, str]] | None = None
-    dynamic_column_contract: DynamicColumnContractProof | None = None
-
-
-@dataclass(frozen=True)
-class CompileSqlScenarioInput:
-    """One discovered SQL-native scenario with compile-time SQL expansion applied."""
-
-    scenario_file: DiscoveredSqlScenarioFile
-    sql_body: str
-    authored_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
-    expected_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
-    assertion_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
-    source_fixture_names: tuple[str, ...] = field(default_factory=tuple)
-    ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
-    seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
-    dbt_ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
-    expected_model_names: tuple[str, ...] = field(default_factory=tuple)
-    assertion_names: tuple[str, ...] = field(default_factory=tuple)
-    assertion_target_model_names: tuple[str, ...] = field(default_factory=tuple)
-    target_model_names: tuple[str, ...] = field(default_factory=tuple)
-    declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class CompileProjectInputs:
-    """Attached project view used as the first pre-semantic compile input snapshot."""
-
-    project_config: ProjectConfig
-    local_config: LocalConfig
-    discovered_inputs: DiscoveredProjectInputs
-    sql_lexical_syntax: SqlLexicalSyntax
-    run_id: str = ""
-    effective_target_name: str | None = None
-    effective_target: TargetConfig | None = None
-    compile_cache_dir: Path | None = None
-    effective_connection: dict[str, object] = field(default_factory=dict)
-    effective_settings: SettingsConfig = field(default_factory=SettingsConfig)
-    no_sql_validation: bool = False
-    effective_vars: dict[str, object] = field(default_factory=dict)
-    macro_context: MacroContext | None = field(default=None, repr=False, compare=False)
-    loaded_macros: dict[str, LoadedMacro] = field(default_factory=dict)
-    public_enums: dict[str, EnumDeclaration] = field(default_factory=dict)
-    public_constants: dict[str, ConstantDeclaration] = field(default_factory=dict)
-    model_inputs: tuple[ModelInput, ...] = field(default_factory=tuple)
-    seed_inputs: tuple[SeedInput, ...] = field(default_factory=tuple)
-    source_inputs: tuple[SourceInput, ...] = field(default_factory=tuple)
-    sql_function_inputs: tuple[FunctionInput, ...] = field(default_factory=tuple)
-    test_inputs: tuple[CompileSqlTestInput, ...] = field(default_factory=tuple)
-    scenario_inputs: tuple[CompileSqlScenarioInput, ...] = field(default_factory=tuple)
-    audit_inputs: tuple[AuditInput, ...] = field(default_factory=tuple)
-    diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
-    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
-    scope_index: ScopeIndex = field(default_factory=ScopeIndex)
-    declaration_scope: DeclarationScopeBuild | None = field(default=None, repr=False, compare=False)
-    native_project: _native.NativeCompiledProject | None = field(
-        default=None, repr=False, compare=False
-    )
 
 
 @dataclass(frozen=True)
@@ -911,55 +583,6 @@ class CompiledModel:
 
 
 @dataclass(frozen=True)
-class CompiledSource:
-    """Planner-ready compiled source metadata."""
-
-    key: CompiledObjectKey
-    deps: tuple[CompiledObjectKey, ...]
-    name: str
-    source_entry: SourceEntry
-    source_file: DiscoveredSourceFile
-
-
-@dataclass(frozen=True)
-class CompiledSeed:
-    """Planner-ready compiled seed metadata."""
-
-    key: CompiledObjectKey
-    deps: tuple[CompiledObjectKey, ...]
-    name: str
-    seed_file: DiscoveredSeedFile
-    schema_entry: SchemaSeedEntry
-    schema_file: DiscoveredSchemaFile
-    destination: CompiledRelationLocation
-    external: bool = False
-
-
-@dataclass(frozen=True)
-class CompiledFunction:
-    """Planner-ready compiled SQL function metadata."""
-
-    key: CompiledObjectKey
-    deps: tuple[CompiledObjectKey, ...]
-    name: str
-    relative_path: Path
-    arguments: tuple[FunctionArgument, ...]
-    returns: str
-    body_sql: str
-    destination: CompiledRelationLocation
-    fingerprint_destination: CompiledRelationLocation
-    return_columns: tuple[FunctionReturnColumn, ...] = field(default_factory=tuple)
-    references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
-    language: FunctionLanguage = FunctionLanguage.SQL
-    source_file_path: Path | None = None
-    runtime_version: str | None = None
-    entry_point: str | None = None
-    packages: tuple[str, ...] = field(default_factory=tuple)
-    tags: tuple[str, ...] = field(default_factory=tuple)
-    description: str | None = None
-
-
-@dataclass(frozen=True)
 class CompiledAudit:
     """Compiled audit metadata selected by scope dependencies."""
 
@@ -1022,14 +645,6 @@ class CompiledSqlScenario:
                     dict.fromkeys((*self.expected_model_names, *self.assertion_target_model_names))
                 ),
             )
-
-
-@dataclass(frozen=True)
-class PythonSqlReferenceReport:
-    """P008 diagnostics plus literal SQL relations that named no project relation."""
-
-    diagnostics: tuple[CompilerDiagnostic, ...] = ()
-    unmatched: tuple[LiteralSqlRelation, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1128,143 +743,6 @@ class CompiledProject:
 
 
 @dataclass(frozen=True)
-class CompileSqlTestCte:
-    """One top-level SQL-native test CTE extracted after macro expansion."""
-
-    name: str
-    sql_body: str
-
-
-@dataclass(frozen=True)
-class CompileModelSqlTestInputPayload:
-    """Model-mode SQL test compile payload."""
-
-    authored_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
-    macro_mocks: dict[str, str] = field(default_factory=dict)
-    mock_model_names: tuple[str, ...] = field(default_factory=tuple)
-    mock_source_names: tuple[str, ...] = field(default_factory=tuple)
-    mock_seed_names: tuple[str, ...] = field(default_factory=tuple)
-    mock_dbt_ref_names: tuple[str, ...] = field(default_factory=tuple)
-    mock_table_function_names: tuple[str, ...] = field(default_factory=tuple)
-    expected_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
-    expected_model_names: tuple[str, ...] = field(default_factory=tuple)
-    assertion_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
-    assertion_names: tuple[str, ...] = field(default_factory=tuple)
-    assertion_target_model_names: tuple[str, ...] = field(default_factory=tuple)
-    read_helper_names: tuple[str, ...] = field(default_factory=tuple)
-    reference_target_model_names: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class CompileDirectLogicSqlTestInputPayload:
-    """Direct-logic SQL test compile payload."""
-
-    actual_cte: CompileSqlTestCte
-    expected_cte: CompileSqlTestCte
-    mode: SqlTestMode
-    helper_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
-    tested_resource_names: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class CompileSqlTestInput:
-    """One discovered SQL-native test block with compile-time SQL expansion applied."""
-
-    test_file: DiscoveredSqlTestFile
-    test_block: DiscoveredSqlTestBlock
-    sql_body: str
-    mode: SqlTestMode = DEFAULT_SQL_TEST_MODE
-    payload: CompileModelSqlTestInputPayload | CompileDirectLogicSqlTestInputPayload = field(
-        default_factory=CompileModelSqlTestInputPayload
-    )
-    declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
-    parent_name: str | None = None
-    case_name: str | None = None
-    case_index: int | None = None
-    parameter_schema: tuple[SqlTestParameterDeclaration, ...] = field(default_factory=tuple)
-    parameter_values: tuple[tuple[str, SqlValue], ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class CompiledModelSqlTestPayload:
-    """Compiled model-mode SQL test payload."""
-
-    authored_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
-    macro_mocks: dict[str, str] = field(default_factory=dict)
-    model_query_overrides: dict[str, str] = field(default_factory=dict)
-    mock_model_names: tuple[str, ...] = field(default_factory=tuple)
-    mock_source_names: tuple[str, ...] = field(default_factory=tuple)
-    mock_seed_names: tuple[str, ...] = field(default_factory=tuple)
-    mock_dbt_ref_names: tuple[str, ...] = field(default_factory=tuple)
-    mock_table_function_names: tuple[str, ...] = field(default_factory=tuple)
-    expected_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
-    expected_model_names: tuple[str, ...] = field(default_factory=tuple)
-    assertion_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
-    assertion_names: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class SqlExpansionContext:
-    """Everything needed to expand one project's authored SQL bodies."""
-
-    effective_vars: dict[str, object]
-    loaded_macros: dict[str, LoadedMacro]
-    macro_context: MacroContext
-    enums: dict[str, EnumDeclaration]
-    constants: dict[str, ConstantDeclaration]
-    value_renderer: TypedSqlValueRenderer
-    collection_rendering: CollectionRendering
-    local_declarations: dict[Path, DeclarationResolutionContext] = field(default_factory=dict)
-    declaration_resolver: DeclarationScopeResolver | None = None
-
-
-@dataclass(frozen=True)
-class ExpansionSpan:
-    """One substituted region, pairing its source range with its rendered range."""
-
-    source_start: int
-    source_end: int
-    output_start: int
-    output_end: int
-
-
-@dataclass(frozen=True)
-class CompiledSqlExpansion:
-    """Process-local authored-to-expanded SQL evidence shared with compiler checks."""
-
-    authored_sql: str
-    expanded_sql: str
-    passes: tuple[tuple[ExpansionSpan, ...], ...]
-
-
-@dataclass(frozen=True)
-class MappedOffset:
-    """An offset in rendered SQL resolved back onto the text that produced it."""
-
-    offset: int
-    generated: bool
-
-
-@dataclass(frozen=True)
-class CompiledDirectLogicSqlTestPayload:
-    """Compiled direct-logic SQL test payload."""
-
-    actual_cte: CompileSqlTestCte
-    expected_cte: CompileSqlTestCte
-    mode: SqlTestMode = DEFAULT_SQL_TEST_MODE
-    helper_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
-    tested_resource_names: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class CompiledSqlTestResource:
-    """One direct SQL test resource with its authored resource kind."""
-
-    kind: SqlTestMode
-    name: str
-
-
-@dataclass(frozen=True)
 class CompiledSqlTest:
     """Compiled SQL-native unit test metadata selected by expected targets."""
 
@@ -1311,36 +789,3 @@ class CompiledSqlTest:
                 "parent_name",
                 self.test_block.name or self.test_file.relative_path.stem,
             )
-
-
-@dataclass(frozen=True)
-class NativeModelConfigSession:
-    """The native config builder, validator, and inherited storage policies for one compile."""
-
-    path_defaults: dict[str, dict[str, object]]
-    builder: _native.NativeModelConfigBuilder
-    validator: _native.NativeModelValidator
-    inherited_storage: dict[str | None, tuple[ResolvedTimeTravelRetention, ResolvedTableType]]
-
-
-@dataclass(frozen=True)
-class NativeModelConfigInputs:
-    """The project and run inputs every model's native config build reads."""
-
-    project_config: ProjectConfig
-    target_config: TargetConfig | None
-    effective_vars: dict[str, object]
-    effective_target_name: str | None
-    run_id: str
-    microbatch_concurrency: bool
-
-
-@dataclass(frozen=True)
-class ModelValidationRequest:
-    """One model's effective config and the facts its validators read."""
-
-    model_file: DiscoveredSqlModelFile
-    config: CompileModelConfig
-    references: tuple[CompileSqlReference, ...]
-    declared_columns: tuple[SchemaColumn, ...] | None
-    query_sql: str

@@ -15,8 +15,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::dbt_interop::pipeline_prologue::progress;
 use crate::bindings::_helpers::dbt_interop::runtime_config::config_overrides;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_RECORDS: &str = "sqlbuild._native";
-const MODELS: &str = "sqlbuild.integrations.dbt.models";
 const PLAN_OPTIONS: (&[&str], &[&str]) = (
     &["project_dir", "args"],
     &[
@@ -107,12 +108,7 @@ fn execute_dbt_interop_from_project(request: &Bound<'_, PyAny>) -> PyResult<i64>
     let kind = imported(py, "sqlbuild._native", "DbtInteropCommand")?;
     if !command.eq(kind.getattr("RUN")?)? && !command.eq(kind.getattr("BUILD")?)? {
         return Err(PyErr::from_value(
-            imported(
-                py,
-                "sqlbuild.integrations.dbt.exceptions",
-                "DbtInteropArgumentError",
-            )?
-            .call1((format!(
+            imported(py, "sqlbuild._native", "DbtInteropArgumentError")?.call1((format!(
                 "unsupported dbt interop execution command: {}",
                 command.str()?
             ),))?,
@@ -348,7 +344,7 @@ fn debug_dbt_from_project(py: Python<'_>, options: Option<Bound<'_, PyDict>>) ->
         ],
     )?;
     let dbt_options = call_with(
-        &imported(py, MODELS, "DbtCliOptions")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "DbtCliOptions")?,
         &[
             ("project_dir", resolved.getattr("project_dir")?),
             ("profiles_dir", resolved.getattr("profiles_dir")?),

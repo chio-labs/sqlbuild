@@ -3,11 +3,11 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import cast
 
-from sqlbuild._native import build_compile_reference_resolver
-from sqlbuild.compiler.compile.models import (
+from sqlbuild._native import (
     CompileDirectLogicSqlTestInputPayload,
     CompileModelSqlTestInputPayload,
     CompileSqlTestInput,
+    build_compile_reference_resolver,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 

@@ -6,7 +6,7 @@ use pyo3::types::PyTuple;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 const FAULT_CLASS: &str = "DiscoveryFileFault";
 const PROJECT_DIR_MARKER: &str = ".";
 
@@ -46,7 +46,7 @@ impl<'py> FileFaults<'py> {
             .str()?
             .call_method1("replace", (self.project_dir.str()?, PROJECT_DIR_MARKER))?;
         on_fault.call1((call_with(
-            &imported(py, DISCOVERY_MODELS_MODULE, FAULT_CLASS)?,
+            &imported(py, NATIVE_RECORDS_MODULE, FAULT_CLASS)?,
             &[("path", relative_path.clone()), ("message", message)],
         )?,))?;
         Ok(None)

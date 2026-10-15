@@ -11,7 +11,12 @@ from itertools import chain, repeat
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
-from sqlbuild._native import CostContext, build_python_node_graph, build_python_sql_run_lifecycle
+from sqlbuild._native import (
+    CostContext,
+    PythonSqlRunSelection,
+    build_python_node_graph,
+    build_python_sql_run_lifecycle,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.assets import AssetContext, asset
@@ -27,7 +32,6 @@ from sqlbuild.compiler.python_nodes.models import (
     DiscoveredPythonNode,
     PythonNodeGraph,
     PythonSqlRunLifecyclePlan,
-    PythonSqlRunSelection,
 )
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.cost.models import CostResourceContext

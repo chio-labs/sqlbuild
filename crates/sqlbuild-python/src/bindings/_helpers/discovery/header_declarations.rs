@@ -15,14 +15,16 @@ use sqlbuild_model_config::declarations::models::{
 use sqlbuild_model_config::sql_values::errors::SqlValueFailure;
 use sqlbuild_model_config::sql_values::models::RawSqlValue;
 
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
 use crate::bindings::_helpers::contracts::sql_values::{
     SqlValueClasses, raw_value, sql_value, sql_value_error,
 };
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
-const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild.compiler.discovery.exceptions";
-const IDENTITY_ERRORS_MODULE: &str = "sqlbuild.compiler.resource_names.exceptions";
-const RENDERING_MODULE: &str = "sqlbuild.sql_values.types";
+const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
+const IDENTITY_ERRORS_MODULE: &str = "sqlbuild._native";
 
 fn declaration_error(py: Python<'_>, failure: DeclarationFailure) -> PyResult<PyErr> {
     Ok(match failure {
@@ -58,7 +60,7 @@ fn enum_record<'py>(
     owner: &Owner<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let models = py.import(MODELS_MODULE)?;
-    let member_class = models.getattr("EnumMember")?;
+    let member_class = shape_class(models.as_any(), "EnumMember")?;
     let int_class = py.import("builtins")?.getattr("int")?;
     let members = facts
         .members
@@ -88,7 +90,7 @@ fn constant_record<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let render_as = match facts.render_as {
         Some(rendering) => py
-            .import(RENDERING_MODULE)?
+            .import(NATIVE_RECORDS_MODULE)?
             .getattr("CollectionRendering")?
             .call1((rendering,))?,
         None => py.None().into_bound(py),

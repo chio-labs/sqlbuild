@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView
 
 
 @dataclass(frozen=True)

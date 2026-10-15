@@ -6,7 +6,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::compiled_project::main::map_expanded_offset::map_expanded_offset as mapped;
 use sqlbuild_analysis::compiled_project::models::SplicedSpan;
 
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 /// `map_expanded_offset(*, offset, passes)`: a `MappedOffset` in the first pass's source.
 #[pyfunction]
@@ -34,7 +34,7 @@ fn map_expanded_offset<'py>(
     let arguments: Bound<'py, PyDict> = PyDict::new(py);
     arguments.set_item("offset", offset)?;
     arguments.set_item("generated", generated)?;
-    py.import(COMPILE_MODELS_MODULE)?
+    py.import(NATIVE_RECORDS_MODULE)?
         .getattr("MappedOffset")?
         .call((), Some(&arguments))
 }

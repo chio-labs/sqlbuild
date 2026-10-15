@@ -6,6 +6,8 @@ use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
@@ -14,7 +16,7 @@ const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const PLANNER_TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
 const REFERENCE_TYPES_MODULE: &str = "sqlbuild.compiler.references.types";
-const SCOPE_ERRORS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
+const SCOPE_ERRORS_MODULE: &str = "sqlbuild._native";
 const SCOPE_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
 const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
@@ -74,7 +76,7 @@ pub(crate) fn native_config_classes<'py>(
             ("table_backed", PyTuple::new(py, table_backed)?.into_any()),
             (
                 "compile_model_config",
-                class(py, COMPILE_MODELS_MODULE, "CompileModelConfig")?,
+                class(py, NATIVE_RECORDS_MODULE, "CompileModelConfig")?,
             ),
             (
                 "resolved_retention",
@@ -282,7 +284,7 @@ fn input_view_classes<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         ),
         (
             "lineage_column_fact",
-            class(py, COMPILE_MODELS_MODULE, "CompiledLineageColumnFact")?,
+            class(py, NATIVE_RECORDS_MODULE, "CompiledLineageColumnFact")?,
         ),
         (
             "lineage_source_fact",
@@ -290,11 +292,11 @@ fn input_view_classes<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         ),
         (
             "contract_proof",
-            class(py, COMPILE_MODELS_MODULE, "DynamicColumnContractProof")?,
+            class(py, NATIVE_RECORDS_MODULE, "DynamicColumnContractProof")?,
         ),
         (
             "family_proof",
-            class(py, COMPILE_MODELS_MODULE, "DynamicColumnFamilyProof")?,
+            class(py, NATIVE_RECORDS_MODULE, "DynamicColumnFamilyProof")?,
         ),
     ];
     dict(
@@ -314,11 +316,11 @@ fn input_view_classes<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
             ),
             (
                 "sql_expansion",
-                class(py, COMPILE_MODELS_MODULE, "CompiledSqlExpansion")?,
+                class(py, NATIVE_RECORDS_MODULE, "CompiledSqlExpansion")?,
             ),
             (
                 "expansion_span",
-                class(py, COMPILE_MODELS_MODULE, "ExpansionSpan")?,
+                class(py, NATIVE_RECORDS_MODULE, "ExpansionSpan")?,
             ),
             (
                 "audits",
@@ -344,11 +346,11 @@ fn input_view_classes<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
                     vec![
                         (
                             "function_argument",
-                            class(py, COMPILE_MODELS_MODULE, "FunctionArgument")?,
+                            class(py, NATIVE_RECORDS_MODULE, "FunctionArgument")?,
                         ),
                         (
                             "function_return_column",
-                            class(py, COMPILE_MODELS_MODULE, "FunctionReturnColumn")?,
+                            class(py, NATIVE_RECORDS_MODULE, "FunctionReturnColumn")?,
                         ),
                         (
                             "function_language",

@@ -7,9 +7,9 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const PIPELINE_MODELS_MODULE: &str = "sqlbuild.compiler.pipeline.models";
-const PLANNER_MODELS_MODULE: &str = "sqlbuild.compiler.planner.models";
 const SPLIT_SELECTORS_MODULE: &str = "sqlbuild._native";
 const PLANNER_SCOPES_MODULE: &str = "sqlbuild._native";
 const STATIC_SCOPE_MODULE: &str = "sqlbuild._native";
@@ -28,7 +28,7 @@ fn unit_test_selectors_applied<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = discovered.py();
     let resolved: Bound<'py, PyAny> = if options.is_none() {
-        imported(py, PIPELINE_MODELS_MODULE, "CompilePipelineOptions")?.call0()?
+        imported(py, NATIVE_RECORDS_MODULE, "CompilePipelineOptions")?.call0()?
     } else {
         options.clone()
     };
@@ -77,7 +77,7 @@ fn planner_scopes<'py>(
             (
                 "selection",
                 call_with(
-                    &imported(py, PLANNER_MODELS_MODULE, "PlannerSelection")?,
+                    &imported(py, NATIVE_RECORDS_MODULE, "PlannerSelection")?,
                     &[
                         ("select", selection.getattr("select")?),
                         ("exclude", selection.getattr("exclude")?),
@@ -87,7 +87,7 @@ fn planner_scopes<'py>(
             (
                 "policies",
                 call_with(
-                    &imported(py, PLANNER_MODELS_MODULE, "PlannerPolicies")?,
+                    &imported(py, NATIVE_RECORDS_MODULE, "PlannerPolicies")?,
                     &[("auto_load_sources", selection.getattr("auto_load_sources")?)],
                 )?,
             ),
@@ -262,7 +262,7 @@ fn compile_static_command_context<'py>(
             (
                 "selection",
                 call_with(
-                    &imported(py, PLANNER_MODELS_MODULE, "PlannerSelection")?,
+                    &imported(py, NATIVE_RECORDS_MODULE, "PlannerSelection")?,
                     &[
                         ("select", options.getattr("select")?),
                         ("exclude", options.getattr("exclude")?),
@@ -287,7 +287,7 @@ fn compile_static_command_context<'py>(
             (
                 "deferral",
                 call_with(
-                    &imported(py, PLANNER_MODELS_MODULE, "DeferralInputs")?,
+                    &imported(py, NATIVE_RECORDS_MODULE, "DeferralInputs")?,
                     &[
                         ("deferred_locations", deferred),
                         ("defer_sources_to", options.getattr("defer_sources_to")?),
@@ -307,7 +307,7 @@ fn compile_static_command_context<'py>(
         ],
     )?;
     call_with(
-        &imported(py, PIPELINE_MODELS_MODULE, "StaticCommandContext")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "StaticCommandContext")?,
         &[
             ("project", project),
             ("scope", scope),

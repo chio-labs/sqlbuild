@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, ClassVar
 
+from sqlbuild._native import CompileModelConfig
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.compile.models import (
@@ -10,7 +11,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
-    CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,

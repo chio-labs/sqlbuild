@@ -9,7 +9,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 
 const NATIVE: &str = "sqlbuild._native";
-const MODELS: &str = "sqlbuild.lint.models";
+const MODELS: &str = "sqlbuild._native";
 
 /// Classify a lint path, retaining the caller's supplied relative path when available.
 #[pyfunction]

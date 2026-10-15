@@ -1,5 +1,6 @@
 //! Compiled SQL tests, their keyed P013 diagnostics and assembly failures, built natively.
 
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
@@ -11,7 +12,7 @@ use crate::bindings::_helpers::sql_test_glue::assembly::{
 
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const GLUE_MODELS_MODULE: &str = "sqlbuild.compiler.sql_test_glue.models";
+const GLUE_MODELS_MODULE: &str = "sqlbuild._native";
 const SPEC_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
 /// Fields a direct-logic compiled payload copies from its input payload, in order.
 const DIRECT_PAYLOAD_FIELDS: [&str; 5] = [
@@ -66,10 +67,10 @@ impl<'py> Classes<'py> {
         let types: Bound<'py, PyModule> = py.import(COMPILE_TYPES_MODULE)?;
         let glue: Bound<'py, PyModule> = py.import(GLUE_MODELS_MODULE)?;
         Ok(Self {
-            direct_input: models.getattr("CompileDirectLogicSqlTestInputPayload")?,
+            direct_input: shape_class(&models, "CompileDirectLogicSqlTestInputPayload")?,
             resource_type: types.getattr("CompiledResourceType")?,
-            phase: types.getattr("DiagnosticPhase")?.getattr("COMPILE")?,
-            severity: types.getattr("DiagnosticSeverity")?.getattr("ERROR")?,
+            phase: shape_class(&types, "DiagnosticPhase")?.getattr("COMPILE")?,
+            severity: shape_class(&types, "DiagnosticSeverity")?.getattr("ERROR")?,
             assembly: glue.getattr("NativeSqlTestAssembly")?,
             failure: glue.getattr("NativeSqlTestFailure")?,
             location: py.import(SPEC_MODELS_MODULE)?.getattr("SourceLocation")?,
@@ -83,7 +84,7 @@ impl<'py> Classes<'py> {
     }
 
     fn model(&self, name: &str) -> PyResult<Bound<'py, PyAny>> {
-        self.models.getattr(name)
+        shape_class(&self.models, name)
     }
 
     fn object_key(&self, resource_type: &str, name: &str) -> PyResult<Bound<'py, PyAny>> {

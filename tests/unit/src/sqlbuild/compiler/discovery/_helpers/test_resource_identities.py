@@ -6,8 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import discover_project_inputs, validate_resource_identity
-from sqlbuild.compiler.resource_names.exceptions import ResourceIdentityError
+from sqlbuild._native import (
+    ResourceIdentityError,
+    discover_project_inputs,
+    validate_resource_identity,
+)
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     CanonicalResourceIdentityTestCase,
     DiscoveredResourceIdentityErrorTestCase,

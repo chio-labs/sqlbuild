@@ -9,12 +9,16 @@ from collections.abc import Callable, Iterator
 from dataclasses import replace
 from pathlib import Path
 from types import ModuleType
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    CollectionRendering,
+    CompileAdapterContext,
+    CompileModelConfig,
+    CompileProjectInputs,
     assemble_project,
     build_compile_inputs,
     build_compiled_project,
@@ -25,26 +29,20 @@ from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.models import MeasurementThresholdBound, MeasurementThresholds
 from sqlbuild.compiler.compile import models as compile_models
-from sqlbuild.compiler.compile.models import (
-    CompileAdapterContext,
-    CompileModelConfig,
-    CompileModelInput,
-    CompileProjectInputs,
-    CompilerDiagnostic,
-)
+from sqlbuild.compiler.compile.models import CompileModelInput, CompilerDiagnostic
 from sqlbuild.compiler.compile.types import (
     CompiledAuditView,
     CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
-    CompileInputsView,
-    ModelInput,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SourceColumnEntry
-from sqlbuild.sql_values.types import CollectionRendering
 from tests.integration.src.sqlbuild.compiler.graph.helpers import write_files
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView, ModelInput
 
 TYPE_PROOF_FILES: dict[str, str] = {
     "sqlbuild_project.toml": (
@@ -89,7 +87,7 @@ def skip_model_retention(*, monkeypatch: pytest.MonkeyPatch) -> None:
     """
 
     build_inputs: Callable[..., tuple[ModelInput, ...]] = cast(
-        Callable[..., tuple[ModelInput, ...]], _native.build_model_inputs
+        "Callable[..., tuple[ModelInput, ...]]", _native.build_model_inputs
     )
 
     def discarded(**kwargs: Any) -> tuple[ModelInput, ...]:
@@ -118,7 +116,7 @@ def count_legacy_constructions(*, monkeypatch: pytest.MonkeyPatch) -> Counter[st
 
     counts: Counter[str] = Counter()
     for name in LEGACY_PROJECT_TYPES:
-        model_type: type = getattr(compile_models, name)
+        model_type: type = getattr(compile_models, name, None) or getattr(_native, name)
         monkeypatch.setattr(
             model_type, "__init__", _counted_init(counts=counts, name=name, model_type=model_type)
         )

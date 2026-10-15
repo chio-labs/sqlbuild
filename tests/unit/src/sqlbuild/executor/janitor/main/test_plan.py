@@ -5,18 +5,16 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from sqlbuild._native import (
+    build_janitor_plan,
     build_scenario_artifact_name,
     compute_scenario_hash_prefix,
 )
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.executor.janitor.main.execute import execute_janitor_plan
-from sqlbuild.executor.janitor.main.plan import build_janitor_plan
 from sqlbuild.executor.janitor.models import (
-    JanitorDirectModeSettings,
     JanitorExecutionResult,
     JanitorPlan,
-    JanitorRelationScope,
 )
 from tests.unit.src.sqlbuild.executor.janitor.main._test_types import (
     JanitorExecuteTestCase,
@@ -235,13 +233,9 @@ def test_given_project_and_warehouse_when_building_janitor_plan_then_returns_exp
         retention_days=test_case.retention_days,
         delete_tracked_only=test_case.delete_tracked_only,
         exclude_patterns=test_case.exclude_patterns,
-        relation_scope=JanitorRelationScope(
-            protected_relation_keys=test_case.protected_relation_keys,
-        ),
-        direct_settings=JanitorDirectModeSettings(
-            enabled=test_case.direct_mode,
-            state_history_versions=test_case.direct_state_history_versions,
-        ),
+        protected_relation_keys=test_case.protected_relation_keys,
+        direct_mode=test_case.direct_mode,
+        state_history_versions=test_case.direct_state_history_versions,
     )
 
     assert tuple(candidate.key.name for candidate in plan.candidates) == (
@@ -297,7 +291,7 @@ def test_given_janitor_plan_when_executing_then_drops_expected_relations(
         connection=object(),
         retention_days=7,
         delete_tracked_only=False,
-        direct_settings=JanitorDirectModeSettings(enabled=test_case.direct_mode),
+        direct_mode=test_case.direct_mode,
     )
 
     result: JanitorExecutionResult = execute_janitor_plan(

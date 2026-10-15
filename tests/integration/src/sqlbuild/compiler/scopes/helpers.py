@@ -14,6 +14,9 @@ import pytest
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    DeclarationScopeBuild,
+    DeclarationScopeResolver,
+    DiscoveryError,
     build_declaration_scope,
     discover_project_inputs,
     resolve_declaration_context,
@@ -23,13 +26,7 @@ from sqlbuild._native import (
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import (
-    DeclarationResolutionContext,
-    DeclarationScopeBuild,
-    DeclarationScopeResolver,
-    LoadedMacro,
-)
-from sqlbuild.compiler.discovery.exceptions import DiscoveryError
+from sqlbuild.compiler.compile.models import DeclarationResolutionContext, LoadedMacro
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredProjectInputs,

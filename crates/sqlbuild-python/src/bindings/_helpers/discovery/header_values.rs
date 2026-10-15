@@ -8,7 +8,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild.compiler.discovery.exceptions";
+const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
 const HEADER_CACHE_SIZE: usize = 4096;
 

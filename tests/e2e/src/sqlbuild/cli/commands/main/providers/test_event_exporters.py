@@ -12,6 +12,7 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.providers._test_types import (
     CommandOutputE2ETestCase,
     EventExporterE2ETestCase,
+    FilteredSinkFailureE2ETestCase,
     NoExporterCommandE2ETestCase,
     ReadOnlyProviderE2ETestCase,
 )
@@ -317,3 +318,106 @@ def test_given_no_exporters_and_exploding_provider_when_non_provider_command_run
     assert not marker_path.exists()
     assert helper_marker_path.exists()
     assert not (project_dir / ".sqlbuild").exists()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        FilteredSinkFailureE2ETestCase(
+            description="failed build filters per sink and reports the failing sink",
+            command=("build",),
+            expected_exit_code=1,
+            expected_runs_only=(),
+            expected_errors_only=("invocation_failed",),
+            expected_warning=(
+                "Warning: lifecycle event export was incomplete: 0 of {accepted} event "
+                "deliveries dropped, 1 failed (sink 'failing_on_errors'). Increase "
+                "sinks.lifecycle.shutdown_timeout or check sink health."
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_filtered_and_failing_sinks_when_build_fails_then_delivery_and_warning_match_filters(
+    test_case: FilteredSinkFailureE2ETestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_dir: Path = tmp_path / "filtered"
+    output_dir.mkdir()
+    monkeypatch.setenv("FILTERED_EXPORT_DIR", str(output_dir))
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="filtered_sink_project",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "filtered_sink_project"
+                adapter = "duckdb"
+
+                [connection]
+                database = "filtered_sink_project.duckdb"
+
+                [sinks.lifecycle.named.errors_only]
+                min_severity = "error"
+                """
+            ).lstrip(),
+            "sinks/filtered.py": dedent(
+                """
+                import os
+                from pathlib import Path
+
+                from sqlbuild.sinks import LifecycleEvent, LifecycleEventKind, lifecycle_event_sink
+
+
+                def _record(sink: str, event: LifecycleEvent) -> None:
+                    path = Path(os.environ["FILTERED_EXPORT_DIR"]) / f"{sink}.txt"
+                    with path.open("a", encoding="utf-8") as stream:
+                        stream.write(event.event_type + "\\n")
+
+
+                @lifecycle_event_sink(event_kinds={LifecycleEventKind.RUN}, min_severity="info")
+                def runs_only(event: LifecycleEvent) -> None:
+                    _record("runs_only", event)
+
+
+                @lifecycle_event_sink(event_kinds={LifecycleEventKind.INVOCATION})
+                def errors_only(event: LifecycleEvent) -> None:
+                    _record("errors_only", event)
+
+
+                @lifecycle_event_sink(name="failing_on_errors", min_severity="error")
+                def failing(event: LifecycleEvent) -> None:
+                    raise RuntimeError("destination detail must not be reported")
+                """
+            ),
+            "models/orders.sql": (
+                "MODEL (description 'Test model orders.', materialized table);\n\n"
+                "SELECT 1 AS order_id\n"
+            ),
+            "models/broken_orders.sql": (
+                "MODEL (description 'Test model broken orders.', materialized table);\n\n"
+                'SELECT missing_column FROM __ref("orders")\n'
+            ),
+        },
+    )
+    (output_dir / "runs_only.txt").touch()
+    (output_dir / "errors_only.txt").touch()
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", *test_case.command),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    runs_only: tuple[str, ...] = tuple(
+        (output_dir / "runs_only.txt").read_text(encoding="utf-8").splitlines()
+    )
+    errors_only: tuple[str, ...] = tuple(
+        (output_dir / "errors_only.txt").read_text(encoding="utf-8").splitlines()
+    )
+    accepted: int = len(runs_only) + len(errors_only) + 1
+    assert runs_only == test_case.expected_runs_only
+    assert errors_only == test_case.expected_errors_only
+    assert test_case.expected_warning.format(accepted=accepted) in result.stderr
+    assert "destination detail" not in result.stdout + result.stderr

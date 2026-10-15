@@ -9,6 +9,12 @@ import pytest
 
 import sqlbuild._native as native_module
 from sqlbuild._native import (
+    LintBody,
+    LintConfig,
+    LintRunResult,
+    MappedOffset,
+    ProjectCompileError,
+    SqlExpansionContext,
     build_lint_expansion_context,
     expand_sql_with_spans,
     lint_file_role,
@@ -16,10 +22,7 @@ from sqlbuild._native import (
     prepare_lint_body,
     run_lint,
 )
-from sqlbuild.compiler.compile.models import MappedOffset, SqlExpansionContext
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.lint.exceptions import ProjectCompileError
-from sqlbuild.lint.models import LintBody, LintConfig, LintRunResult
 from tests.unit.src.sqlbuild.lint._test_types import (
     ExpandedLintTestCase,
     ExpandedTypedConstantTestCase,

@@ -4,16 +4,16 @@ from dataclasses import replace
 from pathlib import Path
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.discovery._helpers.filesystem.command_output_sinks import (
-    bind_command_output_sink_declarations,
-    discover_command_output_sink_declarations,
-)
-from sqlbuild.compiler.discovery._helpers.filesystem.core import (
+from sqlbuild._native import (
+    ProjectConfigError,
     bind_event_exporter_declarations,
     discover_event_exporter_declarations,
     discover_provider_classes,
 )
-from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
+from sqlbuild.compiler.discovery._helpers.filesystem.command_output_sinks import (
+    bind_command_output_sink_declarations,
+    discover_command_output_sink_declarations,
+)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredCommandOutputSink,
     DiscoveredCommandOutputSinkDeclaration,
@@ -22,7 +22,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProvider,
     DiscoveredRuntimeExtensions,
 )
-from sqlbuild.runtime.event_exporting.main.stricter_severity import stricter_severity
 from sqlbuild.spec.contracts.models import (
     LifecycleEventSinkFilterConfig,
     LifecycleEventSinksConfig,
@@ -89,5 +88,7 @@ def _apply_runtime_filter(
     for runtime_filter in filters:
         if runtime_filter.event_kinds is not None:
             kinds = kinds & runtime_filter.event_kinds
-        severity = stricter_severity(first=severity, second=runtime_filter.min_severity)
+        severity = _native.stricter_event_export_severity(
+            first=severity, second=runtime_filter.min_severity
+        )
     return replace(exporter, event_kinds=kinds, min_severity=severity)

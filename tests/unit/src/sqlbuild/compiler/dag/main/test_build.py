@@ -4,7 +4,7 @@ import json
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
@@ -19,7 +19,7 @@ from sqlbuild._native import (
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
 )
-from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.dag.types import NodeKind
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
@@ -36,6 +36,9 @@ from tests.unit.src.sqlbuild.compiler.dag.main._test_types import (
 )
 from tests.unit.src.sqlbuild.compiler.dag.main.helpers import build_dag_artifact_test_graph
 from tests.unit.src.sqlbuild.compiler.graph.helpers import project_graph_from_indexes
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView
 
 
 @pytest.mark.parametrize(

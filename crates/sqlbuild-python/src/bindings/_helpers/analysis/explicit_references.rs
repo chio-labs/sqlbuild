@@ -1,5 +1,6 @@
 //! Compile's explicit-reference checks over plain project facts, run natively.
 
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
@@ -348,7 +349,8 @@ fn python_report<'py>(
         fields.set_item("help", &row.help)?;
         diagnostics.push(compiler_diagnostic.call((), Some(&fields))?);
     }
-    let literal_relation: Bound<'py, PyAny> = reference_models.getattr("LiteralSqlRelation")?;
+    let literal_relation: Bound<'py, PyAny> =
+        shape_class(reference_models.as_any(), "LiteralSqlRelation")?;
     let relation_name: Bound<'py, PyAny> = reference_models.getattr("RelationName")?;
     let mut unmatched: Vec<Bound<'py, PyAny>> = Vec::with_capacity(report.unmatched.len());
     for row in &report.unmatched {
@@ -369,9 +371,7 @@ fn python_report<'py>(
     let fields: Bound<'py, PyDict> = PyDict::new(py);
     fields.set_item("diagnostics", PyTuple::new(py, diagnostics)?)?;
     fields.set_item("unmatched", PyTuple::new(py, unmatched)?)?;
-    compile_models
-        .getattr("PythonSqlReferenceReport")?
-        .call((), Some(&fields))
+    shape_class(compile_models.as_any(), "PythonSqlReferenceReport")?.call((), Some(&fields))
 }
 
 /// `(method, sql, line)` for each literal SQL call to the context in a dedented function source.

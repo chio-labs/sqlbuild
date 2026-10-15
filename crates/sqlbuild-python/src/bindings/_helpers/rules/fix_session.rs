@@ -19,10 +19,10 @@ use crate::bindings::_helpers::rules::fix_facts::compile_facts;
 use crate::bindings::_helpers::rules::fix_verdict::fix_verdict;
 
 const NATIVE: &str = "sqlbuild._native";
-const MODELS: &str = "sqlbuild.lint.models";
+const MODELS: &str = "sqlbuild._native";
 const ADAPTER: &str = "sqlbuild.adapter.contract.classes.base_adapter";
 const COMPILE_ERRORS: &str = "sqlbuild.compiler.compile.exceptions";
-const LINT_ERRORS: &str = "sqlbuild.lint.exceptions";
+const LINT_ERRORS: &str = "sqlbuild._native";
 const VERIFICATION_FAILURE: &str =
     "Compilation could not prove unchanged output columns, types, dependencies and lineage";
 const APPLIED_REASON: &str = "Meaning-preserving rewrite; compiler invariants verified";
@@ -268,7 +268,7 @@ impl<'py> FixSession<'py> {
         while !accepted.is_empty() {
             let verdict = self.verdict(&edited_files(&self.unblocked(current)?, &accepted)?)?;
             if let Some(verdict) = &verdict
-                && verdict.getattr("verified")?.is_truthy()?
+                && verified(verdict)?
             {
                 confirmed = true;
                 break;
@@ -286,10 +286,7 @@ impl<'py> FixSession<'py> {
         let candidate = edited_files(&self.unblocked(current)?, &accepted)?;
         if !accepted.is_empty() && !confirmed {
             let verdict = self.verdict(&candidate)?;
-            if !verdict
-                .as_ref()
-                .map_or(Ok(false), |value| value.getattr("verified")?.is_truthy())?
-            {
+            if !verdict.as_ref().map_or(Ok(false), verified)? {
                 return Ok(None);
             }
         }
@@ -319,7 +316,7 @@ impl<'py> FixSession<'py> {
             single.set_item(&path, &path_edits)?;
             let verdict = self.verdict(&edited_files(&base, &single)?)?;
             if let Some(verdict) = &verdict
-                && verdict.getattr("verified")?.is_truthy()?
+                && verified(verdict)?
             {
                 accepted.set_item(path, path_edits)?;
             } else {
@@ -668,4 +665,10 @@ fn result<'py>(
         ],
     )?
     .into_any())
+}
+
+/// Whether a fix verdict proved every edit: nothing failed and nothing was unattributed.
+fn verified(verdict: &Bound<'_, PyAny>) -> PyResult<bool> {
+    Ok(!verdict.getattr("failing")?.is_truthy()?
+        && !verdict.getattr("unattributed")?.is_truthy()?)
 }

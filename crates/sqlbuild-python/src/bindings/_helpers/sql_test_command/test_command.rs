@@ -32,10 +32,11 @@ use crate::bindings::_helpers::compile_outputs::runtime_target::write_test_runti
 use crate::bindings::_helpers::result_output::integration_values::json_value;
 use crate::bindings::_helpers::result_output::resource_ids::sql_test_identity;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
 const STATIC_COMMAND_MODULE: &str = "sqlbuild._native";
-const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const TEST_PLAN_MODULE: &str = "sqlbuild._native";
 const PLANNER_ERRORS: &str = "sqlbuild.compiler.planner.exceptions";
 const EXECUTOR_PIPELINE_MODELS: &str = "sqlbuild.executor.pipeline.models";
@@ -323,7 +324,7 @@ fn compile_tests<'py>(
         ],
     )?;
     let options: Bound<'py, PyAny> = call_with(
-        &imported(py, PIPELINE_MODELS, "CompilePipelineOptions")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "CompilePipelineOptions")?,
         &[
             ("selected_target", request.getattr("selected_target")?),
             ("no_sql_validation", request.getattr("no_sql_validation")?),

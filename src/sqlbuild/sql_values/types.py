@@ -20,13 +20,6 @@ class SqlValueKind(StrEnum):
     OBJECT = "object"
 
 
-class CollectionRendering(StrEnum):
-    """Physical rendering choices for homogeneous SQL collections."""
-
-    VALUE_LIST = "value_list"
-    ARRAY = "array"
-
-
 class StateSqlValueType(StrEnum):
     """Closed physical value kinds used by warehouse state columns."""
 

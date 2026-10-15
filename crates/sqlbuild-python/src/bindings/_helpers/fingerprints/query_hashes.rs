@@ -11,7 +11,7 @@ use sqlbuild_core::panics::main::is_compiler_panic::is_compiler_panic;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::types::CompilerDetach;
 
-const EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.fingerprints.exceptions";
+const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 /// `QueryFingerprintError(message)`, or the compiler error a native panic becomes.
 fn query_fingerprint_error(py: Python<'_>, message: String) -> PyErr {
     if is_compiler_panic(&message) {

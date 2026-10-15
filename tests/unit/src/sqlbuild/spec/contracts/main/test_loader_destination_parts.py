@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import loader_destination_parts
-from sqlbuild.spec.contracts.exceptions import SpecConfigError
+from sqlbuild._native import SpecConfigError, loader_destination_parts
 from sqlbuild.spec.contracts.models import LoaderDestinationParts
 from tests.unit.src.sqlbuild.spec.contracts.main._test_types import (
     InvalidLoaderDestinationTestCase,

@@ -7,17 +7,14 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    DiscoveredSqlTestBlock,
+    DiscoveredSqlTestCase,
+    DiscoveryFileFault,
+    SqlTestParseError,
     discover_test_files,
     omitted_ceremonial_select,
 )
-from sqlbuild.compiler.discovery.exceptions import SqlTestParseError
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredSqlTestBlock,
-    DiscoveredSqlTestCase,
-    DiscoveredSqlTestFile,
-    DiscoveryFileFault,
-    SqlTestParameterDeclaration,
-)
+from sqlbuild.compiler.discovery.models import DiscoveredSqlTestFile, SqlTestParameterDeclaration
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ExpectedCountTestCase,

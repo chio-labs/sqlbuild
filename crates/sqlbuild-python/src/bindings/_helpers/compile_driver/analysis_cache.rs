@@ -14,12 +14,13 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::planner_identity::json_values::{COMPACT, unicode_sorted_dumps};
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const ANALYSIS_CACHE_VERSION: i64 = 13;
 const ANALYSIS_ALGORITHM_FINGERPRINT: &str = "model-sql-analysis-v21-completed-star-shapes";
 const LOCAL_QUALNAME_MARKER: &str = "<locals>";
 const PACKAGE_NAME: &str = "sqlbuild";
 const UNKNOWN_VERSION: &str = "unknown";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 /// Sorted; the dialects whose expression types compile checks.
 const TYPE_CHECKED_DIALECTS: [&str; 4] = ["bigquery", "duckdb", "postgresql", "snowflake"];
 const METADATA_MODULE: &str = "importlib.metadata";
@@ -73,7 +74,7 @@ pub(crate) fn analysis_cache_context<'py>(
         Err(error) => return Err(error),
     };
     let context = call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "AnalysisCacheContext")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "AnalysisCacheContext")?,
         &[
             ("root", root.clone()),
             (

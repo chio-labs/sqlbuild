@@ -5,12 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import CustomHostObserver, rules_bulk_cache_path
+from sqlbuild._native import CustomHostObserver, CustomRulesOutcome, rules_bulk_cache_path
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine._helpers.host import custom_host
 from sqlbuild.rule_engine.constants import CUSTOM_RULES_CACHE_FILE
 from sqlbuild.rule_engine.exceptions import HostCancelledError, RulesError
-from sqlbuild.rule_engine.models import CustomRulesOutcome
 from tests.unit.src.sqlbuild.rule_engine._helpers.host._test_types import (
     AwaitInputsTestCase,
     AwaitPublishedInputsTestCase,

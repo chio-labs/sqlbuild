@@ -1,5 +1,6 @@
 //! Plan a compiled project over an open warehouse connection, and open that connection.
 
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet};
@@ -11,9 +12,10 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::graph::python_node_graph::run_selection_from_inputs;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const EXECUTION_PLAN_MODULE: &str = "sqlbuild._native";
-const PLANNER_MODELS_MODULE: &str = "sqlbuild.compiler.planner.models";
 const MATERIALIZATIONS_MODULE: &str = "sqlbuild.compiler.pipeline._helpers.materializations";
 const PIPELINE_MODELS_MODULE: &str = "sqlbuild.compiler.pipeline.models";
 const SINGLE_CONNECTION: i64 = 1;
@@ -70,7 +72,7 @@ pub(crate) fn pipeline_result<'py>(
             ],
         )?;
     }
-    let planner_models = py.import(PLANNER_MODELS_MODULE)?;
+    let planner_models = py.import(NATIVE_RECORDS_MODULE)?;
     let selection: Bound<'py, PyAny> = call_with(
         &planner_models.getattr("PlannerSelection")?,
         &[
@@ -82,7 +84,7 @@ pub(crate) fn pipeline_result<'py>(
         ],
     )?;
     let overrides: Bound<'py, PyAny> = call_with(
-        &planner_models.getattr("PlannerOverrides")?,
+        &shape_class(planner_models.as_any(), "PlannerOverrides")?,
         &option_fields(
             options,
             &[
@@ -101,10 +103,12 @@ pub(crate) fn pipeline_result<'py>(
         options,
         &["defer_sources_to", "source_deferral_enabled"],
     )?);
-    let deferral: Bound<'py, PyAny> =
-        call_with(&planner_models.getattr("DeferralInputs")?, &deferral_fields)?;
+    let deferral: Bound<'py, PyAny> = call_with(
+        &shape_class(planner_models.as_any(), "DeferralInputs")?,
+        &deferral_fields,
+    )?;
     let policies: Bound<'py, PyAny> = call_with(
-        &planner_models.getattr("PlannerPolicies")?,
+        &shape_class(planner_models.as_any(), "PlannerPolicies")?,
         &option_fields(
             options,
             &[

@@ -24,12 +24,13 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::contract_command::write::{ContractWrite, write_contracts};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild._native";
 const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
 const GRAPH_SELECTION_MODULE: &str = "sqlbuild._native";
-const ADOPTION_MODELS: &str = "sqlbuild.compiler.contract_adoption.models";
+const ADOPTION_MODELS: &str = "sqlbuild._native";
 const GENERATE_ACTION: &str = "generate";
 
 /// A `CliUserError` with its code.
@@ -80,7 +81,7 @@ fn select_resources<'py>(
 ) -> PyResult<Selection<'py>> {
     let py: Python<'py> = request.py();
     let analysis: Bound<'py, PyAny> = call_with(
-        &imported(py, COMPILE_MODELS, "CompileAnalysisSelection")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "CompileAnalysisSelection")?,
         &[("no_cache", PyBool::new(py, true).to_owned().into_any())],
     )?;
     let project: Bound<'py, PyAny> = call_with(

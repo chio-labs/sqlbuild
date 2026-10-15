@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+import functools
 import io
+import sqlite3
 import sys
 import threading
 import time
+from collections.abc import Callable
 
 import pytest
 
 from sqlbuild._native import OutputCaptureDispatcher
 from sqlbuild.runtime.output_capture.classes.text_tee import TextOutputTee
-from sqlbuild.runtime.output_capture.models import CommandOutputCaptureSummary
+from sqlbuild.runtime.output_capture.models import (
+    CommandOutputCaptureSummary,
+    CommandOutputRecord,
+)
 from sqlbuild.runtime.output_capture.types import CommandOutputStream
 from tests.unit.src.sqlbuild.runtime.output_capture.classes._test_types import (
     ChunkingTestCase,
@@ -23,6 +29,7 @@ from tests.unit.src.sqlbuild.runtime.output_capture.classes.helpers import (
     FailingOutputExporter,
     RecordingOutputExporter,
     make_dispatcher,
+    sink_scope,
 )
 
 
@@ -329,6 +336,73 @@ def test_given_exporter_diagnostic_when_exporting_then_diagnostic_is_not_recaptu
     assert sink.getvalue() == "command output\nexport diagnostic\n"
     assert summary.accepted == 1
     assert summary.failed == 1
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (OutputCaptureTestCase(description="sink_output_not_recaptured", expected_success=True),),
+    ids=lambda case: case.description,
+)
+def test_given_printing_command_output_sink_when_exporting_then_sink_output_is_not_recaptured(
+    test_case: OutputCaptureTestCase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert test_case.expected_success is True
+    sink: io.StringIO = io.StringIO()
+    messages: list[str] = []
+
+    def record(*, record: CommandOutputRecord) -> None:
+        messages.append(record.message)
+        print("sink diagnostic", file=sys.stderr)
+
+    dispatcher: OutputCaptureDispatcher = make_dispatcher(exporter=sink_scope(record))
+    tee: TextOutputTee = TextOutputTee(
+        sink=sink, dispatcher=dispatcher, stream=CommandOutputStream.STDERR
+    )
+    monkeypatch.setattr(sys, "stderr", tee)
+
+    tee.write("command output\n")
+    summary: CommandOutputCaptureSummary = dispatcher.close()
+
+    assert messages == ["command output\n"]
+    assert sink.getvalue() == "command output\nsink diagnostic\n"
+    assert summary.accepted == 1
+    assert summary.delivered == 1
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (OutputCaptureTestCase(description="thread_bound_sink_resource", expected_success=True),),
+    ids=lambda case: case.description,
+)
+def test_given_thread_bound_sink_resource_when_exporting_many_records_then_one_thread_calls_sink(
+    test_case: OutputCaptureTestCase,
+) -> None:
+    assert test_case.expected_success is True
+    connection: Callable[[], sqlite3.Connection] = functools.cache(
+        lambda: sqlite3.connect(":memory:")
+    )
+    threads: list[int] = []
+    row_counts: list[int] = []
+
+    def record(*, record: CommandOutputRecord) -> None:
+        threads.append(threading.get_ident())
+        _ = connection().execute("CREATE TABLE IF NOT EXISTS lines (message TEXT)")
+        _ = connection().execute("INSERT INTO lines VALUES (?)", (record.message,))
+        row_counts.append(connection().execute("SELECT COUNT(*) FROM lines").fetchone()[0])
+
+    dispatcher: OutputCaptureDispatcher = make_dispatcher(
+        exporter=sink_scope(record), queue_capacity=128, batch_size=4, max_record_bytes=8
+    )
+    for index in range(40):
+        dispatcher.append(stream=CommandOutputStream.STDOUT, text=f"line {index:02d}\n")
+    summary: CommandOutputCaptureSummary = dispatcher.close()
+
+    assert summary.failed == 0
+    assert summary.dropped == 0
+    assert summary.delivered == summary.accepted == len(threads) == 40
+    assert len(set(threads)) == 1
+    assert threading.get_ident() not in threads
+    assert row_counts == list(range(1, 41))
 
 
 if __name__ == "__main__":

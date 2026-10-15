@@ -16,9 +16,10 @@ use crate::bindings::_helpers::build_command::support::{
 use crate::bindings::_helpers::cli::progress_text::with_verbose_inspection;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
-const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const RUNTIME_CONTRACT_MODELS: &str = "sqlbuild.runtime.contracts.models";
 const CONNECTION_TIMING: [&str; 2] = ["connection_count", "elapsed_seconds"];
 
@@ -50,7 +51,7 @@ fn request_options<'py>(context: &BuildContext<'py>) -> PyResult<Bound<'py, PyAn
         ],
     )?;
     call_with(
-        &imported(py, PIPELINE_MODELS, "CompilePipelineOptions")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "CompilePipelineOptions")?,
         &[
             ("no_sql_validation", field("no_sql_validation")?),
             ("no_cache", field("no_cache")?),

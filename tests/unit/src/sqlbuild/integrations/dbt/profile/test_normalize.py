@@ -4,12 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import normalize_dbt_profile_connection
+from sqlbuild._native import NormalizedDbtProfileConnection, normalize_dbt_profile_connection
 from sqlbuild.integrations.dbt.exceptions import DbtProfileError
-from sqlbuild.integrations.dbt.models import (
-    NormalizedDbtProfileConnection,
-    ResolvedDbtProfileOutput,
-)
+from sqlbuild.integrations.dbt.models import ResolvedDbtProfileOutput
 from tests.unit.src.sqlbuild.integrations.dbt.profile._test_types import (
     DbtProfileNormalizeErrorTestCase,
     DbtProfileNormalizeTestCase,

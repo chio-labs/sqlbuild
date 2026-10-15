@@ -12,6 +12,8 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyListMethods, PyTuple};
 use sqlbuild_analysis::planner_migrations::main::column_decision::column_decision;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 pub(super) fn decide<'py>(
     runtime: &Bound<'py, PyAny>,
     candidate: &ColumnCandidate<'py>,
@@ -57,7 +59,7 @@ pub(super) fn decide<'py>(
     }
     let relation = imported(
         py,
-        "sqlbuild.compiler.migrations.main.relation_for_location",
+        "sqlbuild.executor.migrations._helpers.relation_for_location",
         "migration_relation_for_location",
     )?
     .call1((candidate.model.getattr("destination")?,))?;
@@ -111,7 +113,8 @@ pub(super) fn decide<'py>(
                 ("destination_column", destination),
                 (
                     "discovery",
-                    imported(py, MIGRATION_TYPES, "MigrationDiscovery")?.call1((discovery,))?,
+                    imported(py, NATIVE_RECORDS_MODULE, "MigrationDiscovery")?
+                        .call1((discovery,))?,
                 ),
                 ("decision", decision),
                 (

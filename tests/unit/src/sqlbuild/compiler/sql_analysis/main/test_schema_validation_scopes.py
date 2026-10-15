@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import BindingCatalog, schema_validations
-from sqlbuild.compiler.sql_analysis.models import SqlBindingResult, SqlSchemaValidationRequest
+from sqlbuild._native import (
+    BindingCatalog,
+    SqlBindingResult,
+    SqlSchemaValidationRequest,
+    schema_validations,
+)
 from tests.unit.src.sqlbuild.compiler.sql_analysis.main._test_types import (
     ExactColumnCatalogValidationTestCase,
     SchemaValidationScopeTestCase,

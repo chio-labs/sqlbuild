@@ -98,7 +98,7 @@ fn write_dbt_execution_plan_text(
             (
                 "display_options",
                 call_with(
-                    &imported(py, "sqlbuild.presentation.models", "DisplayOptions")?,
+                    &imported(py, "sqlbuild._native", "DisplayOptions")?,
                     &[("max_entries_per_section", limit)],
                 )?,
             ),

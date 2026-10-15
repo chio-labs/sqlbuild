@@ -12,10 +12,11 @@ use crate::bindings::_helpers::rules::catalogue::{
 };
 use crate::bindings::_helpers::rules::rule_run::freed_memory_released;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const CUSTOM_PAYLOADS_MODULE: &str = "sqlbuild.rule_engine._helpers.engine.custom_payloads";
 const RULES_CONSTANTS_MODULE: &str = "sqlbuild.rule_engine.constants";
-const RULES_MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const PATHLIB_MODULE: &str = "pathlib";
@@ -101,7 +102,7 @@ fn plan_rule_run<'py>(options: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'p
         )?),
     )?;
     call_with(
-        &imported(py, RULES_MODELS_MODULE, "RuleRunPlan")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "RuleRunPlan")?,
         &[
             ("effective_config", effective_config),
             ("project_dir", project_dir),

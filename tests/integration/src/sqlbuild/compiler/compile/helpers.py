@@ -10,11 +10,14 @@ from dataclasses import dataclass
 from functools import partial
 from itertools import compress
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
 from sqlbuild._native import (
+    CompileAdapterContext,
+    CompilerStage,
+    MacroExpansionResult,
     build_compile_inputs,
     compile_frontier,
     discover_project_inputs,
@@ -25,19 +28,15 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import (
-    CompileAdapterContext,
-    LoadedMacro,
-    MacroContext,
-    MacroExpansionResult,
-)
-from sqlbuild.compiler.compile.types import CompileInputsView
+from sqlbuild.compiler.compile.models import LoadedMacro, MacroContext
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.frontier.types import CompilerStage
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 from sqlbuild.compiler.macro_bridge.constants import ACTIVE_MACRO_BRIDGE
 from sqlbuild.compiler.scopes.models import ResourceIdentity
 from sqlbuild.compiler.scopes.types import ResourceKind
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView
 
 MACRO_CALL_LOG_ENV_VAR: str = "SQLBUILD_TEST_MACRO_CALL_LOG"
 _RUN_ID_PATTERN: re.Pattern[str] = re.compile(r'"run_id": "[^"]*"')

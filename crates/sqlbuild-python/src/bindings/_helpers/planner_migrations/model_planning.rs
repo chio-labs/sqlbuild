@@ -4,12 +4,13 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::planner_migrations::column_objects::{config, native, replace};
-use crate::bindings::_helpers::planner_migrations::constants::MIGRATION_TYPES;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{
     PyBool, PyDict, PyDictMethods, PyFrozenSet, PySet, PySetMethods, PyString, PyTuple,
 };
 use pyo3::{pyfunction, wrap_pyfunction};
+
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 fn declared<'py>(item: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>> {
     let py = item.py();
@@ -26,7 +27,7 @@ fn declared<'py>(item: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>
             ("model", item.clone()),
             (
                 "discovery",
-                imported(py, MIGRATION_TYPES, "MigrationDiscovery")?.getattr("MANUAL")?,
+                imported(py, NATIVE_RECORDS_MODULE, "MigrationDiscovery")?.getattr("MANUAL")?,
             ),
             ("raw_origin", origin.call_method0("strip")?),
             (

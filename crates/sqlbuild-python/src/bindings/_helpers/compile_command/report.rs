@@ -22,6 +22,8 @@ use crate::bindings::_helpers::discovery::constants::SQL_HOOK_OUTPUT_FIELDS;
 use crate::bindings::_helpers::discovery::hook_entries::hook_entries;
 use crate::bindings::_helpers::semantic_shapes::coverage::semantic_coverage;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const HOOK_IDENTITIES_MODULE: &str = "sqlbuild.compiler.python_nodes.main._hook_identities";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const METADATA_MODULE: &str = "importlib.metadata";
@@ -761,7 +763,7 @@ fn test_resource<'py>(test: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> 
     let payload: Bound<'py, PyAny> = test.getattr("payload")?;
     let expected_models: Bound<'py, PyList> = if payload.is_instance(&imported(
         py,
-        COMPILE_MODELS_MODULE,
+        NATIVE_RECORDS_MODULE,
         "CompiledModelSqlTestPayload",
     )?)? {
         PyList::new(

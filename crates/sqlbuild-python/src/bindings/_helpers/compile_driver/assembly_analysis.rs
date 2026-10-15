@@ -13,9 +13,11 @@ use crate::bindings::_helpers::compile_driver::compile_timings::{
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ADAPTER_MODELS_MODULE: &str = "sqlbuild.adapter.contract.models";
-pub(crate) const ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.analysis_session.models";
+pub(crate) const ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const PLANNER_TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
 const GENERIC_DIALECT: &str = "generic";
@@ -334,7 +336,7 @@ fn model_analyses<'py>(
     let inputs: &Bound<'py, PyAny> = request.inputs.bind(py);
     let names: &Bound<'py, PyAny> = request.analysis_model_names.bind(py);
     let mode: &Bound<'py, PyAny> = request.column_lineage_mode.bind(py);
-    let lineage_mode: Bound<'py, PyAny> = imported(py, LINEAGE_TYPES_MODULE, "ColumnLineageMode")?;
+    let lineage_mode: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS_MODULE, "ColumnLineageMode")?;
     let rich: bool = mode.eq(lineage_mode.getattr("RICH")?)?;
     let allow_compact: bool = mode.eq(lineage_mode.getattr("FAST")?)? || rich;
     let flags: (Bound<'py, PyAny>, Bound<'py, PyAny>) = (

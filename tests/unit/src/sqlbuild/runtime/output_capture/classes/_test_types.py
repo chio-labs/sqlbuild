@@ -19,3 +19,12 @@ class OutputCaptureTestCase:
 
     description: str
     expected_success: bool
+
+
+@dataclass(frozen=True)
+class InterpreterExitTestCase:
+    """A script left delivering output when the interpreter finalizes, and its exit code."""
+
+    description: str
+    script: str
+    expected_returncode: int

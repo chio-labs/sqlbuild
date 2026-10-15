@@ -16,10 +16,12 @@ use crate::bindings::_helpers::freshness::observation::{
 };
 use crate::bindings::_helpers::freshness::state_io::{StateRead, read_latest};
 use crate::bindings::_helpers::freshness::support::{
-    ADAPTER_EXCEPTIONS, EXCEPTIONS_MODULE, FRESHNESS_MODELS, OBSERVATION_ERROR, text,
+    ADAPTER_EXCEPTIONS, EXCEPTIONS_MODULE, OBSERVATION_ERROR, text,
 };
 use crate::bindings::_helpers::planner_identity::graph::build_downstream_model_name_closure;
 use crate::bindings::_helpers::state_rows::freshness::{age_policy, equivalent};
+
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE_RECORDS: &str = "sqlbuild._native";
 const ADAPTER_STRATEGY: &str = "adapter";
@@ -269,7 +271,11 @@ pub(crate) fn build_direct_source_freshness_planning_result<'py>(
     }
     let unknown_names: Bound<'py, PyDict> = sorted_dict(py, &unknown_sources)?;
     call_with(
-        &imported(py, FRESHNESS_MODELS, "DirectSourceFreshnessPlanningResult")?,
+        &imported(
+            py,
+            NATIVE_RECORDS_MODULE,
+            "DirectSourceFreshnessPlanningResult",
+        )?,
         &[
             (
                 "observed_records",

@@ -8,9 +8,9 @@ from typing import Any, Protocol, cast
 
 from sqlbuild._native import (
     CliEntrypointHandlers,
+    SpecConfigError,
     loader_destination_parts,
 )
-from sqlbuild.spec.contracts.exceptions import SpecConfigError
 
 
 class JsonOutputRequest(Protocol):

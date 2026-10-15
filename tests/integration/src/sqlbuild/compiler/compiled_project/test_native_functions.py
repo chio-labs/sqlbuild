@@ -1,11 +1,14 @@
 """Functions attached by the native model loop and assembled into the native compiled project."""
 
+from __future__ import annotations
+
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.types import CompiledFunctionView, FunctionInput
+from sqlbuild.compiler.compile.types import CompiledFunctionView
 from tests.integration.src.sqlbuild.compiler.compiled_project._test_types import (
     NativeFunctionAttachmentTestCase,
     NativeFunctionErrorTestCase,
@@ -15,6 +18,9 @@ from tests.integration.src.sqlbuild.compiler.compiled_project.helpers import (
     compile_function_project,
     function_summary,
 )
+
+if TYPE_CHECKING:
+    from sqlbuild._native import FunctionInput
 
 
 @pytest.mark.parametrize(

@@ -2,13 +2,10 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import FunctionArgument, FunctionReturnColumn
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapter.contract.types import CursorKind, FunctionNullabilityRule
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import (
-    FunctionArgument,
-    FunctionReturnColumn,
-)
 from sqlbuild.compiler.lineage.types import InferredNullability
 from tests.unit.src.sqlbuild.adapter.contract.classes.base_adapter.helpers import (
     RecordingConnection,

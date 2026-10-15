@@ -14,7 +14,7 @@ use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::contract_classes::contract_classes;
 use crate::bindings::_helpers::model_config::header_metadata::{ContractClasses, audit_tuple};
 
-const IDENTITY_ERRORS_MODULE: &str = "sqlbuild.compiler.resource_names.exceptions";
+const IDENTITY_ERRORS_MODULE: &str = "sqlbuild._native";
 
 /// A resource identity error as `ResourceIdentityError`, anything else as `error_class(message)`.
 fn raised(py: Python<'_>, error: ConfigError, error_class: &Bound<'_, PyAny>) -> PyResult<PyErr> {

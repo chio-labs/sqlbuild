@@ -8,6 +8,11 @@ from types import MappingProxyType
 from typing import Any
 
 from sqlbuild._native import (
+    CompiledFunction,
+    CompiledModelSqlTestPayload,
+    CompileModelConfig,
+    CompileSqlTestCte,
+    DiscoveredSqlTestBlock,
     NativeSqlTestPlan,
     PlanWarning,
     SqlTestPlanResult,
@@ -23,15 +28,11 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
     CompiledModel,
-    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
     CompiledSqlTest,
-    CompileModelConfig,
-    CompileSqlTestCte,
     LoadedMacro,
     MacroContext,
 )
@@ -41,10 +42,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredSqlTestBlock,
-    DiscoveredSqlTestFile,
-)
+from sqlbuild.compiler.discovery.models import DiscoveredSqlTestFile
 from sqlbuild.compiler.planner.models import (
     SqlTestPlanEntry,
 )

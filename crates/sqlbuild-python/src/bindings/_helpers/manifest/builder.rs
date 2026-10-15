@@ -20,7 +20,7 @@ use crate::bindings::_helpers::manifest::rows::{
     ProjectRows, plan_input, project_rows, python_hooks,
 };
 
-const FINGERPRINT_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.fingerprints.exceptions";
+const FINGERPRINT_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const HOOK_IDENTITIES_MODULE: &str = "sqlbuild.compiler.python_nodes.main._hook_identities";
 const DATETIME_MODULE: &str = "datetime";
 

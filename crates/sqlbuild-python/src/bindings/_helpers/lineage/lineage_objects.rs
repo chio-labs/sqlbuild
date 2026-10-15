@@ -1,10 +1,11 @@
 //! The Python lineage models and enums native lineage builds.
 
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyResult, Python};
 use pyo3::types::{PyDict, PyTuple};
 use sqlbuild_analysis::lineage::models::{LineageColumn, LineageSource};
 
-const LINEAGE_MODELS_MODULE: &str = "sqlbuild.compiler.lineage.models";
+const LINEAGE_MODELS_MODULE: &str = "sqlbuild._native";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
@@ -48,12 +49,12 @@ impl<'py> LineageClasses<'py> {
             column_lineage: models.getattr("ColumnLineage")?,
             model_lineage: models.getattr("ModelColumnLineage")?,
             semantic_use: models.getattr("DirectSemanticColumnUse")?,
-            column_fact: compile_models.getattr("CompiledLineageColumnFact")?,
+            column_fact: shape_class(compile_models.as_any(), "CompiledLineageColumnFact")?,
             source_fact: compile_models.getattr("CompiledLineageSourceFact")?,
             compact_facts: compile_models.getattr("CompactLineageFacts")?,
-            transform_kind: types.getattr("ColumnTransformKind")?,
-            confidence: types.getattr("ColumnLineageConfidence")?,
-            analysis_dialect: types.getattr("PolyglotAnalysisDialect")?,
+            transform_kind: shape_class(types.as_any(), "ColumnTransformKind")?,
+            confidence: shape_class(types.as_any(), "ColumnLineageConfidence")?,
+            analysis_dialect: shape_class(types.as_any(), "PolyglotAnalysisDialect")?,
             model_resource: resource_type.getattr("MODEL")?,
             unknown_nullability: nullability.getattr("UNKNOWN")?,
             nullability,
@@ -72,8 +73,11 @@ impl<'py> LineageClasses<'py> {
         resource_name: &str,
         column_name: &str,
     ) -> PyResult<Bound<'py, PyAny>> {
-        self.qualified_column
-            .call1((resource_type, resource_name, column_name))
+        self.qualified_column.call1((
+            self.resource_type.call1((resource_type,))?,
+            resource_name,
+            column_name,
+        ))
     }
 
     /// `ColumnLineageEdge(source, target, transform_kind, confidence)`.
@@ -104,15 +108,11 @@ impl<'py> LineageClasses<'py> {
         &self,
         column: &LineageColumn,
         nullability: &Bound<'py, PyAny>,
-        resource_enum: bool,
     ) -> PyResult<Bound<'py, PyAny>> {
         let mut sources: Vec<Bound<'py, PyAny>> = Vec::with_capacity(column.upstream_columns.len());
         for source in &column.upstream_columns {
-            let resource_type: Bound<'py, PyAny> = if resource_enum {
-                self.resource_type.call1((source.resource_type.as_str(),))?
-            } else {
-                pyo3::types::PyString::new(self.py(), source.resource_type.as_str()).into_any()
-            };
+            let resource_type: Bound<'py, PyAny> =
+                self.resource_type.call1((source.resource_type.as_str(),))?;
             sources.push(self.lineage_source.call1((
                 resource_type,
                 &source.resource_name,

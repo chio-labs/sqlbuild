@@ -7,6 +7,7 @@ use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::compile_driver::config_validation::{
     ProjectConfiguration, reject_invalid_project_configuration,
 };
+use crate::bindings::_helpers::compile_driver::integration_loaders::integration_loader_functions;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords, within,
 };
@@ -27,19 +28,16 @@ use crate::bindings::_helpers::discovery::sql_test_records::{
 use crate::bindings::_helpers::discovery::yaml_records::{
     discover_schema_files, discover_source_files,
 };
+use crate::bindings::_helpers::event_exporting::scope::configure_discovered_event_exporters;
 
 const FRONTIER_MODULE: &str = "sqlbuild._native";
-const FRONTIER_TYPES_MODULE: &str = "sqlbuild.compiler.frontier.types";
+const FRONTIER_TYPES_MODULE: &str = "sqlbuild._native";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const VALIDATION_MODULE: &str = "sqlbuild.compiler.discovery._helpers.validation.discovery";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const SQL_ANALYSIS_SETTING_KEY: &str = "sql_analysis";
-const EVENT_EXPORTERS_MODULE: &str =
-    "sqlbuild.runtime.event_exporting.main._configure_discovered_event_exporters";
-const FILESYSTEM_MODULE: &str = "sqlbuild.compiler.discovery._helpers.filesystem.core";
+const FILESYSTEM_MODULE: &str = "sqlbuild._native";
 const SINKS_MODULE: &str = "sqlbuild.compiler.discovery._helpers.filesystem.command_output_sinks";
-const INGESTR_LOADERS_MODULE: &str = "sqlbuild.integrations.ingestr.main.loaders";
-const DLT_LOADERS_MODULE: &str = "sqlbuild.integrations.dlt.main.loaders";
 const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 
 /// Declaration file collections counted into the declaration-parse lifecycle, in field order.
@@ -243,12 +241,7 @@ fn assembled_inputs<'py>(
         ),
     )?;
     imported(py, VALIDATION_MODULE, "validate_discovered_inputs")?.call1((&discovered,))?;
-    imported(
-        py,
-        EVENT_EXPORTERS_MODULE,
-        "configure_discovered_event_exporters",
-    )?
-    .call1((&discovered,))?;
+    configure_discovered_event_exporters(&discovered)?;
     Ok(discovered)
 }
 
@@ -442,13 +435,7 @@ fn project_inputs<'py>(
         .into_any())
     };
     let source_files: Bound<'py, PyAny> = declarations.get_item("source_files")?;
-    let integration_loaders: Bound<'py, PyAny> =
-        imported(py, INGESTR_LOADERS_MODULE, "build_ingestr_loader_functions")?
-            .call1((&source_files,))?
-            .add(
-                imported(py, DLT_LOADERS_MODULE, "build_dlt_loader_functions")?
-                    .call1((&source_files,))?,
-            )?;
+    let integration_loaders: Bound<'py, PyAny> = integration_loader_functions(py, &source_files)?;
     let loader_functions: Bound<'py, PyAny> = tuple_of("loaders")?.add(integration_loaders)?;
     let mut fields: Vec<(&str, Bound<'py, PyAny>)> = vec![
         ("project_config", project_config.clone()),

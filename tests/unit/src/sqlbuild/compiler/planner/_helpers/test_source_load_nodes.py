@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    CompileModelConfig,
     build_intermediate_source_map,
     build_source_load_entries,
     build_source_load_map,
@@ -21,7 +22,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
-    CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,

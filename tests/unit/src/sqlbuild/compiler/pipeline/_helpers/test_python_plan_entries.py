@@ -8,18 +8,15 @@ from datetime import datetime
 import pytest
 
 from sqlbuild._native import (
+    PythonIdentityStatus,
+    PythonPlanEntry,
+    PythonSqlRunSelection,
     build_python_plan_entries,
     build_python_sql_run_lifecycle,
     read_latest_fingerprints,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
-from sqlbuild.compiler.pipeline.models import PythonPlanEntry
-from sqlbuild.compiler.python_nodes.models import (
-    PythonNodeGraph,
-    PythonNodeIdentity,
-    PythonSqlRunSelection,
-)
-from sqlbuild.compiler.python_nodes.types import PythonIdentityStatus
+from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonNodeIdentity
 from tests.unit.src.sqlbuild.compiler.fingerprints.main.helpers import (
     FakeFingerprintExecute,
     render_qualified_name,

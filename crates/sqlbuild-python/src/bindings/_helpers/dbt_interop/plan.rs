@@ -14,7 +14,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const DBT_TYPES: &str = "sqlbuild._native";
-const PRESENTATION_MODELS: &str = "sqlbuild.presentation.models";
+const PRESENTATION_MODELS: &str = "sqlbuild._native";
 const BUILD_OPTIONS: (&[&str], &[&str]) = (
     &[
         "command",

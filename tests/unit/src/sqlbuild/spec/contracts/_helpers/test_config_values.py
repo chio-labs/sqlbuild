@@ -3,13 +3,13 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
+    ConfigValueTypeError,
     get_config_bool,
     get_config_cursor_bound,
     get_config_int,
     get_config_str,
     get_config_string_tuple,
 )
-from sqlbuild.spec.contracts.exceptions import ConfigValueTypeError
 from tests.unit.src.sqlbuild.spec.contracts._helpers._test_types import (
     ConfigValueErrorTestCase,
     ConfigValueSuccessTestCase,

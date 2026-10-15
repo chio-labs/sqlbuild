@@ -4,8 +4,7 @@ import pytest
 
 import sqlbuild._native as native
 from sqlbuild import _native
-from sqlbuild._native import NativeRulesRequest
-from sqlbuild.rule_engine.models import NativeRulesEvaluation
+from sqlbuild._native import NativeRulesEvaluation, NativeRulesRequest
 
 
 def record_reuse(*, monkeypatch: pytest.MonkeyPatch) -> list[bool]:

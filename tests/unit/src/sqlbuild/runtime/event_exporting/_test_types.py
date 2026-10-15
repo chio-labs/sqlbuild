@@ -11,3 +11,12 @@ class SinkApiTestCase:
 class EventExportPolicyTestCase:
     description: str
     expected_event_count: int
+
+
+@dataclass(frozen=True)
+class SeverityNarrowingTestCase:
+    description: str
+    first: str
+    second: str | None
+    expected_severity: str
+    expected_first_meets_second: bool

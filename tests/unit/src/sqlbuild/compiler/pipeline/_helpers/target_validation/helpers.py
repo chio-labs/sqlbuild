@@ -5,13 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, ClassVar
 
+from sqlbuild._native import CompileModelConfig
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
-    CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 

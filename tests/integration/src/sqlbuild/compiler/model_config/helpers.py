@@ -7,12 +7,13 @@ import re
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TypeGuard, cast
+from typing import TYPE_CHECKING, TypeGuard, cast
 
 import pytest
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    CompileAdapterContext,
     build_compile_inputs,
     discover_project_inputs,
     parse_audit_instances,
@@ -20,10 +21,11 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompileAdapterContext
-from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from sqlbuild.spec.contracts.models import SchemaModelEntry, SourceLocation
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView
 
 _TEXTS: tuple[object, ...] = (
     "INTEGER",

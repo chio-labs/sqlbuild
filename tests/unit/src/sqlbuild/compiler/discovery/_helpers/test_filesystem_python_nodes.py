@@ -10,10 +10,10 @@ from types import ModuleType
 
 import pytest
 
-from sqlbuild.compiler.discovery._helpers.filesystem.core import (
+from sqlbuild._native import (
+    PythonNodeDiscoveryError,
     discover_python_node_functions,
 )
-from sqlbuild.compiler.discovery.exceptions import PythonNodeDiscoveryError
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAssetFunction,
     DiscoveredCheckFunction,

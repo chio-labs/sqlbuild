@@ -17,8 +17,8 @@ use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::contract_classes::yaml_entry_classes;
 use crate::bindings::_helpers::model_config::header_metadata::{ContractClasses, audit_tuple};
 
-const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild.compiler.discovery.exceptions";
-const IDENTITY_ERRORS_MODULE: &str = "sqlbuild.compiler.resource_names.exceptions";
+const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
+const IDENTITY_ERRORS_MODULE: &str = "sqlbuild._native";
 const IDENTITY_ERROR: &str = "ResourceIdentityError";
 /// The directory whose schema YAML files may declare seeds.
 const SEEDS_DIRECTORY: &str = "seeds";

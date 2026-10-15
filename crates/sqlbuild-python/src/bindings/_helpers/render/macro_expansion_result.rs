@@ -16,10 +16,12 @@ use crate::bindings::_helpers::render::macro_expansion::{
 };
 use crate::bindings::_helpers::sqltext::sql_references::extract_references;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
-const FRONTIER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.frontier.exceptions";
+const FRONTIER_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const SCOPES_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
 const SCOPES_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
 const REF_MODELS_MODULE: &str = "sqlbuild.python_nodes.models";
@@ -199,7 +201,7 @@ fn result_model<'py>(
     pairs: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "MacroExpansionResult")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "MacroExpansionResult")?,
         pairs,
     )
 }
@@ -239,7 +241,7 @@ fn expansion_result<'py>(request: ExpansionRequest<'py>) -> PyResult<Bound<'py, 
     let bridge: Bound<'py, PyAny> =
         imported(py, ACTIVE_BRIDGE_MODULE, "active_macro_bridge")?.call0()?;
     let output: ExpansionOutput = expanded(&expansion, request.sql.to_str()?, &bridge)?;
-    let span_class: Bound<'py, PyAny> = imported(py, COMPILE_MODELS_MODULE, "ExpansionSpan")?;
+    let span_class: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS_MODULE, "ExpansionSpan")?;
     let mut spans: Vec<Bound<'py, PyAny>> = Vec::with_capacity(output.spans.len());
     for span in output.spans {
         let (source_start, source_end, output_start, output_end) = span_row(span);

@@ -4,8 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import DbtRunner
-from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult, DbtLsResult
+from sqlbuild._native import DbtCliOptions, DbtCommandResult, DbtLsResult, DbtRunner
 from tests.integration.src.sqlbuild.integrations.dbt._test_types import RealDbtRunnerTestCase
 
 pytestmark: pytest.MarkDecorator = pytest.mark.dbt

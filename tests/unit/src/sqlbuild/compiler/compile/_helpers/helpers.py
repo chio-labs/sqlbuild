@@ -1,11 +1,25 @@
+from __future__ import annotations
+
 import itertools
 import json
 from collections.abc import Callable
 from pathlib import Path
 from types import MappingProxyType
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from sqlbuild._native import (
+    CollectionRendering,
+    ColumnLineageConfidence,
+    ColumnTransformKind,
+    CompileAdapterContext,
+    CompiledDirectLogicSqlTestPayload,
+    CompiledLineageColumnFact,
+    CompiledModelSqlTestPayload,
+    DeclarationExpansionContext,
+    DeclarationRuntimeProjection,
+    DeclarationScopeResolver,
+    NativeColumnQuery,
+    NativeQueryColumns,
     assemble_project,
     build_compile_inputs,
     build_execution_upstream_deps,
@@ -26,23 +40,15 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
-from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeQueryColumns
 from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
 from sqlbuild.compiler.compile.models import (
-    CompileAdapterContext,
-    CompiledDirectLogicSqlTestPayload,
-    CompiledLineageColumnFact,
     CompiledLineageSourceFact,
-    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledRelationLocation,
     CompiledSqlTest,
     CompilerDiagnostic,
     CompileSqlReference,
-    DeclarationExpansionContext,
     DeclarationResolutionContext,
-    DeclarationRuntimeProjection,
-    DeclarationScopeResolver,
     LoadedMacro,
     MacroContext,
 )
@@ -50,18 +56,12 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
-    CompileInputsView,
-    ModelInput,
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredMacroFile,
     DiscoveredProjectInputs,
 )
-from sqlbuild.compiler.lineage.types import (
-    ColumnLineageConfidence,
-    ColumnTransformKind,
-    InferredNullability,
-)
+from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
@@ -73,7 +73,9 @@ from sqlbuild.compiler.scopes.models import (
     ScopeLookup,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, ScopeKind
-from sqlbuild.sql_values.types import CollectionRendering
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView, ModelInput
 
 DUCKDB_COMPILE_ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(
     value_renderer=DuckDbAdapter(),

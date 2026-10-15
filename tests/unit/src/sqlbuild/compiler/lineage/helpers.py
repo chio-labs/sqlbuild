@@ -3,14 +3,19 @@ from __future__ import annotations
 from pathlib import Path
 
 import sqlbuild._native as native
-from sqlbuild._native import ProjectColumnLineage
+from sqlbuild._native import (
+    ColumnLineageMode,
+    CompiledSeed,
+    CompileModelConfig,
+    DiscoveredSchemaFile,
+    DiscoveredSeedFile,
+    ProjectColumnLineage,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
-    CompiledSeed,
-    CompileModelConfig,
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import (
@@ -19,8 +24,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     CompiledSeedView,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredSchemaFile, DiscoveredSeedFile
-from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.spec.contracts.models import SchemaColumn, SchemaSeedEntry, SettingsConfig
 
 

@@ -563,7 +563,7 @@ planner_record! {
     /// SQL test entries planned for one selection; reusable only for the same selection.
     PlannedSqlTests, false, [
         (selected_keys = "selected_keys", FieldDefault::Required, true, true),
-        (sql_test_selection = "sql_test_selection", FieldDefault::Class(("sqlbuild.compiler.planner.models", "SqlTestSelection")), true, true),
+        (sql_test_selection = "sql_test_selection", FieldDefault::Class(("sqlbuild._native", "SqlTestSelection")), true, true),
         (entries = "entries", FieldDefault::EmptyTuple, true, true),
         (warnings = "warnings", FieldDefault::EmptyTuple, true, true),
     ]

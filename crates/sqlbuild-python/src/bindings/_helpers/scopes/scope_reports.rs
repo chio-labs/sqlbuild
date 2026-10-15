@@ -58,7 +58,7 @@ pub(crate) type ListArguments<'py> = (
     bool,
 );
 
-const EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
+const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const CURRENT_FOLDER: &str = ".";
 
 /// One lookup's native lookup and every declaration's values in input order.

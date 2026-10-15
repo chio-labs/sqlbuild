@@ -3,13 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import cast
 
+from sqlbuild._native import CompileModelConfig, DynamicColumnContractProof
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
-    CompileModelConfig,
-    DynamicColumnContractProof,
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType

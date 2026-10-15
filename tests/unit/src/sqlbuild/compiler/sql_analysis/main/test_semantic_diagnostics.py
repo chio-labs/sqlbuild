@@ -7,8 +7,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild._native import BindingCatalog
-from sqlbuild.compiler.sql_analysis.models import SqlBindingResult
+from sqlbuild._native import BindingCatalog, SqlBindingResult
 from tests.unit.src.sqlbuild.compiler.sql_analysis.main._test_types import (
     SemanticDiagnosticMappingCase,
 )

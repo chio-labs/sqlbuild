@@ -8,8 +8,8 @@ from sqlbuild.compiler.discovery.models import DiscoveredProvider
 from sqlbuild.provider.classes.session import ProviderSession
 
 if TYPE_CHECKING:
+    from sqlbuild._native import EventExporterCommandScope
     from sqlbuild.provider.classes.provider import Provider
-    from sqlbuild.runtime.event_exporting.classes.command_scope import EventExporterCommandScope
 
 
 def build_provider_session(
@@ -21,9 +21,7 @@ def build_provider_session(
     """Build a runtime provider session with fresh provider instances."""
 
     if allow_shared:
-        from sqlbuild.runtime.event_exporting.main.current_event_exporter_command_scope import (
-            current_event_exporter_command_scope,
-        )
+        from sqlbuild._native import current_event_exporter_command_scope
 
         scope: EventExporterCommandScope | None = current_event_exporter_command_scope()
         if scope is not None and scope.provider_session is not None:

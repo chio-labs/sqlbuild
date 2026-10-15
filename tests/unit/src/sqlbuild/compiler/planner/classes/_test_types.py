@@ -32,3 +32,11 @@ class FixtureColumnInferencesTestCase:
     description: str
     requests: tuple[tuple[str, str], ...]
     expected_inferences: int
+
+
+@dataclass(frozen=True)
+class PlanningExitTestCase:
+    description: str
+    script: str
+    expected_returncode: int
+    expected_output: str

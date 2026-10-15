@@ -15,9 +15,9 @@ use crate::bindings::_helpers::build_command::invocation::BuildContext;
 use crate::bindings::_helpers::build_command::policies::build_command_error;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
-const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const CLONE_MODELS: &str = "sqlbuild.executor.clone.models";
 const CLONE_TYPES: &str = "sqlbuild.executor.clone.types";
 const SPEC_TYPES: &str = "sqlbuild.spec.contracts.types";
@@ -443,7 +443,7 @@ fn clone_boundaries<'py>(
             (
                 "destination_connection",
                 call_with(
-                    &imported(py, PIPELINE_MODELS, "ClonePipelineConnection")?,
+                    &imported(py, NATIVE_RECORDS_MODULE, "ClonePipelineConnection")?,
                     &[
                         ("config", context.invocation.getattr("connection_config")?),
                         ("handle", connection.clone()),
@@ -453,7 +453,7 @@ fn clone_boundaries<'py>(
             (
                 "options",
                 call_with(
-                    &imported(py, PIPELINE_MODELS, "ClonePipelineOptions")?,
+                    &imported(py, NATIVE_RECORDS_MODULE, "ClonePipelineOptions")?,
                     &[
                         ("no_sql_validation", request.getattr("no_sql_validation")?),
                         ("no_cache", request.getattr("no_cache")?),
@@ -598,7 +598,7 @@ pub(crate) fn run_defer_clone_boundary_prephase(
             (
                 "analysis_selection",
                 call_with(
-                    &imported(py, COMPILE_MODELS, "CompileAnalysisSelection")?,
+                    &imported(py, NATIVE_RECORDS_MODULE, "CompileAnalysisSelection")?,
                     &[("no_cache", request.getattr("no_cache")?)],
                 )?,
             ),

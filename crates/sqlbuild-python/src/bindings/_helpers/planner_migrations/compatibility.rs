@@ -205,12 +205,7 @@ fn result<'py>(
     status: &str,
     findings: Bound<'py, PyTuple>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let status = imported(
-        py,
-        "sqlbuild.compiler.migrations.types",
-        "MigrationCompatibility",
-    )?
-    .call1((status,))?;
+    let status = imported(py, "sqlbuild._native", "MigrationCompatibility")?.call1((status,))?;
     call_with(
         &imported(py, "sqlbuild._native", "MigrationCompatibilityResult")?,
         &[("status", status), ("findings", findings.into_any())],

@@ -15,7 +15,8 @@ use sqlbuild_core::dbt_cli::models::DbtParsedFlags;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::dbt_interop::cli::{raised, resolved_path};
 
-const DBT_MODELS: &str = "sqlbuild.integrations.dbt.models";
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const BUILTIN_ADAPTERS_MODULE: &str = "sqlbuild.adapter.discovery.main.builtins";
 const PROJECT_ADAPTERS_MODULE: &str = "sqlbuild.adapter.discovery.main.project_adapters";
@@ -284,7 +285,7 @@ pub(crate) fn plan_options<'py>(
         )?
     };
     call_with(
-        &imported(py, DBT_MODELS, "DbtCliOptions")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "DbtCliOptions")?,
         &[
             ("project_dir", resolved.getattr("project_dir")?),
             ("profiles_dir", resolved.getattr("profiles_dir")?),

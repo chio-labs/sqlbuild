@@ -363,10 +363,5 @@ impl<'py> OldNamePlanner<'py> {
 }
 
 fn action<'py>(runtime: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    imported(
-        runtime.py(),
-        "sqlbuild.compiler.migrations.types",
-        "OldNameViewAction",
-    )?
-    .getattr(name)
+    imported(runtime.py(), "sqlbuild._native", "OldNameViewAction")?.getattr(name)
 }

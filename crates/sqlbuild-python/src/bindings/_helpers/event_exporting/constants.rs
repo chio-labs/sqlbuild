@@ -1,0 +1,27 @@
+//! Python modules, thread names and wait limits of native lifecycle-event export.
+
+pub(crate) const EXCEPTIONS_MODULE: &str = "sqlbuild.runtime.event_exporting.exceptions";
+pub(crate) const SEVERITY_MODULE: &str = "sqlbuild.spec.contracts.types";
+pub(crate) const CATALOG_MODULE: &str = "sqlbuild.runtime.observability.constants";
+pub(crate) const INVOKE_LIFECYCLE_MODULE: &str =
+    "sqlbuild.runtime.event_exporting.main._invoke_lifecycle_event_sink";
+pub(crate) const RUN_OUTPUT_SINKS_MODULE: &str =
+    "sqlbuild.runtime.event_exporting.main._run_command_output_sinks";
+pub(crate) const SESSION_MODULE: &str = "sqlbuild.provider.main.session";
+pub(crate) const OUTPUT_MODELS_MODULE: &str = "sqlbuild.runtime.output_capture.models";
+pub(crate) const SCOPE_CONTEXT_VARIABLE: &str = "sqlbuild_event_exporter_command_scope";
+pub(crate) const DISPATCHER_THREAD_NAME: &str = "sqlbuild-event-exporter-dispatcher";
+pub(crate) const NOTIFIER_THREAD_NAME: &str = "sqlbuild-event-exporter-notifier";
+pub(crate) const HEALTH_THREAD_NAME: &str = "sqlbuild-event-exporter-health";
+pub(crate) const OUTPUT_SINK_THREAD_NAME: &str = "sqlbuild-command-output-sink";
+pub(crate) const INVOCATION_THREAD_PREFIX: &str = "sqlbuild-event-exporter-";
+/// Attribute naming the worker of a long-lived dispatcher thread, for the exit hook.
+pub(crate) const WORKER_ATTRIBUTE: &str = "_sqlbuild_event_exporter_worker";
+/// The longest single wait of a polling delivery loop, as the Python dispatcher polled.
+pub(crate) const POLL_SECONDS: f64 = 0.01;
+/// Extra time `shutdown` waits for the dispatcher thread beyond the drain deadline.
+pub(crate) const JOIN_GRACE_SECONDS: f64 = 0.05;
+/// How long shutdown and interpreter exit wait for each stopped dispatcher thread.
+pub(crate) const EXIT_JOIN_SECONDS: f64 = 1.0;
+/// No time left before a deadline.
+pub(crate) const NO_SECONDS: f64 = 0.0;

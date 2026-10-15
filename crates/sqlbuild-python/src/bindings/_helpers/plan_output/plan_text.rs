@@ -28,7 +28,7 @@ use crate::bindings::_helpers::plan_output::python_identity::{
 };
 use crate::bindings::_helpers::plan_output::values::{items, optional_text, text, texts};
 
-const DISPLAY_MODELS_MODULE: &str = "sqlbuild.presentation.models";
+const DISPLAY_MODELS_MODULE: &str = "sqlbuild._native";
 const SKIP_ACTION: &str = "skip";
 const QUERY_CHANGED: &str = "query_changed";
 const CONFIG_CHANGED: &str = "config_changed";

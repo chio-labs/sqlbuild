@@ -39,6 +39,8 @@ use crate::bindings::_helpers::lineage::lineage_cache::{
 use crate::bindings::_helpers::lineage::lineage_index::{graph_index, index_views, lineage_keys};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
@@ -48,7 +50,6 @@ const SELECTION_MODULE: &str = "sqlbuild._native";
 const SELECTOR_TOKENS_MODULE: &str = "sqlbuild._native";
 const SELECTOR_PARSE_MODULE: &str = "sqlbuild._native";
 const SELECTOR_MATCH_MODULE: &str = "sqlbuild._native";
-const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
 const PLANNER_EXCEPTIONS: &str = "sqlbuild.compiler.planner.exceptions";
 const UNKNOWN_SELECTOR_ERROR_CODE: &str = "S007";
 const RICH_MODE: &str = "rich";
@@ -485,7 +486,7 @@ fn selector_anchors(
 ) -> PyResult<LineageAnchors> {
     let parse: Bound<'_, PyAny> = imported(py, SELECTOR_PARSE_MODULE, "parse_project_selector")?;
     let matcher: Bound<'_, PyAny> = imported(py, SELECTOR_MATCH_MODULE, "match_project_selector")?;
-    let path_class: Bound<'_, PyAny> = imported(py, PLANNER_MODELS, "PathSelector")?;
+    let path_class: Bound<'_, PyAny> = imported(py, NATIVE_RECORDS_MODULE, "PathSelector")?;
     let names: HashMap<&str, &LineageKey> = name_lookup(index);
     let named = |name: String| -> PyResult<LineageKey> {
         names

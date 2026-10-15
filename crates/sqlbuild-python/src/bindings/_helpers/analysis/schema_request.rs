@@ -10,7 +10,8 @@ use sqlbuild_analysis::semantic_validation::models::NormalizationInput;
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::types::CompilerDetach;
 
-const SQL_ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.sql_analysis.models";
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const GENERIC_DIALECT: &str = "generic";
 
 /// The query, relation schemas and binding context of one schema-validation request.
@@ -60,7 +61,7 @@ pub(crate) fn schema_validation_request<'py>(
         parts.quoted_identifiers_ignore_case,
     )?;
     arguments.set_item("catalog", parts.catalog)?;
-    py.import(SQL_ANALYSIS_MODELS_MODULE)?
+    py.import(NATIVE_RECORDS_MODULE)?
         .getattr("SqlSchemaValidationRequest")?
         .call((), Some(&arguments))
 }

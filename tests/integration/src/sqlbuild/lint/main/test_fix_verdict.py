@@ -6,9 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import compile_facts, fix_verdict
+from sqlbuild._native import FixVerdict, compile_facts, fix_verdict
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.lint.models import FixVerdict
 from tests.integration.src.sqlbuild.lint.main._test_types import FixVerdictTestCase
 from tests.integration.src.sqlbuild.lint.main.helpers import compile_models, without_lineage
 

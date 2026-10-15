@@ -1,6 +1,7 @@
 """Private SQLBuild native engine bindings."""
 
 import threading
+from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence, Set
 from concurrent.futures import Executor, Future
 from contextlib import AbstractContextManager
@@ -14,8 +15,12 @@ from threading import Event
 from types import TracebackType
 from typing import Any, ClassVar, Literal, Protocol, Self, TextIO, TypedDict
 
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import (
+    BaseAdapter,
+)
+from sqlbuild.adapter.contract.classes.strict_adapter import (
+    StrictAdapter,
+)
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     ExpressionInferenceProfile,
@@ -45,49 +50,23 @@ from sqlbuild.compiler.auditing.types import (
     AuditSeverity,
 )
 from sqlbuild.compiler.compile.models import (
-    AnalysisCacheContext,
-    CompileAdapterContext,
-    CompileAnalysisSelection,
     CompiledAudit,
-    CompiledFunction,
-    CompiledLineageColumnFact,
     CompiledLineageSourceFact,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
-    CompiledSeed,
-    CompiledSource,
-    CompiledSqlExpansion,
     CompiledSqlScenario,
     CompiledSqlTest,
-    CompileModelConfig,
     CompilerDiagnostic,
     CompileSqlReference,
-    CompileSqlScenarioInput,
-    CompileSqlTestCte,
-    CompileSqlTestInput,
-    CursorInputRoles,
     DeclarationResolutionContext,
-    DeclarationScopeBuild,
-    DeclarationScopeResolver,
-    DynamicColumnContractProof,
-    ExpansionSpan,
-    FixtureColumnInference,
-    FunctionArgument,
-    FunctionReturnColumn,
     InferredColumn,
     LoadedMacro,
     MacroContext,
-    MacroExpansionResult,
-    MappedOffset,
     ModelInputBuildContext,
-    NativeModelConfigInputs,
-    NativeModelConfigSession,
-    PythonSqlReferenceReport,
-    SqlExpansionContext,
-    SqlReferenceScan,
     StaticMacroExport,
+    _native,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
@@ -99,54 +78,37 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     CompiledSeedView,
     CompiledSourceView,
-    CompileInputsView,
-    FunctionInput,
     FunctionLanguage,
-    ModelInput,
-    SeedInput,
+    RelationKeyRow,
     SourceInput,
+    SqlTestMode,
     TypedSqlValueRenderer,
 )
-from sqlbuild.compiler.contract_adoption.models import ContractEvidence, ContractFinding
-from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
-    DiscoveredAdapterFile,
-    DiscoveredAuditBlock,
-    DiscoveredAuditFile,
     DiscoveredCheckFunction,
-    DiscoveredConstantFile,
-    DiscoveredEnumFile,
+    DiscoveredCommandOutputSink,
+    DiscoveredEventExporter,
+    DiscoveredEventExporterDeclaration,
     DiscoveredHookFunction,
     DiscoveredLoaderFunction,
     DiscoveredMacroFile,
     DiscoveredMaterializationFile,
-    DiscoveredModelSchemaFile,
     DiscoveredProjectInputs,
-    DiscoveredPythonFunctionFile,
-    DiscoveredSchemaFile,
-    DiscoveredSeedFile,
+    DiscoveredProvider,
+    DiscoveredProviderUsage,
+    DiscoveredPythonNodeFunctions,
     DiscoveredSourceFile,
-    DiscoveredSqlFunctionFile,
-    DiscoveredSqlHookFile,
     DiscoveredSqlScenarioFile,
-    DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
-    DiscoveryFileFault,
     EnumDeclaration,
-    ModelSchemaDeclaration,
     SqlTestParameterDeclaration,
-    TolerantScopeDiscovery,
 )
+from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
-from sqlbuild.compiler.frontier.types import CompilerStage
-from sqlbuild.compiler.graph.models import AttachedAuditGateEdge, HookReadEdge, LineageGraphViews
-from sqlbuild.compiler.lineage.models import (
-    ColumnLineageEdge,
-    DirectSemanticColumnUse,
-    ModelColumnLineage,
+from sqlbuild.compiler.lineage.types import (
+    InferredNullability,
 )
-from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.compiler.migrations.models import (
     ColumnMigrationEvent,
     MigrationEvent,
@@ -155,23 +117,13 @@ from sqlbuild.compiler.migrations.models import (
     OldNameViewHistory,
 )
 from sqlbuild.compiler.migrations.types import (
-    MigrationCompatibility,
     MigrationDecision,
-    MigrationDiscovery,
     MigrationPromotion,
     OldNameViewEventType,
 )
 from sqlbuild.compiler.pipeline.models import (
-    ClonePipelineConnection,
-    ClonePipelineOptions,
-    ClonePipelineResult,
-    CompiledProjectPhaseResult,
-    CompilePipelineOptions,
     CompilePipelineResult,
     ProjectGraph,
-    PythonPlanEntry,
-    PythonRunPlanOutputs,
-    StaticCommandContext,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
@@ -183,7 +135,6 @@ from sqlbuild.compiler.planner.models import (
     CursorInputEvidence,
     CursorInputRelation,
     CursorOverrides,
-    DeferralInputs,
     EmptyCursorInputDecision,
     FunctionPlanEntry,
     FutureCursorSafetyEvidence,
@@ -194,13 +145,6 @@ from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,
     OldNameView,
     OldNameViewPlanEntry,
-    ParsedSelector,
-    PathSelector,
-    PlannerOverrides,
-    PlannerPolicies,
-    PlannerRelationsContext,
-    PlannerScope,
-    PlannerSelection,
     PlanOutput,
     RetentionPlanEntry,
     ScenarioExecutionPlan,
@@ -210,9 +154,7 @@ from sqlbuild.compiler.planner.models import (
     SchemaFinding,
     SeedPlanEntry,
     SourceLoadPlanEntry,
-    SqlTestAssertionStep,
     SqlTestPlanEntry,
-    SqlTestSelection,
     TableTypePlanEntry,
 )
 from sqlbuild.compiler.planner.types import (
@@ -228,11 +170,9 @@ from sqlbuild.compiler.planner.types import (
 from sqlbuild.compiler.python_nodes.models import (
     PythonNodeGraph,
     PythonSqlRunLifecyclePlan,
-    PythonSqlRunSelection,
 )
-from sqlbuild.compiler.refactoring.models import ManualLocation
+from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.compiler.references.models import (
-    LiteralSqlRelation,
     ProjectRelation,
     ProjectRelationIndex,
     RelationName,
@@ -240,6 +180,7 @@ from sqlbuild.compiler.references.models import (
 from sqlbuild.compiler.references.types import (
     ExternalSqlReferenceResolver,
     HardCodedRelationOwnerKind,
+    SqlReferenceKind,
 )
 from sqlbuild.compiler.scopes.models import (
     DeclarationExplanation,
@@ -257,90 +198,78 @@ from sqlbuild.compiler.scopes.models import (
     ScopeReportFilters,
     ScopeTargetQuery,
     UsageRecord,
+    VisibilityRecord,
     VisibilityResolution,
 )
-from sqlbuild.compiler.scopes.types import DeclarationKind
+from sqlbuild.compiler.scopes.types import (
+    DeclarationKind,
+    ScopeKind,
+)
 from sqlbuild.compiler.source_freshness.models import (
-    DirectSourceFreshnessPlanningResult,
     SourceFreshnessRecord,
 )
 from sqlbuild.compiler.sql_analysis.models import (
-    SqlBindingResult,
     SqlLexicalSyntax,
-    SqlSchemaValidationRequest,
-)
-from sqlbuild.compiler.sql_test_glue.models import (
-    NativeSqlTestAssembly,
-    NativeSqlTestChainRequest,
-    NativeSqlTestPlanningRequest,
 )
 from sqlbuild.cost.models import CostResourceContext, RunCostSummary, StatementExecutionTelemetry
 from sqlbuild.cost.types import CostStatus
 from sqlbuild.cursor_algebra.models import AlignedInterval, DateValue, Duration, TimestampValue
 from sqlbuild.cursor_algebra.types import Bound, BoundSentinel, CursorScalar
 from sqlbuild.diagnostics.models import ProcessResourceUsage
-from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.auditing.models import (
+    AuditExecutionResult,
+)
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
     FunctionExecutionResult,
     SchedulerState,
     SeedExecutionResult,
 )
-from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
+from sqlbuild.executor.clone.models import (
+    CloneExecutionResult,
+    CloneItemResult,
+)
 from sqlbuild.executor.diff.models import DiffExecutionResult, RowDiffSamplingOverride
-from sqlbuild.executor.janitor.models import JanitorExecutionResult, JanitorPlan
+from sqlbuild.executor.janitor.models import (
+    JanitorExecutionResult,
+    JanitorPlan,
+    JanitorRelationKey,
+)
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.models import (
     PythonCheckExecutionResult,
     PythonNodeExecutionResult,
 )
-from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotCaptureRunResult
-from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
+from sqlbuild.executor.run.models import (
+    ModelExecutionResult,
+)
+from sqlbuild.executor.scenario.models import (
+    ScenarioRunResult,
+    ScenarioSnapshotCaptureRunResult,
+)
+from sqlbuild.executor.testing.models import (
+    SqlTestExecutionResult,
+    StepResult,
+)
 from sqlbuild.integrations.dbt.models import (
-    DbtCliOptions,
-    DbtCommandResult,
-    DbtInitRequest,
-    DbtInitResult,
-    DbtLsResult,
-    DbtNodeExecutionResult,
-    NormalizedDbtProfileConnection,
     ResolvedDbtProfileOutput,
 )
 from sqlbuild.integrations.dbt.types import DbtInvoker
-from sqlbuild.lint.models import (
-    CompileFacts,
-    ExpandedLintFile,
-    FixVerdict,
-    HeaderSpan,
-    LintBody,
-    LintConfig,
-    LintFileRole,
-    LintRunResult,
-    LintViolation,
-    PendingLintBody,
-    PreparedLintFiles,
-    RuleFixResult,
-)
-from sqlbuild.lint.types import RelationKeyRow
 from sqlbuild.microbatches.models import MicrobatchInterval
-from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.presentation.types import TransientLineOwner
 from sqlbuild.provider.classes.container import ProviderContainer
-from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.provider.classes.session import ProviderSession
+from sqlbuild.python_nodes.models import (
+    ColumnLineageRef,
+    RetryPolicy,
+    SqlResourceRef,
+)
+from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.rule_engine.models import (
-    CustomRulesOutcome,
     Finding,
-    NativeRulesEvaluation,
-    PreparedSqlLint,
-    PreparedSqlLintResult,
     Rule,
-    RuleRunPlan,
     RulesConfig,
     RulesResult,
-    RulesRunResult,
-    SqlExpansionReuse,
-    SqlRulesEvaluation,
 )
 from sqlbuild.runtime.compute_logs.models import (
     CaptureByteCounts,
@@ -369,6 +298,7 @@ from sqlbuild.runtime.execution_history.types import (
 from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
 from sqlbuild.runtime.observability.models import DiagnosticLog, LifecycleEvent
 from sqlbuild.runtime.output_capture.models import (
+    BoundCommandOutputSink,
     CommandOutputCaptureSummary,
     CommandOutputRecord,
     OutputCaptureContext,
@@ -384,6 +314,8 @@ from sqlbuild.spec.contracts.models import (
     LocalConfig,
     LocalDbtConfig,
     ProjectConfig,
+    ResolvedTableType,
+    ResolvedTimeTravelRetention,
     ScenarioConfig,
     SchemaAuditInstance,
     SchemaColumn,
@@ -392,6 +324,7 @@ from sqlbuild.spec.contracts.models import (
     SchemaSeedEntry,
     SettingsConfig,
     SnapshotsConfig,
+    SourceColumnEntry,
     SourceEntry,
     SourceFreshnessAgePolicy,
     SourceLocation,
@@ -399,14 +332,18 @@ from sqlbuild.spec.contracts.models import (
     TargetConfig,
 )
 from sqlbuild.spec.contracts.types import (
+    EventExportSeverity,
     MicrobatchLimitAction,
     MissingMigrationOriginPolicy,
     SourceFreshnessStrategy,
     SourceFreshnessValueKind,
+    SourceWriteStrategy,
     WarehouseGroup,
 )
 from sqlbuild.sql_values.models import SqlValue
-from sqlbuild.sql_values.types import CollectionRendering, StateSqlValueType
+from sqlbuild.sql_values.types import (
+    StateSqlValueType,
+)
 
 BUILD_IDENTITY: str
 
@@ -668,6 +605,178 @@ class NativeProjectFacts:
 type FixtureKey = tuple[CompiledResourceType, str]
 type InputColumns = Callable[[str, str], frozenset[str] | None]
 type FixtureGroups = tuple[tuple[CompiledResourceType, dict[str, str]], ...]
+
+class SeedInput(Protocol):
+    """One seed paired with its declaration, as the native owner view holds it."""
+
+    @property
+    def seed_file(self) -> DiscoveredSeedFile: ...
+    @property
+    def schema_entry(self) -> SchemaSeedEntry: ...
+    @property
+    def schema_file(self) -> DiscoveredSchemaFile: ...
+
+class FunctionInput(Protocol):
+    """One attached function, as the native owner view holds it."""
+
+    @property
+    def function_file(self) -> DiscoveredSqlFunctionFile | DiscoveredPythonFunctionFile: ...
+    @property
+    def name(self) -> str: ...
+    @property
+    def arguments(self) -> tuple[FunctionArgument, ...]: ...
+    @property
+    def returns(self) -> str: ...
+    @property
+    def body_sql(self) -> str: ...
+    @property
+    def return_columns(self) -> tuple[FunctionReturnColumn, ...]: ...
+    @property
+    def references(self) -> tuple[CompileSqlReference, ...]: ...
+    @property
+    def language(self) -> FunctionLanguage: ...
+    @property
+    def runtime_version(self) -> str | None: ...
+    @property
+    def entry_point(self) -> str | None: ...
+    @property
+    def packages(self) -> tuple[str, ...]: ...
+    @property
+    def tags(self) -> tuple[str, ...]: ...
+    @property
+    def description(self) -> str | None: ...
+    @property
+    def database(self) -> str | None: ...
+    @property
+    def schema(self) -> str | None: ...
+    @property
+    def logical_database(self) -> str | None: ...
+    @property
+    def logical_schema(self) -> str | None: ...
+    @property
+    def fingerprint_database(self) -> str | None: ...
+    @property
+    def fingerprint_schema(self) -> str | None: ...
+    @property
+    def fingerprint_logical_database(self) -> str | None: ...
+    @property
+    def fingerprint_logical_schema(self) -> str | None: ...
+    @property
+    def declaration_usages(self) -> tuple[UsageRecord, ...]: ...
+    @property
+    def assembly_row(
+        self,
+    ) -> tuple[str, str, list[str], list[tuple[str, str, str | None]]]: ...
+
+class CompileInputsView(Protocol):
+    """A compile's attached inputs: a native owner view, or hand-built `CompileProjectInputs`."""
+
+    @property
+    def project_config(self) -> ProjectConfig: ...
+    @property
+    def local_config(self) -> LocalConfig: ...
+    @property
+    def discovered_inputs(self) -> DiscoveredProjectInputs: ...
+    @property
+    def sql_lexical_syntax(self) -> SqlLexicalSyntax: ...
+    @property
+    def run_id(self) -> str: ...
+    @property
+    def effective_target_name(self) -> str | None: ...
+    @property
+    def effective_target(self) -> TargetConfig | None: ...
+    @property
+    def compile_cache_dir(self) -> Path | None: ...
+    @property
+    def effective_connection(self) -> dict[str, object]: ...
+    @property
+    def effective_settings(self) -> SettingsConfig: ...
+    @property
+    def no_sql_validation(self) -> bool: ...
+    @property
+    def effective_vars(self) -> dict[str, object]: ...
+    @property
+    def macro_context(self) -> MacroContext | None: ...
+    @property
+    def loaded_macros(self) -> dict[str, LoadedMacro]: ...
+    @property
+    def public_enums(self) -> dict[str, EnumDeclaration]: ...
+    @property
+    def public_constants(self) -> dict[str, ConstantDeclaration]: ...
+    @property
+    def model_inputs(self) -> tuple[ModelInput, ...]: ...
+    @property
+    def seed_inputs(self) -> tuple[SeedInput, ...]: ...
+    @property
+    def source_inputs(self) -> tuple[SourceInput, ...]: ...
+    @property
+    def sql_function_inputs(self) -> tuple[FunctionInput, ...]: ...
+    @property
+    def test_inputs(self) -> tuple[CompileSqlTestInput, ...]: ...
+    @property
+    def scenario_inputs(self) -> tuple[CompileSqlScenarioInput, ...]: ...
+    @property
+    def audit_inputs(self) -> tuple[AuditInput, ...]: ...
+    @property
+    def diagnostics(self) -> tuple[CompilerDiagnostic, ...]: ...
+    @property
+    def external_sql_reference_resolver(self) -> ExternalSqlReferenceResolver | None: ...
+    @property
+    def scope_index(self) -> ScopeIndex: ...
+    @property
+    def declaration_scope(self) -> DeclarationScopeBuild | None: ...
+    @property
+    def native_project(self) -> _native.NativeCompiledProject | None: ...
+
+class ModelInput(Protocol):
+    """One model's compile input: a native owner view, or a hand-built `CompileModelInput`."""
+
+    @property
+    def model_file(self) -> DiscoveredSqlModelFile: ...
+    @property
+    def config(self) -> CompileModelConfig: ...
+    @property
+    def query_sql(self) -> str: ...
+    @property
+    def macro_source_sql(self) -> str: ...
+    @property
+    def references(self) -> tuple[CompileSqlReference, ...]: ...
+    @property
+    def schema_entry(self) -> SchemaModelEntry | None: ...
+    @property
+    def schema_file(self) -> DiscoveredSchemaFile | None: ...
+    @property
+    def sql_validation_enabled(self) -> bool: ...
+    @property
+    def rejected_sql_analysis_opt_out(self) -> SourceLocation | None: ...
+    @property
+    def enum_declarations(self) -> tuple[EnumDeclaration, ...]: ...
+    @property
+    def constant_declarations(self) -> tuple[ConstantDeclaration, ...]: ...
+    @property
+    def enum_columns(self) -> dict[str, EnumDeclaration]: ...
+    @property
+    def macro_deps(self) -> tuple[str, ...]: ...
+    @property
+    def macro_usages(self) -> tuple[UsageRecord, ...]: ...
+    @property
+    def declaration_usages(self) -> tuple[UsageRecord, ...]: ...
+    @property
+    def sql_expansion(self) -> CompiledSqlExpansion | None: ...
+    @property
+    def lint_expansion(self) -> CompiledSqlExpansion | None: ...
+    @property
+    def reference_rows(self) -> list[tuple[str, str, str | None, int | None]]: ...
+    @property
+    def attached_schema_name(self) -> str | None: ...
+    @property
+    def relation_key_row(self) -> RelationKeyRow: ...
+
+class CompileInputsReadyCallback(Protocol):
+    """Invocation-local observer for the completed pre-semantic input snapshot."""
+
+    def __call__(self, *, inputs: CompileInputsView) -> None: ...
+
 type _GraphKey = tuple[str, str]
 type _GraphEdges = list[tuple[_GraphKey, list[_GraphKey]]]
 type _GraphIndexes = tuple[
@@ -3471,6 +3580,188 @@ class CliObservabilityScope:
 
 def cli_observability_scope(*, args: CliNamespace, project_dir: Path) -> CliObservabilityScope: ...
 
+class EventExporterCounts:
+    """Frozen attempt counters for one exporter or their aggregate."""
+
+    @property
+    def accepted(self) -> int: ...
+    @property
+    def filtered(self) -> int: ...
+    @property
+    def delivered(self) -> int: ...
+    @property
+    def failed(self) -> int: ...
+    @property
+    def dropped(self) -> int: ...
+
+class EventExporterAccounting:
+    """Frozen accounting snapshot for one named exporter."""
+
+    @property
+    def exporter_name(self) -> str: ...
+    @property
+    def counts(self) -> EventExporterCounts: ...
+
+class EventExportSummary:
+    """Final or point-in-time best-effort delivery accounting."""
+
+    @property
+    def aggregate(self) -> EventExporterCounts: ...
+    @property
+    def per_exporter(self) -> tuple[EventExporterAccounting, ...]: ...
+    @property
+    def queue_depth(self) -> int: ...
+    @property
+    def queue_capacity(self) -> int: ...
+    @property
+    def flush_complete(self) -> bool: ...
+    @property
+    def accepted(self) -> int: ...
+    @property
+    def filtered(self) -> int: ...
+    @property
+    def delivered(self) -> int: ...
+    @property
+    def failed(self) -> int: ...
+    @property
+    def dropped(self) -> int: ...
+
+class EventExporterFailure:
+    """Sanitized exporter failure information safe for diagnostics."""
+
+    @property
+    def exporter_name(self) -> str: ...
+    @property
+    def error_type(self) -> str: ...
+    @property
+    def event_kind(self) -> str: ...
+    @property
+    def event_severity(self) -> EventExportSeverity: ...
+
+class BoundEventExporter:
+    """One lifecycle-event sink bound to command-scoped provider instances."""
+
+    def __init__(
+        self,
+        name: str,
+        function: Callable[..., object],
+        provider_arguments: Mapping[str, object],
+        event_kinds: Iterable[str] | None = None,
+        min_severity: EventExportSeverity | str | None = None,
+    ) -> None: ...
+    @property
+    def name(self) -> str: ...
+    @property
+    def function(self) -> Callable[..., object]: ...
+    @property
+    def provider_arguments(self) -> Mapping[str, object]: ...
+    @property
+    def event_kinds(self) -> frozenset[str]: ...
+    @property
+    def min_severity(self) -> EventExportSeverity: ...
+
+class EventExporterDispatcher:
+    """Deliver filtered lifecycle events off execution threads with bounded memory."""
+
+    def __init__(
+        self,
+        *,
+        exporters: Iterable[BoundEventExporter] | None = None,
+        queue_capacity: int = 1024,
+        shutdown_timeout_seconds: float = 2.0,
+        invocation_timeout_seconds: float = 1.0,
+        notification_queue_capacity: int = 256,
+        health_interval_seconds: float | None = None,
+        failure_callback: Callable[[EventExporterFailure], object] | None = None,
+        summary_callback: Callable[[EventExportSummary], object] | None = None,
+    ) -> None: ...
+    @property
+    def thread(self) -> threading.Thread: ...
+    @property
+    def notification_thread(self) -> threading.Thread | None: ...
+    def enqueue(self, event: LifecycleEvent, /) -> None: ...
+    def bind(self, exporters: Iterable[BoundEventExporter], /) -> None: ...
+    def bind_command_output_sinks(self, sinks: Iterable[BoundCommandOutputSink], /) -> None: ...
+    def export_output(self, records: Iterable[CommandOutputRecord]) -> None: ...
+    def shutdown(self) -> EventExportSummary: ...
+    def finalize_when_idle(self, finalizer: Callable[[], object], /) -> None: ...
+    def summary(self) -> EventExportSummary: ...
+
+class DispatcherWorker:
+    def __call__(self) -> None: ...
+
+class InvocationCompletion:
+    def __call__(self, error: BaseException | None, /) -> None: ...
+
+def stop_event_exporter_threads() -> None: ...
+
+class EventExporterCommandScope:
+    """Bind discovered typed sinks and own their command-scoped provider session."""
+
+    def __init__(self, *, dispatcher: EventExporterDispatcher) -> None: ...
+    @property
+    def dispatcher(self) -> EventExporterDispatcher: ...
+    @property
+    def provider_session(self) -> ProviderSession | None: ...
+    @property
+    def project_dir(self) -> Path | None: ...
+    @property
+    def providers(self) -> tuple[DiscoveredProvider, ...]: ...
+    @property
+    def event_exporters(self) -> tuple[DiscoveredEventExporter, ...]: ...
+    @property
+    def command_output_sinks(self) -> tuple[DiscoveredCommandOutputSink, ...]: ...
+    def configure(self, discovered_inputs: DiscoveredProjectInputs, /) -> None: ...
+    def configure_extensions(
+        self,
+        *,
+        project_dir: Path | None = None,
+        providers: tuple[DiscoveredProvider, ...],
+        event_exporters: tuple[DiscoveredEventExporter, ...],
+        command_output_sinks: tuple[DiscoveredCommandOutputSink, ...] | None = None,
+    ) -> None: ...
+    def cached_extensions(
+        self, *, project_dir: Path
+    ) -> (
+        tuple[
+            tuple[DiscoveredProvider, ...],
+            tuple[DiscoveredEventExporter, ...],
+            tuple[DiscoveredCommandOutputSink, ...],
+        ]
+        | None
+    ): ...
+    def close(self) -> EventExportSummary: ...
+    def export_output(self, records: tuple[CommandOutputRecord, ...]) -> None: ...
+
+class ProviderSessionCloser:
+    def __call__(self) -> None: ...
+
+class EventExporterScopeContext:
+    def __enter__(self) -> EventExporterCommandScope: ...
+    def __exit__(self, *exc_info: object) -> bool: ...
+
+def event_exporter_command_scope(
+    scope: EventExporterCommandScope, /
+) -> EventExporterScopeContext: ...
+def current_event_exporter_command_scope() -> EventExporterCommandScope | None: ...
+def cached_event_exporter_extensions(
+    *, project_dir: Path
+) -> (
+    tuple[
+        tuple[DiscoveredProvider, ...],
+        tuple[DiscoveredEventExporter, ...],
+        tuple[DiscoveredCommandOutputSink, ...],
+    ]
+    | None
+): ...
+def lifecycle_export_policy_catalog() -> dict[str, tuple[str, EventExportSeverity, int]]: ...
+def event_export_severity_at_least(
+    *, severity: EventExportSeverity | str, minimum: EventExportSeverity | str
+) -> bool: ...
+def stricter_event_export_severity(
+    *, first: EventExportSeverity | str, second: EventExportSeverity | str | None
+) -> EventExportSeverity: ...
+
 class OutputCaptureDispatcher:
     """Turn stream fragments into bounded text chunks and export them off execution threads."""
 
@@ -3493,6 +3784,8 @@ class OutputCaptureDispatcher:
 
 class OutputDeliveryWorker:
     def __call__(self) -> None: ...
+
+def stop_output_capture_threads() -> None: ...
 
 class CommandOutputContext:
     def __enter__(self) -> None: ...
@@ -5993,6 +6286,92 @@ def observe_source_freshness_json(
     previous_records_by_source_name: Mapping[str, SourceFreshnessRecord] | None = None,
 ) -> str: ...
 def render_janitor_plan(*, plan: JanitorPlan, use_color: bool = False) -> str: ...
+def discover_python_node_functions(
+    *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] | None = None
+) -> DiscoveredPythonNodeFunctions: ...
+def discover_hook_functions(
+    *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] | None = None
+) -> tuple[DiscoveredHookFunction, ...]: ...
+def discover_materialization_files(
+    *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] | None = None
+) -> tuple[DiscoveredMaterializationFile, ...]: ...
+def discover_provider_classes(*, project_dir: Path) -> tuple[DiscoveredProvider, ...]: ...
+def discover_event_exporter_declarations(
+    *, project_dir: Path
+) -> tuple[DiscoveredEventExporterDeclaration, ...]: ...
+def bind_event_exporter_declarations(
+    *,
+    declarations: tuple[DiscoveredEventExporterDeclaration, ...],
+    providers: tuple[DiscoveredProvider, ...],
+    project_dir: Path,
+) -> tuple[DiscoveredEventExporter, ...]: ...
+def discover_event_exporter_functions(
+    *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] | None = None
+) -> tuple[DiscoveredEventExporter, ...]: ...
+def dagster_cli_arguments(
+    *,
+    args: list[str],
+    dag: Mapping[str, Any] | None,
+    has_context: bool,
+    read_selection: Callable[[], tuple[list[tuple[str, ...]], list[tuple[tuple[str, ...], str]]]],
+) -> dict[str, Any]: ...
+def dagster_selector_log_lines(*, selectors: list[str]) -> list[str]: ...
+def dagster_payload_results(
+    *,
+    dag: Mapping[str, Any],
+    payload: Mapping[str, Any],
+    command: list[str],
+    selected_asset_paths: list[tuple[str, ...]],
+    selected_check_keys: list[tuple[tuple[str, ...], str]],
+    check_selection_is_explicit: bool,
+) -> list[tuple[Any, ...]]: ...
+def dagster_integration_results(
+    *,
+    dag: Mapping[str, Any],
+    envelope: IntegrationResultEnvelope,
+    command: list[str],
+    selected_asset_paths: list[tuple[str, ...]],
+    selected_check_keys: list[tuple[tuple[str, ...], str]],
+    check_selection_is_explicit: bool,
+    emitted_asset_paths: list[tuple[str, ...]],
+) -> list[tuple[Any, ...]]: ...
+def dagster_selected_asset_results(
+    *, dag: Mapping[str, Any], command: list[str], selected_asset_paths: list[tuple[str, ...]]
+) -> list[tuple[Any, ...]]: ...
+def dagster_execution_payload(*, text: str) -> Mapping[str, Any] | None: ...
+def dagster_failure(
+    *,
+    command: list[str],
+    project_dir: Path,
+    selection: list[str],
+    selector_file: str,
+    returncode: int,
+    execution_payload: Mapping[str, Any] | None,
+    stdout: str,
+    stderr: str,
+) -> tuple[str, dict[str, Any]]: ...
+def dagster_live_failure(
+    *, asset: IntegrationAssetResult, envelope: IntegrationResultEnvelope, command: list[str]
+) -> tuple[list[str], dict[str, Any]]: ...
+def build_janitor_plan(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    connection: Any,
+    retention_days: int,
+    delete_tracked_only: bool = True,
+    exclude_patterns: Sequence[str] = (),
+    direct_mode: bool = True,
+    state_history_versions: int = 20,
+    archive_retention_days: int = 14,
+    early_old_name_view_drops: Sequence[str] = (),
+    scan_relation_keys: Iterable[JanitorRelationKey] | None = None,
+    protected_relation_keys: Iterable[JanitorRelationKey] | None = None,
+    protected_relation_reasons: Mapping[JanitorRelationKey, str] | None = None,
+) -> JanitorPlan: ...
+def build_janitor_archive_name(
+    *, original_name: str, archived_at: datetime, identifier_limit: int, kind: str | None = None
+) -> str: ...
 def render_janitor_completion(
     *, result: JanitorExecutionResult, use_color: bool = False
 ) -> str: ...
@@ -6524,6 +6903,7 @@ def start_sql_test_planning(
     sql_test_selection: SqlTestSelection,
     enabled: bool,
 ) -> Future[PlannedSqlTests]: ...
+def join_sql_test_planning_threads() -> None: ...
 def build_display_only_sqlbuild_plan(
     *, project: CompiledProjectView, selected_model_names: tuple[str, ...], full_refresh: bool
 ) -> PlanOutput: ...
@@ -9895,4 +10275,3090 @@ class MigrationStateError(ValueError):
     help: str | None
     def __init__(
         self, message: str, *, code: str | None = None, help: str | None = None
+    ) -> None: ...
+
+class ContractFindingKind(StrEnum):
+    """Stable physical-to-authored contract difference categories."""
+
+    MISSING_DECLARATION = "missing_declaration"
+    MISSING_PHYSICAL_COLUMN = "missing_physical_column"
+    TYPE_MISMATCH = "type_mismatch"
+    RELATION_MISSING = "relation_missing"
+    INSPECTION_UNAVAILABLE = "inspection_unavailable"
+    OWNERSHIP_CONFLICT = "ownership_conflict"
+
+class CompilerStage(StrEnum):
+    """Frontier objects handed from one compiler stage to the next, in pipeline order."""
+
+    DISCOVERED_PROJECT_INPUTS = "discovered_project_inputs"
+    COMPILE_PROJECT_INPUTS = "compile_project_inputs"
+    COMPILED_PROJECT = "compiled_project"
+
+class HookReadType(StrEnum):
+    """Kind of model hook that declares or writes a read."""
+
+    PYTHON = "Python"
+    SQL = "SQL"
+    INLINE_SQL = "inline SQL"
+
+class LintSeverity(StrEnum):
+    """Severity assigned to one lint violation."""
+
+    FAULT = "fault"
+    WARNING = "warning"
+
+class DiscoveryError(ValueError):
+    """Base error for expected discovery failures."""
+
+    code: str
+    message: str
+    help: str | None
+    def __init__(
+        self, message: str, *, code: str | None = None, help: str | None = None
+    ) -> None: ...
+
+class ProjectConfigError(DiscoveryError):
+    """Raised when shared or local project config files are invalid."""
+
+class ModelSqlParseError(DiscoveryError):
+    """Raised when an authored SQL model file has an invalid shape."""
+
+class SqlTestParseError(DiscoveryError):
+    """Raised when an authored SQL-native test file has an invalid shape."""
+
+class SqlAuditParseError(DiscoveryError):
+    """Raised when an authored SQL audit file has an invalid shape."""
+
+class SchemaParseError(DiscoveryError):
+    """Raised when a schema.yml file has an invalid shape."""
+
+class SourceParseError(DiscoveryError):
+    """Raised when a sources/*.yml file has an invalid shape."""
+
+class DiscoveryConflictError(DiscoveryError):
+    """Raised when discovered project inputs conflict across files."""
+
+class SeedDiscoveryError(DiscoveryError):
+    """Raised when declared seed metadata does not match local seed files."""
+
+class SqlScenarioParseError(DiscoveryError):
+    """Raised when an authored SQL scenario file has an invalid shape."""
+
+class PythonNodeDiscoveryError(DiscoveryError):
+    """Raised when project Python nodes cannot be discovered."""
+
+class ProviderDiscoveryError(DiscoveryError):
+    """Raised when project providers cannot be discovered."""
+
+class DeclarationParseError(DiscoveryError):
+    """Raised when an authored public SQL declaration is invalid."""
+
+class SqlHookParseError(DiscoveryError):
+    """Raised when an authored SQL hook resource has an invalid shape."""
+
+class EventExporterDiscoveryError(DiscoveryError):
+    """Raised when project lifecycle event exporters are invalid."""
+
+class ProjectPythonPathError(DiscoveryError):
+    """Raised when project-owned Python lives outside a supported extension root."""
+
+class ProjectPathError(DiscoveryError):
+    """Raised when an authored project path cannot be read as valid UTF-8."""
+
+class ResourceIdentityError(DiscoveryError):
+    """Raised when an authored resource identity is not canonical snake_case."""
+
+class MeasurementAuditError(ValueError):
+    """Raised when a measurement audit contract or value is invalid."""
+
+class ContractAdoptionError(RuntimeError):
+    """Raised when safe contract source editing cannot continue."""
+
+class FingerprintInputError(ValueError):
+    """Raised when fingerprint storage inputs or rows are invalid."""
+
+    code: str
+    message: str
+    help: str | None
+    def __init__(
+        self, message: str, *, code: str | None = None, help: str | None = None
+    ) -> None: ...
+
+class QueryFingerprintError(ValueError):
+    """Raised when SQL cannot be tokenized into a change fingerprint."""
+
+class NativeStageMismatchError(RuntimeError):
+    """Raised when native state the compiler replays is inconsistent with its inputs."""
+
+class UnknownLineageDialectError(ValueError):
+    """Raised, as Python's parser raised `ValueError`, for a dialect Polyglot does not know."""
+
+class RefactorValueError(ValueError):
+    """An unhandled value failure the Python planner also leaves to the caller."""
+
+class RefactorIOError(OSError):
+    """A file read or write failure the Python planner also leaves to the caller."""
+
+class ScopeError(ValueError):
+    """Base error for invalid scope-domain input."""
+
+    code: str
+    message: str
+    help: str | None
+    def __init__(
+        self, message: str, *, code: str | None = None, help: str | None = None
+    ) -> None: ...
+
+class InvalidScopePathError(ScopeError):
+    """Raised when a project-relative scope path is invalid."""
+
+class InvalidQualifiedIdentityError(ScopeError):
+    """Raised when a qualified scope identity cannot be parsed."""
+
+class UnindexableScopeError(ScopeError):
+    """Raised when the native scope index cannot place a discovered path or resource kind."""
+
+class ScopeValidationError(ScopeError):
+    """Aggregate error raised only when strict scope validation is requested."""
+
+    diagnostics: Any
+
+class UnsupportedLexicalSyntaxError(ValueError):
+    """Raised when an adapter declares lexical rules the native SQL scanners do not support."""
+
+class LintError(Exception):
+    """A lint or format run could not proceed."""
+
+    code: str
+    message: str
+    help: str | None
+    def __init__(
+        self, message: str, *, code: str | None = None, help: str | None = None
+    ) -> None: ...
+
+class NativeLintError(LintError):
+    """The SQLBuild-owned native lint engine rejected a request or response."""
+
+class ProjectCompileError(LintError):
+    """The project could not be compiled, so its SQL cannot be linted."""
+
+class LintStoppedError(Exception):
+    """A speculative lint run was stopped because its result is no longer needed."""
+
+class SpecConfigError(RuntimeError):
+    """Raised when project specification configuration is invalid."""
+
+class ConfigValueTypeError(ValueError):
+    """Raised when an authored config value has the wrong runtime type."""
+
+    code: str
+    message: str
+    help: str | None
+    def __init__(
+        self, message: str, *, code: str | None = None, help: str | None = None
+    ) -> None: ...
+    key: Any
+    expected: Any
+    actual_type: Any
+
+class NativeModelAnalysisRequest(NativeRecord):
+    """The Python model analysis's arguments plus the facts dynamic pivot proofs need."""
+
+    known_functions: tuple[str, ...]
+    known_types: tuple[str, ...]
+    model_inputs: tuple[ModelInput, ...]
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]]
+    column_types_by_table: dict[str, dict[str, str]]
+    inference_profile: ExpressionInferenceProfile
+    allow_compact_analysis: bool
+    rich_type_inference: bool
+    analysis_cache: AnalysisCacheContext | None
+    complete_binding_schemas: dict[str, dict[str, str]]
+    dynamic_families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]]
+    def __init__(
+        self,
+        known_functions: tuple[str, ...],
+        known_types: tuple[str, ...],
+        model_inputs: tuple[ModelInput, ...],
+        column_nullability_by_table: dict[str, dict[str, InferredNullability]],
+        column_types_by_table: dict[str, dict[str, str]],
+        inference_profile: ExpressionInferenceProfile,
+        allow_compact_analysis: bool,
+        rich_type_inference: bool,
+        analysis_cache: AnalysisCacheContext | None,
+        complete_binding_schemas: dict[str, dict[str, str]],
+        dynamic_families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]],
+    ) -> None: ...
+
+class NativeModelAnalyses(NativeRecord):
+    """Each analysed model's position in the finished session that keeps its outcome."""
+
+    positions: dict[str, int]
+    succeeded: frozenset[str]
+    session: Any | None
+    def __init__(
+        self,
+        positions: dict[str, int],
+        succeeded: frozenset[str],
+        session: Any | None,
+    ) -> None: ...
+
+class NativePivotTables(NativeRecord):
+    """The relation facts Python's dynamic pivot proofs read, for proofs outside a session."""
+
+    dialect: str | None
+    column_types_by_table: dict[str, dict[str, str]]
+    authoritative_column_types_by_table: dict[str, dict[str, str]]
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]]
+    dynamic_families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]]
+    def __init__(
+        self,
+        dialect: str | None,
+        column_types_by_table: dict[str, dict[str, str]],
+        authoritative_column_types_by_table: dict[str, dict[str, str]],
+        column_nullability_by_table: dict[str, dict[str, InferredNullability]],
+        dynamic_families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]],
+    ) -> None: ...
+
+class NativeColumnQuery(NativeRecord):
+    """One query outside the session whose output columns Python's analysis inferred."""
+
+    sql: str
+    mode: Literal["batch", "reanalysis", "parse", "legacy"]
+    placeholders: dict[str, str] | None
+    references: tuple[CompileSqlReference, ...]
+    recover_cte_facts: bool
+    def __init__(
+        self,
+        sql: str,
+        mode: Literal["batch", "reanalysis", "parse", "legacy"],
+        placeholders: dict[str, str] | None = ...,
+        references: tuple[CompileSqlReference, ...] = ...,
+        recover_cte_facts: bool = ...,
+    ) -> None: ...
+
+class NativeQueryColumns(NativeRecord):
+    """One query's analysis: whether it succeeded, its columns and whether it projects a star."""
+
+    succeeded: bool
+    columns: tuple[InferredColumn, ...] | None
+    has_star: bool
+    def __init__(
+        self,
+        succeeded: bool,
+        columns: tuple[InferredColumn, ...] | None,
+        has_star: bool,
+    ) -> None: ...
+
+class ContractFinding(NativeRecord):
+    resource_type: CompiledResourceType
+    resource_name: str
+    kind: ContractFindingKind
+    message: str
+    column_name: str | None
+    declared_type: str | None
+    physical_type: str | None
+    def __init__(
+        self,
+        resource_type: CompiledResourceType,
+        resource_name: str,
+        kind: ContractFindingKind,
+        message: str,
+        column_name: str | None = ...,
+        declared_type: str | None = ...,
+        physical_type: str | None = ...,
+    ) -> None: ...
+
+class ContractEvidence(NativeRecord):
+    resource_type: CompiledResourceType
+    resource_name: str
+    database: str | None
+    schema: str | None
+    relation: str
+    declared_columns: tuple[ColumnInfo, ...]
+    physical_columns: tuple[ColumnInfo, ...] | None
+    source_path: Path | None
+    dynamic_columns: tuple[SchemaDynamicColumnFamily, ...]
+    findings: tuple[ContractFinding, ...]
+    def __init__(
+        self,
+        resource_type: CompiledResourceType,
+        resource_name: str,
+        database: str | None,
+        schema: str | None,
+        relation: str,
+        declared_columns: tuple[ColumnInfo, ...],
+        physical_columns: tuple[ColumnInfo, ...] | None,
+        source_path: Path | None,
+        dynamic_columns: tuple[SchemaDynamicColumnFamily, ...] = ...,
+        findings: tuple[ContractFinding, ...] = ...,
+    ) -> None: ...
+
+class ContractAdoptionResult(NativeRecord):
+    from_target: str
+    evidence: tuple[ContractEvidence, ...]
+    written_paths: tuple[Path, ...]
+    def __init__(
+        self,
+        from_target: str,
+        evidence: tuple[ContractEvidence, ...],
+        written_paths: tuple[Path, ...] = ...,
+    ) -> None: ...
+
+class ContractValidationResult(NativeRecord):
+    """Diagnostics emitted by model contract validation."""
+
+    diagnostics: tuple[CompilerDiagnostic, ...]
+    def __init__(
+        self,
+        diagnostics: tuple[CompilerDiagnostic, ...] = ...,
+    ) -> None: ...
+
+class LineageGraphViews(NativeRecord):
+    """A native project graph's lineage edges and selector indexes as Python dicts."""
+
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
+    downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
+    tag_index: dict[str, frozenset[CompiledObjectKey]]
+    path_index: dict[CompiledObjectKey, str]
+    all_keys: dict[str, CompiledObjectKey]
+    def __init__(
+        self,
+        upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+        downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+        tag_index: dict[str, frozenset[CompiledObjectKey]],
+        path_index: dict[CompiledObjectKey, str],
+        all_keys: dict[str, CompiledObjectKey],
+    ) -> None: ...
+
+class AttachedAuditGateEdge(NativeRecord):
+    """One ordering edge: the gated node waits for a resource its attached audit reads."""
+
+    audit_name: str
+    target: CompiledObjectKey
+    gated: CompiledObjectKey
+    read: CompiledObjectKey
+    def __init__(
+        self,
+        audit_name: str,
+        target: CompiledObjectKey,
+        gated: CompiledObjectKey,
+        read: CompiledObjectKey,
+    ) -> None: ...
+
+class HookReadEdge(NativeRecord):
+    """One ordering edge: a model waits for a resource one of its hooks reads."""
+
+    hook_name: str
+    gated: CompiledObjectKey
+    read: CompiledObjectKey
+    hook_type: HookReadType
+    hook_path: Path | None
+    def __init__(
+        self,
+        hook_name: str,
+        gated: CompiledObjectKey,
+        read: CompiledObjectKey,
+        hook_type: HookReadType = ...,
+        hook_path: Path | None = ...,
+    ) -> None: ...
+
+class QualifiedLineageColumn(NativeRecord):
+    """A resource-qualified column in the collapsed SQLBuild lineage graph."""
+
+    resource_type: CompiledResourceType | str
+    resource_name: str
+    column_name: str
+    def __init__(
+        self,
+        resource_type: CompiledResourceType | str,
+        resource_name: str,
+        column_name: str,
+    ) -> None: ...
+
+class ColumnLineageSource(NativeRecord):
+    """One upstream column dependency for an output column."""
+
+    resource_type: CompiledResourceType | str
+    resource_name: str
+    column_name: str
+    def __init__(
+        self,
+        resource_type: CompiledResourceType | str,
+        resource_name: str,
+        column_name: str,
+    ) -> None: ...
+
+class ColumnLineageEdge(NativeRecord):
+    """One collapsed SQLBuild lineage graph edge."""
+
+    source: QualifiedLineageColumn
+    target: QualifiedLineageColumn
+    transform_kind: ColumnTransformKind
+    confidence: ColumnLineageConfidence
+    def __init__(
+        self,
+        source: QualifiedLineageColumn,
+        target: QualifiedLineageColumn,
+        transform_kind: ColumnTransformKind = ...,
+        confidence: ColumnLineageConfidence = ...,
+    ) -> None: ...
+
+class DirectSemanticColumnUse(NativeRecord):
+    """One direct non-projection use of a resolved resource column."""
+
+    consumer_model: str
+    context: str
+    expression_sql: str
+    source: QualifiedLineageColumn
+    confidence: ColumnLineageConfidence
+    line: int | None
+    column: int | None
+    def __init__(
+        self,
+        consumer_model: str,
+        context: str,
+        expression_sql: str,
+        source: QualifiedLineageColumn,
+        confidence: ColumnLineageConfidence = ...,
+        line: int | None = ...,
+        column: int | None = ...,
+    ) -> None: ...
+
+class ColumnLineage(NativeRecord):
+    """Lineage for one output column in one model."""
+
+    output_column: str
+    transform_kind: ColumnTransformKind
+    expression_sql: str | None
+    upstream_columns: tuple[ColumnLineageSource, ...]
+    nullability: InferredNullability
+    confidence: ColumnLineageConfidence
+    def __init__(
+        self,
+        output_column: str,
+        transform_kind: ColumnTransformKind,
+        expression_sql: str | None,
+        upstream_columns: tuple[ColumnLineageSource, ...],
+        nullability: InferredNullability = ...,
+        confidence: ColumnLineageConfidence = ...,
+    ) -> None: ...
+
+class ModelColumnLineage(NativeRecord):
+    """Column lineage extracted for one compiled model."""
+
+    model_name: str
+    columns: tuple[ColumnLineage, ...]
+    has_star: bool
+    def __init__(
+        self,
+        model_name: str,
+        columns: tuple[ColumnLineage, ...],
+        has_star: bool = ...,
+    ) -> None: ...
+
+class RefactorProject(NativeRecord):
+    """Compiler facts of one project, as the refactoring planner reads them."""
+
+    project_dir: Path
+    graph: ProjectGraph
+    discovered: DiscoveredProjectInputs
+    def __init__(
+        self,
+        project_dir: Path,
+        graph: ProjectGraph,
+        discovered: DiscoveredProjectInputs,
+    ) -> None: ...
+
+class ManualLocation(NativeRecord):
+    """A location a refactoring cannot rewrite safely."""
+
+    path: str
+    line: int | None
+    column: int | None
+    reason: str
+    def __init__(
+        self,
+        path: str,
+        line: int | None,
+        column: int | None,
+        reason: str,
+    ) -> None: ...
+
+class NativeSqlTestPlanningRequest(NativeRecord):
+    """Compiled models and tests to plan, with the adapter facts native planning cannot derive."""
+
+    models: tuple[CompiledModelView, ...]
+    rendered_model_sql: dict[int, str]
+    functions: tuple[tuple[str, str, str, str, str], ...]
+    tests: tuple[CompiledSqlTest, ...]
+    rendered_test_overrides: dict[int, dict[str, str]]
+    sql_analysis_enabled: bool
+    sql_analysis_dialect: str | None
+    set_difference_operator: str
+    requires_derived_table_aliases: bool
+    lexical_syntax: dict[str, object]
+    render_sql: bool
+    include_plan: bool
+    def __init__(
+        self,
+        models: tuple[CompiledModelView, ...],
+        rendered_model_sql: dict[int, str],
+        functions: tuple[tuple[str, str, str, str, str], ...],
+        tests: tuple[CompiledSqlTest, ...],
+        rendered_test_overrides: dict[int, dict[str, str]],
+        sql_analysis_enabled: bool,
+        sql_analysis_dialect: str | None,
+        set_difference_operator: str,
+        requires_derived_table_aliases: bool,
+        lexical_syntax: dict[str, object],
+        render_sql: bool,
+        include_plan: bool,
+    ) -> None: ...
+
+class NativeSqlTestChainRequest(NativeRecord):
+    """Compiled models and the tests whose unmocked model chains to resolve."""
+
+    models: tuple[CompiledModelView, ...]
+    tests: tuple[CompiledSqlTest, ...]
+    lexical_syntax: dict[str, object]
+    def __init__(
+        self,
+        models: tuple[CompiledModelView, ...],
+        tests: tuple[CompiledSqlTest, ...],
+        lexical_syntax: dict[str, object],
+    ) -> None: ...
+
+class NativeSqlTestFailure(NativeRecord):
+    """The error one test's assembly raises: its kind and message."""
+
+    kind: Literal["input", "internal", "decimal_overflow"]
+    message: str
+    def __init__(
+        self,
+        kind: Literal["input", "internal", "decimal_overflow"],
+        message: str,
+    ) -> None: ...
+
+class NativeSqlTestAssembly(NativeRecord):
+    """One natively assembled test, its keyed diagnostics, and the error its assembly raises."""
+
+    test: CompiledSqlTest | None
+    diagnostics: tuple[tuple[tuple[str, ...], CompilerDiagnostic], ...]
+    failure: NativeSqlTestFailure | None
+    def __init__(
+        self,
+        test: CompiledSqlTest | None,
+        diagnostics: tuple[tuple[tuple[str, ...], CompilerDiagnostic], ...],
+        failure: NativeSqlTestFailure | None = ...,
+    ) -> None: ...
+
+class HeaderSpan(NativeRecord):
+    """A located DSL header region inside one file."""
+
+    kind: str
+    start: int
+    end: int
+    def __init__(
+        self,
+        kind: str,
+        start: int,
+        end: int,
+    ) -> None: ...
+
+class LintFileRole(NativeRecord):
+    """Path-derived classification of one lint input, derived once per file."""
+
+    declaration_kind: DeclarationKind | None
+    in_project: bool
+    in_hook_directory: bool
+    def __init__(
+        self,
+        declaration_kind: DeclarationKind | None = ...,
+        in_project: bool = ...,
+        in_hook_directory: bool = ...,
+    ) -> None: ...
+
+class InterpolationSite(NativeRecord):
+    """One sqlbuild interpolation occurrence replaced by a unique sentinel."""
+
+    sentinel: str
+    neutralized_start: int
+    neutralized_end: int
+    original_start: int
+    original_end: int
+    original_text: str
+    def __init__(
+        self,
+        sentinel: str,
+        neutralized_start: int,
+        neutralized_end: int,
+        original_start: int,
+        original_end: int,
+        original_text: str,
+    ) -> None: ...
+
+class LintBody(NativeRecord):
+    """One authored SQL body prepared for linting, with its expansion spans."""
+
+    file_path: Path
+    body_start: int
+    body_end: int
+    lint_text: str
+    passes: tuple[tuple[ExpansionSpan, ...], ...]
+    external_identifiers: tuple[str, ...]
+    dependency_identifiers: tuple[str, ...]
+    externally_referenced_ctes: tuple[str, ...]
+    allows_ceremonial_select: bool
+    allows_dynamic_output_star: bool
+    allows_empty_fixture_star: bool
+    dependency_relations: tuple[tuple[str, str], ...]
+    def __init__(
+        self,
+        file_path: Path,
+        body_start: int,
+        body_end: int,
+        lint_text: str,
+        passes: tuple[tuple[ExpansionSpan, ...], ...],
+        external_identifiers: tuple[str, ...] = ...,
+        dependency_identifiers: tuple[str, ...] = ...,
+        externally_referenced_ctes: tuple[str, ...] = ...,
+        allows_ceremonial_select: bool = ...,
+        allows_dynamic_output_star: bool = ...,
+        allows_empty_fixture_star: bool = ...,
+        dependency_relations: tuple[tuple[str, str], ...] = ...,
+    ) -> None: ...
+
+class PendingLintBody(NativeRecord):
+    """One expanded authored body awaiting its native lexical preparation."""
+
+    file_path: Path
+    body_start: int
+    body_end: int
+    expansion_input: str
+    expanded: str
+    expansion_passes: tuple[tuple[ExpansionSpan, ...], ...]
+    pre_expansion_sites: tuple[InterpolationSite, ...]
+    external_identifiers: tuple[str, ...]
+    allows_ceremonial_select: bool
+    allows_dynamic_output_star: bool
+    allows_empty_fixture_star: bool
+    request: NativeLintPreparationRequest
+    def __init__(
+        self,
+        file_path: Path,
+        body_start: int,
+        body_end: int,
+        expansion_input: str,
+        expanded: str,
+        expansion_passes: tuple[tuple[ExpansionSpan, ...], ...],
+        pre_expansion_sites: tuple[InterpolationSite, ...],
+        external_identifiers: tuple[str, ...],
+        allows_ceremonial_select: bool,
+        allows_dynamic_output_star: bool,
+        allows_empty_fixture_star: bool,
+        request: NativeLintPreparationRequest,
+    ) -> None: ...
+
+class ExpandedLintFile(NativeRecord):
+    """The expanded bodies of one file, up to the first body that could not be expanded."""
+
+    file_path: Path
+    bodies: tuple[PendingLintBody, ...]
+    failure: ProjectCompileError | None
+    def __init__(
+        self,
+        file_path: Path,
+        bodies: tuple[PendingLintBody, ...],
+        failure: ProjectCompileError | None,
+    ) -> None: ...
+
+class PreparedLintFiles(NativeRecord):
+    """Lint bodies of every expandable file, and why the skipped files could not expand."""
+
+    bodies: tuple[LintBody, ...]
+    unexpandable: dict[Path, str]
+    def __init__(
+        self,
+        bodies: tuple[LintBody, ...],
+        unexpandable: dict[Path, str],
+    ) -> None: ...
+
+class LintEdit(NativeRecord):
+    """One deterministic authored-source edit proposed by a lint rule."""
+
+    file_path: Path
+    code: str
+    start: int
+    end: int
+    replacement: str
+    def __init__(
+        self,
+        file_path: Path,
+        code: str,
+        start: int,
+        end: int,
+        replacement: str,
+    ) -> None: ...
+
+class LintViolation(NativeRecord):
+    """One lint diagnostic reported against an authored file."""
+
+    file_path: Path
+    line: int
+    column: int
+    code: str
+    message: str
+    severity: LintSeverity
+    engine: str
+    end_line: int | None
+    end_column: int | None
+    remediation: str | None
+    fix: LintEdit | None
+    fix_unavailable_reason: str | None
+    def __init__(
+        self,
+        file_path: Path,
+        line: int,
+        column: int,
+        code: str,
+        message: str,
+        severity: LintSeverity,
+        engine: str,
+        end_line: int | None = ...,
+        end_column: int | None = ...,
+        remediation: str | None = ...,
+        fix: LintEdit | None = ...,
+        fix_unavailable_reason: str | None = ...,
+    ) -> None: ...
+
+class RuleFixResult(NativeRecord):
+    """One applied, refused, or unavailable semantic Rule fix."""
+
+    file_path: Path
+    code: str
+    line: int
+    status: RuleFixStatus
+    reason: str
+    def __init__(
+        self,
+        file_path: Path,
+        code: str,
+        line: int,
+        status: RuleFixStatus,
+        reason: str,
+    ) -> None: ...
+
+class LintConfig(NativeRecord):
+    """Resolved lint and format configuration for one run."""
+
+    native_enabled: bool
+    max_description_lines: int
+    line_width: int
+    dialect: str
+    enabled_native_rules: tuple[str, ...] | None
+    ignored_native_rules: tuple[str, ...]
+    header_rules_enabled: bool
+    max_literal_length: int
+    max_ranking_order_by: int
+    allow_suppressions: bool
+    relation_keys: Mapping[str, tuple[tuple[str, ...], ...]]
+    def __init__(
+        self,
+        native_enabled: bool = ...,
+        max_description_lines: int = ...,
+        line_width: int = ...,
+        dialect: str = ...,
+        enabled_native_rules: tuple[str, ...] | None = ...,
+        ignored_native_rules: tuple[str, ...] = ...,
+        header_rules_enabled: bool = ...,
+        max_literal_length: int = ...,
+        max_ranking_order_by: int = ...,
+        allow_suppressions: bool = ...,
+        relation_keys: Mapping[str, tuple[tuple[str, ...], ...]] = ...,
+    ) -> None: ...
+
+class LintRunResult(NativeRecord):
+    """Aggregated outcome of one lint or format run."""
+
+    files_checked: int
+    violations: tuple[LintViolation, ...]
+    formatted_files: tuple[Path, ...]
+    source_texts: Mapping[Path, str]
+    unexpandable: Mapping[Path, str]
+    def __init__(
+        self,
+        files_checked: int,
+        violations: tuple[LintViolation, ...],
+        formatted_files: tuple[Path, ...],
+        source_texts: Mapping[Path, str] = ...,
+        unexpandable: Mapping[Path, str] = ...,
+    ) -> None: ...
+
+class CompileFacts(NativeRecord):
+    """Per-model outputs and per-owner diagnostics of one compilation."""
+
+    models: dict[CompiledObjectKey, CompiledModelView]
+    model_paths: dict[CompiledObjectKey, Path]
+    diagnostics: dict[Path, Counter[DiagnosticIdentity]]
+    def __init__(
+        self,
+        models: dict[CompiledObjectKey, CompiledModelView],
+        model_paths: dict[CompiledObjectKey, Path],
+        diagnostics: dict[Path, Counter[DiagnosticIdentity]],
+    ) -> None: ...
+
+class FixVerdict(NativeRecord):
+    """Edited files that fail verification, and whether any change is unattributable."""
+
+    failing: dict[Path, str]
+    unattributed: bool
+    def __init__(
+        self,
+        failing: dict[Path, str],
+        unattributed: bool,
+    ) -> None: ...
+
+class DisplayOptions(NativeRecord):
+    """Options controlling bounded human output."""
+
+    max_entries_per_section: int | None
+    overflow_flag: str
+    def __init__(
+        self,
+        max_entries_per_section: int | None = ...,
+        overflow_flag: str = ...,
+    ) -> None: ...
+
+type RuleFixStatus = Literal["applied", "refused", "unavailable"]
+type DiagnosticIdentity = tuple[str, str, str, str]
+type NativeLintPreparationRequest = LintPreparationRequest
+
+class DiagnosticPhase(StrEnum):
+    """Phase that produced a compiler diagnostic."""
+
+    COMPILE = "compile"
+    CONTRACT = "contract"
+    RULE = "rule"
+    PLAN = "plan"
+    BUILD = "build"
+    AUDIT = "audit"
+    TEST = "test"
+    CONNECTION = "connection"
+
+class DiagnosticSeverity(StrEnum):
+    """Severity for a compiler diagnostic."""
+
+    ERROR = "error"
+    WARNING = "warning"
+    INFO = "info"
+
+class ColumnTransformKind(StrEnum):
+    """High-level transform classification for one output column."""
+
+    DIRECT = "direct"
+    CAST = "cast"
+    EXPRESSION = "expression"
+    AGGREGATION = "aggregation"
+    STAR = "star"
+    CONSTANT = "constant"
+    UNKNOWN = "unknown"
+
+class ColumnLineageConfidence(StrEnum):
+    """Coarse confidence that a lineage edge is fully understood."""
+
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    UNKNOWN = "unknown"
+
+class ColumnLineageMode(StrEnum):
+    """Column lineage analyzer mode."""
+
+    RICH = "rich"
+    FAST = "fast"
+
+class PolyglotAnalysisDialect(StrEnum):
+    """Dialect names accepted by Polyglot analyze_query."""
+
+    GENERIC = "generic"
+    POSTGRESQL = "postgresql"
+    MYSQL = "mysql"
+    BIGQUERY = "bigquery"
+    SNOWFLAKE = "snowflake"
+    DUCKDB = "duckdb"
+    SQLITE = "sqlite"
+    HIVE = "hive"
+    SPARK = "spark"
+    TRINO = "trino"
+    PRESTO = "presto"
+    REDSHIFT = "redshift"
+    TSQL = "tsql"
+    ORACLE = "oracle"
+    CLICKHOUSE = "clickhouse"
+    DATABRICKS = "databricks"
+    ATHENA = "athena"
+    TERADATA = "teradata"
+    DORIS = "doris"
+    STARROCKS = "starrocks"
+    MATERIALIZE = "materialize"
+    RISINGWAVE = "risingwave"
+    SINGLESTORE = "singlestore"
+    COCKROACHDB = "cockroachdb"
+    TIDB = "tidb"
+    DRUID = "druid"
+    SOLR = "solr"
+    TABLEAU = "tableau"
+    DUNE = "dune"
+    FABRIC = "fabric"
+    DRILL = "drill"
+    DREMIO = "dremio"
+    EXASOL = "exasol"
+    DATAFUSION = "datafusion"
+
+class MigrationDiscovery(StrEnum):
+    """How a migration was requested."""
+
+    MANUAL = "manual"
+    AUTOMATIC = "automatic"
+
+class MigrationCompatibility(StrEnum):
+    """Outcome of checking the origin relation against the destination model."""
+
+    COMPATIBLE = "compatible"
+    INCOMPATIBLE = "incompatible"
+    NOT_CHECKED = "not_checked"
+
+class OldNameViewAction(StrEnum):
+    """What a build does at a migrated model's old name."""
+
+    ARCHIVE_AND_VIEW = "archive_and_view"
+    VIEW_ONLY = "view_only"
+    LIVE = "live"
+    NONE = "none"
+
+class SelectorKind(StrEnum):
+    NAME = "name"
+    SEED = "seed"
+    SOURCE = "source"
+    TASK = "task"
+    ASSET = "asset"
+    LOADER = "loader"
+    CHECK = "check"
+    TAG = "tag"
+    PATH = "path"
+    TEST = "test"
+
+class PythonRunPhase(StrEnum):
+    """Lifecycle-aware Python execution phase."""
+
+    PRE_SQL_INGRESS = "pre_sql_ingress"
+    READ_SIDE = "read_side"
+
+class PythonIdentityStatus(StrEnum):
+    """Read-only identity diff status for Python plan display."""
+
+    NEW = "new"
+    CHANGED = "changed"
+    UNCHANGED = "unchanged"
+    UNKNOWN = "unknown"
+
+class CollectionRendering(StrEnum):
+    """Physical rendering choices for homogeneous SQL collections."""
+
+    VALUE_LIST = "value_list"
+    ARRAY = "array"
+
+class DbtInteropError(ValueError):
+    """Base class for expected dbt interop errors."""
+
+    code: str
+    message: str
+    help: str | None
+    def __init__(
+        self, message: str, *, code: str | None = None, help: str | None = None
+    ) -> None: ...
+
+class DbtInteropConfigError(DbtInteropError):
+    """Raised when dbt project configuration is missing or invalid."""
+
+class DbtInteropRuntimeError(DbtInteropError):
+    """Raised when dbt command execution fails."""
+
+class DbtInteropArgumentError(DbtInteropError):
+    """Raised when `sqb dbt` arguments cannot be routed safely."""
+
+class RelatedLocation(NativeRecord):
+    """A secondary authored location that adds context to a diagnostic."""
+
+    label: str
+    location: SourceLocation
+    message: str | None
+    def __init__(
+        self,
+        label: str,
+        location: SourceLocation,
+        message: str | None = ...,
+    ) -> None: ...
+
+class FixtureColumnInference(NativeRecord):
+    """Inferred fixture columns plus outputs that are explicitly bare NULL literals."""
+
+    columns: tuple[InferredColumn, ...]
+    null_literal_names: frozenset[str]
+    quoted_names: frozenset[str]
+    def __init__(
+        self,
+        columns: tuple[InferredColumn, ...],
+        null_literal_names: frozenset[str],
+        quoted_names: frozenset[str],
+    ) -> None: ...
+
+class DynamicColumnFamilyProof(NativeRecord):
+    """Compiler evidence for one declared runtime-generated column family."""
+
+    name: str
+    inferred_type: str | None
+    def __init__(
+        self,
+        name: str,
+        inferred_type: str | None = ...,
+    ) -> None: ...
+
+class DynamicColumnContractProof(NativeRecord):
+    """Closed output-shape evidence for a dynamic column contract."""
+
+    output_proven: bool
+    fixed_columns: tuple[InferredColumn, ...]
+    families: tuple[DynamicColumnFamilyProof, ...]
+    input_relations: tuple[str, ...]
+    failure_reason: str | None
+    bare_dynamic_pivot: bool
+    def __init__(
+        self,
+        output_proven: bool,
+        fixed_columns: tuple[InferredColumn, ...] = ...,
+        families: tuple[DynamicColumnFamilyProof, ...] = ...,
+        input_relations: tuple[str, ...] = ...,
+        failure_reason: str | None = ...,
+        bare_dynamic_pivot: bool = ...,
+    ) -> None: ...
+
+class CompileModelConfig(NativeRecord):
+    """Pre-semantic effective config layers attached to a model input."""
+
+    values: dict[str, object]
+    model_header_keys: tuple[str, ...]
+    matched_path_default: str | None
+    logical_schema: str | None
+    layer_schema: str | None
+    logical_database: str | None
+    time_travel_retention: ResolvedTimeTravelRetention
+    table_type: ResolvedTableType
+    def __init__(
+        self,
+        values: dict[str, object] = ...,
+        model_header_keys: tuple[str, ...] = ...,
+        matched_path_default: str | None = ...,
+        logical_schema: str | None = ...,
+        layer_schema: str | None = ...,
+        logical_database: str | None = ...,
+        time_travel_retention: ResolvedTimeTravelRetention = ...,
+        table_type: ResolvedTableType = ...,
+    ) -> None: ...
+
+class CursorInputRoles(NativeRecord):
+    """Effective filter and watermark inputs for one compiled model."""
+
+    filter_inputs: dict[str, str]
+    watermark_inputs: dict[str, str]
+    def __init__(
+        self,
+        filter_inputs: dict[str, str],
+        watermark_inputs: dict[str, str],
+    ) -> None: ...
+
+class DeclarationRuntimeProjection(NativeRecord):
+    """Process-only declaration values keyed by canonical static identity."""
+
+    declarations: Mapping[DeclarationIdentity, EnumDeclaration | ConstantDeclaration | LoadedMacro]
+    def __init__(
+        self,
+        declarations: Mapping[
+            DeclarationIdentity, EnumDeclaration | ConstantDeclaration | LoadedMacro
+        ] = ...,
+    ) -> None: ...
+
+class DeclarationScopeResolver(NativeRecord):
+    """Process-only lookup state used to project visible runtime declarations."""
+
+    project_dir: Path | None
+    lookup: ScopeLookup
+    projection: DeclarationRuntimeProjection
+    native_contexts: _native.NativeDeclarationContexts
+    resource_specific: frozenset[ResourceIdentity] | None
+    contexts_by_directory: dict[tuple[str, str], DeclarationResolutionContext]
+    def __init__(
+        self,
+        project_dir: Path | None,
+        lookup: ScopeLookup,
+        projection: DeclarationRuntimeProjection,
+        native_contexts: _native.NativeDeclarationContexts,
+        resource_specific: frozenset[ResourceIdentity] | None = ...,
+        contexts_by_directory: dict[tuple[str, str], DeclarationResolutionContext] = ...,
+    ) -> None: ...
+
+class DeclarationScopeBuild(NativeRecord):
+    """Static artifact and process-local values shared by compile attachment phases."""
+
+    loaded_macros: dict[str, LoadedMacro]
+    index: ScopeIndex
+    resolver: DeclarationScopeResolver
+    sql_test_scans: SqlTestScanCache
+    def __init__(
+        self,
+        loaded_macros: dict[str, LoadedMacro],
+        index: ScopeIndex,
+        resolver: DeclarationScopeResolver,
+        sql_test_scans: SqlTestScanCache,
+    ) -> None: ...
+
+class MacroExpansionResult(NativeRecord):
+    """Expanded SQL and resolved macro usage facts from one authored string."""
+
+    sql: str
+    spans: tuple[ExpansionSpan, ...]
+    dependencies: tuple[DeclarationIdentity, ...]
+    usages: tuple[UsageRecord, ...]
+    argument_references: tuple[CompileSqlReference, ...]
+    def __init__(
+        self,
+        sql: str,
+        spans: tuple[ExpansionSpan, ...] = ...,
+        dependencies: tuple[DeclarationIdentity, ...] = ...,
+        usages: tuple[UsageRecord, ...] = ...,
+        argument_references: tuple[CompileSqlReference, ...] = ...,
+    ) -> None: ...
+
+class VisibleModelDeclarations(NativeRecord):
+    """One model's visible declarations and macros, as the native model loop resolves them."""
+
+    local_enums: dict[str, EnumDeclaration]
+    local_constants: dict[str, ConstantDeclaration]
+    enums: dict[str, EnumDeclaration]
+    constants: dict[str, ConstantDeclaration]
+    inaccessible_enums: dict[str, DeclarationRecord]
+    inaccessible_constants: dict[str, DeclarationRecord]
+    enum_visibility: dict[str, tuple[VisibilityRecord, ...]]
+    constant_visibility: dict[str, tuple[VisibilityRecord, ...]]
+    macros: dict[str, LoadedMacro]
+    macro_records: dict[str, DeclarationRecord]
+    inaccessible_macros: dict[str, DeclarationRecord]
+    def __init__(
+        self,
+        local_enums: dict[str, EnumDeclaration],
+        local_constants: dict[str, ConstantDeclaration],
+        enums: dict[str, EnumDeclaration],
+        constants: dict[str, ConstantDeclaration],
+        inaccessible_enums: dict[str, DeclarationRecord],
+        inaccessible_constants: dict[str, DeclarationRecord],
+        enum_visibility: dict[str, tuple[VisibilityRecord, ...]],
+        constant_visibility: dict[str, tuple[VisibilityRecord, ...]],
+        macros: dict[str, LoadedMacro],
+        macro_records: dict[str, DeclarationRecord],
+        inaccessible_macros: dict[str, DeclarationRecord],
+    ) -> None: ...
+
+class DeclarationExpansionContext(NativeRecord):
+    """Declarations and adapter rendering used by one authored SQL owner."""
+
+    declarations: DeclarationResolutionContext
+    value_renderer: TypedSqlValueRenderer
+    collection_rendering: CollectionRendering
+    resolver: DeclarationScopeResolver | None
+    def __init__(
+        self,
+        declarations: DeclarationResolutionContext,
+        value_renderer: TypedSqlValueRenderer,
+        collection_rendering: CollectionRendering,
+        resolver: DeclarationScopeResolver | None = ...,
+    ) -> None: ...
+
+class CompileAdapterContext(NativeRecord):
+    """Cycle-free adapter behavior required while building compile inputs."""
+
+    value_renderer: TypedSqlValueRenderer
+    collection_rendering: CollectionRendering
+    python_functions_inherit_default_namespace: bool
+    sql_lexical_syntax: SqlLexicalSyntax
+    def __init__(
+        self,
+        value_renderer: TypedSqlValueRenderer,
+        collection_rendering: CollectionRendering,
+        python_functions_inherit_default_namespace: bool,
+        sql_lexical_syntax: SqlLexicalSyntax,
+    ) -> None: ...
+
+class InvalidSqlReferenceCall(NativeRecord):
+    """One reference call whose arguments compile could not replace with a relation."""
+
+    ref_kind: SqlReferenceKind
+    call: str
+    start: int
+    message: str
+    help: str
+    corrected_call: str
+    def __init__(
+        self,
+        ref_kind: SqlReferenceKind,
+        call: str,
+        start: int,
+        message: str,
+        help: str,
+        corrected_call: str,
+    ) -> None: ...
+
+class SqlReferenceScan(NativeRecord):
+    """Valid references and rejected reference calls found in one SQL text."""
+
+    references: tuple[CompileSqlReference, ...]
+    invalid_calls: tuple[InvalidSqlReferenceCall, ...]
+    def __init__(
+        self,
+        references: tuple[CompileSqlReference, ...],
+        invalid_calls: tuple[InvalidSqlReferenceCall, ...] = ...,
+    ) -> None: ...
+
+class CompiledLineageColumnFact(NativeRecord):
+    """Compact output column lineage fact extracted during SQL analysis."""
+
+    output_column: str
+    upstream_columns: tuple[CompiledLineageSourceFact, ...]
+    transform_kind: ColumnTransformKind
+    confidence: ColumnLineageConfidence
+    def __init__(
+        self,
+        output_column: str,
+        upstream_columns: tuple[CompiledLineageSourceFact, ...] = ...,
+        transform_kind: ColumnTransformKind = ...,
+        confidence: ColumnLineageConfidence = ...,
+    ) -> None: ...
+
+class PolyglotAnalysisResult(NativeRecord):
+    """Outcome of one Polyglot column and lineage analysis pass."""
+
+    analysis_succeeded: bool
+    columns: tuple[InferredColumn, ...] | None
+    lineage_columns: Sequence[CompiledLineageColumnFact]
+    has_star: bool
+    star_resolved: bool
+    binding_diagnostics: tuple[SqlBindingDiagnostic, ...]
+    binding_validated: bool
+    def __init__(
+        self,
+        analysis_succeeded: bool,
+        columns: tuple[InferredColumn, ...] | None = ...,
+        lineage_columns: Sequence[CompiledLineageColumnFact] = ...,
+        has_star: bool = ...,
+        star_resolved: bool = ...,
+        binding_diagnostics: tuple[SqlBindingDiagnostic, ...] = ...,
+        binding_validated: bool = ...,
+    ) -> None: ...
+
+class AnalysisCacheContext(NativeRecord):
+    """Shared project-local analysis cache identity for one compile invocation."""
+
+    root: Path
+    shared_fingerprint: str
+    signature_namespace: str
+    def __init__(
+        self,
+        root: Path,
+        shared_fingerprint: str,
+        signature_namespace: str = ...,
+    ) -> None: ...
+
+class CompileAnalysisSelection(NativeRecord):
+    """Deep-analysis selection and invocation-local preparation observer."""
+
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    auto_load_sources: bool
+    no_cache: bool
+    on_inputs_ready: CompileInputsReadyCallback | None
+    def __init__(
+        self,
+        select: tuple[str, ...] = ...,
+        exclude: tuple[str, ...] = ...,
+        auto_load_sources: bool = ...,
+        no_cache: bool = ...,
+        on_inputs_ready: CompileInputsReadyCallback | None = ...,
+    ) -> None: ...
+
+class CompileSqlScenarioCte(NativeRecord):
+    """One top-level SQL-native scenario CTE extracted after macro expansion."""
+
+    name: str
+    sql_body: str
+    def __init__(
+        self,
+        name: str,
+        sql_body: str,
+    ) -> None: ...
+
+class FunctionArgument(NativeRecord):
+    """One SQL function argument with an adapter-native type string."""
+
+    name: str
+    type: str
+    def __init__(
+        self,
+        name: str,
+        type: str,
+    ) -> None: ...
+
+class FunctionReturnColumn(NativeRecord):
+    """One named table-function return column with an adapter-native type string."""
+
+    name: str
+    type: str
+    def __init__(
+        self,
+        name: str,
+        type: str,
+    ) -> None: ...
+
+class HandBuiltAnalysis(NativeRecord):
+    """A hand-built model input's session position, fallback columns and standalone proof."""
+
+    session: tuple[Any, int] | None
+    fallback: list[tuple[str, str | None, str]] | None
+    standalone_proof: (
+        tuple[
+            bool,
+            list[tuple[str, str | None, str]],
+            list[tuple[str, str | None]],
+            list[str],
+            str | None,
+            bool,
+        ]
+        | None
+    )
+    def __init__(
+        self,
+        session: tuple[Any, int] | None,
+        fallback: list[tuple[str, str | None, str]] | None,
+        standalone_proof: tuple[
+            bool,
+            list[tuple[str, str | None, str]],
+            list[tuple[str, str | None]],
+            list[str],
+            str | None,
+            bool,
+        ]
+        | None,
+    ) -> None: ...
+
+class ModelSqlAnalysis(NativeRecord):
+    """Completed model analysis and its in-memory binding proof."""
+
+    polyglot_analysis: PolyglotAnalysisResult
+    placeholders: dict[str, str] | None
+    cached: bool
+    fused_binding_validated: bool
+    cleaned_sql: str | None
+    validated_schema: dict[str, dict[str, str]] | None
+    dynamic_column_contract: DynamicColumnContractProof | None
+    def __init__(
+        self,
+        polyglot_analysis: PolyglotAnalysisResult,
+        placeholders: dict[str, str] | None,
+        cached: bool = ...,
+        fused_binding_validated: bool = ...,
+        cleaned_sql: str | None = ...,
+        validated_schema: dict[str, dict[str, str]] | None = ...,
+        dynamic_column_contract: DynamicColumnContractProof | None = ...,
+    ) -> None: ...
+
+class CompileSqlScenarioInput(NativeRecord):
+    """One discovered SQL-native scenario with compile-time SQL expansion applied."""
+
+    scenario_file: DiscoveredSqlScenarioFile
+    sql_body: str
+    authored_ctes: tuple[CompileSqlScenarioCte, ...]
+    expected_ctes: tuple[CompileSqlScenarioCte, ...]
+    assertion_ctes: tuple[CompileSqlScenarioCte, ...]
+    source_fixture_names: tuple[str, ...]
+    ref_fixture_names: tuple[str, ...]
+    seed_fixture_names: tuple[str, ...]
+    dbt_ref_fixture_names: tuple[str, ...]
+    expected_model_names: tuple[str, ...]
+    assertion_names: tuple[str, ...]
+    assertion_target_model_names: tuple[str, ...]
+    target_model_names: tuple[str, ...]
+    declaration_usages: tuple[UsageRecord, ...]
+    def __init__(
+        self,
+        scenario_file: DiscoveredSqlScenarioFile,
+        sql_body: str,
+        authored_ctes: tuple[CompileSqlScenarioCte, ...] = ...,
+        expected_ctes: tuple[CompileSqlScenarioCte, ...] = ...,
+        assertion_ctes: tuple[CompileSqlScenarioCte, ...] = ...,
+        source_fixture_names: tuple[str, ...] = ...,
+        ref_fixture_names: tuple[str, ...] = ...,
+        seed_fixture_names: tuple[str, ...] = ...,
+        dbt_ref_fixture_names: tuple[str, ...] = ...,
+        expected_model_names: tuple[str, ...] = ...,
+        assertion_names: tuple[str, ...] = ...,
+        assertion_target_model_names: tuple[str, ...] = ...,
+        target_model_names: tuple[str, ...] = ...,
+        declaration_usages: tuple[UsageRecord, ...] = ...,
+    ) -> None: ...
+
+class CompileProjectInputs(NativeRecord):
+    """Attached project view used as the first pre-semantic compile input snapshot."""
+
+    project_config: ProjectConfig
+    local_config: LocalConfig
+    discovered_inputs: DiscoveredProjectInputs
+    sql_lexical_syntax: SqlLexicalSyntax
+    run_id: str
+    effective_target_name: str | None
+    effective_target: TargetConfig | None
+    compile_cache_dir: Path | None
+    effective_connection: dict[str, object]
+    effective_settings: SettingsConfig
+    no_sql_validation: bool
+    effective_vars: dict[str, object]
+    macro_context: MacroContext | None
+    loaded_macros: dict[str, LoadedMacro]
+    public_enums: dict[str, EnumDeclaration]
+    public_constants: dict[str, ConstantDeclaration]
+    model_inputs: tuple[ModelInput, ...]
+    seed_inputs: tuple[SeedInput, ...]
+    source_inputs: tuple[SourceInput, ...]
+    sql_function_inputs: tuple[FunctionInput, ...]
+    test_inputs: tuple[CompileSqlTestInput, ...]
+    scenario_inputs: tuple[CompileSqlScenarioInput, ...]
+    audit_inputs: tuple[AuditInput, ...]
+    diagnostics: tuple[CompilerDiagnostic, ...]
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None
+    scope_index: ScopeIndex
+    declaration_scope: DeclarationScopeBuild | None
+    native_project: _native.NativeCompiledProject | None
+    def __init__(
+        self,
+        project_config: ProjectConfig,
+        local_config: LocalConfig,
+        discovered_inputs: DiscoveredProjectInputs,
+        sql_lexical_syntax: SqlLexicalSyntax,
+        run_id: str = ...,
+        effective_target_name: str | None = ...,
+        effective_target: TargetConfig | None = ...,
+        compile_cache_dir: Path | None = ...,
+        effective_connection: dict[str, object] = ...,
+        effective_settings: SettingsConfig = ...,
+        no_sql_validation: bool = ...,
+        effective_vars: dict[str, object] = ...,
+        macro_context: MacroContext | None = ...,
+        loaded_macros: dict[str, LoadedMacro] = ...,
+        public_enums: dict[str, EnumDeclaration] = ...,
+        public_constants: dict[str, ConstantDeclaration] = ...,
+        model_inputs: tuple[ModelInput, ...] = ...,
+        seed_inputs: tuple[SeedInput, ...] = ...,
+        source_inputs: tuple[SourceInput, ...] = ...,
+        sql_function_inputs: tuple[FunctionInput, ...] = ...,
+        test_inputs: tuple[CompileSqlTestInput, ...] = ...,
+        scenario_inputs: tuple[CompileSqlScenarioInput, ...] = ...,
+        audit_inputs: tuple[AuditInput, ...] = ...,
+        diagnostics: tuple[CompilerDiagnostic, ...] = ...,
+        external_sql_reference_resolver: ExternalSqlReferenceResolver | None = ...,
+        scope_index: ScopeIndex = ...,
+        declaration_scope: DeclarationScopeBuild | None = ...,
+        native_project: _native.NativeCompiledProject | None = ...,
+    ) -> None: ...
+
+class CompiledSource(NativeRecord):
+    """Planner-ready compiled source metadata."""
+
+    key: CompiledObjectKey
+    deps: tuple[CompiledObjectKey, ...]
+    name: str
+    source_entry: SourceEntry
+    source_file: DiscoveredSourceFile
+    def __init__(
+        self,
+        key: CompiledObjectKey,
+        deps: tuple[CompiledObjectKey, ...],
+        name: str,
+        source_entry: SourceEntry,
+        source_file: DiscoveredSourceFile,
+    ) -> None: ...
+
+class CompiledSeed(NativeRecord):
+    """Planner-ready compiled seed metadata."""
+
+    key: CompiledObjectKey
+    deps: tuple[CompiledObjectKey, ...]
+    name: str
+    seed_file: DiscoveredSeedFile
+    schema_entry: SchemaSeedEntry
+    schema_file: DiscoveredSchemaFile
+    destination: CompiledRelationLocation
+    external: bool
+    def __init__(
+        self,
+        key: CompiledObjectKey,
+        deps: tuple[CompiledObjectKey, ...],
+        name: str,
+        seed_file: DiscoveredSeedFile,
+        schema_entry: SchemaSeedEntry,
+        schema_file: DiscoveredSchemaFile,
+        destination: CompiledRelationLocation,
+        external: bool = ...,
+    ) -> None: ...
+
+class CompiledFunction(NativeRecord):
+    """Planner-ready compiled SQL function metadata."""
+
+    key: CompiledObjectKey
+    deps: tuple[CompiledObjectKey, ...]
+    name: str
+    relative_path: Path
+    arguments: tuple[FunctionArgument, ...]
+    returns: str
+    body_sql: str
+    destination: CompiledRelationLocation
+    fingerprint_destination: CompiledRelationLocation
+    return_columns: tuple[FunctionReturnColumn, ...]
+    references: tuple[CompileSqlReference, ...]
+    language: FunctionLanguage
+    source_file_path: Path | None
+    runtime_version: str | None
+    entry_point: str | None
+    packages: tuple[str, ...]
+    tags: tuple[str, ...]
+    description: str | None
+    def __init__(
+        self,
+        key: CompiledObjectKey,
+        deps: tuple[CompiledObjectKey, ...],
+        name: str,
+        relative_path: Path,
+        arguments: tuple[FunctionArgument, ...],
+        returns: str,
+        body_sql: str,
+        destination: CompiledRelationLocation,
+        fingerprint_destination: CompiledRelationLocation,
+        return_columns: tuple[FunctionReturnColumn, ...] = ...,
+        references: tuple[CompileSqlReference, ...] = ...,
+        language: FunctionLanguage = ...,
+        source_file_path: Path | None = ...,
+        runtime_version: str | None = ...,
+        entry_point: str | None = ...,
+        packages: tuple[str, ...] = ...,
+        tags: tuple[str, ...] = ...,
+        description: str | None = ...,
+    ) -> None: ...
+
+class PythonSqlReferenceReport(NativeRecord):
+    """P008 diagnostics plus literal SQL relations that named no project relation."""
+
+    diagnostics: tuple[CompilerDiagnostic, ...]
+    unmatched: tuple[LiteralSqlRelation, ...]
+    def __init__(
+        self,
+        diagnostics: tuple[CompilerDiagnostic, ...] = ...,
+        unmatched: tuple[LiteralSqlRelation, ...] = ...,
+    ) -> None: ...
+
+class CompileSqlTestCte(NativeRecord):
+    """One top-level SQL-native test CTE extracted after macro expansion."""
+
+    name: str
+    sql_body: str
+    def __init__(
+        self,
+        name: str,
+        sql_body: str,
+    ) -> None: ...
+
+class CompileModelSqlTestInputPayload(NativeRecord):
+    """Model-mode SQL test compile payload."""
+
+    authored_ctes: tuple[CompileSqlTestCte, ...]
+    macro_mocks: dict[str, str]
+    mock_model_names: tuple[str, ...]
+    mock_source_names: tuple[str, ...]
+    mock_seed_names: tuple[str, ...]
+    mock_dbt_ref_names: tuple[str, ...]
+    mock_table_function_names: tuple[str, ...]
+    expected_ctes: tuple[CompileSqlTestCte, ...]
+    expected_model_names: tuple[str, ...]
+    assertion_ctes: tuple[CompileSqlTestCte, ...]
+    assertion_names: tuple[str, ...]
+    assertion_target_model_names: tuple[str, ...]
+    read_helper_names: tuple[str, ...]
+    reference_target_model_names: tuple[str, ...]
+    def __init__(
+        self,
+        authored_ctes: tuple[CompileSqlTestCte, ...] = ...,
+        macro_mocks: dict[str, str] = ...,
+        mock_model_names: tuple[str, ...] = ...,
+        mock_source_names: tuple[str, ...] = ...,
+        mock_seed_names: tuple[str, ...] = ...,
+        mock_dbt_ref_names: tuple[str, ...] = ...,
+        mock_table_function_names: tuple[str, ...] = ...,
+        expected_ctes: tuple[CompileSqlTestCte, ...] = ...,
+        expected_model_names: tuple[str, ...] = ...,
+        assertion_ctes: tuple[CompileSqlTestCte, ...] = ...,
+        assertion_names: tuple[str, ...] = ...,
+        assertion_target_model_names: tuple[str, ...] = ...,
+        read_helper_names: tuple[str, ...] = ...,
+        reference_target_model_names: tuple[str, ...] = ...,
+    ) -> None: ...
+
+class CompileDirectLogicSqlTestInputPayload(NativeRecord):
+    """Direct-logic SQL test compile payload."""
+
+    actual_cte: CompileSqlTestCte
+    expected_cte: CompileSqlTestCte
+    mode: SqlTestMode
+    helper_ctes: tuple[CompileSqlTestCte, ...]
+    tested_resource_names: tuple[str, ...]
+    def __init__(
+        self,
+        actual_cte: CompileSqlTestCte,
+        expected_cte: CompileSqlTestCte,
+        mode: SqlTestMode,
+        helper_ctes: tuple[CompileSqlTestCte, ...] = ...,
+        tested_resource_names: tuple[str, ...] = ...,
+    ) -> None: ...
+
+class CompileSqlTestInput(NativeRecord):
+    """One discovered SQL-native test block with compile-time SQL expansion applied."""
+
+    test_file: DiscoveredSqlTestFile
+    test_block: DiscoveredSqlTestBlock
+    sql_body: str
+    mode: SqlTestMode
+    payload: CompileModelSqlTestInputPayload | CompileDirectLogicSqlTestInputPayload
+    declaration_usages: tuple[UsageRecord, ...]
+    parent_name: str | None
+    case_name: str | None
+    case_index: int | None
+    parameter_schema: tuple[SqlTestParameterDeclaration, ...]
+    parameter_values: tuple[tuple[str, SqlValue], ...]
+    def __init__(
+        self,
+        test_file: DiscoveredSqlTestFile,
+        test_block: DiscoveredSqlTestBlock,
+        sql_body: str,
+        mode: SqlTestMode = ...,
+        payload: CompileModelSqlTestInputPayload | CompileDirectLogicSqlTestInputPayload = ...,
+        declaration_usages: tuple[UsageRecord, ...] = ...,
+        parent_name: str | None = ...,
+        case_name: str | None = ...,
+        case_index: int | None = ...,
+        parameter_schema: tuple[SqlTestParameterDeclaration, ...] = ...,
+        parameter_values: tuple[tuple[str, SqlValue], ...] = ...,
+    ) -> None: ...
+
+class CompiledModelSqlTestPayload(NativeRecord):
+    """Compiled model-mode SQL test payload."""
+
+    authored_ctes: tuple[CompileSqlTestCte, ...]
+    macro_mocks: dict[str, str]
+    model_query_overrides: dict[str, str]
+    mock_model_names: tuple[str, ...]
+    mock_source_names: tuple[str, ...]
+    mock_seed_names: tuple[str, ...]
+    mock_dbt_ref_names: tuple[str, ...]
+    mock_table_function_names: tuple[str, ...]
+    expected_ctes: tuple[CompileSqlTestCte, ...]
+    expected_model_names: tuple[str, ...]
+    assertion_ctes: tuple[CompileSqlTestCte, ...]
+    assertion_names: tuple[str, ...]
+    def __init__(
+        self,
+        authored_ctes: tuple[CompileSqlTestCte, ...] = ...,
+        macro_mocks: dict[str, str] = ...,
+        model_query_overrides: dict[str, str] = ...,
+        mock_model_names: tuple[str, ...] = ...,
+        mock_source_names: tuple[str, ...] = ...,
+        mock_seed_names: tuple[str, ...] = ...,
+        mock_dbt_ref_names: tuple[str, ...] = ...,
+        mock_table_function_names: tuple[str, ...] = ...,
+        expected_ctes: tuple[CompileSqlTestCte, ...] = ...,
+        expected_model_names: tuple[str, ...] = ...,
+        assertion_ctes: tuple[CompileSqlTestCte, ...] = ...,
+        assertion_names: tuple[str, ...] = ...,
+    ) -> None: ...
+
+class SqlExpansionContext(NativeRecord):
+    """Everything needed to expand one project's authored SQL bodies."""
+
+    effective_vars: dict[str, object]
+    loaded_macros: dict[str, LoadedMacro]
+    macro_context: MacroContext
+    enums: dict[str, EnumDeclaration]
+    constants: dict[str, ConstantDeclaration]
+    value_renderer: TypedSqlValueRenderer
+    collection_rendering: CollectionRendering
+    local_declarations: dict[Path, DeclarationResolutionContext]
+    declaration_resolver: DeclarationScopeResolver | None
+    def __init__(
+        self,
+        effective_vars: dict[str, object],
+        loaded_macros: dict[str, LoadedMacro],
+        macro_context: MacroContext,
+        enums: dict[str, EnumDeclaration],
+        constants: dict[str, ConstantDeclaration],
+        value_renderer: TypedSqlValueRenderer,
+        collection_rendering: CollectionRendering,
+        local_declarations: dict[Path, DeclarationResolutionContext] = ...,
+        declaration_resolver: DeclarationScopeResolver | None = ...,
+    ) -> None: ...
+
+class ExpansionSpan(NativeRecord):
+    """One substituted region, pairing its source range with its rendered range."""
+
+    source_start: int
+    source_end: int
+    output_start: int
+    output_end: int
+    def __init__(
+        self,
+        source_start: int,
+        source_end: int,
+        output_start: int,
+        output_end: int,
+    ) -> None: ...
+
+class CompiledSqlExpansion(NativeRecord):
+    """Process-local authored-to-expanded SQL evidence shared with compiler checks."""
+
+    authored_sql: str
+    expanded_sql: str
+    passes: tuple[tuple[ExpansionSpan, ...], ...]
+    def __init__(
+        self,
+        authored_sql: str,
+        expanded_sql: str,
+        passes: tuple[tuple[ExpansionSpan, ...], ...],
+    ) -> None: ...
+
+class MappedOffset(NativeRecord):
+    """An offset in rendered SQL resolved back onto the text that produced it."""
+
+    offset: int
+    generated: bool
+    def __init__(
+        self,
+        offset: int,
+        generated: bool,
+    ) -> None: ...
+
+class CompiledDirectLogicSqlTestPayload(NativeRecord):
+    """Compiled direct-logic SQL test payload."""
+
+    actual_cte: CompileSqlTestCte
+    expected_cte: CompileSqlTestCte
+    mode: SqlTestMode
+    helper_ctes: tuple[CompileSqlTestCte, ...]
+    tested_resource_names: tuple[str, ...]
+    def __init__(
+        self,
+        actual_cte: CompileSqlTestCte,
+        expected_cte: CompileSqlTestCte,
+        mode: SqlTestMode = ...,
+        helper_ctes: tuple[CompileSqlTestCte, ...] = ...,
+        tested_resource_names: tuple[str, ...] = ...,
+    ) -> None: ...
+
+class CompiledSqlTestResource(NativeRecord):
+    """One direct SQL test resource with its authored resource kind."""
+
+    kind: SqlTestMode
+    name: str
+    def __init__(
+        self,
+        kind: SqlTestMode,
+        name: str,
+    ) -> None: ...
+
+class NativeModelConfigSession(NativeRecord):
+    """The native config builder, validator, and inherited storage policies for one compile."""
+
+    path_defaults: dict[str, dict[str, object]]
+    builder: _native.NativeModelConfigBuilder
+    validator: _native.NativeModelValidator
+    inherited_storage: dict[str | None, tuple[ResolvedTimeTravelRetention, ResolvedTableType]]
+    def __init__(
+        self,
+        path_defaults: dict[str, dict[str, object]],
+        builder: _native.NativeModelConfigBuilder,
+        validator: _native.NativeModelValidator,
+        inherited_storage: dict[str | None, tuple[ResolvedTimeTravelRetention, ResolvedTableType]],
+    ) -> None: ...
+
+class NativeModelConfigInputs(NativeRecord):
+    """The project and run inputs every model's native config build reads."""
+
+    project_config: ProjectConfig
+    target_config: TargetConfig | None
+    effective_vars: dict[str, object]
+    effective_target_name: str | None
+    run_id: str
+    microbatch_concurrency: bool
+    def __init__(
+        self,
+        project_config: ProjectConfig,
+        target_config: TargetConfig | None,
+        effective_vars: dict[str, object],
+        effective_target_name: str | None,
+        run_id: str,
+        microbatch_concurrency: bool,
+    ) -> None: ...
+
+class ModelValidationRequest(NativeRecord):
+    """One model's effective config and the facts its validators read."""
+
+    model_file: DiscoveredSqlModelFile
+    config: CompileModelConfig
+    references: tuple[CompileSqlReference, ...]
+    declared_columns: tuple[SchemaColumn, ...] | None
+    query_sql: str
+    def __init__(
+        self,
+        model_file: DiscoveredSqlModelFile,
+        config: CompileModelConfig,
+        references: tuple[CompileSqlReference, ...],
+        declared_columns: tuple[SchemaColumn, ...] | None,
+        query_sql: str,
+    ) -> None: ...
+
+class NamedSqlHookEntry(NativeRecord):
+    """An unresolved invocation of a discovered SQL hook resource."""
+
+    name: str
+    kwargs: dict[str, object]
+    def __init__(
+        self,
+        name: str,
+        kwargs: dict[str, object],
+    ) -> None: ...
+
+class DiscoveredSqlFunctionFile(NativeRecord):
+    """A discovered SQL function file and its raw contents."""
+
+    file_path: Path
+    relative_path: Path
+    contents: str
+    header_values: dict[str, object]
+    body_sql: str
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        contents: str,
+        header_values: dict[str, object],
+        body_sql: str,
+    ) -> None: ...
+
+class DiscoveredSqlHookFile(NativeRecord):
+    """A discovered named SQL lifecycle hook resource."""
+
+    file_path: Path
+    relative_path: Path
+    contents: str
+    header_values: dict[str, object]
+    sql_body: str
+    name: str
+    description: str | None
+    scope_kind: ScopeKind
+    ownership_root: Path | None
+    owning_path: Path | None
+    declaration_root: Path | None
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        contents: str,
+        header_values: dict[str, object],
+        sql_body: str,
+        name: str,
+        description: str | None = ...,
+        scope_kind: ScopeKind = ...,
+        ownership_root: Path | None = ...,
+        owning_path: Path | None = ...,
+        declaration_root: Path | None = ...,
+    ) -> None: ...
+
+class EnumMember(NativeRecord):
+    """One named member in a SQLBuild enum declaration."""
+
+    name: str
+    value: str | int
+    def __init__(
+        self,
+        name: str,
+        value: str | int,
+    ) -> None: ...
+
+class DiscoveredEnumFile(NativeRecord):
+    """A public SQL file containing one or more enum declarations."""
+
+    file_path: Path
+    relative_path: Path
+    contents: str
+    declarations: tuple[EnumDeclaration, ...]
+    scope_kind: ScopeKind
+    ownership_root: Path | None
+    owning_path: Path | None
+    declaration_root: Path | None
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        contents: str,
+        declarations: tuple[EnumDeclaration, ...],
+        scope_kind: ScopeKind = ...,
+        ownership_root: Path | None = ...,
+        owning_path: Path | None = ...,
+        declaration_root: Path | None = ...,
+    ) -> None: ...
+
+class DiscoveredConstantFile(NativeRecord):
+    """A public SQL file containing one or more constant declarations."""
+
+    file_path: Path
+    relative_path: Path
+    contents: str
+    declarations: tuple[ConstantDeclaration, ...]
+    scope_kind: ScopeKind
+    ownership_root: Path | None
+    owning_path: Path | None
+    declaration_root: Path | None
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        contents: str,
+        declarations: tuple[ConstantDeclaration, ...],
+        scope_kind: ScopeKind = ...,
+        ownership_root: Path | None = ...,
+        owning_path: Path | None = ...,
+        declaration_root: Path | None = ...,
+    ) -> None: ...
+
+class ModelSchemaDeclaration(NativeRecord):
+    """One public reusable model column schema declaration."""
+
+    name: str
+    columns: tuple[SchemaColumn, ...]
+    relative_path: Path
+    extends: str | None
+    description: str | None
+    def __init__(
+        self,
+        name: str,
+        columns: tuple[SchemaColumn, ...],
+        relative_path: Path,
+        extends: str | None = ...,
+        description: str | None = ...,
+    ) -> None: ...
+
+class DiscoveredModelSchemaFile(NativeRecord):
+    """A public SQL file containing reusable model schemas."""
+
+    file_path: Path
+    relative_path: Path
+    contents: str
+    declarations: tuple[ModelSchemaDeclaration, ...]
+    scope_kind: ScopeKind
+    ownership_root: Path | None
+    owning_path: Path | None
+    declaration_root: Path | None
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        contents: str,
+        declarations: tuple[ModelSchemaDeclaration, ...],
+        scope_kind: ScopeKind = ...,
+        ownership_root: Path | None = ...,
+        owning_path: Path | None = ...,
+        declaration_root: Path | None = ...,
+    ) -> None: ...
+
+class DiscoveredPythonFunctionFile(NativeRecord):
+    """A discovered Python function file and its parsed UDF metadata."""
+
+    file_path: Path
+    relative_path: Path
+    contents: str
+    header_values: dict[str, object]
+    entry_point: str
+    body_python: str
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        contents: str,
+        header_values: dict[str, object],
+        entry_point: str,
+        body_python: str,
+    ) -> None: ...
+
+class DiscoveredSchemaFile(NativeRecord):
+    """A discovered schema.yml file and its raw contents."""
+
+    file_path: Path
+    relative_path: Path
+    contents: str
+    model_entries: tuple[SchemaModelEntry, ...]
+    seed_entries: tuple[SchemaSeedEntry, ...]
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        contents: str,
+        model_entries: tuple[SchemaModelEntry, ...],
+        seed_entries: tuple[SchemaSeedEntry, ...],
+    ) -> None: ...
+
+class DiscoveredSeedFile(NativeRecord):
+    """A discovered seed file."""
+
+    file_path: Path
+    relative_path: Path
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+    ) -> None: ...
+
+class DiscoveredSqlTestCase(NativeRecord):
+    """One ordered named case belonging to a SQL-native test template."""
+
+    name: str
+    values: tuple[tuple[str, SqlValue], ...]
+    case_index: int
+    def __init__(
+        self,
+        name: str,
+        values: tuple[tuple[str, SqlValue], ...],
+        case_index: int,
+    ) -> None: ...
+
+class DiscoveredSqlTestBlock(NativeRecord):
+    """One raw TEST(...) block discovered from a SQL-native test file."""
+
+    test_index: int
+    header_values: dict[str, object]
+    sql_body: str
+    name: str | None
+    mode: SqlTestMode
+    parameters: tuple[SqlTestParameterDeclaration, ...]
+    cases: tuple[DiscoveredSqlTestCase, ...]
+    cursor_start: str | None
+    cursor_end: str | None
+    sql_body_span: tuple[int, int] | None
+    def __init__(
+        self,
+        test_index: int,
+        header_values: dict[str, object],
+        sql_body: str,
+        name: str | None = ...,
+        mode: SqlTestMode = ...,
+        parameters: tuple[SqlTestParameterDeclaration, ...] = ...,
+        cases: tuple[DiscoveredSqlTestCase, ...] = ...,
+        cursor_start: str | None = ...,
+        cursor_end: str | None = ...,
+        sql_body_span: tuple[int, int] | None = ...,
+    ) -> None: ...
+
+class DiscoveredAuditFile(NativeRecord):
+    """A discovered audit SQL file and its raw contents."""
+
+    file_path: Path
+    relative_path: Path
+    contents: str
+    blocks: tuple[DiscoveredAuditBlock, ...]
+    declaration_kind: DeclarationKind
+    scope_kind: ScopeKind
+    ownership_root: Path | None
+    owning_path: Path | None
+    declaration_root: Path | None
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        contents: str,
+        blocks: tuple[DiscoveredAuditBlock, ...],
+        declaration_kind: DeclarationKind = ...,
+        scope_kind: ScopeKind = ...,
+        ownership_root: Path | None = ...,
+        owning_path: Path | None = ...,
+        declaration_root: Path | None = ...,
+    ) -> None: ...
+
+class DiscoveredAuditBlock(NativeRecord):
+    """One raw AUDIT(...) block discovered from a SQL audit file."""
+
+    audit_index: int
+    header_values: dict[str, object]
+    sql_body: str
+    name: str | None
+    evaluation_mode: AuditEvaluationMode
+    measurement_contract: MeasurementContract | None
+    measure_sql: str | None
+    evidence_sql: str | None
+    def __init__(
+        self,
+        audit_index: int,
+        header_values: dict[str, object],
+        sql_body: str,
+        name: str | None = ...,
+        evaluation_mode: AuditEvaluationMode = ...,
+        measurement_contract: MeasurementContract | None = ...,
+        measure_sql: str | None = ...,
+        evidence_sql: str | None = ...,
+    ) -> None: ...
+
+class DiscoveredAdapterFile(NativeRecord):
+    """A detected project adapter Python file."""
+
+    file_path: Path
+    relative_path: Path
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+    ) -> None: ...
+
+class DiscoveryFileFault(NativeRecord):
+    """One project-relative authored file fault captured during tolerant discovery."""
+
+    path: Path | None
+    message: str
+    def __init__(
+        self,
+        path: Path | None,
+        message: str,
+    ) -> None: ...
+
+class TolerantScopeDiscovery(NativeRecord):
+    """Parsed scope inputs and independently categorized tolerant discovery faults."""
+
+    discovered_inputs: DiscoveredProjectInputs
+    resource_faults: tuple[DiscoveryFileFault, ...]
+    declaration_faults: tuple[DiscoveryFileFault, ...]
+    relationship_faults: tuple[DiscoveryFileFault, ...]
+    config_faults: tuple[DiscoveryFileFault, ...]
+    def __init__(
+        self,
+        discovered_inputs: DiscoveredProjectInputs,
+        resource_faults: tuple[DiscoveryFileFault, ...] = ...,
+        declaration_faults: tuple[DiscoveryFileFault, ...] = ...,
+        relationship_faults: tuple[DiscoveryFileFault, ...] = ...,
+        config_faults: tuple[DiscoveryFileFault, ...] = ...,
+    ) -> None: ...
+
+class CompilePipelineOptions(NativeRecord):
+    """Selection, deferral, and planning options for one compile pipeline run."""
+
+    selected_target: str | None
+    no_sql_validation: bool
+    defer_to: str | None
+    defer_sources_to: str | None
+    source_deferral_enabled: bool
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    cursor_overrides: CursorOverrides | None
+    full_refresh: bool
+    auto_load_sources: bool
+    reload_sources: bool
+    connection_config: dict[str, object] | None
+    cli_vars: dict[str, object] | None
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None
+    resolve_python_run_selectors: bool
+    no_cache: bool
+    max_microbatches: int | None
+    selection_diagnostics: bool
+    plan_sql_tests: bool
+    record_migration_fingerprints: bool
+    accepts_unit_test_selectors: bool
+    sql_test_selection: SqlTestSelection
+    def __init__(
+        self,
+        selected_target: str | None = ...,
+        no_sql_validation: bool = ...,
+        defer_to: str | None = ...,
+        defer_sources_to: str | None = ...,
+        source_deferral_enabled: bool = ...,
+        select: tuple[str, ...] = ...,
+        exclude: tuple[str, ...] = ...,
+        cursor_overrides: CursorOverrides | None = ...,
+        full_refresh: bool = ...,
+        auto_load_sources: bool = ...,
+        reload_sources: bool = ...,
+        connection_config: dict[str, object] | None = ...,
+        cli_vars: dict[str, object] | None = ...,
+        external_sql_reference_resolver: ExternalSqlReferenceResolver | None = ...,
+        resolve_python_run_selectors: bool = ...,
+        no_cache: bool = ...,
+        max_microbatches: int | None = ...,
+        selection_diagnostics: bool = ...,
+        plan_sql_tests: bool = ...,
+        record_migration_fingerprints: bool = ...,
+        accepts_unit_test_selectors: bool = ...,
+        sql_test_selection: SqlTestSelection = ...,
+    ) -> None: ...
+
+class PythonPlanEntry(NativeRecord):
+    """Display-ready Python node entry for plan output."""
+
+    name: str
+    kind: PythonNodeKind
+    phase: PythonRunPhase
+    identity_status: PythonIdentityStatus
+    current_definition_json: str | None
+    previous_definition_json: str | None
+    current_metadata_json: str | None
+    previous_metadata_json: str | None
+    provider_usages: tuple[DiscoveredProviderUsage, ...]
+    def __init__(
+        self,
+        name: str,
+        kind: PythonNodeKind,
+        phase: PythonRunPhase,
+        identity_status: PythonIdentityStatus = ...,
+        current_definition_json: str | None = ...,
+        previous_definition_json: str | None = ...,
+        current_metadata_json: str | None = ...,
+        previous_metadata_json: str | None = ...,
+        provider_usages: tuple[DiscoveredProviderUsage, ...] = ...,
+    ) -> None: ...
+
+class PythonRunPlanOutputs(NativeRecord):
+    """Plan output and Python entries after python-aware run selection."""
+
+    plan_output: PlanOutput
+    python_plan_entries: tuple[PythonPlanEntry, ...]
+    selected_python_node_names: frozenset[str]
+    def __init__(
+        self,
+        plan_output: PlanOutput,
+        python_plan_entries: tuple[PythonPlanEntry, ...],
+        selected_python_node_names: frozenset[str],
+    ) -> None: ...
+
+class CompiledProjectPhaseResult(NativeRecord):
+    """Canonical project compilation output before command-specific planning."""
+
+    project: CompiledProjectView
+    connection_config: dict[str, object]
+    compile_seconds: float
+    def __init__(
+        self,
+        project: CompiledProjectView,
+        connection_config: dict[str, object],
+        compile_seconds: float,
+    ) -> None: ...
+
+class StaticCommandContext(NativeRecord):
+    """Shared compile, selection, and relation phases for focused commands."""
+
+    project: CompiledProjectView
+    scope: PlannerScope
+    relations: PlannerRelationsContext
+    connection_config: dict[str, object]
+    compile_seconds: float
+    def __init__(
+        self,
+        project: CompiledProjectView,
+        scope: PlannerScope,
+        relations: PlannerRelationsContext,
+        connection_config: dict[str, object],
+        compile_seconds: float,
+    ) -> None: ...
+
+class ClonePipelineOptions(NativeRecord):
+    """Compilation and selection options for one clone pipeline."""
+
+    no_sql_validation: bool
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    cli_vars: dict[str, object] | None
+    no_cache: bool
+    def __init__(
+        self,
+        no_sql_validation: bool = ...,
+        select: tuple[str, ...] = ...,
+        exclude: tuple[str, ...] = ...,
+        cli_vars: dict[str, object] | None = ...,
+        no_cache: bool = ...,
+    ) -> None: ...
+
+class ClonePipelineConnection(NativeRecord):
+    """Resolved destination connection used throughout clone compilation and planning."""
+
+    config: dict[str, object]
+    handle: Any
+    def __init__(
+        self,
+        config: dict[str, object],
+        handle: Any,
+    ) -> None: ...
+
+class ClonePipelineResult(NativeRecord):
+    """Prepared clone inputs for origin and destination target environments."""
+
+    origin_project: CompiledProjectView
+    destination_project: CompiledProjectView
+    clone_plan: PlanOutput
+    destination_source_entries: tuple[CloneSourcePlanEntry, ...]
+    destination_model_entries: tuple[ModelPlanEntry, ...]
+    destination_seed_entries: tuple[SeedPlanEntry, ...]
+    destination_function_entries: tuple[FunctionPlanEntry, ...]
+    origin_model_entries: tuple[ModelPlanEntry, ...]
+    origin_seed_entries: tuple[SeedPlanEntry, ...]
+    origin_source_entries: tuple[CloneSourcePlanEntry, ...]
+    def __init__(
+        self,
+        origin_project: CompiledProjectView,
+        destination_project: CompiledProjectView,
+        clone_plan: PlanOutput,
+        destination_source_entries: tuple[CloneSourcePlanEntry, ...] = ...,
+        destination_model_entries: tuple[ModelPlanEntry, ...] = ...,
+        destination_seed_entries: tuple[SeedPlanEntry, ...] = ...,
+        destination_function_entries: tuple[FunctionPlanEntry, ...] = ...,
+        origin_model_entries: tuple[ModelPlanEntry, ...] = ...,
+        origin_seed_entries: tuple[SeedPlanEntry, ...] = ...,
+        origin_source_entries: tuple[CloneSourcePlanEntry, ...] = ...,
+    ) -> None: ...
+
+class ParsedSelector(NativeRecord):
+    """One parsed selector token before graph resolution."""
+
+    kind: SelectorKind
+    value: str
+    upstream: bool
+    downstream: bool
+    def __init__(
+        self,
+        kind: SelectorKind,
+        value: str,
+        upstream: bool = ...,
+        downstream: bool = ...,
+    ) -> None: ...
+
+class PathSelector(NativeRecord):
+    """A directed path selector between two model names with optional endpoint expansion."""
+
+    start_name: str
+    end_name: str
+    upstream: bool
+    downstream: bool
+    def __init__(
+        self,
+        start_name: str,
+        end_name: str,
+        upstream: bool = ...,
+        downstream: bool = ...,
+    ) -> None: ...
+
+class SqlTestSelection(NativeRecord):
+    """Unit tests selected or excluded by name, beside the tests of the selected resources."""
+
+    names: frozenset[str]
+    excluded_names: frozenset[str]
+    models_selected: bool
+    def __init__(
+        self,
+        names: frozenset[str] = ...,
+        excluded_names: frozenset[str] = ...,
+        models_selected: bool = ...,
+    ) -> None: ...
+
+class PlannerScope(NativeRecord):
+    """Resolved graph scope for one planner invocation."""
+
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
+    downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
+    all_keys: dict[str, CompiledObjectKey]
+    models_by_name: dict[str, CompiledModelView]
+    selected_keys: frozenset[CompiledObjectKey]
+    execution_order: tuple[CompiledObjectKey, ...]
+    user_selected_keys: frozenset[CompiledObjectKey]
+    python_read_source_names: frozenset[str]
+    sql_test_selection: SqlTestSelection
+    def __init__(
+        self,
+        upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+        downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+        all_keys: dict[str, CompiledObjectKey],
+        models_by_name: dict[str, CompiledModelView],
+        selected_keys: frozenset[CompiledObjectKey],
+        execution_order: tuple[CompiledObjectKey, ...],
+        user_selected_keys: frozenset[CompiledObjectKey] = ...,
+        python_read_source_names: frozenset[str] = ...,
+        sql_test_selection: SqlTestSelection = ...,
+    ) -> None: ...
+
+class PlannerRelationsContext(NativeRecord):
+    """Resolved relation and source inputs for plan entry construction."""
+
+    model_locations: dict[str, CompiledRelationLocation]
+    seed_locations: dict[str, CompiledRelationLocation]
+    function_locations: dict[str, CompiledRelationLocation]
+    source_map: dict[str, SourceEntry]
+    source_read_map: dict[str, SourceEntry]
+    python_source_read_map: dict[str, SourceEntry]
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]]
+    star_exclude_keyword: str
+    listed_source_names: frozenset[str]
+    def __init__(
+        self,
+        model_locations: dict[str, CompiledRelationLocation],
+        seed_locations: dict[str, CompiledRelationLocation],
+        function_locations: dict[str, CompiledRelationLocation],
+        source_map: dict[str, SourceEntry],
+        source_read_map: dict[str, SourceEntry],
+        python_source_read_map: dict[str, SourceEntry],
+        source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
+        star_exclude_keyword: str,
+        listed_source_names: frozenset[str] = ...,
+    ) -> None: ...
+
+class SqlTestAssertionStep(NativeRecord):
+    """One zero-row assertion step in a SQL-native unit test."""
+
+    name: str
+    resolved_sql: str
+    lifted_ctes: tuple[tuple[str, str], ...]
+    comparison_body_sql: str | None
+    def __init__(
+        self,
+        name: str,
+        resolved_sql: str,
+        lifted_ctes: tuple[tuple[str, str], ...] = ...,
+        comparison_body_sql: str | None = ...,
+    ) -> None: ...
+
+class PlannerSelection(NativeRecord):
+    """User-facing selection inputs for one planner invocation."""
+
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    selected_keys: frozenset[CompiledObjectKey] | None
+    python_read_source_names: frozenset[str]
+    sql_test_selection: SqlTestSelection
+    def __init__(
+        self,
+        select: tuple[str, ...] = ...,
+        exclude: tuple[str, ...] = ...,
+        selected_keys: frozenset[CompiledObjectKey] | None = ...,
+        python_read_source_names: frozenset[str] = ...,
+        sql_test_selection: SqlTestSelection = ...,
+    ) -> None: ...
+
+class PlannerOverrides(NativeRecord):
+    """Explicit user overrides that force or bound planner decisions."""
+
+    cursor_overrides: CursorOverrides | None
+    full_refresh: bool
+    reload_sources: bool
+    forced_stale_model_names: tuple[str, ...]
+    external_blocked_model_names: tuple[str, ...]
+    max_microbatches: int | None
+    def __init__(
+        self,
+        cursor_overrides: CursorOverrides | None = ...,
+        full_refresh: bool = ...,
+        reload_sources: bool = ...,
+        forced_stale_model_names: tuple[str, ...] = ...,
+        external_blocked_model_names: tuple[str, ...] = ...,
+        max_microbatches: int | None = ...,
+    ) -> None: ...
+
+class DeferralInputs(NativeRecord):
+    """Deferred relation and source-deferral inputs for planning."""
+
+    deferred_locations: dict[str, CompiledRelationLocation] | None
+    deferred_relations: dict[str, RelationInfo] | None
+    defer_sources_to: str | None
+    source_deferral_enabled: bool
+    def __init__(
+        self,
+        deferred_locations: dict[str, CompiledRelationLocation] | None = ...,
+        deferred_relations: dict[str, RelationInfo] | None = ...,
+        defer_sources_to: str | None = ...,
+        source_deferral_enabled: bool = ...,
+    ) -> None: ...
+
+class PlannerPolicies(NativeRecord):
+    """Behavior policies selected by the caller for one planner invocation."""
+
+    auto_load_sources: bool
+    selection_diagnostics: bool
+    plan_sql_tests: bool
+    record_migration_fingerprints: bool
+    def __init__(
+        self,
+        auto_load_sources: bool = ...,
+        selection_diagnostics: bool = ...,
+        plan_sql_tests: bool = ...,
+        record_migration_fingerprints: bool = ...,
+    ) -> None: ...
+
+class DiscoveredPythonLoaderMetadata(NativeRecord):
+    """Loader-specific metadata carried by an internal Python loader node."""
+
+    destination: str | None
+    write_strategy: SourceWriteStrategy | None
+    cursor_column: str | None
+    unique_key: tuple[str, ...]
+    columns: tuple[SourceColumnEntry, ...]
+    contract: str | None
+    connection_mode: LoaderConnectionMode
+    def __init__(
+        self,
+        destination: str | None = ...,
+        write_strategy: SourceWriteStrategy | None = ...,
+        cursor_column: str | None = ...,
+        unique_key: tuple[str, ...] = ...,
+        columns: tuple[SourceColumnEntry, ...] = ...,
+        contract: str | None = ...,
+        connection_mode: LoaderConnectionMode = ...,
+    ) -> None: ...
+
+class DiscoveredPythonTaskMetadata(NativeRecord):
+    """Task-specific metadata carried by an internal Python task node."""
+
+    retry: RetryPolicy | None
+    def __init__(
+        self,
+        retry: RetryPolicy | None = ...,
+    ) -> None: ...
+
+class DiscoveredPythonAssetMetadata(NativeRecord):
+    """Asset-specific metadata carried by an internal Python asset node."""
+
+    columns: tuple[SourceColumnEntry, ...]
+    column_lineage: dict[str, tuple[ColumnLineageRef, ...]] | None
+    retry: RetryPolicy | None
+    def __init__(
+        self,
+        columns: tuple[SourceColumnEntry, ...] = ...,
+        column_lineage: dict[str, tuple[ColumnLineageRef, ...]] | None = ...,
+        retry: RetryPolicy | None = ...,
+    ) -> None: ...
+
+class DiscoveredPythonCheckMetadata(NativeRecord):
+    """Check-specific metadata carried by an internal Python check node."""
+
+    severity: PythonCheckSeverity
+    def __init__(
+        self,
+        severity: PythonCheckSeverity = ...,
+    ) -> None: ...
+
+class PythonNodeDependencyEdge(NativeRecord):
+    """Internal dependency edge between two discovered Python nodes."""
+
+    upstream_name: str
+    downstream_name: str
+    def __init__(
+        self,
+        upstream_name: str,
+        downstream_name: str,
+    ) -> None: ...
+
+class PythonSqlRunSelection(NativeRecord):
+    """Unified run-command selection excluding Python checks."""
+
+    sql_keys: frozenset[CompiledObjectKey]
+    python_node_names: frozenset[str]
+    def __init__(
+        self,
+        sql_keys: frozenset[CompiledObjectKey],
+        python_node_names: frozenset[str],
+    ) -> None: ...
+
+class LiteralSqlRelation(NativeRecord):
+    """A relation named in literal SQL in Python code that matched no project relation."""
+
+    owner_label: str
+    owner_kind: HardCodedRelationOwnerKind
+    relative_path: Path
+    line: int
+    method: str
+    relation: RelationName
+    def __init__(
+        self,
+        owner_label: str,
+        owner_kind: HardCodedRelationOwnerKind,
+        relative_path: Path,
+        line: int,
+        method: str,
+        relation: RelationName,
+    ) -> None: ...
+
+class DirectSourceFreshnessPlanningResult(NativeRecord):
+    """Direct planning-time source freshness observations and comparisons."""
+
+    observed_records: tuple[SourceFreshnessRecord, ...]
+    previous_records: tuple[SourceFreshnessRecord, ...]
+    changed_identities: frozenset[SourceFreshnessIdentity]
+    unchanged_identities: frozenset[SourceFreshnessIdentity]
+    unknown_source_names: tuple[str, ...]
+    unknown_sources: dict[str, SourceFreshnessUnknown]
+    age_statuses: dict[SourceFreshnessIdentity, SourceFreshnessAgeStatus]
+    propagation: DirectSourceFreshnessPropagationResult | None
+    def __init__(
+        self,
+        observed_records: tuple[SourceFreshnessRecord, ...] = ...,
+        previous_records: tuple[SourceFreshnessRecord, ...] = ...,
+        changed_identities: frozenset[SourceFreshnessIdentity] = ...,
+        unchanged_identities: frozenset[SourceFreshnessIdentity] = ...,
+        unknown_source_names: tuple[str, ...] = ...,
+        unknown_sources: dict[str, SourceFreshnessUnknown] = ...,
+        age_statuses: dict[SourceFreshnessIdentity, SourceFreshnessAgeStatus] = ...,
+        propagation: DirectSourceFreshnessPropagationResult | None = ...,
+    ) -> None: ...
+
+class SqlBindingDiagnostic(NativeRecord):
+    """One native binding error or non-blocking runtime-conversion warning."""
+
+    code: str
+    message: str
+    line: int | None
+    column: int | None
+    start: int | None
+    end: int | None
+    severity: str
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        line: int | None = ...,
+        column: int | None = ...,
+        start: int | None = ...,
+        end: int | None = ...,
+        severity: str = ...,
+    ) -> None: ...
+
+class SqlBindingResult(NativeRecord):
+    """Stable result of schema-aware semantic SQL validation."""
+
+    diagnostics: tuple[SqlBindingDiagnostic, ...]
+    def __init__(
+        self,
+        diagnostics: tuple[SqlBindingDiagnostic, ...] = ...,
+    ) -> None: ...
+
+class SqlSchemaValidationRequest(NativeRecord):
+    """One expanded SQL query and its complete relation schemas."""
+
+    sql: str
+    dialect: str | None
+    schema: Mapping[str, Mapping[str, str]]
+    known_functions: tuple[str, ...]
+    known_types: tuple[str, ...]
+    quoted_identifiers_ignore_case: bool
+    catalog: Any | None
+    def __init__(
+        self,
+        sql: str,
+        dialect: str | None,
+        schema: Mapping[str, Mapping[str, str]],
+        known_functions: tuple[str, ...] = ...,
+        known_types: tuple[str, ...] = ...,
+        quoted_identifiers_ignore_case: bool = ...,
+        catalog: Any | None = ...,
+    ) -> None: ...
+
+class DbtCliOptions(NativeRecord):
+    """Resolved dbt CLI options shared by dbt commands."""
+
+    project_dir: Path | None
+    profiles_dir: Path | None
+    target: str | None
+    target_path: Path | None
+    vars: str | None
+    state: Path | None
+    defer: bool
+    def __init__(
+        self,
+        project_dir: Path | None = ...,
+        profiles_dir: Path | None = ...,
+        target: str | None = ...,
+        target_path: Path | None = ...,
+        vars: str | None = ...,
+        state: Path | None = ...,
+        defer: bool = ...,
+    ) -> None: ...
+
+class NormalizedDbtProfileConnection(NativeRecord):
+    """Rendered dbt profile output normalized for SQLBuild."""
+
+    adapter: str
+    connection: dict[str, object]
+    target_schema: str | None
+    target_database: str | None
+    warnings: tuple[str, ...]
+    def __init__(
+        self,
+        adapter: str,
+        connection: dict[str, object],
+        target_schema: str | None = ...,
+        target_database: str | None = ...,
+        warnings: tuple[str, ...] = ...,
+    ) -> None: ...
+
+class DbtInitProgressCallbacks(NativeRecord):
+    """Optional progress hooks for `sqb dbt init` phases."""
+
+    start: Callable[[str], None] | None
+    complete: Callable[[str], None] | None
+    def __init__(
+        self,
+        start: Callable[[str], None] | None = ...,
+        complete: Callable[[str], None] | None = ...,
+    ) -> None: ...
+
+class DbtInitRequest(NativeRecord):
+    """Request to initialize a SQLBuild project from a dbt project."""
+
+    cwd: Path
+    dbt_project_dir: Path
+    profiles_dir: Path | None
+    profile_name: str | None
+    target_name: str | None
+    sqb_output_dir: Path | None
+    dry_run: bool
+    overwrite: bool
+    skip_dbt_debug: bool
+    progress_callbacks: DbtInitProgressCallbacks
+    def __init__(
+        self,
+        cwd: Path,
+        dbt_project_dir: Path,
+        profiles_dir: Path | None,
+        profile_name: str | None,
+        target_name: str | None,
+        sqb_output_dir: Path | None,
+        dry_run: bool = ...,
+        overwrite: bool = ...,
+        skip_dbt_debug: bool = ...,
+        progress_callbacks: DbtInitProgressCallbacks = ...,
+    ) -> None: ...
+
+class DbtInitResult(NativeRecord):
+    """Result from `sqb dbt init`."""
+
+    output_dir: Path
+    project_file: Path
+    project_name: str
+    adapter: str
+    target_name: str
+    profile_name: str
+    toml: str
+    warnings: tuple[str, ...]
+    dry_run: bool
+    def __init__(
+        self,
+        output_dir: Path,
+        project_file: Path,
+        project_name: str,
+        adapter: str,
+        target_name: str,
+        profile_name: str,
+        toml: str,
+        warnings: tuple[str, ...] = ...,
+        dry_run: bool = ...,
+    ) -> None: ...
+
+class DbtCommandResult(NativeRecord):
+    """Completed dbt command output."""
+
+    argv: tuple[str, ...]
+    returncode: int
+    stdout: str
+    stderr: str
+    def __init__(
+        self,
+        argv: tuple[str, ...],
+        returncode: int,
+        stdout: str = ...,
+        stderr: str = ...,
+    ) -> None: ...
+
+class DbtNodeExecutionResult(NativeRecord):
+    """One dbt node execution result parsed from JSON logs."""
+
+    unique_id: str
+    resource_type: str
+    node_name: str
+    status: str
+    index: int | None
+    total: int | None
+    execution_time: float | None
+    materialized: str | None
+    relation_name: str | None
+    database: str | None
+    schema: str | None
+    node_checksum: str | None
+    messages: tuple[DbtNodeMessage, ...]
+    def __init__(
+        self,
+        unique_id: str,
+        resource_type: str,
+        node_name: str,
+        status: str,
+        index: int | None,
+        total: int | None,
+        execution_time: float | None,
+        materialized: str | None = ...,
+        relation_name: str | None = ...,
+        database: str | None = ...,
+        schema: str | None = ...,
+        node_checksum: str | None = ...,
+        messages: tuple[DbtNodeMessage, ...] = ...,
+    ) -> None: ...
+
+class DbtLsResult(NativeRecord):
+    """Parsed result from one dbt ls invocation."""
+
+    nodes: tuple[DbtLsNode, ...]
+    command: DbtCommandResult
+    def __init__(
+        self,
+        nodes: tuple[DbtLsNode, ...],
+        command: DbtCommandResult,
+    ) -> None: ...
+
+class RuleGuidance(NativeRecord):
+    """Structured authoring guidance shared by diagnostics and generated documentation."""
+
+    good_example: str
+    anti_tautology: str
+    mutation_check: str
+    def __init__(
+        self,
+        good_example: str,
+        anti_tautology: str,
+        mutation_check: str,
+    ) -> None: ...
+
+class RuleExemption(NativeRecord):
+    rule: str
+    path: str
+    reason: str
+    def __init__(
+        self,
+        rule: str,
+        path: str,
+        reason: str,
+    ) -> None: ...
+
+class GraphEdgeExclusion(NativeRecord):
+    """One exact, temporary internal-layer dependency exception."""
+
+    consumer: str
+    dependency: str
+    reason: str
+    def __init__(
+        self,
+        consumer: str,
+        dependency: str,
+        reason: str,
+    ) -> None: ...
+
+class RuleIgnore(NativeRecord):
+    rules: tuple[str, ...]
+    paths: tuple[str, ...]
+    reason: str
+    selectors: tuple[str, ...]
+    def __init__(
+        self,
+        rules: tuple[str, ...],
+        paths: tuple[str, ...],
+        reason: str,
+        selectors: tuple[str, ...] = ...,
+    ) -> None: ...
+
+class SelectStarAllow(NativeRecord):
+    paths: tuple[str, ...]
+    reason: str
+    def __init__(
+        self,
+        paths: tuple[str, ...],
+        reason: str,
+    ) -> None: ...
+
+class ThresholdOverride(NativeRecord):
+    paths: tuple[str, ...]
+    thresholds: dict[str, int]
+    reason: str
+    def __init__(
+        self,
+        paths: tuple[str, ...],
+        thresholds: dict[str, int],
+        reason: str,
+    ) -> None: ...
+
+class RulesCacheConfig(NativeRecord):
+    enabled: bool
+    def __init__(
+        self,
+        enabled: bool = ...,
+    ) -> None: ...
+
+class SqlTestRulesConfig(NativeRecord):
+    pipeline_directory: str
+    def __init__(
+        self,
+        pipeline_directory: str = ...,
+    ) -> None: ...
+
+class PreparedSqlLintResult(NativeRecord):
+    """Reusable expansion context and completed preliminary SQL checks."""
+
+    result: LintRunResult
+    context: SqlExpansionContext
+    def __init__(
+        self,
+        result: LintRunResult,
+        context: SqlExpansionContext,
+    ) -> None: ...
+
+class SqlExpansionReuse(NativeRecord):
+    """Compiler declaration scope for post-assembly SQL checks; assembly still runs its macros."""
+
+    discovered_inputs: DiscoveredProjectInputs
+    declaration_scope: DeclarationScopeBuild
+    def __init__(
+        self,
+        discovered_inputs: DiscoveredProjectInputs,
+        declaration_scope: DeclarationScopeBuild,
+    ) -> None: ...
+
+class PreparedSqlLint(NativeRecord):
+    """Process-local SQL checks started after compiler expansion has completed."""
+
+    codes: tuple[str, ...]
+    future: Future[PreparedSqlLintResult]
+    project_dir: Path | None
+    def __init__(
+        self,
+        codes: tuple[str, ...],
+        future: Future[PreparedSqlLintResult],
+        project_dir: Path | None = ...,
+    ) -> None: ...
+
+class SqlRulesEvaluation(NativeRecord):
+    """SQL rule findings of one run, their cache accounting and elapsed time."""
+
+    findings: tuple[Finding, ...]
+    cache_hits: int
+    cache_misses: int
+    sql_ms: int
+    def __init__(
+        self,
+        findings: tuple[Finding, ...],
+        cache_hits: int,
+        cache_misses: int,
+        sql_ms: int = ...,
+    ) -> None: ...
+
+class RuleRunPlan(NativeRecord):
+    """The catalogue, selected rules, project slice and settings one rules run evaluates."""
+
+    effective_config: RulesConfig
+    project_dir: Path
+    catalogue: tuple[Rule, ...]
+    custom_payloads: list[dict[str, object]]
+    selected: tuple[Rule, ...]
+    skipped_type_proof_rules: tuple[str, ...]
+    model_paths: frozenset[str] | None
+    project: CompiledProjectView
+    config: RulesConfig
+    def __init__(
+        self,
+        effective_config: RulesConfig,
+        project_dir: Path,
+        catalogue: tuple[Rule, ...],
+        custom_payloads: list[dict[str, object]],
+        selected: tuple[Rule, ...],
+        skipped_type_proof_rules: tuple[str, ...],
+        model_paths: frozenset[str] | None,
+        project: CompiledProjectView,
+        config: RulesConfig,
+    ) -> None: ...
+
+class RulesRunResult(NativeRecord):
+    """Unified findings and phase measurements for configured rules."""
+
+    findings: tuple[Finding, ...]
+    evaluated_models: int
+    built_in_ms: int
+    custom_ms: int
+    custom_cpu_ms: int
+    unevaluated_resources: int
+    cache_hits: int
+    cache_misses: int
+    skipped_type_proof_rules: tuple[str, ...]
+    def __init__(
+        self,
+        findings: tuple[Finding, ...],
+        evaluated_models: int,
+        built_in_ms: int,
+        custom_ms: int,
+        custom_cpu_ms: int = ...,
+        unevaluated_resources: int = ...,
+        cache_hits: int = ...,
+        cache_misses: int = ...,
+        skipped_type_proof_rules: tuple[str, ...] = ...,
+    ) -> None: ...
+
+class NativeRulesEvaluation(NativeRecord):
+    """The built-in rules response, decoded natively."""
+
+    findings: tuple[Finding, ...]
+    selected_codes: tuple[str, ...]
+    evaluated_models: int
+    cache_hits: int
+    cache_misses: int
+    built_in_ms: int
+    reused: bool
+    def __init__(
+        self,
+        findings: tuple[Finding, ...],
+        selected_codes: tuple[str, ...],
+        evaluated_models: int,
+        cache_hits: int,
+        cache_misses: int,
+        built_in_ms: int,
+        reused: bool,
+    ) -> None: ...
+
+class CustomRulesOutcome(NativeRecord):
+    """Custom-rule findings in canonical order and their cache accounting."""
+
+    findings: tuple[Finding, ...]
+    cache_hits: int
+    cache_misses: int
+    custom_ms: int
+    custom_cpu_ms: int
+    def __init__(
+        self,
+        findings: tuple[Finding, ...],
+        cache_hits: int,
+        cache_misses: int,
+        custom_ms: int,
+        custom_cpu_ms: int = ...,
     ) -> None: ...

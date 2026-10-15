@@ -11,11 +11,12 @@ use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
 use crate::bindings::_helpers::scopes::scope_validation::validate_scope_index;
 use crate::bindings::_helpers::sql_test_glue::constants::SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const SCAN_CACHE_MODULE: &str = "sqlbuild._native";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
-const SCOPE_ERRORS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
+const SCOPE_ERRORS_MODULE: &str = "sqlbuild._native";
 
 fn compile_error(py: Python<'_>, message: Bound<'_, PyAny>) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
@@ -33,7 +34,7 @@ fn scope_build<'py>(
     let resolver: Bound<'py, PyAny> =
         declaration_scope_resolver(discovered, &index, (loaded_macros, &lookup))?;
     call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "DeclarationScopeBuild")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "DeclarationScopeBuild")?,
         &[
             ("loaded_macros", loaded_macros.clone()),
             ("index", index),

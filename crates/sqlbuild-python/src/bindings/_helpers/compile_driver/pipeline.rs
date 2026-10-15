@@ -18,12 +18,13 @@ use crate::bindings::_helpers::frontier::stage_capture::write_plan_capture;
 use crate::bindings::_helpers::rules::results::{format_rules_result, rules_progress};
 use crate::bindings::_helpers::rules::rules_config::load_rules_config;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const EFFECTIVE_CONFIG_MODULE: &str = "sqlbuild._native";
 const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const ANALYSIS_SELECTION_MODULE: &str = "sqlbuild._native";
-const PIPELINE_MODELS_MODULE: &str = "sqlbuild.compiler.pipeline.models";
 const TIMING_TRACKER_MODULE: &str = "sqlbuild._native";
 const RULE_EXCEPTIONS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
 const RULE_THREADS_MODULE: &str = "sqlbuild._native";
@@ -80,7 +81,7 @@ fn compiled_phase<'py>(
     let options: Bound<'py, PyAny> = if options.is_truthy()? {
         options.clone()
     } else {
-        imported(py, PIPELINE_MODELS_MODULE, "CompilePipelineOptions")?.call0()?
+        imported(py, NATIVE_RECORDS_MODULE, "CompilePipelineOptions")?.call0()?
     };
     let configured: Bound<'py, PyAny> = options.getattr("connection_config")?;
     let connection_config: Bound<'py, PyAny> = if configured.is_none() {
@@ -132,7 +133,7 @@ fn compiled_phase<'py>(
         &format!("Compiled project. ({compile_seconds:.2}s)"),
     )?;
     call_with(
-        &imported(py, PIPELINE_MODELS_MODULE, "CompiledProjectPhaseResult")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "CompiledProjectPhaseResult")?,
         &[
             ("project", project),
             ("connection_config", connection_config),
@@ -263,7 +264,7 @@ fn run_rules_gate<'py>(
         load_rules_config(py, project_dir.extract()?)?.into_bound(py);
     if options.getattr("no_cache")?.is_truthy()? {
         let cache: Bound<'py, PyAny> = call_with(
-            &imported(py, RULE_MODELS_MODULE, "RulesCacheConfig")?,
+            &imported(py, NATIVE_RECORDS_MODULE, "RulesCacheConfig")?,
             &[("enabled", false.into_pyobject(py)?.to_owned().into_any())],
         )?;
         config = imported(py, "dataclasses", "replace")?

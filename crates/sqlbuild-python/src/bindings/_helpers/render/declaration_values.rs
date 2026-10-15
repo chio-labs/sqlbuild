@@ -9,13 +9,15 @@ use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const SCOPE_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
 const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
-const SCOPE_ERRORS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
+const SCOPE_ERRORS_MODULE: &str = "sqlbuild._native";
 const BUILTINS_MODULE: &str = "builtins";
 const NO_DECLARATION_KIND: u8 = 255;
 /// Declaration kinds by their native code: enum 0, constant 1, macro 2.
@@ -138,7 +140,7 @@ pub(crate) fn declaration_scope_resolver<'py>(
         lookup.clone()
     };
     let projection: Bound<'py, PyAny> = call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "DeclarationRuntimeProjection")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "DeclarationRuntimeProjection")?,
         &[(
             "declarations",
             imported(py, TYPES_MODULE, "MappingProxyType")?.call1((&declarations,))?,
@@ -147,7 +149,7 @@ pub(crate) fn declaration_scope_resolver<'py>(
     let native_contexts: Bound<'py, PyAny> =
         native_declaration_contexts(&lookup, declarations.as_any())?;
     call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "DeclarationScopeResolver")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "DeclarationScopeResolver")?,
         &[
             ("project_dir", discovered.getattr("project_dir")?),
             ("lookup", lookup),

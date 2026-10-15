@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    RulesRunResult,
     build_project_graph,
     discover_project_inputs,
     load_rules_config,
@@ -14,7 +15,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.rule_engine.models import RulesRunResult
 from tests.unit.src.sqlbuild.rule_engine.main.run_rules._test_types import (
     TypeProofRuleSkipTestCase,
 )

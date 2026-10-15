@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import map_expanded_offset
-from sqlbuild.compiler.compile.models import ExpansionSpan, MappedOffset
+from sqlbuild._native import ExpansionSpan, MappedOffset, map_expanded_offset
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     MapOutputOffsetTestCase,
     MapThroughPassesTestCase,

@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
 
-from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction, DiscoveredSourceFile
-from sqlbuild.integrations.dlt.main.loaders import build_dlt_loader_functions
-from sqlbuild.integrations.dlt.models import DltResourceConfig, DltSourceConfig
-from sqlbuild.spec.contracts.models import IntegrationLoaderConfig, SourceEntry
+from sqlbuild._native import discover_project_inputs
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from tests.unit.src.sqlbuild.integrations.dlt._test_types import DltLoaderDiscoveryTestCase
 
 
@@ -18,44 +18,45 @@ from tests.unit.src.sqlbuild.integrations.dlt._test_types import DltLoaderDiscov
     "test_case",
     [
         DltLoaderDiscoveryTestCase(
-            description="builds deterministic synthetic loader",
-            expected_loader_names=("raw_orders",),
-            expected_relative_path="sources/raw.yml",
-            expected_function_name="raw_orders",
+            description="builds deterministic synthetic loaders per resource",
+            repo_files={
+                "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
+                "sources/raw.yml": (
+                    "dlt_sources:\n"
+                    "  - type: sql_database\n"
+                    "    config:\n"
+                    '      credentials: "duckdb:///source.duckdb"\n'
+                    "    resources:\n"
+                    "      - name: raw_orders\n"
+                    "        table: orders\n"
+                    "      - name: raw_customers\n"
+                    "        table: customers\n"
+                ),
+            },
+            expected_loader_names=("raw_orders", "raw_customers"),
+            expected_relative_paths=("sources/raw.yml", "sources/raw.yml"),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_dlt_source_when_building_loader_functions_then_name_is_deterministic(
+def test_given_dlt_source_when_discovering_inputs_then_loader_functions_are_deterministic(
     test_case: DltLoaderDiscoveryTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
-    source_file: DiscoveredSourceFile = DiscoveredSourceFile(
-        file_path=Path("sources/raw.yml"),
-        relative_path=Path("sources/raw.yml"),
-        contents="",
-        source_entries=(
-            SourceEntry(
-                name="raw_orders",
-                loader="raw_orders",
-                integration_loader=IntegrationLoaderConfig(
-                    kind="dlt",
-                    config=DltSourceConfig(
-                        source_type="sql_database",
-                        config={"credentials": "duckdb:///source.duckdb"},
-                        destination={},
-                        resource=DltResourceConfig(
-                            name="raw_orders", dlt_name="orders", raw_config={}
-                        ),
-                        group_index=0,
-                    ),
-                ),
-            ),
-        ),
+    write_repo_files(tmp_path, test_case.repo_files)
+
+    inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+
+    assert tuple(loader.name for loader in inputs.loader_functions) == (
+        test_case.expected_loader_names
     )
-
-    loaders: tuple[DiscoveredLoaderFunction, ...] = build_dlt_loader_functions((source_file,))
-
-    assert tuple(loader.name for loader in loaders) == test_case.expected_loader_names
-    assert loaders[0].relative_path == Path(test_case.expected_relative_path)
-    loader_function: Any = cast(Any, loaders[0].function)
-    assert loader_function.__name__ == test_case.expected_function_name
+    assert tuple(str(loader.relative_path) for loader in inputs.loader_functions) == (
+        test_case.expected_relative_paths
+    )
+    assert tuple(cast(Any, loader.function).__name__ for loader in inputs.loader_functions) == (
+        test_case.expected_loader_names
+    )
+    assert {loader.connection_mode for loader in inputs.loader_functions} == {
+        LoaderConnectionMode.EXTERNAL
+    }

@@ -23,6 +23,8 @@ use crate::bindings::_helpers::rules::custom_evaluation::{
 };
 use crate::bindings::_helpers::rules::custom_hosts::HostCancel;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const RULES_MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
 const RULES_CONSTANTS_MODULE: &str = "sqlbuild.rule_engine.constants";
@@ -369,7 +371,7 @@ pub(crate) fn prepare_sql_rules<'py>(
         Some(&work),
     )?;
     call_with(
-        &imported(py, RULES_MODELS_MODULE, "PreparedSqlLint")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "PreparedSqlLint")?,
         &[
             ("codes", codes),
             ("project_dir", project_dir),
@@ -417,7 +419,7 @@ fn prepare_early_sql_lint<'py>(
             ],
         )?;
         call_with(
-            &imported(py, RULES_MODELS_MODULE, "PreparedSqlLintResult")?,
+            &imported(py, NATIVE_RECORDS_MODULE, "PreparedSqlLintResult")?,
             &[("result", result), ("context", context)],
         )
     })

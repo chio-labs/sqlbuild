@@ -17,7 +17,7 @@ use crate::bindings::_helpers::dbt_interop::runtime_config::validate_dbt_executi
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const PLAN_MODULE: &str = "sqlbuild._native";
 const EXECUTE_MODULE: &str = "sqlbuild._native";
-const PRESENTATION_MODELS: &str = "sqlbuild.presentation.models";
+const PRESENTATION_MODELS: &str = "sqlbuild._native";
 const PLAN_COMMAND: &str = "plan";
 const DEBUG_COMMAND: &str = "debug";
 const BOUNDED_SECTION_ENTRIES: i64 = 10;

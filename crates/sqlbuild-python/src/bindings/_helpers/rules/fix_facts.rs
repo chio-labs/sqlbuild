@@ -6,7 +6,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
-const LINT_MODELS: &str = "sqlbuild.lint.models";
+const LINT_MODELS: &str = "sqlbuild._native";
 
 /// Index a compilation by model key and diagnostic owner without changing its fact views.
 #[pyfunction]

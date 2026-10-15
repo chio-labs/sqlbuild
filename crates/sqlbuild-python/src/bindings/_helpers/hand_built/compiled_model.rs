@@ -1,5 +1,6 @@
 //! A `CompiledModel` for a model input built outside the native compile-input stage.
 
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyList, PyString, PyTuple};
 
@@ -272,7 +273,7 @@ fn located<'py>(
     let location_class: Object<'py> = py
         .import(CONTRACT_MODELS_MODULE)?
         .getattr("SourceLocation")?;
-    let phase: Object<'py> = types.getattr("DiagnosticPhase")?.getattr("COMPILE")?;
+    let phase: Object<'py> = shape_class(types.as_any(), "DiagnosticPhase")?.getattr("COMPILE")?;
     let model: Object<'py> = types.getattr("CompiledResourceType")?.getattr("MODEL")?;
     let name: Object<'py> = model_file.getattr("file_path")?.getattr("stem")?;
     let mut built: Vec<Object<'py>> = Vec::new();

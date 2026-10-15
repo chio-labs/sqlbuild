@@ -11,6 +11,7 @@ import pytest
 
 import sqlbuild._native as native_module
 from sqlbuild._native import (
+    ColumnLineageMode,
     ProjectColumnLineage,
     build_project_graph,
     compiled_model_record,
@@ -19,7 +20,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.lineage.types import ColumnLineageMode
 
 _PROJECT_TOML: str = (
     'name = "orders_lineage"\nadapter = "duckdb"\n\n[connection]\ndatabase = "orders.duckdb"\n'

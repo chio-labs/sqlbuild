@@ -5,7 +5,10 @@ from typing import Any
 from unittest.mock import Mock
 
 from sqlbuild._native import (
+    CompileModelConfig,
+    PlannerRelationsContext,
     PlannerRuntime,
+    PlannerScope,
     PlannerWarehouseState,
     WarehouseSnapshot,
 )
@@ -16,16 +19,11 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
-    CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
-)
-from sqlbuild.compiler.planner.models import (
-    PlannerRelationsContext,
-    PlannerScope,
 )
 from sqlbuild.spec.contracts.models import (
     LocalConfig,

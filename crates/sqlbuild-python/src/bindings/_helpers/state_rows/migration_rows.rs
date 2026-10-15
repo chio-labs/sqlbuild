@@ -1,5 +1,6 @@
 //! Create, read and append SQL of migration state tables, and stored rows decoded to events.
 
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class_at;
 use pyo3::exceptions::{PyKeyError, PyValueError};
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
@@ -258,7 +259,7 @@ fn enumerated<'py>(
     class: &str,
     value: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, MIGRATION_TYPES, class)?.call1((value,))
+    shape_class_at(py, MIGRATION_TYPES, class)?.call1((value,))
 }
 
 fn known_member<'py>(

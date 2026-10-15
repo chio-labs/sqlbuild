@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery.models import DiscoveryFileFault
+from sqlbuild._native import DiscoveryFileFault
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     FailureTextTestCase,
     TolerantFailureTextTestCase,

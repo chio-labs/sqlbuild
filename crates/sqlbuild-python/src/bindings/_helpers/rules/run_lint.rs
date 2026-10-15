@@ -21,7 +21,7 @@ use crate::bindings::_helpers::rules::lint_stop::check_stop;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const EXPANSION_MODULE: &str = "sqlbuild._native";
-const LINT_MODELS_MODULE: &str = "sqlbuild.lint.models";
+const LINT_MODELS_MODULE: &str = "sqlbuild._native";
 
 fn resolved(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())

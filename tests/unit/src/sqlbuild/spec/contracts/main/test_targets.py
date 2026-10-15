@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import resolve_target_config
-from sqlbuild.spec.contracts.exceptions import SpecConfigError
+from sqlbuild._native import SpecConfigError, resolve_target_config
 from sqlbuild.spec.contracts.models import (
     AuthoredTimeTravelRetention,
     ClonePolicy,

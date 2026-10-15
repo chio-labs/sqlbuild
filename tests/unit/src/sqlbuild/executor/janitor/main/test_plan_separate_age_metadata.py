@@ -6,11 +6,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from sqlbuild.executor.janitor.main.plan import build_janitor_plan
+from sqlbuild._native import build_janitor_plan
 from sqlbuild.executor.janitor.models import (
-    JanitorDirectModeSettings,
     JanitorPlan,
-    JanitorRelationScope,
 )
 from tests.unit.src.sqlbuild.executor.janitor.main._test_types import (
     JanitorAgeReadScopeTestCase,
@@ -63,7 +61,7 @@ def test_given_adapter_reading_ages_separately_when_planning_janitor_then_uses_t
         connection=object(),
         retention_days=7,
         delete_tracked_only=False,
-        direct_settings=JanitorDirectModeSettings(enabled=True),
+        direct_mode=True,
     )
 
     assert (
@@ -152,10 +150,8 @@ def test_given_filtered_relations_when_planning_janitor_then_ages_are_read_for_c
         retention_days=test_case.retention_days,
         delete_tracked_only=test_case.delete_tracked_only,
         exclude_patterns=test_case.exclude_patterns,
-        relation_scope=JanitorRelationScope(
-            protected_relation_keys=test_case.protected_relation_keys
-        ),
-        direct_settings=JanitorDirectModeSettings(enabled=test_case.direct_mode),
+        protected_relation_keys=test_case.protected_relation_keys,
+        direct_mode=test_case.direct_mode,
     )
 
     assert tuple(adapter.age_metadata_requests) == test_case.expected_age_requests

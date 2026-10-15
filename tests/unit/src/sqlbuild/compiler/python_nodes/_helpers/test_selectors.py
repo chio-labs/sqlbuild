@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import parse_project_selector, resolve_python_node_selection
-from sqlbuild.compiler.planner.models import ParsedSelector
-from sqlbuild.compiler.planner.types import SelectorKind
+from sqlbuild._native import (
+    ParsedSelector,
+    SelectorKind,
+    parse_project_selector,
+    resolve_python_node_selection,
+)
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from tests.unit.src.sqlbuild.compiler.python_nodes._helpers._test_types import (
     PythonNodeParseSelectorTestCase,

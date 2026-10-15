@@ -1,6 +1,7 @@
 //! Materialize native plan rows as the existing executor-facing dataclasses.
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class_at;
 use crate::bindings::_helpers::sql_test_glue::constants::PLAN_MODELS;
 use crate::bindings::_helpers::sql_test_glue::plan_values::tuple;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
@@ -35,7 +36,7 @@ fn step<'py>(row: &Bound<'py, PyAny>, chain: bool) -> PyResult<Bound<'py, PyAny>
             },
         )?;
     }
-    imported(
+    shape_class_at(
         py,
         PLAN_MODELS,
         if chain {

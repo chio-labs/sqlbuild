@@ -24,8 +24,9 @@ use crate::bindings::_helpers::discovery::raised::{failure_error, read_error, st
 use crate::bindings::_helpers::discovery::snapshot::{in_snapshot, project_root, project_tree};
 use crate::bindings::models::NativeProjectTree;
 
-const MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
-const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild.compiler.discovery.exceptions";
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
+const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
 const PARSE_ERROR_CLASS: &str = "ModelSqlParseError";
 const AST_MODULE: &str = "ast";
 const DESCRIPTION_KEY: &str = "description";
@@ -249,7 +250,7 @@ fn function_record<'py>(
     };
     let (header_values, entry_point, body_python) = parsed_function(&source)?;
     call_with(
-        &imported(py, MODELS_MODULE, "DiscoveredPythonFunctionFile")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "DiscoveredPythonFunctionFile")?,
         &[
             ("file_path", source.file_path.clone()),
             ("relative_path", source.relative_path.clone()),

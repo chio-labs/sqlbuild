@@ -6,8 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import discover_project_inputs
-from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
+from sqlbuild._native import ProjectConfigError, discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.contracts.models import TargetWarehousesConfig
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (

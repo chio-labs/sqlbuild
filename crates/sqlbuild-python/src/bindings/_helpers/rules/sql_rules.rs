@@ -15,9 +15,11 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::rules::constants::SAFE_RULE_FIX_CODES;
 use crate::bindings::_helpers::rules::early_sql_lint::{sql_lint_config, sql_rule_cache_path};
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const RULES_MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
-const LINT_EXCEPTIONS_MODULE: &str = "sqlbuild.lint.exceptions";
+const LINT_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const JSON_MODULE: &str = "json";
 const BUILTINS_MODULE: &str = "builtins";
@@ -110,7 +112,7 @@ fn run_planned_sql_rules<'py>(options: Option<&Bound<'py, PyDict>>) -> PyResult<
         evaluated_sql_rules(&run, (&lint_key, identities), project_files)?;
     let sql_ms: i64 = (started.elapsed().as_secs_f64() * 1000.0).round_ties_even() as i64;
     call_with(
-        &imported(py, RULES_MODELS_MODULE, "SqlRulesEvaluation")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "SqlRulesEvaluation")?,
         &[
             ("findings", findings),
             ("cache_hits", hits.into_bound_py_any(py)?),

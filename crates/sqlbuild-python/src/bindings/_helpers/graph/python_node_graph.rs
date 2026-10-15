@@ -1,5 +1,6 @@
 //! The executable Python-node graph built from discovered project inputs.
 
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class_at;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -8,8 +9,11 @@ use sqlbuild_analysis::python_selection::models::{InventoryIndexes, InventoryNod
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::discovery::imported_modules::provider_usages;
 use crate::bindings::_helpers::graph::python_selection::resolve_python_sql_run_selection;
 use crate::bindings::_helpers::graph::views::compiled_graph_keys;
+
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const USER_INVENTORY_MODULE: &str = "sqlbuild.compiler.python_nodes._helpers.user_inventory";
 const NODE_MODELS_MODULE: &str = "sqlbuild.compiler.python_nodes.models";
@@ -30,7 +34,7 @@ struct Vocabulary<'py> {
     node: Bound<'py, PyAny>,
     kinds: Bound<'py, PyAny>,
     sql_ref: Bound<'py, PyAny>,
-    user_facts: Bound<'py, PyAny>,
+    identity: Bound<'py, PyAny>,
     providers: Bound<'py, PyDict>,
 }
 
@@ -58,7 +62,7 @@ fn kind_parts<'py>(
             .iter()
             .map(|field| Ok((*field, get(field)?)))
             .collect::<PyResult<_>>()?;
-        call_with(&imported(py, NODE_MODELS_MODULE, class)?, &pairs)
+        call_with(&shape_class_at(py, NODE_MODELS_MODULE, class)?, &pairs)
     };
     Ok(match kind {
         "LOADER" => {
@@ -104,7 +108,7 @@ fn kind_parts<'py>(
     })
 }
 
-/// One `DiscoveredPythonNode` with its identity and provider usages read by the user shim.
+/// One `DiscoveredPythonNode` with its identity and provider usages read by the user shims.
 fn python_node<'py>(
     vocabulary: &Vocabulary<'py>,
     (kind, documented): (&str, bool),
@@ -119,18 +123,17 @@ fn python_node<'py>(
         }
     }
     let kind_member: Bound<'py, PyAny> = vocabulary.kinds.getattr(kind)?;
-    let (usages, identity): (Bound<'py, PyAny>, Bound<'py, PyAny>) = call_with(
-        &vocabulary.user_facts,
+    let usages: Bound<'py, PyAny> = provider_usages(&get("function")?, &vocabulary.providers)?;
+    let identity: Bound<'py, PyAny> = call_with(
+        &vocabulary.identity,
         &[
             ("kind", kind_member.getattr("value")?),
             ("name", get("name")?),
             ("function", get("function")?),
             ("file_path", get("file_path")?),
-            ("provider_by_name", vocabulary.providers.clone().into_any()),
             ("decorator_config", config.into_any()),
         ],
-    )?
-    .extract()?;
+    )?;
     let depends_on: Bound<'py, PyAny> = get("depends_on")?;
     let mut sql_deps: Vec<Bound<'py, PyAny>> = Vec::new();
     for dependency in depends_on.try_iter()? {
@@ -224,7 +227,7 @@ pub(crate) fn python_node_graph<'py>(
         node: imported(py, NODE_MODELS_MODULE, "DiscoveredPythonNode")?,
         kinds: imported(py, NODE_TYPES_MODULE, "PythonNodeKind")?,
         sql_ref: imported(py, SQL_REF_MODULE, "SqlResourceRef")?,
-        user_facts: imported(py, USER_INVENTORY_MODULE, "python_node_user_facts")?,
+        identity: imported(py, USER_INVENTORY_MODULE, "python_node_identity")?,
         providers,
     };
     let mut nodes: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -256,7 +259,7 @@ fn graph_record<'py>(
         paths,
     } = indexes;
     let edge_class: Bound<'py, PyAny> =
-        imported(py, NODE_MODELS_MODULE, "PythonNodeDependencyEdge")?;
+        imported(py, NATIVE_RECORDS_MODULE, "PythonNodeDependencyEdge")?;
     let dependency_edges: Vec<Bound<'py, PyAny>> = edges
         .into_iter()
         .map(|(upstream_name, downstream_name)| {
@@ -327,7 +330,7 @@ pub(crate) fn run_selection_from_inputs<'py>(
     let (sql_keys, python_node_names) =
         resolve_python_sql_run_selection(project_graph, &python_graph, select, exclude)?;
     call_with(
-        &imported(py, NODE_MODELS_MODULE, "PythonSqlRunSelection")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "PythonSqlRunSelection")?,
         &[
             ("sql_keys", compiled_graph_keys(py, sql_keys)?.into_any()),
             (

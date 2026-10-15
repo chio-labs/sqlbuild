@@ -14,10 +14,11 @@ use sqlbuild_core::cli_text::models::CliStyle;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_reported_command_invocation;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
 const STATIC_COMMAND_MODULE: &str = "sqlbuild._native";
-const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const AUDIT_PLAN_MODULE: &str = "sqlbuild._native";
 const COST_CONTEXT_MODULE: &str = "sqlbuild._native";
 const EXECUTOR_RUN_MODULE: &str = "sqlbuild.executor.pipeline.main.run";
@@ -119,7 +120,7 @@ fn compile_audits<'py>(
         ],
     )?;
     let options: Bound<'py, PyAny> = call_with(
-        &imported(py, PIPELINE_MODELS, "CompilePipelineOptions")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "CompilePipelineOptions")?,
         &[
             ("selected_target", request.getattr("selected_target")?),
             ("no_sql_validation", request.getattr("no_sql_validation")?),

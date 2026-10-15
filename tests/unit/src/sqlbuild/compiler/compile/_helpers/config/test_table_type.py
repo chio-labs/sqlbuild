@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import CompileModelConfig
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompileModelConfig
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     MaterializationDefaultsConfig,

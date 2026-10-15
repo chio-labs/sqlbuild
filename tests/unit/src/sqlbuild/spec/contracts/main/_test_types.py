@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from sqlbuild._native import CollectionRendering
 from sqlbuild.spec.contracts.models import (
     AuthoredTimeTravelRetention,
     ExecutionLimitsConfig,
@@ -12,7 +13,6 @@ from sqlbuild.spec.contracts.models import (
     TargetWarehousesConfig,
 )
 from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy
-from sqlbuild.sql_values.types import CollectionRendering
 
 
 @dataclass(frozen=True)

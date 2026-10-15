@@ -5,19 +5,6 @@ from __future__ import annotations
 from enum import StrEnum
 
 
-class SelectorKind(StrEnum):
-    NAME = "name"
-    SEED = "seed"
-    SOURCE = "source"
-    TASK = "task"
-    ASSET = "asset"
-    LOADER = "loader"
-    CHECK = "check"
-    TAG = "tag"
-    PATH = "path"
-    TEST = "test"
-
-
 class BackfillAction(StrEnum):
     FULL = "full"
     BOUNDED = "bounded"

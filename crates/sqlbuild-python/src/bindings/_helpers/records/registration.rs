@@ -5,9 +5,9 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 
 use crate::bindings::_helpers::records::constants::{
-    DATACLASS_FIELD_KIND, DATACLASS_FIELDS_ATTRIBUTE, DATACLASSES_MODULE, ENUM_MODULE, ENUMS,
-    ERROR_SPEC_ATTRIBUTE, ERRORS, EXCEPTION_PARENT, NATIVE_MODULE, RECORD_SPEC_ATTRIBUTE, STR_ENUM,
-    VALUE_ERROR_PARENT,
+    BUILTIN_PARENT_PREFIX, BUILTINS_MODULE, DATACLASS_FIELD_KIND, DATACLASS_FIELDS_ATTRIBUTE,
+    DATACLASSES_MODULE, ENUM_MODULE, ENUMS, ERROR_SPEC_ATTRIBUTE, ERRORS, EXCEPTION_PARENT,
+    NATIVE_MODULE, RECORD_SPEC_ATTRIBUTE, STR_ENUM, VALUE_ERROR_PARENT,
 };
 use crate::bindings::_helpers::records::error_classes::{
     BoundErrorInitializer, ErrorInitializer, class_value,
@@ -29,11 +29,14 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     }
     module.add_class::<ErrorInitializer>()?;
     module.add_class::<BoundErrorInitializer>()?;
-    for (index, spec) in ERRORS.iter().enumerate() {
+    for (index, spec) in ERRORS.iter().flat_map(|group| group.iter()).enumerate() {
         let parent: Bound<'_, PyAny> = match spec.parent {
             EXCEPTION_PARENT => py.get_type::<PyException>().into_any(),
             VALUE_ERROR_PARENT => py.get_type::<PyValueError>().into_any(),
-            parent => module.getattr(parent)?,
+            parent => match parent.strip_prefix(BUILTIN_PARENT_PREFIX) {
+                Some(builtin) => py.import(BUILTINS_MODULE)?.getattr(builtin)?,
+                None => module.getattr(parent)?,
+            },
         };
         module.add(spec.name, error_class(&parent, (index, spec))?)?;
     }

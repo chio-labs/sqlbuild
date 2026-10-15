@@ -8,11 +8,8 @@ import re
 from typing import Any
 
 import sqlbuild._native as _native
-from sqlbuild._native import find_macro_call_names, scan_sql_reference_calls
+from sqlbuild._native import SqlReferenceScan, find_macro_call_names, scan_sql_reference_calls
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import (
-    SqlReferenceScan,
-)
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 

@@ -8,6 +8,8 @@ use crate::bindings::_helpers::compile_driver::assembly_project::ADAPTER_NAME_MO
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::render::declaration_values::declaration_scope_resolver;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const NATIVE_MODULE: &str = "sqlbuild._native";
@@ -37,7 +39,7 @@ pub(crate) fn test_model_query_overrides<'py>(
     let payload: Bound<'py, PyAny> = test_input.getattr("payload")?;
     if !payload.is_instance(&imported(
         py,
-        COMPILE_MODELS_MODULE,
+        NATIVE_RECORDS_MODULE,
         "CompileModelSqlTestInputPayload",
     )?)? {
         return Ok(overrides);

@@ -38,8 +38,9 @@ use crate::bindings::_helpers::rules::sql_test_objects::{scenario_fact, sql_test
 use crate::bindings::_helpers::type_system::equality::types_equal;
 use crate::bindings::types::CompilerDetach;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const NATIVE_RULES_CACHE_FILE: &str = "native.json";
 const NATIVE_RULES_MEMO_FILE: &str = "native-response.json";
@@ -242,7 +243,7 @@ fn evaluated<'py>(
         .map(|fault| classes.finding_of_fault(fault, false))
         .collect::<PyResult<_>>()?;
     call_with(
-        &imported(py, MODELS_MODULE, "NativeRulesEvaluation")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "NativeRulesEvaluation")?,
         &[
             ("findings", PyTuple::new(py, findings)?.into_any()),
             (

@@ -6,8 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, cast
 
 import sqlbuild._native as _native
-from sqlbuild._native import BindingCatalog
-from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic, SqlBindingResult
+from sqlbuild._native import BindingCatalog, SqlBindingDiagnostic, SqlBindingResult
 
 if TYPE_CHECKING:
     from sqlbuild._native import (

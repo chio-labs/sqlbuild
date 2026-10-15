@@ -12,11 +12,12 @@ use crate::bindings::_helpers::command_runtime::invocation::resolve_adapter_conn
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
-const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const CONTRACT_MODELS: &str = "sqlbuild.runtime.contracts.models";
-const PRESENTATION_MODELS: &str = "sqlbuild.presentation.models";
+const PRESENTATION_MODELS: &str = "sqlbuild._native";
 const COMMAND_NAME: &str = "plan";
 const DEFAULT_SECTION_ENTRIES: i64 = 50;
 const CONNECTION_TIMING: [&str; 2] = ["connection_count", "elapsed_seconds"];
@@ -212,7 +213,7 @@ fn compile_pipeline<'py>(
     )?;
     options.set_item("record_migration_fingerprints", false)?;
     let pipeline_options: Bound<'py, PyAny> =
-        imported(py, PIPELINE_MODELS, "CompilePipelineOptions")?.call((), Some(&options))?;
+        imported(py, NATIVE_RECORDS_MODULE, "CompilePipelineOptions")?.call((), Some(&options))?;
     call_with(
         &imported(py, NATIVE_MODULE, "run_compile_pipeline")?,
         &[

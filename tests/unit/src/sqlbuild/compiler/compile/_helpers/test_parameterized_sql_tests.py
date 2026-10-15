@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from decimal import Decimal
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -17,7 +18,6 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
-    CompileInputsView,
     TypedSqlValueRenderer,
 )
 from sqlbuild.sql_values.models import SqlLogicalType, SqlValue
@@ -30,6 +30,9 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import compile_project_inputs
 from tests.unit.src.sqlbuild.compiler.compile._test_helpers import base_repo_files
+
+if TYPE_CHECKING:
+    from sqlbuild._native import CompileInputsView
 
 
 @pytest.mark.parametrize(

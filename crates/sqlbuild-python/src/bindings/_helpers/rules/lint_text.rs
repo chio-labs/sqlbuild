@@ -26,8 +26,8 @@ use crate::bindings::_helpers::boundary::panics::{compiler_guard, value_error};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::types::CompilerDetach;
 
-const LINT_MODELS_MODULE: &str = "sqlbuild.lint.models";
-const LINT_TYPES_MODULE: &str = "sqlbuild.lint.types";
+const LINT_MODELS_MODULE: &str = "sqlbuild._native";
+const LINT_TYPES_MODULE: &str = "sqlbuild._native";
 const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
 const NATIVE_ENGINE: &str = "native";
 const FORMAT_UNSAFE_CODE: &str = "format-unsafe";
