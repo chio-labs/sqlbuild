@@ -8,9 +8,14 @@ from sqlbuild._native import (
     build_compiled_function_fingerprint_sql,
     build_downstream_deps,
     build_execution_upstream_deps,
+    build_function_locations,
+    build_model_locations,
+    build_seed_locations,
     gather_source_columns,
     get_materialization_type,
+    resolve_function_sql,
     resolve_graph_selection,
+    resolve_model_sql,
     topologically_order_keys,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -23,15 +28,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledSourceView,
-)
-from sqlbuild.compiler.planner._helpers.resolve.refs import (
-    build_function_locations,
-    build_model_locations,
-    build_seed_locations,
-)
-from sqlbuild.compiler.planner._helpers.resolve.resolve import (
-    resolve_function_sql,
-    resolve_model_sql,
 )
 from sqlbuild.compiler.planner.models import (
     BackfillResult,

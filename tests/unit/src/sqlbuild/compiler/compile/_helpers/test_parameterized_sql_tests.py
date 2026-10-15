@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import assemble_project
+from sqlbuild._native import assemble_project, scope_overlaps
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
@@ -20,7 +20,6 @@ from sqlbuild.compiler.compile.types import (
     CompileInputsView,
     TypedSqlValueRenderer,
 )
-from sqlbuild.compiler.planner._helpers.output.plan_entry import scope_overlaps
 from sqlbuild.sql_values.models import SqlLogicalType, SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (

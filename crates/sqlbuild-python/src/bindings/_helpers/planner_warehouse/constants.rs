@@ -33,19 +33,12 @@ pub(crate) const LOG_DEBUG_EVENT: (&str, &str) = (
     "sqlbuild.diagnostics.main.log_debug_event",
     "log_debug_event",
 );
-pub(crate) const CURSOR_RESOLVE_MODULE: &str = "sqlbuild.compiler.planner._helpers.resolve.cursor";
-pub(crate) const CURSOR_POLICIES: (&str, &str) = (
-    "sqlbuild.compiler.planner._helpers.resolve.cursor_policies",
-    "resolve_start_cursor_config",
-);
-pub(crate) const MAXIMUM_START: (&str, &str) = (
-    "sqlbuild.compiler.planner._helpers.resolve.maximum_start",
-    "maximum_allowed_start",
-);
-pub(crate) const RENDER_SOURCE_READ: (&str, &str) = (
-    "sqlbuild.compiler.planner._helpers.resolve.sources",
-    "render_source_read_relation",
-);
+pub(crate) const CURSOR_RESOLVE_MODULE: &str = "sqlbuild._native";
+pub(crate) const CURSOR_POLICIES: (&str, &str) =
+    ("sqlbuild._native", "resolve_start_cursor_config");
+pub(crate) const MAXIMUM_START: (&str, &str) = ("sqlbuild._native", "maximum_allowed_start");
+pub(crate) const RENDER_SOURCE_READ: (&str, &str) =
+    ("sqlbuild._native", "render_source_read_relation");
 pub(crate) const YAML_ENTRY_LINE: (&str, &str) = (
     "sqlbuild.compiler.discovery.main._yaml_entry_line",
     "yaml_entry_line",

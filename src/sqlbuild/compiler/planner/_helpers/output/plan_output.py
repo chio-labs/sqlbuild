@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from sqlbuild._native import (
+    build_model_materializations,
     build_relation_fixture_context,
     build_selected_audit_entries,
     build_source_load_entries,
     extract_seed_columns,
     plan_sql_tests,
+    resolve_function_sql,
+    scope_overlaps,
     upstream_loader_dependency_names,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -27,11 +30,6 @@ from sqlbuild.compiler.discovery.models import (
     PythonHookEntry,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner._helpers.output.plan_entry import (
-    build_model_materializations,
-    scope_overlaps,
-)
-from sqlbuild.compiler.planner._helpers.resolve.resolve import resolve_function_sql
 from sqlbuild.compiler.planner.exceptions import (
     PlannerInputError,
 )

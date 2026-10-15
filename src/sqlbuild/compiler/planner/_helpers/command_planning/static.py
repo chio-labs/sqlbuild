@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlbuild._native import (
     build_compiled_function_fingerprint_sql,
+    build_planner_relations_context,
     build_seed_identity,
     build_selected_audit_entries,
     extract_seed_columns,
@@ -14,7 +15,6 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner._helpers.output.plan_entry import build_planner_relations_context
 from sqlbuild.compiler.planner._helpers.output.plan_output import (
     build_selected_test_entries,
     plan_function,

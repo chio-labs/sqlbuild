@@ -251,6 +251,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerChangeResults,
     PlannerEntryResults,
     PlannerIdentityContext,
+    PlannerModelEntryResults,
     PlannerOverrides,
     PlannerPolicies,
     PlannerRelationsContext,
@@ -4819,7 +4820,7 @@ def cursor_sentinel_to_token(*, sentinel: Bound) -> str: ...
 def cursor_sentinel_from_token(*, token: str) -> BoundSentinel | None: ...
 def cursor_compare(*, left: CursorScalar, right: CursorScalar) -> int: ...
 def type_cursor_overrides(
-    *, cursor_overrides: CursorOverrides | None, selected_models: Iterable[CompiledModelView]
+    *, cursor_overrides: CursorOverrides | None, selected_models: Iterable[CompiledModelView] = ()
 ) -> CursorOverrides | None: ...
 def maximum_allowed_start(
     *, discovered_value: str, cursor_grain: str | None, invocation_time: datetime, max_ahead: str
@@ -4836,6 +4837,90 @@ def apply_maximum_start_policy(
     policy: MaximumStartPolicyInputs,
     has_start_override: bool,
 ) -> CursorBounds: ...
+def resolve_future_cursor_config(
+    *, model: CompiledModelView, project_config: FutureCursorsConfig | None
+) -> FutureCursorsConfig | None: ...
+def resolve_start_cursor_config(
+    *, model: CompiledModelView, project_config: StartCursorsConfig | None
+) -> StartCursorsConfig | None: ...
+def future_cursor_cap_warning(bounds: CursorBounds | None, /) -> str | None: ...
+def maximum_start_cap_warning(bounds: CursorBounds | None, /) -> str | None: ...
+def compute_plan_cursor_bounds(
+    *,
+    model: CompiledModelView,
+    snapshot: WarehouseSnapshot,
+    backfill: BackfillResult,
+    full_refresh: bool,
+    start_cursor_override: str | None,
+    end_cursor_override: str | None,
+    runtime_owned_cursor_bounds: bool,
+    invocation_time: datetime | None = None,
+    future_cursor_config: FutureCursorsConfig | None = None,
+    start_cursor_config: StartCursorsConfig | None = None,
+    replaces_relation: bool = False,
+    cursor_input_relations: tuple[CursorInputRelation, ...] = (),
+) -> CursorBounds | None: ...
+def compute_microbatch_range(
+    *,
+    model: CompiledModelView,
+    snapshot: WarehouseSnapshot,
+    backfill: BackfillResult,
+    full_refresh: bool,
+    start_cursor_override: str | None,
+    end_cursor_override: str | None,
+    runtime_owned_cursor_bounds: bool,
+    invocation_time: datetime | None = None,
+    future_cursor_config: FutureCursorsConfig | None = None,
+    start_cursor_config: StartCursorsConfig | None = None,
+    replaces_relation: bool = False,
+    cursor_input_relations: tuple[CursorInputRelation, ...] = (),
+) -> CursorBounds | None: ...
+def resolve_empty_cursor_inputs(
+    *,
+    model: CompiledModelView,
+    snapshot: WarehouseSnapshot,
+    full_refresh: bool,
+    runtime_owned_cursor_bounds: bool,
+    start_cursor_override: str | None,
+    end_cursor_override: str | None,
+) -> tuple[tuple[str, ...], bool]: ...
+def resolve_cursor_overrides(
+    *,
+    model: CompiledModelView,
+    cursor_overrides: CursorOverrides | None,
+    start_cursor_override: str | None,
+    end_cursor_override: str | None,
+) -> tuple[str | None, str | None]: ...
+def build_planner_relations_context(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    connection: Any,
+    scope: PlannerScope,
+    deferral: DeferralInputs | None = None,
+    project_config: ProjectConfig | None = None,
+    local_config: LocalConfig | None = None,
+    known_source_columns: dict[str, tuple[ColumnInfo, ...]] | None = None,
+    relation_keys: frozenset[CompiledObjectKey] | None = None,
+) -> PlannerRelationsContext: ...
+def build_plan_entries(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    scope: PlannerScope,
+    snapshot: WarehouseSnapshot,
+    relations: PlannerRelationsContext,
+    resolved_actions: PlannerResolvedActions,
+    cursor_overrides: CursorOverrides | None,
+    full_refresh: bool,
+    build_inputs: PlanEntryBuildInputs | None = None,
+) -> PlannerModelEntryResults: ...
+def build_model_materializations(
+    model_entries: tuple[ModelPlanEntry, ...], /
+) -> dict[str, str]: ...
+def scope_overlaps(
+    *, scope_deps: tuple[CompiledObjectKey, ...], selected_keys: frozenset[CompiledObjectKey]
+) -> bool: ...
 def resolve_future_cursor_safety(
     *,
     bounds: CursorBounds,

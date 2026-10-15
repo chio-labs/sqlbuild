@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
+from sqlbuild._native import future_cursor_cap_warning, maximum_start_cap_warning
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
@@ -17,8 +18,6 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
-from sqlbuild.compiler.planner.main.execution.future_cursor_warning import future_cursor_cap_warning
-from sqlbuild.compiler.planner.main.execution.maximum_start_warning import maximum_start_cap_warning
 from sqlbuild.compiler.planner.models import CursorBounds, ModelPlanEntry
 from sqlbuild.compiler.planner.types import IncrementalStrategy, OnSchemaChange
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context

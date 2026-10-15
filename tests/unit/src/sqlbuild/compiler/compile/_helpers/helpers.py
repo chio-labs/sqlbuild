@@ -16,6 +16,7 @@ from sqlbuild._native import (
     expand_sql_macros,
     infer_native_query_columns,
     project_lineage_views,
+    resolve_ref_references,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
@@ -63,7 +64,6 @@ from sqlbuild.compiler.lineage.types import (
     ColumnTransformKind,
     InferredNullability,
 )
-from sqlbuild.compiler.planner._helpers.resolve.refs import resolve_ref_references
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,

@@ -20,6 +20,7 @@ from sqlbuild._native import (
     reconcile_execution_changes,
     resolve_model_actions,
     resolve_planner_scopes,
+    type_cursor_overrides,
     with_plan_metadata,
     with_plan_warnings,
     with_storage_policies,
@@ -30,9 +31,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
-)
-from sqlbuild.compiler.planner._helpers.resolve.cursor import (
-    type_cursor_overrides,
 )
 from sqlbuild.compiler.planner.classes.background_sql_test_planning import (
     BackgroundSqlTestPlanning,

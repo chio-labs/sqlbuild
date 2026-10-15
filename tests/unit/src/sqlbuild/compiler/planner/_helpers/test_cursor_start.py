@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import compute_cursor_bounds
 from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
-from sqlbuild.compiler.planner._helpers.resolve.cursor import compute_cursor_bounds
 from sqlbuild.compiler.planner.models import CursorBounds, ModelCursorSnapshot
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     CursorStartBoundsTestCase,
