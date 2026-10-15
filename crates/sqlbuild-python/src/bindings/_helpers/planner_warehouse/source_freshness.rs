@@ -2,17 +2,18 @@
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::freshness::planning::{
+    build_direct_source_freshness_planning_result, build_direct_source_freshness_propagation_result,
+};
 use crate::bindings::_helpers::planner_phases::objects::{
     model_key_names, planner_model, replace, text, tuple,
 };
-use crate::bindings::_helpers::planner_warehouse::constants::{
-    FRESHNESS_PLANNING, FRESHNESS_PROPAGATION, RUN_SCOPE,
-};
+use crate::bindings::_helpers::planner_warehouse::constants::RUN_SCOPE;
 use crate::bindings::_helpers::planner_warehouse::snapshot::{destination_nodes, lower};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
-use pyo3::pyfunction;
 use pyo3::types::PyDict as KeywordDict;
 use pyo3::types::{PyBool, PyDict, PyDictMethods};
+use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::planner_warehouse::main::freshness_unknown_message::freshness_unknown_message;
 use std::collections::BTreeSet;
 
@@ -151,7 +152,7 @@ pub(crate) fn build_planner_source_freshness_result<'py>(
         &imported(py, RUN_SCOPE.0, RUN_SCOPE.1)?.call1((project.getattr("run_id")?,))?,
         |_| {
             call_with(
-                &imported(py, FRESHNESS_PLANNING.0, FRESHNESS_PLANNING.1)?,
+                wrap_pyfunction!(build_direct_source_freshness_planning_result, py)?.as_any(),
                 &[
                     ("adapter", adapter.clone()),
                     ("connection", connection.clone()),
@@ -177,7 +178,7 @@ pub(crate) fn build_planner_source_freshness_result<'py>(
         },
     )?;
     let propagation = call_with(
-        &imported(py, FRESHNESS_PROPAGATION.0, FRESHNESS_PROPAGATION.1)?,
+        wrap_pyfunction!(build_direct_source_freshness_propagation_result, py)?.as_any(),
         &[
             ("source_freshness", result.clone()),
             ("scope", scope.clone()),

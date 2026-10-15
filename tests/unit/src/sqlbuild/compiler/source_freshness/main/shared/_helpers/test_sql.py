@@ -4,13 +4,12 @@ from collections.abc import Callable
 
 import pytest
 
+from sqlbuild._native import (
+    build_source_freshness_create_table_sql,
+    build_source_freshness_read_latest_sql,
+)
 from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.source_freshness._helpers.sql import (
-    build_create_table_sql,
-    build_qualified_table_name,
-    build_read_latest_sql,
-)
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from tests.unit.src.sqlbuild.compiler.source_freshness.main.shared._helpers._test_types import (
     BuildSourceFreshnessSqlTestCase,
@@ -35,7 +34,7 @@ RENDER_FRAMEWORK_TYPE: Callable[[FrameworkType], str] = DuckDbAdapter().render_f
 def test_given_schema_when_building_qualified_name_then_returns_expected(
     test_case: BuildSourceFreshnessSqlTestCase,
 ) -> None:
-    result: str = build_qualified_table_name(
+    result: str = build_source_freshness_read_latest_sql(
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
@@ -74,7 +73,7 @@ def test_given_schema_when_building_qualified_name_then_returns_expected(
 def test_given_schema_when_building_create_table_sql_then_contains_expected_fragments(
     test_case: BuildSourceFreshnessSqlTestCase,
 ) -> None:
-    result: str = build_create_table_sql(
+    result: str = build_source_freshness_create_table_sql(
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,
@@ -107,7 +106,7 @@ def test_given_schema_when_building_create_table_sql_then_contains_expected_frag
 def test_given_schema_when_building_read_latest_sql_then_contains_windowed_latest_query(
     test_case: BuildSourceFreshnessSqlTestCase,
 ) -> None:
-    result: str = build_read_latest_sql(
+    result: str = build_source_freshness_read_latest_sql(
         database=test_case.database,
         schema=test_case.schema,
         render_qualified_name=RENDER_QUALIFIED_NAME,

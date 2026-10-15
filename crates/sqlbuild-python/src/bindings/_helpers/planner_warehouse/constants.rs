@@ -43,14 +43,6 @@ pub(crate) const YAML_ENTRY_LINE: (&str, &str) = (
     "sqlbuild.compiler.discovery.main._yaml_entry_line",
     "yaml_entry_line",
 );
-pub(crate) const FRESHNESS_PLANNING: (&str, &str) = (
-    "sqlbuild.compiler.source_freshness.main._planning",
-    "build_direct_source_freshness_planning_result",
-);
-pub(crate) const FRESHNESS_PROPAGATION: (&str, &str) = (
-    "sqlbuild.compiler.source_freshness.main._propagation",
-    "build_direct_source_freshness_propagation_result",
-);
 pub(crate) const RUN_SCOPE: (&str, &str) =
     ("sqlbuild.runtime.observability.main.run_scope", "run_scope");
 pub(crate) const SQL_HOOK_ENTRY: (&str, &str) =

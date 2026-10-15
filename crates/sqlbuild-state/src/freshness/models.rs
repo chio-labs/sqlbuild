@@ -30,3 +30,11 @@ pub enum AgeStatus {
     Warn,
     Error,
 }
+
+/// The shape of a single-value freshness query result.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct QueryShape {
+    pub columns: usize,
+    pub rows: usize,
+    pub first_value_null: bool,
+}

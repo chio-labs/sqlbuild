@@ -342,9 +342,14 @@ from sqlbuild.compiler.scopes.models import (
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, JsonValue, ScopeQueryTarget
 from sqlbuild.compiler.source_freshness.models import (
+    AdapterSourceFreshnessBatch,
     DirectSourceFreshnessPlanningResult,
+    DirectSourceFreshnessPropagationResult,
     SourceFreshnessIdentity,
+    SourceFreshnessObservation,
     SourceFreshnessRecord,
+    SourceFreshnessRenderers,
+    SourceFreshnessSet,
 )
 from sqlbuild.compiler.source_freshness.types import (
     SourceFreshnessAgeStatus,
@@ -4802,6 +4807,66 @@ def evaluate_source_freshness_age_policy(
     data_version: object,
     observed_at: datetime,
 ) -> SourceFreshnessAgeStatus | None: ...
+def require_aware_utc_datetime(*, value: datetime, field_name: str) -> datetime: ...
+def build_source_freshness_read_latest_sql(
+    *, database: str | None, schema: str, render_qualified_name: Callable[..., str | None]
+) -> str: ...
+def build_source_freshness_create_table_sql(
+    *,
+    database: str | None,
+    schema: str,
+    render_qualified_name: Callable[..., str | None],
+    render_framework_type: Callable[[FrameworkType], str],
+) -> str: ...
+def read_latest_source_freshness(
+    *,
+    connection: object,
+    execute: AdapterExecute[Any, Any],
+    table_exists: bool,
+    database: str | None,
+    schema: str,
+    render_qualified_name: Callable[..., str | None],
+    render_read_latest_sql: Callable[..., str],
+    source_names: tuple[str, ...] | None = None,
+) -> SourceFreshnessSet: ...
+def write_source_freshness_records(
+    *,
+    connection: object,
+    execute: AdapterExecute[Any, Any],
+    database: str | None,
+    schema: str,
+    records: tuple[SourceFreshnessRecord, ...],
+    renderers: SourceFreshnessRenderers,
+) -> None: ...
+def observe_configured_source_freshness(
+    *, adapter: StrictAdapter, connection: object, source: SourceEntry, observed_at: datetime
+) -> SourceFreshnessObservation: ...
+def observe_adapter_sources_freshness(
+    *,
+    adapter: StrictAdapter,
+    connection: object,
+    sources: tuple[SourceEntry, ...],
+    observed_at: datetime,
+) -> AdapterSourceFreshnessBatch: ...
+def source_freshness_record_from_observation(
+    *, observation: SourceFreshnessObservation, source: SourceEntry, run_id: str
+) -> SourceFreshnessRecord: ...
+def build_direct_source_freshness_planning_result(
+    *,
+    adapter: StrictAdapter,
+    connection: object,
+    sources: tuple[SourceEntry, ...],
+    state_database: str | None,
+    state_schemas: tuple[str, ...],
+    observed_at: datetime,
+    run_id: str,
+    render_qualified_name: Callable[..., str | None],
+    state_table_exists_by_schema: Mapping[str, bool],
+    filter_previous_to_sources: bool = False,
+) -> DirectSourceFreshnessPlanningResult: ...
+def build_direct_source_freshness_propagation_result(
+    *, source_freshness: DirectSourceFreshnessPlanningResult, scope: PlannerScope
+) -> DirectSourceFreshnessPropagationResult: ...
 def redact_diagnostic_text(value: str) -> str: ...
 def redact_diagnostic_value(*, name: str, value: object) -> object: ...
 def sql_rule_lint_key(*, config: LintConfig) -> str: ...

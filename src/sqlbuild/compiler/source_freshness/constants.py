@@ -5,8 +5,6 @@ from __future__ import annotations
 from sqlbuild.sql_values.types import StateSqlValueType
 
 SOURCE_FRESHNESS_TABLE_NAME: str = "_sqlbuild_source_freshness"
-PHYSICAL_TABLE_SOURCE_ERROR_FRAGMENT: str = "requires a physical table source"
-INCOMPLETE_CONFIGURATION_ERROR_FRAGMENT: str = "incomplete"
 
 COLUMN_SOURCE_NAME: str = "source_name"
 COLUMN_TARGET_DATABASE: str = "target_database"

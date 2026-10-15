@@ -2166,11 +2166,9 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     ) -> str:
         """Render SQL that reads latest source freshness rows per identity."""
 
-        from sqlbuild.compiler.source_freshness.main.read_latest_sql import (
-            build_read_latest_sql,
-        )
+        from sqlbuild._native import build_source_freshness_read_latest_sql
 
-        return build_read_latest_sql(
+        return build_source_freshness_read_latest_sql(
             database=database,
             schema=schema,
             render_qualified_name=self.render_qualified_name,
@@ -2190,9 +2188,7 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     def render_create_source_freshness_table_sql(self, *, database: str | None, schema: str) -> str:
         """Render DDL that creates the source freshness table when it is missing."""
 
-        from sqlbuild.compiler.source_freshness.main.create_table_sql import (
-            build_create_table_sql as build_source_freshness_create_table_sql,
-        )
+        from sqlbuild._native import build_source_freshness_create_table_sql
 
         return build_source_freshness_create_table_sql(
             database=database,

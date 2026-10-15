@@ -28,3 +28,17 @@ pub(crate) const MARCH_BASED_MONTH_DAYS: i128 = 153;
 pub(crate) const MONTH_LENGTH_DIVISOR: i128 = 5;
 pub(crate) const MONTHS_FROM_MARCH: i128 = 9;
 pub(crate) const FEBRUARY: u32 = 2;
+pub const SOURCE_FRESHNESS_TABLE_NAME: &str = "_sqlbuild_source_freshness";
+/// Columns a source freshness state table must have, in Python's declaration order.
+pub const REQUIRED_STATE_COLUMNS: [&str; 6] = [
+    "source_name",
+    "run_id",
+    "strategy",
+    "value_kind",
+    "data_version_hash",
+    "observed_at",
+];
+pub(crate) const STATE_SELECT_COLUMNS: &str = "source_name, target_database, target_schema, \
+target_name, run_id, strategy, value_kind, data_version, data_version_hash, observed_at";
+pub(crate) const PHYSICAL_TABLE_SOURCE_FRAGMENT: &str = "requires a physical table source";
+pub(crate) const INCOMPLETE_CONFIGURATION_FRAGMENT: &str = "incomplete";

@@ -15,9 +15,9 @@ use sqlbuild_core::freshness_text::main::render_freshness_text::render_freshness
 use sqlbuild_core::freshness_text::models::FreshnessSourceResult;
 
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
-use crate::bindings::_helpers::freshness::freshness_observe::{
-    Observer, PreviousState, observe_freshness,
-};
+use crate::bindings::_helpers::freshness::freshness_observe::{PreviousState, observe_freshness};
+use crate::bindings::_helpers::freshness::observation::Observer;
+use crate::bindings::_helpers::freshness::state_io::{StateRead, read_latest};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
@@ -29,7 +29,6 @@ const GRAPH_SELECTION_MODULE: &str = "sqlbuild._native";
 const UPSTREAM_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const RELATION_LOOKUP_MODULE: &str = "sqlbuild.adapter.relations.main.relation_lookup";
-const STATE_READ_MODULE: &str = "sqlbuild.compiler.source_freshness.main.read";
 const STATE_TABLE_NAME: &str = "_sqlbuild_source_freshness";
 const STALE_REQUIRES_STATE_MESSAGE: &str = "freshness --fail-on-stale requires --state";
 const STALE_REQUIRES_STATE_CODE: &str = "C238";
@@ -180,35 +179,23 @@ fn previous_records<'py>(
                 ],
             )?),
         )?;
-    let read: Bound<'py, PyAny> = imported(py, STATE_READ_MODULE, "read_latest_source_freshness")?;
+    let read: StateRead<'py> = StateRead {
+        connection: connection.clone(),
+        execute: adapter.getattr("execute")?,
+        render_qualified_name: adapter.getattr("render_qualified_name")?,
+        render_read_latest_sql: adapter.getattr("render_read_latest_source_freshness_sql")?,
+    };
     let records: Bound<'py, PyDict> = PyDict::new(py);
     for schema in &schemas {
         let exists: Bound<'py, PyDict> = keywords(py, &[("database", &database)])?;
         exists.set_item("schema", schema)?;
         exists.set_item("name", STATE_TABLE_NAME)?;
-        let options: Bound<'py, PyDict> = keywords(
-            py,
-            &[
-                ("connection", connection),
-                ("execute", &adapter.getattr("execute")?),
-                (
-                    "table_exists",
-                    &lookup.call_method("exists", (), Some(&exists))?,
-                ),
-                ("database", &database),
-                (
-                    "render_qualified_name",
-                    &adapter.getattr("render_qualified_name")?,
-                ),
-                (
-                    "render_read_latest_sql",
-                    &adapter.getattr("render_read_latest_source_freshness_sql")?,
-                ),
-            ],
-        )?;
-        options.set_item("schema", schema)?;
+        let table_exists: bool = lookup
+            .call_method("exists", (), Some(&exists))?
+            .is_truthy()?;
+        let schema: Bound<'py, PyAny> = PyString::new(py, schema).into_any();
         records.update(
-            read.call((), Some(&options))?
+            read_latest(&read, (&database, &schema), table_exists, None)?
                 .getattr("records")?
                 .downcast()?,
         )?;

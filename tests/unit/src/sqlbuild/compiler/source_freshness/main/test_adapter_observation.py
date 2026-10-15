@@ -5,13 +5,11 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.contract.models import TableFreshnessMetadata
-from sqlbuild.compiler.source_freshness.main._planning import (
+from sqlbuild._native import (
     build_direct_source_freshness_planning_result,
-)
-from sqlbuild.compiler.source_freshness.main.adapter_observation import (
     observe_adapter_sources_freshness,
 )
+from sqlbuild.adapter.contract.models import TableFreshnessMetadata
 from sqlbuild.compiler.source_freshness.models import (
     AdapterSourceFreshnessBatch,
     DirectSourceFreshnessPlanningResult,
