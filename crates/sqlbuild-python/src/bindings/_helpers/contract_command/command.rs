@@ -21,6 +21,7 @@ use sqlbuild_core::contract_command::models::{
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_adapter_connection_context;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::contract_command::write::{ContractWrite, write_contracts};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
@@ -29,7 +30,6 @@ const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
 const GRAPH_SELECTION_MODULE: &str = "sqlbuild._native";
 const ADOPTION_MODELS: &str = "sqlbuild.compiler.contract_adoption.models";
-const WRITE_MODULE: &str = "sqlbuild.compiler.contract_adoption.main._write";
 const GENERATE_ACTION: &str = "generate";
 
 /// A `CliUserError` with its code.
@@ -258,18 +258,14 @@ fn write_updates<'py>(
     let status: Bound<'py, PyAny> = progress.status()?;
     let started: Instant = Instant::now();
     status.call_method1("start", ("Updating repository contracts...",))?;
-    let updated: Bound<'py, PyAny> = match call_with(
-        &imported(py, WRITE_MODULE, "write_contracts")?,
-        &[
-            ("project_dir", project_dir.clone()),
-            ("graph", graph.clone()),
-            ("result", result),
-            ("overwrite", request.getattr("overwrite")?),
-            ("adapter", context.getattr("adapter")?),
-            ("resolved_connection", context.getattr("connection_config")?),
-            ("cli_vars", request.getattr("cli_vars")?),
-        ],
-    ) {
+    let write: ContractWrite<'py> = ContractWrite {
+        project_dir: project_dir.clone(),
+        overwrite: request.getattr("overwrite")?,
+        adapter: context.getattr("adapter")?,
+        resolved_connection: context.getattr("connection_config")?,
+        cli_vars: request.getattr("cli_vars")?,
+    };
+    let updated: Bound<'py, PyAny> = match write_contracts(&write, graph, &result) {
         Ok(updated) => updated,
         Err(error) => {
             if exception(py, &error) {

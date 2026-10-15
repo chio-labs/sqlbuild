@@ -3506,6 +3506,9 @@ class CollectedCompileDiagnostics:
     def diagnostics(self) -> tuple[CompilerDiagnostic, ...]: ...
 
 def collect_compile_diagnostics() -> CollectedCompileDiagnostics: ...
+def open_connection_with_hooks(
+    *, adapter: BaseAdapter, connection_config: dict[str, object], hooks: ConnectionHooks
+) -> Any: ...
 def build_analysis_cache_context(
     *,
     root: Path | None,

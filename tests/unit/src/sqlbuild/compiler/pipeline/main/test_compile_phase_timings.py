@@ -11,14 +11,14 @@ import pytest
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.pipeline.main import _plan_result as plan_result
+from sqlbuild.compiler.pipeline._helpers import materializations
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
+from sqlbuild.compiler.planner.main.execution import execution
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTimingTracker
 from sqlbuild.diagnostics.models import PartialBuildPhaseTimings
 from sqlbuild.rule_engine._helpers.run import rule_threads
 from sqlbuild.rule_engine.models import RulesRunResult
-from sqlbuild.runtime.contracts.main import open_connection
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from tests.unit.src.sqlbuild.compiler.pipeline.main._test_types import PipelinePhaseTimingTestCase
 
@@ -28,14 +28,14 @@ from tests.unit.src.sqlbuild.compiler.pipeline.main._test_types import PipelineP
     [
         PipelinePhaseTimingTestCase(
             description="slow planning connection is excluded from direct compilation",
-            clock_values=(0.0, 0.0, 2.0, 2.0, 3.0, 13.0, 13.0),
+            clock_values=(0.0, 0.0, 2.0, 2.0, 3.0, 3.0, 13.0, 13.0),
             expected_compile_seconds=2.0,
             expected_planning_seconds=10.0,
             expected_total_seconds=13.0,
         ),
         PipelinePhaseTimingTestCase(
             description="rules wall time is reported and excluded from compile and planning",
-            clock_values=(0.0, 0.0, 2.0, 2.0, 3.0, 3.0, 13.0, 13.0),
+            clock_values=(0.0, 0.0, 2.0, 2.0, 3.0, 3.0, 3.0, 13.0, 13.0),
             expected_compile_seconds=2.0,
             expected_planning_seconds=10.0,
             expected_total_seconds=13.0,
@@ -66,8 +66,19 @@ def test_given_slow_planning_connection_when_compiling_then_direct_phases_are_di
     adapter: Mock = Mock()
     monkeypatch.setattr(time, "monotonic", monotonic)
     monkeypatch.setattr(_native, "build_compiled_project", Mock(return_value=project))
-    monkeypatch.setattr(open_connection, "open_connection_with_hooks", Mock(return_value=object()))
-    monkeypatch.setattr(plan_result, "build_pipeline_result", Mock(return_value=pipeline_result))
+    monkeypatch.setattr(execution, "build_execution_plan", Mock(return_value=PlanOutput()))
+    monkeypatch.setattr(materializations, "load_custom_materializations", Mock(return_value={}))
+    monkeypatch.setattr(
+        _native,
+        "build_python_run_plan_outputs",
+        Mock(
+            return_value=Mock(
+                plan_output=pipeline_result.plan_output,
+                selected_python_node_names=frozenset(),
+                python_plan_entries=(),
+            )
+        ),
+    )
     (tmp_path / "sqlbuild_project.toml").write_text('name = "timing"\n', encoding="utf-8")
     monkeypatch.setattr(_native, "resolve_configured_rule_selection", Mock(return_value=None))
     monkeypatch.setattr(

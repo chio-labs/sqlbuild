@@ -1,0 +1,195 @@
+//! Typed, metadata-preserving repository edits for contract adoption.
+
+use pyo3::exceptions::PyException;
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
+
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+
+const NATIVE_MODULE: &str = "sqlbuild._native";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
+const UTF8: &str = "utf-8";
+
+/// The repository the edits apply to and how they apply.
+pub(crate) struct ContractWrite<'py> {
+    pub(crate) project_dir: Bound<'py, PyAny>,
+    pub(crate) overwrite: Bound<'py, PyAny>,
+    pub(crate) adapter: Bound<'py, PyAny>,
+    pub(crate) resolved_connection: Bound<'py, PyAny>,
+    pub(crate) cli_vars: Bound<'py, PyAny>,
+}
+
+/// Apply safe source-only edits atomically and validate the resulting project.
+pub(crate) fn write_contracts<'py>(
+    write: &ContractWrite<'py>,
+    graph: &Bound<'py, PyAny>,
+    result: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = graph.py();
+    let native = py.import(NATIVE_MODULE)?;
+    let project: Bound<'py, PyAny> = graph.getattr("project")?;
+    let models: Bound<'py, PyDict> = by_name(&project.getattr("models")?)?;
+    let sources: Bound<'py, PyDict> = by_name(&project.getattr("sources")?)?;
+    let model_type: Bound<'py, PyAny> =
+        imported(py, COMPILE_TYPES_MODULE, "CompiledResourceType")?.getattr("MODEL")?;
+    let updates: Bound<'py, PyDict> = PyDict::new(py);
+    let updated_evidence: Bound<'py, PyList> = PyList::empty(py);
+    for evidence in result.getattr("evidence")?.try_iter()? {
+        let evidence: Bound<'py, PyAny> = evidence?;
+        let physical_columns: Bound<'py, PyAny> = evidence.getattr("physical_columns")?;
+        let findings: Bound<'py, PyAny> = evidence.getattr("findings")?;
+        if physical_columns.is_none() || !findings.is_truthy()? {
+            updated_evidence.append(evidence)?;
+            continue;
+        }
+        let name: Bound<'py, PyAny> = evidence.getattr("resource_name")?;
+        let (path, edited): (Bound<'py, PyAny>, Bound<'py, PyAny>) =
+            if evidence.getattr("resource_type")?.eq(&model_type)? {
+                let model: Bound<'py, PyAny> = models.as_any().get_item(&name)?;
+                let edited: Bound<'py, PyAny> = call_with(
+                    &native.getattr("edit_contract_model")?,
+                    &[
+                        ("model", model.clone()),
+                        ("physical_columns", physical_columns),
+                        ("overwrite", write.overwrite.clone()),
+                    ],
+                )?;
+                (
+                    write.project_dir.div(model.getattr("relative_path")?)?,
+                    edited,
+                )
+            } else {
+                let source: Bound<'py, PyAny> = sources.as_any().get_item(&name)?;
+                let path: Bound<'py, PyAny> =
+                    source.getattr("source_file")?.getattr("file_path")?;
+                let edited: Bound<'py, PyAny> = call_with(
+                    &native.getattr("edit_contract_source")?,
+                    &[
+                        ("source", source),
+                        ("physical_columns", physical_columns),
+                        ("overwrite", write.overwrite.clone()),
+                        ("contents", updates.as_any().call_method1("get", (&path,))?),
+                    ],
+                )?;
+                (path, edited)
+            };
+        let (contents, conflict): (Bound<'py, PyAny>, Bound<'py, PyAny>) = edited.extract()?;
+        if !contents.is_none() && contents.ne(read_text(&path)?)? {
+            updates.set_item(&path, contents)?;
+        }
+        let remaining: Bound<'py, PyAny> = call_with(
+            &native.getattr("remaining_contract_findings")?,
+            &[
+                ("findings", findings),
+                ("overwrite", write.overwrite.clone()),
+                ("conflict", conflict),
+            ],
+        )?;
+        updated_evidence.append(replaced(&evidence, &[("findings", remaining)])?)?;
+    }
+    let evidence: Bound<'py, PyAny> = PyTuple::new(py, updated_evidence)?.into_any();
+    if updates.is_empty() {
+        return replaced(result, &[("evidence", evidence)]);
+    }
+    let originals: Bound<'py, PyDict> = PyDict::new(py);
+    for path in updates.keys() {
+        originals.set_item(&path, read_text(&path)?)?;
+    }
+    if let Err(error) = applied(write, result, &updates) {
+        if error.is_instance_of::<PyException>(py) {
+            write_all(&originals)?;
+        }
+        return Err(error);
+    }
+    let relative: Vec<Bound<'py, PyAny>> = updates
+        .keys()
+        .iter()
+        .map(|path| path.call_method1("relative_to", (&write.project_dir,)))
+        .collect::<PyResult<_>>()?;
+    let written: Bound<'py, PyAny> = imported(py, "builtins", "sorted")?.call1((relative,))?;
+    replaced(
+        result,
+        &[
+            ("evidence", evidence),
+            (
+                "written_paths",
+                PyTuple::new(py, written.try_iter()?.collect::<PyResult<Vec<_>>>()?)?.into_any(),
+            ),
+        ],
+    )
+}
+
+/// Write every update, rediscover the project and compile it when an adapter is available.
+fn applied<'py>(
+    write: &ContractWrite<'py>,
+    result: &Bound<'py, PyAny>,
+    updates: &Bound<'py, PyDict>,
+) -> PyResult<()> {
+    let py: Python<'py> = result.py();
+    let native = py.import(NATIVE_MODULE)?;
+    write_all(updates)?;
+    let discovered: Bound<'py, PyAny> = call_with(
+        &native.getattr("discover_project_inputs")?,
+        &[("project_dir", write.project_dir.clone())],
+    )?;
+    if write.adapter.is_none() {
+        return Ok(());
+    }
+    let keywords: Bound<'py, PyDict> = PyDict::new(py);
+    keywords.set_item("no_cache", true)?;
+    let selection: Bound<'py, PyAny> =
+        imported(py, COMPILE_MODELS_MODULE, "CompileAnalysisSelection")?
+            .call((), Some(&keywords))?;
+    call_with(
+        &native.getattr("build_compiled_project")?,
+        &[
+            ("discovered_inputs", discovered),
+            ("adapter", write.adapter.clone()),
+            ("selected_target", result.getattr("from_target")?),
+            ("resolved_connection", write.resolved_connection.clone()),
+            ("cli_vars", write.cli_vars.clone()),
+            ("analysis_selection", selection),
+        ],
+    )?;
+    Ok(())
+}
+
+/// Write each `path: contents` pair atomically, in order.
+fn write_all(contents_by_path: &Bound<'_, PyDict>) -> PyResult<()> {
+    let py: Python<'_> = contents_by_path.py();
+    let write_atomically: Bound<'_, PyAny> = imported(py, NATIVE_MODULE, "write_atomically")?;
+    for (path, contents) in contents_by_path.iter() {
+        call_with(&write_atomically, &[("path", path), ("contents", contents)])?;
+    }
+    Ok(())
+}
+
+fn read_text<'py>(path: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let keywords: Bound<'py, PyDict> = PyDict::new(path.py());
+    keywords.set_item("encoding", UTF8)?;
+    path.call_method("read_text", (), Some(&keywords))
+}
+
+/// `{item.name: item for item in items}`.
+fn by_name<'py>(items: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+    let named: Bound<'py, PyDict> = PyDict::new(items.py());
+    for item in items.try_iter()? {
+        let item: Bound<'py, PyAny> = item?;
+        named.set_item(item.getattr("name")?, &item)?;
+    }
+    Ok(named)
+}
+
+/// `dataclasses.replace(value, **fields)`.
+fn replaced<'py>(
+    value: &Bound<'py, PyAny>,
+    fields: &[(&str, Bound<'py, PyAny>)],
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = value.py();
+    let keywords: Bound<'py, PyDict> = PyDict::new(py);
+    for (name, field) in fields {
+        keywords.set_item(*name, field)?;
+    }
+    imported(py, "dataclasses", "replace")?.call((value,), Some(&keywords))
+}

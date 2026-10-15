@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Iterator
 
 import pytest
 
-import sqlbuild.runtime.contracts.main.open_connection as open_connection_module
-from sqlbuild.runtime.contracts.main.open_connection import open_connection_with_hooks
+from sqlbuild._native import open_connection_with_hooks
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from tests.unit.src.sqlbuild.runtime.contracts._test_types import (
     OpenConnectionFailureTestCase,
@@ -44,7 +44,7 @@ def test_given_connection_hooks_when_opening_succeeds_then_reports_order_and_ela
         connection=connection,
     )
     monotonic_times: Iterator[float] = iter(test_case.monotonic_times)
-    monkeypatch.setattr(open_connection_module.time, "monotonic", lambda: next(monotonic_times))
+    monkeypatch.setattr(time, "monotonic", lambda: next(monotonic_times))
 
     def on_start(connection_count: int) -> None:
         events.append("start")
@@ -98,7 +98,7 @@ def test_given_connection_hooks_when_opening_fails_then_reports_error_and_rerais
         error=test_case.expected_error,
     )
     monotonic_times: Iterator[float] = iter(test_case.monotonic_times)
-    monkeypatch.setattr(open_connection_module.time, "monotonic", lambda: next(monotonic_times))
+    monkeypatch.setattr(time, "monotonic", lambda: next(monotonic_times))
 
     def on_start(connection_count: int) -> None:
         events.append("start")
