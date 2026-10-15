@@ -28,8 +28,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::event_exporting::constants::{
-    DISPATCHER_THREAD_NAME, EXIT_JOIN_SECONDS, HEALTH_THREAD_NAME, INVOKE_OUTPUT_MODULE,
-    JOIN_GRACE_SECONDS, NO_SECONDS, NOTIFIER_THREAD_NAME, OUTPUT_SINK_THREAD_NAME, POLL_SECONDS,
+    DISPATCHER_THREAD_NAME, EXIT_JOIN_SECONDS, HEALTH_THREAD_NAME, JOIN_GRACE_SECONDS, NO_SECONDS,
+    NOTIFIER_THREAD_NAME, OUTPUT_SINK_THREAD_NAME, POLL_SECONDS, RUN_OUTPUT_SINKS_MODULE,
     WORKER_ATTRIBUTE,
 };
 use crate::bindings::_helpers::event_exporting::models::{
@@ -38,9 +38,7 @@ use crate::bindings::_helpers::event_exporting::models::{
 use crate::bindings::_helpers::event_exporting::values::{
     export_policy, input_error, severity_from, state_error,
 };
-use crate::bindings::_helpers::event_exporting::workers::{
-    Completion, DispatcherWorker, InvocationCompletion, WorkerRole, completion_state,
-};
+use crate::bindings::_helpers::event_exporting::workers::{DispatcherWorker, WorkerRole};
 use crate::bindings::_helpers::native_threads::constants::OUTPUT_SUPPRESSED_ATTRIBUTE;
 use crate::bindings::_helpers::native_threads::exit_signal::{
     interpreter_exiting, signal_interpreter_exit,
@@ -74,6 +72,8 @@ pub(crate) struct State {
     pub(crate) filters: Vec<ExporterFilter>,
     pub(crate) counts: Vec<ExporterCounts>,
     output_sinks: Arc<Vec<OutputSink>>,
+    /// Calls queued to the single command-output sink thread, once it has started.
+    output_lane: Option<Py<PyAny>>,
     pub(crate) queue: EventQueue<Queued>,
     sequence: u64,
     accepting: bool,
@@ -165,6 +165,14 @@ pub(crate) fn run_finalizers(py: Python<'_>, finalizers: Vec<Py<PyAny>>) {
     for finalizer in finalizers {
         drop(finalizer.bind(py).call0());
     }
+}
+
+/// End a retired command-output sink thread once it has run every call queued before.
+fn retire_output_lane(py: Python<'_>, retired: Option<Py<PyAny>>) -> PyResult<()> {
+    if let Some(calls) = retired {
+        calls.bind(py).call_method1("put", (py.None(),))?;
+    }
+    Ok(())
 }
 
 /// `thread.join(timeout=seconds)` when the thread is alive.
@@ -421,16 +429,22 @@ impl Shared {
 
     /// Forget one finished invocation; once idle, run the finalizers waiting for it.
     pub(crate) fn invocation_finished(&self, py: Python<'_>, invocation: u64) -> PyResult<()> {
-        let finalizers: Vec<Py<PyAny>> = {
+        let (finalizers, retired): (Vec<Py<PyAny>>, Option<Py<PyAny>>) = {
             let _held = self.hold(py)?;
             let mut state = self.locked()?;
             state.live_invocations.remove(&invocation);
             if state.live_invocations.is_empty() && !state.dispatcher_running {
-                std::mem::take(&mut state.idle_finalizers)
+                let retired: Option<Py<PyAny>> = if state.shutdown_complete {
+                    state.output_lane.take()
+                } else {
+                    None
+                };
+                (std::mem::take(&mut state.idle_finalizers), retired)
             } else {
-                Vec::new()
+                (Vec::new(), None)
             }
         };
+        retire_output_lane(py, retired)?;
         run_finalizers(py, finalizers);
         Ok(())
     }
@@ -477,29 +491,26 @@ impl Shared {
         self.notify_all(py)
     }
 
-    /// Call one command-output sink on its own daemon thread and wait until it returns or exit begins.
-    fn call_output_sink(
-        self: &Arc<Self>,
-        py: Python<'_>,
-        sink: &OutputSink,
-        record: &Bound<'_, PyAny>,
-    ) -> PyResult<Delivery> {
-        let completion: Arc<Mutex<Completion>> = Arc::new(Mutex::new(Completion::default()));
-        let reporter = Py::new(
-            py,
-            InvocationCompletion::new(Arc::clone(self), None, &completion),
-        )?;
+    /// The queue feeding this dispatcher's single command-output sink thread, started on first use.
+    fn output_lane<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let _held = self.hold(py)?;
+        let existing: Option<Py<PyAny>> = self
+            .locked()?
+            .output_lane
+            .as_ref()
+            .map(|calls| calls.clone_ref(py));
+        if let Some(calls) = existing {
+            return Ok(calls.into_bound(py));
+        }
+        let calls: Bound<'py, PyAny> = imported(py, "queue", "SimpleQueue")?.call0()?;
         let arguments = PyDict::new(py);
-        arguments.set_item("function", sink.function.bind(py))?;
-        arguments.set_item("provider_arguments", sink.provider_arguments.bind(py))?;
-        arguments.set_item("record", record)?;
-        arguments.set_item("completion", reporter)?;
-        let started = call_with(
+        arguments.set_item("calls", &calls)?;
+        let thread = call_with(
             &imported(py, "threading", "Thread")?,
             &[
                 (
                     "target",
-                    imported(py, INVOKE_OUTPUT_MODULE, "invoke_command_output_sink")?,
+                    imported(py, RUN_OUTPUT_SINKS_MODULE, "run_command_output_sinks")?,
                 ),
                 ("kwargs", arguments.into_any()),
                 (
@@ -508,24 +519,47 @@ impl Shared {
                 ),
                 ("daemon", PyBool::new(py, true).to_owned().into_any()),
             ],
-        )
-        .and_then(|thread| {
-            thread.setattr(OUTPUT_SUPPRESSED_ATTRIBUTE, true)?;
-            thread.call_method0("start")
-        });
-        if started.is_err() {
+        )?;
+        thread.setattr(OUTPUT_SUPPRESSED_ATTRIBUTE, true)?;
+        thread.call_method0("start")?;
+        self.locked()?.output_lane = Some(calls.clone().unbind());
+        Ok(calls)
+    }
+
+    /// Call one command-output sink on the sink thread and wait until it returns or exit begins.
+    fn call_output_sink(
+        &self,
+        py: Python<'_>,
+        sink: &OutputSink,
+        record: &Bound<'_, PyAny>,
+    ) -> PyResult<Delivery> {
+        let Ok(calls) = self.output_lane(py) else {
             return Ok(Delivery::Delivered(true));
-        }
-        let _held = self.hold(py)?;
+        };
+        let outcome: Bound<'_, PyAny> = imported(py, "queue", "SimpleQueue")?.call0()?;
+        calls.call_method1(
+            "put",
+            ((
+                sink.function.bind(py),
+                sink.provider_arguments.bind(py),
+                record,
+                &outcome,
+            ),),
+        )?;
+        let empty: Bound<'_, PyAny> = imported(py, "queue", "Empty")?;
+        let get: Bound<'_, PyAny> = outcome.getattr("get")?;
         loop {
-            let (done, error_type) = completion_state(&completion)?;
-            if done {
-                return Ok(Delivery::Delivered(error_type.is_some()));
+            match call_with(
+                &get,
+                &[("timeout", PyFloat::new(py, POLL_SECONDS).into_any())],
+            ) {
+                Ok(failed) => return Ok(Delivery::Delivered(failed.is_truthy()?)),
+                Err(error) if error.is_instance(py, &empty) => {}
+                Err(error) => return Err(error),
             }
             if interpreter_exiting(py)? {
                 return Ok(Delivery::Abandoned);
             }
-            self.wait(py, POLL_SECONDS)?;
         }
     }
 
@@ -616,6 +650,7 @@ impl EventExporterDispatcher {
                 exporters: bound_exporters,
                 filters,
                 output_sinks: Arc::new(Vec::new()),
+                output_lane: None,
                 queue: EventQueue::new(limits.queue_capacity),
                 sequence: 0,
                 accepting: true,
@@ -873,8 +908,14 @@ impl EventExporterDispatcher {
                 state.final_notification = Some(summary.clone_ref(py));
             }
             state.notification_stopping = true;
+            let retired: Option<Py<PyAny>> = if state.live_invocations.is_empty() {
+                state.output_lane.take()
+            } else {
+                None
+            };
             drop(state);
             shared.notify_all(py)?;
+            retire_output_lane(py, retired)?;
         }
         if let Some(health) = &self.health_thread {
             join(health.bind(py), EXIT_JOIN_SECONDS)?;

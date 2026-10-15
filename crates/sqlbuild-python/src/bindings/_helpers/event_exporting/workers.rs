@@ -39,7 +39,7 @@ pub(crate) struct DispatcherWorker {
 
 /// Whether an invocation finished, and the sanitized type of what it raised.
 #[derive(Default)]
-pub(crate) struct Completion {
+struct Completion {
     done: bool,
     error_type: Option<String>,
 }
@@ -48,8 +48,7 @@ pub(crate) struct Completion {
 #[pyclass(module = "sqlbuild._native", frozen)]
 pub(crate) struct InvocationCompletion {
     shared: Arc<Shared>,
-    /// The live invocation this call ends; `None` when its caller tracks the invocation.
-    invocation: Option<u64>,
+    invocation: u64,
     completion: Arc<Mutex<Completion>>,
 }
 
@@ -62,7 +61,7 @@ enum Notification {
 }
 
 /// Whether the call finished, and the sanitized type of what it raised.
-pub(crate) fn completion_state(completion: &Mutex<Completion>) -> PyResult<(bool, Option<String>)> {
+fn completion_state(completion: &Mutex<Completion>) -> PyResult<(bool, Option<String>)> {
     let completion = completion
         .lock()
         .map_err(|_| PyRuntimeError::new_err("event exporter invocation lock is poisoned"))?;
@@ -188,7 +187,7 @@ impl DispatcherWorker {
         let completion: Arc<Mutex<Completion>> = Arc::new(Mutex::new(Completion::default()));
         let name: String = format!("{INVOCATION_THREAD_PREFIX}{}", exporter.name);
         let invocation: u64 = shared.begin_invocation(py)?;
-        let reporter = InvocationCompletion::new(Arc::clone(shared), Some(invocation), &completion);
+        let reporter = InvocationCompletion::new(Arc::clone(shared), invocation, &completion);
         let started = Py::new(py, reporter).and_then(|reporter| {
             let arguments = PyDict::new(py);
             arguments.set_item("function", exporter.function.bind(py))?;
@@ -377,12 +376,8 @@ impl DispatcherWorker {
 }
 
 impl InvocationCompletion {
-    /// A reporter that records into `completion` and, when given, ends `invocation`.
-    pub(crate) fn new(
-        shared: Arc<Shared>,
-        invocation: Option<u64>,
-        completion: &Arc<Mutex<Completion>>,
-    ) -> Self {
+    /// A reporter that records into `completion` and ends `invocation`.
+    fn new(shared: Arc<Shared>, invocation: u64, completion: &Arc<Mutex<Completion>>) -> Self {
         Self {
             shared,
             invocation,
@@ -401,10 +396,7 @@ impl InvocationCompletion {
                 completion.error_type = Some(error_type);
             }
         }
-        let finished = match self.invocation {
-            Some(invocation) => self.shared.invocation_finished(py, invocation),
-            None => Ok(()),
-        };
+        let finished = self.shared.invocation_finished(py, self.invocation);
         let _held = self.shared.hold(py)?;
         if let Ok(mut completion) = self.completion.lock() {
             completion.done = true;

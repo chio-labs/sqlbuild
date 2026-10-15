@@ -5,8 +5,8 @@ pub(crate) const SEVERITY_MODULE: &str = "sqlbuild.spec.contracts.types";
 pub(crate) const CATALOG_MODULE: &str = "sqlbuild.runtime.observability.constants";
 pub(crate) const INVOKE_LIFECYCLE_MODULE: &str =
     "sqlbuild.runtime.event_exporting.main._invoke_lifecycle_event_sink";
-pub(crate) const INVOKE_OUTPUT_MODULE: &str =
-    "sqlbuild.runtime.event_exporting.main._invoke_command_output_sink";
+pub(crate) const RUN_OUTPUT_SINKS_MODULE: &str =
+    "sqlbuild.runtime.event_exporting.main._run_command_output_sinks";
 pub(crate) const SESSION_MODULE: &str = "sqlbuild.provider.main.session";
 pub(crate) const OUTPUT_MODELS_MODULE: &str = "sqlbuild.runtime.output_capture.models";
 pub(crate) const SCOPE_CONTEXT_VARIABLE: &str = "sqlbuild_event_exporter_command_scope";
