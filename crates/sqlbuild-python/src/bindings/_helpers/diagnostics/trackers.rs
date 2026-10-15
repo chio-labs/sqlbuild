@@ -9,7 +9,7 @@ use pyo3::{pyclass, pymethods};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{context_variable, imported};
 
-const DIAGNOSTICS_MODELS_MODULE: &str = "sqlbuild.diagnostics.models";
+const DIAGNOSTICS_MODELS_MODULE: &str = "sqlbuild._native";
 const PROCESS_RESOURCES_MODULE: &str = "sqlbuild.diagnostics._helpers.process_resources";
 const TRACKER_VARIABLE: &str = "sqlbuild_build_phase_timing_tracker";
 const PHASES: [&str; 6] = [
