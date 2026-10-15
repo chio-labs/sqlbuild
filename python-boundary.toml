@@ -2,7 +2,7 @@
 # migration work that moves to Rust. `remaining_lines` must equal the current count of that work:
 # a PR that moves code lowers it, and adding movable Python fails the check.
 # Native failures must surface as errors; `handled_native_errors` lists the reviewed exceptions.
-remaining_lines = 9601
+remaining_lines = 9599
 
 [[stays]]
 path = "executor"
@@ -295,21 +295,6 @@ reason = "user-code"
 note = "Loader runtime that runs inside the executor load phase."
 
 [[stays]]
-path = "integrations/dbt/_helpers/runtime/event_stream.py"
-reason = "user-code"
-note = "Runs the dbt subprocess over the user's dbt project and drives its progress threads."
-
-[[stays]]
-path = "integrations/dbt/main/runtime/_execute_json_event_stream.py"
-reason = "user-code"
-note = "Entry point of the dbt subprocess runner."
-
-[[stays]]
-path = "integrations/dbt/classes/dbt_runner.py"
-reason = "user-code"
-note = "Runs dbt compile, deps, debug and ls as subprocesses over the user's dbt project."
-
-[[stays]]
 path = "integrations/dbt/_helpers/profile/load.py"
 reason = "user-code"
 note = "Loads the user's dbt_project.yml and profiles.yml with PyYAML."
@@ -333,11 +318,6 @@ note = "Tees the command's Python output streams to configured output capture si
 path = "cli/commands/_helpers/entry/compute_log_diagnostics.py"
 reason = "user-code"
 note = "Logs compute log capture failures through Python logging during capture."
-
-[[stays]]
-path = "integrations/dbt/_helpers/profile/init.py"
-reason = "user-code"
-note = "Initializes a SQLBuild project from the user's dbt project and runs dbt debug as a subprocess."
 
 [[stays]]
 path = "cli/compile_reuse/_helpers/provider_settings.py"

@@ -1,5 +1,6 @@
 pub(crate) mod cli;
 pub(crate) mod constants;
+pub(crate) mod event_stream;
 pub(crate) mod execution;
 pub(crate) mod graph;
 pub(crate) mod manifest;
@@ -13,6 +14,7 @@ pub(crate) mod profile;
 pub(crate) mod profile_connection;
 pub(crate) mod reference_resolver;
 pub(crate) mod registration;
+pub(crate) mod runner;
 pub(crate) mod runtime_config;
 pub(crate) mod runtime_execution;
 pub(crate) mod runtime_results;

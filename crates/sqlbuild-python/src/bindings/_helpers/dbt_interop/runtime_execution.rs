@@ -174,11 +174,7 @@ fn execute_dbt_commands<'py>(
         target = project_dir.call_method1("__truediv__", ("target",))?;
     }
     let (returncode, streamed): (Bound<'py, PyAny>, Bound<'py, PyAny>) = call_with(
-        &imported(
-            py,
-            "sqlbuild.integrations.dbt.main.runtime._execute_json_event_stream",
-            "execute_dbt_json_event_stream",
-        )?,
+        &imported(py, "sqlbuild._native", "execute_dbt_json_event_stream")?,
         &[
             ("argv", argv),
             ("cwd", project_dir),

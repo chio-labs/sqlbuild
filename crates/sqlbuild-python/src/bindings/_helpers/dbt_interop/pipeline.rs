@@ -358,11 +358,7 @@ fn debug_dbt_from_project(py: Python<'_>, options: Option<Bound<'_, PyDict>>) ->
     let mut runner = args.value("dbt_runner")?;
     if !runner.is_truthy()? {
         runner = call_with(
-            &imported(
-                py,
-                "sqlbuild.integrations.dbt.classes.dbt_runner",
-                "DbtRunner",
-            )?,
+            &imported(py, "sqlbuild._native", "DbtRunner")?,
             &[("dbt_executable", args.value("dbt_executable")?)],
         )?;
     }

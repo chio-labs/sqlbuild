@@ -307,14 +307,29 @@ from sqlbuild.executor.python_nodes.models import (
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotCaptureRunResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
-from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCommandResult,
+    DbtInitRequest,
+    DbtInitResult,
+    DbtInteropCommandArgs,
+    DbtInteropCompiledProject,
+    DbtInteropExecutionRequest,
+    DbtInteropInvocation,
+    DbtInteropParsedArgs,
+    DbtInteropPlan,
+    DbtInteropPlanResolution,
+    DbtInteropRoutedArgs,
+    DbtInteropSelectionResult,
+    DbtLsNode,
+    DbtLsResult,
+    DbtManifestIndex,
+    DbtManifestModel,
     DbtNodeExecutionResult,
     NormalizedDbtProfileConnection,
     ResolvedDbtProfileOutput,
 )
+from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInvoker
 from sqlbuild.lint.models import (
     CompileFacts,
     ExpandedLintFile,
@@ -3075,6 +3090,42 @@ def plan_dbt_interop_command(
     command_args: DbtInteropCommandArgs,
 ) -> DbtInteropPlan: ...
 def resolve_dbt_executable() -> str: ...
+
+class DbtRunner:
+    dbt_executable: str
+    invoker: DbtInvoker | None
+    def __init__(
+        self, *, dbt_executable: str | None = None, invoker: DbtInvoker | None = None
+    ) -> None: ...
+    def compile(
+        self, *, options: DbtCliOptions, full_refresh: bool = False
+    ) -> DbtCommandResult: ...
+    def deps(self, *, options: DbtCliOptions) -> DbtCommandResult: ...
+    def debug(self, *, options: DbtCliOptions, args: Sequence[str] = ()) -> DbtCommandResult: ...
+    def ls(
+        self,
+        *,
+        options: DbtCliOptions,
+        select: Sequence[str] = (),
+        exclude: Sequence[str] = (),
+        resource_types: Sequence[str] = (),
+    ) -> DbtLsResult: ...
+    def invoke(self, *, argv: tuple[str, ...], cwd: Path | None) -> DbtCommandResult: ...
+
+def execute_dbt_json_event_stream(
+    *,
+    argv: tuple[str, ...],
+    cwd: Path | None,
+    stream: TextIO,
+    use_color: bool,
+    target_path: Path | None,
+    display_total: int | None = None,
+    on_node_result: Callable[[DbtNodeExecutionResult], None] | None = None,
+    detail_by_unique_id: dict[str, str] | None = None,
+    enable_status: bool = True,
+) -> tuple[int, tuple[DbtNodeExecutionResult, ...]]: ...
+def build_dbt_init_project(*, request: DbtInitRequest) -> DbtInitResult: ...
+def validate_dbt_init_project(*, request: DbtInitRequest) -> None: ...
 def build_dbt_compile_argv(
     *, dbt_executable: str, options: DbtCliOptions, full_refresh: bool = False
 ) -> tuple[str, ...]: ...
