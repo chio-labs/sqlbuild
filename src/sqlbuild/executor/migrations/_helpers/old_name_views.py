@@ -8,7 +8,11 @@ from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlbuild._native import deterministic_migration_event_id, read_recorded_column_renames
+from sqlbuild._native import (
+    build_janitor_archive_name,
+    deterministic_migration_event_id,
+    read_recorded_column_renames,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.main.grants_for_columns import grants_for_columns
@@ -29,7 +33,6 @@ from sqlbuild.compiler.migrations.types import OldNameViewEventType
 from sqlbuild.compiler.planner.models import OldNameView, OldNameViewPlanEntry, PlanOutput
 from sqlbuild.cursor_algebra.models import Duration
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
-from sqlbuild.executor.janitor.main._build_archive_name import build_janitor_archive_name
 from sqlbuild.executor.migrations._helpers.old_name_facts import (
     old_name_fact,
     record_old_name_fact,

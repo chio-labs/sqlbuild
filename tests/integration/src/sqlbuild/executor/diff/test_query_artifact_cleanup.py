@@ -9,7 +9,12 @@ from typing import Any
 import duckdb
 import pytest
 
-from sqlbuild._native import DiffCommandRequest, QueryDiffPreparation, execute_query_diff
+from sqlbuild._native import (
+    DiffCommandRequest,
+    QueryDiffPreparation,
+    build_janitor_plan,
+    execute_query_diff,
+)
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
@@ -19,9 +24,7 @@ from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_QUERY_DIFF_ARTIFA
 from sqlbuild.executor.diff.classes.query_artifact_lifecycle import QueryDiffArtifactLifecycle
 from sqlbuild.executor.diff.models import QueryDiffArtifact
 from sqlbuild.executor.janitor.main.execute import execute_janitor_plan
-from sqlbuild.executor.janitor.main.plan import build_janitor_plan
 from sqlbuild.executor.janitor.models import (
-    JanitorDirectModeSettings,
     JanitorExecutionResult,
     JanitorPlan,
 )
@@ -97,7 +100,7 @@ def test_given_expired_owned_and_untracked_artifacts_when_janitor_runs_then_only
             adapter=adapter,
             connection=connection,
             retention_days=30,
-            direct_settings=JanitorDirectModeSettings(enabled=True),
+            direct_mode=True,
         )
 
         assert tuple(candidate.key.name for candidate in plan.query_diff_artifact_candidates) == (

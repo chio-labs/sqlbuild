@@ -1,10 +1,16 @@
-//! Register the native `sqb janitor` command and its plan rendering.
+//! Register the native `sqb janitor` command, its planning and its plan rendering.
 
-use pyo3::prelude::{Bound, PyModule, PyResult};
+use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult};
+use pyo3::wrap_pyfunction;
 
+use crate::bindings::_helpers::janitor::janitor_planning::{
+    build_janitor_archive_name, build_janitor_plan_binding,
+};
 use crate::bindings::_helpers::janitor::{janitor_command, janitor_plan};
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     janitor_command::register(module)?;
-    janitor_plan::register(module)
+    janitor_plan::register(module)?;
+    module.add_function(wrap_pyfunction!(build_janitor_plan_binding, module)?)?;
+    module.add_function(wrap_pyfunction!(build_janitor_archive_name, module)?)
 }

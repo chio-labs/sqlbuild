@@ -6,6 +6,7 @@ import itertools
 from datetime import datetime, timedelta
 from typing import Any
 
+from sqlbuild._native import build_janitor_archive_name
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
@@ -13,7 +14,6 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
 )
 from sqlbuild.compiler.planner.models import ModelMigrationPlanEntry
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
-from sqlbuild.executor.janitor.main._build_archive_name import build_janitor_archive_name
 from sqlbuild.executor.migrations.constants import (
     MIGRATION_NAME_ATTEMPTS,
     MIGRATION_PREVIOUS_ARCHIVE_KIND,

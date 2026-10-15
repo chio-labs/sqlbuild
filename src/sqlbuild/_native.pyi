@@ -228,10 +228,12 @@ from sqlbuild.executor.clone.models import (
     CloneItemResult,
 )
 from sqlbuild.executor.diff.models import DiffExecutionResult, RowDiffSamplingOverride
-from sqlbuild.executor.janitor.models import JanitorExecutionResult, JanitorPlan
-from sqlbuild.executor.load.models import (
-    LoadExecutionResult,
+from sqlbuild.executor.janitor.models import (
+    JanitorExecutionResult,
+    JanitorPlan,
+    JanitorRelationKey,
 )
+from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.models import (
     PythonCheckExecutionResult,
     PythonNodeExecutionResult,
@@ -6282,6 +6284,25 @@ def observe_source_freshness_json(
     previous_records_by_source_name: Mapping[str, SourceFreshnessRecord] | None = None,
 ) -> str: ...
 def render_janitor_plan(*, plan: JanitorPlan, use_color: bool = False) -> str: ...
+def build_janitor_plan(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    connection: Any,
+    retention_days: int,
+    delete_tracked_only: bool = True,
+    exclude_patterns: Sequence[str] = (),
+    direct_mode: bool = True,
+    state_history_versions: int = 20,
+    archive_retention_days: int = 14,
+    early_old_name_view_drops: Sequence[str] = (),
+    scan_relation_keys: Iterable[JanitorRelationKey] | None = None,
+    protected_relation_keys: Iterable[JanitorRelationKey] | None = None,
+    protected_relation_reasons: Mapping[JanitorRelationKey, str] | None = None,
+) -> JanitorPlan: ...
+def build_janitor_archive_name(
+    *, original_name: str, archived_at: datetime, identifier_limit: int, kind: str | None = None
+) -> str: ...
 def render_janitor_completion(
     *, result: JanitorExecutionResult, use_color: bool = False
 ) -> str: ...

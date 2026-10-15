@@ -8,12 +8,10 @@ from itertools import chain
 
 import pytest
 
-from sqlbuild.executor.janitor.main.plan import build_janitor_plan
+from sqlbuild._native import build_janitor_plan
 from sqlbuild.executor.janitor.models import (
     JanitorDeleteCandidate,
-    JanitorDirectModeSettings,
     JanitorPlan,
-    JanitorRelationScope,
 )
 from tests.unit.src.sqlbuild.executor.janitor.main._test_types import (
     JanitorFoldedIdentifierPlanTestCase,
@@ -128,10 +126,8 @@ def test_given_folded_catalog_identifiers_when_planning_janitor_then_keys_compar
         connection=object(),
         retention_days=7,
         delete_tracked_only=test_case.delete_tracked_only,
-        relation_scope=JanitorRelationScope(
-            protected_relation_keys=test_case.protected_relation_keys
-        ),
-        direct_settings=JanitorDirectModeSettings(enabled=test_case.direct_mode),
+        protected_relation_keys=test_case.protected_relation_keys,
+        direct_mode=test_case.direct_mode,
     )
 
     assert (

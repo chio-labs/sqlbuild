@@ -1,4 +1,9 @@
+pub(crate) mod janitor_classification;
 pub(crate) mod janitor_command;
+pub(crate) mod janitor_facts;
+pub(crate) mod janitor_keys;
+pub(crate) mod janitor_old_names;
 pub(crate) mod janitor_phases;
 pub(crate) mod janitor_plan;
+pub(crate) mod janitor_planning;
 pub(crate) mod registration;

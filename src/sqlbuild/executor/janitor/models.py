@@ -53,14 +53,6 @@ class JanitorDeleteCandidate:
 
 
 @dataclass(frozen=True)
-class JanitorParsedArchiveName:
-    """Structured parts of one strict janitor archive relation name."""
-
-    archived_at: datetime
-    logical_name: str
-
-
-@dataclass(frozen=True)
 class JanitorArchiveCandidate:
     """One stale direct-mode relation that will be renamed to an archive name."""
 
@@ -194,63 +186,6 @@ class JanitorBlockedSchema:
         if self.database is not None:
             return self.database
         return "<default>"
-
-
-@dataclass(frozen=True)
-class JanitorWarehouseFacts:
-    """Desired, discovered, and tracked relation facts for planning."""
-
-    desired_keys: frozenset[JanitorRelationKey]
-    source_schema_names: dict[tuple[str | None, str | None], set[str]]
-    relations_by_schema: dict[tuple[str | None, str | None], tuple[RelationInfo, ...]]
-    tracked_relation_keys: frozenset[JanitorRelationKey]
-
-
-@dataclass(frozen=True)
-class JanitorRelationClassification:
-    """Delete candidates and skipped relations for one target schema."""
-
-    candidates: tuple[JanitorDeleteCandidate, ...]
-    skipped_relations: tuple[JanitorSkippedRelation, ...]
-
-
-@dataclass(frozen=True)
-class JanitorSchemaClassification:
-    """Combined relation decisions across target schemas."""
-
-    candidates: tuple[JanitorDeleteCandidate, ...]
-    skipped_relations: tuple[JanitorSkippedRelation, ...]
-    skipped_schemas: tuple[JanitorSkippedSchema, ...]
-    blocked_schemas: tuple[JanitorBlockedSchema, ...]
-
-
-@dataclass(frozen=True)
-class JanitorArchivePlanning:
-    """Direct-mode archive and archive-expiry decisions for one janitor plan."""
-
-    archive_candidates: tuple[JanitorArchiveCandidate, ...]
-    archive_deletion_candidates: tuple[JanitorArchivedRelation, ...]
-    retained_archives: tuple[JanitorArchivedRelation, ...]
-    skipped_relations: tuple[JanitorSkippedRelation, ...]
-    blocked_schemas: tuple[JanitorBlockedSchema, ...]
-
-
-@dataclass(frozen=True)
-class JanitorRelationScope:
-    """Scan scope and protection rules for one janitor plan."""
-
-    scan_relation_keys: frozenset[JanitorRelationKey] = frozenset()
-    protected_relation_keys: frozenset[JanitorRelationKey] = frozenset()
-    protected_relation_reasons: dict[JanitorRelationKey, str] | None = None
-
-
-@dataclass(frozen=True)
-class JanitorDirectModeSettings:
-    """Direct-mode state-history settings."""
-
-    enabled: bool = True
-    state_history_versions: int = 20
-    archive_retention_days: int = 14
 
 
 @dataclass(frozen=True)

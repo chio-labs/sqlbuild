@@ -1,6 +1,6 @@
 //! Python boundaries for native scenario planning.
 
-mod artifacts;
+pub(crate) mod artifacts;
 mod cli;
 mod constants;
 mod entries;

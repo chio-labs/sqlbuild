@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import build_janitor_plan
 from sqlbuild.executor.janitor.main.execute import execute_janitor_plan
-from sqlbuild.executor.janitor.main.plan import build_janitor_plan
-from sqlbuild.executor.janitor.models import JanitorDirectModeSettings, JanitorPlan
+from sqlbuild.executor.janitor.models import JanitorPlan
 from tests.unit.src.sqlbuild.executor.janitor.main._test_types import (
     JanitorCaseSafetyTestCase,
     relation_info,
@@ -48,7 +48,7 @@ def test_given_case_variant_relations_when_running_janitor_then_excluded_tables_
         connection=object(),
         retention_days=0,
         exclude_patterns=test_case.exclude_patterns,
-        direct_settings=JanitorDirectModeSettings(enabled=test_case.direct_mode),
+        direct_mode=test_case.direct_mode,
     )
     execute_janitor_plan(plan=plan, adapter=adapter, connection=object())
 

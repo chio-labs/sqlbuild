@@ -7,15 +7,9 @@ from itertools import chain
 
 import pytest
 
-from sqlbuild.executor.janitor.constants import (
-    CASE_COLLISION_REASON,
-    MALFORMED_ARCHIVE_REASON,
-    UNQUOTED_ADDRESSING_REASON,
-)
-from sqlbuild.executor.janitor.main.plan import build_janitor_plan
+from sqlbuild._native import build_janitor_plan
 from sqlbuild.executor.janitor.models import (
     JanitorArchivedRelation,
-    JanitorDirectModeSettings,
     JanitorPlan,
     JanitorRelationKey,
     JanitorSkippedRelation,
@@ -26,6 +20,9 @@ from tests.unit.src.sqlbuild.executor.janitor.main._test_types import (
     relation_info,
 )
 from tests.unit.src.sqlbuild.executor.janitor.main.helpers import (
+    CASE_COLLISION_REASON,
+    MALFORMED_ARCHIVE_REASON,
+    UNQUOTED_ADDRESSING_REASON,
     FakeJanitorAdapter,
     build_project,
 )
@@ -127,10 +124,8 @@ def test_given_direct_warehouse_when_planning_janitor_then_plans_archives_by_str
         retention_days=test_case.retention_days,
         delete_tracked_only=False,
         exclude_patterns=test_case.exclude_patterns,
-        direct_settings=JanitorDirectModeSettings(
-            enabled=test_case.direct_mode,
-            archive_retention_days=test_case.archive_retention_days,
-        ),
+        direct_mode=test_case.direct_mode,
+        archive_retention_days=test_case.archive_retention_days,
     )
 
     assert (
@@ -202,7 +197,7 @@ def test_given_long_relation_name_when_planning_archive_then_fits_name_with_time
         connection=object(),
         retention_days=test_case.retention_days,
         delete_tracked_only=False,
-        direct_settings=JanitorDirectModeSettings(enabled=True),
+        direct_mode=True,
     )
 
     assert (
@@ -262,7 +257,7 @@ def test_given_unaddressable_names_when_planning_direct_janitor_then_they_are_sk
         connection=object(),
         retention_days=7,
         delete_tracked_only=False,
-        direct_settings=JanitorDirectModeSettings(enabled=test_case.direct_mode),
+        direct_mode=test_case.direct_mode,
     )
 
     assert (

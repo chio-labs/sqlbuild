@@ -6,10 +6,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from sqlbuild._native import build_janitor_plan
 from sqlbuild.executor.janitor.main.execute import execute_janitor_plan
-from sqlbuild.executor.janitor.main.plan import build_janitor_plan
 from sqlbuild.executor.janitor.models import (
-    JanitorDirectModeSettings,
     JanitorExecutionResult,
     JanitorPlan,
 )
@@ -73,9 +72,8 @@ def test_given_direct_archive_plan_when_executing_then_renames_drops_and_writes_
         connection=object(),
         retention_days=7,
         delete_tracked_only=False,
-        direct_settings=JanitorDirectModeSettings(
-            enabled=True, archive_retention_days=test_case.archive_retention_days
-        ),
+        direct_mode=True,
+        archive_retention_days=test_case.archive_retention_days,
     )
 
     result: JanitorExecutionResult = execute_janitor_plan(
@@ -150,7 +148,7 @@ def test_given_audit_write_failure_when_archiving_then_rename_persists_and_error
         connection=object(),
         retention_days=7,
         delete_tracked_only=False,
-        direct_settings=JanitorDirectModeSettings(enabled=True),
+        direct_mode=True,
     )
 
     with pytest.raises(RuntimeError) as exc_info:

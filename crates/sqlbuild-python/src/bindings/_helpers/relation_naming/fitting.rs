@@ -11,7 +11,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::imported;
 
 const SHARED_EXCEPTIONS_MODULE: &str = "sqlbuild.errors.contracts.exceptions";
 
-fn shared_error(py: Python<'_>, message: String) -> PyErr {
+pub(crate) fn shared_error(py: Python<'_>, message: String) -> PyErr {
     imported(py, SHARED_EXCEPTIONS_MODULE, "SharedInputError")
         .and_then(|class| class.call1((message,)))
         .map_or_else(|error| error, PyErr::from_value)

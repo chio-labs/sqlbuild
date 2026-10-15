@@ -117,6 +117,7 @@ def test_given_native_source_when_checking_module_paths_then_reports_errors(
                 "sqlbuild.compile",
                 "sqlbuild.compile.reuse",
                 "sqlbuild.cost",
+                "sqlbuild.execution",
                 "sqlbuild.executor.runtime",
                 "sqlbuild.fingerprints",
                 "sqlbuild.lineage",
