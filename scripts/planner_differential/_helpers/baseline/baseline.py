@@ -91,8 +91,7 @@ def _steps(document: dict[str, object]) -> list[dict[str, object]]:
 
 
 def _without_type_modules(value: dict[str, object]) -> dict[str, object]:
-    """Compare captured class and enum names without their module, which moves when a type is
-    hosted natively."""
+    """Drop module paths from captured class and enum names so natively hosted types still match."""
 
     return {key: _type_names_only(key=key, value=item) for key, item in value.items()}
 

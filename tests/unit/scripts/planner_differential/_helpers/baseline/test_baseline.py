@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from scripts.planner_differential._helpers.baseline.baseline import compare_documents
+from scripts.planner_differential.models import ProjectDifference
 from tests.unit.scripts.planner_differential._helpers.baseline._test_types import (
     CompareDocumentsTestCase,
 )
@@ -73,6 +74,8 @@ from tests.unit.scripts.planner_differential._helpers.baseline._test_types impor
 def test_given_runs_when_comparing_then_reports_only_real_differences(
     test_case: CompareDocumentsTestCase,
 ) -> None:
-    differences = compare_documents(expected=test_case.expected, actual=test_case.actual)
+    differences: tuple[ProjectDifference, ...] = compare_documents(
+        expected=test_case.expected, actual=test_case.actual
+    )
 
     assert tuple(difference.artifact for difference in differences) == test_case.expected_artifacts

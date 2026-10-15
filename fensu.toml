@@ -60,11 +60,6 @@ reason = "Native bindings own run-cost allocation, Snowflake cost collection, th
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
-path = "src/sqlbuild/compiler/project_assembly/__init__.py"
-reason = "Native bindings own project assembly and SQL syntax checks; this package only declares the resource fact models the native assembly builds."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
 path = "src/sqlbuild/compiler/contract_adoption/__init__.py"
 reason = "Native bindings own contract comparison, edits and repository writes; this package only declares the adoption models, types and errors the native command builds and raises."
 
