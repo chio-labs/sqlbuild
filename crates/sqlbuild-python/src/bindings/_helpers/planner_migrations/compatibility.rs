@@ -10,7 +10,7 @@ use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::planner_migrations::main::compatibility_findings::compatibility_findings;
 use sqlbuild_analysis::planner_migrations::models::CompatibilityFinding;
 
-const TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
+const TYPES_MODULE: &str = "sqlbuild._native";
 
 fn config(model: &Bound<'_, PyAny>, key: &str) -> PyResult<Option<String>> {
     model

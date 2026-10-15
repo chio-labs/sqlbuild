@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.planner.types import PlanReason
+from sqlbuild._native import PlanReason
 from sqlbuild.executor.run._helpers.materializations.custom import reports_query_change
 from tests.unit.src.sqlbuild.executor.run._helpers._test_types import CustomQueryChangeTestCase
 

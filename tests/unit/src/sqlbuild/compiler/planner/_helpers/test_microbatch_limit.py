@@ -5,8 +5,15 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    CursorBounds,
+    CursorInputRelation,
+    IncrementalMode,
+    MaterializationType,
     MicrobatchLimitAction,
+    ModelPlanEntry,
+    PlanAction,
     PlanEntryBuildInputs,
+    PlanReason,
     PlanWarning,
     apply_configured_microbatch_limits,
     apply_microbatch_limit,
@@ -18,17 +25,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.models import (
-    CursorBounds,
-    CursorInputRelation,
-    ModelPlanEntry,
-)
-from sqlbuild.compiler.planner.types import (
-    IncrementalMode,
-    MaterializationType,
-    PlanAction,
-    PlanReason,
-)
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     ConfiguredMicrobatchPolicyTestCase,
     EffectiveMicrobatchLimitPlanningTestCase,

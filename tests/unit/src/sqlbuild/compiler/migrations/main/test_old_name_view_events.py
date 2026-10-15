@@ -8,19 +8,17 @@ import duckdb
 import pytest
 
 from sqlbuild._native import (
+    MigrationEvent,
     MigrationStateInspection,
+    OldNameViewEvent,
+    OldNameViewEventType,
+    OldNameViewHistory,
     project_old_name_views,
     read_migration_state_events,
     stored_old_name_view_columns,
     write_migration_state_event,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.migrations.models import (
-    MigrationEvent,
-    OldNameViewEvent,
-    OldNameViewHistory,
-)
-from sqlbuild.compiler.migrations.types import OldNameViewEventType
 from tests.unit.src.sqlbuild.compiler.migrations.main._test_types import (
     OldNameViewAbsentColumnsTestCase,
     OldNameViewProjectionTestCase,

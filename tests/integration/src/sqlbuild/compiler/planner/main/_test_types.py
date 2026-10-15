@@ -1,14 +1,12 @@
 from dataclasses import dataclass, field
 
 from sqlbuild._native import (
-    WarningSeverity,
-)
-from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.planner.types import (
     BackfillAction,
     PlanAction,
     PlanReason,
+    WarningSeverity,
 )
+from sqlbuild.compiler.compile.types import FunctionLanguage
 
 
 @dataclass(frozen=True)

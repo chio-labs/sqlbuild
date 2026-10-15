@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import resolve_effective_microbatch_batch_size
-from sqlbuild.compiler.planner.types import CursorGrain
+from sqlbuild._native import CursorGrain, resolve_effective_microbatch_batch_size
 from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
     EffectiveMicrobatchBatchSizeTestCase,
 )

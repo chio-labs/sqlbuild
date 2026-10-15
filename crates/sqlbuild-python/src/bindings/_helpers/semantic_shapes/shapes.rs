@@ -10,7 +10,7 @@ use crate::bindings::_helpers::analysis::binding_catalog::{
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 
 const ADAPTER_MODELS_MODULE: &str = "sqlbuild.adapter.contract.models";
-const PLANNER_TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
+const PLANNER_TYPES_MODULE: &str = "sqlbuild._native";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const UNKNOWN: &str = "UNKNOWN";

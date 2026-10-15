@@ -2,12 +2,10 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from sqlbuild._native import (
+    CursorBounds,
     FutureCursorsConfig,
     SelectionStalenessGraph,
     SelectionStalenessWarning,
-)
-from sqlbuild.compiler.planner.models import (
-    CursorBounds,
 )
 
 

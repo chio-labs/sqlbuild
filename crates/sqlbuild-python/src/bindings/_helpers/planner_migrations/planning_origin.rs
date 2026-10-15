@@ -65,12 +65,7 @@ fn named<'py>(
 
 fn input_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
-        imported(
-            py,
-            "sqlbuild.compiler.planner.exceptions",
-            "PlannerInputError",
-        )?
-        .call1((message,))?,
+        imported(py, "sqlbuild._native", "PlannerInputError")?.call1((message,))?,
     ))
 }
 

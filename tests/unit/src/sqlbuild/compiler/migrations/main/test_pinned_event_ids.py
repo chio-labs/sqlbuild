@@ -3,13 +3,13 @@
 import pytest
 
 from sqlbuild._native import (
+    MigrationRelation,
+    OldNameViewEventType,
     deterministic_column_migration_event_id,
     deterministic_migration_event_id,
     deterministic_old_name_view_event_id,
     source_freshness_data_version_hash,
 )
-from sqlbuild.compiler.migrations.models import MigrationRelation
-from sqlbuild.compiler.migrations.types import OldNameViewEventType
 from tests.unit.src.sqlbuild.compiler.migrations.main._test_types import (
     PinnedColumnEventIdTestCase,
     PinnedFreshnessHashTestCase,

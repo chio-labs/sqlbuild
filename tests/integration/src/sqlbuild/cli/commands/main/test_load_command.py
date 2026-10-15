@@ -17,8 +17,10 @@ from sqlbuild._native import (
     AuditCommandRequest,
     BuildCommandRequest,
     CliUserError,
+    CursorOverrides,
     LoadCommandRequest,
     PlanCommandRequest,
+    PlannerInputError,
     ScenarioTestCommandRequest,
     SourceEntry,
     TestCommandRequest,
@@ -35,8 +37,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.executor.load.main.run import run_load_pipeline
 from sqlbuild.executor.load.models import (
     LoadCallbacks,

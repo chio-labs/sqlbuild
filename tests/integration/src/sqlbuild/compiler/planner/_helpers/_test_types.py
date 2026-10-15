@@ -3,12 +3,10 @@ from dataclasses import dataclass, field
 from sqlbuild._native import (
     CursorSnapshotScope,
     Fingerprint,
+    ModelCursorSnapshot,
     SourceEntry,
 )
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
-from sqlbuild.compiler.planner.models import (
-    ModelCursorSnapshot,
-)
 from sqlbuild.cursor_algebra.types import CursorScalar
 
 

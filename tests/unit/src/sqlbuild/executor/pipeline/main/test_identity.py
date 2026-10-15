@@ -7,9 +7,8 @@ from unittest.mock import Mock
 import pytest
 
 import sqlbuild.executor.pipeline.main.run as run_module
-from sqlbuild._native import CostContext, SettingsConfig
+from sqlbuild._native import CostContext, PlanOutput, SettingsConfig
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.executor.build.models import BuildExecutionResult, BuildRuntimeParams
 from sqlbuild.executor.build.types import BuildStatus

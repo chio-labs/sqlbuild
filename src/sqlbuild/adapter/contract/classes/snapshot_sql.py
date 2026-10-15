@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import InitialValidFrom, SnapshotStrategy
 from sqlbuild.adapter.contract.models import SnapshotChangeTarget, SnapshotSqlDialect
 from sqlbuild.adapter.contract.types import SnapshotUpdateStyle
-from sqlbuild.compiler.planner.types import InitialValidFrom, SnapshotStrategy
 
 
 class SnapshotSql:

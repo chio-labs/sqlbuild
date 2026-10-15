@@ -4,8 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from sqlbuild.compiler.planner.models import FunctionPlanEntry, ModelPlanEntry
-from sqlbuild.compiler.planner.types import MaterializationType
+from sqlbuild._native import FunctionPlanEntry, MaterializationType, ModelPlanEntry
 from sqlbuild.executor.clone.main.execute import execute_clone
 from sqlbuild.executor.clone.models import (
     CloneExecutionInput,

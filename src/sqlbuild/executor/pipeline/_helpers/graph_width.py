@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild._native import PlanOutput
 
 
 def runnable_graph_width(*, plan: PlanOutput) -> int:

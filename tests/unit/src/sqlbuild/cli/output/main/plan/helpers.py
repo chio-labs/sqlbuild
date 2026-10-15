@@ -5,15 +5,28 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild._native import (
+    BackfillAction,
     BackfillResult,
     ColumnRenameHint,
+    CursorBounds,
+    CursorInputRelation,
+    FunctionPlanEntry,
+    MaterializationType,
     MicrobatchLimitAction,
+    ModelPlanEntry,
+    PlanAction,
+    PlanOutput,
     PlanProviderUsage,
+    PlanReason,
     PlanWarning,
     SchemaChangeKind,
     SchemaColumnSource,
+    SchemaFinding,
     SeedCsvSettings,
+    SeedPlanEntry,
+    SourceLoadPlanEntry,
     SourceWriteStrategy,
+    TableTypePlanEntry,
     WarningSeverity,
 )
 from sqlbuild.compiler.compile.models import (
@@ -22,23 +35,6 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
 from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
-from sqlbuild.compiler.planner.models import (
-    CursorBounds,
-    CursorInputRelation,
-    FunctionPlanEntry,
-    ModelPlanEntry,
-    PlanOutput,
-    SchemaFinding,
-    SeedPlanEntry,
-    SourceLoadPlanEntry,
-    TableTypePlanEntry,
-)
-from sqlbuild.compiler.planner.types import (
-    BackfillAction,
-    MaterializationType,
-    PlanAction,
-    PlanReason,
-)
 
 
 def build_model_entry(

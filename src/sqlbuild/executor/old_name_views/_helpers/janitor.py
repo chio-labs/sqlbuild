@@ -6,6 +6,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild._native import (
+    OldNameViewDropReason,
+    OldNameViewEvent,
+    OldNameViewEventType,
+    OldNameViewHistory,
+    OldNameViewStatus,
     deterministic_old_name_view_event_id,
     write_migration_state_event,
 )

@@ -1,7 +1,7 @@
 //! Python modules, names and messages of migration state rows.
 
-pub(crate) const MIGRATION_MODELS: &str = "sqlbuild.compiler.migrations.models";
-pub(crate) const MIGRATION_TYPES: &str = "sqlbuild.compiler.migrations.types";
+pub(crate) const MIGRATION_MODELS: &str = "sqlbuild._native";
+pub(crate) const MIGRATION_TYPES: &str = "sqlbuild._native";
 pub(crate) const MIGRATION_EXCEPTIONS: &str = "sqlbuild._native";
 pub(crate) const STATE_TABLE_DDL: &str =
     "sqlbuild.adapter.state_sql.main.render_state_table_create_sql";

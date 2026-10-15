@@ -5,6 +5,11 @@ from typing import Any, ClassVar
 
 from sqlbuild._native import (
     CompileModelConfig,
+    FunctionPlanEntry,
+    MaterializationType,
+    ModelPlanEntry,
+    PlanAction,
+    PlanReason,
     ResolvedTimeTravelRetention,
     TimeTravelRetentionSource,
 )
@@ -21,8 +26,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.planner.models import FunctionPlanEntry, ModelPlanEntry
-from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 
 
 class FakeCloneAdapter(BaseAdapter):

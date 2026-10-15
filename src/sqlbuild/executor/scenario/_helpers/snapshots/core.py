@@ -11,13 +11,14 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from sqlbuild._native import error_code, error_message
-from sqlbuild.compiler.planner.models import (
+from sqlbuild._native import (
+    ScenarioArtifactKind,
     ScenarioExecutionPlan,
     ScenarioFixturePlan,
     SeedPlanEntry,
+    error_code,
+    error_message,
 )
-from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.scenario.constants import (
     JSONL_BLANK_LINE,

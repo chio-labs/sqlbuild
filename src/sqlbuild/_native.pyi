@@ -26,12 +26,14 @@ from sqlbuild.adapter.contract.models import (
     ExpressionInferenceProfile,
     QueryResult,
     RelationInfo,
+    RetentionRequest,
     RowDiffSampling,
     RowDiffTolerances,
 )
 from sqlbuild.adapter.contract.types import (
     AdapterExecute,
     FrameworkType,
+    MigrationTransfer,
     TablePromotionMode,
     TypeDialect,
 )
@@ -104,63 +106,9 @@ from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.lineage.types import (
     InferredNullability,
 )
-from sqlbuild.compiler.migrations.models import (
-    ColumnMigrationEvent,
-    MigrationEvent,
-    MigrationRelation,
-    OldNameViewEvent,
-    OldNameViewHistory,
-)
-from sqlbuild.compiler.migrations.types import (
-    MigrationDecision,
-    MigrationPromotion,
-    OldNameViewEventType,
-)
 from sqlbuild.compiler.pipeline.models import (
     CompilePipelineResult,
     ProjectGraph,
-)
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.models import (
-    AuditPlanEntry,
-    ChainStep,
-    CloneSourcePlanEntry,
-    ColumnMigrationPlanEntry,
-    CursorBounds,
-    CursorInputEvidence,
-    CursorInputRelation,
-    CursorOverrides,
-    EmptyCursorInputDecision,
-    FunctionPlanEntry,
-    FutureCursorSafetyEvidence,
-    MaximumStartPolicyInputs,
-    MaximumStartSafetyEvidence,
-    ModelCursorSnapshot,
-    ModelMigrationPlanEntry,
-    ModelPlanEntry,
-    OldNameView,
-    OldNameViewPlanEntry,
-    PlanOutput,
-    RetentionPlanEntry,
-    ScenarioExecutionPlan,
-    ScenarioFixturePlan,
-    ScenarioRelationMap,
-    ScenarioRelationPlan,
-    SchemaFinding,
-    SeedPlanEntry,
-    SourceLoadPlanEntry,
-    SqlTestPlanEntry,
-    TableTypePlanEntry,
-)
-from sqlbuild.compiler.planner.types import (
-    BackfillAction,
-    CursorGrain,
-    CursorType,
-    MaterializationType,
-    OnSchemaChange,
-    PlanAction,
-    PlanReason,
-    ScenarioArtifactKind,
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.compiler.references.models import (
@@ -15517,3 +15465,1321 @@ class Duration(NativeRecord):
     def total_months(self) -> int: ...
     def add_to(self, moment: datetime) -> datetime: ...
     def subtract_from(self, moment: datetime) -> datetime: ...
+
+class MigrationDecision(StrEnum):
+    """Per-run decision for one declared or discovered model migration."""
+
+    DONE = "done"
+    MIGRATE = "migrate"
+    REDO = "redo"
+    SUPERSEDED_REPLACE = "superseded_replace"
+    FORCED_REPLACE = "forced_replace"
+    CONFLICT = "conflict"
+    ORIGIN_MISSING = "origin_missing"
+    RENAMED = "renamed"
+    @property
+    def moves_data(self) -> bool: ...
+    @property
+    def blocks_build(self) -> bool: ...
+    @property
+    def checks_compatibility(self) -> bool: ...
+    @property
+    def label(self) -> str: ...
+
+class MigrationPromotion(StrEnum):
+    """How a completed migration stage replaces or creates the destination."""
+
+    SWAP = "swap"
+    RENAME = "rename"
+    TRANSACTIONAL_RENAME = "transactional_rename"
+    @property
+    def label(self) -> str: ...
+
+class ColumnMigrationDecision(StrEnum):
+    """Per-run decision for one declared or detected column rename."""
+
+    RENAME = "rename"
+    RECORD = "record"
+    DONE = "done"
+    CONFLICT = "conflict"
+    SOURCE_MISSING = "source_missing"
+    STILL_PRODUCED = "still_produced"
+    UNSUPPORTED = "unsupported"
+    @property
+    def renames(self) -> bool: ...
+    @property
+    def records_event(self) -> bool: ...
+    @property
+    def blocks_build(self) -> bool: ...
+    @property
+    def label(self) -> str: ...
+
+class OldNameViewEventType(StrEnum):
+    """Immutable facts about what happened at a migrated relation's old name."""
+
+    REQUIRED = "required"
+    ORIGIN_ARCHIVED = "origin_archived"
+    VIEW_CREATED = "view_created"
+    VIEW_DROPPED = "view_dropped"
+
+class OldNameViewDropReason(StrEnum):
+    """Why a compatibility view at an old name was dropped."""
+
+    EXPIRED = "expired"
+    EARLY = "early"
+    MISSING = "missing"
+
+class OldNameViewStatus(StrEnum):
+    """Projected state of the old-name steps of one recorded move."""
+
+    PENDING_ARCHIVE = "pending_archive"
+    PENDING_VIEW = "pending_view"
+    LIVE = "live"
+    EXPIRED = "expired"
+    DROPPED = "dropped"
+
+class MigrationRelation(NativeRecord):
+    """One physical relation named by a migration event."""
+
+    database: str | None
+    schema: str | None
+    name: str
+    def __init__(
+        self,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> None: ...
+    @property
+    def identity(self) -> tuple[str | None, str, str]: ...
+    def matches(self, other: MigrationRelation) -> bool: ...
+
+class MigrationEvent(NativeRecord):
+    """One immutable fact that a origin relation was cloned over a destination."""
+
+    event_id: str
+    target_name: str | None
+    origin_model: str | None
+    origin: MigrationRelation
+    destination_model: str
+    destination: MigrationRelation
+    origin_version_hash: str
+    discovery: MigrationDiscovery
+    decision: MigrationDecision
+    run_id: str
+    created_at: datetime
+    def __init__(
+        self,
+        event_id: str,
+        target_name: str | None,
+        origin_model: str | None,
+        origin: MigrationRelation,
+        destination_model: str,
+        destination: MigrationRelation,
+        origin_version_hash: str,
+        discovery: MigrationDiscovery,
+        decision: MigrationDecision,
+        run_id: str,
+        created_at: datetime,
+    ) -> None: ...
+    def mentions(self, relation: MigrationRelation) -> bool: ...
+
+class ColumnMigrationEvent(NativeRecord):
+    """One immutable fact that a column of a model relation was renamed in place."""
+
+    event_id: str
+    target_name: str | None
+    model_name: str
+    relation: MigrationRelation
+    origin_column: str
+    destination_column: str
+    discovery: MigrationDiscovery
+    decision: ColumnMigrationDecision
+    run_id: str
+    created_at: datetime
+    def __init__(
+        self,
+        event_id: str,
+        target_name: str | None,
+        model_name: str,
+        relation: MigrationRelation,
+        origin_column: str,
+        destination_column: str,
+        discovery: MigrationDiscovery,
+        decision: ColumnMigrationDecision,
+        run_id: str,
+        created_at: datetime,
+    ) -> None: ...
+    def mentions(self, *, relation: MigrationRelation, columns: frozenset[str]) -> bool: ...
+    def renamed(self, *, origin_column: str, destination_column: str) -> bool: ...
+
+class OldNameViewEvent(NativeRecord):
+    """One immutable fact about the old name of one recorded move."""
+
+    event_id: str
+    target_name: str | None
+    event_type: OldNameViewEventType
+    migration_event_id: str
+    destination_model: str
+    old: MigrationRelation
+    new: MigrationRelation
+    run_id: str
+    created_at: datetime
+    view_retention: str | None
+    archive_name: str | None
+    column_aliases: tuple[tuple[str, str], ...]
+    expires_at: datetime | None
+    drop_reason: OldNameViewDropReason | None
+    grants_copied: tuple[str, ...] | None
+    view_sql: str | None
+    def __init__(
+        self,
+        event_id: str,
+        target_name: str | None,
+        event_type: OldNameViewEventType,
+        migration_event_id: str,
+        destination_model: str,
+        old: MigrationRelation,
+        new: MigrationRelation,
+        run_id: str,
+        created_at: datetime,
+        view_retention: str | None = ...,
+        archive_name: str | None = ...,
+        column_aliases: tuple[tuple[str, str], ...] = ...,
+        expires_at: datetime | None = ...,
+        drop_reason: OldNameViewDropReason | None = ...,
+        grants_copied: tuple[str, ...] | None = ...,
+        view_sql: str | None = ...,
+    ) -> None: ...
+
+class OldNameViewHistory(NativeRecord):
+    """The recorded move and every old-name fact that references it."""
+
+    move: MigrationEvent
+    required: OldNameViewEvent
+    archived: OldNameViewEvent | None
+    created: OldNameViewEvent | None
+    dropped: OldNameViewEvent | None
+    def __init__(
+        self,
+        move: MigrationEvent,
+        required: OldNameViewEvent,
+        archived: OldNameViewEvent | None = ...,
+        created: OldNameViewEvent | None = ...,
+        dropped: OldNameViewEvent | None = ...,
+    ) -> None: ...
+    def status(self, *, now: datetime) -> OldNameViewStatus: ...
+    @property
+    def old(self) -> MigrationRelation: ...
+    @property
+    def new(self) -> MigrationRelation: ...
+
+class BackfillAction(StrEnum):
+    FULL = "full"
+    BOUNDED = "bounded"
+    FORWARD_ONLY = "forward"
+
+class OnSchemaChange(StrEnum):
+    IGNORE = "ignore"
+    FAIL = "fail"
+    APPEND_NEW_COLUMNS = "append_new_columns"
+    SYNC_ALL_COLUMNS = "sync_all_columns"
+
+class ContractPolicy(StrEnum):
+    NONE = "none"
+    ENFORCED = "enforced"
+
+class RetentionDirection(StrEnum):
+    INCREASE = "increase"
+    DECREASE = "decrease"
+    MIXED = "mixed"
+    MATCH = "match"
+    APPLY_AFTER_CREATE = "apply_after_create"
+
+class RetentionPlanPhase(StrEnum):
+    PRE = "pre"
+    POST = "post"
+    AFTER_CREATE = "after_create"
+    NONE = "none"
+
+class PlanAction(StrEnum):
+    CREATE_VIEW = "create_view"
+    CREATE_TABLE = "create_table"
+    INCREMENTAL_APPEND = "incremental_append"
+    INCREMENTAL_DELETE_INSERT = "incremental_delete_insert"
+    INCREMENTAL_MERGE = "incremental_merge"
+    SNAPSHOT = "snapshot"
+    LOAD_SEED = "load_seed"
+    SKIP = "skip"
+    CUSTOM = "custom"
+
+class PlanReason(StrEnum):
+    FIRST_RUN = "first_run"
+    RENAMED = "renamed"
+    FULL_REFRESH = "full_refresh"
+    QUERY_CHANGED = "query_changed"
+    FUNCTION_CHANGED = "function_changed"
+    CONFIG_CHANGED = "config_changed"
+    SCHEMA_CHANGED = "schema_changed"
+    NORMAL_INCREMENTAL = "normal_incremental"
+    NO_CHANGE = "no_change"
+    DISABLED = "disabled"
+    SOURCE_FRESHNESS_ERROR = "source_freshness_error"
+    EXTERNAL_UPSTREAM_FAILED = "external_upstream_failed"
+
+class IncrementalStrategy(StrEnum):
+    APPEND = "append"
+    DELETE_INSERT = "delete_insert"
+    MERGE = "merge"
+
+class MicrobatchStrategy(StrEnum):
+    """How an ordinary microbatch range is selected."""
+
+    ROLLING_WINDOW = "rolling_window"
+    WATERMARK = "watermark"
+
+class IncrementalMode(StrEnum):
+    FULL = "full"
+    MICROBATCH = "microbatch"
+
+class SnapshotStrategy(StrEnum):
+    TIMESTAMP = "timestamp"
+    CHECK = "check"
+
+class HistoricalInput(StrEnum):
+    SNAPSHOT = "snapshot"
+    CHANGES = "changes"
+
+class InitialValidFrom(StrEnum):
+    UPDATED_AT = "updated_at"
+    OBSERVED_AT = "observed_at"
+    EXECUTION_TIME = "execution_time"
+
+class SnapshotSchemaChangePolicy(StrEnum):
+    DENY = "deny"
+    REQUIRE_CONFIRMATION = "require_confirmation"
+    APPEND_NEW_COLUMNS = "append_new_columns"
+
+class CursorType(StrEnum):
+    TIMESTAMP = "timestamp"
+    INTEGER = "integer"
+
+class CursorGrain(StrEnum):
+    SECOND = "second"
+    MINUTE = "minute"
+    HOUR = "hour"
+    DAY = "day"
+    MONTH = "month"
+    YEAR = "year"
+
+class MaterializationType(StrEnum):
+    VIEW = "view"
+    TABLE = "table"
+    INCREMENTAL = "incremental"
+    SNAPSHOT = "snapshot"
+    SEED = "seed"
+    CUSTOM = "custom"
+    @classmethod
+    def is_table_backed(cls, *, materialized: object | None) -> bool: ...
+
+class ScenarioArtifactKind(StrEnum):
+    SOURCE = "source"
+    REF = "ref"
+    SEED = "seed"
+    DBT_REF = "dbt_ref"
+    MODEL = "model"
+
+class PlannerInputError(ValueError):
+    """Raised when planner inputs cannot be resolved safely."""
+
+    code: str
+    message: str
+    help: str | None
+    def __init__(
+        self, message: str, *, code: str | None = None, help: str | None = None
+    ) -> None: ...
+
+class NativeSqlTestPlanningError(PlannerInputError):
+    """Raised when the native SQL-test planning boundary returns invalid data."""
+
+class FutureCursorSafetyError(PlannerInputError):
+    """Raised when an effective cursor exceeds the configured future limit."""
+
+class MaximumAutomaticStartError(PlannerInputError):
+    """Raised when automatic cursor recovery would exceed its configured horizon."""
+
+    evidence: Any
+
+class CursorOverrides(NativeRecord):
+    """Cursor override values from CLI flags; untyped `start`/`end` await planner typing."""
+
+    start_ts: CursorScalar | None
+    end_ts: CursorScalar | None
+    start_int: CursorScalar | None
+    end_int: CursorScalar | None
+    start: str | None
+    end: str | None
+    def __init__(
+        self,
+        *,
+        start_ts: str | CursorScalar | None = None,
+        end_ts: str | CursorScalar | None = None,
+        start_int: str | CursorScalar | None = None,
+        end_int: str | CursorScalar | None = None,
+        start: str | None = None,
+        end: str | None = None,
+    ) -> None: ...
+    @property
+    def has_untyped(self) -> bool: ...
+    def typed_as(self, *, cursor_type: CursorType) -> CursorOverrides: ...
+
+class EmptyCursorInputDecision(NativeRecord):
+    """Cursor inputs whose lack of rows leaves no window, and whether other inputs have rows."""
+
+    input_names: tuple[str, ...]
+    waiting_on_empty_inputs: bool
+    def __init__(
+        self,
+        input_names: tuple[str, ...] = ...,
+        waiting_on_empty_inputs: bool = ...,
+    ) -> None: ...
+
+class ModelCursorSnapshot(NativeRecord):
+    """Cursor MIN/MAX values gathered from warehouse for one incremental model."""
+
+    target_max: CursorScalar | None
+    upstream_mins: tuple[CursorScalar, ...]
+    upstream_maxes: tuple[CursorScalar, ...]
+    physical_target_max: CursorScalar | None
+    target_eligible_max: CursorScalar | None
+    target_relation: str | None
+    destination_cursor_column: str | None
+    input_evidence: tuple[CursorInputEvidence, ...]
+    expected_watermark_count: int
+    unavailable_watermark_tags: tuple[str, ...]
+    cursor_watermark_mode: CursorWatermarkMode
+    upstream_terminal_starts: tuple[CursorScalar, ...]
+    upstream_terminal_ends: tuple[CursorScalar, ...]
+    upstream_end_inputs: tuple[tuple[CursorScalar | None, CursorScalar | None], ...]
+    upstream_availability_ends: tuple[CursorScalar, ...]
+    empty_input_names: tuple[str, ...]
+    unreadable_input_names: tuple[str, ...]
+    def __init__(self, **values: Any) -> None: ...
+    @property
+    def watermarks_available(self) -> bool: ...
+
+class CursorBounds(NativeRecord):
+    """Effective cursor start and end values for one incremental model."""
+
+    start: Bound
+    end: Bound
+    future_safety: FutureCursorSafetyEvidence | None
+    maximum_start_safety: MaximumStartSafetyEvidence | None
+    def __init__(
+        self,
+        *,
+        start: Bound | str,
+        end: Bound | str,
+        future_safety: FutureCursorSafetyEvidence | None = None,
+        maximum_start_safety: MaximumStartSafetyEvidence | None = None,
+    ) -> None: ...
+
+class CursorInputEvidence(NativeRecord):
+    """Observed bounds for one physical cursor input."""
+
+    relation: str
+    cursor_column: str
+    minimum: CursorScalar | None
+    maximum: CursorScalar
+    def __init__(
+        self,
+        *,
+        relation: str,
+        cursor_column: str,
+        minimum: CursorScalar | str | None,
+        maximum: CursorScalar | str,
+    ) -> None: ...
+
+class FutureCursorSafetyEvidence(NativeRecord):
+    """Structured evidence for one applied future-cursor cap."""
+
+    action: FutureCursorAction
+    max_distance: str
+    invocation_time: CursorScalar
+    discovered_start: CursorScalar
+    discovered_end: CursorScalar
+    applied_start: CursorScalar
+    applied_end: CursorScalar
+    maximum_allowed_start: CursorScalar
+    maximum_allowed_end: CursorScalar
+    future_start_detected: bool
+    future_end_detected: bool
+    determining_relation: str | None
+    determining_cursor_column: str | None
+    inputs: tuple[CursorInputEvidence, ...]
+    def __init__(self, **values: Any) -> None: ...
+
+class MaximumStartSafetyEvidence(NativeRecord):
+    """Structured evidence for an automatic-start eligibility decision."""
+
+    action: FutureCursorAction
+    max_ahead: str
+    invocation_time: CursorScalar
+    physical_target_max: CursorScalar
+    highest_eligible_target_max: CursorScalar | None
+    effective_start: CursorScalar
+    maximum_allowed_start: CursorScalar
+    target_relation: str
+    cursor_column: str
+    def __init__(
+        self,
+        *,
+        action: FutureCursorAction,
+        max_ahead: str,
+        invocation_time: CursorScalar | str,
+        physical_target_max: CursorScalar | str,
+        highest_eligible_target_max: CursorScalar | str | None,
+        effective_start: CursorScalar | str,
+        maximum_allowed_start: CursorScalar | str,
+        target_relation: str,
+        cursor_column: str,
+    ) -> None: ...
+
+class CursorInputRelation(NativeRecord):
+    """One cursor-bearing input relation for runtime range discovery."""
+
+    relation: str
+    cursor_column: str
+    cursor_grain: CursorGrain | None
+    is_model_backed: bool
+    is_runtime_produced: bool
+    terminal_cursor_start: CursorScalar | None
+    terminal_cursor_end: CursorScalar | None
+    input_name: str | None
+    input_kind: GraphResourceKind | None
+    def __init__(
+        self,
+        *,
+        relation: str,
+        cursor_column: str,
+        cursor_grain: CursorGrain | str | None = None,
+        is_model_backed: bool = False,
+        is_runtime_produced: bool = False,
+        terminal_cursor_start: CursorScalar | str | None = None,
+        terminal_cursor_end: CursorScalar | str | None = None,
+        input_name: str | None = None,
+        input_kind: GraphResourceKind | None = None,
+    ) -> None: ...
+    @property
+    def is_runtime_owned(self) -> bool: ...
+
+class MaximumStartPolicyInputs(NativeRecord):
+    """Effective policy and materialization safety inputs for automatic starts."""
+
+    config: StartCursorsConfig | None
+    invocation_time: datetime | None
+    incremental_strategy: str | None
+    incremental_mode: str | None
+    def __init__(
+        self,
+        config: StartCursorsConfig | None = ...,
+        invocation_time: datetime | None = ...,
+        incremental_strategy: str | None = ...,
+        incremental_mode: str | None = ...,
+    ) -> None: ...
+
+class SchemaFinding(NativeRecord):
+    """One detected schema difference between expected and warehouse columns."""
+
+    kind: SchemaChangeKind
+    column_name: str
+    source: SchemaColumnSource
+    expected_type: str | None
+    actual_type: str | None
+    def __init__(
+        self,
+        kind: SchemaChangeKind,
+        column_name: str,
+        source: SchemaColumnSource,
+        expected_type: str | None = ...,
+        actual_type: str | None = ...,
+    ) -> None: ...
+
+class RetentionPlanEntry(NativeRecord):
+    """Warehouse retention work independent of model identity actions."""
+
+    request: RetentionRequest
+    model_names: tuple[str, ...]
+    actual_days: int | None
+    effective_days: int | None
+    source: str
+    direction: RetentionDirection
+    phase: RetentionPlanPhase
+    statements: tuple[str, ...]
+    irreversible_warning: str | None
+    decrease_policy: str
+    def __init__(
+        self,
+        request: RetentionRequest,
+        model_names: tuple[str, ...],
+        actual_days: int | None,
+        effective_days: int | None,
+        source: str,
+        direction: RetentionDirection,
+        phase: RetentionPlanPhase,
+        statements: tuple[str, ...] = ...,
+        irreversible_warning: str | None = ...,
+        decrease_policy: str = ...,
+    ) -> None: ...
+    @property
+    def decreases(self) -> bool: ...
+
+class TableTypePlanEntry(NativeRecord):
+    """Snowflake table-type work independent of model identity actions."""
+
+    model_name: str
+    destination: CompiledRelationLocation
+    copy_name: str
+    desired_type: str
+    actual_type: str | None
+    source: str
+    downgrade: bool
+    downgrade_policy: str
+    irreversible_warning: str | None
+    def __init__(
+        self,
+        model_name: str,
+        destination: CompiledRelationLocation,
+        copy_name: str,
+        desired_type: str,
+        actual_type: str | None,
+        source: str,
+        downgrade: bool,
+        downgrade_policy: str,
+        irreversible_warning: str | None = ...,
+    ) -> None: ...
+
+class ModelMigrationPlanEntry(NativeRecord):
+    """One declared or discovered model migration and its per-run decision."""
+
+    model_name: str
+    discovery: MigrationDiscovery
+    decision: MigrationDecision
+    compatibility: MigrationCompatibility
+    origin_model: str | None
+    origin: CompiledRelationLocation
+    destination: CompiledRelationLocation
+    target_name: str | None
+    origin_version_hash: str
+    origin_is_transient: bool
+    stage_is_transient: bool | None
+    transfer: MigrationTransfer | None
+    transfer_fallback: MigrationTransfer | None
+    promotion: MigrationPromotion | None
+    completed_at: datetime | None
+    compatibility_findings: tuple[str, ...]
+    message: str | None
+    origin_tracked: bool
+    missing_origin_policy: MissingMigrationOriginPolicy
+    def __init__(
+        self,
+        model_name: str,
+        discovery: MigrationDiscovery,
+        decision: MigrationDecision,
+        compatibility: MigrationCompatibility,
+        origin_model: str | None,
+        origin: CompiledRelationLocation,
+        destination: CompiledRelationLocation,
+        target_name: str | None,
+        origin_version_hash: str = ...,
+        origin_is_transient: bool = ...,
+        stage_is_transient: bool | None = ...,
+        transfer: MigrationTransfer | None = ...,
+        transfer_fallback: MigrationTransfer | None = ...,
+        promotion: MigrationPromotion | None = ...,
+        completed_at: datetime | None = ...,
+        compatibility_findings: tuple[str, ...] = ...,
+        message: str | None = ...,
+        origin_tracked: bool = ...,
+        missing_origin_policy: MissingMigrationOriginPolicy = ...,
+    ) -> None: ...
+    @property
+    def origin_missing(self) -> bool: ...
+    @property
+    def origin_hidden(self) -> bool: ...
+    @property
+    def storage_transition(self) -> str | None: ...
+    @property
+    def target_label(self) -> str: ...
+    @property
+    def blocks_build(self) -> bool: ...
+
+class OldNameViewPlanEntry(NativeRecord):
+    """What one build does at the old name of one migrated model."""
+
+    model_name: str
+    origin: CompiledRelationLocation
+    destination: CompiledRelationLocation
+    action: OldNameViewAction
+    target_name: str | None
+    retention: str | None
+    expires_at: datetime | None
+    column_aliases: tuple[tuple[str, str], ...]
+    stores_history: bool
+    migration_event_id: str | None
+    records_requirement: bool
+    reason: str | None
+    grants_copied: int | None
+    grants_supported: bool
+    archived: bool
+    def __init__(
+        self,
+        model_name: str,
+        origin: CompiledRelationLocation,
+        destination: CompiledRelationLocation,
+        action: OldNameViewAction,
+        target_name: str | None,
+        retention: str | None = ...,
+        expires_at: datetime | None = ...,
+        column_aliases: tuple[tuple[str, str], ...] = ...,
+        stores_history: bool = ...,
+        migration_event_id: str | None = ...,
+        records_requirement: bool = ...,
+        reason: str | None = ...,
+        grants_copied: int | None = ...,
+        grants_supported: bool = ...,
+        archived: bool = ...,
+    ) -> None: ...
+    @property
+    def runs_steps(self) -> bool: ...
+
+class OldNameView(NativeRecord):
+    """One compatibility view recorded at an old name and not recorded as dropped."""
+
+    destination_model: str
+    old: CompiledRelationLocation
+    new: CompiledRelationLocation
+    expires_at: datetime | None
+    column_aliases: tuple[tuple[str, str], ...]
+    migration_event_id: str
+    target_name: str | None
+    name_reused_by: str | None
+    def __init__(
+        self,
+        destination_model: str,
+        old: CompiledRelationLocation,
+        new: CompiledRelationLocation,
+        expires_at: datetime | None,
+        column_aliases: tuple[tuple[str, str], ...],
+        migration_event_id: str,
+        target_name: str | None,
+        name_reused_by: str | None = ...,
+    ) -> None: ...
+
+class ColumnMigrationPlanEntry(NativeRecord):
+    """One declared or detected in-place column rename and its per-run decision."""
+
+    model_name: str
+    destination: CompiledRelationLocation
+    origin_column: str
+    destination_column: str
+    discovery: MigrationDiscovery
+    decision: ColumnMigrationDecision
+    target_name: str | None
+    completed_at: datetime | None
+    message: str | None
+    missing_origin_policy: MissingMigrationOriginPolicy
+    def __init__(
+        self,
+        model_name: str,
+        destination: CompiledRelationLocation,
+        origin_column: str,
+        destination_column: str,
+        discovery: MigrationDiscovery,
+        decision: ColumnMigrationDecision,
+        target_name: str | None,
+        completed_at: datetime | None = ...,
+        message: str | None = ...,
+        missing_origin_policy: MissingMigrationOriginPolicy = ...,
+    ) -> None: ...
+    @property
+    def origin_missing(self) -> bool: ...
+    @property
+    def blocks_build(self) -> bool: ...
+
+class ModelPlanEntry(NativeRecord):
+    """Per-model execution plan entry with action, reason, and resolved artifacts."""
+
+    key: CompiledObjectKey
+    name: str
+    relative_path: Path
+    materialization_type: MaterializationType
+    action: PlanAction
+    reason: PlanReason
+    destination: CompiledRelationLocation
+    fingerprint_query_sql: str
+    resolved_sql: str
+    logical_ddl: str
+    migration_fingerprint: str | None
+    incremental_strategy: str | None
+    incremental_mode: str | None
+    microbatch_strategy: str | None
+    cursor_watermark_mode: str | None
+    cursor_column: str | None
+    cursor_type: str | None
+    cursor_grain: str | None
+    cursor_start: str | None
+    cursor_end: str | None
+    lookback: str | None
+    cursor_bounds: CursorBounds | None
+    empty_cursor_inputs: tuple[str, ...]
+    waiting_on_empty_inputs: bool
+    cursor_input_relations: tuple[CursorInputRelation, ...]
+    batch_size: str | None
+    batch_concurrency: int
+    unaccounted_partition_policy: str | None
+    microbatch_range: CursorBounds | None
+    microbatch_limit: int | None
+    declared_microbatch_limit_action: MicrobatchLimitAction | None
+    microbatch_safety_limit: int | None
+    microbatch_safety_limit_action: MicrobatchLimitAction | None
+    microbatch_limit_count: int | None
+    microbatch_limit_action: MicrobatchLimitAction | None
+    microbatch_limit_warning: str | None
+    start_cursor_override: str | None
+    end_cursor_override: str | None
+    future_cursor_config: FutureCursorsConfig | None
+    start_cursor_config: StartCursorsConfig | None
+    invocation_time: datetime | None
+    unique_key: tuple[str, ...]
+    merge_exclude_columns: tuple[str, ...]
+    snapshot_strategy: str | None
+    updated_at_column: str | None
+    check_columns: tuple[str, ...]
+    observed_at_column: str | None
+    historical_input: str | None
+    valid_from_column: str | None
+    valid_to_column: str | None
+    initial_valid_from: str | None
+    invalidate_hard_deletes: bool
+    snapshot_full_refresh: str | None
+    snapshot_schema_change: str | None
+    table_type: str
+    on_schema_change: OnSchemaChange | None
+    type_enforcement: bool
+    declared_columns: tuple[ColumnInfo, ...]
+    contract_enforced: bool
+    contract_columns: tuple[ColumnInfo, ...]
+    contract_dynamic_columns: tuple[SchemaDynamicColumnFamily, ...]
+    pre_hooks: object
+    post_hooks: object
+    previous_query_sql: str | None
+    fingerprint_metadata_json: str | None
+    previous_metadata_json: str | None
+    fingerprint_version_hash: str | None
+    previous_version_hash: str | None
+    query_changed: bool
+    config_changed: bool
+    schema_actions: tuple[SchemaAction, ...]
+    schema_findings: tuple[SchemaFinding, ...]
+    backfill: BackfillResult
+    changed_functions: tuple[str, ...]
+    custom_materialization_name: str | None
+    custom_config: dict[str, object]
+    custom_placeholders: dict[str, str]
+    column_rename_hints: tuple[ColumnRenameHint, ...]
+    def __init__(
+        self,
+        key: CompiledObjectKey,
+        name: str,
+        relative_path: Path,
+        materialization_type: MaterializationType,
+        action: PlanAction,
+        reason: PlanReason,
+        destination: CompiledRelationLocation,
+        fingerprint_query_sql: str,
+        resolved_sql: str,
+        logical_ddl: str,
+        migration_fingerprint: str | None = ...,
+        incremental_strategy: str | None = ...,
+        incremental_mode: str | None = ...,
+        microbatch_strategy: str | None = ...,
+        cursor_watermark_mode: str | None = ...,
+        cursor_column: str | None = ...,
+        cursor_type: str | None = ...,
+        cursor_grain: str | None = ...,
+        cursor_start: str | None = ...,
+        cursor_end: str | None = ...,
+        lookback: str | None = ...,
+        cursor_bounds: CursorBounds | None = ...,
+        empty_cursor_inputs: tuple[str, ...] = ...,
+        waiting_on_empty_inputs: bool = ...,
+        cursor_input_relations: tuple[CursorInputRelation, ...] = ...,
+        batch_size: str | None = ...,
+        batch_concurrency: int = ...,
+        unaccounted_partition_policy: str | None = ...,
+        microbatch_range: CursorBounds | None = ...,
+        microbatch_limit: int | None = ...,
+        declared_microbatch_limit_action: MicrobatchLimitAction | None = ...,
+        microbatch_safety_limit: int | None = ...,
+        microbatch_safety_limit_action: MicrobatchLimitAction | None = ...,
+        microbatch_limit_count: int | None = ...,
+        microbatch_limit_action: MicrobatchLimitAction | None = ...,
+        microbatch_limit_warning: str | None = ...,
+        start_cursor_override: str | None = ...,
+        end_cursor_override: str | None = ...,
+        future_cursor_config: FutureCursorsConfig | None = ...,
+        start_cursor_config: StartCursorsConfig | None = ...,
+        invocation_time: datetime | None = ...,
+        unique_key: tuple[str, ...] = ...,
+        merge_exclude_columns: tuple[str, ...] = ...,
+        snapshot_strategy: str | None = ...,
+        updated_at_column: str | None = ...,
+        check_columns: tuple[str, ...] = ...,
+        observed_at_column: str | None = ...,
+        historical_input: str | None = ...,
+        valid_from_column: str | None = ...,
+        valid_to_column: str | None = ...,
+        initial_valid_from: str | None = ...,
+        invalidate_hard_deletes: bool = ...,
+        snapshot_full_refresh: str | None = ...,
+        snapshot_schema_change: str | None = ...,
+        table_type: str = ...,
+        on_schema_change: OnSchemaChange | None = ...,
+        type_enforcement: bool = ...,
+        declared_columns: tuple[ColumnInfo, ...] = ...,
+        contract_enforced: bool = ...,
+        contract_columns: tuple[ColumnInfo, ...] = ...,
+        contract_dynamic_columns: tuple[SchemaDynamicColumnFamily, ...] = ...,
+        pre_hooks: object = ...,
+        post_hooks: object = ...,
+        previous_query_sql: str | None = ...,
+        fingerprint_metadata_json: str | None = ...,
+        previous_metadata_json: str | None = ...,
+        fingerprint_version_hash: str | None = ...,
+        previous_version_hash: str | None = ...,
+        query_changed: bool = ...,
+        config_changed: bool = ...,
+        schema_actions: tuple[SchemaAction, ...] = ...,
+        schema_findings: tuple[SchemaFinding, ...] = ...,
+        backfill: BackfillResult = ...,
+        changed_functions: tuple[str, ...] = ...,
+        custom_materialization_name: str | None = ...,
+        custom_config: dict[str, object] = ...,
+        custom_placeholders: dict[str, str] = ...,
+        column_rename_hints: tuple[ColumnRenameHint, ...] = ...,
+    ) -> None: ...
+
+class CloneSourcePlanEntry(NativeRecord):
+    """One managed source relation selected for target cloning."""
+
+    key: CompiledObjectKey
+    name: str
+    destination: CompiledRelationLocation
+    def __init__(
+        self,
+        key: CompiledObjectKey,
+        name: str,
+        destination: CompiledRelationLocation,
+    ) -> None: ...
+
+class SeedPlanEntry(NativeRecord):
+    """Per-seed execution plan entry."""
+
+    key: CompiledObjectKey
+    name: str
+    destination: CompiledRelationLocation
+    file_path: Path
+    columns: tuple[ColumnInfo, ...]
+    csv_settings: SeedCsvSettings
+    fingerprint_definition: str
+    fingerprint_version_hash: str
+    fingerprint_metadata_json: str
+    action: PlanAction
+    reason: PlanReason
+    def __init__(
+        self,
+        key: CompiledObjectKey,
+        name: str,
+        destination: CompiledRelationLocation,
+        file_path: Path,
+        columns: tuple[ColumnInfo, ...],
+        csv_settings: SeedCsvSettings,
+        fingerprint_definition: str = ...,
+        fingerprint_version_hash: str = ...,
+        fingerprint_metadata_json: str = ...,
+        action: PlanAction = ...,
+        reason: PlanReason = ...,
+    ) -> None: ...
+
+class SourceLoadPlanEntry(NativeRecord):
+    """Per-managed-source loader execution plan entry."""
+
+    key: CompiledObjectKey
+    name: str
+    loader: str
+    destination: str
+    resource_kind: ExecutionResourceKind
+    write_strategy: SourceWriteStrategy | None
+    cursor_column: str | None
+    unique_key: tuple[str, ...]
+    is_reload: bool
+    integration_kind: str | None
+    def __init__(
+        self,
+        key: CompiledObjectKey,
+        name: str,
+        loader: str,
+        destination: str,
+        resource_kind: ExecutionResourceKind = ...,
+        write_strategy: SourceWriteStrategy | None = ...,
+        cursor_column: str | None = ...,
+        unique_key: tuple[str, ...] = ...,
+        is_reload: bool = ...,
+        integration_kind: str | None = ...,
+    ) -> None: ...
+
+class FunctionPlanEntry(NativeRecord):
+    """Per-SQL-function execution plan entry."""
+
+    key: CompiledObjectKey
+    name: str
+    relative_path: Path
+    destination: CompiledRelationLocation
+    arguments: tuple[object, ...]
+    returns: str
+    body_sql: str
+    fingerprint_query_sql: str
+    fingerprint_destination: CompiledRelationLocation
+    return_columns: tuple[FunctionReturnColumn, ...]
+    language: FunctionLanguage
+    source_file_path: Path | None
+    runtime_version: str | None
+    entry_point: str | None
+    packages: tuple[str, ...]
+    previous_query_sql: str | None
+    reason: PlanReason
+    def __init__(
+        self,
+        key: CompiledObjectKey,
+        name: str,
+        relative_path: Path,
+        destination: CompiledRelationLocation,
+        arguments: tuple[object, ...],
+        returns: str,
+        body_sql: str,
+        fingerprint_query_sql: str,
+        fingerprint_destination: CompiledRelationLocation,
+        return_columns: tuple[FunctionReturnColumn, ...] = ...,
+        language: FunctionLanguage = ...,
+        source_file_path: Path | None = ...,
+        runtime_version: str | None = ...,
+        entry_point: str | None = ...,
+        packages: tuple[str, ...] = ...,
+        previous_query_sql: str | None = ...,
+        reason: PlanReason = ...,
+    ) -> None: ...
+
+class AuditPlanEntry(NativeRecord):
+    """Per-audit execution plan entry with resolved SQL and scheduling metadata."""
+
+    key: CompiledObjectKey
+    name: str
+    definition_name: str
+    resolved_sql: str
+    unresolved_sql: str
+    attachment_kind: AuditAttachmentKind
+    severity: AuditSeverity
+    requested_run_scope: AuditRunScope
+    effective_run_scope: AuditRunScope
+    evaluation_mode: AuditEvaluationMode
+    value_column: str | None
+    sample_count_column: str | None
+    sample_unit: str | None
+    thresholds: MeasurementThresholds | None
+    minimum_samples: int | None
+    evidence_resolved_sql: str | None
+    evidence_unresolved_sql: str | None
+    evidence_limit: int | None
+    scope_deps: tuple[CompiledObjectKey, ...]
+    attached_target_kind: AttachedAuditTargetKind | None
+    attached_target_name: str | None
+    attached_column_name: str | None
+    always_run: bool
+    description: str | None
+    reads_outside_target_lineage: bool
+    def __init__(
+        self,
+        key: CompiledObjectKey,
+        name: str,
+        definition_name: str,
+        resolved_sql: str,
+        unresolved_sql: str,
+        attachment_kind: AuditAttachmentKind,
+        severity: AuditSeverity,
+        requested_run_scope: AuditRunScope,
+        effective_run_scope: AuditRunScope,
+        evaluation_mode: AuditEvaluationMode = ...,
+        value_column: str | None = ...,
+        sample_count_column: str | None = ...,
+        sample_unit: str | None = ...,
+        thresholds: MeasurementThresholds | None = ...,
+        minimum_samples: int | None = ...,
+        evidence_resolved_sql: str | None = ...,
+        evidence_unresolved_sql: str | None = ...,
+        evidence_limit: int | None = ...,
+        scope_deps: tuple[CompiledObjectKey, ...] = ...,
+        attached_target_kind: AttachedAuditTargetKind | None = ...,
+        attached_target_name: str | None = ...,
+        attached_column_name: str | None = ...,
+        always_run: bool = ...,
+        description: str | None = ...,
+        reads_outside_target_lineage: bool = ...,
+    ) -> None: ...
+
+class ChainStep(NativeRecord):
+    """One step in a chained test execution sequence."""
+
+    model_name: str
+    resolved_sql: str
+    expected_cte_sql: str | None
+    lifted_ctes: tuple[tuple[str, str], ...]
+    comparison_body_sql: str | None
+    expected_columns: tuple[str, ...] | None
+    expected_lifted_ctes: tuple[tuple[str, str], ...]
+    def __init__(
+        self,
+        model_name: str,
+        resolved_sql: str,
+        expected_cte_sql: str | None = ...,
+        lifted_ctes: tuple[tuple[str, str], ...] = ...,
+        comparison_body_sql: str | None = ...,
+        expected_columns: tuple[str, ...] | None = ...,
+        expected_lifted_ctes: tuple[tuple[str, str], ...] = ...,
+    ) -> None: ...
+
+class SqlTestPlanEntry(NativeRecord):
+    """Per-test execution plan entry with chained resolution."""
+
+    key: CompiledObjectKey
+    name: str
+    source_path: Path | None
+    block_index: int | None
+    parent_name: str | None
+    case_name: str | None
+    case_index: int | None
+    case_fingerprint: str | None
+    parameter_schema: tuple[SqlTestParameterDeclaration, ...]
+    parameter_values: tuple[tuple[str, SqlValue], ...]
+    mock_ref_names: tuple[str, ...]
+    mock_source_names: tuple[str, ...]
+    mock_seed_names: tuple[str, ...]
+    mock_dbt_ref_names: tuple[str, ...]
+    mock_table_function_names: tuple[str, ...]
+    chain: tuple[ChainStep, ...]
+    assertions: tuple[SqlTestAssertionStep, ...]
+    scope_deps: tuple[CompiledObjectKey, ...]
+    function_deps: tuple[CompiledObjectKey, ...]
+    sql_analysis_enabled: bool
+    def __init__(
+        self,
+        key: CompiledObjectKey,
+        name: str,
+        source_path: Path | None = ...,
+        block_index: int | None = ...,
+        parent_name: str | None = ...,
+        case_name: str | None = ...,
+        case_index: int | None = ...,
+        case_fingerprint: str | None = ...,
+        parameter_schema: tuple[SqlTestParameterDeclaration, ...] = ...,
+        parameter_values: tuple[tuple[str, SqlValue], ...] = ...,
+        mock_ref_names: tuple[str, ...] = ...,
+        mock_source_names: tuple[str, ...] = ...,
+        mock_seed_names: tuple[str, ...] = ...,
+        mock_dbt_ref_names: tuple[str, ...] = ...,
+        mock_table_function_names: tuple[str, ...] = ...,
+        chain: tuple[ChainStep, ...] = ...,
+        assertions: tuple[SqlTestAssertionStep, ...] = ...,
+        scope_deps: tuple[CompiledObjectKey, ...] = ...,
+        function_deps: tuple[CompiledObjectKey, ...] = ...,
+        sql_analysis_enabled: bool = ...,
+    ) -> None: ...
+
+class ScenarioRelationMap(NativeRecord):
+    """Resolved scenario hash prefix and scenario-owned relation names."""
+
+    scenario_name: str
+    hash_prefix: str
+    artifacts: tuple[ScenarioArtifactName, ...]
+    def __init__(
+        self,
+        scenario_name: str,
+        hash_prefix: str,
+        artifacts: tuple[ScenarioArtifactName, ...] = ...,
+    ) -> None: ...
+
+class ScenarioRelationPlan(NativeRecord):
+    """Resolved scenario relation locations for model/source/seed ref resolution."""
+
+    scenario_name: str
+    relation_map: ScenarioRelationMap
+    model_locations: dict[str, CompiledRelationLocation]
+    seed_locations: dict[str, CompiledRelationLocation]
+    project_source_map: dict[str, SourceEntry]
+    source_map: dict[str, SourceEntry]
+    source_fixture_locations: dict[str, CompiledRelationLocation]
+    ref_fixture_locations: dict[str, CompiledRelationLocation]
+    seed_fixture_locations: dict[str, CompiledRelationLocation]
+    dbt_ref_fixture_locations: dict[str, CompiledRelationLocation]
+    def __init__(
+        self,
+        scenario_name: str,
+        relation_map: ScenarioRelationMap,
+        model_locations: dict[str, CompiledRelationLocation] = ...,
+        seed_locations: dict[str, CompiledRelationLocation] = ...,
+        project_source_map: dict[str, SourceEntry] = ...,
+        source_map: dict[str, SourceEntry] = ...,
+        source_fixture_locations: dict[str, CompiledRelationLocation] = ...,
+        ref_fixture_locations: dict[str, CompiledRelationLocation] = ...,
+        seed_fixture_locations: dict[str, CompiledRelationLocation] = ...,
+        dbt_ref_fixture_locations: dict[str, CompiledRelationLocation] = ...,
+    ) -> None: ...
+
+class ScenarioFixturePlan(NativeRecord):
+    """Self-contained fixture SQL planned for scenario materialization."""
+
+    kind: ScenarioArtifactKind
+    logical_name: str
+    destination: CompiledRelationLocation
+    sql: str
+    def __init__(
+        self,
+        kind: ScenarioArtifactKind,
+        logical_name: str,
+        destination: CompiledRelationLocation,
+        sql: str,
+    ) -> None: ...
+
+class ScenarioExpectedExpectationPlan(NativeRecord):
+    """Expected-output comparison inputs for one scenario target model."""
+
+    model_name: str
+    actual_destination: CompiledRelationLocation
+    expected_sql: str
+    def __init__(
+        self,
+        model_name: str,
+        actual_destination: CompiledRelationLocation,
+        expected_sql: str,
+    ) -> None: ...
+
+class ScenarioAssertionExpectationPlan(NativeRecord):
+    """Zero-row assertion SQL for one scenario assertion CTE."""
+
+    name: str
+    sql: str
+    def __init__(
+        self,
+        name: str,
+        sql: str,
+    ) -> None: ...
+
+class ScenarioExecutionPlan(NativeRecord):
+    """Dry-run execution plan for a SQL scenario graph slice."""
+
+    key: CompiledObjectKey
+    name: str
+    graph_plan: ScenarioGraphPlan
+    relation_plan: ScenarioRelationPlan
+    fixture_plans: tuple[ScenarioFixturePlan, ...]
+    seed_entries: tuple[SeedPlanEntry, ...]
+    function_entries: tuple[FunctionPlanEntry, ...]
+    model_entries: tuple[ModelPlanEntry, ...]
+    hook_functions: tuple[DiscoveredHookFunction, ...]
+    expected_expectations: tuple[ScenarioExpectedExpectationPlan, ...]
+    assertion_expectations: tuple[ScenarioAssertionExpectationPlan, ...]
+    def __init__(
+        self,
+        key: CompiledObjectKey,
+        name: str,
+        graph_plan: ScenarioGraphPlan,
+        relation_plan: ScenarioRelationPlan,
+        fixture_plans: tuple[ScenarioFixturePlan, ...] = ...,
+        seed_entries: tuple[SeedPlanEntry, ...] = ...,
+        function_entries: tuple[FunctionPlanEntry, ...] = ...,
+        model_entries: tuple[ModelPlanEntry, ...] = ...,
+        hook_functions: tuple[DiscoveredHookFunction, ...] = ...,
+        expected_expectations: tuple[ScenarioExpectedExpectationPlan, ...] = ...,
+        assertion_expectations: tuple[ScenarioAssertionExpectationPlan, ...] = ...,
+    ) -> None: ...
+
+class PlanOutput(NativeRecord):
+    """Complete execution plan produced by the planner."""
+
+    execution_order: tuple[CompiledObjectKey, ...]
+    model_entries: tuple[ModelPlanEntry, ...]
+    seed_entries: tuple[SeedPlanEntry, ...]
+    source_load_entries: tuple[SourceLoadPlanEntry, ...]
+    function_entries: tuple[FunctionPlanEntry, ...]
+    audit_entries: tuple[AuditPlanEntry, ...]
+    test_entries: tuple[SqlTestPlanEntry, ...]
+    available_test_case_names: tuple[str, ...]
+    selected_keys: frozenset[CompiledObjectKey]
+    warnings: tuple[PlanWarning, ...]
+    retention_entries: tuple[RetentionPlanEntry, ...]
+    table_type_entries: tuple[TableTypePlanEntry, ...]
+    migration_entries: tuple[ModelMigrationPlanEntry, ...]
+    column_migration_entries: tuple[ColumnMigrationPlanEntry, ...]
+    old_name_view_entries: tuple[OldNameViewPlanEntry, ...]
+    old_name_views: tuple[OldNameView, ...]
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
+    downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
+    model_locations: dict[str, CompiledRelationLocation]
+    seed_locations: dict[str, CompiledRelationLocation]
+    function_locations: dict[str, CompiledRelationLocation]
+    source_map: dict[str, SourceEntry]
+    source_read_map: dict[str, SourceEntry]
+    python_source_read_map: dict[str, SourceEntry]
+    hook_functions: tuple[DiscoveredHookFunction, ...]
+    enforce_explicit_references: bool
+    provider_usages: tuple[PlanProviderUsage, ...]
+    source_freshness: DirectSourceFreshnessPlanningResult | None
+    python_identity_fingerprints: dict[tuple[str, str], Fingerprint]
+    metadata: dict[str, object]
+    cursor_overrides: CursorOverrides | None
+    def __init__(
+        self,
+        execution_order: tuple[CompiledObjectKey, ...] = ...,
+        model_entries: tuple[ModelPlanEntry, ...] = ...,
+        seed_entries: tuple[SeedPlanEntry, ...] = ...,
+        source_load_entries: tuple[SourceLoadPlanEntry, ...] = ...,
+        function_entries: tuple[FunctionPlanEntry, ...] = ...,
+        audit_entries: tuple[AuditPlanEntry, ...] = ...,
+        test_entries: tuple[SqlTestPlanEntry, ...] = ...,
+        available_test_case_names: tuple[str, ...] = ...,
+        selected_keys: frozenset[CompiledObjectKey] = ...,
+        warnings: tuple[PlanWarning, ...] = ...,
+        retention_entries: tuple[RetentionPlanEntry, ...] = ...,
+        table_type_entries: tuple[TableTypePlanEntry, ...] = ...,
+        migration_entries: tuple[ModelMigrationPlanEntry, ...] = ...,
+        column_migration_entries: tuple[ColumnMigrationPlanEntry, ...] = ...,
+        old_name_view_entries: tuple[OldNameViewPlanEntry, ...] = ...,
+        old_name_views: tuple[OldNameView, ...] = ...,
+        upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = ...,
+        downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = ...,
+        model_locations: dict[str, CompiledRelationLocation] = ...,
+        seed_locations: dict[str, CompiledRelationLocation] = ...,
+        function_locations: dict[str, CompiledRelationLocation] = ...,
+        source_map: dict[str, SourceEntry] = ...,
+        source_read_map: dict[str, SourceEntry] = ...,
+        python_source_read_map: dict[str, SourceEntry] = ...,
+        hook_functions: tuple[DiscoveredHookFunction, ...] = ...,
+        enforce_explicit_references: bool = ...,
+        provider_usages: tuple[PlanProviderUsage, ...] = ...,
+        source_freshness: DirectSourceFreshnessPlanningResult | None = ...,
+        python_identity_fingerprints: dict[tuple[str, str], Fingerprint] = ...,
+        metadata: dict[str, object] = ...,
+        cursor_overrides: CursorOverrides | None = ...,
+    ) -> None: ...
+    @property
+    def python_source_entries(self) -> dict[str, SourceEntry]: ...

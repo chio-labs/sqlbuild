@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import ModelPlanEntry
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.executor.run._helpers.execution.table_targets import (
     resolve_table_targets as _resolve_table_targets,
 )

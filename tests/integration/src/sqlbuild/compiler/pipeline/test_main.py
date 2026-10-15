@@ -8,6 +8,7 @@ from unittest.mock import Mock
 import pytest
 
 from sqlbuild._native import (
+    ModelPlanEntry,
     build_compiled_project,
     build_project_graph,
     discover_project_inputs,
@@ -20,7 +21,6 @@ from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.rule_engine.exceptions import RulesError
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     AppendCursorPipelineIntegrationTestCase,

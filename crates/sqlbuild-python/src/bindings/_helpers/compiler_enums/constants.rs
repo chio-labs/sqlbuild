@@ -442,6 +442,240 @@ const E_STATE_SQL_VALUE_TYPE: EnumSpec = EnumSpec {
         ("JSON", "json"),
     ],
 };
+const E_MIGRATION_DECISION: EnumSpec = EnumSpec {
+    name: "MigrationDecision",
+    doc: "Per-run decision for one declared or discovered model migration.",
+    members: &[
+        ("DONE", "done"),
+        ("MIGRATE", "migrate"),
+        ("REDO", "redo"),
+        ("SUPERSEDED_REPLACE", "superseded_replace"),
+        ("FORCED_REPLACE", "forced_replace"),
+        ("CONFLICT", "conflict"),
+        ("ORIGIN_MISSING", "origin_missing"),
+        ("RENAMED", "renamed"),
+    ],
+};
+const E_MIGRATION_PROMOTION: EnumSpec = EnumSpec {
+    name: "MigrationPromotion",
+    doc: "How a completed migration stage replaces or creates the destination.",
+    members: &[
+        ("SWAP", "swap"),
+        ("RENAME", "rename"),
+        ("TRANSACTIONAL_RENAME", "transactional_rename"),
+    ],
+};
+const E_COLUMN_MIGRATION_DECISION: EnumSpec = EnumSpec {
+    name: "ColumnMigrationDecision",
+    doc: "Per-run decision for one declared or detected column rename.",
+    members: &[
+        ("RENAME", "rename"),
+        ("RECORD", "record"),
+        ("DONE", "done"),
+        ("CONFLICT", "conflict"),
+        ("SOURCE_MISSING", "source_missing"),
+        ("STILL_PRODUCED", "still_produced"),
+        ("UNSUPPORTED", "unsupported"),
+    ],
+};
+const E_OLD_NAME_VIEW_EVENT_TYPE: EnumSpec = EnumSpec {
+    name: "OldNameViewEventType",
+    doc: "Immutable facts about what happened at a migrated relation's old name.",
+    members: &[
+        ("REQUIRED", "required"),
+        ("ORIGIN_ARCHIVED", "origin_archived"),
+        ("VIEW_CREATED", "view_created"),
+        ("VIEW_DROPPED", "view_dropped"),
+    ],
+};
+const E_OLD_NAME_VIEW_DROP_REASON: EnumSpec = EnumSpec {
+    name: "OldNameViewDropReason",
+    doc: "Why a compatibility view at an old name was dropped.",
+    members: &[
+        ("EXPIRED", "expired"),
+        ("EARLY", "early"),
+        ("MISSING", "missing"),
+    ],
+};
+const E_OLD_NAME_VIEW_STATUS: EnumSpec = EnumSpec {
+    name: "OldNameViewStatus",
+    doc: "Projected state of the old-name steps of one recorded move.",
+    members: &[
+        ("PENDING_ARCHIVE", "pending_archive"),
+        ("PENDING_VIEW", "pending_view"),
+        ("LIVE", "live"),
+        ("EXPIRED", "expired"),
+        ("DROPPED", "dropped"),
+    ],
+};
+const E_BACKFILL_ACTION: EnumSpec = EnumSpec {
+    name: "BackfillAction",
+    doc: "",
+    members: &[
+        ("FULL", "full"),
+        ("BOUNDED", "bounded"),
+        ("FORWARD_ONLY", "forward"),
+    ],
+};
+const E_ON_SCHEMA_CHANGE: EnumSpec = EnumSpec {
+    name: "OnSchemaChange",
+    doc: "",
+    members: &[
+        ("IGNORE", "ignore"),
+        ("FAIL", "fail"),
+        ("APPEND_NEW_COLUMNS", "append_new_columns"),
+        ("SYNC_ALL_COLUMNS", "sync_all_columns"),
+    ],
+};
+const E_CONTRACT_POLICY: EnumSpec = EnumSpec {
+    name: "ContractPolicy",
+    doc: "",
+    members: &[("NONE", "none"), ("ENFORCED", "enforced")],
+};
+const E_RETENTION_DIRECTION: EnumSpec = EnumSpec {
+    name: "RetentionDirection",
+    doc: "",
+    members: &[
+        ("INCREASE", "increase"),
+        ("DECREASE", "decrease"),
+        ("MIXED", "mixed"),
+        ("MATCH", "match"),
+        ("APPLY_AFTER_CREATE", "apply_after_create"),
+    ],
+};
+const E_RETENTION_PLAN_PHASE: EnumSpec = EnumSpec {
+    name: "RetentionPlanPhase",
+    doc: "",
+    members: &[
+        ("PRE", "pre"),
+        ("POST", "post"),
+        ("AFTER_CREATE", "after_create"),
+        ("NONE", "none"),
+    ],
+};
+const E_PLAN_ACTION: EnumSpec = EnumSpec {
+    name: "PlanAction",
+    doc: "",
+    members: &[
+        ("CREATE_VIEW", "create_view"),
+        ("CREATE_TABLE", "create_table"),
+        ("INCREMENTAL_APPEND", "incremental_append"),
+        ("INCREMENTAL_DELETE_INSERT", "incremental_delete_insert"),
+        ("INCREMENTAL_MERGE", "incremental_merge"),
+        ("SNAPSHOT", "snapshot"),
+        ("LOAD_SEED", "load_seed"),
+        ("SKIP", "skip"),
+        ("CUSTOM", "custom"),
+    ],
+};
+const E_PLAN_REASON: EnumSpec = EnumSpec {
+    name: "PlanReason",
+    doc: "",
+    members: &[
+        ("FIRST_RUN", "first_run"),
+        ("RENAMED", "renamed"),
+        ("FULL_REFRESH", "full_refresh"),
+        ("QUERY_CHANGED", "query_changed"),
+        ("FUNCTION_CHANGED", "function_changed"),
+        ("CONFIG_CHANGED", "config_changed"),
+        ("SCHEMA_CHANGED", "schema_changed"),
+        ("NORMAL_INCREMENTAL", "normal_incremental"),
+        ("NO_CHANGE", "no_change"),
+        ("DISABLED", "disabled"),
+        ("SOURCE_FRESHNESS_ERROR", "source_freshness_error"),
+        ("EXTERNAL_UPSTREAM_FAILED", "external_upstream_failed"),
+    ],
+};
+const E_INCREMENTAL_STRATEGY: EnumSpec = EnumSpec {
+    name: "IncrementalStrategy",
+    doc: "",
+    members: &[
+        ("APPEND", "append"),
+        ("DELETE_INSERT", "delete_insert"),
+        ("MERGE", "merge"),
+    ],
+};
+const E_MICROBATCH_STRATEGY: EnumSpec = EnumSpec {
+    name: "MicrobatchStrategy",
+    doc: "How an ordinary microbatch range is selected.",
+    members: &[
+        ("ROLLING_WINDOW", "rolling_window"),
+        ("WATERMARK", "watermark"),
+    ],
+};
+const E_INCREMENTAL_MODE: EnumSpec = EnumSpec {
+    name: "IncrementalMode",
+    doc: "",
+    members: &[("FULL", "full"), ("MICROBATCH", "microbatch")],
+};
+const E_SNAPSHOT_STRATEGY: EnumSpec = EnumSpec {
+    name: "SnapshotStrategy",
+    doc: "",
+    members: &[("TIMESTAMP", "timestamp"), ("CHECK", "check")],
+};
+const E_HISTORICAL_INPUT: EnumSpec = EnumSpec {
+    name: "HistoricalInput",
+    doc: "",
+    members: &[("SNAPSHOT", "snapshot"), ("CHANGES", "changes")],
+};
+const E_INITIAL_VALID_FROM: EnumSpec = EnumSpec {
+    name: "InitialValidFrom",
+    doc: "",
+    members: &[
+        ("UPDATED_AT", "updated_at"),
+        ("OBSERVED_AT", "observed_at"),
+        ("EXECUTION_TIME", "execution_time"),
+    ],
+};
+const E_SNAPSHOT_SCHEMA_CHANGE_POLICY: EnumSpec = EnumSpec {
+    name: "SnapshotSchemaChangePolicy",
+    doc: "",
+    members: &[
+        ("DENY", "deny"),
+        ("REQUIRE_CONFIRMATION", "require_confirmation"),
+        ("APPEND_NEW_COLUMNS", "append_new_columns"),
+    ],
+};
+const E_CURSOR_TYPE: EnumSpec = EnumSpec {
+    name: "CursorType",
+    doc: "",
+    members: &[("TIMESTAMP", "timestamp"), ("INTEGER", "integer")],
+};
+const E_CURSOR_GRAIN: EnumSpec = EnumSpec {
+    name: "CursorGrain",
+    doc: "",
+    members: &[
+        ("SECOND", "second"),
+        ("MINUTE", "minute"),
+        ("HOUR", "hour"),
+        ("DAY", "day"),
+        ("MONTH", "month"),
+        ("YEAR", "year"),
+    ],
+};
+const E_MATERIALIZATION_TYPE: EnumSpec = EnumSpec {
+    name: "MaterializationType",
+    doc: "",
+    members: &[
+        ("VIEW", "view"),
+        ("TABLE", "table"),
+        ("INCREMENTAL", "incremental"),
+        ("SNAPSHOT", "snapshot"),
+        ("SEED", "seed"),
+        ("CUSTOM", "custom"),
+    ],
+};
+const E_SCENARIO_ARTIFACT_KIND: EnumSpec = EnumSpec {
+    name: "ScenarioArtifactKind",
+    doc: "",
+    members: &[
+        ("SOURCE", "source"),
+        ("REF", "ref"),
+        ("SEED", "seed"),
+        ("DBT_REF", "dbt_ref"),
+        ("MODEL", "model"),
+    ],
+};
 
 /// Compiler, rule, lint and config string enums.
 pub(crate) const COMPILER_ENUMS: &[EnumSpec] = &[
@@ -488,4 +722,28 @@ pub(crate) const COMPILER_ENUMS: &[EnumSpec] = &[
     E_RETENTION_DECREASE_POLICY,
     E_SQL_VALUE_KIND,
     E_STATE_SQL_VALUE_TYPE,
+    E_MIGRATION_DECISION,
+    E_MIGRATION_PROMOTION,
+    E_COLUMN_MIGRATION_DECISION,
+    E_OLD_NAME_VIEW_EVENT_TYPE,
+    E_OLD_NAME_VIEW_DROP_REASON,
+    E_OLD_NAME_VIEW_STATUS,
+    E_BACKFILL_ACTION,
+    E_ON_SCHEMA_CHANGE,
+    E_CONTRACT_POLICY,
+    E_RETENTION_DIRECTION,
+    E_RETENTION_PLAN_PHASE,
+    E_PLAN_ACTION,
+    E_PLAN_REASON,
+    E_INCREMENTAL_STRATEGY,
+    E_MICROBATCH_STRATEGY,
+    E_INCREMENTAL_MODE,
+    E_SNAPSHOT_STRATEGY,
+    E_HISTORICAL_INPUT,
+    E_INITIAL_VALID_FROM,
+    E_SNAPSHOT_SCHEMA_CHANGE_POLICY,
+    E_CURSOR_TYPE,
+    E_CURSOR_GRAIN,
+    E_MATERIALIZATION_TYPE,
+    E_SCENARIO_ARTIFACT_KIND,
 ];

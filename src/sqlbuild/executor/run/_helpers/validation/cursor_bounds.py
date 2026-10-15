@@ -10,8 +10,20 @@ from typing import Any
 
 from sqlbuild._native import (
     AlignedInterval,
+    BackfillAction,
+    CursorBounds,
+    CursorGrain,
+    CursorInputEvidence,
+    CursorInputRelation,
+    CursorType,
     DateValue,
+    Duration,
+    EmptyCursorInputDecision,
     IntegerValue,
+    MaximumStartPolicyInputs,
+    MicrobatchStrategy,
+    ModelCursorSnapshot,
+    ModelPlanEntry,
     StartCursorsConfig,
     TimestampValue,
     apply_maximum_start_policy,
@@ -39,22 +51,6 @@ from sqlbuild._native import resolve_future_cursor_safety as apply_future_cursor
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.relations.main.cached_relation_exists import cached_relation_exists
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
-from sqlbuild.compiler.planner.models import (
-    CursorBounds,
-    CursorInputEvidence,
-    CursorInputRelation,
-    Duration,
-    EmptyCursorInputDecision,
-    MaximumStartPolicyInputs,
-    ModelCursorSnapshot,
-    ModelPlanEntry,
-)
-from sqlbuild.compiler.planner.types import (
-    BackfillAction,
-    CursorGrain,
-    CursorType,
-    MicrobatchStrategy,
-)
 from sqlbuild.cursor_algebra.constants import GRAIN_ORDER
 from sqlbuild.cursor_algebra.types import BoundSentinel, CursorScalar
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError

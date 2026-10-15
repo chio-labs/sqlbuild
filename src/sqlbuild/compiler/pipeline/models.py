@@ -10,14 +10,12 @@ from typing import Any
 import sqlbuild._native as _native
 from sqlbuild._native import (
     LineageGraphViews,
+    PlanOutput,
     PythonPlanEntry,
     lineage_graph_views,
 )
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.planner.models import (
-    PlanOutput,
-)
 
 
 @dataclass(frozen=True)

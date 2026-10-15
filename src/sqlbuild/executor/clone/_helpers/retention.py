@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild._native import ResolvedTimeTravelRetention
+from sqlbuild._native import ResolvedTimeTravelRetention, RetentionPlanPhase
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import (
     RenderedRetentionChange,
@@ -13,7 +13,6 @@ from sqlbuild.adapter.contract.models import (
 )
 from sqlbuild.adapter.contract.types import BuiltinAdapter, RetentionScope
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.planner.types import RetentionPlanPhase
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.runtime.observability.classes.operation_lifecycle import (
     OperationAttributes,

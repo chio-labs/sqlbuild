@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild._native import SourceEntry
+from sqlbuild._native import ContractPolicy, SourceEntry
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
-from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 
 

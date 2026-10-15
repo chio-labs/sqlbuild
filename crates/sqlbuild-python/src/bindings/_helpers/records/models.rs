@@ -9,7 +9,7 @@ use pyo3::{IntoPyObjectExt, pyclass, pymethods};
 use crate::bindings::_helpers::records::fields::{
     build_values, compared_values, frozen_error, ordered_comparison, record_spec, repr_text,
 };
-use crate::bindings::_helpers::records::types::{ClassMethod, ClassProperty};
+use crate::bindings::_helpers::records::types::{ClassMethod, ClassProperty, RecordFactory};
 
 /// How a record field is filled when the caller does not pass it.
 #[derive(Debug, Clone, Copy)]
@@ -31,6 +31,8 @@ pub(crate) enum FieldDefault {
     Member(&'static str, &'static str, &'static str),
     /// `getattr(import(module), name)()`, evaluated for every instance.
     Call(&'static str, &'static str),
+    /// A native factory, evaluated for every instance.
+    Factory(RecordFactory),
     /// `getattr(import(module), name)(text)`, evaluated for every instance.
     CallText(&'static str, &'static str, &'static str),
 }
@@ -76,6 +78,8 @@ pub(crate) struct ErrorSpec {
     pub(crate) class_attributes: &'static [(&'static str, ClassValue)],
     /// Keyword-only constructor fields stored as attributes.
     pub(crate) required: &'static [&'static str],
+    /// Keyword-only constructor fields stored as attributes, `None` when not passed.
+    pub(crate) optional: &'static [&'static str],
     /// Attributes every instance is given.
     pub(crate) fixed: &'static [(&'static str, ClassValue)],
 }

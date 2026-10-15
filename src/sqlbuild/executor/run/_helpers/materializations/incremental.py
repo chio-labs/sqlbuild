@@ -6,6 +6,10 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from sqlbuild._native import (
+    CursorBounds,
+    IncrementalStrategy,
+    ModelPlanEntry,
+    OnSchemaChange,
     TableType,
     fit_auxiliary_relation_name,
     future_cursor_cap_warning,
@@ -22,8 +26,6 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
-from sqlbuild.compiler.planner.models import CursorBounds, ModelPlanEntry
-from sqlbuild.compiler.planner.types import IncrementalStrategy, OnSchemaChange
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.auditing.models import AuditExecutionResult

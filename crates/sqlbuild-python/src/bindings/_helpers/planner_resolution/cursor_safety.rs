@@ -7,8 +7,8 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use sqlbuild_cursor::algebra::models::{DurationSpan, Grain, Scalar};
 use sqlbuild_cursor::planner::main::safety_horizon::safety_horizon;
 
-pub(super) const MODELS: &str = "sqlbuild.compiler.planner.models";
-pub(super) const EXCEPTIONS: &str = "sqlbuild.compiler.planner.exceptions";
+pub(super) const MODELS: &str = "sqlbuild._native";
+pub(super) const EXCEPTIONS: &str = "sqlbuild._native";
 
 pub(super) fn safety_error(py: Python<'_>, class: &str, message: &str) -> PyErr {
     match imported(py, EXCEPTIONS, class).and_then(|class| class.call1((message,))) {

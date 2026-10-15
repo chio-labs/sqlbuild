@@ -9,7 +9,16 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import NativeProgressProjector, SourceEntry, SourceWriteStrategy
+from sqlbuild._native import (
+    ModelPlanEntry,
+    NativeProgressProjector,
+    PlanAction,
+    PlanOutput,
+    PlanReason,
+    SourceEntry,
+    SourceLoadPlanEntry,
+    SourceWriteStrategy,
+)
 from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledObjectKey
@@ -19,8 +28,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredLoaderFunction,
     PythonHookEntry,
 )
-from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput, SourceLoadPlanEntry
-from sqlbuild.compiler.planner.types import PlanAction, PlanReason
 from sqlbuild.executor.build.main._execute import execute_build_plan
 from sqlbuild.executor.build.models import (
     BuildCallbacks,

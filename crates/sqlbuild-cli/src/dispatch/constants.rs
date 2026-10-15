@@ -13,7 +13,7 @@ pub(crate) const DIFF_COMMAND_NAME: &str = "diff";
 
 const NATIVE_RECORDS: &str = "sqlbuild._native";
 const ENTRY_MODELS: &str = "sqlbuild._native";
-const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
+const PLANNER_MODELS: &str = "sqlbuild._native";
 
 const PROJECT_DIR: Field = field("project_dir", Source::ProjectDir);
 const SELECT: Field = field("select", Source::Select);

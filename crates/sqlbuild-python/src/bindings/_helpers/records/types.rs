@@ -12,3 +12,6 @@ pub(crate) type ClassProperty = fn(&Bound<'_, PyAny>) -> PyResult<Py<PyAny>>;
 /// Runs one method of a native class with its receiver (the instance, or the class when unbound).
 pub(crate) type ClassMethod =
     fn(&Bound<'_, PyAny>, &Bound<'_, PyTuple>, Option<&Bound<'_, PyDict>>) -> PyResult<Py<PyAny>>;
+
+/// Builds the default value of one record field.
+pub(crate) type RecordFactory = fn(Python<'_>) -> PyResult<Bound<'_, PyAny>>;

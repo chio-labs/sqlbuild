@@ -50,6 +50,7 @@ const CLI_ERRORS: &[ErrorSpec] = &[
         doc: "Expected CLI-facing error that should be rendered without a traceback.",
         class_attributes: &[("code", ClassValue::Text("C000"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -58,6 +59,7 @@ const CLI_ERRORS: &[ErrorSpec] = &[
         doc: "Staged compile artifacts changed before publication, so nothing stale is deleted.",
         class_attributes: &[],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -69,6 +71,7 @@ const CLI_ERRORS: &[ErrorSpec] = &[
             ("exit_code", ClassValue::Int(2)),
         ],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -77,6 +80,7 @@ const CLI_ERRORS: &[ErrorSpec] = &[
         doc: "Expected query-diff failure with an explicit outcome and exit code.",
         class_attributes: &[],
         required: &["status", "exit_code"],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -85,6 +89,7 @@ const CLI_ERRORS: &[ErrorSpec] = &[
         doc: "Safety or preflight prevented complete value evidence.",
         class_attributes: &[],
         required: &[],
+        optional: &[],
         fixed: &[
             ("status", ClassValue::Text("incomplete")),
             ("exit_code", ClassValue::Int(2)),
@@ -96,6 +101,7 @@ const CLI_ERRORS: &[ErrorSpec] = &[
         doc: "Setup, execution, ownership publication, or cleanup failed.",
         class_attributes: &[],
         required: &[],
+        optional: &[],
         fixed: &[
             ("status", ClassValue::Text("execution_failed")),
             ("exit_code", ClassValue::Int(3)),
@@ -110,6 +116,7 @@ const CLI_ERRORS: &[ErrorSpec] = &[
             ("exit_code", ClassValue::Int(2)),
         ],
         required: &["details"],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -118,6 +125,7 @@ const CLI_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when model migration state inputs or rows are invalid.",
         class_attributes: &[("code", ClassValue::Text("M000"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
 ];

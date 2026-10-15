@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sqlbuild.compiler.planner.types import RetentionPlanPhase
+from sqlbuild._native import RetentionPlanPhase
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 
 

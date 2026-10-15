@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import ModelPlanEntry
 from sqlbuild.adapter.contract.models import RelationLookup
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
-from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.executor.clone._helpers.operations import clone_relation
 from sqlbuild.executor.clone.models import CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus

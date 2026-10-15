@@ -6,8 +6,8 @@ from unittest.mock import Mock
 
 import pytest
 
+from sqlbuild._native import PlanOutput
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.models import BuildCallbacks
 from sqlbuild.executor.pipeline._helpers import connections as connections_module
 from sqlbuild.executor.pipeline._helpers.connections import (

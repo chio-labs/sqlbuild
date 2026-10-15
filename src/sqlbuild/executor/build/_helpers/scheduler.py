@@ -5,6 +5,11 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 
 from sqlbuild._native import (
+    IncrementalMode,
+    MaterializationType,
+    ModelPlanEntry,
+    PlanAction,
+    PlanReason,
     SnapshotsConfig,
     assert_no_unresolved_sql_markers,
     replaces_incremental_relation,
@@ -14,13 +19,6 @@ from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
-from sqlbuild.compiler.planner.models import ModelPlanEntry
-from sqlbuild.compiler.planner.types import (
-    IncrementalMode,
-    MaterializationType,
-    PlanAction,
-    PlanReason,
-)
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.build.constants import (
     BUILD_CUSTOM_MATERIALIZATION_MISSING_CODE,

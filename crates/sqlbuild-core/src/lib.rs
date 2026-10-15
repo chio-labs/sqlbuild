@@ -32,6 +32,7 @@ pub mod integration_results;
 pub mod janitor_text;
 pub mod json;
 pub mod load_command;
+pub mod migration_values;
 pub mod models;
 pub mod nested_progress;
 pub mod panics;

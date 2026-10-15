@@ -11,6 +11,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Base error for expected discovery failures.",
         class_attributes: &[("code", ClassValue::Text("D000"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -19,6 +20,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when shared or local project config files are invalid.",
         class_attributes: &[("code", ClassValue::Text("D001"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -27,6 +29,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when an authored SQL model file has an invalid shape.",
         class_attributes: &[("code", ClassValue::Text("D002"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -35,6 +38,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when an authored SQL-native test file has an invalid shape.",
         class_attributes: &[("code", ClassValue::Text("D003"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -43,6 +47,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when an authored SQL audit file has an invalid shape.",
         class_attributes: &[("code", ClassValue::Text("D004"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -51,6 +56,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when a schema.yml file has an invalid shape.",
         class_attributes: &[("code", ClassValue::Text("D005"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -59,6 +65,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when a sources/*.yml file has an invalid shape.",
         class_attributes: &[("code", ClassValue::Text("D006"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -67,6 +74,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when discovered project inputs conflict across files.",
         class_attributes: &[("code", ClassValue::Text("D007"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -75,6 +83,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when declared seed metadata does not match local seed files.",
         class_attributes: &[("code", ClassValue::Text("D008"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -83,6 +92,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when an authored SQL scenario file has an invalid shape.",
         class_attributes: &[("code", ClassValue::Text("D009"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -91,6 +101,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when project Python nodes cannot be discovered.",
         class_attributes: &[("code", ClassValue::Text("D011"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -99,6 +110,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when project providers cannot be discovered.",
         class_attributes: &[("code", ClassValue::Text("D012"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -107,6 +119,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when an authored public SQL declaration is invalid.",
         class_attributes: &[("code", ClassValue::Text("D013"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -115,6 +128,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when an authored SQL hook resource has an invalid shape.",
         class_attributes: &[("code", ClassValue::Text("D014"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -123,6 +137,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when project lifecycle event exporters are invalid.",
         class_attributes: &[("code", ClassValue::Text("D015"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -131,6 +146,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when project-owned Python lives outside a supported extension root.",
         class_attributes: &[("code", ClassValue::Text("D016"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -139,6 +155,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when an authored project path cannot be read as valid UTF-8.",
         class_attributes: &[("code", ClassValue::Text("D016"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -147,6 +164,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when an authored resource identity is not canonical snake_case.",
         class_attributes: &[("code", ClassValue::Text("D016"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -155,6 +173,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when a measurement audit contract or value is invalid.",
         class_attributes: &[],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -163,6 +182,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when safe contract source editing cannot continue.",
         class_attributes: &[],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -171,6 +191,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when fingerprint storage inputs or rows are invalid.",
         class_attributes: &[("code", ClassValue::Text("F000"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -179,6 +200,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when SQL cannot be tokenized into a change fingerprint.",
         class_attributes: &[],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -187,6 +209,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when native state the compiler replays is inconsistent with its inputs.",
         class_attributes: &[],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -195,6 +218,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised, as Python's parser raised `ValueError`, for a dialect Polyglot does not know.",
         class_attributes: &[],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -203,6 +227,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "An unhandled value failure the Python planner also leaves to the caller.",
         class_attributes: &[],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -211,6 +236,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "A file read or write failure the Python planner also leaves to the caller.",
         class_attributes: &[],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -219,6 +245,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Base error for invalid scope-domain input.",
         class_attributes: &[("code", ClassValue::Text("S000"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -227,6 +254,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when a project-relative scope path is invalid.",
         class_attributes: &[("code", ClassValue::Text("S011"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -235,6 +263,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when a qualified scope identity cannot be parsed.",
         class_attributes: &[("code", ClassValue::Text("S002"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -243,6 +272,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when the native scope index cannot place a discovered path or resource kind.",
         class_attributes: &[],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -251,6 +281,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Aggregate error raised only when strict scope validation is requested.",
         class_attributes: &[],
         required: &["diagnostics"],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -259,6 +290,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when an adapter declares lexical rules the native SQL scanners do not support.",
         class_attributes: &[],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -267,6 +299,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "A lint or format run could not proceed.",
         class_attributes: &[("code", ClassValue::Text("L001"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -275,6 +308,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "The SQLBuild-owned native lint engine rejected a request or response.",
         class_attributes: &[("code", ClassValue::Text("L003"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -283,6 +317,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "The project could not be compiled, so its SQL cannot be linted.",
         class_attributes: &[("code", ClassValue::Text("L005"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -291,6 +326,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "A speculative lint run was stopped because its result is no longer needed.",
         class_attributes: &[],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -299,6 +335,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when project specification configuration is invalid.",
         class_attributes: &[],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -307,6 +344,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when an authored config value has the wrong runtime type.",
         class_attributes: &[],
         required: &["key", "expected", "actual_type"],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -315,6 +353,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Base class for expected dbt interop errors.",
         class_attributes: &[("code", ClassValue::Text("C240"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -323,6 +362,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when dbt project configuration is missing or invalid.",
         class_attributes: &[("code", ClassValue::Text("C240"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -331,6 +371,7 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when dbt command execution fails.",
         class_attributes: &[("code", ClassValue::Text("C241"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -339,6 +380,43 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when `sqb dbt` arguments cannot be routed safely.",
         class_attributes: &[("code", ClassValue::Text("C230"))],
         required: &[],
+        optional: &[],
+        fixed: &[],
+    },
+    ErrorSpec {
+        name: "PlannerInputError",
+        parent: VALUE_ERROR_PARENT,
+        doc: "Raised when planner inputs cannot be resolved safely.",
+        class_attributes: &[("code", ClassValue::Text("S000"))],
+        required: &[],
+        optional: &[],
+        fixed: &[],
+    },
+    ErrorSpec {
+        name: "NativeSqlTestPlanningError",
+        parent: "PlannerInputError",
+        doc: "Raised when the native SQL-test planning boundary returns invalid data.",
+        class_attributes: &[],
+        required: &[],
+        optional: &[],
+        fixed: &[],
+    },
+    ErrorSpec {
+        name: "FutureCursorSafetyError",
+        parent: "PlannerInputError",
+        doc: "Raised when an effective cursor exceeds the configured future limit.",
+        class_attributes: &[],
+        required: &[],
+        optional: &[],
+        fixed: &[],
+    },
+    ErrorSpec {
+        name: "MaximumAutomaticStartError",
+        parent: "PlannerInputError",
+        doc: "Raised when automatic cursor recovery would exceed its configured horizon.",
+        class_attributes: &[],
+        required: &[],
+        optional: &["evidence"],
         fixed: &[],
     },
 ];

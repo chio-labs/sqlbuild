@@ -4,11 +4,12 @@ from dataclasses import dataclass
 
 from sqlbuild._native import (
     ChangeDetectionResult,
+    RetentionDirection,
+    RetentionPlanPhase,
     TableType,
     TableTypeDowngradePolicy,
 )
 from sqlbuild.adapter.contract.models import RetentionState
-from sqlbuild.compiler.planner.types import RetentionDirection, RetentionPlanPhase
 
 
 @dataclass(frozen=True)

@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild.compiler.planner.models import CursorOverrides
+from sqlbuild._native import CursorOverrides
 
 
 @dataclass(frozen=True)

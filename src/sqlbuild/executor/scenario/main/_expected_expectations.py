@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild._native import build_scenario_expected_comparison_sql
+from sqlbuild._native import ScenarioExpectedExpectationPlan, build_scenario_expected_comparison_sql
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
-from sqlbuild.compiler.planner.models import ScenarioExpectedExpectationPlan
 from sqlbuild.executor.scenario.constants import (
     SCENARIO_EXEC_EXPECTED_ERRORED,
     SCENARIO_EXEC_EXPECTED_FAILED,

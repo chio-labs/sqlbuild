@@ -5,15 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild._native import SqlLexicalSyntax
-from sqlbuild.adapter.contract.models import LifeCycleEvent
-from sqlbuild.adapter.contract.types import TablePromotionMode
-from sqlbuild.compiler.planner.models import (
-    CompiledRelationLocation,
+from sqlbuild._native import (
+    MaterializationType,
+    ScenarioArtifactKind,
     ScenarioExecutionPlan,
     ScenarioRelationMap,
+    SqlLexicalSyntax,
 )
-from sqlbuild.compiler.planner.types import MaterializationType, ScenarioArtifactKind
+from sqlbuild.adapter.contract.models import LifeCycleEvent
+from sqlbuild.adapter.contract.types import TablePromotionMode
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.executor.build.models import FunctionExecutionResult, SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario.classes.prepared_scenario_schemas import PreparedScenarioSchemas

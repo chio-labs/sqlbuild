@@ -7,6 +7,8 @@ import pytest
 
 from sqlbuild._native import (
     CursorSnapshotScope,
+    ModelCursorSnapshot,
+    PlannerInputError,
     WarehouseSnapshot,
     gather_warehouse_snapshot,
 )
@@ -14,10 +16,6 @@ from sqlbuild.adapter.relations.main.open_inspection_catalog import open_inspect
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.models import (
-    ModelCursorSnapshot,
-)
 from tests.integration.src.sqlbuild.compiler.planner._helpers._test_types import (
     ConcurrentCursorReadsTestCase,
     EligibleMaxFailureTestCase,

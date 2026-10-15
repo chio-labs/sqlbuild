@@ -7,6 +7,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+from sqlbuild._native import (
+    AuditPlanEntry,
+    MaterializationType,
+    ModelPlanEntry,
+    PlanAction,
+    PlanReason,
+)
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import (
@@ -20,12 +27,6 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
-from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
-from sqlbuild.compiler.planner.types import (
-    MaterializationType,
-    PlanAction,
-    PlanReason,
-)
 from sqlbuild.executor.run.main._execute import execute_table_entry
 from sqlbuild.executor.run.models import (
     HookContext,

@@ -10,6 +10,7 @@ import pytest
 from sqlbuild._native import (
     CompileModelConfig,
     SourceEntry,
+    SourceLoadPlanEntry,
     SourceWriteStrategy,
     build_intermediate_source_map,
     build_source_load_entries,
@@ -31,7 +32,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.compiler.planner.models import SourceLoadPlanEntry
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     LoaderDagExpansionTestCase,

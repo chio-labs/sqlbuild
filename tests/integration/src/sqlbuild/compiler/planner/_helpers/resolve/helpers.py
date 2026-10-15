@@ -7,11 +7,13 @@ from pathlib import Path
 from typing import Any, cast
 
 from sqlbuild._native import (
+    BackfillAction,
     BackfillResult,
     CollectionRendering,
     CompileAdapterContext,
     CompileModelConfig,
     CursorOverridePair,
+    ModelCursorSnapshot,
     ModelPlanContext,
     SourceEntry,
     WarehouseSnapshot,
@@ -33,10 +35,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.planner.models import (
-    ModelCursorSnapshot,
-)
-from sqlbuild.compiler.planner.types import BackfillAction
 from sqlbuild.compiler.references.types import SqlReferenceKind
 
 

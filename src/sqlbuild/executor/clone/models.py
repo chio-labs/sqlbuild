@@ -5,15 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from sqlbuild._native import CloneSourcePlanEntry, FunctionPlanEntry, ModelPlanEntry, SeedPlanEntry
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import LifeCycleEvent, RetentionRequest
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
-from sqlbuild.compiler.planner.models import (
-    CloneSourcePlanEntry,
-    FunctionPlanEntry,
-    ModelPlanEntry,
-    SeedPlanEntry,
-)
 from sqlbuild.executor.clone.types import CloneAction, CloneItemCallback, CloneStatus
 
 

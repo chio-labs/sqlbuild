@@ -10,7 +10,7 @@ use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_cursor::algebra::main::floor_to_grain::floor_to_grain;
 use sqlbuild_cursor::planner::main::empty_inputs::empty_inputs;
 
-const MODELS: &str = "sqlbuild.compiler.planner.models";
+const MODELS: &str = "sqlbuild._native";
 
 #[pyfunction]
 #[pyo3(signature = (*, empty_input_names, waits_for_every_input, inputs_with_rows, has_window_start))]
@@ -143,11 +143,7 @@ fn unreadable_cursor_inputs_error<'py>(
     input_names: Vec<String>,
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(
-            py,
-            "sqlbuild.compiler.planner.exceptions",
-            "PlannerInputError",
-        )?,
+        &imported(py, "sqlbuild._native", "PlannerInputError")?,
         &[
             (
                 "message",

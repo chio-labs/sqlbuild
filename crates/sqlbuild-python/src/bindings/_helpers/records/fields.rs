@@ -114,6 +114,7 @@ fn default_value<'py>(
         FieldDefault::EmptyFrozenset => Ok(PyFrozenSet::empty(py)?.into_any()),
         FieldDefault::Member(module, class, member) => imported(py, module, class)?.getattr(member),
         FieldDefault::Call(module, name) => imported(py, module, name)?.call0(),
+        FieldDefault::Factory(factory) => factory(py),
         FieldDefault::CallText(module, name, text) => imported(py, module, name)?.call1((text,)),
     }
 }

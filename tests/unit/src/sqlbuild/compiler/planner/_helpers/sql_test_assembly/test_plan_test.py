@@ -6,15 +6,19 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    ChainStep,
     CompiledDirectLogicSqlTestPayload,
     CompiledFunction,
     CompiledModelSqlTestPayload,
     CompileSqlTestCte,
     DiscoveredSqlTestBlock,
     NativeSqlTestPlan,
+    PlannerInputError,
     PlannerScope,
     PlannerSelection,
+    PlanOutput,
     PlanWarning,
+    SqlTestPlanEntry,
     SqlTestPlanResult,
     WarningSeverity,
     build_test_command_plan,
@@ -37,8 +41,6 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType, SqlTestMode
 from sqlbuild.compiler.discovery.models import DiscoveredSqlTestFile
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.models import ChainStep, PlanOutput, SqlTestPlanEntry
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     AssertionChainCteErrorTestCase,
     NativePlanningDifferentialTestCase,

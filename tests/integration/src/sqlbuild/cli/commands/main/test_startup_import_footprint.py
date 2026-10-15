@@ -43,7 +43,6 @@ COMPILE_ONLY_MODULES: tuple[str, ...] = (
     "sqlbuild.adapter.contract.classes.base_adapter",
     "sqlbuild.compiler.compile.models",
     "sqlbuild.compiler.discovery.models",
-    "sqlbuild.compiler.planner.models",
     "sqlbuild.lint",
     "sqlbuild.rule_engine",
     "sqlbuild.runtime.compute_logs",
@@ -67,7 +66,6 @@ FULL_COMPILE_MODULES: tuple[str, ...] = (
     "sqlbuild.adapter.contract.classes.base_adapter",
     "sqlbuild.compiler.compile.models",
     "sqlbuild.compiler.pipeline",
-    "sqlbuild.compiler.planner.models",
 )
 REUSED_COMPILE_FORBIDDEN: tuple[str, ...] = (
     *WAREHOUSE_AND_INTEGRATION_MODULES,

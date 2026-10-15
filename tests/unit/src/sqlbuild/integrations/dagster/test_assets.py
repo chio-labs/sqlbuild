@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild._native import PlannerInputError
 from sqlbuild.integrations.dagster import (
     SqlBuildDagsterTranslator,
     build_sqlbuild_asset_selection,

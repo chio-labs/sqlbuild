@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Any, cast
 
-from sqlbuild._native import SourceEntry
+from sqlbuild._native import AuditPlanEntry, ModelPlanEntry, PlanReason, SourceEntry
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
@@ -16,8 +16,6 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
 )
 from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
-from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.auditing.main._execute import execute_audit

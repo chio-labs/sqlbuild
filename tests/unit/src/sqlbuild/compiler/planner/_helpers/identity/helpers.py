@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 from sqlbuild._native import (
+    BackfillAction,
     BackfillResult,
     ChangeDetectionResult,
     ChangeKind,
     PlannerResolvedActions,
     ResolvedModelAction,
-)
-from sqlbuild.compiler.planner.types import (
-    BackfillAction,
 )
 
 MERGE_MODEL_NAME: str = "orders"

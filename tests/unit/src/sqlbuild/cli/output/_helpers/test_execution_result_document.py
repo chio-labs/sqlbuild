@@ -9,7 +9,10 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    CursorInputEvidence,
     FutureCursorAction,
+    FutureCursorSafetyEvidence,
+    MaximumStartSafetyEvidence,
     MeasurementThresholdBound,
     MeasurementThresholds,
     SqlLogicalType,
@@ -29,11 +32,6 @@ from sqlbuild.compiler.auditing.types import (
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.compiler.discovery.models import SqlTestParameterDeclaration
-from sqlbuild.compiler.planner.models import (
-    CursorInputEvidence,
-    FutureCursorSafetyEvidence,
-    MaximumStartSafetyEvidence,
-)
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.models import (
     MicrobatchAccountingInterval,

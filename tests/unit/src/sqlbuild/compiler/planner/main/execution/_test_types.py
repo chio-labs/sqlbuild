@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from sqlbuild.compiler.planner.types import PlanAction, PlanReason
+from sqlbuild._native import PlanAction, PlanReason
 
 
 @dataclass(frozen=True)

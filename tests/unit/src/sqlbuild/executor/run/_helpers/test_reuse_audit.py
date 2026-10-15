@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import pytest
 
-from sqlbuild.compiler.planner.models import AuditPlanEntry
+from sqlbuild._native import AuditPlanEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run._helpers.reuse.audit import reused_final_audit_results_by_binding_key
 from sqlbuild.executor.run._helpers.reuse.fingerprint_metadata import (

@@ -8,14 +8,12 @@ from typing import TYPE_CHECKING
 
 from sqlbuild._native import (
     OldNameViewAction,
+    OldNameViewPlanEntry,
     QueryShape,
     build_migration_fingerprint,
     parse_query_shape,
 )
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.planner.models import (
-    OldNameViewPlanEntry,
-)
 
 if TYPE_CHECKING:
     from sqlbuild._native import InputColumns

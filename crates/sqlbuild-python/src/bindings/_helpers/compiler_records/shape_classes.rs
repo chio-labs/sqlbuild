@@ -3,35 +3,18 @@
 use pyo3::exceptions::PyLookupError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 
-use sqlbuild_cache::stage_capture::constants::HOSTED_SHAPE_TYPES;
+use sqlbuild_cache::hosted_shapes::main::hosted_native_name::hosted_native_name;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::records::constants::NATIVE_MODULE;
 
-/// The native class name hosting `module:class`, failing when the qualified key is ambiguous.
-pub(crate) fn hosted_name(module: &str, class: &str) -> PyResult<Option<&'static str>> {
-    let mut found: Option<&'static str> = None;
-    for (native, python) in HOSTED_SHAPE_TYPES {
-        let Some((python_module, python_class)) = python.split_once(':') else {
-            continue;
-        };
-        if python_module != module || python_class != class {
-            continue;
-        }
-        let Some(native_name) = native
-            .strip_prefix(NATIVE_MODULE)
-            .and_then(|rest| rest.strip_prefix(':'))
-        else {
-            continue;
-        };
-        if found.is_some_and(|existing| existing != native_name) {
-            return Err(PyLookupError::new_err(format!(
-                "{module}:{class} names more than one natively hosted shape"
-            )));
-        }
-        found = Some(native_name);
-    }
-    Ok(found)
+/// The native class name hosting `module:class`, failing loudly when the name is ambiguous.
+fn hosted_name(module: &str, class: &str) -> PyResult<Option<&'static str>> {
+    hosted_native_name(module, class).map_err(|_| {
+        PyLookupError::new_err(format!(
+            "{module}:{class} names more than one natively hosted shape"
+        ))
+    })
 }
 
 /// `class` of the Python module object `module`, or the native class hosting it.

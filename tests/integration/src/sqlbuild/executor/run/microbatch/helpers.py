@@ -7,6 +7,17 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
+from sqlbuild._native import (
+    AuditPlanEntry,
+    CursorBounds,
+    CursorInputRelation,
+    IncrementalMode,
+    IncrementalStrategy,
+    MaterializationType,
+    ModelPlanEntry,
+    PlanAction,
+    PlanReason,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
@@ -21,19 +32,6 @@ from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
-)
-from sqlbuild.compiler.planner.models import (
-    AuditPlanEntry,
-    CursorBounds,
-    CursorInputRelation,
-    ModelPlanEntry,
-)
-from sqlbuild.compiler.planner.types import (
-    IncrementalMode,
-    IncrementalStrategy,
-    MaterializationType,
-    PlanAction,
-    PlanReason,
 )
 from sqlbuild.executor.run._helpers.materializations.microbatch import execute_microbatch_entry
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import resolve_runtime_cursor_bounds

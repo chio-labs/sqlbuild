@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild._native import SeedCsvSettings
+from sqlbuild._native import SeedCsvSettings, SeedPlanEntry
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.models import SeedPlanEntry
 
 
 def build_seed_plan_entry(*, seed_name: str, file_path: Path) -> SeedPlanEntry:

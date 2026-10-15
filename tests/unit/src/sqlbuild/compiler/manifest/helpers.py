@@ -7,17 +7,26 @@ from pathlib import Path
 from typing import Any, cast
 
 from sqlbuild._native import (
+    AuditPlanEntry,
+    ChainStep,
     CompiledSeed,
     CompiledSource,
     CompileModelConfig,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSqlHookFile,
+    MaterializationType,
+    ModelPlanEntry,
+    PlanAction,
+    PlanOutput,
+    PlanReason,
     SchemaColumn,
     SchemaModelEntry,
     SchemaSeedEntry,
+    SeedPlanEntry,
     SourceColumnEntry,
     SourceEntry,
+    SqlTestPlanEntry,
     build_manifest,
 )
 from sqlbuild.compiler.auditing.types import (
@@ -40,19 +49,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledSourceView,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredSourceFile
-from sqlbuild.compiler.planner.models import (
-    AuditPlanEntry,
-    ChainStep,
-    ModelPlanEntry,
-    PlanOutput,
-    SeedPlanEntry,
-    SqlTestPlanEntry,
-)
-from sqlbuild.compiler.planner.types import (
-    MaterializationType,
-    PlanAction,
-    PlanReason,
-)
 
 
 def model_key(name: str) -> CompiledObjectKey:

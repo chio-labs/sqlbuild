@@ -11,6 +11,9 @@ from typing import Any
 from sqlbuild._native import (
     Fingerprint,
     FingerprintSet,
+    MaterializationType,
+    ModelPlanEntry,
+    SeedPlanEntry,
     read_latest_fingerprints,
     write_fingerprints,
 )
@@ -22,8 +25,6 @@ from sqlbuild.compiler.fingerprints.constants import (
     NODE_TYPE_MODEL,
     NODE_TYPE_SEED,
 )
-from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
-from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.clone.types import (
     CloneAction,

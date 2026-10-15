@@ -20,7 +20,7 @@ use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
 
-const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
+const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 
 type NameRows = Vec<(String, Vec<String>)>;
 /// `(name, tags, POSIX relative path, upstream node names)` of one discovered node.

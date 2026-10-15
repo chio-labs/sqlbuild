@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any, cast
 from uuid import uuid4
 
-from sqlbuild._native import sql_test_resource_id
+from sqlbuild._native import FunctionPlanEntry, PlanOutput, SqlTestPlanEntry, sql_test_resource_id
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import FunctionInfo
@@ -21,7 +21,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.planner.models import FunctionPlanEntry, PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.build.models import FunctionExecutionResult
 from sqlbuild.executor.functions.main._execute import execute_function
 from sqlbuild.executor.pipeline._helpers.connections import (

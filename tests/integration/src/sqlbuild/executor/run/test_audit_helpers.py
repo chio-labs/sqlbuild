@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.planner.models import AuditPlanEntry
+from sqlbuild._native import AuditPlanEntry
 from tests.integration.src.sqlbuild.executor.run._test_types import AuditSqlResolutionTestCase
 from tests.integration.src.sqlbuild.executor.run.helpers import build_test_audit_plan_entry
 

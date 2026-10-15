@@ -1,6 +1,6 @@
 """Canonical cursor grain metadata."""
 
-from sqlbuild.compiler.planner.types import CursorGrain
+from sqlbuild._native import CursorGrain
 
 GRAIN_ORDER: dict[CursorGrain, int] = {
     CursorGrain.SECOND: 0,

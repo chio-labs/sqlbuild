@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from sqlbuild._native import SchemaDynamicColumnFamily, matching_dynamic_families
+from sqlbuild._native import ModelPlanEntry, SchemaDynamicColumnFamily, matching_dynamic_families
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapter.contract.types import TypeDialect
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
-from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run.constants import (
     RUNTIME_CONTRACT_EXTRA_COLUMN_CODE,

@@ -13,9 +13,18 @@ from typing import Any
 
 from sqlbuild._native import (
     AlignedInterval,
+    BackfillAction,
+    CursorBounds,
+    CursorGrain,
+    CursorType,
     DateValue,
+    Duration,
+    IncrementalStrategy,
     IntegerValue,
     MicrobatchLimitAction,
+    MicrobatchStrategy,
+    ModelPlanEntry,
+    OnSchemaChange,
     TableType,
     TimestampValue,
     aligned_timestamp_bounds,
@@ -51,19 +60,6 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
 )
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
-)
-from sqlbuild.compiler.planner.models import (
-    CursorBounds,
-    Duration,
-    ModelPlanEntry,
-)
-from sqlbuild.compiler.planner.types import (
-    BackfillAction,
-    CursorGrain,
-    CursorType,
-    IncrementalStrategy,
-    MicrobatchStrategy,
-    OnSchemaChange,
 )
 from sqlbuild.cursor_algebra.types import Bound, BoundSentinel, CursorScalar
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context

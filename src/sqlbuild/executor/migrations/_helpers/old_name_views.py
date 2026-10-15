@@ -24,13 +24,6 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
 from sqlbuild.adapter.type_system.main.normalize_relation_type import normalize_relation_type
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.migrations.constants import COLUMN_MIGRATION_TABLE_NAME
-from sqlbuild.compiler.migrations.models import (
-    ColumnMigrationEvent,
-    MigrationRelation,
-    OldNameViewEvent,
-)
-from sqlbuild.compiler.migrations.types import OldNameViewEventType
-from sqlbuild.compiler.planner.models import OldNameView, OldNameViewPlanEntry, PlanOutput
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.migrations._helpers.old_name_facts import (
     old_name_fact,

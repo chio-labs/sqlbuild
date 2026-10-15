@@ -15,10 +15,10 @@ from _pytest.capture import CaptureResult
 from sqlbuild._native import (
     FutureCursorAction,
     IntegrationResultEnvelope,
+    MaximumStartSafetyEvidence,
     MicrobatchLimitAction,
     serialize_maximum_start_safety,
 )
-from sqlbuild.compiler.planner.models import MaximumStartSafetyEvidence
 from sqlbuild.integrations.dagster import (
     SqlBuildCliResource,
     SqlBuildDagsterTranslator,

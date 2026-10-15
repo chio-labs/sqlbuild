@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import MaterializationType
 from sqlbuild.compiler.dag.types import NodeKind
-from sqlbuild.compiler.planner.types import MaterializationType
 
 RIVERS_DEPLOYMENT_ENVIRONMENT_VARIABLE: str = "RIVERS_DEPLOYMENT"
 RIVERS_DEVELOPMENT_DEPLOYMENT: str = "dev"

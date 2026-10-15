@@ -11,7 +11,10 @@ import sqlbuild._native as _native
 import sqlbuild._native as model_chain_module
 import sqlbuild._native as plan_artifacts_module
 from sqlbuild._native import (
+    ChainStep,
     DiagnosticPhase,
+    PlanOutput,
+    SqlTestPlanEntry,
     WrittenTarget,
     build_manifest,
     compiled_model_record,
@@ -27,7 +30,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.planner.models import ChainStep, PlanOutput, SqlTestPlanEntry
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     ExpectedMessageTestCase,
     TargetWriterCacheTestCase,

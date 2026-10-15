@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import (
+    BackfillAction,
     BackfillResult,
     CursorOverridePair,
     ModelPlanContext,
@@ -20,7 +21,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.discovery.models import SqlHookEntry
-from sqlbuild.compiler.planner.types import BackfillAction
 from tests.integration.src.sqlbuild.compiler.planner._helpers.resolve._test_types import (
     OrchestrationTestCase,
 )

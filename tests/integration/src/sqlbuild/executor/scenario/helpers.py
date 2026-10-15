@@ -4,7 +4,18 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild._native import (
+    MaterializationType,
+    ModelPlanEntry,
+    PlanAction,
+    PlanReason,
+    ScenarioArtifactKind,
+    ScenarioAssertionExpectationPlan,
+    ScenarioExecutionPlan,
+    ScenarioExpectedExpectationPlan,
+    ScenarioFixturePlan,
     ScenarioGraphPlan,
+    ScenarioRelationMap,
+    ScenarioRelationPlan,
 )
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
@@ -12,21 +23,6 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
-from sqlbuild.compiler.planner.models import (
-    ModelPlanEntry,
-    ScenarioAssertionExpectationPlan,
-    ScenarioExecutionPlan,
-    ScenarioExpectedExpectationPlan,
-    ScenarioFixturePlan,
-    ScenarioRelationMap,
-    ScenarioRelationPlan,
-)
-from sqlbuild.compiler.planner.types import (
-    MaterializationType,
-    PlanAction,
-    PlanReason,
-    ScenarioArtifactKind,
-)
 from sqlbuild.executor.run.models import HookContext
 
 SCENARIO_NAME: str = "revenue__customer_refund"

@@ -8,23 +8,19 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import (
+    BackfillAction,
     BackfillResult,
+    CursorBounds,
     CursorWatermarkMode,
     IntegerValue,
     MicrobatchLimitAction,
+    ModelCursorSnapshot,
+    ModelPlanEntry,
     compute_cursor_bounds,
 )
 from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.planner.models import (
-    CursorBounds,
-    ModelCursorSnapshot,
-    ModelPlanEntry,
-)
-from sqlbuild.compiler.planner.types import (
-    BackfillAction,
-)
 from sqlbuild.executor.run._helpers.materializations.microbatch import (
     _clamp_intervals_to_model_domain,
     _count_unaccounted_intervals,

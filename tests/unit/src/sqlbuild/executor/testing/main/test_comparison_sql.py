@@ -4,9 +4,8 @@ from dataclasses import replace
 
 import pytest
 
-from sqlbuild._native import render_sql_test_comparison_sql
+from sqlbuild._native import ChainStep, SqlTestPlanEntry, render_sql_test_comparison_sql
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
 from tests.unit.src.sqlbuild.executor.testing.main._test_types import (
     BuildComparisonSqlTestCase,
     ExpectedBooleanTestCase,

@@ -4,10 +4,10 @@ from unittest.mock import Mock
 
 import pytest
 
+from sqlbuild._native import OnSchemaChange
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapter.contract.types import PromotionStrategy
-from sqlbuild.compiler.planner.types import OnSchemaChange
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run._helpers.execution.promotion import promote_relation_to_destination
 from sqlbuild.executor.run._helpers.execution.staging import create_staging_relation

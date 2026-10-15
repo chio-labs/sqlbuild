@@ -9,10 +9,18 @@ from datetime import datetime
 from typing import Any, cast
 
 from sqlbuild._native import (
+    AuditPlanEntry,
+    CursorBounds,
+    CursorGrain,
+    CursorType,
     DateValue,
+    Duration,
+    FutureCursorSafetyEvidence,
     FutureCursorsConfig,
     IntegerValue,
+    MaximumStartSafetyEvidence,
     MicrobatchLimitAction,
+    ModelPlanEntry,
     SourceEntry,
     StartCursorsConfig,
     TimestampValue,
@@ -24,15 +32,6 @@ from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecord
 from sqlbuild.adapter.contract.models import LifeCycleEvent, QueryResult
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, PythonHookEntry
-from sqlbuild.compiler.planner.models import (
-    AuditPlanEntry,
-    CursorBounds,
-    Duration,
-    FutureCursorSafetyEvidence,
-    MaximumStartSafetyEvidence,
-    ModelPlanEntry,
-)
-from sqlbuild.compiler.planner.types import CursorGrain, CursorType
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError
 from sqlbuild.cursor_algebra.types import BoundSentinel, CursorScalar

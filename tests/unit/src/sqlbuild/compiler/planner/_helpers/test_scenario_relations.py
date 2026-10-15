@@ -8,7 +8,11 @@ import pytest
 
 from sqlbuild._native import (
     CompileSqlScenarioCte,
+    PlannerInputError,
+    ScenarioExecutionPlan,
+    ScenarioFixturePlan,
     ScenarioGraphPlan,
+    ScenarioRelationPlan,
     SqlLexicalSyntax,
     build_scenario_execution_plan,
     build_scenario_fixture_plans,
@@ -25,12 +29,6 @@ from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapt
 from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.models import (
-    ScenarioExecutionPlan,
-    ScenarioFixturePlan,
-    ScenarioRelationPlan,
-)
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     ScenarioCheckSqlResolutionErrorTestCase,
     ScenarioCheckSqlResolutionTestCase,

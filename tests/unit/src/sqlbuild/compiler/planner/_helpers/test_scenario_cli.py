@@ -7,14 +7,12 @@ import pytest
 
 from sqlbuild._native import (
     ScenarioArtifactName,
+    ScenarioExecutionPlan,
     SqlLexicalSyntax,
     build_cli_scenario_plan,
 )
 from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.planner.models import (
-    ScenarioExecutionPlan,
-)
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     ScenarioCliPlanIdentifierLimitTestCase,
 )

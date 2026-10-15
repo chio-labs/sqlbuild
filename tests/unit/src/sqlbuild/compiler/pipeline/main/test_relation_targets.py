@@ -6,12 +6,12 @@ import pytest
 
 from sqlbuild._native import (
     DiscoveredPythonNode,
+    PlanOutput,
     PythonNodeGraph,
     SourceEntry,
     build_python_relation_targets,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.refs import model, source

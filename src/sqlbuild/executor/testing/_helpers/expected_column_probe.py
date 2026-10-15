@@ -5,9 +5,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from sqlbuild._native import describe_missing_expected_columns, render_sql_test_comparison_sql
+from sqlbuild._native import (
+    SqlTestPlanEntry,
+    describe_missing_expected_columns,
+    render_sql_test_comparison_sql,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.planner.models import SqlTestPlanEntry
 from sqlbuild.diagnostics.classes.diagnostic_record_redactor import DiagnosticRecordRedactor
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 

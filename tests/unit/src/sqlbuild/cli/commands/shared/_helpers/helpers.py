@@ -5,7 +5,16 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from sqlbuild._native import SqlTestAssertionStep
+from sqlbuild._native import (
+    ChainStep,
+    MaterializationType,
+    ModelPlanEntry,
+    PlanAction,
+    PlanOutput,
+    PlanReason,
+    SqlTestAssertionStep,
+    SqlTestPlanEntry,
+)
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditOutcome,
@@ -14,8 +23,6 @@ from sqlbuild.compiler.auditing.types import (
 )
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.models import ChainStep, ModelPlanEntry, PlanOutput, SqlTestPlanEntry
-from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome

@@ -6,6 +6,10 @@ from datetime import datetime
 from typing import Any
 
 from sqlbuild._native import (
+    MigrationRelation,
+    OldNameViewEvent,
+    OldNameViewEventType,
+    OldNameViewPlanEntry,
     deterministic_old_name_view_event_id,
     read_migration_state_events,
     stored_old_name_view_columns,
@@ -13,9 +17,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.migrations.constants import MIGRATION_WRITE_ATTEMPTS
-from sqlbuild.compiler.migrations.models import MigrationRelation, OldNameViewEvent
-from sqlbuild.compiler.migrations.types import OldNameViewEventType
-from sqlbuild.compiler.planner.models import OldNameViewPlanEntry
 from sqlbuild.executor.migrations._helpers.relation_for_location import (
     migration_relation_for_location,
 )

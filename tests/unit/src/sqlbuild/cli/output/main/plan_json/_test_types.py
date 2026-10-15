@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 
-from sqlbuild._native import PythonPlanEntry
-from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild._native import PlanOutput, PythonPlanEntry
 
 
 @dataclass(frozen=True)

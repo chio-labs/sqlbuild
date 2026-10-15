@@ -8,8 +8,12 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    BackfillAction,
     BackfillResult,
     CompileModelConfig,
+    CursorBounds,
+    CursorInputRelation,
+    ModelCursorSnapshot,
     WarehouseSnapshot,
     compute_microbatch_range,
     compute_plan_cursor_bounds,
@@ -22,12 +26,6 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
-from sqlbuild.compiler.planner.models import (
-    CursorBounds,
-    CursorInputRelation,
-    ModelCursorSnapshot,
-)
-from sqlbuild.compiler.planner.types import BackfillAction
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     AuthoritativeCursorOverrideTestCase,
     MicrobatchCursorEndPlanTestCase,

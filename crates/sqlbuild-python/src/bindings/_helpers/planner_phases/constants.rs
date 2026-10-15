@@ -1,9 +1,9 @@
 //! Python modules and names the planner phases exchange values with.
 
 pub(crate) const NATIVE_MODULE: &str = "sqlbuild._native";
-pub(crate) const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
-pub(crate) const PLANNER_TYPES: &str = "sqlbuild.compiler.planner.types";
-pub(crate) const PLANNER_EXCEPTIONS: &str = "sqlbuild.compiler.planner.exceptions";
+pub(crate) const PLANNER_MODELS: &str = "sqlbuild._native";
+pub(crate) const PLANNER_TYPES: &str = "sqlbuild._native";
+pub(crate) const PLANNER_EXCEPTIONS: &str = "sqlbuild._native";
 pub(crate) const ADAPTER_MODELS: &str = "sqlbuild.adapter.contract.models";
 pub(crate) const ADAPTER_TYPES: &str = "sqlbuild.adapter.contract.types";
 pub(crate) const SPEC_MODELS: &str = "sqlbuild._native";

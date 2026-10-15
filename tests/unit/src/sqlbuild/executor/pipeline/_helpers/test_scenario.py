@@ -7,10 +7,9 @@ from typing import Any
 
 import pytest
 
-from sqlbuild._native import SqlLexicalSyntax
+from sqlbuild._native import ScenarioExecutionPlan, SqlLexicalSyntax
 from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.executor.pipeline._helpers import scenario as scenario_pipeline
 from sqlbuild.executor.scenario._helpers.local import execution as local_scenario
 from sqlbuild.executor.scenario.constants import (

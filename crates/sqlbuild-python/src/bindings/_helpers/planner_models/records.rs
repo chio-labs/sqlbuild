@@ -143,8 +143,7 @@ fn forward_only_backfill(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     let kwargs = PyDict::new(py);
     kwargs.set_item(
         "action",
-        imported(py, "sqlbuild.compiler.planner.types", "BackfillAction")?
-            .getattr("FORWARD_ONLY")?,
+        imported(py, "sqlbuild._native", "BackfillAction")?.getattr("FORWARD_ONLY")?,
     )?;
     imported(py, "sqlbuild._native", "BackfillResult")?.call((), Some(&kwargs))
 }
@@ -155,13 +154,9 @@ fn utc_now(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 
 fn scenario_artifact_kind(py: Python<'_>, mut values: Vec<Py<PyAny>>) -> PyResult<Vec<Py<PyAny>>> {
     if let Some(kind) = values.first_mut() {
-        *kind = imported(
-            py,
-            "sqlbuild.compiler.planner.types",
-            "ScenarioArtifactKind",
-        )?
-        .call1((kind.bind(py),))?
-        .unbind();
+        *kind = imported(py, "sqlbuild._native", "ScenarioArtifactKind")?
+            .call1((kind.bind(py),))?
+            .unbind();
     }
     Ok(values)
 }
@@ -432,7 +427,7 @@ planner_record! {
     /// Per-function output from change detection.
     FunctionChangeResult, false, [
         (fingerprint_sql = "fingerprint_sql", FieldDefault::Required, true, true),
-        (reason = "reason", FieldDefault::Member(("sqlbuild.compiler.planner.types", "PlanReason"), "NO_CHANGE"), true, true),
+        (reason = "reason", FieldDefault::Member(("sqlbuild._native", "PlanReason"), "NO_CHANGE"), true, true),
     ]
 }
 

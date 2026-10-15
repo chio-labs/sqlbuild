@@ -16,7 +16,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE_RECORDS: &str = "sqlbuild._native";
-const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
+const PLANNER_MODELS: &str = "sqlbuild._native";
 const HOOKS: &str = "sqlbuild.runtime.contracts.models";
 const BUILD_OPTIONS: (&[&str], &[&str]) = (&["environment", "request", "hooks"], &[]);
 const ATTACH_OPTIONS: (&[&str], &[&str]) = (
@@ -204,14 +204,8 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
         );
         match result {
             Err(error)
-                if error.is_instance(
-                    py,
-                    &imported(
-                        py,
-                        "sqlbuild.compiler.planner.exceptions",
-                        "PlannerInputError",
-                    )?,
-                ) =>
+                if error
+                    .is_instance(py, &imported(py, "sqlbuild._native", "PlannerInputError")?) =>
             {
                 call_with(
                     &imported(py, "sqlbuild._native", "build_display_only_sqlbuild_plan")?,

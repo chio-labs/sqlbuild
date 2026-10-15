@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import AuditPlanEntry, PlanOutput
 from sqlbuild.compiler.auditing.types import AuditAttachmentKind
-from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput
 from sqlbuild.executor.build.models import BuildIndexes
 
 

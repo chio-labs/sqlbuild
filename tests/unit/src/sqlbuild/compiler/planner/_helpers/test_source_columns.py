@@ -7,6 +7,8 @@ from typing import Any, ClassVar
 import pytest
 
 from sqlbuild._native import (
+    CursorInputRelation,
+    PlannerInputError,
     PlannerRelationsContext,
     PlannerScope,
     SourceEntry,
@@ -29,8 +31,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.models import CursorInputRelation
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     CursorRuntimeOwnershipTestCase,

@@ -19,7 +19,7 @@ const NATIVE_MODULE: &str = "sqlbuild._native";
 const ADAPTER_MODELS_MODULE: &str = "sqlbuild.adapter.contract.models";
 pub(crate) const ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
-const PLANNER_TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
+const PLANNER_TYPES_MODULE: &str = "sqlbuild._native";
 const GENERIC_DIALECT: &str = "generic";
 const UDF_PREFIX: &str = "__sqlbuild_udf_";
 

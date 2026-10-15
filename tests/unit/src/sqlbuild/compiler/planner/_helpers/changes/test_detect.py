@@ -6,12 +6,15 @@ from datetime import datetime
 import pytest
 
 from sqlbuild._native import (
+    BackfillAction,
     BackfillResult,
     ChangeDetectionResult,
     ChangeKind,
     Fingerprint,
+    PlanAction,
     PlannerChangeResults,
     PlannerScope,
+    PlanReason,
     PlanWarning,
     WarehouseFingerprints,
     WarehouseSnapshot,
@@ -27,11 +30,6 @@ from sqlbuild._native import (
 from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.discovery.models import SqlHookEntry
-from sqlbuild.compiler.planner.types import (
-    BackfillAction,
-    PlanAction,
-    PlanReason,
-)
 from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_helpers import (
     build_function_caller_metadata_case,
     build_metadata_json_with_audit_gate,

@@ -2,7 +2,7 @@
 # migration work that moves to Rust. `remaining_lines` must equal the current count of that work:
 # a PR that moves code lowers it, and adding movable Python fails the check.
 # Native failures must surface as errors; `handled_native_errors` lists the reviewed exceptions.
-remaining_lines = 3851
+remaining_lines = 2319
 
 [[stays]]
 path = "executor"
@@ -803,7 +803,3 @@ note = "Shape rule: data constants only (INTEGRATION_RESULT_PATH_ENV), no logic;
 path = "compiler/compile/types.py"
 reason = "executor"
 note = "Shape rule: typing protocols, enums and aliases only (CompiledProjectView, CompiledModelView, CompiledResourceType, AuditInput, ...), no logic; consumed by executor/janitor/_helpers/plan.py, executor/pipeline/_helpers/testing.py, executor/scenario/_helpers/local/execution.py and project audit factories that annotate AuditInput."
-
-[[handled_native_errors]]
-location = "compiler/planner/models.py::CursorBounds._parse_inferred"
-note = "A bound that is not integer text is parsed as a timestamp instead; CursorAlgebraError is an input error, and native compiler failures are not caught."

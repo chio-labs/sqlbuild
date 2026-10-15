@@ -6,10 +6,9 @@ from typing import Any
 
 import pytest
 
-from sqlbuild._native import TableType, table_type_copy_name
+from sqlbuild._native import TableType, TableTypePlanEntry, table_type_copy_name
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.planner.models import TableTypePlanEntry
 from sqlbuild.executor.build._helpers.retention import apply_table_type_conversion
 from sqlbuild.executor.clone.main._clone_relation_operation import clone_relation_by_names
 from tests.integration.src.sqlbuild.adapters.snowflake._test_types import (

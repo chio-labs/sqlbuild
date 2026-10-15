@@ -9,10 +9,10 @@ use pyo3::types::{
     PyStringMethods, PyTuple,
 };
 
+use sqlbuild_cache::hosted_shapes::constants::HOSTED_SHAPE_TYPES;
 use sqlbuild_cache::stage_capture::constants::{
-    CANONICAL_TYPES, DECODED_SEQUENCES, HOSTED_SHAPE_TYPES, OMITTED_ATTRIBUTES,
-    PROJECTED_ATTRIBUTES, RESERVED_KEYS, SHARED_MARKER, SHARED_MIN_CHARS, SKIPPED_SLOTS,
-    UNORDERED_ATTRIBUTES,
+    CANONICAL_TYPES, DECODED_SEQUENCES, OMITTED_ATTRIBUTES, PROJECTED_ATTRIBUTES, RESERVED_KEYS,
+    SHARED_MARKER, SHARED_MIN_CHARS, SKIPPED_SLOTS, UNORDERED_ATTRIBUTES,
 };
 use sqlbuild_cache::stage_capture::main::capture_sort_key::capture_sort_key;
 use sqlbuild_cache::stage_capture::main::compact_capture_json::compact_capture_json;

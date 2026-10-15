@@ -8,13 +8,14 @@ from typing import Any
 from sqlbuild._native import (
     CostContext,
     DirectSourceFreshnessPlanningResult,
+    ModelPlanEntry,
+    PlanOutput,
     SourceFreshnessIdentity,
     SourceFreshnessRecord,
     SourceFreshnessRenderers,
     write_source_freshness_records,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle

@@ -5,9 +5,8 @@ from __future__ import annotations
 import duckdb
 import pytest
 
-from sqlbuild._native import read_migration_state_events
+from sqlbuild._native import ColumnMigrationEvent, read_migration_state_events
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.migrations.models import ColumnMigrationEvent
 from sqlbuild.executor.migrations._helpers.columns import apply_model_column_renames
 from tests.unit.src.sqlbuild.executor.migrations._helpers._test_types import (
     OverlappingColumnRenameTestCase,

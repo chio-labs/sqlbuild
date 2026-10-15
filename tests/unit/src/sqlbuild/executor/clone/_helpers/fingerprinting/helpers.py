@@ -5,13 +5,20 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import Fingerprint, FingerprintSet, SeedCsvSettings
+from sqlbuild._native import (
+    Fingerprint,
+    FingerprintSet,
+    MaterializationType,
+    ModelPlanEntry,
+    PlanAction,
+    PlanReason,
+    SeedCsvSettings,
+    SeedPlanEntry,
+)
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
-from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
-from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 
 
 class CloneFingerprintAdapter:

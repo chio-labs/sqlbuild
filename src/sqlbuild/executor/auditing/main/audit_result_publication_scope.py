@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild._native import PlanOutput
 from sqlbuild.executor.auditing._helpers.result_projection import (
     audit_result_publication_scope_impl,
 )

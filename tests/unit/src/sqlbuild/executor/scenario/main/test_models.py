@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import MaterializationType, ModelPlanEntry, PlanAction, ScenarioExecutionPlan
 from sqlbuild.adapter.contract.types import TablePromotionMode
-from sqlbuild.compiler.planner.models import ModelPlanEntry, ScenarioExecutionPlan
-from sqlbuild.compiler.planner.types import MaterializationType, PlanAction
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario._helpers.execution.model_execution import execute_scenario_models
 from sqlbuild.executor.scenario.main._execute import execute_scenario_model

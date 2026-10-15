@@ -6,11 +6,11 @@ from sqlbuild._native import (
     SchemaChangeKind,
     SchemaColumnSource,
     SchemaDynamicColumnFamily,
+    SchemaFinding,
     detect_schema_changes,
 )
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import InferredColumn
-from sqlbuild.compiler.planner.models import SchemaFinding
 from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types import (
     DetectSchemaChangesTestCase,
 )

@@ -10,6 +10,7 @@ from numbers import Number
 from typing import Any, cast
 
 from sqlbuild._native import (
+    AuditPlanEntry,
     CostContext,
     SourceEntry,
     assert_no_unresolved_sql_markers,
@@ -23,7 +24,6 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
 )
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.constants import (
     DEFAULT_EVIDENCE_ROW_LIMIT,

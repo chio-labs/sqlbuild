@@ -90,14 +90,10 @@ pub(super) fn planning_error(
             message.to_owned(),
         )
     } else if let Some(message) = message.strip_prefix("planner_input:") {
-        (
-            "sqlbuild.compiler.planner.exceptions",
-            "PlannerInputError",
-            message.to_owned(),
-        )
+        ("sqlbuild._native", "PlannerInputError", message.to_owned())
     } else {
         (
-            "sqlbuild.compiler.planner.exceptions",
+            "sqlbuild._native",
             "NativeSqlTestPlanningError",
             format!("native SQL-test planning failed: {message}"),
         )

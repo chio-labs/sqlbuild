@@ -10,7 +10,12 @@ from typing import Any, cast
 
 import pytest
 
-from sqlbuild._native import FutureCursorAction, FutureCursorsConfig, MicrobatchLimitAction
+from sqlbuild._native import (
+    FutureCursorAction,
+    FutureCursorsConfig,
+    MicrobatchLimitAction,
+    OnSchemaChange,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, PythonHookEntry, SqlHookEntry
@@ -18,7 +23,6 @@ from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
 )
-from sqlbuild.compiler.planner.types import OnSchemaChange
 from sqlbuild.executor.run._helpers.materializations import microbatch as microbatch_module
 from sqlbuild.executor.run.models import BatchWindow, ModelExecutionResult
 from sqlbuild.executor.run.types import ExecutionPhase

@@ -13,6 +13,8 @@ import duckdb
 from sqlbuild._native import (
     CompilePipelineOptions,
     MicrobatchLimitAction,
+    PlanOutput,
+    TableTypePlanEntry,
     discover_project_inputs,
     run_compile_pipeline,
 )
@@ -21,7 +23,6 @@ from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.planner.models import PlanOutput, TableTypePlanEntry
 from sqlbuild.executor.build.main._execute import execute_build_plan
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,

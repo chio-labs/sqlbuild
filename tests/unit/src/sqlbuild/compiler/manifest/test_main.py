@@ -9,17 +9,21 @@ import pytest
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    AuditPlanEntry,
+    ChainStep,
     DeclarationIdentity,
     DeclarationKind,
     DeclarationRecord,
     DiscoveredSqlHookFile,
     MacroMetadata,
     OwnershipRoot,
+    PlanOutput,
     ResourceKind,
     SchemaColumn,
     ScopeIndex,
     ScopeKind,
     SourceColumnEntry,
+    SqlTestPlanEntry,
     build_manifest,
     project_with,
 )
@@ -34,7 +38,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledSourceView,
 )
 from sqlbuild.compiler.discovery.models import SqlHookEntry
-from sqlbuild.compiler.planner.models import AuditPlanEntry, ChainStep, PlanOutput, SqlTestPlanEntry
 from tests.unit.src.sqlbuild.compiler.manifest._test_types import (
     FqnTestCase,
     ManifestAuditNodeTestCase,

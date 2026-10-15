@@ -3,16 +3,25 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild._native import (
+    BackfillAction,
     ChangeKind,
+    CursorBounds,
     Fingerprint,
+    MaterializationType,
     MissingUpstream,
+    OnSchemaChange,
     ParsedSelector,
     PathSelector,
+    PlanAction,
+    PlanReason,
     PlanWarning,
     ScenarioArtifactIdentity,
     ScenarioGraphPlan,
+    ScenarioRelationMap,
     SchemaAction,
+    SchemaFinding,
     SourceEntry,
+    SourceLoadPlanEntry,
     SqlLexicalSyntax,
     WarningSeverity,
 )
@@ -26,19 +35,6 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledProjectView
-from sqlbuild.compiler.planner.models import (
-    CursorBounds,
-    ScenarioRelationMap,
-    SchemaFinding,
-    SourceLoadPlanEntry,
-)
-from sqlbuild.compiler.planner.types import (
-    BackfillAction,
-    MaterializationType,
-    OnSchemaChange,
-    PlanAction,
-    PlanReason,
-)
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     PlanTestChainTestCase as PlanTestChainTestCase,

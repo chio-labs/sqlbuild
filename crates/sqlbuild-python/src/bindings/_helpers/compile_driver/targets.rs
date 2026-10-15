@@ -25,7 +25,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::model_config::template_data::expanded_template_data;
 
-const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
+const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const TARGET_NAME_MODULE: &str = "sqlbuild._native";
 const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
 const EFFECTIVE_RUNTIME_MODULE: &str = "sqlbuild._native";

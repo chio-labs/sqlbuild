@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
+from sqlbuild._native import ScenarioFixturePlan, SeedPlanEntry
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.compiler.planner.models import ScenarioFixturePlan, SeedPlanEntry
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.scenario.constants import SCENARIO_EXEC_SEED_FAILED
 from sqlbuild.executor.scenario.main._fixtures import execute_scenario_fixture

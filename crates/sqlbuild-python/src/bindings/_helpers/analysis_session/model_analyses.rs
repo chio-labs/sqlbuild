@@ -16,7 +16,7 @@ use crate::bindings::_helpers::compile_driver::analysis_cache::record_analysis_c
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
-const PLANNER_TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
+const PLANNER_TYPES_MODULE: &str = "sqlbuild._native";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const LOG_DEBUG_MODULE: &str = "sqlbuild.diagnostics.main.log_debug_event";
 const LOGGING_MODULE: &str = "logging";

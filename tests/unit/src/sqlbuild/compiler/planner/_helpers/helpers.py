@@ -13,6 +13,7 @@ from unittest.mock import Mock
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    BackfillAction,
     BackfillResult,
     ChangeDetectionResult,
     CompiledDirectLogicSqlTestPayload,
@@ -32,7 +33,10 @@ from sqlbuild._native import (
     Fingerprint,
     FunctionArgument,
     PlannerChangeResults,
+    PlanOutput,
+    PlanReason,
     ScenarioArtifactIdentity,
+    ScenarioRelationMap,
     SchemaColumn,
     SchemaModelEntry,
     SchemaSeedEntry,
@@ -81,14 +85,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.planner.models import (
-    PlanOutput,
-    ScenarioRelationMap,
-)
-from sqlbuild.compiler.planner.types import (
-    BackfillAction,
-    PlanReason,
-)
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     BuildModelWarningsTestCase,

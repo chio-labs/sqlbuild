@@ -6,12 +6,12 @@ import duckdb
 import pytest
 
 from sqlbuild._native import (
+    MigrationEvent,
     newest_migration_event_mentioning,
     read_migration_state_events,
     write_migration_state_event,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.migrations.models import MigrationEvent
 from tests.unit.src.sqlbuild.compiler.migrations.main._test_types import (
     NewestEventTestCase,
     RepeatedEventWriteTestCase,

@@ -9,9 +9,19 @@ import duckdb
 import pytest
 
 from sqlbuild._native import (
+    CursorBounds,
+    CursorGrain,
+    CursorInputRelation,
+    CursorType,
     CursorWatermarkMode,
     FutureCursorAction,
+    FutureCursorSafetyError,
     FutureCursorsConfig,
+    MaterializationType,
+    ModelCursorSnapshot,
+    ModelPlanEntry,
+    PlanAction,
+    PlanReason,
     StartCursorsConfig,
     normalize_cursor_snapshot_grain,
 )
@@ -21,20 +31,6 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.exceptions import FutureCursorSafetyError
-from sqlbuild.compiler.planner.models import (
-    CursorBounds,
-    CursorInputRelation,
-    ModelCursorSnapshot,
-    ModelPlanEntry,
-)
-from sqlbuild.compiler.planner.types import (
-    CursorGrain,
-    CursorType,
-    MaterializationType,
-    PlanAction,
-    PlanReason,
-)
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
     build_runtime_cursor_spec,

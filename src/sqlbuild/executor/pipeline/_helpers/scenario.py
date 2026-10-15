@@ -17,6 +17,7 @@ from typing import Any, ClassVar, Protocol
 
 from sqlbuild._native import (
     NativeProgressProjector,
+    ScenarioExecutionPlan,
     SqlLexicalSyntax,
     current_native_progress_projector,
     error_code,
@@ -29,7 +30,6 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.executor.pipeline._helpers.connections import (
     close_connections,

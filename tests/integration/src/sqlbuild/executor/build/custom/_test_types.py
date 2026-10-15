@@ -1,9 +1,8 @@
 from dataclasses import dataclass, field
 
+from sqlbuild._native import AuditPlanEntry, PlanReason
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.auditing.types import AuditOutcome
-from sqlbuild.compiler.planner.models import AuditPlanEntry
-from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.run.types import ExecutionPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus

@@ -4,7 +4,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild._native import SnapshotsConfig, fit_auxiliary_relation_name
+from sqlbuild._native import (
+    HistoricalInput,
+    InitialValidFrom,
+    ModelPlanEntry,
+    PlanReason,
+    SnapshotSchemaChangePolicy,
+    SnapshotsConfig,
+    SnapshotStrategy,
+    fit_auxiliary_relation_name,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import (
@@ -25,14 +34,6 @@ from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.planner.constants import (
     SNAPSHOT_DEFAULT_VALID_FROM_COLUMN,
     SNAPSHOT_DEFAULT_VALID_TO_COLUMN,
-)
-from sqlbuild.compiler.planner.models import ModelPlanEntry
-from sqlbuild.compiler.planner.types import (
-    HistoricalInput,
-    InitialValidFrom,
-    PlanReason,
-    SnapshotSchemaChangePolicy,
-    SnapshotStrategy,
 )
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError

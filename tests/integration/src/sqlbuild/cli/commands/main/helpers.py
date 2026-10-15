@@ -21,6 +21,7 @@ from sqlbuild._native import (
     CustomHostObserver,
     NativeQueryColumns,
     NativeSqlTestArtifact,
+    NativeSqlTestPlanningError,
     PlannedStaticSqlTests,
     PreparedCompileArtifacts,
 )
@@ -33,7 +34,6 @@ from sqlbuild.adapter.contract.models import (
 )
 from sqlbuild.adapter.contract.types import RetentionChangePhase
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.planner.exceptions import NativeSqlTestPlanningError
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     RepeatedJsonParseTestCase,
 )

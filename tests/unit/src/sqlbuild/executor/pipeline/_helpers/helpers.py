@@ -9,8 +9,14 @@ from typing import Any, ClassVar
 from unittest.mock import MagicMock
 
 from sqlbuild._native import (
+    AuditPlanEntry,
+    PlanOutput,
+    ScenarioExecutionPlan,
     ScenarioGraphPlan,
+    ScenarioRelationMap,
+    ScenarioRelationPlan,
     SeedCsvSettings,
+    SeedPlanEntry,
     SqlLexicalSyntax,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -31,14 +37,6 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredSqlScenarioFile
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.planner.models import (
-    AuditPlanEntry,
-    PlanOutput,
-    ScenarioExecutionPlan,
-    ScenarioRelationMap,
-    ScenarioRelationPlan,
-    SeedPlanEntry,
-)
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.scenario.constants import SCENARIO_LOCAL_JSONL_INVALID

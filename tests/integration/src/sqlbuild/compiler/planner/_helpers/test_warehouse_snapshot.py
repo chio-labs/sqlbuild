@@ -7,8 +7,11 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import (
+    CursorOverrides,
     CursorSnapshotScope,
     Fingerprint,
+    ModelCursorSnapshot,
+    PlannerInputError,
     SchemaColumn,
     SchemaModelEntry,
     TimestampValue,
@@ -29,11 +32,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
-)
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.models import (
-    CursorOverrides,
-    ModelCursorSnapshot,
 )
 from tests.integration.src.sqlbuild.compiler.planner._helpers._test_types import (
     GatherCursorSnapshotTestCase,

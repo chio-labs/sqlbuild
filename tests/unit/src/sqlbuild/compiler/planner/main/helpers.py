@@ -12,6 +12,7 @@ from sqlbuild._native import (
     PlannerOverrides,
     PlannerPolicies,
     PlannerSelection,
+    PlanOutput,
     SchemaColumn,
     SchemaModelEntry,
     SelectionStalenessGraph,
@@ -33,7 +34,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.planner.models import PlanOutput
 
 
 def model_definition_hash(project: CompiledProjectView, name: str) -> str:

@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlbuild._native import (
     Fingerprint,
+    FunctionPlanEntry,
     compute_function_definition_hash,
     error_code,
     error_help,
@@ -19,7 +20,6 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import FunctionDefinition
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.planner.models import FunctionPlanEntry
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.build.models import FunctionExecutionResult
 from sqlbuild.executor.functions.constants import (

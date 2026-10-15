@@ -8,27 +8,23 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import (
+    BackfillAction,
+    CursorBounds,
+    CursorInputEvidence,
+    CursorInputRelation,
     FutureCursorAction,
+    FutureCursorSafetyEvidence,
+    MaterializationType,
+    MaximumStartSafetyEvidence,
     MicrobatchLimitAction,
+    PlanAction,
+    PlanOutput,
+    PlanReason,
     PythonIdentityStatus,
     PythonPlanEntry,
     PythonRunPhase,
     WarningSeverity,
     format_plan_json,
-)
-from sqlbuild.compiler.planner.models import (
-    CursorBounds,
-    CursorInputEvidence,
-    CursorInputRelation,
-    FutureCursorSafetyEvidence,
-    MaximumStartSafetyEvidence,
-    PlanOutput,
-)
-from sqlbuild.compiler.planner.types import (
-    BackfillAction,
-    MaterializationType,
-    PlanAction,
-    PlanReason,
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (

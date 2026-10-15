@@ -26,6 +26,7 @@ from sqlbuild._native import (
     PlannerOverrides,
     PlannerPolicies,
     PlannerSelection,
+    PlanOutput,
     SchemaSeedEntry,
     SettingsConfig,
     SourceEntry,
@@ -58,7 +59,6 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (

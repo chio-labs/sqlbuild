@@ -4,18 +4,16 @@ import pytest
 
 from sqlbuild._native import (
     ParsedScenarioArtifactName,
+    PlannerInputError,
     ScenarioArtifactIdentity,
     ScenarioArtifactName,
+    ScenarioRelationMap,
     build_scenario_artifact_name,
     build_scenario_hash_index,
     build_scenario_relation_map,
     compute_scenario_hash_prefix,
     is_scenario_artifact_physical_name,
     parse_scenario_artifact_physical_name,
-)
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.models import (
-    ScenarioRelationMap,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     ScenarioArtifactNameRecognitionTestCase,

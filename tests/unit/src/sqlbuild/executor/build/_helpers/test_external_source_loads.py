@@ -6,12 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import SourceEntry
+from sqlbuild._native import PlanOutput, SourceEntry, SourceLoadPlanEntry
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
-from sqlbuild.compiler.planner.models import PlanOutput, SourceLoadPlanEntry
 from sqlbuild.executor.build._helpers.external_source_loads import (
     run_external_source_loads_before_connections,
 )

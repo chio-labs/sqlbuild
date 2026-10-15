@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild._native import ScenarioFixturePlan
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
-from sqlbuild.compiler.planner.models import ScenarioFixturePlan
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.scenario.constants import SCENARIO_EXEC_FIXTURE_FAILED
 from sqlbuild.executor.scenario.models import ScenarioFixtureExecutionResult

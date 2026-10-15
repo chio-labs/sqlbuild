@@ -18,6 +18,7 @@ from sqlbuild._native import (
     CompileCommandRequest,
     CompileLineageMode,
     CostCommandRequest,
+    CursorOverrides,
     DbtInitCommandRequest,
     DiffCommandRequest,
     FreshnessCommandRequest,
@@ -35,7 +36,6 @@ from sqlbuild._native import (
 from sqlbuild._native import run_cli as _main_with_dependencies
 from sqlbuild._native import run_cli as main
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.executor.pipeline.exceptions import AuditExecutionError
 from sqlbuild.executor.pipeline.models import AuditExecutionFailure
 from sqlbuild.observability import EventDispatcher, ExecutionIdentity, current_execution_identity

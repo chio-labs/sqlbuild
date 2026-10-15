@@ -6,11 +6,21 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild._native import (
+    AuditPlanEntry,
+    ChainStep,
     CompiledFunction,
     CompileModelConfig,
     FunctionArgument,
+    FunctionPlanEntry,
+    MaterializationType,
+    ModelPlanEntry,
+    PlanAction,
+    PlanOutput,
+    PlanReason,
     PreparedCompileArtifacts,
     SeedCsvSettings,
+    SeedPlanEntry,
+    SqlTestPlanEntry,
     WrittenTarget,
     project_with,
 )
@@ -35,16 +45,6 @@ from sqlbuild.compiler.compile.types import (
     FunctionLanguage,
 )
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.planner.models import (
-    AuditPlanEntry,
-    ChainStep,
-    FunctionPlanEntry,
-    ModelPlanEntry,
-    PlanOutput,
-    SeedPlanEntry,
-    SqlTestPlanEntry,
-)
-from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
     FunctionExecutionResult,

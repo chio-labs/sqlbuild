@@ -24,7 +24,7 @@ use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const CURSOR_OVERRIDES_MODULE: &str = "sqlbuild._native";
-const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
+const PLANNER_MODELS: &str = "sqlbuild._native";
 const BUILD_MODELS: &str = "sqlbuild.executor.build.models";
 const PIPELINE_RUN_MODULE: &str = "sqlbuild.executor.pipeline.main.run";
 const FRESHNESS_MODULE: &str = "sqlbuild.cli.commands._helpers.freshness.source_freshness";

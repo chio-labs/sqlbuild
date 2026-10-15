@@ -6,19 +6,17 @@ from datetime import UTC, datetime
 import pytest
 
 from sqlbuild._native import (
+    CursorBounds,
     FutureCursorAction,
     FutureCursorsConfig,
+    MaximumAutomaticStartError,
+    MaximumStartPolicyInputs,
+    ModelCursorSnapshot,
     StartCursorsConfig,
     compute_cursor_bounds,
 )
 from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
 from sqlbuild._native import resolve_future_cursor_safety as apply_future_cursor_safety
-from sqlbuild.compiler.planner.exceptions import MaximumAutomaticStartError
-from sqlbuild.compiler.planner.models import (
-    CursorBounds,
-    MaximumStartPolicyInputs,
-    ModelCursorSnapshot,
-)
 from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
     MaximumStartCapTestCase,
     MaximumStartErrorTestCase,

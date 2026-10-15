@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from sqlbuild.compiler.planner.models import AuditPlanEntry, SqlTestPlanEntry
+from sqlbuild._native import AuditPlanEntry, SqlTestPlanEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import (
     BuildCallbacks,

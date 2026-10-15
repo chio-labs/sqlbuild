@@ -6,8 +6,8 @@ import logging
 import threading
 from typing import Any
 
+from sqlbuild._native import ScenarioExecutionPlan
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")

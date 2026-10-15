@@ -1,21 +1,17 @@
 from dataclasses import dataclass, field
 
 from sqlbuild._native import (
+    BackfillAction,
     BackfillResult,
     ChangeKind,
+    PlanAction,
+    PlanReason,
     ReferenceRename,
     SchemaDynamicColumnFamily,
+    SchemaFinding,
 )
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import InferredColumn
-from sqlbuild.compiler.planner.models import (
-    SchemaFinding,
-)
-from sqlbuild.compiler.planner.types import (
-    BackfillAction,
-    PlanAction,
-    PlanReason,
-)
 
 
 @dataclass(frozen=True)

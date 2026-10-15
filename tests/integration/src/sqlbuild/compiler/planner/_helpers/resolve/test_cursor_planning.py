@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.compiler.planner.models import CursorBounds, ModelPlanEntry, PlanOutput
+from sqlbuild._native import CursorBounds, ModelPlanEntry, PlanOutput
 from tests.integration.src.sqlbuild.compiler.planner._helpers.resolve._test_types import (
     CursorPlannerTestCase,
 )

@@ -18,9 +18,3 @@ pub(crate) struct SortKeyTestCase {
     pub(crate) item: JsonValue,
     pub(crate) expected_key: &'static str,
 }
-
-pub(crate) struct HostedKeyTestCase {
-    pub(crate) description: &'static str,
-    pub(crate) keys: Vec<&'static str>,
-    pub(crate) expected_duplicates: Vec<&'static str>,
-}

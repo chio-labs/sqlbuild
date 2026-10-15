@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import CloneSourcePlanEntry, ModelPlanEntry, SeedPlanEntry
 from sqlbuild.adapter.contract.models import RelationLookup
 from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
-from sqlbuild.compiler.planner.models import CloneSourcePlanEntry, ModelPlanEntry, SeedPlanEntry
 from sqlbuild.executor.clone.models import CloneExecutionInput
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 

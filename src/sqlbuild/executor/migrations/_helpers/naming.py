@@ -12,7 +12,6 @@ from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
-from sqlbuild.compiler.planner.models import ModelMigrationPlanEntry
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.migrations.constants import (
     MIGRATION_NAME_ATTEMPTS,

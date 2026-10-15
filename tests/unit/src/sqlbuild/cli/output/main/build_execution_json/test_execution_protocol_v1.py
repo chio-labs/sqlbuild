@@ -6,9 +6,8 @@ import json
 
 import pytest
 
-from sqlbuild._native import MicrobatchLimitAction, format_build_execution_json
+from sqlbuild._native import MicrobatchLimitAction, PlanReason, format_build_execution_json
 from sqlbuild.compiler.auditing.types import AuditOutcome
-from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
 from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
