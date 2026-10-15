@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import threading
+from concurrent.futures import Future
 
 import pytest
 
 import sqlbuild._native as native_module
+from sqlbuild._native import start_sql_test_planning
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.classes.background_sql_test_planning import (
-    BackgroundSqlTestPlanning,
-)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import PlannedSqlTests, PlanWarning, SqlTestSelection
 from sqlbuild.compiler.planner.types import WarningSeverity
@@ -57,14 +56,14 @@ def test_given_enabled_planning_when_joining_then_returns_planned_tests(
 
     monkeypatch.setattr(native_module, "plan_selected_sql_tests", plan)
 
-    with BackgroundSqlTestPlanning(
+    planning: Future[PlannedSqlTests] = start_sql_test_planning(
         sql_test_selection=SqlTestSelection(),
         project=object(),  # ty: ignore[invalid-argument-type]
         adapter=object(),  # ty: ignore[invalid-argument-type]
         selected_keys=_KEYS,
         enabled=test_case.enabled,
-    ) as planning:
-        result: PlannedSqlTests = planning.result()
+    )
+    result: PlannedSqlTests = planning.result()
 
     assert result == _PLANNED
     assert calls == [_KEYS] * test_case.expected_planner_calls
@@ -99,14 +98,14 @@ def test_given_disabled_planning_when_joining_then_returns_empty_tests(
 
     monkeypatch.setattr(native_module, "plan_selected_sql_tests", plan)
 
-    with BackgroundSqlTestPlanning(
+    planning: Future[PlannedSqlTests] = start_sql_test_planning(
         sql_test_selection=SqlTestSelection(),
         project=object(),  # ty: ignore[invalid-argument-type]
         adapter=object(),  # ty: ignore[invalid-argument-type]
         selected_keys=_KEYS,
         enabled=test_case.enabled,
-    ) as planning:
-        result: PlannedSqlTests = planning.result()
+    )
+    result: PlannedSqlTests = planning.result()
 
     assert result == PlannedSqlTests(selected_keys=_KEYS)
     assert len(calls) == test_case.expected_planner_calls
@@ -139,15 +138,15 @@ def test_given_failing_planning_when_joining_then_raises_original_error(
 
     monkeypatch.setattr(native_module, "plan_selected_sql_tests", plan)
 
-    with BackgroundSqlTestPlanning(
+    planning: Future[PlannedSqlTests] = start_sql_test_planning(
         sql_test_selection=SqlTestSelection(),
         project=object(),  # ty: ignore[invalid-argument-type]
         adapter=object(),  # ty: ignore[invalid-argument-type]
         selected_keys=_KEYS,
         enabled=test_case.enabled,
-    ) as planning:
-        with pytest.raises(PlannerInputError, match=str(test_case.expected_error)):
-            planning.result()
+    )
+    with pytest.raises(PlannerInputError, match=str(test_case.expected_error)):
+        planning.result()
 
 
 @pytest.mark.parametrize(
@@ -181,18 +180,19 @@ def test_given_running_planning_when_planner_fails_then_worker_is_daemon(
 
     monkeypatch.setattr(native_module, "plan_selected_sql_tests", plan)
 
-    with BackgroundSqlTestPlanning(
+    planning: Future[PlannedSqlTests] = start_sql_test_planning(
         sql_test_selection=SqlTestSelection(),
         project=object(),  # ty: ignore[invalid-argument-type]
         adapter=object(),  # ty: ignore[invalid-argument-type]
         selected_keys=_KEYS,
         enabled=test_case.enabled,
-    ):
-        assert started.wait(timeout=5)
-        daemon_by_name: dict[str, bool] = {
-            thread.name: thread.daemon for thread in threading.enumerate()
-        }
+    )
+    assert started.wait(timeout=5)
+    daemon_by_name: dict[str, bool] = {
+        thread.name: thread.daemon for thread in threading.enumerate()
+    }
     release.set()
+    planning.result()
 
     assert daemon_by_name["sqlbuild-test-planning"] is True
     assert test_case.expected_planner_calls == 1

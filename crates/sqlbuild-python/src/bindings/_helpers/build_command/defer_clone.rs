@@ -162,11 +162,7 @@ fn defer_clone_selection(scope: &Bound<'_, PyAny>) -> PyResult<(Vec<String>, Vec
     let is_view: Bound<'_, PyAny> = membership(py, &keys, |key| recreated_over_clones(scope, key))?;
     let callbacks: (&Bound<'_, PyAny>, &Bound<'_, PyAny>) = (&is_clonable, &is_view);
     Ok((
-        traversed_names(
-            scope,
-            (NATIVE_MODULE, "resolve_clone_boundary"),
-            callbacks,
-        )?,
+        traversed_names(scope, (NATIVE_MODULE, "resolve_clone_boundary"), callbacks)?,
         traversed_names(
             scope,
             (NATIVE_MODULE, "resolve_skipped_view_chain"),

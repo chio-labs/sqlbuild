@@ -14,6 +14,7 @@ from typing import Any, cast
 
 from sqlbuild._native import (
     build_compiled_function_fingerprint_sql,
+    build_execution_plan,
     compiled_model_record,
     compute_query_hash,
     discover_project_inputs,
@@ -52,7 +53,6 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
-from sqlbuild.compiler.planner.main.execution.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import (
     DeferralInputs,
     PlannerOverrides,

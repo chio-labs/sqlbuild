@@ -193,11 +193,7 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
         )?;
         let discovered = environment.getattr("discovered_inputs")?;
         let result = call_with(
-            &imported(
-                py,
-                "sqlbuild.compiler.planner.main.execution.execution",
-                "build_execution_plan",
-            )?,
+            &imported(py, "sqlbuild._native", "build_execution_plan")?,
             &[
                 ("project", environment.getattr("project")?),
                 ("adapter", environment.getattr("adapter")?),

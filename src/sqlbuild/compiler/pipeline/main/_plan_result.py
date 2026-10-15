@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Any
 
 import sqlbuild._native as _native
+from sqlbuild._native import build_execution_plan
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.compile.models import (
@@ -20,7 +21,6 @@ from sqlbuild.compiler.pipeline.models import (
     CompilePipelineResult,
     PythonRunPlanOutputs,
 )
-from sqlbuild.compiler.planner.main.execution.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import (
     DeferralInputs,
     PlannerOverrides,

@@ -4969,6 +4969,27 @@ def resolve_skipped_view_chain[K](
 def sql_test_model_chain_names_by_key(
     *, project: CompiledProjectView, tests: tuple[CompiledSqlTest, ...]
 ) -> dict[CompiledObjectKey, tuple[str, ...]]: ...
+def build_execution_plan(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    connection: Any,
+    selection: PlannerSelection,
+    overrides: PlannerOverrides,
+    deferral: DeferralInputs,
+    policies: PlannerPolicies,
+    on_progress: Callable[[str], None] | None = None,
+    project_config: ProjectConfig | None = None,
+    local_config: LocalConfig | None = None,
+) -> PlanOutput: ...
+def start_sql_test_planning(
+    *,
+    project: CompiledProjectView,
+    adapter: BaseAdapter,
+    selected_keys: frozenset[CompiledObjectKey],
+    sql_test_selection: SqlTestSelection,
+    enabled: bool,
+) -> Future[PlannedSqlTests]: ...
 def resolve_future_cursor_config(
     *, model: CompiledModelView, project_config: FutureCursorsConfig | None
 ) -> FutureCursorsConfig | None: ...
