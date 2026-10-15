@@ -19,7 +19,6 @@ use crate::bindings::_helpers::render::macro_expansion_result::macro_expansion_c
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
-const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";
 const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 const DISCOVERY_CONSTANTS_MODULE: &str = "sqlbuild.compiler.discovery.constants";
 const SCOPE_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
@@ -29,6 +28,20 @@ const PROJECT_VARS_MODULE: &str = "sqlbuild._native";
 const MACRO_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.main.active_macro_bridge";
 const SQL_ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.sql_analysis.models";
 const PYTHON_NODE_MODELS_MODULE: &str = "sqlbuild.python_nodes.models";
+const PYTHON_NODE_TYPES_MODULE: &str = "sqlbuild.python_nodes.types";
+/// The explicit reference call kinds and the `SqlResourceRefKind` member each resolves to.
+const EXPLICIT_REFERENCE_KINDS: [(&str, &str); 3] =
+    [("ref", "MODEL"), ("source", "SOURCE"), ("seed", "SEED")];
+
+/// The explicit reference call kinds mapped to their `SqlResourceRefKind` members.
+fn explicit_reference_kinds(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
+    let kinds: Bound<'_, PyAny> = imported(py, PYTHON_NODE_TYPES_MODULE, "SqlResourceRefKind")?;
+    let built: Bound<'_, PyDict> = PyDict::new(py);
+    for (call_kind, member) in EXPLICIT_REFERENCE_KINDS {
+        built.set_item(call_kind, kinds.getattr(member)?)?;
+    }
+    Ok(built)
+}
 
 fn dict<'py>(
     py: Python<'py>,
@@ -136,10 +149,7 @@ fn sql_hook_inputs<'py>(
                 "sql_resource_ref",
                 imported(py, PYTHON_NODE_MODELS_MODULE, "SqlResourceRef")?,
             ),
-            (
-                "explicit_kinds",
-                imported(py, COMPILE_CONSTANTS_MODULE, "EXPLICIT_REFERENCE_KINDS")?,
-            ),
+            ("explicit_kinds", explicit_reference_kinds(py)?.into_any()),
             (
                 "declaration_identity",
                 imported(py, SCOPE_MODELS_MODULE, "DeclarationIdentity")?,

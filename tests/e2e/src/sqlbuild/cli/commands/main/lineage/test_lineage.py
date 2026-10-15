@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.frontier.constants import NATIVE_CACHE_NAMESPACE_SUFFIX
 from tests.e2e.src.sqlbuild.cli.commands.main.lineage._test_types import (
     ColumnLineageCacheCliTestCase,
     DiamondLineageTreeCliTestCase,
@@ -29,6 +28,8 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_waffle_shop,
     run_sqb,
 )
+
+NATIVE_CACHE_NAMESPACE_SUFFIX: str = "-native-v1"
 
 _TREE_LINE: re.Pattern[str] = re.compile(r"^[│ ]*[├└]── .*$", re.MULTILINE)
 _EXPANDED_DIAMOND_NODE: re.Pattern[str] = re.compile(

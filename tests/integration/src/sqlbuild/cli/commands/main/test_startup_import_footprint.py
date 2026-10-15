@@ -41,8 +41,6 @@ COMPILE_ONLY_MODULES: tuple[str, ...] = (
     "pydantic",
     "yaml",
     "sqlbuild.adapter.contract.classes.base_adapter",
-    "sqlbuild.cli.compile.models",
-    "sqlbuild.cli.output.models",
     "sqlbuild.compiler.compile.models",
     "sqlbuild.compiler.discovery.models",
     "sqlbuild.compiler.planner.models",
@@ -53,7 +51,6 @@ COMPILE_ONLY_MODULES: tuple[str, ...] = (
 PRESENTATION_AND_PROVIDER_MODULES: tuple[str, ...] = (
     "pydantic_settings",
     "rich",
-    "sqlbuild.cli.commands.models",
 )
 PARSE_ONLY_FORBIDDEN: tuple[str, ...] = (
     *WAREHOUSE_AND_INTEGRATION_MODULES,
@@ -68,7 +65,6 @@ FULL_COMPILE_MODULES: tuple[str, ...] = (
     "polyglot_sql",
     "pydantic",
     "sqlbuild.adapter.contract.classes.base_adapter",
-    "sqlbuild.cli.compile.models",
     "sqlbuild.compiler.compile.models",
     "sqlbuild.compiler.pipeline",
     "sqlbuild.compiler.planner.models",

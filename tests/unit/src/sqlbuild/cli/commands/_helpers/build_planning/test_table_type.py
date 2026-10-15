@@ -4,8 +4,7 @@ from io import StringIO
 
 import pytest
 
-from sqlbuild._native import enforce_plan_safety_policies
-from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild._native import CliUserError, enforce_plan_safety_policies
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.spec.contracts.models import ExecutionLimitsConfig, SnapshotsConfig
 from tests.unit.src.sqlbuild.cli.commands._helpers.build_planning._test_types import (

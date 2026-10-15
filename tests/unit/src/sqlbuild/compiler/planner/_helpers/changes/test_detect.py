@@ -6,6 +6,14 @@ from datetime import datetime
 import pytest
 
 from sqlbuild._native import (
+    BackfillResult,
+    ChangeDetectionResult,
+    ChangeKind,
+    PlannerChangeResults,
+    PlanWarning,
+    WarehouseFingerprints,
+    WarehouseSnapshot,
+    WarningSeverity,
     build_model_warnings,
     build_version_identity_metadata_json,
     compute_query_hash,
@@ -18,22 +26,13 @@ from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.constants import RECORDED_RELATION_MISSING_WARNING_CODE
 from sqlbuild.compiler.planner.models import (
-    BackfillResult,
-    ChangeDetectionResult,
-    PlannerChangeResults,
     PlannerScope,
-    PlanWarning,
-    WarehouseFingerprints,
-    WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
-    ChangeKind,
     PlanAction,
     PlanReason,
-    WarningSeverity,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_helpers import (
     build_function_caller_metadata_case,
@@ -465,7 +464,7 @@ def test_given_dropped_relation_with_recorded_build_when_planning_then_plans_fir
         False,
         (),
     )
-    assert [warning.code for warning in warnings] == [RECORDED_RELATION_MISSING_WARNING_CODE]
+    assert [warning.code for warning in warnings] == ["RECORDED_RELATION_MISSING"]
     assert warnings[0].severity == WarningSeverity.WARNING
     assert warnings[0].model_name == "orders"
 

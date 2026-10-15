@@ -7,10 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import parse_cli_invocation
-from sqlbuild.cli.commands.types import CompileLineageMode, PlaygroundTemplate
-from sqlbuild.cli.entry.models import (
+from sqlbuild._native import (
+    CompileLineageMode,
     ParsedCliInvocation,
+    PlaygroundTemplate,
+    parse_cli_invocation,
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.scopes.types import DeclarationKind

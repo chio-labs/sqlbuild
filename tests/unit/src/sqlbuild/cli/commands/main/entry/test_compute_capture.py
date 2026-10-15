@@ -6,9 +6,9 @@ from unittest.mock import Mock, patch
 import pytest
 from _pytest.capture import CaptureResult
 
+from sqlbuild._native import CompileCommandRequest
 from sqlbuild._native import run_cli as _main_with_dependencies
 from sqlbuild.cli.commands.main.entrypoint import _dispatch_with_compute_logs as compute_dispatch
-from sqlbuild.cli.entry.models import CompileCommandRequest
 from sqlbuild.diagnostics.classes.dynamic_stderr_handler import DynamicStderrHandler
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.diagnostics.main.log_sql import log_sql

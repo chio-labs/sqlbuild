@@ -97,21 +97,3 @@ class SqlTestReferenceError(CompileInputError):
 
 class MacroDeclarationLookupError(CompileInputError, KeyError):
     """Retain authored diagnostics while honoring the Mapping lookup contract."""
-
-
-class SqlTestExtractionError(CompileInputError):
-    """Raised when a SQL test cannot be split into CTEs; names the test and offending text."""
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        help: str | None = None,
-        test_index: int = 0,
-        token: str | None = None,
-        token_offset: int | None = None,
-    ) -> None:
-        super().__init__(message, help=help)
-        self.test_index = test_index
-        self.token = token
-        self.token_offset = token_offset

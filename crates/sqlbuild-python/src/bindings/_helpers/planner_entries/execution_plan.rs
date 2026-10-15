@@ -4,7 +4,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, within,
 };
 use crate::bindings::_helpers::planner_entries::values::{
-    COMPILE_TYPES, boolean, native, planner_model, replaced, string,
+    COMPILE_TYPES, boolean, native, replaced, string,
 };
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyTuple};
@@ -28,7 +28,7 @@ fn sql_test_planning<'py>(
     if !enabled {
         future.call_method1(
             "set_result",
-            (planner_model(
+            (native(
                 py,
                 "PlannedSqlTests",
                 &[
@@ -130,7 +130,7 @@ fn change_results<'py>(
         ],
     )?;
     if !policies.getattr("selection_diagnostics")?.is_truthy()? {
-        let empty = planner_model(
+        let empty = native(
             py,
             "PlannerChangeResults",
             &[
@@ -351,7 +351,7 @@ fn build_execution_plan<'py>(
     let project = args.value("project")?;
     let adapter = args.value("adapter")?;
     let connection = args.value("connection")?;
-    let runtime = planner_model(
+    let runtime = native(
         py,
         "PlannerRuntime",
         &[

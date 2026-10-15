@@ -1,7 +1,8 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-from sqlbuild.cost.models import CostRunRecord, QueryCostObservation, ResourceCost, RunCostSummary
+from sqlbuild._native import CostRunRecord, QueryCostObservation, ResourceCost
+from sqlbuild.cost.models import RunCostSummary
 from sqlbuild.cost.types import CostStatus
 
 

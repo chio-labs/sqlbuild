@@ -10,6 +10,7 @@ use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     Status, call_with, imported, keywords, within,
 };
+use crate::bindings::_helpers::rules::constants::RULE_FIX_AVAILABLE_NOTE;
 use crate::bindings::_helpers::rules::early_sql_lint::EarlySqlLint;
 use crate::bindings::_helpers::rules::results::rules_progress;
 use crate::bindings::_helpers::rules::rules_config::load_rules_config;
@@ -30,10 +31,9 @@ const CONTRACT_MODELS_MODULE: &str = "sqlbuild.compiler.contracts.models";
 const SELECTION_MODULE: &str = "sqlbuild._native";
 const RULE_THREADS_MODULE: &str = "sqlbuild.rule_engine._helpers.run.rule_threads";
 const RULE_MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
-const RULE_CONSTANTS_MODULE: &str = "sqlbuild.rule_engine.constants";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const CLI_COMPILE_MODELS_MODULE: &str = "sqlbuild.cli.compile.models";
+const CLI_COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const GENERIC_DIALECT: &str = "generic";
 const TARGET_DIRECTORY: &str = "target";
 
@@ -528,8 +528,7 @@ fn with_rule_diagnostics<'py>(
         imported(py, COMPILE_TYPES_MODULE, "DiagnosticPhase")?.getattr("RULE")?;
     let severity: Bound<'py, PyAny> =
         imported(py, COMPILE_TYPES_MODULE, "DiagnosticSeverity")?.getattr("ERROR")?;
-    let fix_note: Bound<'py, PyAny> =
-        imported(py, RULE_CONSTANTS_MODULE, "RULE_FIX_AVAILABLE_NOTE")?;
+    let fix_note: Bound<'py, PyAny> = PyString::new(py, RULE_FIX_AVAILABLE_NOTE).into_any();
     let mut diagnostics: Vec<Bound<'py, PyAny>> = core.iter().collect();
     for fault in rules_result.getattr("findings")?.try_iter()? {
         let fault: Bound<'py, PyAny> = fault?;

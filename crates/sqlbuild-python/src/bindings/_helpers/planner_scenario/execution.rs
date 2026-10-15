@@ -4,6 +4,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::compiled_project::loop_classes::by_attribute;
+use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_INVALID_FIXTURE;
 use crate::bindings::_helpers::planner_scenario::{
     entries::{function_entry, seed_entries},
     fixtures::{extract_fixtures, fixture_plans},
@@ -53,7 +54,7 @@ pub(crate) fn build_scenario_execution_plan<'py>(
     let snapshot = if snapshot.is_truthy()? {
         snapshot
     } else {
-        imported(py, MODELS, "WarehouseSnapshot")?.call0()?
+        imported(py, "sqlbuild._native", "WarehouseSnapshot")?.call0()?
     };
     let columns = args.value("source_warehouse_columns")?;
     let columns = if columns.is_truthy()? {
@@ -144,7 +145,7 @@ pub(crate) fn build_scenario_execution_plan<'py>(
                 ("full_refresh", PyBool::new(py, true).to_owned().into_any()),
                 (
                     "cursor_overrides",
-                    imported(py, MODELS, "CursorOverridePair")?.call0()?,
+                    imported(py, "sqlbuild._native", "CursorOverridePair")?.call0()?,
                 ),
             ],
         )?;
@@ -239,7 +240,7 @@ fn complete_fixtures<'py>(
                 context.label,
                 details.join("\n")
             ),
-            "SCENARIO_PLAN_INVALID_FIXTURE",
+            SCENARIO_PLAN_INVALID_FIXTURE,
             None,
         )?);
     }
@@ -254,7 +255,7 @@ fn model_context<'py>(
     let (models, locations, columns) = inputs;
     let py = project.py();
     call_with(
-        &imported(py, MODELS, "ModelPlanContext")?,
+        &imported(py, "sqlbuild._native", "ModelPlanContext")?,
         &[
             (
                 "model_locations",

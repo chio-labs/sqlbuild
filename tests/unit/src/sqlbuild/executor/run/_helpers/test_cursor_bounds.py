@@ -8,9 +8,12 @@ from typing import cast
 import duckdb
 import pytest
 
+from sqlbuild._native import (
+    CursorWatermarkMode,
+    normalize_cursor_snapshot_grain,
+)
 from sqlbuild._native import cursor_render as render
 from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
-from sqlbuild._native import normalize_cursor_snapshot_grain
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
@@ -25,7 +28,6 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import (
     CursorGrain,
     CursorType,
-    CursorWatermarkMode,
     MaterializationType,
     PlanAction,
     PlanReason,

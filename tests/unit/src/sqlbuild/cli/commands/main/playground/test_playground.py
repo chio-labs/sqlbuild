@@ -5,10 +5,13 @@ from pathlib import Path
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild._native import maintain_sqlbuild_skills, run_playground_command
-from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.models import PlaygroundCommandRequest
-from sqlbuild.cli.output.models import SkillMaintenanceResult
+from sqlbuild._native import (
+    CliUserError,
+    PlaygroundCommandRequest,
+    SkillMaintenanceResult,
+    maintain_sqlbuild_skills,
+    run_playground_command,
+)
 from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
     CreatePlaygroundProjectTestCase,
     RunPlaygroundTestCase,

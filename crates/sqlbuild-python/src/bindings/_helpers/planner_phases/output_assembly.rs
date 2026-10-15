@@ -4,7 +4,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::planner_phases::constants::NATIVE_MODULE;
 use crate::bindings::_helpers::planner_phases::objects::{
-    model_key_names, native, planner_model, replace, sorted_names, strings, text, tuple,
+    model_key_names, native, replace, sorted_names, strings, text, tuple,
 };
 use crate::bindings::_helpers::planner_warehouse::source_freshness::source_freshness_unknown_warnings;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
@@ -76,7 +76,7 @@ pub(crate) fn assemble_base_plan_output<'py>(
 
     let py = runtime.py();
     let version = identities.getattr("version_identities")?;
-    let extras = planner_model(
+    let extras = native(
         py,
         "PlanOutputExtras",
         &[

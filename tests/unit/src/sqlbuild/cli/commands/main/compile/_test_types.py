@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from sqlbuild.cli.commands.types import CompileLineageMode
+from sqlbuild._native import CompileLineageMode
 
 
 @dataclass(frozen=True)

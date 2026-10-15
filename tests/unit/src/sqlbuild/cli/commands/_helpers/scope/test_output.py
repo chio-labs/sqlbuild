@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from io import StringIO
 
 import pytest
 
-from sqlbuild._native import render_scope_result, run_scope_command
-from sqlbuild.cli.commands.models import ScopeCommandRequest
+from sqlbuild._native import ScopeCommandRequest, render_scope_result, run_scope_command
 from tests.unit.src.sqlbuild.cli.commands._helpers.scope._test_types import (
     ScopeColourCase,
     ScopeDetailLevelCase,
@@ -23,9 +21,6 @@ _GREEN: str = "\033[32m"
 _YELLOW: str = "\033[33m"
 _RED: str = "\033[38;5;167m"
 _RESET: str = "\033[0m"
-_MOVE_REQUEST: ScopeCommandRequest = ScopeCommandRequest(
-    target="model:orders", as_path="models/marts/orders.sql"
-)
 
 
 @pytest.mark.parametrize(
@@ -76,7 +71,11 @@ def test_given_move_preview_when_rendering_then_detail_level_follows_verbose(
     stream: StringIO = StringIO()
 
     exit_code: int = run_scope_command(
-        request=replace(_MOVE_REQUEST, verbose=test_case.verbose),
+        request=ScopeCommandRequest(
+            target="model:orders",
+            as_path="models/marts/orders.sql",
+            verbose=test_case.verbose,
+        ),
         load_scope_index=lambda **_kwargs: report_scope_lookup().index,
         output_stream=stream,
     )
@@ -127,7 +126,9 @@ def test_given_colour_setting_when_rendering_move_preview_then_applies_colour_ro
     test_case: ScopeColourCase,
 ) -> None:
     rendered: str = render_scope_result(
-        result=orders_move_report(), request=_MOVE_REQUEST, use_color=test_case.use_color
+        result=orders_move_report(),
+        request=ScopeCommandRequest(target="model:orders", as_path="models/marts/orders.sql"),
+        use_color=test_case.use_color,
     )
 
     assert all(fragment in rendered for fragment in test_case.expected_fragments), rendered

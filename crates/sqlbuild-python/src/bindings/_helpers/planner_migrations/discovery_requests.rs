@@ -1,7 +1,8 @@
 //! Live candidate inspection and automatic request materialization.
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::planner_migrations::column_objects::{config, model};
+use crate::bindings::_helpers::planner_migrations::column_objects::config;
+use crate::bindings::_helpers::planner_migrations::column_objects::native;
 use crate::bindings::_helpers::planner_migrations::discovery_events::{
     identity, key, newest, relation,
 };
@@ -137,7 +138,7 @@ pub(super) fn automatic<'py>(
             None
         };
         if let Some((location, origin_model)) = origin {
-            requests.push(model(
+            requests.push(native(
                 py,
                 "ModelMigrationRequest",
                 &[
@@ -183,9 +184,9 @@ pub(super) fn warnings<'py>(
     let mut warnings: Vec<Bound<'py, PyAny>> = Vec::new();
     for (name, detail) in ambiguous {
         if selected.contains(&name)? {
-            warnings.push(model(py, "PlanWarning", &[
+            warnings.push(native(py, "PlanWarning", &[
                 ("model_name", PyString::new(py, &name).into_any()),
-                ("severity", imported(py, "sqlbuild.compiler.planner.types", "WarningSeverity")?.getattr("WARNING")?),
+                ("severity", imported(py, "sqlbuild._native", "WarningSeverity")?.getattr("WARNING")?),
                 ("message", PyString::new(py, &format!("'{name}' matches {detail}; no automatic migration was inferred. Add migrate_from to choose one.")).into_any()),
                 ("code", PyString::new(py, "M107").into_any()),
             ])?);

@@ -20,8 +20,8 @@ use sqlbuild_core::text::main::python_strip::python_strip;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 
-const EXCEPTIONS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
-const ENTRY_MODELS_MODULE: &str = "sqlbuild.cli.entry.models";
+const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
+const ENTRY_MODELS_MODULE: &str = "sqlbuild._native";
 const WAREHOUSES_MODULE: &str = "sqlbuild._native";
 const PATHLIB_MODULE: &str = "pathlib";
 const COMMENT_PREFIX: &str = "#";

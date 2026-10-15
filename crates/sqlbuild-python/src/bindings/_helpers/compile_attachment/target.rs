@@ -5,16 +5,20 @@ use pyo3::pyfunction;
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 
 use crate::bindings::_helpers::compile_attachment::effective_config::project_vars;
+use crate::bindings::_helpers::compile_command::constants::{
+    COMPILE_CACHE_DISABLE_ENV_VAR, COMPILE_CACHE_DISABLE_VALUE, RETIRED_CACHE_DIRECTORY_NAMES,
+};
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::frontier::cache_directory::cache_directory;
+use crate::bindings::_helpers::frontier::constants::{
+    COMPILER_CACHE_DIRECTORY_NAME, RETIRED_CACHE_NAMESPACE_SUFFIXES,
+};
 use crate::bindings::_helpers::model_config::template_data::{early_model_templates, run_id};
 
 const TARGET_NAME_MODULE: &str = "sqlbuild._native";
 const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
-const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";
-const FRONTIER_CONSTANTS_MODULE: &str = "sqlbuild.compiler.frontier.constants";
 const DATABASE_KEY: &str = "database";
 const SCHEMA_KEY: &str = "schema";
 
@@ -73,15 +77,12 @@ fn compile_cache_root<'py>(
     no_cache: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project_dir.py();
-    let constant = |name: &str| imported(py, COMPILE_CONSTANTS_MODULE, name);
-    let disabled_value: String = constant("COMPILE_CACHE_DISABLE_VALUE")?.extract()?;
-    let disable_env: String = constant("COMPILE_CACHE_DISABLE_ENV_VAR")?.extract()?;
     let disabled: bool = py
         .import("os")?
         .getattr("environ")?
-        .call_method1("get", (disable_env,))?
+        .call_method1("get", (COMPILE_CACHE_DISABLE_ENV_VAR,))?
         .extract::<Option<String>>()?
-        .is_some_and(|value| value == disabled_value);
+        .is_some_and(|value| value == COMPILE_CACHE_DISABLE_VALUE);
     if no_cache
         || project_dir.is_none()
         || (!target_config.is_none()
@@ -100,39 +101,14 @@ fn compile_cache_root<'py>(
 /// Delete the fact and reference caches older releases kept under each retired cache root.
 fn remove_retired_caches(root: &Bound<'_, PyAny>) -> PyResult<()> {
     let py: Python<'_> = root.py();
-    let directory_name: String = imported(
-        py,
-        FRONTIER_CONSTANTS_MODULE,
-        "COMPILER_CACHE_DIRECTORY_NAME",
-    )?
-    .extract()?;
-    let names: [Bound<'_, PyAny>; 2] = [
-        imported(
-            py,
-            COMPILE_CONSTANTS_MODULE,
-            "RETIRED_FACT_CACHE_DIRECTORY_NAME",
-        )?,
-        imported(
-            py,
-            COMPILE_CONSTANTS_MODULE,
-            "RETIRED_REFERENCE_CACHE_DIRECTORY_NAME",
-        )?,
-    ];
     let rmtree: Bound<'_, PyAny> = imported(py, "shutil", "rmtree")?;
     let ignore: Bound<'_, PyDict> = PyDict::new(py);
     ignore.set_item("ignore_errors", true)?;
-    for suffix in imported(
-        py,
-        FRONTIER_CONSTANTS_MODULE,
-        "RETIRED_CACHE_NAMESPACE_SUFFIXES",
-    )?
-    .try_iter()?
-    {
-        let suffix: String = suffix?.extract()?;
-        for name in &names {
+    for suffix in RETIRED_CACHE_NAMESPACE_SUFFIXES {
+        for name in RETIRED_CACHE_DIRECTORY_NAMES {
             let retired: Bound<'_, PyAny> = root
                 .getattr("parent")?
-                .div(format!("{directory_name}{suffix}"))?
+                .div(format!("{COMPILER_CACHE_DIRECTORY_NAME}{suffix}"))?
                 .div(name)?;
             if retired.call_method0("is_dir")?.is_truthy()? {
                 rmtree.call((retired,), Some(&ignore))?;

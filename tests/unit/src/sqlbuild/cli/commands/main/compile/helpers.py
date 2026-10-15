@@ -7,12 +7,12 @@ from typing import Any
 
 from sqlbuild._native import (
     PreparedCompileArtifacts,
+    WrittenTarget,
     project_with,
 )
 from sqlbuild.adapter.contract.models import LifeCycleEvent, QueryResult
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.cli.output.models import WrittenTarget
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditRunScope,

@@ -478,7 +478,7 @@ fn collect_models<'py>(
         let mode = config_str(&model, "cursor_watermark_mode")?
             .filter(|value| !value.is_empty())
             .unwrap_or_else(|| "all".to_owned());
-        let watermark_mode = member(py, (PLANNER_TYPES, "CursorWatermarkMode"), &mode)?;
+        let watermark_mode = member(py, ("sqlbuild._native", "CursorWatermarkMode"), &mode)?;
         models.push(CursorModel {
             target_tag,
             target_relation,

@@ -10,7 +10,6 @@ use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::planner_migrations::main::compatibility_findings::compatibility_findings;
 use sqlbuild_analysis::planner_migrations::models::CompatibilityFinding;
 
-const MODELS_MODULE: &str = "sqlbuild.compiler.planner.models";
 const TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
 
 fn config(model: &Bound<'_, PyAny>, key: &str) -> PyResult<Option<String>> {
@@ -143,7 +142,7 @@ fn check_migration_compatibility<'py>(
     let columns = PyDict::new(py);
     columns.set_item(model.getattr("name")?, arguments.value("origin_columns")?)?;
     let snapshot = call_with(
-        &imported(py, MODELS_MODULE, "WarehouseSnapshot")?,
+        &imported(py, "sqlbuild._native", "WarehouseSnapshot")?,
         &[
             ("existing_relations", relations.into_any()),
             ("existing_columns", columns.into_any()),
@@ -213,7 +212,7 @@ fn result<'py>(
     )?
     .call1((status,))?;
     call_with(
-        &imported(py, MODELS_MODULE, "MigrationCompatibilityResult")?,
+        &imported(py, "sqlbuild._native", "MigrationCompatibilityResult")?,
         &[("status", status), ("findings", findings.into_any())],
     )
 }

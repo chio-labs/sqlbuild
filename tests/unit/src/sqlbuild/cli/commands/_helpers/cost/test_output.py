@@ -4,8 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from sqlbuild._native import format_cost_breakdown
-from sqlbuild.cost.models import CostRunRecord
+from sqlbuild._native import CostRunRecord, format_cost_breakdown
 from tests.unit.src.sqlbuild.cli.commands._helpers.cost._test_types import (
     CostOutputTestCase,
 )

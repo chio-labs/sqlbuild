@@ -23,7 +23,7 @@ use crate::bindings::_helpers::dbt_interop::graph::{
 use crate::bindings::_helpers::dbt_interop::manifest::resolve_sqlbuild_model_dbt_refs;
 use crate::bindings::_helpers::dbt_interop::plan::build_dbt_interop_plan;
 
-const DBT_TYPES: &str = "sqlbuild.integrations.dbt.types";
+const DBT_TYPES: &str = "sqlbuild._native";
 const PLAN_OPTIONS: (&[&str], &[&str]) = (
     &[
         "command",

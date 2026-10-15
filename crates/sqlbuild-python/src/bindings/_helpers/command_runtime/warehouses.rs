@@ -28,7 +28,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::discovery::configuration::discover_project_configuration;
 use crate::bindings::_helpers::model_config::template_data::expanded_template_data;
 
-const ENTRY_MODELS: &str = "sqlbuild.cli.entry.models";
+const ENTRY_MODELS: &str = "sqlbuild._native";
 const TARGET_NAME_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const SESSION_WAREHOUSE_MODULE: &str = "sqlbuild.adapter.discovery.main._session_warehouse_support";
@@ -303,42 +303,6 @@ fn validate_cli_warehouse(
     Ok(())
 }
 
-/// Find the active target's authored, unexpanded warehouse for one command group.
-#[pyfunction]
-#[pyo3(signature = (*, discovered_inputs, selected_target, group))]
-fn find_target_group_warehouse<'py>(
-    py: Python<'py>,
-    discovered_inputs: Bound<'py, PyAny>,
-    selected_target: Bound<'py, PyAny>,
-    group: Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let inputs: WarehouseInputs<'_, 'py> = WarehouseInputs {
-        discovered_inputs: &discovered_inputs,
-        selected_target: &selected_target,
-    };
-    let Some(found) = find_authored(inputs, &group)? else {
-        return Ok(none(py));
-    };
-    call_with(
-        &imported(py, ENTRY_MODELS, "AuthoredTargetWarehouse")?,
-        &[
-            (
-                "warehouse",
-                PyString::new(py, &found.authored.warehouse).into_any(),
-            ),
-            (
-                "target_name",
-                PyString::new(py, &found.authored.target_name).into_any(),
-            ),
-            ("group", found.group),
-            (
-                "file_name",
-                PyString::new(py, &found.authored.file_name).into_any(),
-            ),
-        ],
-    )
-}
-
 /// Resolve one group's warehouse: CLI, then target group, then connection, then default.
 #[pyfunction]
 #[pyo3(signature = (**options))]
@@ -458,7 +422,6 @@ fn describe_connection_warehouse<'py>(
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(validate_cli_warehouse, module)?)?;
-    module.add_function(wrap_pyfunction!(find_target_group_warehouse, module)?)?;
     module.add_function(wrap_pyfunction!(resolve_command_warehouse, module)?)?;
     module.add_function(wrap_pyfunction!(apply_command_warehouse, module)?)?;
     module.add_function(wrap_pyfunction!(describe_connection_warehouse, module)?)

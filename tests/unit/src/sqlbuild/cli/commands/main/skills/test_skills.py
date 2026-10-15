@@ -5,14 +5,12 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    CliUserError,
+    SkillMaintenanceResult,
+    SkillUpdateResult,
     load_packaged_skill_files,
     maintain_sqlbuild_skills,
     update_sqlbuild_skills,
-)
-from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.output.models import (
-    SkillMaintenanceResult,
-    SkillUpdateResult,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.skills._test_types import (
     SkillMaintenanceTestCase,

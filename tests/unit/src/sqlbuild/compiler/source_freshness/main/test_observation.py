@@ -6,11 +6,11 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import (
+    SourceFreshnessObservation,
     observe_configured_source_freshness,
 )
 from sqlbuild.adapter.contract.models import QueryResult, TableFreshnessMetadata
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
 from sqlbuild.observability import (
     EventDispatcher,
     LifecycleEvent,

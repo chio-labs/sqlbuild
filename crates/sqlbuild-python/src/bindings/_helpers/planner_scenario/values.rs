@@ -6,7 +6,6 @@ use pyo3::types::PyString;
 
 pub(super) const MODELS: &str = "sqlbuild.compiler.planner.models";
 pub(super) const TYPES: &str = "sqlbuild.compiler.planner.types";
-pub(super) const CONSTANTS: &str = "sqlbuild.compiler.planner.constants";
 
 pub(super) fn string<'py>(py: Python<'py>, text: &str) -> Bound<'py, PyAny> {
     PyString::new(py, text).into_any()
@@ -18,10 +17,7 @@ pub(super) fn error(
     code: &str,
     help: Option<&str>,
 ) -> PyResult<PyErr> {
-    let mut args = vec![
-        ("message", string(py, message)),
-        ("code", imported(py, CONSTANTS, code)?),
-    ];
+    let mut args = vec![("message", string(py, message)), ("code", string(py, code))];
     if let Some(help) = help {
         args.push(("help", string(py, help)));
     }

@@ -4,6 +4,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::compiled_project::loop_classes::by_attribute;
+use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_UNKNOWN_SEED;
 use crate::bindings::_helpers::planner_scenario::{
     models::SqlContext,
     sql::required_target,
@@ -32,7 +33,7 @@ pub(super) fn seed_entries<'py>(
             return Err(error(
                 py,
                 &format!("Scenario '{scenario}' requires unknown seed '{name}'"),
-                "SCENARIO_PLAN_UNKNOWN_SEED",
+                SCENARIO_PLAN_UNKNOWN_SEED,
                 None,
             )?);
         };

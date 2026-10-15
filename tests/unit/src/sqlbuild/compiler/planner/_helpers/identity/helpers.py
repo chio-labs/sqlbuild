@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.planner.models import (
+from sqlbuild._native import (
     BackfillResult,
     ChangeDetectionResult,
+    ChangeKind,
     PlannerResolvedActions,
     ResolvedModelAction,
 )
-from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
+from sqlbuild.compiler.planner.types import (
+    BackfillAction,
+)
 
 MERGE_MODEL_NAME: str = "orders"
 MERGE_RESOLVED_HASH: str = "resolved-hash"

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import classify_selection_staleness_warnings
-from sqlbuild.compiler.planner.models import (
+from sqlbuild._native import (
     SelectionStalenessGraph,
     SelectionStalenessNodeKey,
     SelectionStalenessWarning,
+    classify_selection_staleness_warnings,
 )
 from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
     DeepChainStalenessTestCase,

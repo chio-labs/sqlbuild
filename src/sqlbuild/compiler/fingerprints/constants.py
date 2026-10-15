@@ -18,9 +18,6 @@ COLUMN_METADATA_JSON_B64: str = "metadata_json_b64"
 COLUMN_TIMESTAMP: str = "ts"
 
 NODE_TYPE_MODEL: str = "model"
-NODE_TYPE_UDF: str = "udf"
-NODE_TYPE_TABLE_FN: str = "table_fn"
-FUNCTION_NODE_TYPES: tuple[str, str] = (NODE_TYPE_UDF, NODE_TYPE_TABLE_FN)
 NODE_TYPE_SEED: str = "seed"
 NODE_TYPE_HOOK: str = "hook"
 NODE_TYPE_QUERY_DIFF_ARTIFACT: str = "query_diff_artifact"

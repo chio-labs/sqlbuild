@@ -9,7 +9,6 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyString, PyTuple};
 use pyo3::{IntoPyObject, PyErr, pyfunction, wrap_pyfunction};
 
-const MODELS_MODULE: &str = "sqlbuild.compiler.planner.models";
 const HOOK_MODULE: &str = "sqlbuild.compiler.discovery.models";
 const ERROR_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
 
@@ -348,7 +347,10 @@ fn resolve_function_sql<'py>(
     }
     let resolution = Resolution {
         adapter: args.value("adapter")?,
-        context: call_with(&imported(py, MODELS_MODULE, "ModelPlanContext")?, &context)?,
+        context: call_with(
+            &imported(py, "sqlbuild._native", "ModelPlanContext")?,
+            &context,
+        )?,
         external: py.None().into_bound(py),
     };
     let function = args.value("function")?;

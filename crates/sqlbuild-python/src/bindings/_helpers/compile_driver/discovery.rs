@@ -33,7 +33,7 @@ const FRONTIER_TYPES_MODULE: &str = "sqlbuild.compiler.frontier.types";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const VALIDATION_MODULE: &str = "sqlbuild.compiler.discovery._helpers.validation.discovery";
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const DISCOVERY_CONSTANTS_MODULE: &str = "sqlbuild.compiler.discovery.constants";
+const SQL_ANALYSIS_SETTING_KEY: &str = "sql_analysis";
 const EVENT_EXPORTERS_MODULE: &str =
     "sqlbuild.runtime.event_exporting.main._configure_discovered_event_exporters";
 const FILESYSTEM_MODULE: &str = "sqlbuild.compiler.discovery._helpers.filesystem.core";
@@ -226,11 +226,7 @@ fn assembled_inputs<'py>(
         sql_analysis_override.clone()
     } else if local_config
         .getattr("setting_overrides")?
-        .contains(imported(
-            py,
-            DISCOVERY_CONSTANTS_MODULE,
-            "SQL_ANALYSIS_SETTING_KEY",
-        )?)?
+        .contains(SQL_ANALYSIS_SETTING_KEY)?
     {
         local_config.getattr("settings")?.getattr("sql_analysis")?
     } else {

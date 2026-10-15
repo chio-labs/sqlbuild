@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
-from sqlbuild._native import run_cli as _main_with_dependencies
-from sqlbuild.cli.commands.models import (
+from sqlbuild._native import (
     ScopeCommandRequest,
 )
+from sqlbuild._native import run_cli as _main_with_dependencies
 from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
     ScopeArgumentMisuseCase,
     ScopeEntryCase,
@@ -88,7 +90,8 @@ def test_given_all_scope_flags_when_dispatching_then_builds_typed_frozen_request
             no_color=True,
         )
     ]
-    assert ScopeCommandRequest.__dataclass_params__.frozen is True
+    with pytest.raises(FrozenInstanceError):
+        received[0].verbose = False
 
 
 @pytest.mark.parametrize(

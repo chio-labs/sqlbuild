@@ -2,32 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from enum import StrEnum
-from typing import TYPE_CHECKING, Protocol
-
-from sqlbuild.compiler.compile.types import CompiledResourceType
-
-type FixtureKey = tuple[CompiledResourceType, str]
-type InputColumns = Callable[[str, str], frozenset[str] | None]
-type FixtureGroups = tuple[tuple[CompiledResourceType, dict[str, str]], ...]
-
-if TYPE_CHECKING:
-    from sqlbuild.compiler.planner.models import GraphNodeKey
-
-
-class GraphIdentityComposer(Protocol):
-    def __call__(
-        self,
-        *,
-        local_hash: str,
-        upstream_hashes: tuple[tuple[GraphNodeKey, str], ...],
-    ) -> str: ...
-
-
-class CursorInputRole(StrEnum):
-    FILTER = "filter"
-    WATERMARK = "watermark"
 
 
 class SelectorKind(StrEnum):
@@ -41,23 +16,6 @@ class SelectorKind(StrEnum):
     TAG = "tag"
     PATH = "path"
     TEST = "test"
-
-
-class GraphResourceKind(StrEnum):
-    MODEL = "model"
-    SEED = "seed"
-    SOURCE = "source"
-    FUNCTION = "function"
-
-
-class ChangeKind(StrEnum):
-    FIRST_RUN = "first_run"
-    RENAMED = "renamed"
-    QUERY_CHANGED = "query_changed"
-    FUNCTION_CHANGED = "function_changed"
-    CONFIG_CHANGED = "config_changed"
-    SCHEMA_CHANGED = "schema_changed"
-    NO_CHANGE = "no_change"
 
 
 class BackfillAction(StrEnum):
@@ -76,17 +34,6 @@ class OnSchemaChange(StrEnum):
 class ContractPolicy(StrEnum):
     NONE = "none"
     ENFORCED = "enforced"
-
-
-class SchemaChangeKind(StrEnum):
-    COLUMN_ADDED = "column_added"
-    COLUMN_REMOVED = "column_removed"
-    COLUMN_TYPE_CHANGED = "column_type_changed"
-
-
-class SchemaColumnSource(StrEnum):
-    YML = "yml"
-    SQL_ANALYSIS = "sql_analysis"
 
 
 class RetentionDirection(StrEnum):
@@ -144,13 +91,6 @@ class MicrobatchStrategy(StrEnum):
     WATERMARK = "watermark"
 
 
-class CursorWatermarkMode(StrEnum):
-    """How multiple watermark inputs contribute availability."""
-
-    ALL = "all"
-    ANY = "any"
-
-
 class IncrementalMode(StrEnum):
     FULL = "full"
     MICROBATCH = "microbatch"
@@ -170,12 +110,6 @@ class InitialValidFrom(StrEnum):
     UPDATED_AT = "updated_at"
     OBSERVED_AT = "observed_at"
     EXECUTION_TIME = "execution_time"
-
-
-class SnapshotFullRefreshPolicy(StrEnum):
-    DENY = "deny"
-    REQUIRE_CONFIRMATION = "require_confirmation"
-    ALLOW = "allow"
 
 
 class SnapshotSchemaChangePolicy(StrEnum):
@@ -211,18 +145,6 @@ class MaterializationType(StrEnum):
         """Return whether a materialization owns a physical managed table."""
 
         return materialized in {cls.TABLE, cls.INCREMENTAL, cls.SNAPSHOT}
-
-
-class SchemaActionKind(StrEnum):
-    ADD_COLUMN = "add_column"
-    DROP_COLUMN = "drop_column"
-    ALTER_COLUMN_TYPE = "alter_column_type"
-
-
-class WarningSeverity(StrEnum):
-    ERROR = "error"
-    WARNING = "warning"
-    INFO = "info"
 
 
 class ScenarioArtifactKind(StrEnum):

@@ -24,24 +24,9 @@ exclude = ["tests/e2e/fixtures/**"]
 max_positional_args = 1
 
 [[targets.python.rule_exceptions]]
-rule = "FFR001"
-path = "src/sqlbuild/cli/commands/models.py"
-reason = "The TYPE_CHECKING block contains annotation-only imports, avoiding executor and integration imports for read-only commands; runtime declarations remain structured models."
-
-[[targets.python.rule_exceptions]]
 rule = "FFR309"
 path = "src/sqlbuild/lint/__init__.py"
 reason = "Native bindings own lint entry points, expansion preparation and compiler-verified fix planning; this package retains boundary models, custom-rule and macro callbacks."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
-path = "src/sqlbuild/sql_values/constants.py"
-reason = "Typed SQL values are normalized and state literals rendered natively; the namespace package keeps the value models, types, limits and errors the native bindings build and raise."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
-path = "src/sqlbuild/cli/compile/__init__.py"
-reason = "Native bindings own the compile command, its reuse attempt and its analysis; this package only declares the compile analysis models the native code builds."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
@@ -61,7 +46,7 @@ reason = "Native bindings own configuration resolution; this package only declar
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
 path = "src/sqlbuild/compiler/planner/__init__.py"
-reason = "Native bindings own planning, plan entries, plan output and command plans; this package only declares the plan models, types, constants, errors and the fixture inference cache the native planner reads."
+reason = "Native bindings own planning, plan entries, plan output, command plans and the planner value records; this package only declares the plan models, types, constants and errors the executor, integrations and pipeline import."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
@@ -72,11 +57,6 @@ reason = "Native bindings own source freshness observation, planning, propagatio
 rule = "FFR309"
 path = "src/sqlbuild/cost/constants.py"
 reason = "Native bindings own run-cost allocation, Snowflake cost collection, the statement ledger and the cost context; this package only declares the cost models, types and constants they use."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
-path = "src/sqlbuild/compiler/project_assembly/__init__.py"
-reason = "Native bindings own project assembly and SQL syntax checks; this package only declares the resource fact models the native assembly builds."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
@@ -190,8 +170,13 @@ reason = "Graph algorithms and views run natively; the package keeps only the ed
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
+path = "src/sqlbuild/sql_values/exceptions.py"
+reason = "Typed SQL values are normalized and state literals rendered natively; the namespace package keeps the value models, types and the rendering error adapters raise."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
 path = "src/sqlbuild/cli/output/__init__.py"
-reason = "Execution-result output is rendered natively; the package keeps only the integration-result models, constants and types its callers and readers share."
+reason = "Execution-result output is rendered natively; the package keeps only the integration-result constants its callers and readers share."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"

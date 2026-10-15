@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::planner_migrations::column_objects::{native, replace, text};
+use crate::bindings::_helpers::planner_migrations::constants::MIGRATION_MODEL_NAME_METADATA_KEY;
 use crate::bindings::_helpers::state_rows::timestamps::presumed_utc;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods};
@@ -37,13 +38,9 @@ pub(super) fn handover<'py>(
         }
         Err(error) => return Err(error),
     };
-    let key = imported(
-        py,
-        "sqlbuild.compiler.planner.constants",
-        "MIGRATION_MODEL_NAME_METADATA_KEY",
-    )?;
+    let key = MIGRATION_MODEL_NAME_METADATA_KEY;
     if let Ok(payload) = payload.cast::<PyDict>()
-        && payload.contains(&key)?
+        && payload.contains(key)?
     {
         payload.set_item(key, model.getattr("name")?)?;
         let kwargs = PyDict::new(py);

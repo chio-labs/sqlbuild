@@ -17,6 +17,7 @@ use crate::bindings::_helpers::freshness::support::{
 };
 use crate::bindings::_helpers::state_rows::timestamps::date_time_typed;
 
+const NATIVE_RECORDS: &str = "sqlbuild._native";
 const MISSING_SCHEMA_MESSAGE: &str = "source freshness table requires a target schema";
 
 /// The qualified state table name the adapter renders for one target schema.
@@ -110,7 +111,7 @@ pub(crate) struct StateRead<'py> {
 fn empty_set<'py>(schema: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = schema.py();
     call_with(
-        &imported(py, FRESHNESS_MODELS, "SourceFreshnessSet")?,
+        &imported(py, NATIVE_RECORDS, "SourceFreshnessSet")?,
         &[
             ("schema", schema.clone()),
             ("records", PyDict::new(py).into_any()),
@@ -174,7 +175,7 @@ freshness table to regenerate source freshness state."
         records.set_item(record.getattr("identity")?, record)?;
     }
     call_with(
-        &imported(py, FRESHNESS_MODELS, "SourceFreshnessSet")?,
+        &imported(py, NATIVE_RECORDS, "SourceFreshnessSet")?,
         &[("schema", schema.clone()), ("records", records.into_any())],
     )
 }

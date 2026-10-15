@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.analysis_session.types import QueryColumnsMode
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
+
+if TYPE_CHECKING:
+    from sqlbuild._native import QueryColumnsMode
 
 
 @dataclass(frozen=True)

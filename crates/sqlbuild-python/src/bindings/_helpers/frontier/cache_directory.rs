@@ -1,26 +1,19 @@
 //! The project-local compiler store root.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
-
-const FRONTIER_CONSTANTS_MODULE: &str = "sqlbuild.compiler.frontier.constants";
+use crate::bindings::_helpers::compile_command::constants::TARGET_DIRECTORY_NAME;
+use crate::bindings::_helpers::frontier::constants::{
+    CACHE_DIRECTORY_NAME, COMPILER_CACHE_DIRECTORY_NAME, NATIVE_CACHE_NAMESPACE_SUFFIX,
+};
 
 /// `project_dir / target / cache / compiler<suffix>`, keeping the path type of `project_dir`.
 pub(crate) fn cache_directory<'py>(project_dir: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = project_dir.py();
-    let constant = |name: &str| -> PyResult<String> {
-        imported(py, FRONTIER_CONSTANTS_MODULE, name)?.extract()
-    };
-    let store: String = format!(
-        "{}{}",
-        constant("COMPILER_CACHE_DIRECTORY_NAME")?,
-        constant("NATIVE_CACHE_NAMESPACE_SUFFIX")?
-    );
+    let store: String = format!("{COMPILER_CACHE_DIRECTORY_NAME}{NATIVE_CACHE_NAMESPACE_SUFFIX}");
     project_dir
-        .div(constant("TARGET_DIRECTORY_NAME")?)?
-        .div(constant("CACHE_DIRECTORY_NAME")?)?
+        .div(TARGET_DIRECTORY_NAME)?
+        .div(CACHE_DIRECTORY_NAME)?
         .div(store)
 }
 

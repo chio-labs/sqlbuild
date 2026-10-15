@@ -9,6 +9,7 @@ use pyo3::{pyclass, pymethods};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{context_variable, imported};
 
+const NATIVE_MODULE: &str = "sqlbuild._native";
 const DIAGNOSTICS_MODELS_MODULE: &str = "sqlbuild.diagnostics.models";
 const PROCESS_RESOURCES_MODULE: &str = "sqlbuild.diagnostics._helpers.process_resources";
 const TRACKER_VARIABLE: &str = "sqlbuild_build_phase_timing_tracker";
@@ -100,8 +101,7 @@ impl BuildPhaseTimingTracker {
             keywords.set_item(phase, value)?;
         }
         keywords.set_item("total_seconds", non_negative(now, self.started_at))?;
-        imported(py, DIAGNOSTICS_MODELS_MODULE, "PartialBuildPhaseTimings")?
-            .call((), Some(&keywords))
+        imported(py, NATIVE_MODULE, "PartialBuildPhaseTimings")?.call((), Some(&keywords))
     }
 
     /// Return the active build timing tracker.

@@ -14,9 +14,10 @@ use sqlbuild_cli::replay::constants::{LAUNCH_RECORD_DIRECTORY, LAUNCH_RECORD_FOR
 
 use crate::bindings::_helpers::cli::launch_state::launch_record_path;
 use crate::bindings::_helpers::compile_command::constants::{
-    COMPILE_COMMAND_NAME, COMPILED_DIRECTORY_NAME, COMPUTE_LOG_DIRECTORY_NAME,
-    EXCLUDED_DIRECTORIES, EXCLUDED_ROOT_ATTRIBUTE, EXCLUDED_ROOT_DIRECTORIES,
-    MILLISECONDS_PER_SECOND, MISSING_ENVIRONMENT_VALUE, MISSING_FILE_DIGEST, MISSING_PATH_MTIME_NS,
+    COMPILE_CACHE_DISABLE_ENV_VAR, COMPILE_CACHE_DISABLE_VALUE, COMPILE_COMMAND_NAME,
+    COMPILED_DIRECTORY_NAME, COMPUTE_LOG_DIRECTORY_NAME, EXCLUDED_DIRECTORIES,
+    EXCLUDED_ROOT_ATTRIBUTE, EXCLUDED_ROOT_DIRECTORIES, MILLISECONDS_PER_SECOND,
+    MISSING_ENVIRONMENT_VALUE, MISSING_FILE_DIGEST, MISSING_PATH_MTIME_NS,
     NATIVE_REUSE_DIRECTORY_NAME, PRESENCE_ONLY_FILE_SUFFIXES, PROJECT_CONFIG_FILENAMES,
     PROJECT_ROOT_PATH_MTIME_NS, RACY_WINDOW_ATTRIBUTE, RACY_WINDOW_NS,
     RETIRED_REUSE_DIRECTORY_NAME, REUSE_BYPASS_TIMING, REUSE_CHECK_TIMING, REUSE_DISABLE_ENV_VAR,
@@ -33,7 +34,6 @@ use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_colo
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const REUSE_REQUEST: (&str, &str) = ("sqlbuild.cli.compile_reuse.models", "CompileReuseRequest");
-const COMPILE_CONSTANTS: &str = "sqlbuild.compiler.compile.constants";
 const RUNTIME_IDENTITY_MODULE: &str = "sqlbuild.cli.compile_reuse._helpers.runtime_identity";
 const STARTUP_INPUTS_MODULE: &str = "sqlbuild.cli.compile_reuse._helpers.startup_inputs";
 const COMPUTE_LOG_TEE_MODULE: &str = "sqlbuild.runtime.compute_logs.classes.text_tee";
@@ -87,8 +87,8 @@ pub(crate) fn reuse_rules(py: Python<'_>, with_output_files: bool) -> PyResult<B
             py,
             [
                 (
-                    imported(py, COMPILE_CONSTANTS, "COMPILE_CACHE_DISABLE_ENV_VAR")?,
-                    imported(py, COMPILE_CONSTANTS, "COMPILE_CACHE_DISABLE_VALUE")?,
+                    COMPILE_CACHE_DISABLE_ENV_VAR.into_bound_py_any(py)?,
+                    COMPILE_CACHE_DISABLE_VALUE.into_bound_py_any(py)?,
                 ),
                 (
                     REUSE_DISABLE_ENV_VAR.into_bound_py_any(py)?,

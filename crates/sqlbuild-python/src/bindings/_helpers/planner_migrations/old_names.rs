@@ -12,8 +12,6 @@ use sqlbuild_analysis::planner_migrations::main::{
     old_name_skip_reason,
 };
 
-const MODELS_MODULE: &str = "sqlbuild.compiler.planner.models";
-
 #[pyfunction]
 fn declared_column_aliases<'py>(
     py: Python<'py>,
@@ -139,13 +137,12 @@ fn old_name_claim_errors<'py>(
             let message =
                 claim_message(&name.extract::<String>()?, &view, &arguments.value("now")?)?;
             errors.push(call_with(
-                &imported(py, MODELS_MODULE, "PlanWarning")?,
+                &imported(py, "sqlbuild._native", "PlanWarning")?,
                 &[
                     ("model_name", name.clone()),
                     (
                         "severity",
-                        imported(py, "sqlbuild.compiler.planner.types", "WarningSeverity")?
-                            .getattr("ERROR")?,
+                        imported(py, "sqlbuild._native", "WarningSeverity")?.getattr("ERROR")?,
                     ),
                     ("message", message.into_pyobject(py)?.into_any()),
                     ("code", "M114".into_pyobject(py)?.into_any()),

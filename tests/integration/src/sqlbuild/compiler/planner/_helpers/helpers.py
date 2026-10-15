@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from sqlbuild._native import (
+    WarehouseSnapshot,
     compiled_model_record,
     gather_warehouse_snapshot,
     project_with,
@@ -39,7 +40,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSeedFile,
     DiscoveredSourceFile,
 )
-from sqlbuild.compiler.planner.models import WarehouseSnapshot
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import (
     SchemaColumn,

@@ -11,7 +11,6 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.compiler.compile.constants import DESCRIPTION_REQUIRED_INPUT_KINDS
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     FormatDescriptionResolutionE2ECase,
     PathDefaultDescriptionCase,
@@ -28,6 +27,22 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     require_sql_analysis_output,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
+
+DESCRIPTION_REQUIRED_INPUT_KINDS: dict[str, str] = {
+    "model_files": "model",
+    "scenario_files": "scenario",
+    "seed_files": "seed",
+    "source_files": "source",
+    "sql_function_files": "function",
+    "python_function_files": "function",
+    "sql_hook_files": "hook",
+    "hook_functions": "hook",
+    "loader_functions": "loader",
+    "task_functions": "task",
+    "asset_functions": "asset",
+    "check_functions": "check",
+    "providers": "provider",
+}
 
 _SEED_CSV: str = "product_type_id,label\n1,waffle\n"
 _SEED_COLUMNS: str = (

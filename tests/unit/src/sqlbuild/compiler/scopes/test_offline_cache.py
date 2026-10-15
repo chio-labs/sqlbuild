@@ -14,7 +14,6 @@ from sqlbuild._native import (
     load_or_build_scope_index,
     scope_index_fingerprint,
 )
-from sqlbuild.compiler.scopes.constants import SCOPE_CACHE_DIRECTORY_NAME, SCOPE_CACHE_FILENAME
 from sqlbuild.compiler.scopes.models import DeclarationIdentity, ScopeIndex
 from sqlbuild.compiler.scopes.types import (
     DeclarationKind,
@@ -41,6 +40,9 @@ from tests.unit.src.sqlbuild.compiler.scopes.helpers import (
     write_wrong_fingerprint_cache,
     write_wrong_version_cache,
 )
+
+SCOPE_CACHE_DIRECTORY_NAME: str = "declaration-scopes-v2"
+SCOPE_CACHE_FILENAME: str = "scope-index.json"
 
 _PROJECT: str = SCOPE_CACHE_PROJECT
 _MODEL: str = SCOPE_CACHE_MODEL

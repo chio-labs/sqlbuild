@@ -4,8 +4,8 @@ from decimal import Decimal
 
 import pytest
 
-from sqlbuild._native import allocate_run_cost
-from sqlbuild.cost.models import QueryCostObservation, RunCostSummary
+from sqlbuild._native import QueryCostObservation, allocate_run_cost
+from sqlbuild.cost.models import RunCostSummary
 from sqlbuild.cost.types import CostStatus
 from tests.unit.src.sqlbuild.cost._test_types import AllocationTestCase
 from tests.unit.src.sqlbuild.cost.helpers import build_query_cost_observation

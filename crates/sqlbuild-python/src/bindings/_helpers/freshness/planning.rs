@@ -16,12 +16,12 @@ use crate::bindings::_helpers::freshness::observation::{
 };
 use crate::bindings::_helpers::freshness::state_io::{StateRead, read_latest};
 use crate::bindings::_helpers::freshness::support::{
-    ADAPTER_EXCEPTIONS, EXCEPTIONS_MODULE, FRESHNESS_MODELS, FRESHNESS_TYPES, OBSERVATION_ERROR,
-    text,
+    ADAPTER_EXCEPTIONS, EXCEPTIONS_MODULE, FRESHNESS_MODELS, OBSERVATION_ERROR, text,
 };
 use crate::bindings::_helpers::planner_identity::graph::build_downstream_model_name_closure;
 use crate::bindings::_helpers::state_rows::freshness::{age_policy, equivalent};
 
+const NATIVE_RECORDS: &str = "sqlbuild._native";
 const ADAPTER_STRATEGY: &str = "adapter";
 const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
@@ -124,7 +124,7 @@ fn adapter_batch<'py>(
         unknown_sources.set_item(&name, unknown(&name, ("ERROR", message.clone()))?)?;
     }
     call_with(
-        &imported(py, FRESHNESS_MODELS, "AdapterSourceFreshnessBatch")?,
+        &imported(py, NATIVE_RECORDS, "AdapterSourceFreshnessBatch")?,
         &[("unknown", unknown_sources.into_any())],
     )
 }
@@ -345,7 +345,7 @@ pub(crate) fn build_direct_source_freshness_propagation_result<'py>(
         unknown_sources.set_item(name, models)?;
     }
     let error_status: Bound<'py, PyAny> =
-        imported(py, FRESHNESS_TYPES, "SourceFreshnessAgeStatus")?.getattr("ERROR")?;
+        imported(py, NATIVE_RECORDS, "SourceFreshnessAgeStatus")?.getattr("ERROR")?;
     for (identity, status) in source_freshness
         .getattr("age_statuses")?
         .downcast::<PyDict>()?
@@ -360,11 +360,7 @@ pub(crate) fn build_direct_source_freshness_propagation_result<'py>(
         errors.set_item(identity, models)?;
     }
     call_with(
-        &imported(
-            py,
-            FRESHNESS_MODELS,
-            "DirectSourceFreshnessPropagationResult",
-        )?,
+        &imported(py, NATIVE_RECORDS, "DirectSourceFreshnessPropagationResult")?,
         &[
             ("changed_source_model_names", changed.into_any()),
             ("unknown_source_model_names", unknown_sources.into_any()),

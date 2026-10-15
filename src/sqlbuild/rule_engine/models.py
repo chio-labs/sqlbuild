@@ -381,14 +381,6 @@ class RulesRunResult:
 
 
 @dataclass(frozen=True)
-class ResolvedRuleset:
-    catalogue: tuple[Rule, ...]
-    rules: tuple[Rule, ...]
-    fingerprint: str
-    cacheable: bool
-
-
-@dataclass(frozen=True)
 class RuleFile:
     path: str
     source: str

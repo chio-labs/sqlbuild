@@ -7,6 +7,7 @@ use sqlbuild_core::cost_report::models::{CostResource, CostRun, CostSummary};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 
+const NATIVE_RECORDS: &str = "sqlbuild._native";
 const COST_MODELS: &str = "sqlbuild.cost.models";
 const COST_TYPES: &str = "sqlbuild.cost.types";
 const COST_EXCEPTIONS: &str = "sqlbuild._native";
@@ -154,7 +155,7 @@ fn resource_object<'py>(
         builders.decimal(&resource.estimated_compute_credits)?,
     )?;
     fields.set_item("estimated_usd", builders.decimal(&resource.estimated_usd)?)?;
-    imported(py, COST_MODELS, "ResourceCost")?.call((), Some(&fields))
+    imported(py, NATIVE_RECORDS, "ResourceCost")?.call((), Some(&fields))
 }
 
 fn summary_object<'py>(
@@ -215,7 +216,7 @@ pub(crate) fn record_object<'py>(py: Python<'py>, run: &CostRun) -> PyResult<Bou
     )?;
     fields.set_item("cost", summary_object(&builders, &run.cost)?)?;
     fields.set_item("had_executable_work", run.had_executable_work)?;
-    imported(py, COST_MODELS, "CostRunRecord")?.call((), Some(&fields))
+    imported(py, NATIVE_RECORDS, "CostRunRecord")?.call((), Some(&fields))
 }
 
 /// Records of several plain runs, as a tuple.

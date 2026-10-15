@@ -16,6 +16,7 @@ use crate::bindings::_helpers::cost_telemetry::values::{
     COST_MODELS, COST_TYPES, instant_micros, native_decimal, python_decimal,
 };
 
+const NATIVE_RECORDS: &str = "sqlbuild._native";
 const PENDING_MESSAGE: &str = "Snowflake query history is not complete yet.";
 
 /// One `QueryCostObservation` as a native query, in the run when its run ID matches.
@@ -62,7 +63,7 @@ fn resource_cost<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let decimal = |value: &PyDecimal| python_decimal(py, value);
     call_with(
-        &imported(py, COST_MODELS, "ResourceCost")?,
+        &imported(py, NATIVE_RECORDS, "ResourceCost")?,
         &[
             (
                 "resource_type",

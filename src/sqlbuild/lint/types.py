@@ -18,8 +18,6 @@ class LintSeverity(StrEnum):
 
 type RuleFixStatus = Literal["applied", "refused", "unavailable"]
 
-type RelationKeys = dict[str, tuple[tuple[str, ...], ...]]
-
 type RelationKeyRow = tuple[
     str,
     str,
@@ -35,5 +33,3 @@ type RelationKeyRow = tuple[
 type DiagnosticIdentity = tuple[str, str, str, str]
 
 type NativeLintPreparationRequest = LintPreparationRequest
-
-type NativePreparedSql = tuple[str, list[tuple[str, int, int, int, int, str]], list[str]]

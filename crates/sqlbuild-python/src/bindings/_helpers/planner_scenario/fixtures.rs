@@ -3,6 +3,7 @@
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_MISSING_FIXTURE_SQL;
 use crate::bindings::_helpers::planner_scenario::{
     models::SqlContext,
     sql::{required_target, resolve_sql, source_label},
@@ -75,7 +76,7 @@ pub(super) fn fixture_plans<'py>(
                 return Err(error(
                     py,
                     &format!("Scenario is missing {kind} fixture SQL '{name}'"),
-                    "SCENARIO_PLAN_MISSING_FIXTURE_SQL",
+                    SCENARIO_PLAN_MISSING_FIXTURE_SQL,
                     None,
                 )?);
             };

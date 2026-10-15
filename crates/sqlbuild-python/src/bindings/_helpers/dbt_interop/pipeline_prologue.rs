@@ -15,7 +15,7 @@ use crate::bindings::_helpers::dbt_interop::runtime_config::{
 use pyo3::{pyfunction, wrap_pyfunction};
 use std::time::Instant;
 
-const MODELS: &str = "sqlbuild.integrations.dbt.models";
+const NATIVE_RECORDS: &str = "sqlbuild._native";
 const COMPILE_OPTIONS: (&[&str], &[&str]) = (
     &[
         "project_dir",
@@ -107,7 +107,7 @@ pub(crate) fn resolve_dbt_execution_invocation<'py>(
     }
     let dbt_stream = request.getattr("dbt_stdout_stream")?;
     call_with(
-        &imported(py, MODELS, "DbtInteropInvocation")?,
+        &imported(py, NATIVE_RECORDS, "DbtInteropInvocation")?,
         &[
             ("dbt_executable", executable),
             ("output_stream", stream.clone()),
@@ -214,7 +214,7 @@ fn compile_dbt_interop_project<'py>(
     )?;
     completed(&callback, "Compiled SQLBuild project.", start)?;
     call_with(
-        &imported(py, MODELS, "DbtInteropCompiledProject")?,
+        &imported(py, NATIVE_RECORDS, "DbtInteropCompiledProject")?,
         &[
             ("adapter_name", name),
             ("adapter", adapter),
@@ -249,7 +249,7 @@ fn resolve_dbt_interop_plan<'py>(
     let routed = invocation.getattr("routed")?;
     let tuple = py.import("builtins")?.getattr("tuple")?;
     let command_args = call_with(
-        &imported(py, MODELS, "DbtInteropCommandArgs")?,
+        &imported(py, NATIVE_RECORDS, "DbtInteropCommandArgs")?,
         &[
             ("select", tuple.call1((routed.getattr("select")?,))?),
             ("exclude", tuple.call1((routed.getattr("exclude")?,))?),
@@ -279,7 +279,7 @@ fn resolve_dbt_interop_plan<'py>(
     )?;
     completed(&callback, "Resolved dbt and SQLBuild selection.", start)?;
     call_with(
-        &imported(py, MODELS, "DbtInteropPlanResolution")?,
+        &imported(py, NATIVE_RECORDS, "DbtInteropPlanResolution")?,
         &[("graph", graph), ("plan", plan)],
     )
 }

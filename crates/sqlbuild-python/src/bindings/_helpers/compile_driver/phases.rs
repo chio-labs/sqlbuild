@@ -15,7 +15,7 @@ use crate::bindings::_helpers::dag_artifact::artifact::build_dag_json;
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const PYTHON_NODES_MODULE: &str = "sqlbuild.compiler.python_nodes.main._graph";
-const OUTPUT_MODELS_MODULE: &str = "sqlbuild.cli.output.models";
+const OUTPUT_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";

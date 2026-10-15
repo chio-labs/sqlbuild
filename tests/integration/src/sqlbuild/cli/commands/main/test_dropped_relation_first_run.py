@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.planner.constants import RECORDED_RELATION_MISSING_WARNING_CODE
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     AbsentMicrobatchFullRefreshTestCase,
     DroppedIncrementalFirstRunRangeTestCase,
@@ -145,16 +144,12 @@ def test_given_relation_dropped_outside_sqlbuild_when_planning_and_building_then
         model["built_version_present"],
         model["identity_status"],
     ) == (None, False, "missing")
-    assert plan_warning_identities(plan=plan) == (
-        ("orders", RECORDED_RELATION_MISSING_WARNING_CODE),
-    )
+    assert plan_warning_identities(plan=plan) == (("orders", "RECORDED_RELATION_MISSING"),)
     assert rebuild_exit_code == 0, rebuild_output
     assert rebuilt_rows == test_case.expected_rows
     assert steady_exit_code == 0, steady_output
     assert query_duckdb_rows(db_path=db_path, sql=_BUILD_ARTIFACTS_SQL) == ()
-    assert ("orders", RECORDED_RELATION_MISSING_WARNING_CODE) not in plan_warning_identities(
-        plan=steady_plan
-    )
+    assert ("orders", "RECORDED_RELATION_MISSING") not in plan_warning_identities(plan=steady_plan)
     assert plan_model(plan=steady_plan, name="orders")["identity_status"] == "current"
 
 

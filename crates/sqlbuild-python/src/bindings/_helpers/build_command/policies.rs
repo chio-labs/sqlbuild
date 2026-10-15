@@ -18,7 +18,7 @@ use sqlbuild_core::build_command::models::{
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 
-const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
+const ERRORS_MODULE: &str = "sqlbuild._native";
 const SNAPSHOT_VALUE: &str = "snapshot";
 const FULL_REFRESH_REASON: &str = "full_refresh";
 const SKIP_ACTION: &str = "skip";

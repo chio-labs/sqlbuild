@@ -5,11 +5,13 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence, Set
 from concurrent.futures import Future
 from contextlib import AbstractContextManager
 from contextvars import Token
+from dataclasses import Field
 from datetime import date, datetime
 from decimal import Decimal
+from enum import StrEnum
 from pathlib import Path, PurePath
 from threading import Event
-from typing import Any, Literal, TextIO, TypedDict
+from typing import Any, ClassVar, Literal, Protocol, TextIO, TypedDict
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
@@ -26,46 +28,7 @@ from sqlbuild.adapter.contract.types import (
     TypeDialect,
 )
 from sqlbuild.adapter.relations.models import InspectionQueryRecord
-from sqlbuild.cli.commands.models import (
-    AuditCommandRequest,
-    BuildCommandRequest,
-    BuildCostFinalization,
-    CheckCommandRequest,
-    CloneCommandRequest,
-    ContractCommandRequest,
-    CostCommandRequest,
-    DbtInitCommandRequest,
-    DbtSqlbuildWorkContext,
-    DiffCommandRequest,
-    FreshnessCommandRequest,
-    JanitorCommandRequest,
-    LineageCommandRequest,
-    LoadCommandRequest,
-    NestedProgressChildRow,
-    PlanCommandRequest,
-    PlanSafetyGates,
-    PlaygroundCommandRequest,
-    QueryDiffPreparation,
-    RefactorCommandRequest,
-    RulesCommandRequest,
-    ScenarioCaptureCommandRequest,
-    ScenarioTestCommandRequest,
-    ScopeCommandRequest,
-    SeedCommandRequest,
-    TestCommandRequest,
-)
-from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode, ScopeIndexLoader
-from sqlbuild.cli.compile.models import CompileAnalysis
 from sqlbuild.cli.compile_reuse.models import CompileReuseRequest
-from sqlbuild.cli.entry.models import (
-    AuthoredTargetWarehouse,
-    CommandWarehouseScope,
-    CompileCommandRequest,
-    CompileProfileFlags,
-    ParsedCliInvocation,
-    ResolvedWarehouse,
-)
-from sqlbuild.cli.output.models import SkillMaintenanceResult, SkillUpdateResult, WrittenTarget
 from sqlbuild.compiler.auditing.models import (
     AuditGateIdentity,
     MeasurementContract,
@@ -82,7 +45,6 @@ from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
     CompileAdapterContext,
     CompileAnalysisSelection,
-    CompileAuditInput,
     CompiledAudit,
     CompiledFunction,
     CompiledLineageColumnFact,
@@ -98,9 +60,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledSqlTest,
     CompileModelConfig,
     CompilerDiagnostic,
-    CompileSeedInput,
-    CompileSourceInput,
-    CompileSqlFunctionInput,
     CompileSqlReference,
     CompileSqlScenarioInput,
     CompileSqlTestCte,
@@ -177,7 +136,6 @@ from sqlbuild.compiler.discovery.models import (
     TolerantScopeDiscovery,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
-from sqlbuild.compiler.fingerprints.types import FingerprintWriteProgress
 from sqlbuild.compiler.frontier.types import CompilerStage
 from sqlbuild.compiler.graph.models import AttachedAuditGateEdge, HookReadEdge, LineageGraphViews
 from sqlbuild.compiler.lineage.models import (
@@ -194,7 +152,9 @@ from sqlbuild.compiler.migrations.models import (
     OldNameViewHistory,
 )
 from sqlbuild.compiler.migrations.types import (
+    MigrationCompatibility,
     MigrationDecision,
+    MigrationDiscovery,
     MigrationPromotion,
     OldNameViewEventType,
 )
@@ -213,102 +173,55 @@ from sqlbuild.compiler.pipeline.models import (
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
-    BackfillResult,
-    ChangeDetectionResult,
+    ChainStep,
     CloneSourcePlanEntry,
     ColumnMigrationPlanEntry,
-    ColumnMigrationPlanning,
-    ColumnRenameHint,
     CursorBounds,
     CursorInputEvidence,
     CursorInputRelation,
-    CursorOverridePair,
     CursorOverrides,
-    CursorSnapshotScope,
     DeferralInputs,
-    DirectModelVersionIdentities,
     EmptyCursorInputDecision,
-    FixtureRelationMetadata,
     FunctionPlanEntry,
     FutureCursorSafetyEvidence,
     MaximumStartPolicyInputs,
     MaximumStartSafetyEvidence,
-    MigrationCompatibilityResult,
-    MissingUpstream,
     ModelCursorSnapshot,
-    ModelMigrationDeclaration,
-    ModelMigrationDiscovery,
     ModelMigrationPlanEntry,
-    ModelMigrationPlanning,
-    ModelMigrationRequest,
-    ModelPlanContext,
     ModelPlanEntry,
-    NativeSqlTestArtifact,
-    NativeSqlTestPlan,
     OldNameView,
     OldNameViewPlanEntry,
-    OldNameViewPlanning,
-    ParsedScenarioArtifactName,
     ParsedSelector,
     PathSelector,
-    PlanEntryBuildInputs,
-    PlannedSqlTests,
-    PlannerChangeReconciliation,
-    PlannerChangeResults,
-    PlannerEntryResults,
-    PlannerIdentityContext,
-    PlannerModelEntryResults,
     PlannerOverrides,
     PlannerPolicies,
     PlannerRelationsContext,
-    PlannerResolvedActions,
-    PlannerRuntime,
     PlannerScope,
-    PlannerScopePruningResult,
-    PlannerScopeResolution,
     PlannerSelection,
-    PlannerWarehouseState,
     PlanOutput,
-    PlanOutputExtras,
-    PlanWarning,
-    QueryShape,
-    ReferenceRename,
-    RelationFixtureCompletion,
-    RelationFixtureDiagnostic,
-    RelationFixturePlanningContext,
     RetentionPlanEntry,
-    ScenarioArtifactIdentity,
     ScenarioExecutionPlan,
     ScenarioFixturePlan,
-    ScenarioGraphPlan,
     ScenarioRelationMap,
     ScenarioRelationPlan,
-    SchemaAction,
     SchemaFinding,
     SeedPlanEntry,
-    SelectionStalenessGraph,
-    SelectionStalenessWarning,
-    SelectorExpansion,
     SourceLoadPlanEntry,
+    SqlTestAssertionStep,
     SqlTestPlanEntry,
-    SqlTestPlanResult,
     SqlTestSelection,
     TableTypePlanEntry,
-    UnitTestSelectorSplit,
-    WarehouseFingerprints,
-    WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import (
+    BackfillAction,
     CursorGrain,
     CursorType,
-    FixtureGroups,
-    InputColumns,
     MaterializationType,
     OnSchemaChange,
     PlanAction,
     PlanReason,
+    ScenarioArtifactKind,
 )
-from sqlbuild.compiler.project_assembly.models import NativeProjectResources
 from sqlbuild.compiler.python_nodes.models import (
     PythonNodeGraph,
     PythonSqlRunLifecyclePlan,
@@ -343,41 +256,29 @@ from sqlbuild.compiler.scopes.models import (
     UsageRecord,
     VisibilityResolution,
 )
-from sqlbuild.compiler.scopes.types import DeclarationKind, JsonValue, ScopeQueryTarget
-from sqlbuild.compiler.source_freshness.models import (
-    AdapterSourceFreshnessBatch,
-    DirectSourceFreshnessPlanningResult,
-    DirectSourceFreshnessPropagationResult,
-    SourceFreshnessIdentity,
-    SourceFreshnessObservation,
-    SourceFreshnessRecord,
-    SourceFreshnessRenderers,
-    SourceFreshnessSet,
+from sqlbuild.compiler.scopes.types import (
+    DeclarationKind,
 )
-from sqlbuild.compiler.source_freshness.types import (
-    SourceFreshnessAgeStatus,
-    SourceFreshnessComparableRecord,
+from sqlbuild.compiler.source_freshness.models import (
+    DirectSourceFreshnessPlanningResult,
+    SourceFreshnessRecord,
 )
 from sqlbuild.compiler.sql_analysis.models import (
     SqlBindingResult,
     SqlLexicalSyntax,
     SqlSchemaValidationRequest,
 )
-from sqlbuild.compiler.sql_analysis.types import NativeProjectCatalog
 from sqlbuild.compiler.sql_test_glue.models import (
     NativeSqlTestAssembly,
     NativeSqlTestChainRequest,
     NativeSqlTestPlanningRequest,
 )
-from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestPlanRow
 from sqlbuild.cost.models import (
     CostResourceContext,
-    CostRunRecord,
-    QueryCostObservation,
     RunCostSummary,
     StatementExecutionTelemetry,
-    StatementLedgerEntry,
 )
+from sqlbuild.cost.types import CostStatus
 from sqlbuild.cursor_algebra.models import (
     AlignedInterval,
     DateValue,
@@ -385,7 +286,7 @@ from sqlbuild.cursor_algebra.models import (
     TimestampValue,
 )
 from sqlbuild.cursor_algebra.types import Bound, BoundSentinel, CursorScalar
-from sqlbuild.diagnostics.models import PartialBuildPhaseTimings, ProcessResourceUsage
+from sqlbuild.diagnostics.models import ProcessResourceUsage
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
@@ -404,30 +305,12 @@ from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapsho
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.models import (
-    DbtCliConfigOverrides,
     DbtCliOptions,
-    DbtCommandExecutionResult,
     DbtCommandResult,
-    DbtInteropCommandArgs,
-    DbtInteropCompiledProject,
-    DbtInteropExecutionRequest,
-    DbtInteropInvocation,
-    DbtInteropParsedArgs,
-    DbtInteropPlan,
-    DbtInteropPlanResolution,
-    DbtInteropRoutedArgs,
-    DbtInteropSelectionResult,
-    DbtLsNode,
-    DbtManifestIndex,
-    DbtManifestModel,
     DbtNodeExecutionResult,
-    DbtPlanEnvironment,
-    DbtSqlbuildPlanRequest,
     NormalizedDbtProfileConnection,
-    ResolvedDbtConfig,
     ResolvedDbtProfileOutput,
 )
-from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from sqlbuild.lint.models import (
     CompileFacts,
     ExpandedLintFile,
@@ -442,9 +325,11 @@ from sqlbuild.lint.models import (
     PreparedLintFiles,
     RuleFixResult,
 )
-from sqlbuild.lint.types import RelationKeyRow, RelationKeys
+from sqlbuild.lint.types import (
+    RelationKeyRow,
+)
 from sqlbuild.presentation.models import DisplayOptions
-from sqlbuild.presentation.types import CompletionState, TransientLineOwner
+from sqlbuild.presentation.types import TransientLineOwner
 from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.rule_engine.models import (
@@ -464,6 +349,7 @@ from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.models import (
+    CostConfig,
     DbtConfig,
     DefaultsConfig,
     ExecutionLimitsConfig,
@@ -493,7 +379,7 @@ from sqlbuild.spec.contracts.types import (
     SourceFreshnessValueKind,
     WarehouseGroup,
 )
-from sqlbuild.sql_values.models import SqlValue, SqlValueLimits
+from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import CollectionRendering, StateSqlValueType
 
 BUILD_IDENTITY: str
@@ -603,6 +489,159 @@ def evaluate_rules_request(request: NativeRulesRequest) -> NativeRulesEvaluation
 def emit_orjson_report(report: object) -> str: ...
 def emit_json_report(report: object) -> str: ...
 
+type ColumnRow = tuple[str, str | None, str]
+
+type DiagnosticRow = tuple[str, str, int | None, int | None, int | None, int | None, str]
+
+type ProofRow = tuple[
+    bool, list[ColumnRow], list[tuple[str, str | None]], list[str], str | None, bool
+]
+
+type QueryColumnsMode = Literal["batch", "reanalysis", "parse", "legacy"]
+
+type CtePairRow = tuple[str, str]
+
+type NativeChainStepRow = tuple[
+    str,
+    str,
+    str | None,
+    list[CtePairRow],
+    str | None,
+    list[str] | None,
+    list[CtePairRow],
+]
+
+type NativeAssertionStepRow = tuple[str, str, list[CtePairRow], str | None]
+
+type NativePlanWarningRow = tuple[str | None, str, str]
+
+type NativeSqlTestPlanRow = tuple[
+    str | None,
+    list[NativeChainStepRow],
+    list[NativeAssertionStepRow],
+    list[str],
+    list[NativePlanWarningRow],
+    list[str],
+]
+
+type SqlTestAssemblyFailureKind = Literal["input", "internal", "decimal_overflow"]
+
+class FingerprintWriteProgress(Protocol):
+    def __call__(self, *, completed: int, total: int) -> None: ...
+
+type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
+
+type ScopeQueryTarget = str | PurePath | ResourceIdentity | DeclarationIdentity
+
+type NativeDiagnosticRow = tuple[str, str, int | None, int | None, int | None, int | None, str]
+
+type NativeNormalizationRequest = tuple[str, dict[str, str], dict[str, str]]
+
+class NativeCompactAnalysisJob(Protocol):
+    def run(self) -> bytes: ...
+
+class NativeProjectCatalog(Protocol):
+    def inferred_schema(
+        self, *, sql: str, columns: Mapping[str, str], inputs: Mapping[str, Mapping[str, str]]
+    ) -> list[tuple[str, str]]: ...
+    def with_relations(
+        self, relations: Mapping[str, Mapping[str, str]]
+    ) -> NativeProjectCatalog: ...
+    def validation_payload(
+        self, requests: list[tuple[str, list[tuple[str, bool]], dict[str, Mapping[str, str]]]]
+    ) -> str: ...
+    def update_analysis(
+        self, relations: Mapping[str, tuple[Mapping[str, str], Mapping[str, str]]]
+    ) -> None: ...
+    def register_override(self, relations: Mapping[str, Mapping[str, str]]) -> int: ...
+    def prepare_compact(self, payload: bytes) -> NativeCompactAnalysisJob: ...
+    def update_relations(self, relations: Mapping[str, Mapping[str, str]]) -> None: ...
+    def normalize_analysis_sqls(
+        self, *, dialect: str, requests: list[NativeNormalizationRequest]
+    ) -> list[str | Exception]: ...
+
+class NativeBindingPositions(Protocol):
+    def position(
+        self, *, start: int | None, line: int | None, column: int | None, message: str
+    ) -> tuple[int | None, int | None]: ...
+
+class NativePositionsModule(Protocol):
+    def normalize_analysis_sqls(
+        self, *, dialect: str, requests: list[NativeNormalizationRequest]
+    ) -> list[str | Exception]: ...
+    def binding_diagnostics(
+        self, *, sql: str, dialect: str, rows: list[NativeDiagnosticRow]
+    ) -> list[NativeDiagnosticRow]: ...
+    def BindingPositions(
+        self,
+        request: dict[str, object],
+    ) -> NativeBindingPositions: ...
+    def normalize_analysis_sql(self, request: dict[str, object]) -> str: ...
+    def normalize_dialect_sql(self, *, sql: str, dialect: str) -> str: ...
+
+type RelationKeys = dict[str, tuple[tuple[str, ...], ...]]
+
+type NativePreparedSql = tuple[str, list[tuple[str, int, int, int, int, str]], list[str]]
+
+type ObjectKeyRow = tuple[str, str]
+
+type NamespaceRow = tuple[str | None, str | None, str | None, str | None]
+
+class NativeProjectResources:
+    @property
+    def model_deps(self) -> tuple[list[tuple[str, str]], ...]: ...
+    @property
+    def model_syntax_valid(self) -> tuple[bool, ...]: ...
+    @property
+    def source_namespaces(self) -> tuple[tuple[str | None, str | None] | None, ...]: ...
+    @property
+    def seed_namespaces(
+        self,
+    ) -> tuple[tuple[str | None, str | None, str | None, str | None], ...]: ...
+    @property
+    def function_deps(self) -> tuple[list[tuple[str, str]], ...]: ...
+    @property
+    def audit_scope_deps(self) -> tuple[list[tuple[str, str]], ...]: ...
+    @property
+    def failure(self) -> NativeResourceFailure | None: ...
+
+class NativeResourceFailure:
+    @property
+    def slot(self) -> str: ...
+    @property
+    def index(self) -> int: ...
+    @property
+    def error(self) -> Exception: ...
+
+class NativeModelFacts:
+    @property
+    def deps(self) -> list[tuple[str, str]]: ...
+    @property
+    def dynamic_contract(
+        self,
+    ) -> (
+        tuple[
+            bool,
+            list[tuple[str, str | None, str]],
+            list[tuple[str, str | None]],
+            list[str],
+            str | None,
+            bool,
+        ]
+        | None
+    ): ...
+    @property
+    def syntax_valid(self) -> bool: ...
+
+class NativeProjectFacts:
+    @property
+    def models(self) -> tuple[NativeModelFacts, ...]: ...
+    @property
+    def resources(self) -> NativeProjectResources: ...
+
+type FixtureKey = tuple[CompiledResourceType, str]
+type InputColumns = Callable[[str, str], frozenset[str] | None]
+type FixtureGroups = tuple[tuple[CompiledResourceType, dict[str, str]], ...]
 type _GraphKey = tuple[str, str]
 type _GraphEdges = list[tuple[_GraphKey, list[_GraphKey]]]
 type _GraphIndexes = tuple[
@@ -614,6 +653,992 @@ type _GraphIndexes = tuple[
 ]
 type _SelectorFailure = tuple[str, str, str | None]
 type _SelectorKeys = tuple[list[_GraphKey] | None, _SelectorFailure | None]
+
+class GraphResourceKind(StrEnum):
+    MODEL = "model"
+    SEED = "seed"
+    SOURCE = "source"
+    FUNCTION = "function"
+
+class ChangeKind(StrEnum):
+    FIRST_RUN = "first_run"
+    RENAMED = "renamed"
+    QUERY_CHANGED = "query_changed"
+    FUNCTION_CHANGED = "function_changed"
+    CONFIG_CHANGED = "config_changed"
+    SCHEMA_CHANGED = "schema_changed"
+    NO_CHANGE = "no_change"
+
+class SchemaChangeKind(StrEnum):
+    COLUMN_ADDED = "column_added"
+    COLUMN_REMOVED = "column_removed"
+    COLUMN_TYPE_CHANGED = "column_type_changed"
+
+class SchemaColumnSource(StrEnum):
+    YML = "yml"
+    SQL_ANALYSIS = "sql_analysis"
+
+class CursorWatermarkMode(StrEnum):
+    ALL = "all"
+    ANY = "any"
+
+class SchemaActionKind(StrEnum):
+    ADD_COLUMN = "add_column"
+    DROP_COLUMN = "drop_column"
+    ALTER_COLUMN_TYPE = "alter_column_type"
+
+class WarningSeverity(StrEnum):
+    ERROR = "error"
+    WARNING = "warning"
+    INFO = "info"
+
+class FixtureColumnInferences:
+    """Reuse inference for identical fixture SQL under an equal, catalog-free profile."""
+
+    def __init__(self) -> None: ...
+    def infer(
+        self, *, query_sql: str, inference_profile: ExpressionInferenceProfile
+    ) -> FixtureColumnInference | None:
+        """Return the inference for one fixture query, computing each distinct query once."""
+
+class NativeSqlTestArtifact:
+    """One native-planned SQL-test artifact and its distinct planning error messages."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    sql: str
+    model_names: tuple[str, ...]
+    error_messages: tuple[str, ...]
+    def __init__(
+        self, sql: str, model_names: tuple[str, ...], error_messages: tuple[str, ...] = ...
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> NativeSqlTestArtifact: ...
+
+class RelationFixtureDiagnostic:
+    """One statically provable invalid fixture condition."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    key: FixtureKey
+    message: str
+    def __init__(self, key: FixtureKey, message: str) -> None: ...
+    def __replace__(self, **changes: Any) -> RelationFixtureDiagnostic: ...
+
+class RelationFixtureCompletion:
+    """Completed fixture SQL plus metadata reused by SQL-test validation."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    fixture_sql_by_key: dict[FixtureKey, str]
+    inferred_by_fixture: dict[FixtureKey, tuple[InferredColumn, ...]]
+    expected_types: Mapping[FixtureKey, dict[str, str]]
+    diagnostics: tuple[RelationFixtureDiagnostic, ...]
+    def __init__(
+        self,
+        fixture_sql_by_key: dict[FixtureKey, str],
+        inferred_by_fixture: dict[FixtureKey, tuple[InferredColumn, ...]],
+        expected_types: Mapping[FixtureKey, dict[str, str]],
+        diagnostics: tuple[RelationFixtureDiagnostic, ...],
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> RelationFixtureCompletion: ...
+
+class FixtureColumnMetadata:
+    """Known type and nullability for one relation fixture column."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    name: str
+    type: str | None
+    nullable: bool | None
+    def __init__(self, name: str, type: str | None, nullable: bool | None) -> None: ...
+    def __replace__(self, **changes: Any) -> FixtureColumnMetadata: ...
+
+class FixtureRelationMetadata:
+    """Known columns and whether they form an authoritative relation shape."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    columns: tuple[FixtureColumnMetadata, ...]
+    authoritative_names: bool
+    def __init__(
+        self, columns: tuple[FixtureColumnMetadata, ...], authoritative_names: bool
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> FixtureRelationMetadata: ...
+
+class RelationFixturePlanningContext:
+    """Project-wide fixture metadata shared across test and scenario planning."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    models_by_name: dict[str, CompiledModelView]
+    relations: dict[FixtureKey, FixtureRelationMetadata]
+    authoritative_columns: dict[FixtureKey, frozenset[str]]
+    expected_types: dict[FixtureKey, dict[str, str]]
+    fixture_inferences: FixtureColumnInferences
+    def __init__(
+        self,
+        models_by_name: dict[str, CompiledModelView],
+        relations: dict[FixtureKey, FixtureRelationMetadata],
+        authoritative_columns: dict[FixtureKey, frozenset[str]],
+        expected_types: dict[FixtureKey, dict[str, str]],
+        fixture_inferences: FixtureColumnInferences = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> RelationFixturePlanningContext: ...
+
+class SelectorExpansion:
+    """One selector split into graph expansion flags and core text."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    core: str
+    upstream: bool
+    downstream: bool
+    def __init__(self, core: str, upstream: bool = ..., downstream: bool = ...) -> None: ...
+    def __replace__(self, **changes: Any) -> SelectorExpansion: ...
+
+class ParsedScenarioArtifactName:
+    """Parsed physical name for one planner-owned scenario artifact."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    hash_prefix: str
+    kind: str
+    logical_name: str
+    def __init__(self, hash_prefix: str, kind: str, logical_name: str) -> None: ...
+    def __replace__(self, **changes: Any) -> ParsedScenarioArtifactName: ...
+
+class MissingUpstream:
+    """One upstream dependency missing from both scope and warehouse."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    key: CompiledObjectKey
+    required_by: tuple[CompiledObjectKey, ...]
+    def __init__(
+        self, key: CompiledObjectKey, required_by: tuple[CompiledObjectKey, ...]
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> MissingUpstream: ...
+
+class WarehouseFingerprints:
+    """Latest direct fingerprints grouped by node type."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    models: dict[str, Fingerprint]
+    functions: dict[str, Fingerprint]
+    seeds: dict[str, Fingerprint]
+    python_nodes: dict[tuple[str, str], Fingerprint]
+    unfiltered_schemas: dict[str, tuple[Fingerprint, ...]]
+    unfiltered_database: str | None
+    def __init__(
+        self,
+        models: dict[str, Fingerprint] = ...,
+        functions: dict[str, Fingerprint] = ...,
+        seeds: dict[str, Fingerprint] = ...,
+        python_nodes: dict[tuple[str, str], Fingerprint] = ...,
+        unfiltered_schemas: dict[str, tuple[Fingerprint, ...]] = ...,
+        unfiltered_database: str | None = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> WarehouseFingerprints: ...
+
+class CursorSnapshotScope:
+    """Execution selection used for cursor validation and runtime producer resolution."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    model_keys: frozenset[CompiledObjectKey]
+    runtime_producer_keys: frozenset[CompiledObjectKey]
+    invocation_time: datetime | None
+    start_cursor_config: StartCursorsConfig | None
+    cursor_overrides: CursorOverrides | None
+    def __init__(
+        self,
+        model_keys: frozenset[CompiledObjectKey],
+        runtime_producer_keys: frozenset[CompiledObjectKey],
+        invocation_time: datetime | None = ...,
+        start_cursor_config: StartCursorsConfig | None = ...,
+        cursor_overrides: CursorOverrides | None = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> CursorSnapshotScope: ...
+
+class ReferenceRename:
+    """One model rename that downstream references may have been rewritten for."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    new_name: str
+    origin_name: str
+    recorded_at: datetime | None
+    def __init__(
+        self, new_name: str, origin_name: str, recorded_at: datetime | None = ...
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> ReferenceRename: ...
+
+class WarehouseSnapshot:
+    """Frozen point-in-time picture of warehouse state for planning."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    existing_relations: dict[str, RelationInfo]
+    existing_columns: dict[str, tuple[ColumnInfo, ...]]
+    fingerprints: WarehouseFingerprints
+    cursor_snapshots: dict[str, ModelCursorSnapshot]
+    source_freshness_state_schemas: frozenset[str]
+    column_dialect: str | None
+    renamed_models: frozenset[str]
+    reference_renames: tuple[ReferenceRename, ...]
+    migration_state_schemas: frozenset[str]
+    old_name_view_state_schemas: frozenset[str]
+    listed_state_schemas: frozenset[str] | None
+    def __init__(
+        self,
+        existing_relations: dict[str, RelationInfo] = ...,
+        existing_columns: dict[str, tuple[ColumnInfo, ...]] = ...,
+        fingerprints: WarehouseFingerprints = ...,
+        cursor_snapshots: dict[str, ModelCursorSnapshot] = ...,
+        source_freshness_state_schemas: frozenset[str] = ...,
+        column_dialect: str | None = ...,
+        renamed_models: frozenset[str] = ...,
+        reference_renames: tuple[ReferenceRename, ...] = ...,
+        migration_state_schemas: frozenset[str] = ...,
+        old_name_view_state_schemas: frozenset[str] = ...,
+        listed_state_schemas: frozenset[str] | None = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> WarehouseSnapshot: ...
+
+class SelectionStalenessNodeKey:
+    """Neutral node identity for shared selection-aware staleness classification."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    resource_type: str
+    name: str
+    def __init__(self, resource_type: str, name: str) -> None: ...
+    def __replace__(self, **changes: Any) -> SelectionStalenessNodeKey: ...
+
+class SelectionStalenessGraph:
+    """Neutral graph inputs for selected-model stale warning classification."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    upstream_deps: dict[SelectionStalenessNodeKey, tuple[SelectionStalenessNodeKey, ...]]
+    selected_model_names: frozenset[str]
+    run_model_names: frozenset[str]
+    run_seed_names: frozenset[str]
+    run_source_names: frozenset[str]
+    changed_model_names: frozenset[str]
+    changed_seed_names: frozenset[str]
+    changed_source_names: frozenset[str]
+    def __init__(
+        self,
+        upstream_deps: dict[SelectionStalenessNodeKey, tuple[SelectionStalenessNodeKey, ...]],
+        selected_model_names: frozenset[str],
+        run_model_names: frozenset[str],
+        run_seed_names: frozenset[str],
+        run_source_names: frozenset[str],
+        changed_model_names: frozenset[str],
+        changed_seed_names: frozenset[str],
+        changed_source_names: frozenset[str],
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> SelectionStalenessGraph: ...
+
+class SelectionStalenessWarning:
+    """Neutral stale warning classification for one selected model."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    model_name: str
+    trigger_names: tuple[str, ...]
+    def __init__(self, model_name: str, trigger_names: tuple[str, ...]) -> None: ...
+    def __replace__(self, **changes: Any) -> SelectionStalenessWarning: ...
+
+class BackfillResult:
+    """Resolved backfill action from a change detection policy."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    action: BackfillAction
+    duration: str | None
+    def __init__(self, action: BackfillAction, duration: str | None = ...) -> None: ...
+    def __replace__(self, **changes: Any) -> BackfillResult: ...
+
+class ChangeDetectionResult:
+    """Per-model output from change detection and policy resolution."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    model_name: str
+    change_kind: ChangeKind
+    query_changed: bool
+    config_changed: bool
+    fingerprint_metadata_json: str | None
+    previous_metadata_json: str | None
+    fingerprint_version_hash: str | None
+    previous_version_hash: str | None
+    schema_findings: tuple[SchemaFinding, ...]
+    backfill: BackfillResult
+    recorded_build_relation_missing: bool
+    changed_functions: tuple[str, ...]
+    def __init__(
+        self,
+        model_name: str,
+        change_kind: ChangeKind,
+        query_changed: bool = ...,
+        config_changed: bool = ...,
+        fingerprint_metadata_json: str | None = ...,
+        previous_metadata_json: str | None = ...,
+        fingerprint_version_hash: str | None = ...,
+        previous_version_hash: str | None = ...,
+        schema_findings: tuple[SchemaFinding, ...] = ...,
+        backfill: BackfillResult = ...,
+        recorded_build_relation_missing: bool = ...,
+        changed_functions: tuple[str, ...] = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> ChangeDetectionResult: ...
+
+class UnitTestSelectorSplit:
+    """Resource selectors left after unit-test selectors moved into a test selection."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    sql_test_selection: SqlTestSelection
+    def __init__(
+        self,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+        sql_test_selection: SqlTestSelection,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> UnitTestSelectorSplit: ...
+
+class ModelPlanContext:
+    """Relation lookups and source columns for building one model plan entry."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    model_locations: dict[str, CompiledRelationLocation]
+    models_by_name: dict[str, CompiledModelView]
+    seed_locations: dict[str, CompiledRelationLocation]
+    function_locations: dict[str, CompiledRelationLocation]
+    source_map: dict[str, SourceEntry]
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]]
+    star_exclude_keyword: str
+    functions_by_name: dict[str, CompiledFunctionView]
+    runtime_cursor_producer_names: frozenset[str]
+    future_cursor_config: FutureCursorsConfig | None
+    start_cursor_config: StartCursorsConfig | None
+    invocation_time: datetime | None
+    def __init__(
+        self,
+        model_locations: dict[str, CompiledRelationLocation],
+        models_by_name: dict[str, CompiledModelView],
+        seed_locations: dict[str, CompiledRelationLocation],
+        function_locations: dict[str, CompiledRelationLocation],
+        source_map: dict[str, SourceEntry],
+        source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
+        star_exclude_keyword: str,
+        functions_by_name: dict[str, CompiledFunctionView] = ...,
+        runtime_cursor_producer_names: frozenset[str] = ...,
+        future_cursor_config: FutureCursorsConfig | None = ...,
+        start_cursor_config: StartCursorsConfig | None = ...,
+        invocation_time: datetime | None = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> ModelPlanContext: ...
+
+class CursorOverridePair:
+    """Resolved per-model cursor start/end overrides for plan entry construction."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    start_cursor_override: str | None
+    end_cursor_override: str | None
+    def __init__(
+        self, start_cursor_override: str | None = ..., end_cursor_override: str | None = ...
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> CursorOverridePair: ...
+
+class PlanEntryBuildInputs:
+    """Blocked models and cursor overrides for plan entry building."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    source_freshness_blocked_model_names: frozenset[str]
+    external_blocked_model_names: frozenset[str]
+    start_cursor_override: str | None
+    end_cursor_override: str | None
+    future_cursor_config: FutureCursorsConfig | None
+    start_cursor_config: StartCursorsConfig | None
+    invocation_time: datetime | None
+    max_microbatches: int | None
+    max_microbatches_is_override: bool
+    microbatch_limit_action: MicrobatchLimitAction
+    def __init__(
+        self,
+        source_freshness_blocked_model_names: frozenset[str] = ...,
+        external_blocked_model_names: frozenset[str] = ...,
+        start_cursor_override: str | None = ...,
+        end_cursor_override: str | None = ...,
+        future_cursor_config: FutureCursorsConfig | None = ...,
+        start_cursor_config: StartCursorsConfig | None = ...,
+        invocation_time: datetime | None = ...,
+        max_microbatches: int | None = ...,
+        max_microbatches_is_override: bool = ...,
+        microbatch_limit_action: MicrobatchLimitAction = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlanEntryBuildInputs: ...
+
+class FunctionChangeResult:
+    """Per-function output from change detection."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    fingerprint_sql: str
+    reason: PlanReason
+    def __init__(self, fingerprint_sql: str, reason: PlanReason = ...) -> None: ...
+    def __replace__(self, **changes: Any) -> FunctionChangeResult: ...
+
+class PlannerChangeResults:
+    """Change detection output for selected planner resources."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    models: dict[str, ChangeDetectionResult]
+    functions: dict[str, FunctionChangeResult]
+    def __init__(
+        self, models: dict[str, ChangeDetectionResult], functions: dict[str, FunctionChangeResult]
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlannerChangeResults: ...
+
+class ResolvedModelAction:
+    """Effective model change and backfill decided from the model's own change."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    change: ChangeDetectionResult
+    backfill: BackfillResult
+    def __init__(self, change: ChangeDetectionResult, backfill: BackfillResult) -> None: ...
+    def __replace__(self, **changes: Any) -> ResolvedModelAction: ...
+
+class PlannerResolvedActions:
+    """Per-model planning decisions keyed by model name."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    models: dict[str, ResolvedModelAction]
+    def __init__(self, models: dict[str, ResolvedModelAction]) -> None: ...
+    def __replace__(self, **changes: Any) -> PlannerResolvedActions: ...
+
+class DirectModelVersionIdentities:
+    """Current direct model version identity values by model name."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    function_local_hashes: dict[str, str]
+    seed_version_hashes: dict[str, str]
+    seed_metadata_jsons: dict[str, str]
+    model_metadata_jsons: dict[str, str]
+    model_local_hashes: dict[str, str]
+    model_version_hashes: dict[str, str]
+    def __init__(
+        self,
+        function_local_hashes: dict[str, str],
+        seed_version_hashes: dict[str, str],
+        seed_metadata_jsons: dict[str, str],
+        model_metadata_jsons: dict[str, str],
+        model_local_hashes: dict[str, str],
+        model_version_hashes: dict[str, str],
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> DirectModelVersionIdentities: ...
+
+class PlannerModelEntryResults:
+    """Model plan-entry phase output."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    entries: tuple[ModelPlanEntry, ...]
+    warnings: tuple[PlanWarning, ...]
+    def __init__(
+        self, entries: tuple[ModelPlanEntry, ...], warnings: tuple[PlanWarning, ...] = ...
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlannerModelEntryResults: ...
+
+class SchemaAction:
+    """One concrete schema change action to apply to a target table."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    kind: SchemaActionKind
+    column_name: str
+    column_type: str | None
+    def __init__(
+        self, kind: SchemaActionKind, column_name: str, column_type: str | None = ...
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> SchemaAction: ...
+
+class PlanWarning:
+    """One warning or error produced during plan resolution."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    model_name: str | None
+    severity: WarningSeverity
+    message: str
+    code: str | None
+    def __init__(
+        self,
+        model_name: str | None,
+        severity: WarningSeverity,
+        message: str,
+        code: str | None = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlanWarning: ...
+
+class ColumnRenameHint:
+    """A removed column that an added column may have been renamed from."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    model_name: str
+    added_column: str
+    candidate_columns: tuple[str, ...]
+    identical: bool
+    def __init__(
+        self,
+        model_name: str,
+        added_column: str,
+        candidate_columns: tuple[str, ...],
+        identical: bool = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> ColumnRenameHint: ...
+    @property
+    def message(self) -> str:
+        """The one-line hint shown beside the added column."""
+
+class QueryProjection:
+    """One named top-level output column of a query and its canonical expression."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    name: str
+    expression: str
+    references: frozenset[str]
+    passthrough: bool
+    def __init__(
+        self, name: str, expression: str, references: frozenset[str], passthrough: bool = ...
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> QueryProjection: ...
+    @property
+    def key(self) -> str:
+        """The case-insensitive output name."""
+
+class QueryShape:
+    """Canonical top-level projections and the rest of one query, ignoring formatting."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    projections: tuple[QueryProjection, ...]
+    body: str
+    alias_clauses: str
+    positional: bool
+    input_relations: tuple[tuple[str, str], ...] | None
+    local_input_columns: frozenset[str]
+    clause_references: frozenset[str]
+    def __init__(
+        self,
+        projections: tuple[QueryProjection, ...],
+        body: str,
+        alias_clauses: str = ...,
+        positional: bool = ...,
+        input_relations: tuple[tuple[str, str], ...] | None = ...,
+        local_input_columns: frozenset[str] = ...,
+        clause_references: frozenset[str] = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> QueryShape: ...
+
+class PlanOutputExtras:
+    """Optional supplemental seed fingerprints and precomputed SQL tests for plan assembly."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    seed_version_hashes: dict[str, str] | None
+    seed_metadata_jsons: dict[str, str] | None
+    seed_plan_reasons: dict[str, PlanReason] | None
+    planned_sql_tests: PlannedSqlTests | None
+    def __init__(
+        self,
+        seed_version_hashes: dict[str, str] | None = ...,
+        seed_metadata_jsons: dict[str, str] | None = ...,
+        seed_plan_reasons: dict[str, PlanReason] | None = ...,
+        planned_sql_tests: PlannedSqlTests | None = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlanOutputExtras: ...
+
+class PlannedSqlTests:
+    """SQL test entries planned for one selection; reusable only for the same selection."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    selected_keys: frozenset[CompiledObjectKey]
+    sql_test_selection: SqlTestSelection
+    entries: tuple[SqlTestPlanEntry, ...]
+    warnings: tuple[PlanWarning, ...]
+    def __init__(
+        self,
+        selected_keys: frozenset[CompiledObjectKey],
+        sql_test_selection: SqlTestSelection = ...,
+        entries: tuple[SqlTestPlanEntry, ...] = ...,
+        warnings: tuple[PlanWarning, ...] = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlannedSqlTests: ...
+
+class NativeSqlTestPlan:
+    """Native chain and assertion steps for one SQL test, with SQL when rendered."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    chain: tuple[ChainStep, ...]
+    assertions: tuple[SqlTestAssertionStep, ...]
+    model_names: tuple[str, ...]
+    warnings: tuple[PlanWarning, ...]
+    error_messages: tuple[str, ...]
+    sql: str | None
+    def __init__(
+        self,
+        chain: tuple[ChainStep, ...],
+        assertions: tuple[SqlTestAssertionStep, ...],
+        model_names: tuple[str, ...],
+        warnings: tuple[PlanWarning, ...],
+        error_messages: tuple[str, ...],
+        sql: str | None = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> NativeSqlTestPlan: ...
+
+class SqlTestPlanResult:
+    """One SQL test's plan entry and warnings, or the fixture diagnostics preventing it."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    entry: SqlTestPlanEntry | None
+    warnings: tuple[PlanWarning, ...]
+    fixture_diagnostics: tuple[str, ...]
+    def __init__(
+        self,
+        entry: SqlTestPlanEntry | None,
+        warnings: tuple[PlanWarning, ...] = ...,
+        fixture_diagnostics: tuple[str, ...] = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> SqlTestPlanResult: ...
+
+class ScenarioGraphPlan:
+    """Inferred graph slice and fixture boundaries for one SQL scenario."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    key: CompiledObjectKey
+    name: str
+    target_model_names: tuple[str, ...]
+    assertion_target_model_names: tuple[str, ...]
+    model_names: tuple[str, ...]
+    source_fixture_names: tuple[str, ...]
+    ref_fixture_names: tuple[str, ...]
+    seed_names: tuple[str, ...]
+    seed_fixture_names: tuple[str, ...]
+    dbt_ref_fixture_names: tuple[str, ...]
+    function_deps: tuple[CompiledObjectKey, ...]
+    def __init__(
+        self,
+        key: CompiledObjectKey,
+        name: str,
+        target_model_names: tuple[str, ...] = ...,
+        assertion_target_model_names: tuple[str, ...] = ...,
+        model_names: tuple[str, ...] = ...,
+        source_fixture_names: tuple[str, ...] = ...,
+        ref_fixture_names: tuple[str, ...] = ...,
+        seed_names: tuple[str, ...] = ...,
+        seed_fixture_names: tuple[str, ...] = ...,
+        dbt_ref_fixture_names: tuple[str, ...] = ...,
+        function_deps: tuple[CompiledObjectKey, ...] = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> ScenarioGraphPlan: ...
+
+class ScenarioArtifactIdentity:
+    """Logical identity for one scenario-owned physical artifact."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    kind: ScenarioArtifactKind | str
+    logical_name: str
+    def __init__(self, kind: ScenarioArtifactKind | str, logical_name: str) -> None: ...
+    def __replace__(self, **changes: Any) -> ScenarioArtifactIdentity: ...
+
+class ScenarioArtifactName:
+    """Resolved physical relation name for one scenario artifact."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    identity: ScenarioArtifactIdentity
+    physical_name: str
+    def __init__(self, identity: ScenarioArtifactIdentity, physical_name: str) -> None: ...
+    def __replace__(self, **changes: Any) -> ScenarioArtifactName: ...
+
+class PlanProviderUsage:
+    """Provider usage metadata scoped to planned work."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    provider_name: str
+    consumer_kind: str
+    consumer_name: str
+    parameter_name: str
+    annotation_class_name: str | None
+    annotation_module: str | None
+    def __init__(
+        self,
+        provider_name: str,
+        consumer_kind: str,
+        consumer_name: str,
+        parameter_name: str,
+        annotation_class_name: str | None = ...,
+        annotation_module: str | None = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlanProviderUsage: ...
+
+class PlannerRuntime:
+    """Resolved execution environment shared by planner phases."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    project: CompiledProjectView
+    adapter: BaseAdapter
+    connection: Any
+    project_config: ProjectConfig | None
+    local_config: LocalConfig | None
+    on_progress: Callable[[str], None] | None
+    invocation_time: datetime
+    def __init__(
+        self,
+        project: CompiledProjectView,
+        adapter: BaseAdapter,
+        connection: Any,
+        project_config: ProjectConfig | None = ...,
+        local_config: LocalConfig | None = ...,
+        on_progress: Callable[[str], None] | None = ...,
+        invocation_time: datetime = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlannerRuntime: ...
+
+class PlannerScopeResolution:
+    """Resolved planner scopes for one plan build."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    selected_scope: PlannerScope
+    stale_warning_scope: PlannerScope
+    inspection_scope: PlannerScope
+    def __init__(
+        self,
+        selected_scope: PlannerScope,
+        stale_warning_scope: PlannerScope,
+        inspection_scope: PlannerScope,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlannerScopeResolution: ...
+
+class PlannerWarehouseState:
+    """Warehouse snapshot and inspection relations gathered once per plan."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    snapshot: WarehouseSnapshot
+    inspection_relations: PlannerRelationsContext
+    migration_entries: tuple[ModelMigrationPlanEntry, ...]
+    migration_warnings: tuple[PlanWarning, ...]
+    column_migration_entries: tuple[ColumnMigrationPlanEntry, ...]
+    column_rename_hints: tuple[ColumnRenameHint, ...]
+    old_name_view_entries: tuple[OldNameViewPlanEntry, ...]
+    old_name_views: tuple[OldNameView, ...]
+    migration_fingerprints: MigrationFingerprintCache
+    def __init__(
+        self,
+        snapshot: WarehouseSnapshot,
+        inspection_relations: PlannerRelationsContext,
+        migration_entries: tuple[ModelMigrationPlanEntry, ...] = ...,
+        migration_warnings: tuple[PlanWarning, ...] = ...,
+        column_migration_entries: tuple[ColumnMigrationPlanEntry, ...] = ...,
+        column_rename_hints: tuple[ColumnRenameHint, ...] = ...,
+        old_name_view_entries: tuple[OldNameViewPlanEntry, ...] = ...,
+        old_name_views: tuple[OldNameView, ...] = ...,
+        migration_fingerprints: MigrationFingerprintCache = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlannerWarehouseState: ...
+
+class ModelMigrationRequest:
+    """One destination model whose data should come from an earlier relation."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    model: CompiledModelView
+    discovery: MigrationDiscovery
+    raw_origin: str | None
+    origin_location: CompiledRelationLocation | None
+    origin_model: str | None
+    force: bool
+    identity_only: bool
+    def __init__(
+        self,
+        model: CompiledModelView,
+        discovery: MigrationDiscovery,
+        raw_origin: str | None = ...,
+        origin_location: CompiledRelationLocation | None = ...,
+        origin_model: str | None = ...,
+        force: bool = ...,
+        identity_only: bool = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> ModelMigrationRequest: ...
+
+class ModelMigrationDeclaration:
+    """One project model's explicit migrate_from, resolved to a relation."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    model_name: str
+    origin_location: CompiledRelationLocation
+    origin_model: str | None
+    def __init__(
+        self, model_name: str, origin_location: CompiledRelationLocation, origin_model: str | None
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> ModelMigrationDeclaration: ...
+
+class ModelMigrationDiscovery:
+    """Manual and automatically discovered migration requests for one plan."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    requests: tuple[ModelMigrationRequest, ...]
+    warnings: tuple[PlanWarning, ...]
+    destination_fingerprints: dict[str, tuple[str, ...]]
+    def __init__(
+        self,
+        requests: tuple[ModelMigrationRequest, ...] = ...,
+        warnings: tuple[PlanWarning, ...] = ...,
+        destination_fingerprints: dict[str, tuple[str, ...]] = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> ModelMigrationDiscovery: ...
+
+class MigrationCompatibilityResult:
+    """Compatibility status plus human-readable blocking findings."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    status: MigrationCompatibility
+    findings: tuple[str, ...]
+    def __init__(self, status: MigrationCompatibility, findings: tuple[str, ...] = ...) -> None: ...
+    def __replace__(self, **changes: Any) -> MigrationCompatibilityResult: ...
+
+class ModelMigrationPlanning:
+    """Migration decisions plus the warehouse snapshot as it will look after moves."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    snapshot: WarehouseSnapshot
+    entries: tuple[ModelMigrationPlanEntry, ...]
+    warnings: tuple[PlanWarning, ...]
+    def __init__(
+        self,
+        snapshot: WarehouseSnapshot,
+        entries: tuple[ModelMigrationPlanEntry, ...] = ...,
+        warnings: tuple[PlanWarning, ...] = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> ModelMigrationPlanning: ...
+
+class OldNameViewPlanning:
+    """Old-name steps for this build plus every compatibility view still recorded."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    entries: tuple[OldNameViewPlanEntry, ...]
+    views: tuple[OldNameView, ...]
+    warnings: tuple[PlanWarning, ...]
+    def __init__(
+        self,
+        entries: tuple[OldNameViewPlanEntry, ...] = ...,
+        views: tuple[OldNameView, ...] = ...,
+        warnings: tuple[PlanWarning, ...] = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> OldNameViewPlanning: ...
+
+class ColumnMigrationPlanning:
+    """Column rename decisions plus the warehouse snapshot as it will look after renames."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    snapshot: WarehouseSnapshot
+    entries: tuple[ColumnMigrationPlanEntry, ...]
+    hints: tuple[ColumnRenameHint, ...]
+    warnings: tuple[PlanWarning, ...]
+    def __init__(
+        self,
+        snapshot: WarehouseSnapshot,
+        entries: tuple[ColumnMigrationPlanEntry, ...] = ...,
+        hints: tuple[ColumnRenameHint, ...] = ...,
+        warnings: tuple[PlanWarning, ...] = ...,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> ColumnMigrationPlanning: ...
+
+class PlannerIdentityContext:
+    """Expected version identities for inspection and stale-warning scopes."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    version_identities: DirectModelVersionIdentities
+    stale_warning_identities: DirectModelVersionIdentities
+    def __init__(
+        self,
+        version_identities: DirectModelVersionIdentities,
+        stale_warning_identities: DirectModelVersionIdentities,
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlannerIdentityContext: ...
+
+class PlannerScopePruningResult:
+    """Scope pruning outcome with pruned scopes, actions, and staleness state."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    inspection_scope: PlannerScope
+    execution_scope: PlannerScope
+    resolved_actions: PlannerResolvedActions
+    pruned_direct_model_names: tuple[str, ...]
+    direct_identity_stale_model_names: frozenset[str]
+    def __init__(
+        self,
+        inspection_scope: PlannerScope,
+        execution_scope: PlannerScope,
+        resolved_actions: PlannerResolvedActions,
+        pruned_direct_model_names: tuple[str, ...],
+        direct_identity_stale_model_names: frozenset[str],
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlannerScopePruningResult: ...
+
+class PlannerChangeReconciliation:
+    """Write-hash-honest changes merged back into resolved actions."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    changes: PlannerChangeResults
+    resolved_actions: PlannerResolvedActions
+    def __init__(
+        self, changes: PlannerChangeResults, resolved_actions: PlannerResolvedActions
+    ) -> None: ...
+    def __replace__(self, **changes: Any) -> PlannerChangeReconciliation: ...
+
+class PlannerEntryResults:
+    """Model plan entries for one plan build."""
+
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+    model_entry_results: PlannerModelEntryResults
+    def __init__(self, model_entry_results: PlannerModelEntryResults) -> None: ...
+    def __replace__(self, **changes: Any) -> PlannerEntryResults: ...
 
 class NativeModelInput:
     @property
@@ -792,17 +1817,17 @@ class NativeInputsView:
     @property
     def model_inputs(self) -> tuple[NativeModelInput, ...]: ...
     @property
-    def seed_inputs(self) -> tuple[CompileSeedInput, ...]: ...
+    def seed_inputs(self) -> tuple[SeedInput, ...]: ...
     @property
-    def source_inputs(self) -> tuple[CompileSourceInput, ...]: ...
+    def source_inputs(self) -> tuple[SourceInput, ...]: ...
     @property
-    def sql_function_inputs(self) -> tuple[CompileSqlFunctionInput, ...]: ...
+    def sql_function_inputs(self) -> tuple[FunctionInput, ...]: ...
     @property
     def test_inputs(self) -> tuple[CompileSqlTestInput, ...]: ...
     @property
     def scenario_inputs(self) -> tuple[CompileSqlScenarioInput, ...]: ...
     @property
-    def audit_inputs(self) -> tuple[CompileAuditInput, ...]: ...
+    def audit_inputs(self) -> tuple[AuditInput, ...]: ...
     @property
     def diagnostics(self) -> tuple[CompilerDiagnostic, ...]: ...
     @property
@@ -1908,12 +2933,6 @@ def run_skills_command(
 ) -> int: ...
 def run_playground_command(request: PlaygroundCommandRequest) -> int: ...
 def validate_cli_warehouse(*, cli_warehouse: str | None, project_dir: Path) -> None: ...
-def find_target_group_warehouse(
-    *,
-    discovered_inputs: DiscoveredProjectInputs,
-    selected_target: str | None,
-    group: WarehouseGroup,
-) -> AuthoredTargetWarehouse | None: ...
 def resolve_command_warehouse(
     *,
     discovered_inputs: DiscoveredProjectInputs | None,
@@ -6338,3 +7357,2203 @@ def render_snowflake_query_history_sql(
 ) -> str: ...
 def snowflake_statement_is_metadata_only(*, query_type: object, query_text: object) -> bool: ...
 def parse_sqlbuild_query_tag(value: object) -> dict[str, str | None] | None: ...
+
+class NestedProgressChildRow(NativeRecord):
+    """One child row rendered below a completed nested progress item."""
+
+    label: str
+    name: str
+    status_text: str
+    detail: str
+    def __init__(
+        self,
+        label: str,
+        name: str,
+        status_text: str,
+        detail: str = "",
+    ) -> None: ...
+
+class AuditCommandRequest(NativeRecord):
+    """CLI inputs for one audit command invocation."""
+
+    project_dir: Path | None
+    no_sql_validation: bool
+    defer_to: str | None
+    no_color: bool
+    selected_target: str | None
+    concurrency: int | None
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    cli_vars: dict[str, object] | None
+    json_output: bool
+    json_output_path: Path | None
+    def __init__(
+        self,
+        project_dir: Path | None = None,
+        no_sql_validation: bool = False,
+        defer_to: str | None = None,
+        no_color: bool = False,
+        selected_target: str | None = None,
+        concurrency: int | None = None,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        cli_vars: dict[str, object] | None = None,
+        json_output: bool = False,
+        json_output_path: Path | None = None,
+    ) -> None: ...
+
+class AuditInvocation(NativeRecord):
+    """Resolved project, adapter, and reporter context for the audit command."""
+
+    effective_project_dir: Path
+    discovered_inputs: DiscoveredProjectInputs
+    adapter_name: str
+    adapter: BaseAdapter
+    connection_config: dict[str, object]
+    use_color: bool
+    progress_stream: TextIO
+    connection_progress: ConnectionProgressReporter
+    planning_progress: PlanningProgressReporter
+    def __init__(
+        self,
+        effective_project_dir: Path,
+        discovered_inputs: DiscoveredProjectInputs,
+        adapter_name: str,
+        adapter: BaseAdapter,
+        connection_config: dict[str, object],
+        use_color: bool,
+        progress_stream: TextIO,
+        connection_progress: ConnectionProgressReporter,
+        planning_progress: PlanningProgressReporter,
+    ) -> None: ...
+
+class BuildCommandRequest(NativeRecord):
+    """CLI inputs for one build command invocation."""
+
+    project_dir: Path | None
+    no_sql_validation: bool
+    defer_to: str | None
+    defer_clone_from: str | None
+    defer_sources_to: str | None
+    selected_target: str | None
+    cursor_overrides: CursorOverrides | None
+    no_color: bool
+    fail_fast: bool
+    full_refresh: bool
+    load_sources: bool | None
+    reload_sources: bool
+    include_python: bool
+    allow_snapshot_full_refresh: bool
+    allow_table_type_downgrade: bool
+    allow_retention_decrease: bool
+    allow_missing_migration_origin: bool
+    allow_snapshot_schema_change: bool
+    concurrency: int | None
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    verbose: bool
+    debug: bool
+    cli_vars: dict[str, object] | None
+    run_tests: bool
+    run_audits: bool
+    manifest: bool
+    json_output: bool
+    json_output_path: Path | None
+    event_output_path: Path | None
+    no_cache: bool
+    max_microbatches: int | None
+    selection_diagnostics: bool
+    selector_files: tuple[SelectorFileSummary, ...]
+    def __init__(
+        self,
+        project_dir: Path | None = None,
+        no_sql_validation: bool = False,
+        defer_to: str | None = None,
+        defer_clone_from: str | None = None,
+        defer_sources_to: str | None = None,
+        selected_target: str | None = None,
+        cursor_overrides: CursorOverrides | None = None,
+        no_color: bool = False,
+        fail_fast: bool = False,
+        full_refresh: bool = False,
+        load_sources: bool | None = None,
+        reload_sources: bool = False,
+        include_python: bool = True,
+        allow_snapshot_full_refresh: bool = False,
+        allow_table_type_downgrade: bool = False,
+        allow_retention_decrease: bool = False,
+        allow_missing_migration_origin: bool = False,
+        allow_snapshot_schema_change: bool = False,
+        concurrency: int | None = None,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        verbose: bool = False,
+        debug: bool = False,
+        cli_vars: dict[str, object] | None = None,
+        run_tests: bool = True,
+        run_audits: bool = True,
+        manifest: bool = False,
+        json_output: bool = False,
+        json_output_path: Path | None = None,
+        event_output_path: Path | None = None,
+        no_cache: bool = False,
+        max_microbatches: int | None = None,
+        selection_diagnostics: bool = False,
+        selector_files: tuple[SelectorFileSummary, ...] = (),
+    ) -> None: ...
+
+class BuildInvocation(NativeRecord):
+    """Resolved project, adapter, and reporter context for the build command."""
+
+    effective_project_dir: Path
+    discovered_inputs: DiscoveredProjectInputs
+    effective_defer_clone_from: str | None
+    adapter_name: str
+    adapter: BaseAdapter
+    connection_config: dict[str, object]
+    use_color: bool
+    progress_stream: TextIO
+    connection_progress: ConnectionProgressReporter
+    planning_progress: PlanningProgressReporter
+    should_load_sources: bool
+    effective_target_name: str | None
+    execution_limits: ExecutionLimitsConfig
+    def __init__(
+        self,
+        effective_project_dir: Path,
+        discovered_inputs: DiscoveredProjectInputs,
+        effective_defer_clone_from: str | None,
+        adapter_name: str,
+        adapter: BaseAdapter,
+        connection_config: dict[str, object],
+        use_color: bool,
+        progress_stream: TextIO,
+        connection_progress: ConnectionProgressReporter,
+        planning_progress: PlanningProgressReporter,
+        should_load_sources: bool,
+        effective_target_name: str | None = None,
+        execution_limits: ExecutionLimitsConfig = ...,
+    ) -> None: ...
+
+class CheckCommandRequest(NativeRecord):
+    """CLI inputs for one check command invocation."""
+
+    project_dir: Path | None
+    no_sql_validation: bool
+    no_color: bool
+    selected_target: str | None
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    cli_vars: dict[str, object] | None
+    json_output: bool
+    json_output_path: Path | None
+    def __init__(
+        self,
+        project_dir: Path | None = None,
+        no_sql_validation: bool = False,
+        no_color: bool = False,
+        selected_target: str | None = None,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        cli_vars: dict[str, object] | None = None,
+        json_output: bool = False,
+        json_output_path: Path | None = None,
+    ) -> None: ...
+
+class CheckInvocation(NativeRecord):
+    """Resolved project, adapter, and reporter context for the check command."""
+
+    effective_project_dir: Path
+    discovered_inputs: DiscoveredProjectInputs
+    adapter_name: str
+    adapter: BaseAdapter
+    connection_config: dict[str, object]
+    use_color: bool
+    progress_stream: TextIO
+    connection_progress: ConnectionProgressReporter
+    planning_progress: PlanningProgressReporter
+    def __init__(
+        self,
+        effective_project_dir: Path,
+        discovered_inputs: DiscoveredProjectInputs,
+        adapter_name: str,
+        adapter: BaseAdapter,
+        connection_config: dict[str, object],
+        use_color: bool,
+        progress_stream: TextIO,
+        connection_progress: ConnectionProgressReporter,
+        planning_progress: PlanningProgressReporter,
+    ) -> None: ...
+
+class CloneCommandRequest(NativeRecord):
+    """CLI inputs for one clone command invocation."""
+
+    project_dir: Path | None
+    no_color: bool
+    no_sql_validation: bool
+    origin_target_name: str
+    destination_target_name: str | None
+    hard_copy: bool
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    verbose: bool
+    cli_vars: dict[str, object] | None
+    json_output_path: Path | None
+    event_output_path: Path | None
+    def __init__(
+        self,
+        project_dir: Path | None,
+        no_color: bool,
+        no_sql_validation: bool,
+        origin_target_name: str,
+        destination_target_name: str | None,
+        hard_copy: bool,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        verbose: bool = False,
+        cli_vars: dict[str, object] | None = None,
+        json_output_path: Path | None = None,
+        event_output_path: Path | None = None,
+    ) -> None: ...
+
+class DbtSqlbuildWorkContext(NativeRecord):
+    """Shared execution context for one dbt interop SQLBuild work run."""
+
+    plan_output: PlanOutput
+    connection_config: dict[str, object]
+    adapter: BaseAdapter
+    adapter_name: str
+    output_stream: TextIO
+    use_color: bool
+    snapshots_config: SnapshotsConfig
+    execution_limits: ExecutionLimitsConfig
+    def __init__(
+        self,
+        plan_output: PlanOutput,
+        connection_config: dict[str, object],
+        adapter: BaseAdapter,
+        adapter_name: str,
+        output_stream: TextIO,
+        use_color: bool,
+        snapshots_config: SnapshotsConfig,
+        execution_limits: ExecutionLimitsConfig,
+    ) -> None: ...
+
+class PlanSafetyGates(NativeRecord):
+    """Pre-confirmed plan safety gates and the guidance shown when one needs a terminal."""
+
+    allow_missing_migration_origin: bool
+    allow_snapshot_full_refresh: bool
+    allow_table_type_downgrade: bool
+    allow_retention_decrease: bool
+    missing_origin_help: str
+    snapshot_full_refresh_help: str
+    table_type_downgrade_help: str
+    retention_decrease_help: str
+    execution_limit_note: str
+    def __init__(
+        self,
+        allow_missing_migration_origin: bool,
+        allow_snapshot_full_refresh: bool,
+        allow_table_type_downgrade: bool,
+        allow_retention_decrease: bool,
+        missing_origin_help: str,
+        snapshot_full_refresh_help: str,
+        table_type_downgrade_help: str,
+        retention_decrease_help: str,
+        execution_limit_note: str,
+    ) -> None: ...
+
+class DbtInitCommandRequest(NativeRecord):
+    """CLI inputs for one dbt init command invocation."""
+
+    cwd: Path
+    dbt_project_dir: str | None
+    profiles_dir: str | None
+    profile_name: str | None
+    target_name: str | None
+    sqb_output_dir: str | None
+    dry_run: bool
+    overwrite: bool
+    skip_dbt_debug: bool
+    def __init__(
+        self,
+        cwd: Path,
+        dbt_project_dir: str | None,
+        profiles_dir: str | None,
+        profile_name: str | None,
+        target_name: str | None,
+        sqb_output_dir: str | None,
+        dry_run: bool,
+        overwrite: bool,
+        skip_dbt_debug: bool,
+    ) -> None: ...
+
+class DiffCommandRequest(NativeRecord):
+    """CLI inputs for one diff command invocation."""
+
+    project_dir: Path | None
+    no_color: bool
+    no_sql_validation: bool
+    from_name: str | None
+    to_name: str | None
+    full: bool
+    schema_only: bool
+    bounded: str | None
+    max_column_examples: int | None
+    max_row_only_examples: int | None
+    sample_rows: int | None
+    sample_seed: int | None
+    exhaustive: bool
+    json_output: bool
+    json_output_path: Path | None
+    max_models: int | None
+    max_columns: int | None
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    verbose: bool
+    cli_vars: dict[str, object] | None
+    selected_target: str | None
+    left_query: str | None
+    left_query_file: Path | None
+    left_label: str | None
+    right_query: str | None
+    right_query_file: Path | None
+    right_label: str | None
+    unique_key_override: tuple[str, ...]
+    unkeyed: bool
+    excluded_columns_override: tuple[str, ...]
+    tolerance_overrides: tuple[str, ...]
+    max_value_length: int | None
+    suppress_example_values: bool
+    full_example_values: bool
+    def __init__(
+        self,
+        project_dir: Path | None,
+        no_color: bool,
+        no_sql_validation: bool,
+        from_name: str | None,
+        to_name: str | None,
+        full: bool,
+        schema_only: bool,
+        bounded: str | None,
+        max_column_examples: int | None = None,
+        max_row_only_examples: int | None = None,
+        sample_rows: int | None = None,
+        sample_seed: int | None = None,
+        exhaustive: bool = False,
+        json_output: bool = False,
+        json_output_path: Path | None = None,
+        max_models: int | None = None,
+        max_columns: int | None = None,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        verbose: bool = False,
+        cli_vars: dict[str, object] | None = None,
+        selected_target: str | None = None,
+        left_query: str | None = None,
+        left_query_file: Path | None = None,
+        left_label: str | None = None,
+        right_query: str | None = None,
+        right_query_file: Path | None = None,
+        right_label: str | None = None,
+        unique_key_override: tuple[str, ...] = (),
+        unkeyed: bool = False,
+        excluded_columns_override: tuple[str, ...] = (),
+        tolerance_overrides: tuple[str, ...] = (),
+        max_value_length: int | None = None,
+        suppress_example_values: bool = False,
+        full_example_values: bool = False,
+    ) -> None: ...
+
+class QueryDiffPreparation(NativeRecord):
+    """Resolved raw-query diff adapter, connection, SQL, and limits."""
+
+    adapter: BaseAdapter
+    connection_config: dict[str, object]
+    left_sql: str
+    right_sql: str
+    left_label: str
+    right_label: str
+    selected_target: str | None
+    database: str | None
+    schema: str
+    run_id: str
+    artifact_ttl: str
+    effective_max_column_examples: int
+    effective_max_row_only_examples: int
+    def __init__(
+        self,
+        adapter: BaseAdapter,
+        connection_config: dict[str, object],
+        left_sql: str,
+        right_sql: str,
+        left_label: str,
+        right_label: str,
+        selected_target: str | None,
+        database: str | None,
+        schema: str,
+        run_id: str,
+        artifact_ttl: str,
+        effective_max_column_examples: int,
+        effective_max_row_only_examples: int,
+    ) -> None: ...
+
+class FreshnessCommandRequest(NativeRecord):
+    """CLI inputs for one `sqb freshness` invocation."""
+
+    project_dir: Path | None
+    no_sql_validation: bool
+    no_color: bool
+    selected_target: str | None
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    cli_vars: dict[str, object] | None
+    json_output: bool
+    json_output_path: Path | None
+    fail_on_error: bool
+    compare_state: bool
+    fail_on_stale: bool
+    def __init__(
+        self,
+        project_dir: Path | None = None,
+        no_sql_validation: bool = False,
+        no_color: bool = False,
+        selected_target: str | None = None,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        cli_vars: dict[str, object] | None = None,
+        json_output: bool = False,
+        json_output_path: Path | None = None,
+        fail_on_error: bool = False,
+        compare_state: bool = False,
+        fail_on_stale: bool = False,
+    ) -> None: ...
+
+class JanitorCommandRequest(NativeRecord):
+    """CLI inputs for one janitor command invocation."""
+
+    project_dir: Path | None
+    no_color: bool
+    auto_approve: bool
+    retention_days: int | None
+    direct_state_history_versions: int | None
+    drop_old_name_views: tuple[str, ...]
+    selected_target: str | None
+    as_target: str | None
+    def __init__(
+        self,
+        project_dir: Path | None,
+        no_color: bool = False,
+        auto_approve: bool = False,
+        retention_days: int | None = None,
+        direct_state_history_versions: int | None = None,
+        drop_old_name_views: tuple[str, ...] = (),
+        selected_target: str | None = None,
+        as_target: str | None = None,
+    ) -> None: ...
+
+class JanitorInvocation(NativeRecord):
+    """Resolved project discovery and output context for janitor."""
+
+    effective_project_dir: Path
+    discovered_inputs: DiscoveredProjectInputs
+    use_color: bool
+    selected_target: str | None
+    active_target_name: str | None
+    as_target: str | None
+    def __init__(
+        self,
+        effective_project_dir: Path,
+        discovered_inputs: DiscoveredProjectInputs,
+        use_color: bool,
+        selected_target: str | None = None,
+        active_target_name: str | None = None,
+        as_target: str | None = None,
+    ) -> None: ...
+
+class JanitorSettings(NativeRecord):
+    """Validated effective janitor settings."""
+
+    retention_days: int
+    direct_state_history_versions: int
+    archive_retention_days: int
+    drop_old_name_views: tuple[str, ...]
+    def __init__(
+        self,
+        retention_days: int,
+        direct_state_history_versions: int,
+        archive_retention_days: int = 14,
+        drop_old_name_views: tuple[str, ...] = (),
+    ) -> None: ...
+
+class LoadCommandRequest(NativeRecord):
+    """CLI inputs for one load command invocation."""
+
+    project_dir: Path | None
+    no_color: bool
+    selected_target: str | None
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    reload: bool
+    concurrency: int | None
+    cursor_overrides: CursorOverrides | None
+    cli_vars: dict[str, object] | None
+    json_output: bool
+    json_output_path: Path | None
+    def __init__(
+        self,
+        project_dir: Path | None,
+        no_color: bool = False,
+        selected_target: str | None = None,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        reload: bool = False,
+        concurrency: int | None = None,
+        cursor_overrides: CursorOverrides | None = None,
+        cli_vars: dict[str, object] | None = None,
+        json_output: bool = False,
+        json_output_path: Path | None = None,
+    ) -> None: ...
+
+class PlanCommandRequest(NativeRecord):
+    """CLI inputs for one plan command invocation."""
+
+    project_dir: Path | None
+    no_sql_validation: bool
+    defer_to: str | None
+    defer_sources_to: str | None
+    selected_target: str | None
+    as_target: str | None
+    cursor_overrides: CursorOverrides | None
+    json_output: bool
+    full_refresh: bool
+    load_sources: bool | None
+    include_python: bool
+    no_color: bool
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    verbose: bool
+    cli_vars: dict[str, object] | None
+    no_cache: bool
+    max_microbatches: int | None
+    selection_diagnostics: bool
+    def __init__(
+        self,
+        project_dir: Path | None = None,
+        no_sql_validation: bool = False,
+        defer_to: str | None = None,
+        defer_sources_to: str | None = None,
+        selected_target: str | None = None,
+        as_target: str | None = None,
+        cursor_overrides: CursorOverrides | None = None,
+        json_output: bool = False,
+        full_refresh: bool = False,
+        load_sources: bool | None = None,
+        include_python: bool = True,
+        no_color: bool = False,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        verbose: bool = False,
+        cli_vars: dict[str, object] | None = None,
+        no_cache: bool = False,
+        max_microbatches: int | None = None,
+        selection_diagnostics: bool = False,
+    ) -> None: ...
+
+class PlaygroundCommandRequest(NativeRecord):
+    """CLI inputs for one playground command invocation."""
+
+    project_dir: Path | None
+    target_path: str
+    template: str
+    def __init__(
+        self,
+        project_dir: Path | None,
+        target_path: str,
+        template: str = ...,
+    ) -> None: ...
+
+class AdapterConnectionContext(NativeRecord):
+    """Resolved adapter and connection configuration for one CLI command."""
+
+    adapter_name: str
+    adapter: BaseAdapter
+    connection_config: dict[str, object]
+    def __init__(
+        self,
+        adapter_name: str,
+        adapter: BaseAdapter,
+        connection_config: dict[str, object],
+    ) -> None: ...
+
+class ScenarioSnapshotLimitInputs(NativeRecord):
+    """CLI snapshot capture-limit overrides for one scenario run."""
+
+    max_snapshot_rows: int | None
+    max_snapshot_total_rows: int | None
+    max_snapshot_bytes: int | None
+    max_snapshot_total_bytes: int | None
+    force: bool
+    def __init__(
+        self,
+        max_snapshot_rows: int | None = None,
+        max_snapshot_total_rows: int | None = None,
+        max_snapshot_bytes: int | None = None,
+        max_snapshot_total_bytes: int | None = None,
+        force: bool = False,
+    ) -> None: ...
+
+class ScenarioTestCommandRequest(NativeRecord):
+    """CLI inputs for one `sqb scenario test` invocation."""
+
+    project_dir: Path | None
+    scenario_namespace: str | None
+    no_sql_validation: bool
+    no_color: bool
+    selectors: tuple[str, ...]
+    exclude: tuple[str, ...]
+    retain: bool
+    local: bool
+    strict: bool
+    concurrency: int | None
+    sync_snapshots: bool
+    refresh: bool
+    limit_inputs: ScenarioSnapshotLimitInputs
+    json_output: bool
+    json_output_path: Path | None
+    def __init__(
+        self,
+        project_dir: Path | None = None,
+        scenario_namespace: str | None = None,
+        no_sql_validation: bool = False,
+        no_color: bool = False,
+        selectors: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        retain: bool = False,
+        local: bool = False,
+        strict: bool = False,
+        concurrency: int | None = None,
+        sync_snapshots: bool = False,
+        refresh: bool = False,
+        limit_inputs: ScenarioSnapshotLimitInputs = ...,
+        json_output: bool = False,
+        json_output_path: Path | None = None,
+    ) -> None: ...
+
+class ScenarioCaptureCommandRequest(NativeRecord):
+    """CLI inputs for one `sqb scenario capture` invocation."""
+
+    project_dir: Path | None
+    scenario_namespace: str | None
+    no_sql_validation: bool
+    no_color: bool
+    selectors: tuple[str, ...]
+    exclude: tuple[str, ...]
+    retain: bool
+    limit_inputs: ScenarioSnapshotLimitInputs
+    def __init__(
+        self,
+        project_dir: Path | None = None,
+        scenario_namespace: str | None = None,
+        no_sql_validation: bool = False,
+        no_color: bool = False,
+        selectors: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        retain: bool = False,
+        limit_inputs: ScenarioSnapshotLimitInputs = ...,
+    ) -> None: ...
+
+class SeedCommandRequest(NativeRecord):
+    """CLI inputs for one seed command invocation."""
+
+    project_dir: Path | None
+    no_color: bool
+    selected_target: str | None
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    concurrency: int | None
+    cli_vars: dict[str, object] | None
+    json_output: bool
+    json_output_path: Path | None
+    def __init__(
+        self,
+        project_dir: Path | None,
+        no_color: bool = False,
+        selected_target: str | None = None,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        concurrency: int | None = None,
+        cli_vars: dict[str, object] | None = None,
+        json_output: bool = False,
+        json_output_path: Path | None = None,
+    ) -> None: ...
+
+class SeedInvocation(NativeRecord):
+    """Resolved project, adapter, connection, and output context for seed."""
+
+    effective_project_dir: Path
+    discovered_inputs: DiscoveredProjectInputs
+    adapter_name: str
+    adapter: BaseAdapter
+    connection_config: dict[str, object]
+    use_color: bool
+    progress_stream: TextIO
+    def __init__(
+        self,
+        effective_project_dir: Path,
+        discovered_inputs: DiscoveredProjectInputs,
+        adapter_name: str,
+        adapter: BaseAdapter,
+        connection_config: dict[str, object],
+        use_color: bool,
+        progress_stream: TextIO,
+    ) -> None: ...
+
+class TestCommandRequest(NativeRecord):
+    """CLI inputs for one test command invocation."""
+
+    project_dir: Path | None
+    no_sql_validation: bool
+    no_color: bool
+    selected_target: str | None
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    cli_vars: dict[str, object] | None
+    json_output: bool
+    json_output_path: Path | None
+    concurrency: int | None
+    case_name: str | None
+    inspect: bool
+    def __init__(
+        self,
+        project_dir: Path | None = None,
+        no_sql_validation: bool = False,
+        no_color: bool = False,
+        selected_target: str | None = None,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        cli_vars: dict[str, object] | None = None,
+        json_output: bool = False,
+        json_output_path: Path | None = None,
+        concurrency: int | None = None,
+        case_name: str | None = None,
+        inspect: bool = False,
+    ) -> None: ...
+
+class RefactorCommandRequest(NativeRecord):
+    """CLI inputs for one `sqb rename` or `sqb mv` invocation."""
+
+    command: str
+    target: str
+    new_name: str | None
+    destination: str | None
+    project_dir: Path | None
+    cascade: bool
+    dry_run: bool
+    json_output: bool
+    no_color: bool
+    def __init__(
+        self,
+        command: str,
+        target: str,
+        new_name: str | None = None,
+        destination: str | None = None,
+        project_dir: Path | None = None,
+        cascade: bool = False,
+        dry_run: bool = False,
+        json_output: bool = False,
+        no_color: bool = False,
+    ) -> None: ...
+
+class ScopeCommandRequest(NativeRecord):
+    """CLI inputs for one offline declaration-scope inspection."""
+
+    project_dir: Path | None
+    target: str | None
+    at: str | None
+    as_path: str | None
+    browse: str | None
+    list_path: str | None
+    defined_under: str | None
+    kinds: tuple[str, ...]
+    match: str | None
+    used_only: bool
+    include_nearby: bool
+    nearby_depth: int
+    dependency_depth: int
+    explain: str | None
+    globals: str
+    page_size: int
+    after: str | None
+    paths: str
+    json_output: bool
+    no_cache: bool
+    verbose: bool
+    no_color: bool
+    def __init__(
+        self,
+        project_dir: Path | None = None,
+        target: str | None = None,
+        at: str | None = None,
+        as_path: str | None = None,
+        browse: str | None = None,
+        list_path: str | None = None,
+        defined_under: str | None = None,
+        kinds: tuple[str, ...] = (),
+        match: str | None = None,
+        used_only: bool = False,
+        include_nearby: bool = False,
+        nearby_depth: int = 1,
+        dependency_depth: int = 0,
+        explain: str | None = None,
+        globals: str = "summary",
+        page_size: int = 100,
+        after: str | None = None,
+        paths: str = "relative",
+        json_output: bool = False,
+        no_cache: bool = False,
+        verbose: bool = False,
+        no_color: bool = False,
+    ) -> None: ...
+
+class TestInvocation(NativeRecord):
+    """Resolved project, adapter, and reporter context for the test command."""
+
+    effective_project_dir: Path
+    discovered_inputs: DiscoveredProjectInputs
+    adapter_name: str
+    adapter: BaseAdapter
+    connection_config: dict[str, object]
+    use_color: bool
+    progress_stream: TextIO
+    connection_progress: ConnectionProgressReporter
+    planning_progress: PlanningProgressReporter
+    def __init__(
+        self,
+        effective_project_dir: Path,
+        discovered_inputs: DiscoveredProjectInputs,
+        adapter_name: str,
+        adapter: BaseAdapter,
+        connection_config: dict[str, object],
+        use_color: bool,
+        progress_stream: TextIO,
+        connection_progress: ConnectionProgressReporter,
+        planning_progress: PlanningProgressReporter,
+    ) -> None: ...
+
+class RulesCommandRequest(NativeRecord):
+    """Inputs for focused rule execution, inspection, or skill generation."""
+
+    project_dir: Path | None
+    json_output: bool
+    action: str
+    rule_selector: str | None
+    skills_check: bool
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    def __init__(
+        self,
+        project_dir: Path | None,
+        json_output: bool,
+        action: str,
+        rule_selector: str | None,
+        skills_check: bool,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+    ) -> None: ...
+
+class CostCommandRequest(NativeRecord):
+    """Inputs for local run-cost history and drill-down."""
+
+    project_dir: Path | None
+    selector: str
+    no_color: bool
+    limit: int | None
+    no_limit: bool
+    sort: str | None
+    order: str | None
+    since: str | None
+    until: str | None
+    json_output: bool
+    json_output_path: Path | None
+    def __init__(
+        self,
+        project_dir: Path | None,
+        selector: str,
+        no_color: bool,
+        limit: int | None,
+        no_limit: bool,
+        sort: str | None,
+        order: str | None,
+        since: str | None,
+        until: str | None,
+        json_output: bool,
+        json_output_path: Path | None,
+    ) -> None: ...
+
+class BuildCostFinalization(NativeRecord):
+    """Inputs for nonfatal automatic build-cost finalization."""
+
+    project_dir: Path
+    adapter_name: str
+    adapter: object
+    connection_config: dict[str, object]
+    target_name: str | None
+    target_database: str | None
+    run_id: str
+    build_status: str
+    started_at: datetime
+    completed_at: datetime
+    config: CostConfig
+    output_stream: TextIO
+    use_color: bool
+    collect: bool
+    render: bool
+    cost_status: CostStatus
+    cost_message: str
+    had_executable_work: bool | None
+    def __init__(
+        self,
+        project_dir: Path,
+        adapter_name: str,
+        adapter: object,
+        connection_config: dict[str, object],
+        target_name: str | None,
+        target_database: str | None,
+        run_id: str,
+        build_status: str,
+        started_at: datetime,
+        completed_at: datetime,
+        config: CostConfig,
+        output_stream: TextIO,
+        use_color: bool,
+        collect: bool = True,
+        render: bool = True,
+        cost_status: CostStatus = ...,
+        cost_message: str = ...,
+        had_executable_work: bool | None = True,
+    ) -> None: ...
+
+class ContractCommandRequest(NativeRecord):
+    """CLI inputs for physical contract comparison and repository adoption."""
+
+    action: str
+    from_target: str
+    project_dir: Path | None
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    write: bool
+    overwrite: bool
+    json_output: bool
+    no_color: bool
+    cli_vars: dict[str, object] | None
+    def __init__(
+        self,
+        action: str,
+        from_target: str,
+        project_dir: Path | None = None,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        write: bool = False,
+        overwrite: bool = False,
+        json_output: bool = False,
+        no_color: bool = False,
+        cli_vars: dict[str, object] | None = None,
+    ) -> None: ...
+
+class LineageCommandRequest(NativeRecord):
+    """CLI inputs for dependency and column lineage inspection."""
+
+    project_dir: Path | None
+    no_sql_validation: bool
+    targets: tuple[str, ...]
+    output_format: str
+    direction: str | None
+    depth: str
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    lineage_mode: ColumnLineageMode
+    include_uses: bool
+    cli_vars: dict[str, object] | None
+    def __init__(
+        self,
+        project_dir: Path | None,
+        no_sql_validation: bool = False,
+        targets: tuple[str, ...] = (),
+        output_format: str = "tree",
+        direction: str | None = None,
+        depth: str = "all",
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        lineage_mode: ColumnLineageMode = ...,
+        include_uses: bool = False,
+        cli_vars: dict[str, object] | None = None,
+    ) -> None: ...
+
+class CompileProfileFlags(NativeRecord):
+    """Profiling toggles that skip compile phases for benchmarking."""
+
+    skip_discovery_sql_analysis: bool
+    skip_column_inference: bool
+    skip_contracts: bool
+    skip_write: bool
+    def __init__(
+        self,
+        skip_discovery_sql_analysis: bool = False,
+        skip_column_inference: bool = False,
+        skip_contracts: bool = False,
+        skip_write: bool = False,
+    ) -> None: ...
+
+class CompileCommandRequest(NativeRecord):
+    """CLI inputs for one `sqb compile` invocation."""
+
+    project_dir: Path | None
+    no_sql_validation: bool
+    defer_to: str | None
+    selected_target: str | None
+    json_output: bool
+    manifest: bool
+    dag_path: str | None
+    no_color: bool
+    lineage_mode: CompileLineageMode
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    cli_vars: dict[str, object] | None
+    profile_flags: CompileProfileFlags
+    no_cache: bool
+    debug: bool
+    def __init__(
+        self,
+        project_dir: Path | None = None,
+        no_sql_validation: bool = False,
+        defer_to: str | None = None,
+        selected_target: str | None = None,
+        json_output: bool = False,
+        manifest: bool = False,
+        dag_path: str | None = None,
+        no_color: bool = False,
+        lineage_mode: CompileLineageMode = ...,
+        select: tuple[str, ...] = (),
+        exclude: tuple[str, ...] = (),
+        cli_vars: dict[str, object] | None = None,
+        profile_flags: CompileProfileFlags = ...,
+        no_cache: bool = False,
+        debug: bool = False,
+    ) -> None: ...
+
+class SelectorFileSummary(NativeRecord):
+    """Non-expanded provenance for one selector file."""
+
+    path: Path
+    selector_count: int
+    def __init__(
+        self,
+        path: Path,
+        selector_count: int,
+    ) -> None: ...
+
+class ParsedCliInvocation(NativeRecord):
+    """Outcome of parsing CLI arguments: either a namespace or an exit code."""
+
+    args: CliNamespace | None
+    exit_code: int | None
+    def __init__(
+        self,
+        args: CliNamespace | None,
+        exit_code: int | None,
+    ) -> None: ...
+
+class CliEntrypointHandlers(NativeRecord):
+    """Injected command handlers for the CLI entrypoint."""
+
+    run_compile: Callable[[CompileCommandRequest], int]
+    run_cost: Callable[..., int]
+    run_dag: DagCommandHandler
+    run_plan: Callable[..., int]
+    run_dbt_plan: Callable[[Path | None, tuple[str, ...], bool], int]
+    run_dbt_run: Callable[[Path | None, tuple[str, ...], bool], int]
+    run_dbt_build: Callable[[Path | None, tuple[str, ...], bool], int]
+    run_dbt_debug: Callable[[Path | None, tuple[str, ...], bool], int]
+    run_dbt_init: Callable[..., int]
+    run_build: Callable[..., int]
+    run_freshness: Callable[..., int]
+    run_test: Callable[..., int]
+    run_check: Callable[..., int]
+    run_audit: Callable[..., int]
+    run_seed: Callable[..., int]
+    run_load: Callable[..., int]
+    run_clone: Callable[..., int]
+    run_diff: Callable[..., int]
+    run_query: QueryCommandHandler
+    run_debug: DebugCommandHandler
+    run_lineage: LineageCommandHandler
+    run_janitor: Callable[..., int]
+    run_init: Callable[[Path | None], int]
+    run_playground: Callable[..., int]
+    run_skills_update: SkillsUpdateCommandHandler
+    run_format: FormatCommandHandler
+    run_scenario: Callable[..., int]
+    run_scenario_capture: Callable[..., int]
+    run_rules: Callable[..., int]
+    run_scope: ScopeCommandHandler
+    run_contract: Callable[..., int] | None
+    run_refactor: Callable[..., int] | None
+    def __init__(
+        self,
+        run_compile: Callable[[CompileCommandRequest], int],
+        run_cost: Callable[..., int],
+        run_dag: DagCommandHandler,
+        run_plan: Callable[..., int],
+        run_dbt_plan: Callable[[Path | None, tuple[str, ...], bool], int],
+        run_dbt_run: Callable[[Path | None, tuple[str, ...], bool], int],
+        run_dbt_build: Callable[[Path | None, tuple[str, ...], bool], int],
+        run_dbt_debug: Callable[[Path | None, tuple[str, ...], bool], int],
+        run_dbt_init: Callable[..., int],
+        run_build: Callable[..., int],
+        run_freshness: Callable[..., int],
+        run_test: Callable[..., int],
+        run_check: Callable[..., int],
+        run_audit: Callable[..., int],
+        run_seed: Callable[..., int],
+        run_load: Callable[..., int],
+        run_clone: Callable[..., int],
+        run_diff: Callable[..., int],
+        run_query: QueryCommandHandler,
+        run_debug: DebugCommandHandler,
+        run_lineage: LineageCommandHandler,
+        run_janitor: Callable[..., int],
+        run_init: Callable[[Path | None], int],
+        run_playground: Callable[..., int],
+        run_skills_update: SkillsUpdateCommandHandler,
+        run_format: FormatCommandHandler,
+        run_scenario: Callable[..., int],
+        run_scenario_capture: Callable[..., int],
+        run_rules: Callable[..., int],
+        run_scope: ScopeCommandHandler,
+        run_contract: Callable[..., int] | None = None,
+        run_refactor: Callable[..., int] | None = None,
+    ) -> None: ...
+
+class CommandWarehouseScope(NativeRecord):
+    """The warehouse group and CLI override active for one command invocation."""
+
+    group: WarehouseGroup | None
+    cli_warehouse: str | None
+    cli_vars: dict[str, object]
+    def __init__(
+        self,
+        group: WarehouseGroup | None,
+        cli_warehouse: str | None = None,
+        cli_vars: dict[str, object] = ...,
+    ) -> None: ...
+
+class ResolvedWarehouse(NativeRecord):
+    """The warehouse one command connects with and where that value came from."""
+
+    warehouse: str | None
+    source: str
+    def __init__(
+        self,
+        warehouse: str | None,
+        source: str,
+    ) -> None: ...
+
+class WrittenTarget(NativeRecord):
+    """Result of writing compiled output to target/."""
+
+    model_count: int
+    seed_count: int
+    function_count: int
+    audit_count: int
+    test_count: int
+    target_dir: Path
+    diagnostics: tuple[CompilerDiagnostic, ...]
+    def __init__(
+        self,
+        model_count: int,
+        seed_count: int,
+        function_count: int,
+        audit_count: int,
+        test_count: int,
+        target_dir: Path,
+        diagnostics: tuple[CompilerDiagnostic, ...] = ...,
+    ) -> None: ...
+
+class SkillMaintenanceResult(NativeRecord):
+    """Non-blocking generated-skill maintenance result."""
+
+    message: str
+    def __init__(
+        self,
+        message: str = "",
+    ) -> None: ...
+
+class SkillUpdateResult(NativeRecord):
+    """Result of installing or updating skill files."""
+
+    written_paths: tuple[Path, ...]
+    def __init__(
+        self,
+        written_paths: tuple[Path, ...],
+    ) -> None: ...
+
+class CompileAnalysis(NativeRecord):
+    """Compiled project analysis shared by compile output phases."""
+
+    discovered_inputs: DiscoveredProjectInputs
+    adapter: BaseAdapter
+    graph: ProjectGraph
+    selected_keys: frozenset[CompiledObjectKey]
+    lineage: ProjectColumnLineage | None
+    diagnostics: tuple[CompilerDiagnostic, ...]
+    discover_ms: int
+    graph_ms: int
+    lineage_ms: int
+    contract_ms: int
+    contract_cpu_ms: int
+    built_in_rules_ms: int
+    custom_rules_ms: int
+    custom_rules_cpu_ms: int
+    early_lint_wait_ms: int
+    rule_cache_hits: int
+    rule_cache_misses: int
+    skipped_type_proof_rules: tuple[str, ...]
+    def __init__(
+        self,
+        discovered_inputs: DiscoveredProjectInputs,
+        adapter: BaseAdapter,
+        graph: ProjectGraph,
+        selected_keys: frozenset[CompiledObjectKey],
+        lineage: ProjectColumnLineage | None,
+        diagnostics: tuple[CompilerDiagnostic, ...],
+        discover_ms: int,
+        graph_ms: int,
+        lineage_ms: int,
+        contract_ms: int,
+        contract_cpu_ms: int,
+        built_in_rules_ms: int = 0,
+        custom_rules_ms: int = 0,
+        custom_rules_cpu_ms: int = 0,
+        early_lint_wait_ms: int = 0,
+        rule_cache_hits: int = 0,
+        rule_cache_misses: int = 0,
+        skipped_type_proof_rules: tuple[str, ...] = (),
+    ) -> None: ...
+
+class DbtManifestModel(NativeRecord):
+    """One dbt model node needed for SQLBuild dbt_ref resolution."""
+
+    unique_id: str
+    package_name: str
+    name: str
+    relation_name: str
+    database: str | None
+    schema: str | None
+    alias: str | None
+    node_checksum: str | None
+    fqn: tuple[str, ...]
+    query_sql: str
+    depends_on_nodes: tuple[str, ...]
+    payload: dict[str, object]
+    def __init__(
+        self,
+        unique_id: str,
+        package_name: str,
+        name: str,
+        relation_name: str,
+        database: str | None = None,
+        schema: str | None = None,
+        alias: str | None = None,
+        node_checksum: str | None = None,
+        fqn: tuple[str, ...] = ...,
+        query_sql: str = "",
+        depends_on_nodes: tuple[str, ...] = ...,
+        payload: dict[str, object] = ...,
+    ) -> None: ...
+
+class DbtManifestSource(NativeRecord):
+    """One dbt source node needed for graph and lineage resolution."""
+
+    unique_id: str
+    package_name: str
+    source_name: str
+    name: str
+    relation_name: str
+    database: str | None
+    schema: str | None
+    identifier: str | None
+    payload: dict[str, object]
+    def __init__(
+        self,
+        unique_id: str,
+        package_name: str,
+        source_name: str,
+        name: str,
+        relation_name: str,
+        database: str | None = None,
+        schema: str | None = None,
+        identifier: str | None = None,
+        payload: dict[str, object] = ...,
+    ) -> None: ...
+
+class DbtManifestSeed(NativeRecord):
+    """One dbt seed node, a leaf data relation used for column lineage."""
+
+    unique_id: str
+    package_name: str
+    name: str
+    relation_name: str
+    database: str | None
+    schema: str | None
+    alias: str | None
+    payload: dict[str, object]
+    def __init__(
+        self,
+        unique_id: str,
+        package_name: str,
+        name: str,
+        relation_name: str,
+        database: str | None = None,
+        schema: str | None = None,
+        alias: str | None = None,
+        payload: dict[str, object] = ...,
+    ) -> None: ...
+
+class DbtManifestIndex(NativeRecord):
+    """Lookup indexes for dbt model and source nodes in a manifest."""
+
+    models_by_unique_id: dict[str, DbtManifestModel]
+    models_by_name: dict[str, tuple[DbtManifestModel, ...]]
+    models_by_package_and_name: dict[tuple[str, str], DbtManifestModel]
+    sources_by_unique_id: dict[str, DbtManifestSource]
+    seeds_by_unique_id: dict[str, DbtManifestSeed]
+    validation_depends_on_nodes_by_unique_id: dict[str, tuple[str, ...]]
+    def __init__(
+        self,
+        models_by_unique_id: dict[str, DbtManifestModel],
+        models_by_name: dict[str, tuple[DbtManifestModel, ...]],
+        models_by_package_and_name: dict[tuple[str, str], DbtManifestModel],
+        sources_by_unique_id: dict[str, DbtManifestSource] = ...,
+        seeds_by_unique_id: dict[str, DbtManifestSeed] = ...,
+        validation_depends_on_nodes_by_unique_id: dict[str, tuple[str, ...]] = ...,
+    ) -> None: ...
+
+class DbtCliConfigOverrides(NativeRecord):
+    """dbt config values supplied by CLI flags."""
+
+    project_dir: str | None
+    profiles_dir: str | None
+    target: str | None
+    target_path: str | None
+    def __init__(
+        self,
+        project_dir: str | None = None,
+        profiles_dir: str | None = None,
+        target: str | None = None,
+        target_path: str | None = None,
+    ) -> None: ...
+
+class ResolvedDbtConfig(NativeRecord):
+    """Resolved dbt config after applying CLI overrides."""
+
+    project_dir: Path | None
+    profiles_dir: Path | None
+    target: str | None
+    target_path: Path | None
+    def __init__(
+        self,
+        project_dir: Path | None,
+        profiles_dir: Path | None,
+        target: str | None,
+        target_path: Path | None,
+    ) -> None: ...
+
+class DbtNodeMessage(NativeRecord):
+    """One dbt log message attached to a dbt node."""
+
+    level: str
+    message: str
+    def __init__(
+        self,
+        level: str,
+        message: str,
+    ) -> None: ...
+
+class DbtCommandExecutionResult(NativeRecord):
+    """dbt command execution output from streamed JSON events."""
+
+    returncode: int
+    node_results: tuple[DbtNodeExecutionResult, ...]
+    def __init__(
+        self,
+        returncode: int,
+        node_results: tuple[DbtNodeExecutionResult, ...] = ...,
+    ) -> None: ...
+
+class DbtLsNode(NativeRecord):
+    """One node returned by `dbt ls --output json`."""
+
+    unique_id: str
+    resource_type: str | None
+    package_name: str | None
+    name: str | None
+    fqn: tuple[str, ...]
+    original_file_path: str | None
+    def __init__(
+        self,
+        unique_id: str,
+        resource_type: str | None = None,
+        package_name: str | None = None,
+        name: str | None = None,
+        fqn: tuple[str, ...] = ...,
+        original_file_path: str | None = None,
+    ) -> None: ...
+
+class DbtInteropParsedArgs(NativeRecord):
+    """Declared `sqb dbt` flags parsed by argparse, before routing to buckets."""
+
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    vars: str | None
+    threads: str | None
+    full_refresh: bool
+    event_time_start: str | None
+    event_time_end: str | None
+    project_dir: str | None
+    profiles_dir: str | None
+    profile: str | None
+    target: str | None
+    target_path: str | None
+    state: str | None
+    indirect_selection: str | None
+    defer: bool
+    start_cursor_ts: str | None
+    end_cursor_ts: str | None
+    start_cursor_int: str | None
+    end_cursor_int: str | None
+    defer_to: str | None
+    fail_fast: bool
+    hard_copy: bool
+    dbt_passthrough: tuple[str, ...]
+    def __init__(
+        self,
+        select: tuple[str, ...] = ...,
+        exclude: tuple[str, ...] = ...,
+        vars: str | None = None,
+        threads: str | None = None,
+        full_refresh: bool = False,
+        event_time_start: str | None = None,
+        event_time_end: str | None = None,
+        project_dir: str | None = None,
+        profiles_dir: str | None = None,
+        profile: str | None = None,
+        target: str | None = None,
+        target_path: str | None = None,
+        state: str | None = None,
+        indirect_selection: str | None = None,
+        defer: bool = False,
+        start_cursor_ts: str | None = None,
+        end_cursor_ts: str | None = None,
+        start_cursor_int: str | None = None,
+        end_cursor_int: str | None = None,
+        defer_to: str | None = None,
+        fail_fast: bool = False,
+        hard_copy: bool = False,
+        dbt_passthrough: tuple[str, ...] = ...,
+    ) -> None: ...
+
+class DbtInteropRoutedArgs(NativeRecord):
+    """Arguments split for a future `sqb dbt` command execution."""
+
+    command: DbtInteropCommand
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    dbt_args: tuple[str, ...]
+    sqlbuild_args: tuple[str, ...]
+    def __init__(
+        self,
+        command: DbtInteropCommand,
+        select: tuple[str, ...] = ...,
+        exclude: tuple[str, ...] = ...,
+        dbt_args: tuple[str, ...] = ...,
+        sqlbuild_args: tuple[str, ...] = ...,
+    ) -> None: ...
+
+class DbtInteropSelectionResult(NativeRecord):
+    """SQLBuild-side selection produced from `sqb dbt` selectors."""
+
+    sqlbuild_model_names: tuple[str, ...]
+    dbt_required_unique_ids: tuple[str, ...]
+    dbt_anchor_terms: tuple[str, ...]
+    dbt_anchor_unique_ids_by_term: dict[str, tuple[str, ...]]
+    path_translations: tuple[tuple[str, str], ...]
+    def __init__(
+        self,
+        sqlbuild_model_names: tuple[str, ...] = ...,
+        dbt_required_unique_ids: tuple[str, ...] = ...,
+        dbt_anchor_terms: tuple[str, ...] = ...,
+        dbt_anchor_unique_ids_by_term: dict[str, tuple[str, ...]] = ...,
+        path_translations: tuple[tuple[str, str], ...] = ...,
+    ) -> None: ...
+
+class DbtInteropPlan(NativeRecord):
+    """Plan output for one future `sqb dbt` command."""
+
+    command: DbtInteropCommand
+    dbt_command_argv: tuple[str, ...]
+    dbt_selected_nodes: tuple[DbtLsNode, ...]
+    dbt_selected_unique_ids: tuple[str, ...]
+    sqlbuild_command_argvs: tuple[tuple[str, ...], ...]
+    selection: DbtInteropSelectionResult
+    sqlbuild_plan_output: PlanOutput | None
+    dbt_required_selector_terms: tuple[str, ...]
+    supplemental_dbt_command_argvs: tuple[tuple[str, ...], ...]
+    dbt_skip_reason: DbtInteropSkipReason | None
+    sqlbuild_skip_reason: DbtInteropSkipReason | None
+    warnings: tuple[str, ...]
+    def __init__(
+        self,
+        command: DbtInteropCommand,
+        dbt_command_argv: tuple[str, ...],
+        dbt_selected_nodes: tuple[DbtLsNode, ...],
+        dbt_selected_unique_ids: tuple[str, ...],
+        sqlbuild_command_argvs: tuple[tuple[str, ...], ...],
+        selection: DbtInteropSelectionResult,
+        sqlbuild_plan_output: PlanOutput | None = None,
+        dbt_required_selector_terms: tuple[str, ...] = ...,
+        supplemental_dbt_command_argvs: tuple[tuple[str, ...], ...] = ...,
+        dbt_skip_reason: DbtInteropSkipReason | None = None,
+        sqlbuild_skip_reason: DbtInteropSkipReason | None = None,
+        warnings: tuple[str, ...] = ...,
+    ) -> None: ...
+
+class DbtInteropExecutionRequest(NativeRecord):
+    """Caller inputs for one dbt interop execution command."""
+
+    command: DbtInteropCommand
+    project_dir: Path
+    args: tuple[str, ...]
+    dbt_runner: Any | None
+    dbt_executable: str | None
+    sqlbuild_executable: str
+    no_sql_validation: bool
+    fail_fast: bool
+    on_progress: Callable[[str], None] | None
+    progress_stream: TextIO | None
+    dbt_stdout_stream: TextIO | None
+    use_color: bool
+    verbose: bool
+    json_output: bool
+    def __init__(
+        self,
+        command: DbtInteropCommand,
+        project_dir: Path,
+        args: tuple[str, ...],
+        dbt_runner: Any | None = None,
+        dbt_executable: str | None = None,
+        sqlbuild_executable: str = "sqb",
+        no_sql_validation: bool = False,
+        fail_fast: bool = False,
+        on_progress: Callable[[str], None] | None = None,
+        progress_stream: TextIO | None = None,
+        dbt_stdout_stream: TextIO | None = None,
+        use_color: bool = False,
+        verbose: bool = False,
+        json_output: bool = False,
+    ) -> None: ...
+
+class DbtInteropInvocation(NativeRecord):
+    """Resolved execution environment for one dbt interop command."""
+
+    dbt_executable: str
+    output_stream: TextIO
+    dbt_output_stream: TextIO
+    routed: DbtInteropRoutedArgs
+    discovered_inputs: DiscoveredProjectInputs
+    effective_sqlbuild_args: tuple[str, ...]
+    dbt_options: DbtCliOptions
+    dbt_vars: dict[str, object]
+    runner: Any
+    def __init__(
+        self,
+        dbt_executable: str,
+        output_stream: TextIO,
+        dbt_output_stream: TextIO,
+        routed: DbtInteropRoutedArgs,
+        discovered_inputs: DiscoveredProjectInputs,
+        effective_sqlbuild_args: tuple[str, ...],
+        dbt_options: DbtCliOptions,
+        dbt_vars: dict[str, object],
+        runner: Any,
+    ) -> None: ...
+
+class DbtInteropCompiledProject(NativeRecord):
+    """Adapter and compiled SQLBuild project for dbt interop planning."""
+
+    adapter_name: str
+    adapter: BaseAdapter
+    project: CompiledProjectView
+    def __init__(
+        self,
+        adapter_name: str,
+        adapter: BaseAdapter,
+        project: CompiledProjectView,
+    ) -> None: ...
+
+class DbtInteropPlanResolution(NativeRecord):
+    """Combined dbt graph and the resolved interop plan."""
+
+    graph: DbtCombinedGraph
+    plan: DbtInteropPlan
+    def __init__(
+        self,
+        graph: DbtCombinedGraph,
+        plan: DbtInteropPlan,
+    ) -> None: ...
+
+class DbtInteropCommandArgs(NativeRecord):
+    """Selection, passthrough args, and executables for a dbt interop command."""
+
+    select: tuple[str, ...]
+    exclude: tuple[str, ...]
+    dbt_command_args: tuple[str, ...]
+    sqlbuild_command_args: tuple[str, ...]
+    dbt_executable: str
+    sqlbuild_executable: str
+    def __init__(
+        self,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...] = (),
+        dbt_command_args: tuple[str, ...] = (),
+        sqlbuild_command_args: tuple[str, ...] = (),
+        dbt_executable: str = "dbt",
+        sqlbuild_executable: str = "sqb",
+    ) -> None: ...
+
+class DbtPlanEnvironment(NativeRecord):
+    """Compiled project and adapter environment for dbt plan-output builds."""
+
+    project_dir: Path
+    discovered_inputs: DiscoveredProjectInputs
+    project: CompiledProjectView
+    adapter: BaseAdapter
+    adapter_name: str
+    def __init__(
+        self,
+        project_dir: Path,
+        discovered_inputs: DiscoveredProjectInputs,
+        project: CompiledProjectView,
+        adapter: BaseAdapter,
+        adapter_name: str,
+    ) -> None: ...
+
+class DbtSqlbuildPlanRequest(NativeRecord):
+    """Selection and native planner inputs for a SQLBuild plan-output build."""
+
+    selected_model_names: tuple[str, ...]
+    sqlbuild_args: tuple[str, ...]
+    external_blocked_model_names: tuple[str, ...]
+    def __init__(
+        self,
+        selected_model_names: tuple[str, ...],
+        sqlbuild_args: tuple[str, ...],
+        external_blocked_model_names: tuple[str, ...] = (),
+    ) -> None: ...
+
+class SourceFreshnessComparableRecord(Protocol):
+    @property
+    def data_version_hash(self) -> str: ...
+    @property
+    def value_kind(self) -> str: ...
+    @property
+    def data_version(self) -> str | None: ...
+
+class SourceFreshnessAgeStatus(StrEnum):
+    PASS = "pass"
+    WARN = "warn"
+    ERROR = "error"
+    UNKNOWN = "unknown"
+
+class SourceFreshnessUnknownReason(StrEnum):
+    """Why one source's freshness could not be observed."""
+
+    UNAVAILABLE = "unavailable"
+    ERROR = "error"
+    NO_FRESHNESS_CONFIG = "no_freshness_config"
+
+class SourceFreshnessRenderers(NativeRecord):
+    """Adapter SQL renderers used when writing source freshness rows."""
+
+    render_qualified_name: Callable[..., str | None]
+    render_framework_type: Callable[[FrameworkType], str]
+    render_insert_records_sql: Callable[..., str]
+    render_create_table_sql: Callable[..., str] | None
+    render_create_index_sqls: Callable[..., tuple[str, ...]] | None
+    def __init__(
+        self,
+        render_qualified_name: Callable[..., str | None],
+        render_framework_type: Callable[[FrameworkType], str],
+        render_insert_records_sql: Callable[..., str],
+        render_create_table_sql: Callable[..., str] | None = None,
+        render_create_index_sqls: Callable[..., tuple[str, ...]] | None = None,
+    ) -> None: ...
+
+class SourceFreshnessObservation(NativeRecord):
+    """One comparable observation whose datetime values are always aware UTC."""
+
+    source_name: str
+    strategy: SourceFreshnessStrategy
+    data_version: object
+    value_kind: SourceFreshnessValueKind
+    observed_at: datetime
+    def __init__(
+        self,
+        source_name: str,
+        strategy: SourceFreshnessStrategy,
+        data_version: object,
+        value_kind: SourceFreshnessValueKind,
+        observed_at: datetime,
+    ) -> None: ...
+
+class SourceFreshnessUnknown(NativeRecord):
+    """One source whose freshness could not be observed, with the reason."""
+
+    source_name: str
+    reason: SourceFreshnessUnknownReason
+    message: str
+    def __init__(
+        self,
+        source_name: str,
+        reason: SourceFreshnessUnknownReason,
+        message: str,
+    ) -> None: ...
+
+class AdapterSourceFreshnessBatch(NativeRecord):
+    """Per-source outcomes of one batched adapter metadata observation."""
+
+    observations: dict[str, SourceFreshnessObservation]
+    unknown: dict[str, SourceFreshnessUnknown]
+    def __init__(
+        self,
+        observations: dict[str, SourceFreshnessObservation] = ...,
+        unknown: dict[str, SourceFreshnessUnknown] = ...,
+    ) -> None: ...
+
+class SourceFreshnessIdentity(NativeRecord):
+    """Stable identity for one source freshness stream in direct state."""
+
+    source_name: str
+    target_database: str | None
+    target_schema: str | None
+    target_name: str | None
+    def __init__(
+        self,
+        source_name: str,
+        target_database: str | None,
+        target_schema: str | None,
+        target_name: str | None,
+    ) -> None: ...
+
+class SourceFreshnessSet(NativeRecord):
+    """Latest direct source freshness records for one target schema."""
+
+    schema: str
+    records: dict[SourceFreshnessIdentity, SourceFreshnessRecord]
+    def __init__(
+        self,
+        schema: str,
+        records: dict[SourceFreshnessIdentity, SourceFreshnessRecord],
+    ) -> None: ...
+
+class DirectSourceFreshnessPropagationResult(NativeRecord):
+    """Downstream model impact derived from direct source freshness roots."""
+
+    changed_source_model_names: dict[SourceFreshnessIdentity, frozenset[str]]
+    unknown_source_model_names: dict[str, frozenset[str]]
+    error_source_model_names: dict[SourceFreshnessIdentity, frozenset[str]]
+    stale_model_names: frozenset[str]
+    blocked_model_names: frozenset[str]
+    def __init__(
+        self,
+        changed_source_model_names: dict[SourceFreshnessIdentity, frozenset[str]] = ...,
+        unknown_source_model_names: dict[str, frozenset[str]] = ...,
+        error_source_model_names: dict[SourceFreshnessIdentity, frozenset[str]] = ...,
+        stale_model_names: frozenset[str] = ...,
+        blocked_model_names: frozenset[str] = ...,
+    ) -> None: ...
+
+class QueryCostObservation(NativeRecord):
+    query_id: str
+    warehouse_name: str
+    warehouse_size: str
+    warehouse_type: str | None
+    cluster_number: int | None
+    started_at: datetime
+    completed_at: datetime
+    execution_ms: int
+    bytes_scanned: int
+    execution_status: str
+    run_id: str | None
+    resource_type: str | None
+    resource_name: str | None
+    def __init__(
+        self,
+        query_id: str,
+        warehouse_name: str,
+        warehouse_size: str,
+        warehouse_type: str | None,
+        cluster_number: int | None,
+        started_at: datetime,
+        completed_at: datetime,
+        execution_ms: int,
+        bytes_scanned: int,
+        execution_status: str,
+        run_id: str | None = None,
+        resource_type: str | None = None,
+        resource_name: str | None = None,
+    ) -> None: ...
+
+class ResourceCost(NativeRecord):
+    resource_type: str
+    resource_name: str
+    warehouse_name: str
+    warehouse_size: str
+    warehouse_type: str | None
+    cluster_number: int | None
+    query_count: int
+    attributed_seconds: Decimal
+    bytes_scanned: int
+    estimated_compute_credits: Decimal
+    estimated_usd: Decimal
+    def __init__(
+        self,
+        resource_type: str,
+        resource_name: str,
+        warehouse_name: str,
+        warehouse_size: str,
+        warehouse_type: str | None,
+        cluster_number: int | None,
+        query_count: int,
+        attributed_seconds: Decimal,
+        bytes_scanned: int,
+        estimated_compute_credits: Decimal,
+        estimated_usd: Decimal,
+    ) -> None: ...
+
+class CostRunRecord(NativeRecord):
+    run_id: str
+    adapter_name: str
+    target_name: str | None
+    build_status: str
+    started_at: datetime
+    completed_at: datetime
+    cost: RunCostSummary
+    version: int
+    had_executable_work: bool | None
+    def __init__(
+        self,
+        run_id: str,
+        adapter_name: str,
+        target_name: str | None,
+        build_status: str,
+        started_at: datetime,
+        completed_at: datetime,
+        cost: RunCostSummary,
+        version: int = 1,
+        had_executable_work: bool | None = None,
+    ) -> None: ...
+
+class StatementLedgerEntry(NativeRecord):
+    statement_id: str
+    run_id: str
+    resource_type: str
+    resource_name: str
+    phase: str
+    attempt: int
+    query_id: str | None
+    status: str
+    started_at: datetime
+    completed_at: datetime
+    def __init__(
+        self,
+        statement_id: str,
+        run_id: str,
+        resource_type: str,
+        resource_name: str,
+        phase: str,
+        attempt: int,
+        query_id: str | None,
+        status: str,
+        started_at: datetime,
+        completed_at: datetime,
+    ) -> None: ...
+
+class NativeRecord:
+    """Base of every native frozen record, built, compared, shown and pickled as a dataclass."""
+
+    __dataclass_fields__: ClassVar[dict[str, Field[Any]]]
+    __match_args__: ClassVar[tuple[str, ...]]
+
+class CompileLineageMode(StrEnum):
+    """Column lineage mode for compile output."""
+
+    FAST = "fast"
+    RICH = "rich"
+    NONE = "none"
+
+class CliCommand(StrEnum):
+    COMPILE = "compile"
+    DAG = "dag"
+    PLAN = "plan"
+    FRESHNESS = "freshness"
+    BUILD = "build"
+    TEST = "test"
+    CHECK = "check"
+    AUDIT = "audit"
+    LOAD = "load"
+    SEED = "seed"
+    CLONE = "clone"
+    DIFF = "diff"
+    DEBUG = "debug"
+    LINEAGE = "lineage"
+    QUERY = "query"
+    COST = "cost"
+    CLEAN = "clean"
+    JANITOR = "janitor"
+    INIT = "init"
+    PLAYGROUND = "playground"
+    SCENARIO = "scenario"
+    DBT = "dbt"
+    SKILLS = "skills"
+    FORMAT = "format"
+    RULES = "rules"
+    SCOPE = "scope"
+    CONTRACT = "contract"
+    RENAME = "rename"
+    MV = "mv"
+
+class ScopeCommandHandler(Protocol):
+    def __call__(self, *, request: ScopeCommandRequest) -> int: ...
+
+class ScopeIndexLoader(Protocol):
+    def __call__(self, *, project_dir: Path, no_cache: bool = False) -> ScopeIndex: ...
+
+class DagCommandHandler(Protocol):
+    def __call__(
+        self,
+        project_dir: Path | None,
+        *,
+        no_sql_validation: bool,
+        json_output: bool,
+        cli_vars: dict[str, object] | None,
+    ) -> int: ...
+
+class QueryCommandHandler(Protocol):
+    def __call__(
+        self,
+        project_dir: Path | None,
+        *,
+        sql: str | None,
+        query_file: Path | None,
+        selected_target: str | None,
+        output_format: str,
+        limit: int | None,
+    ) -> int: ...
+
+class DebugCommandHandler(Protocol):
+    def __call__(
+        self,
+        project_dir: Path | None,
+        *,
+        no_color: bool,
+        no_connection: bool,
+        selected_target: str | None,
+        json_output: bool,
+    ) -> int: ...
+
+class LineageCommandHandler(Protocol):
+    def __call__(self, request: LineageCommandRequest) -> int: ...
+
+class SkillsUpdateCommandHandler(Protocol):
+    def __call__(
+        self,
+        project_dir: Path | None,
+        *,
+        global_install: bool,
+        targets: tuple[str, ...],
+        force: bool,
+    ) -> int: ...
+
+class FormatCommandHandler(Protocol):
+    def __call__(
+        self,
+        project_dir: Path | None,
+        *,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+        check: bool,
+        diff: bool,
+        fixtures_only: bool,
+        fix: bool,
+        json_output: bool,
+        no_color: bool,
+    ) -> int: ...
+
+class PlaygroundTemplate(StrEnum):
+    """Available `sqb playground` templates."""
+
+    WAFFLE_SHOP = "waffle_shop"
+    LOADER_WAFFLE_SHOP = "loader_waffle_shop"
+    DAGSTER = "dagster"
+    RIVERS = "rivers"
+    PYTHON_NODES = "python_nodes"
+
+class DbtInteropCommand(StrEnum):
+    """dbt interop commands with SQLBuild participation."""
+
+    PLAN = "plan"
+    RUN = "run"
+    BUILD = "build"
+    DEBUG = "debug"
+
+class DbtInteropSkipReason(StrEnum):
+    """Reason one side of a dbt interop plan has no work."""
+
+    NO_DBT_WORK = "no_dbt_work"
+    NO_SQLBUILD_WORK = "no_sqlbuild_work"
+
+class AuthoredSqlSet(NativeRecord):
+    """Set literal entries retained in authored order until validation."""
+
+    values: tuple[object, ...]
+    def __init__(
+        self,
+        values: tuple[object, ...],
+    ) -> None: ...
+
+class AuthoredSqlValueCall(NativeRecord):
+    """Source-preserving representation of an authored ``constant(...)`` call."""
+
+    arguments: tuple[tuple[str, object], ...]
+    def __init__(
+        self,
+        arguments: tuple[tuple[str, object], ...],
+    ) -> None: ...
+
+class SqlValueLimits(NativeRecord):
+    """Safety limits applied while normalizing recursively authored values."""
+
+    max_depth: int
+    max_elements: int
+    max_size: int
+    def __init__(
+        self,
+        max_depth: int = ...,
+        max_elements: int = ...,
+        max_size: int = ...,
+    ) -> None: ...
+
+class SqlValueValidationError(ValueError):
+    """An authored value cannot be represented by the typed SQL value domain."""
+
+class CompletionState(StrEnum):
+    """Overall outcome state for a completion summary line."""
+
+    OK = "ok"
+    WARN = "warn"
+    FAIL = "fail"
+
+class PartialBuildPhaseTimings(NativeRecord):
+    """Available disjoint phase durations after an exceptional build."""
+
+    compile_seconds: float | None
+    planning_seconds: float | None
+    connection_preparation_seconds: float | None
+    schema_preparation_seconds: float | None
+    execution_seconds: float | None
+    cost_collection_seconds: float | None
+    total_seconds: float | None
+    def __init__(
+        self,
+        compile_seconds: float | None = None,
+        planning_seconds: float | None = None,
+        connection_preparation_seconds: float | None = None,
+        schema_preparation_seconds: float | None = None,
+        execution_seconds: float | None = None,
+        cost_collection_seconds: float | None = None,
+        total_seconds: float | None = None,
+    ) -> None: ...
+
+class CliUserError(Exception):
+    """Expected CLI-facing error that should be rendered without a traceback."""
+
+    code: str
+    message: str
+    help: str | None
+    def __init__(
+        self, message: str, *, code: str | None = None, help: str | None = None
+    ) -> None: ...
+
+class StagedArtifactsChangedError(CliUserError):
+    """Staged compile artifacts changed before publication, so nothing stale is deleted."""
+
+class QueryExecutionError(CliUserError):
+    """The warehouse rejected or failed an ad hoc query."""
+
+    exit_code: int
+
+class QueryDiffOutcomeError(CliUserError):
+    """Expected query-diff failure with an explicit outcome and exit code."""
+
+    status: str
+    exit_code: int
+    def __init__(
+        self,
+        message: str,
+        *,
+        status: str,
+        exit_code: int,
+        code: str | None = None,
+        help: str | None = None,
+    ) -> None: ...
+
+class QueryDiffIncompleteError(QueryDiffOutcomeError):
+    """Safety or preflight prevented complete value evidence."""
+
+    def __init__(
+        self, message: str, *, code: str | None = None, help: str | None = None
+    ) -> None: ...
+
+class QueryDiffExecutionError(QueryDiffOutcomeError):
+    """Setup, execution, ownership publication, or cleanup failed."""
+
+    def __init__(
+        self, message: str, *, code: str | None = None, help: str | None = None
+    ) -> None: ...
+
+class DiffSizeGuardError(CliUserError):
+    """A default full model diff stopped before reading data because of table sizes."""
+
+    status: str
+    exit_code: int
+    details: dict[str, object]
+    def __init__(
+        self,
+        message: str,
+        *,
+        details: dict[str, object],
+        code: str | None = None,
+        help: str | None = None,
+    ) -> None: ...
+
+class MigrationStateError(ValueError):
+    """Raised when model migration state inputs or rows are invalid."""
+
+    code: str
+    message: str
+    help: str | None
+    def __init__(
+        self, message: str, *, code: str | None = None, help: str | None = None
+    ) -> None: ...

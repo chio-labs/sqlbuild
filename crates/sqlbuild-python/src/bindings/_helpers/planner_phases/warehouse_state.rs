@@ -3,7 +3,7 @@
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::planner_phases::constants::NATIVE_MODULE;
 use crate::bindings::_helpers::planner_phases::full_refresh::effectively_full_refreshed_model_names;
-use crate::bindings::_helpers::planner_phases::objects::{native, planner_model};
+use crate::bindings::_helpers::planner_phases::objects::native;
 use crate::bindings::_helpers::planner_warehouse::fingerprint_cache::MigrationFingerprintCache;
 use crate::bindings::_helpers::planner_warehouse::snapshot::{SnapshotRequest, warehouse_snapshot};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult};
@@ -40,7 +40,7 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
     let selected_scope = scopes.getattr("selected_scope")?;
     let full_refresh: bool = overrides.getattr("full_refresh")?.extract()?;
     let config = runtime.getattr("project_config")?;
-    let cursor_scope = planner_model(
+    let cursor_scope = native(
         py,
         "CursorSnapshotScope",
         &[
@@ -176,7 +176,7 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
             warnings.push(warning?);
         }
     }
-    planner_model(
+    native(
         py,
         "PlannerWarehouseState",
         &[

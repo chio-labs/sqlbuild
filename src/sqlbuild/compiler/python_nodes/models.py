@@ -115,14 +115,6 @@ class PythonNodeGraph:
 
 
 @dataclass(frozen=True)
-class PythonSqlSelection:
-    """Unified selector result across compiled SQL resources and Python nodes."""
-
-    sql_keys: frozenset[CompiledObjectKey]
-    python_node_names: frozenset[str]
-
-
-@dataclass(frozen=True)
 class PythonSqlRunSelection:
     """Unified run-command selection excluding Python checks."""
 

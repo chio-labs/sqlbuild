@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild._native import build_dbt_interop_plan
-from sqlbuild.integrations.dbt.models import DbtInteropPlan, DbtInteropSelectionResult
-from sqlbuild.integrations.dbt.types import DbtInteropCommand
+from sqlbuild._native import (
+    DbtInteropCommand,
+    DbtInteropPlan,
+    DbtInteropSelectionResult,
+    build_dbt_interop_plan,
+)
 from tests.unit.src.sqlbuild.cli.commands.main.dbt._test_types import DbtAutoInitTestCase
 
 

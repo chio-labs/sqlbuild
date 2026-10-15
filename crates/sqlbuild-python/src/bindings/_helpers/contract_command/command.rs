@@ -25,7 +25,7 @@ use crate::bindings::_helpers::contract_command::write::{ContractWrite, write_co
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
+const ERRORS_MODULE: &str = "sqlbuild._native";
 const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
 const GRAPH_SELECTION_MODULE: &str = "sqlbuild._native";

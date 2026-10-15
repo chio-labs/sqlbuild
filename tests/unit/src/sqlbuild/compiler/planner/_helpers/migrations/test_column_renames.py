@@ -5,12 +5,12 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
+    ColumnRenameHint,
     identical_renames,
     parse_query_shape,
     rename_hints,
     renames_explain_change,
 )
-from sqlbuild.compiler.planner.models import ColumnRenameHint
 from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations._test_types import (
     IdenticalRenameTestCase,
     RenameExplainsChangeTestCase,

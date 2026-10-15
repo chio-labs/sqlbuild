@@ -6,15 +6,13 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import (
+    AdapterSourceFreshnessBatch,
+    SourceFreshnessUnknownReason,
     build_direct_source_freshness_planning_result,
     observe_adapter_sources_freshness,
 )
 from sqlbuild.adapter.contract.models import TableFreshnessMetadata
-from sqlbuild.compiler.source_freshness.models import (
-    AdapterSourceFreshnessBatch,
-    DirectSourceFreshnessPlanningResult,
-)
-from sqlbuild.compiler.source_freshness.types import SourceFreshnessUnknownReason
+from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
 from sqlbuild.observability import (
     EventDispatcher,
     LifecycleEvent,

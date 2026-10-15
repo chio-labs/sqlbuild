@@ -5,14 +5,17 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
-from sqlbuild._native import CostContext, write_source_freshness_records
+from sqlbuild._native import (
+    CostContext,
+    SourceFreshnessIdentity,
+    SourceFreshnessRenderers,
+    write_source_freshness_records,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.source_freshness.models import (
     DirectSourceFreshnessPlanningResult,
-    SourceFreshnessIdentity,
     SourceFreshnessRecord,
-    SourceFreshnessRenderers,
 )
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus

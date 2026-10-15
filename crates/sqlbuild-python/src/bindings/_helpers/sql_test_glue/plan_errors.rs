@@ -75,14 +75,7 @@ pub(super) fn planning_error(
             kwargs.set_item("location", cte_call_location(py, &test, (&cte, &call))?)?;
             "SqlTestReferenceError"
         } else {
-            kwargs.set_item(
-                "code",
-                imported(
-                    py,
-                    "sqlbuild.compiler.compile.constants",
-                    "SQL_TEST_HELPER_REFERENCE_CODE",
-                )?,
-            )?;
+            kwargs.set_item("code", super::constants::SQL_TEST_HELPER_REFERENCE_CODE)?;
             "CompileInputError"
         };
         return Ok(PyErr::from_value(

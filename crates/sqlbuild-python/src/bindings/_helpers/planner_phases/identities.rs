@@ -1,9 +1,7 @@
 //! Expected version identities and stale-warning change detection.
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
-use crate::bindings::_helpers::planner_phases::objects::{
-    frozenset, native, planner_model, replace,
-};
+use crate::bindings::_helpers::planner_phases::objects::{frozenset, native, replace};
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
@@ -41,7 +39,7 @@ pub(crate) fn build_planner_identity_context<'py>(
     } else {
         identities.clone()
     };
-    planner_model(
+    native(
         project.py(),
         "PlannerIdentityContext",
         &[
@@ -168,7 +166,7 @@ pub(crate) fn detect_stale_warning_changes<'py>(
     for (name, change) in remaining_changes.downcast::<PyDict>()?.iter() {
         models.set_item(name, change)?;
     }
-    planner_model(
+    native(
         py,
         "PlannerChangeResults",
         &[

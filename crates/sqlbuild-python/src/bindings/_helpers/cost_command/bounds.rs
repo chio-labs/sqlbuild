@@ -4,7 +4,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyDict, PyDictMethods, PyInt};
+use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyInt};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::cost_command::constants::ISO_DATE_LENGTH;
 use sqlbuild_core::cost_command::errors::CostCommandError;
@@ -15,7 +15,7 @@ use crate::bindings::_helpers::cost_command::refusal::cost_error;
 
 const DATETIME_MODULE: &str = "datetime";
 const DURATION_MODELS: &str = "sqlbuild.cursor_algebra.models";
-const DURATION_CONSTANTS: &str = "sqlbuild.cursor_algebra.constants";
+const MINUTE_TO_DAY_DURATION_UNITS: [&str; 3] = ["m", "h", "d"];
 
 fn utc(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     imported(py, DATETIME_MODULE, "UTC")
@@ -105,8 +105,7 @@ pub(crate) fn parse_since<'py>(py: Python<'py>, value: &str) -> PyResult<Bound<'
     if duration.is_none() {
         return parse_bound(py, value, "--since", false);
     }
-    let units: Bound<'py, PyAny> =
-        imported(py, DURATION_CONSTANTS, "MINUTE_TO_DAY_DURATION_UNITS")?;
+    let units: Bound<'py, PyAny> = PyFrozenSet::new(py, MINUTE_TO_DAY_DURATION_UNITS)?.into_any();
     if !duration
         .call_method1("is_single_unit_in", (units,))?
         .is_truthy()?

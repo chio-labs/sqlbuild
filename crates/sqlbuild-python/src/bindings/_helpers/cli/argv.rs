@@ -15,7 +15,7 @@ use crate::bindings::_helpers::cli::namespace::new_cli_namespace;
 use crate::bindings::_helpers::cli::surrogates::{python_text, rust_text, uses_placeholders};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
-const ENTRY_MODELS_MODULE: &str = "sqlbuild.cli.entry.models";
+const ENTRY_MODELS_MODULE: &str = "sqlbuild._native";
 const INT_CONVERTER: &str = "int";
 const POSITIVE_INTEGER_CONVERTER: &str = "_positive_integer";
 const VARS_CONVERTER: &str = "parse_cli_vars";

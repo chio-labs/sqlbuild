@@ -4,6 +4,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
+from sqlbuild._native import (
+    ScenarioGraphPlan,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
@@ -15,7 +18,6 @@ from sqlbuild.compiler.planner.models import (
     ScenarioExecutionPlan,
     ScenarioExpectedExpectationPlan,
     ScenarioFixturePlan,
-    ScenarioGraphPlan,
     ScenarioRelationMap,
     ScenarioRelationPlan,
     SeedPlanEntry,

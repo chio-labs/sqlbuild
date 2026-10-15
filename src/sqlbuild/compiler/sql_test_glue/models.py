@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 from sqlbuild.compiler.compile.models import (
     CompiledSqlTest,
     CompilerDiagnostic,
 )
 from sqlbuild.compiler.compile.types import CompiledModelView
-from sqlbuild.compiler.sql_test_glue.types import SqlTestAssemblyFailureKind
 
 
 @dataclass(frozen=True)
@@ -43,7 +43,7 @@ class NativeSqlTestChainRequest:
 class NativeSqlTestFailure:
     """The error one test's assembly raises: its kind and message."""
 
-    kind: SqlTestAssemblyFailureKind
+    kind: Literal["input", "internal", "decimal_overflow"]
     message: str
 
 

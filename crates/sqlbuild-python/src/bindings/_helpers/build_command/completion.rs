@@ -26,7 +26,6 @@ use crate::bindings::_helpers::cost_report::degradation::{
 };
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
 const COST_TYPES: &str = "sqlbuild.cost.types";
 const BUILD_MODELS: &str = "sqlbuild.executor.build.models";
 const BUILD_TYPES: &str = "sqlbuild.executor.build.types";
@@ -76,7 +75,7 @@ pub(crate) fn finalize_build_cost<'py>(
     ];
     fields.extend(cost.overrides);
     let finalization: Bound<'py, PyAny> = call_with(
-        &imported(py, COMMAND_MODELS, "BuildCostFinalization")?,
+        &imported(py, NATIVE_MODULE, "BuildCostFinalization")?,
         &fields,
     )?;
     finalize_cost(&finalization)

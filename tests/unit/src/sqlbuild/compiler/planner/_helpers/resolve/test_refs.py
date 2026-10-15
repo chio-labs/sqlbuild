@@ -6,6 +6,7 @@ import pytest
 
 from sqlbuild._native import (
     DbtCompileReferenceResolver,
+    DbtManifestIndex,
     apply_deferred_locations,
     build_dbt_manifest_index,
     resolve_dbt_ref_references,
@@ -21,7 +22,6 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import CursorBounds
-from sqlbuild.integrations.dbt.models import DbtManifestIndex
 from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types import (
     ApplyDeferredTargetsTestCase,
     RefResolutionTestCase,

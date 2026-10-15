@@ -21,6 +21,8 @@ from typing import Any, cast
 
 from sqlbuild import _native
 from sqlbuild._native import (
+    AuthoredSqlSet,
+    AuthoredSqlValueCall,
     discover_audit_files,
     discover_constant_files,
     discover_enum_files,
@@ -32,11 +34,6 @@ from sqlbuild._native import (
     discover_sql_hook_files,
     render_stage_capture,
 )
-from sqlbuild.compiler.discovery.constants import (
-    SQL_AUDIT_HEADER_KEYS,
-    SQL_FUNCTION_HEADER_KEYS,
-    SQL_HOOK_HEADER_KEYS,
-)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSourceFile,
@@ -47,11 +44,30 @@ from sqlbuild.compiler.discovery.models import (
     SqlHookEntry,
     TolerantScopeDiscovery,
 )
-from sqlbuild.sql_values.models import AuthoredSqlSet, AuthoredSqlValueCall
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     GeneratedDeclarationFileTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.helpers import random_float, random_text
+
+SQL_AUDIT_HEADER_KEYS: frozenset[str] = frozenset(
+    {
+        "always_run",
+        "evaluation",
+        "minimum_samples",
+        "name",
+        "run_scope",
+        "sample_count",
+        "sample_unit",
+        "severity",
+        "sql_analysis",
+        "thresholds",
+        "value",
+    }
+)
+SQL_FUNCTION_HEADER_KEYS: frozenset[str] = frozenset(
+    {"arguments", "database", "description", "returns", "schema", "tags"}
+)
+SQL_HOOK_HEADER_KEYS: frozenset[str] = frozenset({"description"})
 
 REPOSITORY_ROOT: Path = Path(__file__).resolve().parents[6]
 EXCLUDED_DIRECTORIES: frozenset[str] = frozenset({".venv", "node_modules", "target", ".git"})

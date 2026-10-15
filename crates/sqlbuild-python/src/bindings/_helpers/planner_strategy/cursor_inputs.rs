@@ -15,7 +15,7 @@ use crate::bindings::_helpers::model_config::config_values::{config_cursor_bound
 use crate::bindings::_helpers::planner_identity::metadata::or_empty;
 use crate::bindings::_helpers::planner_strategy::constants::{
     ENFORCED_CONTRACT, INCREMENTAL_MATERIALIZATION, MODEL_REFERENCE, PLAN_MODELS_MODULE,
-    PLANNER_TYPES_MODULE, SEED_REFERENCE, SOURCE_REFERENCE, TIMESTAMP_CURSOR,
+    SEED_REFERENCE, SOURCE_REFERENCE, TIMESTAMP_CURSOR,
 };
 use crate::bindings::_helpers::planner_strategy::lineage::resolve_lineage_reference;
 use crate::bindings::_helpers::planner_strategy::values::{
@@ -188,7 +188,7 @@ fn input_kind<'py>(
         SOURCE_REFERENCE => "source",
         _ => return Ok(py.None().into_bound(py)),
     };
-    imported(py, PLANNER_TYPES_MODULE, "GraphResourceKind")?.call1((value,))
+    imported(py, "sqlbuild._native", "GraphResourceKind")?.call1((value,))
 }
 
 /// A producer model's terminal cursor bound parsed with the consumer's cursor type.

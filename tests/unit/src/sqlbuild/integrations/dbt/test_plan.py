@@ -2,8 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import build_dbt_interop_plan, render_dbt_interop_plan
-from sqlbuild.integrations.dbt.models import DbtInteropPlan, DbtInteropSelectionResult, DbtLsNode
+from sqlbuild._native import (
+    DbtInteropPlan,
+    DbtInteropSelectionResult,
+    DbtLsNode,
+    build_dbt_interop_plan,
+    render_dbt_interop_plan,
+)
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import DbtPlanTestCase
 
 

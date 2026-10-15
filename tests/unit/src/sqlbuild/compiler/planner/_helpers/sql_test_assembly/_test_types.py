@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 
-from sqlbuild.compiler.planner.types import WarningSeverity
+from sqlbuild._native import (
+    WarningSeverity,
+)
 
 
 @dataclass(frozen=True)

@@ -3,9 +3,10 @@
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_GRAPH_VALIDATION;
 use crate::bindings::_helpers::planner_scenario::graph::plan_scenario_graph;
 use crate::bindings::_helpers::planner_scenario::relations::build_scenario_relation_plan;
-use crate::bindings::_helpers::planner_scenario::values::{CONSTANTS, MODELS, TYPES, string};
+use crate::bindings::_helpers::planner_scenario::values::{TYPES, string};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
@@ -58,7 +59,7 @@ pub(crate) fn build_cli_scenario_plan<'py>(
     ] {
         for name in graph.getattr(field)?.try_iter()? {
             identities.push(call_with(
-                &imported(py, MODELS, "ScenarioArtifactIdentity")?,
+                &imported(py, "sqlbuild._native", "ScenarioArtifactIdentity")?,
                 &[
                     (
                         "kind",
@@ -141,7 +142,7 @@ fn namespace<'py>(
 
 fn raise_for_warnings(warnings: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = warnings.py();
-    let severity = imported(py, TYPES, "WarningSeverity")?.getattr("ERROR")?;
+    let severity = imported(py, "sqlbuild._native", "WarningSeverity")?.getattr("ERROR")?;
     let mut messages: Vec<String> = Vec::new();
     let mut code = None;
     for warning in warnings.try_iter()? {
@@ -152,7 +153,7 @@ fn raise_for_warnings(warnings: &Bound<'_, PyAny>) -> PyResult<()> {
                 code = Some(if value.is_truthy()? {
                     value
                 } else {
-                    imported(py, CONSTANTS, "SCENARIO_PLAN_GRAPH_VALIDATION")?
+                    string(py, SCENARIO_PLAN_GRAPH_VALIDATION)
                 });
             }
             messages.push(warning.getattr("message")?.extract::<String>()?);

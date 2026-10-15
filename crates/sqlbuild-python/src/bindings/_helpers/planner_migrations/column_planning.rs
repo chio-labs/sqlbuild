@@ -3,7 +3,8 @@
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
-use crate::bindings::_helpers::planner_migrations::column_objects::{model, replace};
+use crate::bindings::_helpers::planner_migrations::column_objects::native;
+use crate::bindings::_helpers::planner_migrations::column_objects::replace;
 use crate::bindings::_helpers::planner_migrations::known_input_columns::KnownInputColumns;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PySet, PySetMethods, PyTuple};
@@ -42,7 +43,7 @@ fn plan_column_migrations<'py>(
         &adapter.call_method0("sql_analysis_dialect")?,
     )?;
     if candidates.is_empty() {
-        return model(py, "ColumnMigrationPlanning", &[("snapshot", snapshot)]);
+        return native(py, "ColumnMigrationPlanning", &[("snapshot", snapshot)]);
     }
     let database = call_with(
         &imported(py, "sqlbuild._native", "migration_planning_database")?,
@@ -107,7 +108,7 @@ fn plan_column_migrations<'py>(
     }
     let overlaid = super::column_overlay::overlay(&snapshot, &candidates, &entries, &inputs)?;
     let snapshot = super::column_overlay::cursors(&args, overlaid, &entries)?;
-    model(
+    native(
         py,
         "ColumnMigrationPlanning",
         &[

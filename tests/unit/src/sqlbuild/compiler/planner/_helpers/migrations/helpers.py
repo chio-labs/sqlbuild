@@ -4,12 +4,21 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
-from sqlbuild._native import build_migration_fingerprint, parse_query_shape
+from sqlbuild._native import (
+    QueryShape,
+    build_migration_fingerprint,
+    parse_query_shape,
+)
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.migrations.types import OldNameViewAction
-from sqlbuild.compiler.planner.models import OldNameViewPlanEntry, QueryShape
-from sqlbuild.compiler.planner.types import InputColumns
+from sqlbuild.compiler.planner.models import (
+    OldNameViewPlanEntry,
+)
+
+if TYPE_CHECKING:
+    from sqlbuild._native import InputColumns
 
 BASE_CONFIG: dict[str, object] = {
     "materialized": "incremental",

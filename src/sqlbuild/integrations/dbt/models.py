@@ -5,75 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, TextIO
 
-from sqlbuild._native import DbtCombinedGraph, dbt_fqn_selector_term
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSkipReason
-
-
-@dataclass(frozen=True)
-class DbtManifestModel:
-    """One dbt model node needed for SQLBuild dbt_ref resolution."""
-
-    unique_id: str
-    package_name: str
-    name: str
-    relation_name: str
-    database: str | None = None
-    schema: str | None = None
-    alias: str | None = None
-    node_checksum: str | None = None
-    fqn: tuple[str, ...] = field(default_factory=tuple)
-    query_sql: str = ""
-    depends_on_nodes: tuple[str, ...] = field(default_factory=tuple)
-    payload: dict[str, object] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class DbtManifestSource:
-    """One dbt source node needed for graph and lineage resolution."""
-
-    unique_id: str
-    package_name: str
-    source_name: str
-    name: str
-    relation_name: str
-    database: str | None = None
-    schema: str | None = None
-    identifier: str | None = None
-    payload: dict[str, object] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class DbtManifestSeed:
-    """One dbt seed node, a leaf data relation used for column lineage."""
-
-    unique_id: str
-    package_name: str
-    name: str
-    relation_name: str
-    database: str | None = None
-    schema: str | None = None
-    alias: str | None = None
-    payload: dict[str, object] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class DbtManifestIndex:
-    """Lookup indexes for dbt model and source nodes in a manifest."""
-
-    models_by_unique_id: dict[str, DbtManifestModel]
-    models_by_name: dict[str, tuple[DbtManifestModel, ...]]
-    models_by_package_and_name: dict[tuple[str, str], DbtManifestModel]
-    sources_by_unique_id: dict[str, DbtManifestSource] = field(default_factory=dict)
-    seeds_by_unique_id: dict[str, DbtManifestSeed] = field(default_factory=dict)
-    validation_depends_on_nodes_by_unique_id: dict[str, tuple[str, ...]] = field(
-        default_factory=dict
-    )
+from sqlbuild._native import DbtLsNode, DbtNodeMessage
 
 
 @dataclass(frozen=True)
@@ -87,26 +20,6 @@ class DbtCliOptions:
     vars: str | None = None
     state: Path | None = None
     defer: bool = False
-
-
-@dataclass(frozen=True)
-class DbtCliConfigOverrides:
-    """dbt config values supplied by CLI flags."""
-
-    project_dir: str | None = None
-    profiles_dir: str | None = None
-    target: str | None = None
-    target_path: str | None = None
-
-
-@dataclass(frozen=True)
-class ResolvedDbtConfig:
-    """Resolved dbt config after applying CLI overrides."""
-
-    project_dir: Path | None
-    profiles_dir: Path | None
-    target: str | None
-    target_path: Path | None
 
 
 @dataclass(frozen=True)
@@ -215,14 +128,6 @@ class DbtCommandResult:
 
 
 @dataclass(frozen=True)
-class DbtNodeMessage:
-    """One dbt log message attached to a dbt node."""
-
-    level: str
-    message: str
-
-
-@dataclass(frozen=True)
 class DbtNodeExecutionResult:
     """One dbt node execution result parsed from JSON logs."""
 
@@ -242,185 +147,8 @@ class DbtNodeExecutionResult:
 
 
 @dataclass(frozen=True)
-class DbtCommandExecutionResult:
-    """dbt command execution output from streamed JSON events."""
-
-    returncode: int
-    node_results: tuple[DbtNodeExecutionResult, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class DbtLsNode:
-    """One node returned by `dbt ls --output json`."""
-
-    unique_id: str
-    resource_type: str | None = None
-    package_name: str | None = None
-    name: str | None = None
-    fqn: tuple[str, ...] = field(default_factory=tuple)
-    original_file_path: str | None = None
-
-    @property
-    def selector_term(self) -> str:
-        return dbt_fqn_selector_term(fqn=self.fqn, fallback=self.name or self.unique_id)
-
-
-@dataclass(frozen=True)
 class DbtLsResult:
     """Parsed result from one dbt ls invocation."""
 
     nodes: tuple[DbtLsNode, ...]
     command: DbtCommandResult
-
-
-@dataclass(frozen=True)
-class DbtInteropParsedArgs:
-    """Declared `sqb dbt` flags parsed by argparse, before routing to buckets."""
-
-    select: tuple[str, ...] = field(default_factory=tuple)
-    exclude: tuple[str, ...] = field(default_factory=tuple)
-    vars: str | None = None
-    threads: str | None = None
-    full_refresh: bool = False
-    event_time_start: str | None = None
-    event_time_end: str | None = None
-    project_dir: str | None = None
-    profiles_dir: str | None = None
-    profile: str | None = None
-    target: str | None = None
-    target_path: str | None = None
-    state: str | None = None
-    indirect_selection: str | None = None
-    defer: bool = False
-    start_cursor_ts: str | None = None
-    end_cursor_ts: str | None = None
-    start_cursor_int: str | None = None
-    end_cursor_int: str | None = None
-    defer_to: str | None = None
-    fail_fast: bool = False
-    hard_copy: bool = False
-    dbt_passthrough: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class DbtInteropRoutedArgs:
-    """Arguments split for a future `sqb dbt` command execution."""
-
-    command: DbtInteropCommand
-    select: tuple[str, ...] = field(default_factory=tuple)
-    exclude: tuple[str, ...] = field(default_factory=tuple)
-    dbt_args: tuple[str, ...] = field(default_factory=tuple)
-    sqlbuild_args: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class DbtInteropSelectionResult:
-    """SQLBuild-side selection produced from `sqb dbt` selectors."""
-
-    sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
-    dbt_required_unique_ids: tuple[str, ...] = field(default_factory=tuple)
-    dbt_anchor_terms: tuple[str, ...] = field(default_factory=tuple)
-    dbt_anchor_unique_ids_by_term: dict[str, tuple[str, ...]] = field(default_factory=dict)
-    path_translations: tuple[tuple[str, str], ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class DbtInteropPlan:
-    """Plan output for one future `sqb dbt` command."""
-
-    command: DbtInteropCommand
-    dbt_command_argv: tuple[str, ...]
-    dbt_selected_nodes: tuple[DbtLsNode, ...]
-    dbt_selected_unique_ids: tuple[str, ...]
-    sqlbuild_command_argvs: tuple[tuple[str, ...], ...]
-    selection: DbtInteropSelectionResult
-    sqlbuild_plan_output: PlanOutput | None = None
-    dbt_required_selector_terms: tuple[str, ...] = field(default_factory=tuple)
-    supplemental_dbt_command_argvs: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
-    dbt_skip_reason: DbtInteropSkipReason | None = None
-    sqlbuild_skip_reason: DbtInteropSkipReason | None = None
-    warnings: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class DbtInteropExecutionRequest:
-    """Caller inputs for one dbt interop execution command."""
-
-    command: DbtInteropCommand
-    project_dir: Path
-    args: tuple[str, ...]
-    dbt_runner: Any | None = None
-    dbt_executable: str | None = None
-    sqlbuild_executable: str = "sqb"
-    no_sql_validation: bool = False
-    fail_fast: bool = False
-    on_progress: Callable[[str], None] | None = None
-    progress_stream: TextIO | None = None
-    dbt_stdout_stream: TextIO | None = None
-    use_color: bool = False
-    verbose: bool = False
-    json_output: bool = False
-
-
-@dataclass(frozen=True)
-class DbtInteropInvocation:
-    """Resolved execution environment for one dbt interop command."""
-
-    dbt_executable: str
-    output_stream: TextIO
-    dbt_output_stream: TextIO
-    routed: DbtInteropRoutedArgs
-    discovered_inputs: DiscoveredProjectInputs
-    effective_sqlbuild_args: tuple[str, ...]
-    dbt_options: DbtCliOptions
-    dbt_vars: dict[str, object]
-    runner: Any
-
-
-@dataclass(frozen=True)
-class DbtInteropCompiledProject:
-    """Adapter and compiled SQLBuild project for dbt interop planning."""
-
-    adapter_name: str
-    adapter: BaseAdapter
-    project: CompiledProjectView
-
-
-@dataclass(frozen=True)
-class DbtInteropPlanResolution:
-    """Combined dbt graph and the resolved interop plan."""
-
-    graph: DbtCombinedGraph
-    plan: DbtInteropPlan
-
-
-@dataclass(frozen=True)
-class DbtInteropCommandArgs:
-    """Selection, passthrough args, and executables for a dbt interop command."""
-
-    select: tuple[str, ...]
-    exclude: tuple[str, ...] = ()
-    dbt_command_args: tuple[str, ...] = ()
-    sqlbuild_command_args: tuple[str, ...] = ()
-    dbt_executable: str = "dbt"
-    sqlbuild_executable: str = "sqb"
-
-
-@dataclass(frozen=True)
-class DbtPlanEnvironment:
-    """Compiled project and adapter environment for dbt plan-output builds."""
-
-    project_dir: Path
-    discovered_inputs: DiscoveredProjectInputs
-    project: CompiledProjectView
-    adapter: BaseAdapter
-    adapter_name: str
-
-
-@dataclass(frozen=True)
-class DbtSqlbuildPlanRequest:
-    """Selection and native planner inputs for a SQLBuild plan-output build."""
-
-    selected_model_names: tuple[str, ...]
-    sqlbuild_args: tuple[str, ...]
-    external_blocked_model_names: tuple[str, ...] = ()

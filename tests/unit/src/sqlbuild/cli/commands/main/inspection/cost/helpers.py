@@ -2,8 +2,8 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
-from sqlbuild.cli.commands.models import CostCommandRequest
-from sqlbuild.cost.models import CostRunRecord, ResourceCost, RunCostSummary
+from sqlbuild._native import CostCommandRequest, CostRunRecord, ResourceCost
+from sqlbuild.cost.models import RunCostSummary
 from sqlbuild.cost.types import CostStatus
 
 

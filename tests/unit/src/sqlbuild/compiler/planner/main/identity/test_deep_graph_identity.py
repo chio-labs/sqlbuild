@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.planner.models import DirectModelVersionIdentities
+from sqlbuild._native import (
+    DirectModelVersionIdentities,
+)
 from tests.unit.src.sqlbuild.compiler.planner.main.identity._test_types import (
     DeepChainIdentityTestCase,
 )

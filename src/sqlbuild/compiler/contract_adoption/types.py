@@ -5,13 +5,6 @@ from __future__ import annotations
 from enum import StrEnum
 
 
-class ContractAction(StrEnum):
-    """Supported contract command actions."""
-
-    DIFF = "diff"
-    GENERATE = "generate"
-
-
 class ContractFindingKind(StrEnum):
     """Stable physical-to-authored contract difference categories."""
 

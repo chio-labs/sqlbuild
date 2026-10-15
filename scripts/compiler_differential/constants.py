@@ -542,7 +542,9 @@ RENDER_INDIRECT_KINDS: dict[str, str] = {
 }
 RENDER_CONFIG_ONLY_KINDS: dict[str, str] = {}
 DIAGNOSTIC_CODE_PATTERN: re.Pattern[str] = re.compile(r"[A-Z][0-9]{3}")
-RENDER_RAISED_CODES: frozenset[str] = frozenset({"C214", "C216", "K012", "P004", "P010", "P011"})
+RENDER_RAISED_CODES: frozenset[str] = frozenset(
+    {"C214", "C216", "K012", "P004", "P010", "P011", "P012", "P013"}
+)
 RENDER_CODE_SCAN_EXCLUDED: dict[str, str] = {
     "_helpers/analysis": "SQL analysis of rendered SQL, after the CompileProjectInputs frontier",
 }
@@ -693,3 +695,10 @@ ANALYSIS_UNREACHABLE_CODES: dict[str, str] = {
     ),
     "B219": _NEVER_REPORTED_BY_POLYGLOT,
 }
+BUILT_IN_AUDIT_NAMES: frozenset[str] = frozenset(
+    {"accepted_values", "not_null", "relationships", "unique"}
+)
+BUILT_IN_AUDIT_SHADOW_CODE: str = "P003"
+STAGE_CAPTURE_ROOT_KEY: str = "__capture__"
+STAGE_CAPTURE_SHARED_MARKER: str = "__shared__"
+STAGE_CAPTURE_SHARED_NODES_KEY: str = "__shared_nodes__"

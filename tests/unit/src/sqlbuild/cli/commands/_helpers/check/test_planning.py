@@ -6,10 +6,9 @@ from unittest.mock import Mock
 
 import pytest
 
-from sqlbuild._native import run_check_read_side_dependencies
+from sqlbuild._native import CliUserError, run_check_read_side_dependencies
 from sqlbuild.adapter.contract.models import RelationLookup
 from sqlbuild.adapter.relations.main import relation_lookup as relation_lookup_module
-from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.compile.models import CompiledProject, CompiledRelationLocation
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import PlanOutput

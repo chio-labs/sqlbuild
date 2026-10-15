@@ -1,16 +1,20 @@
 """Fresh-process and location-only measurements for diagnostic workloads."""
 
+from __future__ import annotations
+
 import json
 import subprocess
 import sys
 from pathlib import Path
 from time import perf_counter
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import sqlbuild._native as _native
 from scripts.cold_compile_performance.exceptions import CompileBenchmarkFixtureError
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
-from sqlbuild.compiler.sql_analysis.types import NativeDiagnosticRow, NativePositionsModule
+
+if TYPE_CHECKING:
+    from sqlbuild._native import NativeDiagnosticRow, NativePositionsModule
 
 
 def measure_diagnostic_compile(
@@ -59,7 +63,7 @@ def measure_position_mapping(*, count: int, lines: int = 4000) -> float:
     diagnostic: SqlBindingDiagnostic = SqlBindingDiagnostic(
         code="B217", message="Incompatible comparison", start=offset, end=offset + len("amount > 5")
     )
-    mapper: Any = cast(NativePositionsModule, _native).BindingPositions(
+    mapper: Any = cast("NativePositionsModule", _native).BindingPositions(
         {
             "authored": original,
             "query": original,
@@ -94,7 +98,7 @@ def measure_function_name_scan(*, calls: int) -> float:
         )
         + "\nFROM products"
     )
-    native: NativePositionsModule = cast(NativePositionsModule, _native)
+    native: NativePositionsModule = cast("NativePositionsModule", _native)
     started: float = perf_counter()
     rows: list[NativeDiagnosticRow] = native.binding_diagnostics(
         sql=sql, dialect="snowflake", rows=[]

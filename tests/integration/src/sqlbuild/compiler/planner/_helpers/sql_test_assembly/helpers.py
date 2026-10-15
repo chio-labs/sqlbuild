@@ -4,11 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.compiler.compile.constants import (
-    EXPECTED_TEST_CTE_PREFIX,
-    REF_TEST_CTE_PREFIX,
-    SOURCE_TEST_CTE_PREFIX,
-)
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledModelSqlTestPayload,
@@ -35,6 +30,10 @@ from tests.integration.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.helpers import (
     reference_names_by_kind,
 )
+
+EXPECTED_TEST_CTE_PREFIX: str = "__expected__"
+REF_TEST_CTE_PREFIX: str = "__ref__"
+SOURCE_TEST_CTE_PREFIX: str = "__source__"
 
 _STUB_TEST_FILE: DiscoveredSqlTestFile = DiscoveredSqlTestFile(
     file_path=Path("tests/unit/test_chain.sql"),

@@ -7,7 +7,11 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from sqlbuild._native import apply_typed_cursor_replay_policy, compute_cursor_bounds
+from sqlbuild._native import (
+    CursorWatermarkMode,
+    apply_typed_cursor_replay_policy,
+    compute_cursor_bounds,
+)
 from sqlbuild._native import cursor_observed_partition as observed_partition
 from sqlbuild._native import cursor_parse as parse
 from sqlbuild._native import cursor_render as render
@@ -19,7 +23,6 @@ from sqlbuild.compiler.planner.models import CursorBounds, ModelCursorSnapshot
 from sqlbuild.compiler.planner.types import (
     CursorGrain,
     CursorType,
-    CursorWatermarkMode,
 )
 from sqlbuild.cursor_algebra.models import AlignedInterval, DateValue, TimestampValue
 from sqlbuild.cursor_algebra.types import CursorScalar

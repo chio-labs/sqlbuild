@@ -6,6 +6,8 @@ from types import MappingProxyType
 from typing import Any
 
 from sqlbuild._native import (
+    SourceFreshnessIdentity,
+    SourceFreshnessRenderers,
     build_source_freshness_read_latest_sql,
     source_freshness_data_version_hash,
     write_source_freshness_records,
@@ -21,11 +23,7 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
-from sqlbuild.compiler.source_freshness.models import (
-    SourceFreshnessIdentity,
-    SourceFreshnessRecord,
-    SourceFreshnessRenderers,
-)
+from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 

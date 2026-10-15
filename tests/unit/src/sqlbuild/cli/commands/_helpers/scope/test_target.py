@@ -6,9 +6,7 @@ from io import StringIO
 
 import pytest
 
-from sqlbuild._native import run_scope_command
-from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.models import ScopeCommandRequest
+from sqlbuild._native import CliUserError, ScopeCommandRequest, run_scope_command
 from tests.unit.src.sqlbuild.cli.commands._helpers.scope._test_types import (
     ScopeTargetCase,
     ScopeTargetErrorCase,

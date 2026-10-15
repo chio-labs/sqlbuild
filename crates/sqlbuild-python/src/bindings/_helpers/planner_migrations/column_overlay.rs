@@ -4,7 +4,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::planner_migrations::column_objects::{
-    config, definition_hash, lower, model, native, replace,
+    config, definition_hash, lower, native, replace,
 };
 use crate::bindings::_helpers::planner_migrations::models::ColumnCandidate;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
@@ -97,7 +97,7 @@ pub(super) fn overlay<'py>(
             ("existing_columns", columns),
             (
                 "fingerprints",
-                model(
+                native(
                     py,
                     "WarehouseFingerprints",
                     &[

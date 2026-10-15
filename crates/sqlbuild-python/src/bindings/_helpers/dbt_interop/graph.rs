@@ -24,7 +24,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::dbt_interop::manifest::resolve_sqlbuild_model_dbt_refs;
 
-const DBT_MODELS: &str = "sqlbuild.integrations.dbt.models";
+const NATIVE_RECORDS: &str = "sqlbuild._native";
 const DBT_EXCEPTIONS: &str = "sqlbuild.integrations.dbt.exceptions";
 const SELECTOR_EXPANSION_MODULE: &str = "sqlbuild._native";
 const MODEL_SELECTORS_MODULE: &str = "sqlbuild._native";
@@ -276,7 +276,7 @@ fn selection_result<'py>(py: Python<'py>, selection: DbtSelection) -> PyResult<B
         .map(|(term, translated)| PyTuple::new(py, [term, translated]))
         .collect::<PyResult<_>>()?;
     call_with(
-        &imported(py, DBT_MODELS, "DbtInteropSelectionResult")?,
+        &imported(py, NATIVE_RECORDS, "DbtInteropSelectionResult")?,
         &[
             (
                 "sqlbuild_model_names",

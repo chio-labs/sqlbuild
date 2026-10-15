@@ -4,28 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
+from sqlbuild._native import ResourceCost
 from sqlbuild.cost.types import CostStatus
-
-
-@dataclass(frozen=True)
-class QueryCostObservation:
-    query_id: str
-    warehouse_name: str
-    warehouse_size: str
-    warehouse_type: str | None
-    cluster_number: int | None
-    started_at: datetime
-    completed_at: datetime
-    execution_ms: int
-    bytes_scanned: int
-    execution_status: str
-    run_id: str | None = None
-    resource_type: str | None = None
-    resource_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -52,21 +35,6 @@ class CostResourceContext:
 
 
 @dataclass(frozen=True)
-class ResourceCost:
-    resource_type: str
-    resource_name: str
-    warehouse_name: str
-    warehouse_size: str
-    warehouse_type: str | None
-    cluster_number: int | None
-    query_count: int
-    attributed_seconds: Decimal
-    bytes_scanned: int
-    estimated_compute_credits: Decimal
-    estimated_usd: Decimal
-
-
-@dataclass(frozen=True)
 class RunCostSummary:
     status: CostStatus
     usd_per_credit: Decimal
@@ -85,30 +53,3 @@ class RunCostSummary:
     method: str = "equal_share_visible_query_busy_time_v1"
     limitations: tuple[str, ...] = ()
     message: str | None = None
-
-
-@dataclass(frozen=True)
-class CostRunRecord:
-    run_id: str
-    adapter_name: str
-    target_name: str | None
-    build_status: str
-    started_at: datetime
-    completed_at: datetime
-    cost: RunCostSummary
-    version: int = 1
-    had_executable_work: bool | None = None
-
-
-@dataclass(frozen=True)
-class StatementLedgerEntry:
-    statement_id: str
-    run_id: str
-    resource_type: str
-    resource_name: str
-    phase: str
-    attempt: int
-    query_id: str | None
-    status: str
-    started_at: datetime
-    completed_at: datetime

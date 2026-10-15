@@ -128,7 +128,7 @@ fn split_python<'py>(
         ],
     )?;
     call_with(
-        &imported(py, PLANNER_MODELS_MODULE, "UnitTestSelectorSplit")?,
+        &imported(py, "sqlbuild._native", "UnitTestSelectorSplit")?,
         &[
             ("select", restored(&carrier, &split.select)?.into_any()),
             ("exclude", restored(&carrier, &split.exclude)?.into_any()),

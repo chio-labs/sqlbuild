@@ -1,6 +1,7 @@
 //! Resolve authored migration origins at the adapter and inspection boundaries.
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::planner_migrations::constants::QUALIFIED_RELATION_MAX_PARTS;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PySet, PySetMethods, PyTuple};
 use pyo3::{PyErr, pyfunction, wrap_pyfunction};
@@ -160,12 +161,7 @@ fn migration_resolve_origin<'py>(
                 .call_method1("strip", ("\"`",))?,
         );
     }
-    let maximum: usize = imported(
-        py,
-        "sqlbuild.compiler.planner.constants",
-        "QUALIFIED_RELATION_MAX_PARTS",
-    )?
-    .extract()?;
+    let maximum: usize = QUALIFIED_RELATION_MAX_PARTS;
     let mut invalid = parts.len() > maximum;
     for part in &parts {
         invalid |= !part.is_truthy()?;

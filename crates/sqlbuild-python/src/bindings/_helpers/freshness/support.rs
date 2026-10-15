@@ -10,7 +10,6 @@ use crate::bindings::_helpers::state_rows::timestamps::{date_time_typed, in_utc,
 
 pub(crate) const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 pub(crate) const FRESHNESS_MODELS: &str = "sqlbuild.compiler.source_freshness.models";
-pub(crate) const FRESHNESS_TYPES: &str = "sqlbuild.compiler.source_freshness.types";
 pub(crate) const FRESHNESS_CONSTANTS: &str = "sqlbuild.compiler.source_freshness.constants";
 pub(crate) const CONTRACT_MODELS: &str = "sqlbuild.spec.contracts.models";
 pub(crate) const CONTRACT_TYPES: &str = "sqlbuild.spec.contracts.types";

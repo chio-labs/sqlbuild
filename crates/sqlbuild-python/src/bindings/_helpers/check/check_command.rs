@@ -25,8 +25,7 @@ use crate::bindings::_helpers::compile_outputs::runtime_target::write_python_che
 use crate::bindings::_helpers::graph::python_selection::python_node_names;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
-const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
+const ERRORS_MODULE: &str = "sqlbuild._native";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
 const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
 const STATIC_COMMAND_MODULE: &str = "sqlbuild._native";
@@ -663,7 +662,7 @@ fn complete<'py>(
 fn run_check_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let invocation: Bound<'_, PyAny> = resolve_reported_command_invocation(
         request,
-        &imported(py, COMMAND_MODELS, "CheckInvocation")?,
+        &imported(py, NATIVE_MODULE, "CheckInvocation")?,
         true,
     )?;
     let stream: Bound<'_, PyAny> = invocation.getattr("progress_stream")?;

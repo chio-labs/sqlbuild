@@ -8,8 +8,7 @@ from typing import Any
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild._native import parse_cost_since_bound, run_cost_command, write_cost_run
-from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild._native import CliUserError, parse_cost_since_bound, run_cost_command, write_cost_run
 from tests.unit.src.sqlbuild.cli.commands.main.inspection.cost._test_types import (
     CostCommandTestCase,
     CostRelativeSinceTestCase,

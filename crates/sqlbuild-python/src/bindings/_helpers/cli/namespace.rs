@@ -9,7 +9,7 @@ use sqlbuild_cli::argv::models::NamespaceDefault;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 
-const COMPILE_LINEAGE_MODULE: &str = "sqlbuild.cli.commands.types";
+const COMPILE_LINEAGE_MODULE: &str = "sqlbuild._native";
 const COLUMN_LINEAGE_MODULE: &str = "sqlbuild.compiler.lineage.types";
 
 /// Typed namespace for all CLI arguments across all commands.

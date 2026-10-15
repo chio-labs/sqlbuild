@@ -7,14 +7,13 @@ from pathlib import Path
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild._native import run_dbt_command
-from sqlbuild.integrations.dbt.models import (
-    DbtInitRequest,
-    DbtInitResult,
+from sqlbuild._native import (
+    DbtInteropCommand,
     DbtInteropExecutionRequest,
     DbtInteropPlan,
+    run_dbt_command,
 )
-from sqlbuild.integrations.dbt.types import DbtInteropCommand
+from sqlbuild.integrations.dbt.models import DbtInitRequest, DbtInitResult
 from tests.unit.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtAutoInitTestCase,
     DbtDebugWrapperTestCase,

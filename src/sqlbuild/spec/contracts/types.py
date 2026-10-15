@@ -71,13 +71,6 @@ class TimeTravelRetentionSource(StrEnum):
     MODEL = "model"
 
 
-class TimeTravelRetentionValue(StrEnum):
-    """Named non-duration retention values."""
-
-    INHERIT = "inherit"
-    DISABLED = "disabled"
-
-
 class TableType(StrEnum):
     """Snowflake managed table type."""
 
@@ -92,12 +85,6 @@ class TableTypeSource(StrEnum):
     TARGET = "target"
     MATERIALIZATION = "materialization"
     MODEL = "model"
-
-
-class TableTypeValue(StrEnum):
-    """Named non-type table-type value."""
-
-    INHERIT = "inherit"
 
 
 class TableTypeDowngradePolicy(StrEnum):

@@ -4,6 +4,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, ClassVar
 
+from sqlbuild._native import (
+    ScenarioGraphPlan,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo, QueryResult, RelationInfo
@@ -16,7 +19,6 @@ from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,
     ScenarioExecutionPlan,
     ScenarioFixturePlan,
-    ScenarioGraphPlan,
     ScenarioRelationMap,
     ScenarioRelationPlan,
     SeedPlanEntry,

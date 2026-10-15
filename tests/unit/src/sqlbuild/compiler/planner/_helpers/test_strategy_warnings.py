@@ -2,22 +2,24 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import build_model_warnings
-from sqlbuild.compiler.planner.models import (
+from sqlbuild._native import (
     ChangeDetectionResult,
+    ChangeKind,
     PlanWarning,
     SchemaAction,
-    SchemaFinding,
-)
-from sqlbuild.compiler.planner.types import (
-    BackfillAction,
-    ChangeKind,
-    MaterializationType,
-    OnSchemaChange,
     SchemaActionKind,
     SchemaChangeKind,
     SchemaColumnSource,
     WarningSeverity,
+    build_model_warnings,
+)
+from sqlbuild.compiler.planner.models import (
+    SchemaFinding,
+)
+from sqlbuild.compiler.planner.types import (
+    BackfillAction,
+    MaterializationType,
+    OnSchemaChange,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     BuildModelWarningsTestCase,

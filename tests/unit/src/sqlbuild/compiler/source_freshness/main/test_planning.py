@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import (
+    SourceFreshnessRenderers,
     build_direct_source_freshness_planning_result,
     source_freshness_data_version_hash,
     write_source_freshness_records,
@@ -17,7 +18,6 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.source_freshness.models import (
     DirectSourceFreshnessPlanningResult,
     SourceFreshnessRecord,
-    SourceFreshnessRenderers,
 )
 from sqlbuild.spec.contracts.models import (
     SourceEntry,

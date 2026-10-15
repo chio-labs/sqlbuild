@@ -2,16 +2,26 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from sqlbuild._native import MigrationFingerprintCache
+from sqlbuild._native import (
+    BackfillResult,
+    ColumnRenameHint,
+    CursorWatermarkMode,
+    GraphResourceKind,
+    PlanProviderUsage,
+    PlanWarning,
+    ScenarioArtifactName,
+    ScenarioGraphPlan,
+    SchemaAction,
+    SchemaChangeKind,
+    SchemaColumnSource,
+)
 from sqlbuild._native import cursor_parse as parse
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, RetentionRequest
 from sqlbuild.adapter.contract.types import MigrationTransfer
 from sqlbuild.compiler.auditing.models import MeasurementThresholds
@@ -25,13 +35,10 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
     FunctionReturnColumn,
-    InferredColumn,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
-    CompiledFunctionView,
     CompiledModelView,
-    CompiledProjectView,
     FunctionLanguage,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, SqlTestParameterDeclaration
@@ -44,16 +51,11 @@ from sqlbuild.compiler.migrations.types import (
     MigrationPromotion,
     OldNameViewAction,
 )
-from sqlbuild.compiler.planner.classes.fixture_column_inferences import FixtureColumnInferences
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
-    ChangeKind,
     CursorGrain,
     CursorType,
-    CursorWatermarkMode,
-    FixtureKey,
-    GraphResourceKind,
     MaterializationType,
     OnSchemaChange,
     PlanAction,
@@ -61,11 +63,7 @@ from sqlbuild.compiler.planner.types import (
     RetentionDirection,
     RetentionPlanPhase,
     ScenarioArtifactKind,
-    SchemaActionKind,
-    SchemaChangeKind,
-    SchemaColumnSource,
     SelectorKind,
-    WarningSeverity,
 )
 from sqlbuild.compiler.source_freshness.models import (
     DirectSourceFreshnessPlanningResult,
@@ -83,8 +81,6 @@ from sqlbuild.cursor_algebra.types import Bound, BoundSentinel, CursorScalar
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.contracts.models import (
     FutureCursorsConfig,
-    LocalConfig,
-    ProjectConfig,
     SchemaDynamicColumnFamily,
     SeedCsvSettings,
     SourceEntry,
@@ -97,99 +93,6 @@ from sqlbuild.spec.contracts.types import (
     SourceWriteStrategy,
 )
 from sqlbuild.sql_values.models import SqlValue
-
-
-@dataclass(frozen=True)
-class NativeSqlTestArtifact:
-    """One native-planned SQL-test artifact and its distinct planning error messages."""
-
-    sql: str
-    model_names: tuple[str, ...]
-    error_messages: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class RelationFixtureDiagnostic:
-    """One statically provable invalid fixture condition."""
-
-    key: FixtureKey
-    message: str
-
-
-@dataclass(frozen=True)
-class RelationFixtureCompletion:
-    """Completed fixture SQL plus metadata reused by SQL-test validation."""
-
-    fixture_sql_by_key: dict[FixtureKey, str]
-    inferred_by_fixture: dict[FixtureKey, tuple[InferredColumn, ...]]
-    expected_types: Mapping[FixtureKey, dict[str, str]]
-    diagnostics: tuple[RelationFixtureDiagnostic, ...]
-
-
-@dataclass(frozen=True)
-class FixtureColumnMetadata:
-    """Known type and nullability for one relation fixture column."""
-
-    name: str
-    type: str | None
-    nullable: bool | None
-
-
-@dataclass(frozen=True)
-class FixtureRelationMetadata:
-    """Known columns and whether they form an authoritative relation shape."""
-
-    columns: tuple[FixtureColumnMetadata, ...]
-    authoritative_names: bool
-
-
-@dataclass(frozen=True)
-class RelationFixturePlanningContext:
-    """Project-wide fixture metadata shared across test and scenario planning."""
-
-    models_by_name: dict[str, CompiledModelView]
-    relations: dict[FixtureKey, FixtureRelationMetadata]
-    authoritative_columns: dict[FixtureKey, frozenset[str]]
-    expected_types: dict[FixtureKey, dict[str, str]]
-    fixture_inferences: FixtureColumnInferences = field(
-        default_factory=FixtureColumnInferences, compare=False
-    )
-
-
-@dataclass(frozen=True)
-class GraphNodeKey:
-    """Neutral graph key matching fingerprint identity fields."""
-
-    node_type: str
-    node_name: str
-
-
-@dataclass(frozen=True)
-class SelectorExpansion:
-    """One selector split into graph expansion flags and core text."""
-
-    core: str
-    upstream: bool = False
-    downstream: bool = False
-
-
-@dataclass(frozen=True)
-class ParsedScenarioArtifactName:
-    """Parsed physical name for one planner-owned scenario artifact."""
-
-    hash_prefix: str
-    kind: str
-    logical_name: str
-
-
-@dataclass(frozen=True)
-class GraphIdentityNode:
-    """Neutral node input for dependency-aware identity resolution."""
-
-    key: GraphNodeKey
-    resource_kind: GraphResourceKind
-    upstream_keys: tuple[GraphNodeKey, ...]
-    local_hash: str | None
 
 
 @dataclass(frozen=True, kw_only=True, init=False)
@@ -290,14 +193,6 @@ class CursorOverrides:
                 f"{field_name} value '{value}' is not a valid integer"
             ) from None
         raise PlannerInputError(f"{field_name} value '{value}' is not a valid integer")
-
-
-@dataclass(frozen=True)
-class MissingUpstream:
-    """One upstream dependency missing from both scope and warehouse."""
-
-    key: CompiledObjectKey
-    required_by: tuple[CompiledObjectKey, ...]
 
 
 @dataclass(frozen=True)
@@ -648,31 +543,6 @@ class CursorInputRelation:
 
 
 @dataclass(frozen=True)
-class WarehouseFingerprints:
-    """Latest direct fingerprints grouped by node type."""
-
-    models: dict[str, Fingerprint] = field(default_factory=dict)
-    functions: dict[str, Fingerprint] = field(default_factory=dict)
-    seeds: dict[str, Fingerprint] = field(default_factory=dict)
-    python_nodes: dict[tuple[str, str], Fingerprint] = field(default_factory=dict)
-    unfiltered_schemas: dict[str, tuple[Fingerprint, ...]] = field(
-        default_factory=dict, compare=False, repr=False
-    )
-    unfiltered_database: str | None = field(default=None, compare=False, repr=False)
-
-
-@dataclass(frozen=True)
-class CursorSnapshotScope:
-    """Execution selection used for cursor validation and runtime producer resolution."""
-
-    model_keys: frozenset[CompiledObjectKey]
-    runtime_producer_keys: frozenset[CompiledObjectKey]
-    invocation_time: datetime | None = None
-    start_cursor_config: StartCursorsConfig | None = None
-    cursor_overrides: CursorOverrides | None = None
-
-
-@dataclass(frozen=True)
 class MaximumStartPolicyInputs:
     """Effective policy and materialization safety inputs for automatic starts."""
 
@@ -680,62 +550,6 @@ class MaximumStartPolicyInputs:
     invocation_time: datetime | None = None
     incremental_strategy: str | None = None
     incremental_mode: str | None = None
-
-
-@dataclass(frozen=True)
-class ReferenceRename:
-    """One model rename that downstream references may have been rewritten for."""
-
-    new_name: str
-    origin_name: str
-    recorded_at: datetime | None = None
-
-
-@dataclass(frozen=True)
-class WarehouseSnapshot:
-    """Frozen point-in-time picture of warehouse state for planning."""
-
-    existing_relations: dict[str, RelationInfo] = field(default_factory=dict)
-    existing_columns: dict[str, tuple[ColumnInfo, ...]] = field(default_factory=dict)
-    fingerprints: WarehouseFingerprints = field(default_factory=WarehouseFingerprints)
-    cursor_snapshots: dict[str, ModelCursorSnapshot] = field(default_factory=dict)
-    source_freshness_state_schemas: frozenset[str] = field(default_factory=frozenset)
-    column_dialect: str | None = None
-    renamed_models: frozenset[str] = field(default_factory=frozenset)
-    reference_renames: tuple[ReferenceRename, ...] = ()
-    migration_state_schemas: frozenset[str] = field(default_factory=frozenset)
-    old_name_view_state_schemas: frozenset[str] = field(default_factory=frozenset)
-    listed_state_schemas: frozenset[str] | None = field(default_factory=frozenset)
-
-
-@dataclass(frozen=True)
-class SelectionStalenessNodeKey:
-    """Neutral node identity for shared selection-aware staleness classification."""
-
-    resource_type: str
-    name: str
-
-
-@dataclass(frozen=True)
-class SelectionStalenessGraph:
-    """Neutral graph inputs for selected-model stale warning classification."""
-
-    upstream_deps: dict[SelectionStalenessNodeKey, tuple[SelectionStalenessNodeKey, ...]]
-    selected_model_names: frozenset[str]
-    run_model_names: frozenset[str]
-    run_seed_names: frozenset[str]
-    run_source_names: frozenset[str]
-    changed_model_names: frozenset[str]
-    changed_seed_names: frozenset[str]
-    changed_source_names: frozenset[str]
-
-
-@dataclass(frozen=True)
-class SelectionStalenessWarning:
-    """Neutral stale warning classification for one selected model."""
-
-    model_name: str
-    trigger_names: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -750,57 +564,12 @@ class SchemaFinding:
 
 
 @dataclass(frozen=True)
-class BackfillResult:
-    """Resolved backfill action from a change detection policy."""
-
-    action: BackfillAction
-    duration: str | None = None
-
-
-@dataclass(frozen=True)
-class ChangeDetectionResult:
-    """Per-model output from change detection and policy resolution."""
-
-    model_name: str
-    change_kind: ChangeKind
-    query_changed: bool = False
-    config_changed: bool = False
-    fingerprint_metadata_json: str | None = None
-    previous_metadata_json: str | None = None
-    fingerprint_version_hash: str | None = None
-    previous_version_hash: str | None = None
-    schema_findings: tuple[SchemaFinding, ...] = field(default_factory=tuple)
-    backfill: BackfillResult = field(
-        default_factory=lambda: BackfillResult(action=BackfillAction.FORWARD_ONLY)
-    )
-    recorded_build_relation_missing: bool = False
-    changed_functions: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
 class SqlTestSelection:
     """Unit tests selected or excluded by name, beside the tests of the selected resources."""
 
     names: frozenset[str] = frozenset()
     excluded_names: frozenset[str] = frozenset()
     models_selected: bool = True
-
-
-@dataclass(frozen=True)
-class UnitTestSelectorNames:
-    """Names selectors can match: unit tests, and every other selectable resource."""
-
-    tests: frozenset[str]
-    resources: frozenset[str]
-
-
-@dataclass(frozen=True)
-class UnitTestSelectorSplit:
-    """Resource selectors left after unit-test selectors moved into a test selection."""
-
-    select: tuple[str, ...]
-    exclude: tuple[str, ...]
-    sql_test_selection: SqlTestSelection
 
 
 @dataclass(frozen=True)
@@ -831,118 +600,6 @@ class PlannerRelationsContext:
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]]
     star_exclude_keyword: str
     listed_source_names: frozenset[str] = frozenset()
-
-
-@dataclass(frozen=True)
-class ModelPlanContext:
-    """Relation lookups and source columns for building one model plan entry."""
-
-    model_locations: dict[str, CompiledRelationLocation]
-    models_by_name: dict[str, CompiledModelView]
-    seed_locations: dict[str, CompiledRelationLocation]
-    function_locations: dict[str, CompiledRelationLocation]
-    source_map: dict[str, SourceEntry]
-    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]]
-    star_exclude_keyword: str
-    functions_by_name: dict[str, CompiledFunctionView] = field(default_factory=dict)
-    runtime_cursor_producer_names: frozenset[str] = frozenset()
-    future_cursor_config: FutureCursorsConfig | None = None
-    start_cursor_config: StartCursorsConfig | None = None
-    invocation_time: datetime | None = None
-
-
-@dataclass(frozen=True)
-class CursorOverridePair:
-    """Resolved per-model cursor start/end overrides for plan entry construction."""
-
-    start_cursor_override: str | None = None
-    end_cursor_override: str | None = None
-
-
-@dataclass(frozen=True)
-class PlanEntryBuildInputs:
-    """Blocked models and cursor overrides for plan entry building."""
-
-    source_freshness_blocked_model_names: frozenset[str] = frozenset()
-    external_blocked_model_names: frozenset[str] = frozenset()
-    start_cursor_override: str | None = None
-    end_cursor_override: str | None = None
-    future_cursor_config: FutureCursorsConfig | None = None
-    start_cursor_config: StartCursorsConfig | None = None
-    invocation_time: datetime | None = None
-    max_microbatches: int | None = None
-    max_microbatches_is_override: bool = False
-    microbatch_limit_action: MicrobatchLimitAction = MicrobatchLimitAction.ERROR
-
-
-@dataclass(frozen=True)
-class FunctionChangeResult:
-    """Per-function output from change detection."""
-
-    fingerprint_sql: str
-    reason: PlanReason = PlanReason.NO_CHANGE
-
-
-@dataclass(frozen=True)
-class PlannerChangeResults:
-    """Change detection output for selected planner resources."""
-
-    models: dict[str, ChangeDetectionResult]
-    functions: dict[str, FunctionChangeResult]
-
-
-@dataclass(frozen=True)
-class ResolvedModelAction:
-    """Effective model change and backfill decided from the model's own change."""
-
-    change: ChangeDetectionResult
-    backfill: BackfillResult
-
-
-@dataclass(frozen=True)
-class PlannerResolvedActions:
-    """Per-model planning decisions keyed by model name."""
-
-    models: dict[str, ResolvedModelAction]
-
-
-@dataclass(frozen=True)
-class DirectModelVersionIdentities:
-    """Current direct model version identity values by model name."""
-
-    function_local_hashes: dict[str, str]
-    seed_version_hashes: dict[str, str]
-    seed_metadata_jsons: dict[str, str]
-    model_metadata_jsons: dict[str, str]
-    model_local_hashes: dict[str, str]
-    model_version_hashes: dict[str, str]
-
-
-@dataclass(frozen=True)
-class PlannerModelEntryResults:
-    """Model plan-entry phase output."""
-
-    entries: tuple[ModelPlanEntry, ...]
-    warnings: tuple[PlanWarning, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class SchemaAction:
-    """One concrete schema change action to apply to a target table."""
-
-    kind: SchemaActionKind
-    column_name: str
-    column_type: str | None = None
-
-
-@dataclass(frozen=True)
-class PlanWarning:
-    """One warning or error produced during plan resolution."""
-
-    model_name: str | None
-    severity: WarningSeverity
-    message: str
-    code: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1116,76 +773,6 @@ class ColumnMigrationPlanEntry:
         if self.origin_missing:
             return self.missing_origin_policy == MissingMigrationOriginPolicy.DENY
         return self.decision.blocks_build
-
-
-@dataclass(frozen=True)
-class ColumnRenameHint:
-    """A removed column that an added column may have been renamed from."""
-
-    model_name: str
-    added_column: str
-    candidate_columns: tuple[str, ...]
-    identical: bool = False
-
-    @property
-    def message(self) -> str:
-        """Return the one-line hint shown beside the added column."""
-
-        relation: str = "same expression as" if self.identical else "similar to"
-        origin: str = self.candidate_columns[0] if len(self.candidate_columns) == 1 else "<column>"
-        return (
-            f"{relation} {', '.join(self.candidate_columns)}; if this is a rename, add "
-            f"{self.added_column} (migrate_from {origin})"
-        )
-
-
-@dataclass(frozen=True)
-class QueryProjection:
-    """One named top-level output column of a query and its canonical expression."""
-
-    name: str
-    expression: str
-    references: frozenset[str]
-    passthrough: bool = False
-
-    @property
-    def key(self) -> str:
-        """Return the case-insensitive output name."""
-
-        return self.name.lower()
-
-
-@dataclass(frozen=True)
-class QueryShape:
-    """Canonical top-level projections and the rest of one query, ignoring formatting."""
-
-    projections: tuple[QueryProjection, ...]
-    body: str
-    alias_clauses: str = "{}"
-    positional: bool = False
-    input_relations: tuple[tuple[str, str], ...] | None = None
-    local_input_columns: frozenset[str] = frozenset()
-    clause_references: frozenset[str] = frozenset()
-
-
-@dataclass(frozen=True)
-class PlanOutputExtras:
-    """Optional supplemental seed fingerprints and precomputed SQL tests for plan assembly."""
-
-    seed_version_hashes: dict[str, str] | None = None
-    seed_metadata_jsons: dict[str, str] | None = None
-    seed_plan_reasons: dict[str, PlanReason] | None = None
-    planned_sql_tests: PlannedSqlTests | None = None
-
-
-@dataclass(frozen=True)
-class PlannedSqlTests:
-    """SQL test entries planned for one selection; reusable only for the same selection."""
-
-    selected_keys: frozenset[CompiledObjectKey]
-    sql_test_selection: SqlTestSelection = field(default_factory=SqlTestSelection)
-    entries: tuple[SqlTestPlanEntry, ...] = ()
-    warnings: tuple[PlanWarning, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1420,63 +1007,6 @@ class SqlTestPlanEntry:
 
 
 @dataclass(frozen=True)
-class NativeSqlTestPlan:
-    """Native chain and assertion steps for one SQL test, with SQL when rendered."""
-
-    chain: tuple[ChainStep, ...]
-    assertions: tuple[SqlTestAssertionStep, ...]
-    model_names: tuple[str, ...]
-    warnings: tuple[PlanWarning, ...]
-    error_messages: tuple[str, ...]
-    sql: str | None = None
-
-
-@dataclass(frozen=True)
-class SqlTestPlanResult:
-    """One SQL test's plan entry and warnings, or the fixture diagnostics preventing it."""
-
-    entry: SqlTestPlanEntry | None
-    warnings: tuple[PlanWarning, ...] = field(default_factory=tuple)
-    fixture_diagnostics: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class ScenarioGraphPlan:
-    """Inferred graph slice and fixture boundaries for one SQL scenario."""
-
-    key: CompiledObjectKey
-    name: str
-    target_model_names: tuple[str, ...] = field(default_factory=tuple)
-    assertion_target_model_names: tuple[str, ...] = field(default_factory=tuple)
-    model_names: tuple[str, ...] = field(default_factory=tuple)
-    source_fixture_names: tuple[str, ...] = field(default_factory=tuple)
-    ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
-    seed_names: tuple[str, ...] = field(default_factory=tuple)
-    seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
-    dbt_ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
-    function_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class ScenarioArtifactIdentity:
-    """Logical identity for one scenario-owned physical artifact."""
-
-    kind: ScenarioArtifactKind | str
-    logical_name: str
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "kind", ScenarioArtifactKind(self.kind))
-
-
-@dataclass(frozen=True)
-class ScenarioArtifactName:
-    """Resolved physical relation name for one scenario artifact."""
-
-    identity: ScenarioArtifactIdentity
-    physical_name: str
-
-
-@dataclass(frozen=True)
 class ScenarioRelationMap:
     """Resolved scenario hash prefix and scenario-owned relation names."""
 
@@ -1547,18 +1077,6 @@ class ScenarioExecutionPlan:
     assertion_expectations: tuple[ScenarioAssertionExpectationPlan, ...] = field(
         default_factory=tuple
     )
-
-
-@dataclass(frozen=True)
-class PlanProviderUsage:
-    """Provider usage metadata scoped to planned work."""
-
-    provider_name: str
-    consumer_kind: str
-    consumer_name: str
-    parameter_name: str
-    annotation_class_name: str | None = None
-    annotation_module: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1649,143 +1167,3 @@ class PlannerPolicies:
     selection_diagnostics: bool = False
     plan_sql_tests: bool = True
     record_migration_fingerprints: bool = True
-
-
-@dataclass(frozen=True)
-class PlannerRuntime:
-    """Resolved execution environment shared by planner phases."""
-
-    project: CompiledProjectView
-    adapter: BaseAdapter
-    connection: Any
-    project_config: ProjectConfig | None = None
-    local_config: LocalConfig | None = None
-    on_progress: Callable[[str], None] | None = None
-    invocation_time: datetime = field(default_factory=lambda: datetime.now(UTC))
-
-
-@dataclass(frozen=True)
-class PlannerScopeResolution:
-    """Resolved planner scopes for one plan build."""
-
-    selected_scope: PlannerScope
-    stale_warning_scope: PlannerScope
-    inspection_scope: PlannerScope
-
-
-@dataclass(frozen=True)
-class PlannerWarehouseState:
-    """Warehouse snapshot and inspection relations gathered once per plan."""
-
-    snapshot: WarehouseSnapshot
-    inspection_relations: PlannerRelationsContext
-    migration_entries: tuple[ModelMigrationPlanEntry, ...] = ()
-    migration_warnings: tuple[PlanWarning, ...] = ()
-    column_migration_entries: tuple[ColumnMigrationPlanEntry, ...] = ()
-    column_rename_hints: tuple[ColumnRenameHint, ...] = ()
-    old_name_view_entries: tuple[OldNameViewPlanEntry, ...] = ()
-    old_name_views: tuple[OldNameView, ...] = ()
-    migration_fingerprints: MigrationFingerprintCache = field(
-        default_factory=MigrationFingerprintCache
-    )
-
-
-@dataclass(frozen=True)
-class ModelMigrationRequest:
-    """One destination model whose data should come from an earlier relation."""
-
-    model: CompiledModelView
-    discovery: MigrationDiscovery
-    raw_origin: str | None = None
-    origin_location: CompiledRelationLocation | None = None
-    origin_model: str | None = None
-    force: bool = False
-    identity_only: bool = False
-
-
-@dataclass(frozen=True)
-class ModelMigrationDeclaration:
-    """One project model's explicit migrate_from, resolved to a relation."""
-
-    model_name: str
-    origin_location: CompiledRelationLocation
-    origin_model: str | None
-
-
-@dataclass(frozen=True)
-class ModelMigrationDiscovery:
-    """Manual and automatically discovered migration requests for one plan."""
-
-    requests: tuple[ModelMigrationRequest, ...] = ()
-    warnings: tuple[PlanWarning, ...] = ()
-    destination_fingerprints: dict[str, tuple[str, ...]] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class MigrationCompatibilityResult:
-    """Compatibility status plus human-readable blocking findings."""
-
-    status: MigrationCompatibility
-    findings: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class ModelMigrationPlanning:
-    """Migration decisions plus the warehouse snapshot as it will look after moves."""
-
-    snapshot: WarehouseSnapshot
-    entries: tuple[ModelMigrationPlanEntry, ...] = ()
-    warnings: tuple[PlanWarning, ...] = ()
-
-
-@dataclass(frozen=True)
-class OldNameViewPlanning:
-    """Old-name steps for this build plus every compatibility view still recorded."""
-
-    entries: tuple[OldNameViewPlanEntry, ...] = ()
-    views: tuple[OldNameView, ...] = ()
-    warnings: tuple[PlanWarning, ...] = ()
-
-
-@dataclass(frozen=True)
-class ColumnMigrationPlanning:
-    """Column rename decisions plus the warehouse snapshot as it will look after renames."""
-
-    snapshot: WarehouseSnapshot
-    entries: tuple[ColumnMigrationPlanEntry, ...] = ()
-    hints: tuple[ColumnRenameHint, ...] = ()
-    warnings: tuple[PlanWarning, ...] = ()
-
-
-@dataclass(frozen=True)
-class PlannerIdentityContext:
-    """Expected version identities for inspection and stale-warning scopes."""
-
-    version_identities: DirectModelVersionIdentities
-    stale_warning_identities: DirectModelVersionIdentities
-
-
-@dataclass(frozen=True)
-class PlannerScopePruningResult:
-    """Scope pruning outcome with pruned scopes, actions, and staleness state."""
-
-    inspection_scope: PlannerScope
-    execution_scope: PlannerScope
-    resolved_actions: PlannerResolvedActions
-    pruned_direct_model_names: tuple[str, ...]
-    direct_identity_stale_model_names: frozenset[str]
-
-
-@dataclass(frozen=True)
-class PlannerChangeReconciliation:
-    """Write-hash-honest changes merged back into resolved actions."""
-
-    changes: PlannerChangeResults
-    resolved_actions: PlannerResolvedActions
-
-
-@dataclass(frozen=True)
-class PlannerEntryResults:
-    """Model plan entries for one plan build."""
-
-    model_entry_results: PlannerModelEntryResults

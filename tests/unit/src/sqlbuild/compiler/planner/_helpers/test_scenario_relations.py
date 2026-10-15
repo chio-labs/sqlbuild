@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    ScenarioGraphPlan,
     build_scenario_execution_plan,
     build_scenario_fixture_plans,
     build_scenario_relation_plan,
@@ -29,7 +30,6 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     ScenarioExecutionPlan,
     ScenarioFixturePlan,
-    ScenarioGraphPlan,
     ScenarioRelationPlan,
 )
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax

@@ -3,7 +3,7 @@
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PyList, PyString, PyStringMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{
@@ -31,7 +31,15 @@ const TYPED_REFERENCE_FUNCTIONS: [(&str, &str); 3] = [
 ];
 const USER_MACROS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.user_macros";
 const ACTIVE_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.main.active_macro_bridge";
-const BRIDGE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.macro_bridge.constants";
+/// The call prefix of every reference function, in `SqlReferenceKind` order.
+const GENERATED_REFERENCE_MARKERS: [&str; 6] = [
+    "__ref(",
+    "__seed(",
+    "__source(",
+    "__dbt_ref(",
+    "__udf(",
+    "__table_fn(",
+];
 const DIAGNOSTICS_MODULE: &str = "sqlbuild._native";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
 const SQL_ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.sql_analysis.models";
@@ -62,11 +70,7 @@ fn generated_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
             &[("allowed", PyString::new(py, GENERATED_ALLOWED).into_any())],
         )?),
     )?;
-    let markers: Bound<'_, PyAny> = imported(py, BUILTINS_MODULE, "list")?.call1((imported(
-        py,
-        BRIDGE_CONSTANTS_MODULE,
-        "GENERATED_REFERENCE_MARKERS",
-    )?,))?;
+    let markers: Bound<'_, PyAny> = PyList::new(py, GENERATED_REFERENCE_MARKERS)?.into_any();
     keywords(
         py,
         &[

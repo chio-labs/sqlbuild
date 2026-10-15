@@ -104,7 +104,7 @@ pub(crate) fn parsed_flags(
 
 fn parsed_args_model<'py>(py: Python<'py>, flags: DbtParsedFlags) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(py, DBT_MODELS, "DbtInteropParsedArgs")?,
+        &imported(py, NATIVE_MODULE, "DbtInteropParsedArgs")?,
         &[
             ("select", PyTuple::new(py, flags.select)?.into_any()),
             ("exclude", PyTuple::new(py, flags.exclude)?.into_any()),
@@ -184,7 +184,7 @@ pub(crate) fn config_overrides<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let value = |name: &str| optional_text(py, dbt_flag_value(args, name));
     call_with(
-        &imported(py, DBT_MODELS, "DbtCliConfigOverrides")?,
+        &imported(py, NATIVE_MODULE, "DbtCliConfigOverrides")?,
         &[
             ("project_dir", value("--project-dir")),
             ("profiles_dir", value("--profiles-dir")),

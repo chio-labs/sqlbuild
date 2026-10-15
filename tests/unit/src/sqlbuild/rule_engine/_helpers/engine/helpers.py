@@ -29,7 +29,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, Discovere
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.rule_engine._helpers.engine import custom_dispatch as native
 from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
-from sqlbuild.rule_engine.constants import MIN_CUSTOM_RULE_TEST_CASES, RULES_SKILL_PATHS
+from sqlbuild.rule_engine.constants import MIN_CUSTOM_RULE_TEST_CASES
 from sqlbuild.rule_engine.main._evaluate import evaluate
 from sqlbuild.rule_engine.models import (
     CustomRulesOutcome,
@@ -44,6 +44,12 @@ from sqlbuild.rule_engine.models import (
 )
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import CustomRuleTestCase
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_project
+
+RULES_SKILL_PATHS: tuple[str, ...] = (
+    ".agents/skills/sqlbuild-rules/SKILL.md",
+    ".claude/skills/sqlbuild-rules/SKILL.md",
+    ".opencode/skills/sqlbuild-rules/SKILL.md",
+)
 
 _MODEL_SQL: str = "WITH final AS (SELECT 1 AS id) SELECT id FROM final"
 

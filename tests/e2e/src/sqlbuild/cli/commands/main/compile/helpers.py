@@ -45,19 +45,10 @@ from sqlbuild._native import compiler_cache_directory
 from sqlbuild._native import run_cli as main
 from sqlbuild.adapter.contract.classes.duckdb_backed_adapter import DuckDbBackedAdapter
 from sqlbuild.adapter.contract.types import TypeDialect
-from sqlbuild.compiler.analysis_session.constants import NATIVE_ANALYSIS_STORE_FILE_NAME
-from sqlbuild.compiler.compile.constants import (
-    RETIRED_FACT_CACHE_DIRECTORY_NAME,
-    RETIRED_REFERENCE_CACHE_DIRECTORY_NAME,
-)
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.frontier.constants import (
     COMPILE_REUSE_DISABLE_ENV_VAR as REUSE_DISABLE_ENV_VAR,
-)
-from sqlbuild.compiler.frontier.constants import (
-    COMPILER_CACHE_DIRECTORY_NAME,
-    RETIRED_CACHE_NAMESPACE_SUFFIXES,
 )
 from sqlbuild.compiler.macro_bridge.constants import MACRO_CALL_STORE_FILE_NAME
 from sqlbuild.observability import EventDispatcher, LifecycleEvent
@@ -76,6 +67,12 @@ from tests.integration.src.sqlbuild.compiler.compile.helpers import (
 from tests.integration.src.sqlbuild.compiler.contracts.helpers import (
     contract_statuses,
 )
+
+NATIVE_ANALYSIS_STORE_FILE_NAME: str = "model-analyses.bin"
+RETIRED_FACT_CACHE_DIRECTORY_NAME: str = "facts-v1"
+RETIRED_REFERENCE_CACHE_DIRECTORY_NAME: str = "references-v3"
+COMPILER_CACHE_DIRECTORY_NAME: str = "compiler"
+RETIRED_CACHE_NAMESPACE_SUFFIXES: tuple[str, ...] = ("", "-native-v1", "-native-preview-v1")
 
 NATIVE_REUSE_DIRECTORY_NAME: str = "project-reuse-v2"
 NATIVE_REUSE_SUFFIX: str = ".store"

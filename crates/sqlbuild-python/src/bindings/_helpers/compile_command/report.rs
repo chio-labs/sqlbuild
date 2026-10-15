@@ -18,10 +18,10 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::compile_outputs::json_report::{
     emit_json_report, emit_orjson_report,
 };
+use crate::bindings::_helpers::discovery::constants::SQL_HOOK_OUTPUT_FIELDS;
 use crate::bindings::_helpers::discovery::hook_entries::hook_entries;
 use crate::bindings::_helpers::semantic_shapes::coverage::semantic_coverage;
 
-const DISCOVERY_CONSTANTS_MODULE: &str = "sqlbuild.compiler.discovery.constants";
 const HOOK_IDENTITIES_MODULE: &str = "sqlbuild.compiler.python_nodes.main._hook_identities";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const METADATA_MODULE: &str = "importlib.metadata";
@@ -631,12 +631,7 @@ fn model_resource<'py>(
         if !hooks.is_none() {
             item.set_item(
                 hook_key,
-                hook_entries(
-                    &hooks,
-                    &imported(py, DISCOVERY_CONSTANTS_MODULE, "SQL_HOOK_OUTPUT_FIELDS")?
-                        .extract::<Vec<String>>()?,
-                    None,
-                )?,
+                hook_entries(&hooks, &SQL_HOOK_OUTPUT_FIELDS.map(str::to_owned), None)?,
             )?;
         }
     }

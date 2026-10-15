@@ -7,15 +7,13 @@ from typing import cast
 import pytest
 
 from sqlbuild._native import (
+    CompileLineageMode,
     ProjectColumnLineage,
+    WrittenTarget,
     compiled_model_record,
     format_compile_json,
     format_compile_text,
     project_with,
-)
-from sqlbuild.cli.commands.types import CompileLineageMode
-from sqlbuild.cli.output.models import (
-    WrittenTarget,
 )
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompileModelConfig
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType

@@ -18,6 +18,7 @@ from scripts.compiler_differential._helpers.running.execution import run_project
 from scripts.compiler_differential.constants import (
     ANALYSIS_CODE_SCAN_ROOTS,
     ANALYSIS_NATIVE_CODE_SCAN_ROOTS,
+    BUILT_IN_AUDIT_SHADOW_CODE,
     COLD_COMPILE,
     CORPUS_FAILURES,
     DIAGNOSTIC_CODE_PATTERN,
@@ -38,7 +39,6 @@ from scripts.compiler_differential.models import (
     FailureCase,
     ProjectRun,
 )
-from sqlbuild.compiler.auditing.constants import BUILT_IN_AUDIT_SHADOW_CODE
 from sqlbuild.compiler.compile import constants as compile_constants
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError

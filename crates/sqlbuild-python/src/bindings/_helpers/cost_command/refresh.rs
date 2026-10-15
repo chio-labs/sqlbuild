@@ -11,6 +11,7 @@ use sqlbuild_core::cost_command::models::CostCoverage;
 
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::cost_telemetry::values::cost_aware;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const EFFECTIVE_TARGET_MODULE: &str = "sqlbuild._native";
@@ -121,7 +122,7 @@ fn refresh(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<()> {
         ],
     )?;
     let adapter: Bound<'_, PyAny> = resolve_cli_adapter(&adapter_name, &project_dir)?;
-    if !adapter.is_instance(&imported(py, COST_TYPES, "CostAwareAdapter")?)? {
+    if !cost_aware(&adapter)? {
         return Ok(());
     }
     let none_capability: Bound<'_, PyAny> =

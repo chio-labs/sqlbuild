@@ -8,7 +8,12 @@ from unittest.mock import Mock
 
 import pytest
 
-from sqlbuild._native import plan_column_migrations
+from sqlbuild._native import (
+    PlannerRuntime,
+    WarehouseFingerprints,
+    WarehouseSnapshot,
+    plan_column_migrations,
+)
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
@@ -23,10 +28,7 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     DeferralInputs,
     PlannerOverrides,
-    PlannerRuntime,
     PlannerScope,
-    WarehouseFingerprints,
-    WarehouseSnapshot,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations._test_types import (
     UnfingerprintableCandidateTestCase,

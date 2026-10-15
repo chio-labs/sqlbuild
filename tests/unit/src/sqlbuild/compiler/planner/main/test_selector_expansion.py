@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import split_selector_expansion
-from sqlbuild.compiler.planner.models import SelectorExpansion
+from sqlbuild._native import (
+    SelectorExpansion,
+    split_selector_expansion,
+)
 from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
     SelectorExpansionErrorTestCase,
     SelectorExpansionTestCase,

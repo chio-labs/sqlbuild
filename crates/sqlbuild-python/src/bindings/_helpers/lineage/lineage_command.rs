@@ -40,7 +40,7 @@ use crate::bindings::_helpers::lineage::lineage_index::{graph_index, index_views
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
+const ERRORS_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
 const GRAPH_SELECTION_MODULE: &str = "sqlbuild._native";

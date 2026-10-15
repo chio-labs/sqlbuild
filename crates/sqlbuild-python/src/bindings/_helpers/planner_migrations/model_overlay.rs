@@ -3,7 +3,8 @@
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
-use crate::bindings::_helpers::planner_migrations::column_objects::{config, model, replace};
+use crate::bindings::_helpers::planner_migrations::column_objects::native;
+use crate::bindings::_helpers::planner_migrations::column_objects::{config, replace};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods};
 
@@ -109,7 +110,7 @@ pub(super) fn overlay<'py>(
             ("existing_columns", columns.into_any()),
             (
                 "fingerprints",
-                model(
+                native(
                     py,
                     "WarehouseFingerprints",
                     &[

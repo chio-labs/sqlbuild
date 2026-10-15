@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessIdentity, SourceFreshnessRecord
+from sqlbuild._native import SourceFreshnessIdentity
+from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 
 
 @dataclass(frozen=True)

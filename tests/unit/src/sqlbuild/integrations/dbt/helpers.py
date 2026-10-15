@@ -8,6 +8,8 @@ from types import MappingProxyType
 from typing import cast
 
 from sqlbuild._native import (
+    BackfillResult,
+    DbtCliConfigOverrides,
     DbtCombinedGraph,
     DbtEventStream,
     DbtEventStreamUpdate,
@@ -30,7 +32,9 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSqlModelFile,
 )
-from sqlbuild.compiler.planner.models import BackfillResult, ModelPlanEntry
+from sqlbuild.compiler.planner.models import (
+    ModelPlanEntry,
+)
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
     MaterializationType,
@@ -39,11 +43,7 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
-from sqlbuild.integrations.dbt.models import (
-    DbtCliConfigOverrides,
-    DbtCliOptions,
-    DbtCommandResult,
-)
+from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
 _GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()

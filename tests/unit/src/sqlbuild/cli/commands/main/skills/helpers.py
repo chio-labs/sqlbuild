@@ -3,8 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path, PurePosixPath
 
-from sqlbuild._native import update_sqlbuild_skills
-from sqlbuild.cli.output.models import SkillUpdateResult
+from sqlbuild._native import SkillUpdateResult, update_sqlbuild_skills
 
 
 def write_project_files(*, project_dir: Path, files: dict[Path, str]) -> None:

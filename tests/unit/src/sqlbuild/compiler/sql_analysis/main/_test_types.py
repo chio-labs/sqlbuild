@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from sqlbuild.compiler.sql_analysis.types import NativeProjectCatalog
+if TYPE_CHECKING:
+    from sqlbuild._native import NativeProjectCatalog
 
 
 @dataclass(frozen=True)

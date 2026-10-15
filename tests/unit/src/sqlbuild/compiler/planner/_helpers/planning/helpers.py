@@ -4,6 +4,11 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
 
+from sqlbuild._native import (
+    PlannerRuntime,
+    PlannerWarehouseState,
+    WarehouseSnapshot,
+)
 from sqlbuild.adapter.contract.classes.retention_adapter import RetentionAdapterMixin
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.compile.models import (
@@ -20,10 +25,7 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.planner.models import (
     PlannerRelationsContext,
-    PlannerRuntime,
     PlannerScope,
-    PlannerWarehouseState,
-    WarehouseSnapshot,
 )
 from sqlbuild.spec.contracts.models import (
     LocalConfig,

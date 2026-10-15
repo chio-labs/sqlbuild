@@ -79,3 +79,8 @@ pub(crate) const REUSE_ATTEMPT_FIELDS: (&[&str], &[&str]) = (
         "json_output",
     ],
 );
+/// The variable that disables the compile cache when it holds `COMPILE_CACHE_DISABLE_VALUE`.
+pub(crate) const COMPILE_CACHE_DISABLE_ENV_VAR: &str = "SQLBUILD_DISABLE_COMPILE_CACHE";
+pub(crate) const COMPILE_CACHE_DISABLE_VALUE: &str = "1";
+/// The fact and reference cache directories older releases kept under each retired cache root.
+pub(crate) const RETIRED_CACHE_DIRECTORY_NAMES: [&str; 2] = ["facts-v1", "references-v3"];

@@ -12,11 +12,11 @@ use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::rules::constants::SAFE_RULE_FIX_CODES;
 use crate::bindings::_helpers::rules::early_sql_lint::{sql_lint_config, sql_rule_cache_path};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const RULES_MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
-const LINT_CONSTANTS_MODULE: &str = "sqlbuild.lint.constants";
 const LINT_EXCEPTIONS_MODULE: &str = "sqlbuild.lint.exceptions";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const JSON_MODULE: &str = "json";
@@ -568,7 +568,7 @@ fn violation_findings<'py>(
     let engine_error: String = imported(py, LINT_EXCEPTIONS_MODULE, "NativeLintError")?
         .getattr("code")?
         .extract()?;
-    let safe_fixes: Bound<'py, PyAny> = imported(py, LINT_CONSTANTS_MODULE, "SAFE_RULE_FIX_CODES")?;
+    let safe_fixes: Bound<'py, PyAny> = PyFrozenSet::new(py, SAFE_RULE_FIX_CODES)?.into_any();
     let resolved: Bound<'py, PyAny> = run.project_dir.call_method0("resolve")?;
     let replace: Bound<'py, PyAny> = imported(py, DATACLASSES_MODULE, "replace")?;
     let no_paths: BTreeSet<String> = BTreeSet::new();

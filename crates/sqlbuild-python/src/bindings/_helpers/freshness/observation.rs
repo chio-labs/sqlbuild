@@ -1,7 +1,7 @@
 //! Observe configured and adapter-metadata source freshness through adapter callbacks.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::{PyBool, PyDateTime, PyDict, PyDictMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_state::freshness::main::single_value_problem::single_value_problem;
 use sqlbuild_state::freshness::models::QueryShape;
@@ -9,13 +9,15 @@ use sqlbuild_state::freshness::models::QueryShape;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 use crate::bindings::_helpers::freshness::support::{
     ADAPTER_MODELS, ADAPTER_TYPES, CONTRACT_MODELS, CONTRACT_TYPES, FRESHNESS_MODELS,
-    FRESHNESS_TYPES, LIFECYCLE_MODULE, OBSERVABILITY_MODELS, OBSERVATION_ERROR, exception_text,
-    freshness_error, presumed_utc_datetime, presumed_utc_value, text,
+    LIFECYCLE_MODULE, OBSERVABILITY_MODELS, OBSERVATION_ERROR, exception_text, freshness_error,
+    presumed_utc_datetime, presumed_utc_value, text,
 };
+use crate::bindings::_helpers::records::constants::{DATA_VERSION_FIELD, OBSERVED_AT_FIELD};
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 use crate::bindings::_helpers::state_rows::freshness::{normalize, version_hash};
 use crate::bindings::_helpers::state_rows::timestamps::{in_utc, offset_aware};
 
+const NATIVE_RECORDS: &str = "sqlbuild._native";
 const ADAPTER_STRATEGY: &str = "adapter";
 const COLUMN_STRATEGY: &str = "column";
 const DEFAULT_STRATEGY: &str = "sql";
@@ -117,7 +119,7 @@ fn observation<'py>(
     call_with(
         &imported(
             source_name.py(),
-            FRESHNESS_MODELS,
+            NATIVE_RECORDS,
             "SourceFreshnessObservation",
         )?,
         &[
@@ -307,12 +309,12 @@ pub(crate) fn unknown<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = source_name.py();
     call_with(
-        &imported(py, FRESHNESS_MODELS, "SourceFreshnessUnknown")?,
+        &imported(py, NATIVE_RECORDS, "SourceFreshnessUnknown")?,
         &[
             ("source_name", source_name.clone()),
             (
                 "reason",
-                imported(py, FRESHNESS_TYPES, "SourceFreshnessUnknownReason")?.getattr(reason)?,
+                imported(py, NATIVE_RECORDS, "SourceFreshnessUnknownReason")?.getattr(reason)?,
             ),
             ("message", message),
         ],
@@ -404,7 +406,7 @@ pub(crate) fn observe_adapter_batch<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = observer.adapter.py();
     let batch_class: Bound<'py, PyAny> =
-        imported(py, FRESHNESS_MODELS, "AdapterSourceFreshnessBatch")?;
+        imported(py, NATIVE_RECORDS, "AdapterSourceFreshnessBatch")?;
     if sources.is_empty() {
         return batch_class.call0();
     }
@@ -432,7 +434,7 @@ fn observe_adapter_batch_inner<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = observer.adapter.py();
     let batch_class: Bound<'py, PyAny> =
-        imported(py, FRESHNESS_MODELS, "AdapterSourceFreshnessBatch")?;
+        imported(py, NATIVE_RECORDS, "AdapterSourceFreshnessBatch")?;
     let unknown_sources: Bound<'py, PyDict> = PyDict::new(py);
     let requests: Bound<'py, PyDict> = PyDict::new(py);
     let request_class: Bound<'py, PyAny> = imported(py, ADAPTER_MODELS, "TableFreshnessRequest")?;
@@ -600,6 +602,23 @@ fn require_aware_utc_datetime<'py>(
         ));
     }
     in_utc(value)
+}
+
+/// Hold an observation's `observed_at` and datetime `data_version` as aware UTC values.
+pub(crate) fn normalize_observation(
+    py: Python<'_>,
+    mut values: Vec<Py<PyAny>>,
+) -> PyResult<Vec<Py<PyAny>>> {
+    let observed_at: Bound<'_, PyAny> =
+        require_aware_utc_datetime(values[OBSERVED_AT_FIELD].bind(py), "observed_at")?;
+    values[OBSERVED_AT_FIELD] = observed_at.unbind();
+    let data_version: &Bound<'_, PyAny> = values[DATA_VERSION_FIELD].bind(py);
+    if data_version.is_instance_of::<PyDateTime>() {
+        let data_version: Bound<'_, PyAny> =
+            require_aware_utc_datetime(data_version, "data_version")?;
+        values[DATA_VERSION_FIELD] = data_version.unbind();
+    }
+    Ok(values)
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

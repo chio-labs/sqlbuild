@@ -6,8 +6,11 @@ import hashlib
 
 import pytest
 
-from sqlbuild._native import build_migration_fingerprint, parse_query_shape
-from sqlbuild.compiler.planner.models import QueryShape
+from sqlbuild._native import (
+    QueryShape,
+    build_migration_fingerprint,
+    parse_query_shape,
+)
 from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations._test_types import (
     StoredProjectionTestCase,
 )

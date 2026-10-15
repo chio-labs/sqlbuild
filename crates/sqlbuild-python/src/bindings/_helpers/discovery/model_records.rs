@@ -8,6 +8,7 @@ use sqlbuild_discovery::model_files::models::{DiscoveredModelFile, ModelFileOpti
 use sqlbuild_discovery::models::{DiscoveredFile, FileOutcome, StageFailure};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::discovery::constants;
 use crate::bindings::_helpers::discovery::faults::{FileFaults, record_tuple};
 use crate::bindings::_helpers::discovery::project_files::{model_record, path_object};
 use crate::bindings::_helpers::discovery::raised::{failure_error, read_error, stage_error};
@@ -74,8 +75,8 @@ pub(crate) fn discovered_model_files<'py>(
     let py: Python<'py> = project_dir.py();
     let (extract_implicit_alias_columns, extract_output_column_locations) = extraction;
     let options = ModelFileOptions {
-        supported_keys: sorted_keys(py, "SQL_MODEL_HEADER_KEYS")?,
-        removed_keys: sorted_keys(py, "REMOVED_SQL_MODEL_HEADER_KEYS")?,
+        supported_keys: sorted_keys(&constants::SQL_MODEL_HEADER_KEYS),
+        removed_keys: sorted_keys(&constants::REMOVED_SQL_MODEL_HEADER_KEYS),
         extract_implicit_alias_columns,
         extract_output_column_locations,
     };

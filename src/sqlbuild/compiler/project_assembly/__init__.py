@@ -1,1 +1,0 @@
-"""Native compiled project assembly."""

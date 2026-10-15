@@ -19,7 +19,8 @@ const LOCAL_QUALNAME_MARKER: &str = "<locals>";
 const PACKAGE_NAME: &str = "sqlbuild";
 const UNKNOWN_VERSION: &str = "unknown";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
-const SQL_ANALYSIS_CONSTANTS_MODULE: &str = "sqlbuild.compiler.sql_analysis.constants";
+/// Sorted; the dialects whose expression types compile checks.
+const TYPE_CHECKED_DIALECTS: [&str; 4] = ["bigquery", "duckdb", "postgresql", "snowflake"];
 const METRIC_MODULE: &str = "sqlbuild.compiler.profiling.main._metric";
 const METADATA_MODULE: &str = "importlib.metadata";
 const CONTEXT_REQUIRED: [&str; 3] = ["root", "inference_profile", "allow_compact_analysis"];
@@ -57,11 +58,7 @@ pub(crate) fn analysis_cache_context<'py>(
     shared.set_item("rich_type_inference", rich_type_inference)?;
     shared.set_item(
         "type_checked_dialects",
-        imported(py, "builtins", "sorted")?.call1((imported(
-            py,
-            SQL_ANALYSIS_CONSTANTS_MODULE,
-            "TYPE_CHECKED_DIALECTS",
-        )?,))?,
+        PyList::new(py, TYPE_CHECKED_DIALECTS)?,
     )?;
     shared.set_item("inference_profile", profile)?;
     let digests = (|| -> PyResult<(String, String)> {

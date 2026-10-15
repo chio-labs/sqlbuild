@@ -11,8 +11,6 @@ use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::planner_migrations::main::{query_shape, renames_explain_change as proof};
 use sqlbuild_analysis::planner_migrations::models::{QueryProjection, QueryShape};
 
-const MODELS_MODULE: &str = "sqlbuild.compiler.planner.models";
-
 fn read_shape(shape: &Bound<'_, PyAny>) -> PyResult<QueryShape> {
     let mut projections: Vec<QueryProjection> = Vec::new();
     for item in shape.getattr("projections")?.try_iter()? {
@@ -56,7 +54,7 @@ fn parse_query_shape<'py>(
     let mut projections: Vec<Bound<'py, PyAny>> = Vec::new();
     for item in shape.projections {
         projections.push(call_with(
-            &imported(py, MODELS_MODULE, "QueryProjection")?,
+            &imported(py, "sqlbuild._native", "QueryProjection")?,
             &[
                 ("name", item.name.into_pyobject(py)?.into_any()),
                 ("expression", item.expression.into_pyobject(py)?.into_any()),
@@ -76,7 +74,7 @@ fn parse_query_shape<'py>(
         None => py.None().into_bound(py),
     };
     call_with(
-        &imported(py, MODELS_MODULE, "QueryShape")?,
+        &imported(py, "sqlbuild._native", "QueryShape")?,
         &[
             ("projections", PyTuple::new(py, projections)?.into_any()),
             ("body", shape.body.into_pyobject(py)?.into_any()),

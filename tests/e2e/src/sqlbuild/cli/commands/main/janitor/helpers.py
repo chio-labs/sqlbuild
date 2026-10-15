@@ -9,13 +9,14 @@ from pathlib import Path
 from textwrap import dedent
 from types import MappingProxyType
 
-from sqlbuild._native import write_fingerprint, write_source_freshness_records
+from sqlbuild._native import (
+    SourceFreshnessRenderers,
+    write_fingerprint,
+    write_source_freshness_records,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.source_freshness.models import (
-    SourceFreshnessRecord,
-    SourceFreshnessRenderers,
-)
+from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     execute_duckdb,
     prepare_inline_project,

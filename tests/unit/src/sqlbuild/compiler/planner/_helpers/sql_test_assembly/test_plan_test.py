@@ -6,6 +6,10 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    NativeSqlTestPlan,
+    PlanWarning,
+    SqlTestPlanResult,
+    WarningSeverity,
     build_test_command_plan,
     plan_compiled_sql_test_artifacts,
     project_with,
@@ -32,15 +36,11 @@ from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, Discovere
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     ChainStep,
-    NativeSqlTestPlan,
     PlannerScope,
     PlannerSelection,
     PlanOutput,
-    PlanWarning,
     SqlTestPlanEntry,
-    SqlTestPlanResult,
 )
-from sqlbuild.compiler.planner.types import WarningSeverity
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     AssertionChainCteErrorTestCase,

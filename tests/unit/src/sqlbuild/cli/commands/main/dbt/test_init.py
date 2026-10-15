@@ -7,7 +7,7 @@ from _pytest.capture import CaptureResult
 
 import sqlbuild._native as dbt_init_module
 import sqlbuild.integrations.dbt._helpers.profile.init as dbt_profile_init
-from sqlbuild.cli.commands.models import DbtInitCommandRequest
+from sqlbuild._native import DbtInitCommandRequest
 from sqlbuild.integrations.dbt.exceptions import DbtProfileError
 from sqlbuild.integrations.dbt.models import DbtInitRequest, DbtInitResult
 from tests.unit.src.sqlbuild.cli.commands.main.dbt._test_types import (

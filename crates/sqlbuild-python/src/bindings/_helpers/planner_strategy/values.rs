@@ -1,5 +1,6 @@
 //! Conversions between the planner's Python models and the native strategy rows.
 
+use crate::bindings::_helpers::planner_changes::results::native_enum;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString};
@@ -13,7 +14,6 @@ use sqlbuild_analysis::planner_strategy::models::{
 };
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::planner_changes::results::{MODELS_MODULE, planner_enum};
 
 pub(crate) const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
 pub(crate) const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
@@ -137,10 +137,10 @@ pub(crate) fn plan_warning<'py>(
         WarningSeverity::Info => "info",
     };
     call_with(
-        &imported(py, MODELS_MODULE, "PlanWarning")?,
+        &imported(py, "sqlbuild._native", "PlanWarning")?,
         &[
             ("model_name", model_name.clone()),
-            ("severity", planner_enum(py, "WarningSeverity", severity)?),
+            ("severity", native_enum(py, "WarningSeverity", severity)?),
             ("message", PyString::new(py, &row.message).into_any()),
             ("code", row.code.into_pyobject(py)?.into_any()),
         ],

@@ -23,7 +23,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 
-const DBT_MODELS: &str = "sqlbuild.integrations.dbt.models";
+const NATIVE_RECORDS: &str = "sqlbuild._native";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const DBT_REF_KIND: &str = "dbt_ref";
 const RELATION_OPTIONS: (&[&str], &[&str]) =
@@ -139,7 +139,7 @@ fn model_object<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = raw.py();
     call_with(
-        &imported(py, DBT_MODELS, "DbtManifestModel")?,
+        &imported(py, NATIVE_RECORDS, "DbtManifestModel")?,
         &[
             ("unique_id", unique_id.clone()),
             ("package_name", text(py, &model.package_name)),
@@ -170,7 +170,7 @@ fn seed_object<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = raw.py();
     call_with(
-        &imported(py, DBT_MODELS, "DbtManifestSeed")?,
+        &imported(py, NATIVE_RECORDS, "DbtManifestSeed")?,
         &[
             ("unique_id", unique_id.clone()),
             ("package_name", text(py, &seed.package_name)),
@@ -191,7 +191,7 @@ fn source_object<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = raw.py();
     call_with(
-        &imported(py, DBT_MODELS, "DbtManifestSource")?,
+        &imported(py, NATIVE_RECORDS, "DbtManifestSource")?,
         &[
             ("unique_id", unique_id.clone()),
             ("package_name", text(py, &source.package_name)),
@@ -337,7 +337,7 @@ fn manifest_index<'py>(raw_data: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAn
         sources_by_unique_id.set_item(&unique_id, source_object(&unique_id, &source, &raw)?)?;
     }
     call_with(
-        &imported(py, DBT_MODELS, "DbtManifestIndex")?,
+        &imported(py, NATIVE_RECORDS, "DbtManifestIndex")?,
         &[
             ("models_by_unique_id", indexes.by_unique_id.into_any()),
             ("models_by_name", indexes.by_name.into_any()),

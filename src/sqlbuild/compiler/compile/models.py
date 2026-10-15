@@ -43,11 +43,9 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredLoaderFunction,
     DiscoveredMaterializationFile,
     DiscoveredProjectInputs,
-    DiscoveredPythonFunctionFile,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
-    DiscoveredSqlFunctionFile,
     DiscoveredSqlHookFile,
     DiscoveredSqlModelFile,
     DiscoveredSqlScenarioFile,
@@ -190,14 +188,6 @@ class DynamicColumnContractProof:
     input_relations: tuple[str, ...] = field(default_factory=tuple)
     failure_reason: str | None = None
     bare_dynamic_pivot: bool = False
-
-
-@dataclass(frozen=True)
-class NonNullFilterContext:
-    """Resolved relations and columns constrained by non-null filters."""
-
-    relations: tuple[tuple[str, dict[str, InferredNullability]], ...]
-    columns: frozenset[tuple[str, str]]
 
 
 @dataclass(frozen=True)
@@ -372,15 +362,6 @@ class MacroExpansionResult:
 
 
 @dataclass(frozen=True)
-class DeclarationExpansionResult:
-    """Expanded SQL and resolved declaration usage facts from one authored string."""
-
-    sql: str
-    spans: tuple[ExpansionSpan, ...] = field(default_factory=tuple)
-    usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
 class VisibleModelDeclarations:
     """One model's visible declarations and macros, as the native model loop resolves them."""
 
@@ -466,16 +447,6 @@ class ModelInputBuildContext:
             collection_rendering=self.collection_rendering,
             resolver=self.declaration_resolver,
         )
-
-
-@dataclass(frozen=True)
-class ModelInputScopeBuild:
-    """Model inputs paired with public declaration artifacts and updated context."""
-
-    inputs: tuple[ModelInput, ...]
-    declarations: DeclarationResolutionContext
-    context: ModelInputBuildContext
-    native_project: _native.NativeCompiledProject = field(repr=False, compare=False)
 
 
 @dataclass(frozen=True)
@@ -695,48 +666,6 @@ class FunctionReturnColumn:
 
 
 @dataclass(frozen=True)
-class CompileSqlFunctionInput:
-    """One discovered SQL function with validated compile-time metadata."""
-
-    function_file: DiscoveredSqlFunctionFile | DiscoveredPythonFunctionFile
-    name: str
-    arguments: tuple[FunctionArgument, ...]
-    returns: str
-    body_sql: str
-    return_columns: tuple[FunctionReturnColumn, ...] = field(default_factory=tuple)
-    references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
-    database: str | None = None
-    schema: str | None = None
-    logical_database: str | None = None
-    logical_schema: str | None = None
-    fingerprint_database: str | None = None
-    fingerprint_schema: str | None = None
-    fingerprint_logical_database: str | None = None
-    fingerprint_logical_schema: str | None = None
-    language: FunctionLanguage = FunctionLanguage.SQL
-    runtime_version: str | None = None
-    entry_point: str | None = None
-    packages: tuple[str, ...] = field(default_factory=tuple)
-    declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
-    tags: tuple[str, ...] = field(default_factory=tuple)
-    description: str | None = None
-
-    @property
-    def assembly_row(self) -> tuple[str, str, list[str], list[tuple[str, str, str | None]]]:
-        """`(node type, name, tags, references)`, what assembly resolves dependencies from."""
-
-        return (
-            CompiledResourceType.TABLE_FN if self.return_columns else CompiledResourceType.UDF,
-            self.name,
-            list(self.tags),
-            [
-                (str(reference.ref_kind), reference.ref_name, reference.ref_package)
-                for reference in self.references
-            ],
-        )
-
-
-@dataclass(frozen=True)
 class CompileModelInput:
     """One discovered model file with its attached schema metadata, if any."""
 
@@ -817,42 +746,6 @@ class ModelSqlAnalysis:
 
 
 @dataclass(frozen=True)
-class ModelSqlAnalysisRequest:
-    """Inputs to one model's SQL analysis."""
-
-    model_input: ModelInput
-    query_sql: str
-    placeholders: dict[str, str] | None
-    cache_key: str | None
-    binding_schema: dict[str, dict[str, str]] | None
-
-
-@dataclass(frozen=True)
-class CompileSeedInput:
-    """One discovered seed file with its attached seed metadata."""
-
-    seed_file: DiscoveredSeedFile
-    schema_entry: SchemaSeedEntry
-    schema_file: DiscoveredSchemaFile
-
-
-@dataclass(frozen=True)
-class CompileSourceInput:
-    """One normalized source declaration with its source file provenance."""
-
-    source_entry: SourceEntry
-    source_file: DiscoveredSourceFile
-    declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
-
-    @property
-    def assembly_row(self) -> tuple[str, bool, str | None, str | None]:
-        """`(name, has a loader, database, schema)`, what assembly resolves a namespace from."""
-
-        entry: SourceEntry = self.source_entry
-        return (entry.name, entry.loader is not None, entry.database, entry.schema)
-
-
-@dataclass(frozen=True)
 class CompileSqlScenarioInput:
     """One discovered SQL-native scenario with compile-time SQL expansion applied."""
 
@@ -870,56 +763,6 @@ class CompileSqlScenarioInput:
     assertion_target_model_names: tuple[str, ...] = field(default_factory=tuple)
     target_model_names: tuple[str, ...] = field(default_factory=tuple)
     declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class CompileAuditInput:
-    """One discovered SQL audit block with compile-time SQL expansion applied."""
-
-    audit_file: DiscoveredAuditFile
-    audit_block: DiscoveredAuditBlock
-    sql_body: str
-    evaluation_mode: AuditEvaluationMode = AuditEvaluationMode.VIOLATIONS
-    measurement_contract: MeasurementContract | None = None
-    thresholds: MeasurementThresholds | None = None
-    minimum_samples: int | None = None
-    measure_sql: str | None = None
-    evidence_sql: str | None = None
-    evidence_limit: int | None = None
-    references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
-    attached_target_kind: AttachedAuditTargetKind | str | None = None
-    attached_target_name: str | None = None
-    attached_column_name: str | None = None
-    severity: AuditSeverity | None = None
-    run_scope: str | None = None
-    always_run: bool = False
-    declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
-    name: str | None = None
-    description: str | None = None
-
-    def __post_init__(self) -> None:
-        if self.attached_target_kind is not None:
-            object.__setattr__(
-                self,
-                "attached_target_kind",
-                AttachedAuditTargetKind(self.attached_target_kind),
-            )
-
-    @property
-    def assembly_row(
-        self,
-    ) -> tuple[list[tuple[str, str, str | None]], tuple[str, str] | None]:
-        """`(references, attached (kind, name))`, what assembly resolves scope deps from."""
-
-        return (
-            [
-                (str(reference.ref_kind), reference.ref_name, reference.ref_package)
-                for reference in self.references
-            ],
-            (str(self.attached_target_kind), self.attached_target_name)
-            if self.attached_target_kind is not None and self.attached_target_name is not None
-            else None,
-        )
 
 
 @dataclass(frozen=True)
@@ -1386,16 +1229,6 @@ class ExpansionSpan:
 
 
 @dataclass(frozen=True)
-class SqlInterpolation:
-    """One SQL text after `@@` interpolation, or the error that stopped it, with its reads."""
-
-    sql: str
-    spans: tuple[ExpansionSpan, ...]
-    reads: tuple[tuple[str, str], ...]
-    error: str | None
-
-
-@dataclass(frozen=True)
 class CompiledSqlExpansion:
     """Process-local authored-to-expanded SQL evidence shared with compiler checks."""
 
@@ -1481,15 +1314,6 @@ class CompiledSqlTest:
 
 
 @dataclass(frozen=True)
-class SharedBindingQuery:
-    """Relation-stubbed binding query shared by models with identical input shapes."""
-
-    sql: str
-    stubs: dict[str, str]
-    key: tuple[object, ...]
-
-
-@dataclass(frozen=True)
 class NativeModelConfigSession:
     """The native config builder, validator, and inherited storage policies for one compile."""
 
@@ -1520,12 +1344,3 @@ class ModelValidationRequest:
     references: tuple[CompileSqlReference, ...]
     declared_columns: tuple[SchemaColumn, ...] | None
     query_sql: str
-
-
-@dataclass(frozen=True)
-class ModelValidatorContext:
-    """The project facts the model validators read, and the native config session."""
-
-    settings: SettingsConfig
-    external_sql_reference_resolver: ExternalSqlReferenceResolver | None
-    native_config: NativeModelConfigSession

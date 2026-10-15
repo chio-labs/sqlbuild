@@ -9,7 +9,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from itertools import chain
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
@@ -30,13 +30,11 @@ from sqlbuild._native import dynamic_contract_proof as contract_proof
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.entry.main.entry import main
-from sqlbuild.compiler.analysis_session.constants import LINEAGE_NATIVE
 from sqlbuild.compiler.analysis_session.models import (
     NativeModelAnalyses,
     NativeModelAnalysisRequest,
     NativePivotTables,
 )
-from sqlbuild.compiler.analysis_session.types import ProofRow
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
@@ -58,6 +56,11 @@ from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import
     AdapterRuleCallbackTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.helpers import GoldenEntry, golden_entry
+
+if TYPE_CHECKING:
+    from sqlbuild._native import ProofRow
+
+LINEAGE_NATIVE: str = "native"
 
 _PROJECT_TOML: str = (
     'name = "orders_analysis"\nadapter = "duckdb"\n\n[connection]\ndatabase = "orders.duckdb"\n'

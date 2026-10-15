@@ -1,11 +1,12 @@
 //! The Python models, enums and compile helpers the semantic completion stage reads and builds.
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods};
+use pyo3::types::{PyDict, PyDictMethods, PyString};
 
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";
+const UNNEEDED_SQL_ANALYSIS_OPT_OUT_CODE: &str = "P009";
+const SQL_ANALYSIS_CONFIG_KEY: &str = "sql_analysis";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
 const PROJECT_WITH_MODULE: &str = "sqlbuild._native";
 const TYPE_RECOVERY_MODULE: &str = "sqlbuild._native";
@@ -13,7 +14,6 @@ const BINDING_DIAGNOSTICS_MODULE: &str = "sqlbuild._native";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const NORMALIZE_TYPE_MODULE: &str = "sqlbuild.adapter.type_system.main.normalize_type";
 const DATACLASSES_MODULE: &str = "dataclasses";
-const DISCOVERY_CONSTANTS_MODULE: &str = "sqlbuild.compiler.discovery.constants";
 const REFERENCE_TYPES_MODULE: &str = "sqlbuild.compiler.references.types";
 
 /// Imported once per stage run.
@@ -60,9 +60,7 @@ impl<'py> StageClasses<'py> {
             model_resource: resource.getattr("MODEL")?,
             source_resource: resource.getattr("SOURCE")?,
             sql_test_resource: resource.getattr("SQL_TEST")?,
-            opt_out_code: py
-                .import(COMPILE_CONSTANTS_MODULE)?
-                .getattr("UNNEEDED_SQL_ANALYSIS_OPT_OUT_CODE")?,
+            opt_out_code: PyString::new(py, UNNEEDED_SQL_ANALYSIS_OPT_OUT_CODE).into_any(),
             replace: py.import(DATACLASSES_MODULE)?.getattr("replace")?,
             project_with: py.import(PROJECT_WITH_MODULE)?.getattr("project_with")?,
             with_type_recovery: py
@@ -75,9 +73,7 @@ impl<'py> StageClasses<'py> {
             normalize_type: py
                 .import(NORMALIZE_TYPE_MODULE)?
                 .getattr("normalize_type")?,
-            sql_analysis_key: py
-                .import(DISCOVERY_CONSTANTS_MODULE)?
-                .getattr("SQL_ANALYSIS_CONFIG_KEY")?,
+            sql_analysis_key: PyString::new(py, SQL_ANALYSIS_CONFIG_KEY).into_any(),
             udf_kind: kinds.getattr("UDF")?,
             table_function_kind: kinds.getattr("TABLE_FUNCTION")?,
         })

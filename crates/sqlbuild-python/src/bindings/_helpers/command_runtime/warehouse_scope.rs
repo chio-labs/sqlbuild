@@ -12,9 +12,9 @@ use sqlbuild_config::command_connection::constants::COMMAND_WAREHOUSE_GROUPS;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const ENTRY_MODELS: &str = "sqlbuild.cli.entry.models";
+const ENTRY_MODELS: &str = "sqlbuild._native";
 const WAREHOUSE_GROUP: (&str, &str) = ("sqlbuild.spec.contracts.types", "WarehouseGroup");
-const COMMAND_TYPES: &str = "sqlbuild.cli.commands.types";
+const COMMAND_TYPES: &str = "sqlbuild._native";
 const CONTEXT_ATTRIBUTE: &str = "_command_warehouse_scope_context";
 const CONTEXT_NAME: &str = "sqlbuild_command_warehouse_scope";
 

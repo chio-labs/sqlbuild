@@ -8,7 +8,7 @@ use sqlbuild_cli::diff_report::models::DiffRequestFacts;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 
-pub(crate) const EXCEPTIONS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
+pub(crate) const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 
 /// `name(**pairs)` with keyword arguments.
 pub(crate) fn call<'py>(

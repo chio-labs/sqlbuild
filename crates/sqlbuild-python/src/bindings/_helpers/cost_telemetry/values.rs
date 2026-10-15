@@ -15,6 +15,18 @@ pub(crate) const COST_MODELS: &str = "sqlbuild.cost.models";
 pub(crate) const COST_TYPES: &str = "sqlbuild.cost.types";
 pub(crate) const COST_EXCEPTIONS: &str = "sqlbuild._native";
 const DECIMAL_MODULE: &str = "decimal";
+/// The methods an adapter with warehouse cost telemetry implements.
+const COST_AWARE_METHODS: [&str; 2] = ["cost_capability", "collect_run_cost"];
+
+/// Whether `adapter` implements the cost telemetry methods.
+pub(crate) fn cost_aware(adapter: &Bound<'_, PyAny>) -> PyResult<bool> {
+    for name in COST_AWARE_METHODS {
+        if !adapter.hasattr(name)? || adapter.getattr(name)?.is_none() {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
 
 /// A finite non-negative `Decimal` as its exact digits and exponent.
 pub(crate) fn native_decimal(value: &Bound<'_, PyAny>) -> PyResult<PyDecimal> {

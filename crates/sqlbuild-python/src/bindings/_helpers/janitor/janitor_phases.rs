@@ -14,7 +14,7 @@ const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation
 const JANITOR_PLAN_MODULE: &str = "sqlbuild.executor.janitor.main.plan";
 const JANITOR_EXECUTE_MODULE: &str = "sqlbuild.executor.janitor.main.execute";
 const JANITOR_MODELS: &str = "sqlbuild.executor.janitor.models";
-const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
+const ERRORS_MODULE: &str = "sqlbuild._native";
 const UNKNOWN_VIEW_CODE: &str = "C503";
 const UNKNOWN_VIEW_HELP: &str =
     "Run sqb janitor without --drop-old-name-view to list compatibility views.";

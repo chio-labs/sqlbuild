@@ -3,7 +3,7 @@
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::planner_phases::constants::NATIVE_MODULE;
-use crate::bindings::_helpers::planner_phases::objects::{native, planner_model};
+use crate::bindings::_helpers::planner_phases::objects::native;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
@@ -18,7 +18,7 @@ pub(crate) fn prune_planner_execution_scope<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = scopes.py();
     let inspection = scopes.getattr("inspection_scope")?;
-    planner_model(
+    native(
         py,
         "PlannerScopePruningResult",
         &[
@@ -64,7 +64,7 @@ pub(crate) fn reconcile_execution_changes<'py>(
             ("changes", honest.clone()),
         ],
     )?;
-    planner_model(
+    native(
         py,
         "PlannerChangeReconciliation",
         &[("changes", honest), ("resolved_actions", resolved)],
@@ -158,14 +158,14 @@ pub(crate) fn build_planner_entry_results<'py>(
         max_override.clone()
     };
     let limit_action = if config.is_none() {
-        planner_model(py, "PlanEntryBuildInputs", &[])?.getattr("microbatch_limit_action")?
+        native(py, "PlanEntryBuildInputs", &[])?.getattr("microbatch_limit_action")?
     } else {
         config
             .getattr("microbatches")?
             .getattr("limits")?
             .getattr("action")?
     };
-    let build_inputs = planner_model(
+    let build_inputs = native(
         py,
         "PlanEntryBuildInputs",
         &[
@@ -218,7 +218,7 @@ pub(crate) fn build_planner_entry_results<'py>(
             ("build_inputs", build_inputs),
         ],
     )?;
-    planner_model(
+    native(
         py,
         "PlannerEntryResults",
         &[("model_entry_results", entries)],

@@ -1,5 +1,0 @@
-"""Constants for typed SQL value validation."""
-
-DEFAULT_MAX_SQL_VALUE_DEPTH: int = 32
-DEFAULT_MAX_SQL_VALUE_ELEMENTS: int = 10_000
-DEFAULT_MAX_SQL_VALUE_SIZE: int = 1_000_000

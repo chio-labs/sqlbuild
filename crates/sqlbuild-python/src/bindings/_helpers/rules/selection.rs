@@ -9,8 +9,8 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_rules::rules::main::selected_codes::selected_codes_json;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::rules::constants::RULES_NATIVE_API_VERSION;
 
-const RULES_CONSTANTS_MODULE: &str = "sqlbuild.rule_engine.constants";
 const RULES_EXCEPTIONS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const JSON_MODULE: &str = "json";
@@ -25,11 +25,7 @@ pub(crate) fn selected_rule_codes(
 ) -> PyResult<Vec<String>> {
     let py: Python<'_> = config.py();
     let request: Bound<'_, PyDict> = PyDict::new(py);
-    request.set_item(
-        "version",
-        py.import(RULES_CONSTANTS_MODULE)?
-            .getattr("RULES_NATIVE_API_VERSION")?,
-    )?;
+    request.set_item("version", RULES_NATIVE_API_VERSION)?;
     request.set_item(
         "config",
         py.import(DATACLASSES_MODULE)?

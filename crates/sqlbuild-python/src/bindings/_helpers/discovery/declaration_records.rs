@@ -17,6 +17,7 @@ use sqlbuild_sqltext::compiler::models::AuthoredValue;
 use std::sync::Arc;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::discovery::constants;
 use crate::bindings::_helpers::discovery::faults::{FileFaults, record_tuple};
 use crate::bindings::_helpers::discovery::header_declarations::typed_constant_record;
 use crate::bindings::_helpers::discovery::project_files::path_object;
@@ -379,9 +380,9 @@ pub(crate) fn discovery_session<'py>(
             inner: DiscoverySession::new(
                 project_root(project_dir)?,
                 DeclarationFileOptions {
-                    function_keys: sorted_keys(py, "SQL_FUNCTION_HEADER_KEYS")?,
-                    audit_keys: sorted_keys(py, "SQL_AUDIT_HEADER_KEYS")?,
-                    hook_keys: sorted_keys(py, "SQL_HOOK_HEADER_KEYS")?,
+                    function_keys: sorted_keys(&constants::SQL_FUNCTION_HEADER_KEYS),
+                    audit_keys: sorted_keys(&constants::SQL_AUDIT_HEADER_KEYS),
+                    hook_keys: sorted_keys(&constants::SQL_HOOK_HEADER_KEYS),
                 },
             ),
         },

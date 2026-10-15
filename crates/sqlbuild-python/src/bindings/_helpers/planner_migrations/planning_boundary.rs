@@ -3,7 +3,7 @@
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
-use crate::bindings::_helpers::planner_migrations::column_objects::model;
+use crate::bindings::_helpers::planner_migrations::column_objects::native;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::PyDict;
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -52,7 +52,7 @@ fn migration_redirected_cursor_snapshots<'py>(
     } else {
         config.getattr("cursors")?.getattr("start")?
     };
-    let cursor_scope = model(
+    let cursor_scope = native(
         py,
         "CursorSnapshotScope",
         &[

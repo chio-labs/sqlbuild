@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import DbtCombinedGraph, build_dbt_combined_graph, build_dbt_manifest_index
+from sqlbuild._native import (
+    DbtCombinedGraph,
+    DbtManifestIndex,
+    build_dbt_combined_graph,
+    build_dbt_manifest_index,
+)
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.integrations.dbt.models import DbtManifestIndex
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import DbtCombinedGraphTestCase
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     build_compiled_project_with_models,

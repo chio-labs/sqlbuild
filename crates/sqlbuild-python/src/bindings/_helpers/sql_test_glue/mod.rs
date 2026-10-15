@@ -1,7 +1,7 @@
 pub(crate) mod assembly;
 pub(crate) mod authored_ctes;
 mod compiled_tests;
-mod constants;
+pub(crate) mod constants;
 mod cursor_window;
 mod fixture_validation;
 mod plan_assembly;

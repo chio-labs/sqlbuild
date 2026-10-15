@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from sqlbuild._native import (
+    DirectModelVersionIdentities,
     build_direct_model_version_identities,
     build_downstream_deps,
     build_model_version_identity_metadata_json,
@@ -24,7 +25,9 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     FunctionLanguage,
 )
-from sqlbuild.compiler.planner.models import DirectModelVersionIdentities, PlannerScope
+from sqlbuild.compiler.planner.models import (
+    PlannerScope,
+)
 from sqlbuild.spec.contracts.models import SchemaColumn, SeedCsvSettings
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import build_compiled_function
 

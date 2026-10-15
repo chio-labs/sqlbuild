@@ -6,6 +6,15 @@ from datetime import UTC, datetime
 import pytest
 
 from sqlbuild._native import (
+    ChangeDetectionResult,
+    ChangeKind,
+    DirectModelVersionIdentities,
+    PlannerChangeResults,
+    PlannerScopeResolution,
+    PlanWarning,
+    SourceFreshnessIdentity,
+    WarehouseFingerprints,
+    WarehouseSnapshot,
     build_stale_out_of_selection_warnings,
     compiled_model_record,
     resolve_planner_scopes,
@@ -19,22 +28,11 @@ from sqlbuild.compiler.compile.types import (
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_SEED
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import (
-    ChangeDetectionResult,
-    DirectModelVersionIdentities,
-    PlannerChangeResults,
     PlannerPolicies,
     PlannerScope,
-    PlannerScopeResolution,
     PlannerSelection,
-    PlanWarning,
-    WarehouseFingerprints,
-    WarehouseSnapshot,
 )
-from sqlbuild.compiler.planner.types import ChangeKind
-from sqlbuild.compiler.source_freshness.models import (
-    DirectSourceFreshnessPlanningResult,
-    SourceFreshnessIdentity,
-)
+from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     CompleteModelChangesWorkTestCase,
     PlannerStaleWarningScopeTestCase,

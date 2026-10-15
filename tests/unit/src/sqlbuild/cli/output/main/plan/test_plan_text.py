@@ -6,23 +6,25 @@ import json
 
 import pytest
 
-from sqlbuild._native import format_plan
+from sqlbuild._native import (
+    ColumnRenameHint,
+    GraphResourceKind,
+    SchemaChangeKind,
+    WarningSeverity,
+    format_plan,
+)
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
-    ColumnRenameHint,
     CursorBounds,
     CursorInputRelation,
     PlanOutput,
 )
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
-    GraphResourceKind,
     MaterializationType,
     PlanAction,
     PlanReason,
-    SchemaChangeKind,
-    WarningSeverity,
 )
 from sqlbuild.compiler.python_nodes.types import (
     PythonIdentityStatus,

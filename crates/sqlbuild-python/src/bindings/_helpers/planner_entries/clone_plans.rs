@@ -180,7 +180,7 @@ fn clone_model_entries<'py>(
                 let function = function?;
                 functions.set_item(function.getattr("name")?, function)?;
             }
-            let context = planner_model(
+            let context = native(
                 py,
                 "ModelPlanContext",
                 &[
@@ -206,11 +206,11 @@ fn clone_model_entries<'py>(
                 &[
                     ("adapter", adapter.clone()),
                     ("model", model.clone()),
-                    ("snapshot", planner_model(py, "WarehouseSnapshot", &[])?),
+                    ("snapshot", native(py, "WarehouseSnapshot", &[])?),
                     ("context", context),
                     (
                         "backfill",
-                        planner_model(
+                        native(
                             py,
                             "BackfillResult",
                             &[(
@@ -220,10 +220,7 @@ fn clone_model_entries<'py>(
                         )?,
                     ),
                     ("full_refresh", PyBool::new(py, false).to_owned().into_any()),
-                    (
-                        "cursor_overrides",
-                        planner_model(py, "CursorOverridePair", &[])?,
-                    ),
+                    ("cursor_overrides", native(py, "CursorOverridePair", &[])?),
                 ],
             )?
         } else {

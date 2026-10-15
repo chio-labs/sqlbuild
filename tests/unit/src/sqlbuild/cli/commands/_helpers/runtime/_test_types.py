@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from sqlbuild.cli.commands.types import CliCommand
+from sqlbuild._native import CliCommand
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
     LocalTargetConfig,

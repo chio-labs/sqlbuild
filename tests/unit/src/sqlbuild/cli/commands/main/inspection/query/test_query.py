@@ -5,8 +5,7 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from sqlbuild._native import run_query_command
-from sqlbuild.cli.commands.exceptions import QueryExecutionError
+from sqlbuild._native import QueryExecutionError, run_query_command
 from tests.unit.src.sqlbuild.cli.commands.main.inspection.query._test_types import (
     QueryExecutionErrorTestCase,
 )
