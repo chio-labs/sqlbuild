@@ -19,7 +19,7 @@ const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const REFERENCE_TYPES_MODULE: &str = "sqlbuild.compiler.references.types";
-const COLLECTOR_MODULE: &str = "sqlbuild.compiler.compile._helpers.diagnostics.collector";
+const COLLECTOR_MODULE: &str = "sqlbuild._native";
 const REFERENCE_CALL_SYNTAX_CODE: &str = "P012";
 
 /// `(kind, name, package, call_argument_count)` for one reference.

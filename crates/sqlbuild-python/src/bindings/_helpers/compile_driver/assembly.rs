@@ -10,7 +10,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, within,
 };
 
-const COLLECTOR_MODULE: &str = "sqlbuild.compiler.compile._helpers.diagnostics.collector";
+const COLLECTOR_MODULE: &str = "sqlbuild._native";
 const PROJECT_WITH_MODULE: &str = "sqlbuild._native";
 const RECORD_ANALYSES_MODULE: &str = "sqlbuild._native";
 const EXPLICIT_REFERENCES_MODULE: &str =

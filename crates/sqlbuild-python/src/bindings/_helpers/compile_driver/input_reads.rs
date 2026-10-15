@@ -4,8 +4,118 @@ use std::collections::BTreeSet;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use pyo3::prelude::{Bound, Py, PyAny, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::sync::PyOnceLock;
 use pyo3::types::PyTuple;
-use pyo3::{pyclass, pymethods};
+use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
+
+const RUN_ID_KEY: &str = "run.id";
+
+/// The recorders of every compile currently recording, delivered to from every thread.
+#[pyclass(frozen, module = "sqlbuild._native")]
+struct CompileInputReadRegistry {
+    recorders: Mutex<Vec<Py<CompileInputReads>>>,
+}
+
+impl CompileInputReadRegistry {
+    fn locked(&self) -> MutexGuard<'_, Vec<Py<CompileInputReads>>> {
+        self.recorders
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn recorders(&self, py: Python<'_>) -> Vec<Py<CompileInputReads>> {
+        self.locked()
+            .iter()
+            .map(|recorder| recorder.clone_ref(py))
+            .collect()
+    }
+}
+
+static REGISTRY: PyOnceLock<Py<CompileInputReadRegistry>> = PyOnceLock::new();
+
+fn registry(py: Python<'_>) -> PyResult<&Py<CompileInputReadRegistry>> {
+    REGISTRY.get_or_try_init(py, || {
+        Py::new(
+            py,
+            CompileInputReadRegistry {
+                recorders: Mutex::new(Vec::new()),
+            },
+        )
+    })
+}
+
+fn recorders(py: Python<'_>) -> PyResult<Vec<Py<CompileInputReads>>> {
+    Ok(registry(py)?.get().recorders(py))
+}
+
+/// Note that a template looked up one environment variable, present or not.
+pub(crate) fn environment_read(py: Python<'_>, name: &str) -> PyResult<()> {
+    for recorder in recorders(py)? {
+        recorder.get().add_environment_name(name.to_owned());
+    }
+    Ok(())
+}
+
+/// Note a CTX lookup; only the per-invocation run identity is volatile.
+pub(crate) fn context_read(py: Python<'_>, name: &str) -> PyResult<()> {
+    if name != RUN_ID_KEY {
+        return Ok(());
+    }
+    for recorder in recorders(py)? {
+        recorder.get().mark_run_id_read();
+    }
+    Ok(())
+}
+
+/// Note a provider settings class instantiated from the environment and files.
+#[pyfunction]
+fn record_settings_class_read(settings_class: &Bound<'_, PyAny>) -> PyResult<()> {
+    for recorder in recorders(settings_class.py())? {
+        recorder.get().add_settings_class(settings_class);
+    }
+    Ok(())
+}
+
+/// Records environment variables and run-identity reads while entered.
+#[pyclass(frozen, module = "sqlbuild._native")]
+struct CompileInputRecording {
+    recorder: Mutex<Option<Py<CompileInputReads>>>,
+}
+
+#[pymethods]
+impl CompileInputRecording {
+    fn __enter__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, CompileInputReads>> {
+        let recorder: Bound<'py, CompileInputReads> = Bound::new(py, CompileInputReads::new())?;
+        registry(py)?.get().locked().push(recorder.clone().unbind());
+        *self.recorder.lock().unwrap_or_else(PoisonError::into_inner) =
+            Some(recorder.clone().unbind());
+        Ok(recorder)
+    }
+
+    #[pyo3(signature = (*_exception))]
+    fn __exit__(&self, py: Python<'_>, _exception: &Bound<'_, PyTuple>) -> PyResult<bool> {
+        if let Some(recorder) = self
+            .recorder
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+        {
+            registry(py)?
+                .get()
+                .locked()
+                .retain(|item| !item.is(&recorder));
+        }
+        Ok(false)
+    }
+}
+
+/// Record template input reads from every thread until the returned block exits.
+#[pyfunction]
+fn record_compile_input_reads() -> CompileInputRecording {
+    CompileInputRecording {
+        recorder: Mutex::new(None),
+    }
+}
 
 #[derive(Default)]
 struct Reads {
@@ -83,5 +193,8 @@ impl CompileInputReads {
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_class::<CompileInputReads>()
+    module.add_class::<CompileInputReads>()?;
+    module.add_class::<CompileInputRecording>()?;
+    module.add_function(wrap_pyfunction!(record_settings_class_read, module)?)?;
+    module.add_function(wrap_pyfunction!(record_compile_input_reads, module)?)
 }

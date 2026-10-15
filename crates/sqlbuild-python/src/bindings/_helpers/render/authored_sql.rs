@@ -9,6 +9,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::model_config::template_data::record_reads;
+use crate::bindings::_helpers::model_config::unicode_environment::unicode_environment;
 use crate::bindings::_helpers::render::declaration_expansion::{
     DeclarationExpansion, ExpandedDeclarations, ExpansionClasses, ExpansionConsumer, SpanRow,
     expand_declarations, span_rows,
@@ -22,7 +23,6 @@ const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const SCOPE_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
-const UNICODE_ENVIRONMENT_MODULE: &str = "sqlbuild.compiler.compile.classes.unicode_environment";
 const FUNCTOOLS_MODULE: &str = "functools";
 const DECLARATION_FIELDS: [&str; 4] = [
     "enums",
@@ -40,7 +40,7 @@ fn substituted<'py>(
     let py: Python<'py> = sql.py();
     let sources = InterpolationSources(
         effective_vars.downcast()?.clone(),
-        imported(py, UNICODE_ENVIRONMENT_MODULE, "UnicodeEnvironment")?.call0()?,
+        unicode_environment(py)?,
         if context_values.is_none() {
             None
         } else {

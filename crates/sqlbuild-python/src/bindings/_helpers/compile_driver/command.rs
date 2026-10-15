@@ -25,7 +25,6 @@ use crate::bindings::_helpers::rules::results::format_skipped_type_proof_rules;
 
 const BYPASS_OUTCOME: &str = "bypass";
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const PROFILING_MODULE: &str = "sqlbuild.compiler.profiling.main._collect";
@@ -151,8 +150,7 @@ fn recorded_compile<'py>(
         &imported(py, PROFILING_MODULE, "collect_compile_timings")?.call0()?,
         |detailed_timings| {
             within(
-                &imported(py, COMPILE_CONSTANTS_MODULE, "COMPILE_INPUT_READS")?
-                    .call_method0("recording")?,
+                &imported(py, NATIVE_MODULE, "record_compile_input_reads")?.call0()?,
                 |input_reads| {
                     let artifact_writes: Py<CompileArtifactWrites> = new_artifact_recorder(py)?;
                     let manager: Bound<'py, PyAny> = call_with(

@@ -9,6 +9,7 @@ pub(crate) mod assembly_sql_tests;
 pub(crate) mod command;
 pub(crate) mod config_validation;
 pub(crate) mod deferral;
+pub(crate) mod diagnostic_collector;
 pub(crate) mod diff;
 pub(crate) mod discovery;
 pub(crate) mod input_reads;

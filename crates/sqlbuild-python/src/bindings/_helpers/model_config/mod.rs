@@ -13,3 +13,4 @@ pub(crate) mod model_validator;
 pub(crate) mod project_defaults;
 pub(crate) mod registration;
 pub(crate) mod template_data;
+pub(crate) mod unicode_environment;

@@ -22,7 +22,7 @@ use crate::bindings::_helpers::compiled_project::model_loop_named::scope_path_me
 
 const SCOPE_ERRORS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
 const SCOPE_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
-const COLLECTOR_MODULE: &str = "sqlbuild.compiler.compile._helpers.diagnostics.collector";
+const COLLECTOR_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const INACCESSIBLE_DECLARATION_CODE: &str = "S006";
 const SCHEMA_USAGE_KINDS: [&str; 2] = ["schema", "enum"];

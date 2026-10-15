@@ -12,7 +12,7 @@ use crate::bindings::_helpers::model_config::template_data::run_id;
 const CALL_STORE_MODULE: &str = "sqlbuild.compiler.compile._helpers.macro_bridge.call_store";
 const ATTACHMENT_MODULE: &str = "sqlbuild._native";
 const DECLARATION_SCOPE_MODULE: &str = "sqlbuild._native";
-const COLLECTOR_MODULE: &str = "sqlbuild.compiler.compile._helpers.diagnostics.collector";
+const COLLECTOR_MODULE: &str = "sqlbuild._native";
 const MACROS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.user_macros";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const ATTACH_CHECKS_MODULE: &str = "sqlbuild._native";
