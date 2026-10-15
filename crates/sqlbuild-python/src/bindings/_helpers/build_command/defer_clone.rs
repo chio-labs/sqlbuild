@@ -563,10 +563,8 @@ fn run_prephase(context: &BuildContext<'_>, prephase: &Prephase<'_>) -> PyResult
         (context.invocation.getattr("connection_config")?,),
     )?;
     let cloned: PyResult<()> = clone_boundaries(context, prephase, &connection);
-    let closed: PyResult<Bound<'_, PyAny>> = prephase.adapter.call_method1("close", (connection,));
-    cloned?;
-    closed?;
-    Ok(())
+    prephase.adapter.call_method1("close", (connection,))?;
+    cloned
 }
 
 /// Resolve defer-clone boundaries and clone them before build planning.

@@ -46,14 +46,23 @@ fn error_type(py: Python<'_>, error: &PyErr) -> PyResult<String> {
 
 /// `_write_warning`: a warning line on the build's stream; its own failure is only logged.
 fn warn(output_stream: &Bound<'_, PyAny>, message: &str) -> PyResult<()> {
+    warn_logging_to(output_stream, message, LOGGER_NAME)
+}
+
+fn warn_logging_to(
+    output_stream: &Bound<'_, PyAny>,
+    message: &str,
+    logger_name: &str,
+) -> PyResult<()> {
     let written: PyResult<()> = output_stream
         .call_method1("write", (format!("\nWARNING: {message}\n"),))
         .and_then(|_| output_stream.call_method0("flush"))
         .map(|_| ());
     match written {
         Ok(()) => Ok(()),
-        Err(error) => log_failure(
+        Err(error) => log_to(
             output_stream.py(),
+            logger_name,
             "automatic run-cost warning output failed",
             &error,
         ),
@@ -199,9 +208,10 @@ fn collection_failure<'py>(
         error,
     )?;
     let error_type: String = error_type(py, error)?;
-    warn(
+    warn_logging_to(
         &finalization.getattr("output_stream")?,
         &format!("Cost telemetry failed during {stage} ({error_type}); build result unchanged."),
+        COLLECTION_LOGGER_NAME,
     )?;
     let status: Bound<'py, PyAny> =
         imported(py, COST_TYPES, "CostStatus")?.getattr("COLLECTION_FAILED")?;
