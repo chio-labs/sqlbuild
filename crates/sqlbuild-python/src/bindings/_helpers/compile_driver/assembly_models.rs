@@ -12,8 +12,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::hand_built::compiled_model::compiled_model as hand_built_model;
 use crate::bindings::_helpers::render::macro_calls::top_level_macro_call_names;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const NATIVE_FAILURE_PREFIX: &str = "NativeCompilerError: ";
 const HOOK_NAMES: [&str; 2] = ["pre_hooks", "post_hooks"];
 
@@ -172,7 +173,7 @@ fn compiled_model<'py>(
         );
     }
     let analysis: Bound<'py, PyAny> = call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "HandBuiltAnalysis")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "HandBuiltAnalysis")?,
         &[
             ("session", session_analysis),
             ("fallback", fallback),

@@ -11,9 +11,12 @@ from pathlib import Path
 import pytest
 
 import sqlbuild._native as native_module
-from sqlbuild._native import build_migration_fingerprint, infer_fixture_column_facts
+from sqlbuild._native import (
+    FixtureColumnInference,
+    build_migration_fingerprint,
+    infer_fixture_column_facts,
+)
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile.models import FixtureColumnInference
 
 ORDERS_SQL: str = 'SELECT o.order_id, o.amount_cents FROM __ref("stg_orders") AS o'
 CURSOR_METADATA: str = json.dumps(

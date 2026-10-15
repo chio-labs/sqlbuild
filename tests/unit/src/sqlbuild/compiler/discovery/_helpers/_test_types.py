@@ -2,9 +2,9 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 
+from sqlbuild._native import CollectionRendering
 from sqlbuild.spec.contracts.models import AuthoredTimeTravelRetention, TargetWarehousesConfig
 from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy, RetentionDecreasePolicy
-from sqlbuild.sql_values.types import CollectionRendering
 
 
 @dataclass(frozen=True)

@@ -9,6 +9,10 @@ from typing import cast
 
 from sqlbuild._native import (
     ChangeKind,
+    CompiledFunction,
+    CompileModelConfig,
+    FunctionArgument,
+    PlannerScope,
     WarehouseFingerprints,
     WarehouseSnapshot,
     build_version_identity_metadata_json,
@@ -16,13 +20,10 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
-    CompileModelConfig,
-    FunctionArgument,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledFunctionView,
@@ -32,9 +33,6 @@ from sqlbuild.compiler.compile.types import (
     FunctionLanguage,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.models import (
-    PlannerScope,
-)
 from sqlbuild.spec.contracts.models import SchemaColumn, SchemaModelEntry
 from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types import (
     DetectModelChangesTestCase,

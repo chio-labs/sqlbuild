@@ -4,6 +4,11 @@ from typing import cast
 
 from sqlbuild import _native
 from sqlbuild._native import (
+    DiscoveredConstantFile,
+    DiscoveredEnumFile,
+    DiscoveredPythonFunctionFile,
+    DiscoveredSqlTestBlock,
+    DiscoveredSqlTestCase,
     discover_audit_files,
     discover_constant_files,
     discover_enum_files,
@@ -13,15 +18,7 @@ from sqlbuild._native import (
     discover_sql_function_files,
     discover_sql_hook_files,
 )
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredConstantFile,
-    DiscoveredEnumFile,
-    DiscoveredMacroFile,
-    DiscoveredPythonFunctionFile,
-    DiscoveredSqlTestBlock,
-    DiscoveredSqlTestCase,
-    SqlTestParameterDeclaration,
-)
+from sqlbuild.compiler.discovery.models import DiscoveredMacroFile, SqlTestParameterDeclaration
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     LoadProjectConfigTestCase,

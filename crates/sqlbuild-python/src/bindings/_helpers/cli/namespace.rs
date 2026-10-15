@@ -9,8 +9,9 @@ use sqlbuild_cli::argv::models::NamespaceDefault;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const COMPILE_LINEAGE_MODULE: &str = "sqlbuild._native";
-const COLUMN_LINEAGE_MODULE: &str = "sqlbuild.compiler.lineage.types";
 
 /// Typed namespace for all CLI arguments across all commands.
 #[pyclass(module = "sqlbuild._native", dict, frozen)]
@@ -28,7 +29,7 @@ fn default_object(py: Python<'_>, default: NamespaceDefault) -> PyResult<Bound<'
             imported(py, COMPILE_LINEAGE_MODULE, "CompileLineageMode")?.getattr("FAST")
         }
         NamespaceDefault::ColumnLineageRich => {
-            imported(py, COLUMN_LINEAGE_MODULE, "ColumnLineageMode")?.getattr("RICH")
+            imported(py, NATIVE_RECORDS_MODULE, "ColumnLineageMode")?.getattr("RICH")
         }
     }
 }

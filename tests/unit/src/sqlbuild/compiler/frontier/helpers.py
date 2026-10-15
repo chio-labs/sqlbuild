@@ -7,8 +7,8 @@ from enum import StrEnum
 from pathlib import PurePosixPath
 from typing import Any, cast
 
-from sqlbuild._native import BindingCatalog
-from sqlbuild.compiler.compile.models import CompactLineageFacts, DeclarationScopeBuild
+from sqlbuild._native import BindingCatalog, DeclarationScopeBuild
+from sqlbuild.compiler.compile.models import CompactLineageFacts
 
 HELPERS_MODULE: str = "tests.unit.src.sqlbuild.compiler.frontier.helpers"
 

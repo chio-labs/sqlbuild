@@ -13,10 +13,10 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from sqlbuild._native import discover_project_inputs, run_compile_pipeline
+from sqlbuild._native import CompilePipelineOptions, discover_project_inputs, run_compile_pipeline
 from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
+from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.build.models import BuildExecutionResult, BuildRuntimeParams
 from sqlbuild.executor.pipeline.main.run import run_build_pipeline
 from sqlbuild.executor.scheduling.types import ExecutionStatus

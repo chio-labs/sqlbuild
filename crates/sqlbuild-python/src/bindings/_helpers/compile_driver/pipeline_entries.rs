@@ -8,7 +8,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const PIPELINE_MODELS_MODULE: &str = "sqlbuild.compiler.pipeline.models";
 const PLANNER_MODELS_MODULE: &str = "sqlbuild.compiler.planner.models";
 const NATIVE_MODULE: &str = "sqlbuild._native";
@@ -62,7 +63,7 @@ pub(crate) fn compile_analysis_selection<'py>(
         }
     }
     let selection: Bound<'py, PyAny> =
-        imported(py, COMPILE_MODELS_MODULE, "CompileAnalysisSelection")?;
+        imported(py, NATIVE_RECORDS_MODULE, "CompileAnalysisSelection")?;
     let no_cache: Bound<'py, PyAny> = options.getattr("no_cache")?;
     if (options
         .getattr("resolve_python_run_selectors")?

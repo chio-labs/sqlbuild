@@ -5,7 +5,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::graph::keys::KeyCache;
 use crate::bindings::_helpers::planner_scope::loaders::expand_selected_loader_dependencies;
-use crate::bindings::_helpers::planner_scope::values::{MODELS, NATIVE, edges, keys};
+use crate::bindings::_helpers::planner_scope::values::{NATIVE, edges, keys};
 use crate::bindings::_helpers::planner_selection::carrier::{Carrier, py_strings};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::PyDictMethods;
@@ -15,6 +15,8 @@ use sqlbuild_analysis::planner_scope::main::{
     managed_sources::managed_sources, source_selectors::source_selectors,
 };
 use std::collections::HashSet;
+
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 #[pyfunction]
 #[pyo3(signature = (*, selected_keys, upstream_deps, project))]
@@ -133,10 +135,10 @@ pub(crate) fn build_planner_scope<'py>(
     }
     let mut tests = args.value("sql_test_selection")?;
     if !tests.is_truthy()? {
-        tests = imported(py, MODELS, "SqlTestSelection")?.call0()?;
+        tests = imported(py, NATIVE_RECORDS_MODULE, "SqlTestSelection")?.call0()?;
     }
     call_with(
-        &imported(py, MODELS, "PlannerScope")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "PlannerScope")?,
         &[
             ("upstream_deps", upstream),
             ("downstream_deps", downstream),

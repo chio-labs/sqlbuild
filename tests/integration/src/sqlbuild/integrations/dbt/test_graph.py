@@ -6,7 +6,9 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    DbtCliOptions,
     DbtCombinedGraph,
+    DbtCommandResult,
     DbtManifestIndex,
     DbtRunner,
     assemble_project,
@@ -17,7 +19,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult
 from tests.integration.src.sqlbuild.integrations.dbt._test_types import (
     RealDbtCombinedGraphTestCase,
 )

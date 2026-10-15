@@ -14,9 +14,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 
-const PIPELINE_MODELS_MODULE: &str = "sqlbuild.compiler.pipeline.models";
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const PYTHON_NODE_MODELS_MODULE: &str = "sqlbuild.compiler.python_nodes.models";
 const PYTHON_NODE_TYPES_MODULE: &str = "sqlbuild.compiler.python_nodes.types";
 const REF_TYPES_MODULE: &str = "sqlbuild.python_nodes.types";
 const SKIPPED_UPSTREAM_CODE: &str = "P501";
@@ -123,7 +123,7 @@ fn build_python_run_plan_outputs<'py>(
             &[],
         ),
     )?;
-    let outputs: Bound<'py, PyAny> = imported(py, PIPELINE_MODELS_MODULE, "PythonRunPlanOutputs")?;
+    let outputs: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS_MODULE, "PythonRunPlanOutputs")?;
     let plan_output: Bound<'py, PyAny> = arguments.value("plan_output")?;
     let run_selection: Bound<'py, PyAny> = arguments.value("run_selection")?;
     let selected: Bound<'py, PyAny> = arguments.value("selected_python_node_names")?;
@@ -156,7 +156,7 @@ fn build_python_run_plan_outputs<'py>(
         )?),
     )?;
     let selection: Bound<'py, PyAny> = call_with(
-        &imported(py, PYTHON_NODE_MODELS_MODULE, "PythonSqlRunSelection")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "PythonSqlRunSelection")?,
         &[
             ("sql_keys", plan_output.getattr("selected_keys")?),
             ("python_node_names", selected.clone()),
@@ -217,8 +217,8 @@ fn plan_entries<'py>(
     previous_identities: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = lifecycle.py();
-    let phases: Bound<'py, PyAny> = imported(py, PYTHON_NODE_TYPES_MODULE, "PythonRunPhase")?;
-    let entry_class: Bound<'py, PyAny> = imported(py, PIPELINE_MODELS_MODULE, "PythonPlanEntry")?;
+    let phases: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS_MODULE, "PythonRunPhase")?;
+    let entry_class: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS_MODULE, "PythonPlanEntry")?;
     let upstream: HashMap<String, Vec<String>> = upstream_names(graph)?;
     let nodes: Bound<'py, PyAny> = graph.getattr("nodes_by_name")?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -303,11 +303,8 @@ fn identity_status<'py>(
     identity: &Bound<'py, PyAny>,
     previous_identities: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let statuses: Bound<'py, PyAny> = imported(
-        identity.py(),
-        PYTHON_NODE_TYPES_MODULE,
-        "PythonIdentityStatus",
-    )?;
+    let statuses: Bound<'py, PyAny> =
+        imported(identity.py(), NATIVE_RECORDS_MODULE, "PythonIdentityStatus")?;
     if identity.is_none() {
         return statuses.getattr("UNKNOWN");
     }

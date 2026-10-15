@@ -14,10 +14,11 @@ use sqlbuild_core::dbt_command::models::DbtInitSummary;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, flag, path, stream};
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild._native";
 const PROGRESS_REPORTER_MODULE: &str = "sqlbuild._native";
-const DBT_MODELS: &str = "sqlbuild.integrations.dbt.models";
 
 fn missing_project(py: Python<'_>) -> PyErr {
     let raised = (|| {
@@ -90,14 +91,14 @@ fn run_dbt_init_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<
         ],
     )?;
     let callbacks: Bound<'_, PyAny> = call_with(
-        &imported(py, DBT_MODELS, "DbtInitProgressCallbacks")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "DbtInitProgressCallbacks")?,
         &[
             ("start", progress.getattr("start")?),
             ("complete", progress.getattr("complete")?),
         ],
     )?;
     let init_request: Bound<'_, PyAny> = call_with(
-        &imported(py, DBT_MODELS, "DbtInitRequest")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "DbtInitRequest")?,
         &[
             ("cwd", request.getattr("cwd")?),
             ("dbt_project_dir", project_dir),

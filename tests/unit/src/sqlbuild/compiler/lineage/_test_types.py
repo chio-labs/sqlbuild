@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.compiler.lineage.types import ColumnTransformKind
+from sqlbuild._native import ColumnTransformKind
 
 
 @dataclass(frozen=True)

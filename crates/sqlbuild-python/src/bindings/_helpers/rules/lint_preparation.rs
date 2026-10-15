@@ -12,9 +12,10 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::rules::lint_headers::{lint_body_ranges, lint_file_role};
 use crate::bindings::_helpers::rules::lint_stop::check_stop;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE: &str = "sqlbuild._native";
 const MODELS: &str = "sqlbuild._native";
-const EXPANSION_MODELS: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_ERRORS: &str = "sqlbuild.compiler.compile.exceptions";
 const LINT_ERRORS: &str = "sqlbuild._native";
 
@@ -204,7 +205,7 @@ fn sentinel_spans<'py>(sites: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
     for site in sites.try_iter()? {
         let site = site?;
         spans.push(call_with(
-            &imported(py, EXPANSION_MODELS, "ExpansionSpan")?,
+            &imported(py, NATIVE_RECORDS_MODULE, "ExpansionSpan")?,
             &[
                 ("source_start", site.getattr("original_start")?),
                 ("source_end", site.getattr("original_end")?),

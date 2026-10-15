@@ -20,8 +20,9 @@ use crate::bindings::_helpers::dbt_interop::runner::launch_os_error;
 use crate::bindings::types::CompilerDetach;
 use sqlbuild_config::dbt_profile::models::DbtProjectMetadata;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const DBT_MODELS: &str = "sqlbuild.integrations.dbt.models";
 const DBT_EXCEPTIONS: &str = "sqlbuild.integrations.dbt.exceptions";
 const PROFILE_RENDER_MODULE: &str = "sqlbuild.integrations.dbt._helpers.profile.render";
 const PROJECT_FILE: &str = "sqlbuild_project.toml";
@@ -147,7 +148,7 @@ fn build_dbt_init_project<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'p
         progress(&callbacks, "complete", "Wrote SQLBuild project config.")?;
     }
     call_with(
-        &imported(py, DBT_MODELS, "DbtInitResult")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "DbtInitResult")?,
         &[
             ("output_dir", output_dir),
             ("project_file", project_file),

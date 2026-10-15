@@ -11,12 +11,10 @@ from sqlbuild._native import (
     DirectModelVersionIdentities,
     PlannerChangeResults,
     PlannerIdentityContext,
+    PlannerScope,
     PlannerScopeResolution,
     WarehouseSnapshot,
     detect_stale_warning_changes,
-)
-from sqlbuild.compiler.planner.models import (
-    PlannerScope,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.planning._test_types import (
     ReusableExecutionModelNamesTestCase,

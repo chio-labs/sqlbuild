@@ -25,13 +25,14 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::discovery::guidance::sql_analysis_guidance;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 pub(crate) const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild._native";
 const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const SCENARIO_CONFIG_MODULE: &str = "sqlbuild._native";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
-const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const SCENARIO_MODELS: &str = "sqlbuild.executor.scenario.models";
 const METADATA_MODULE: &str = "importlib.metadata";
@@ -304,7 +305,7 @@ pub(crate) fn compile<'py>(
     let mut pairs: Vec<(&str, Bound<'py, PyAny>)> = options.to_vec();
     pairs.push(("external_sql_reference_resolver", resolver));
     let options: Bound<'py, PyAny> = call_with(
-        &imported(py, PIPELINE_MODELS, "CompilePipelineOptions")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "CompilePipelineOptions")?,
         &pairs,
     )?;
     let lifecycle: Bound<'py, PyAny> = call_with(

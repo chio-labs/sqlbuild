@@ -6,6 +6,11 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild._native import (
+    CompileModelConfig,
+    DeferralInputs,
+    PlannerOverrides,
+    PlannerPolicies,
+    PlannerSelection,
     SelectionStalenessGraph,
     SelectionStalenessNodeKey,
     build_execution_plan,
@@ -19,7 +24,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
-    CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
@@ -27,13 +31,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.models import (
-    DeferralInputs,
-    PlannerOverrides,
-    PlannerPolicies,
-    PlannerSelection,
-    PlanOutput,
-)
+from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.spec.contracts.models import SchemaColumn, SchemaModelEntry
 
 

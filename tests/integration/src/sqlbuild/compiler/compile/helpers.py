@@ -15,7 +15,9 @@ from typing import cast
 import pytest
 
 from sqlbuild._native import (
+    CompileAdapterContext,
     CompilerStage,
+    MacroExpansionResult,
     build_compile_inputs,
     compile_frontier,
     discover_project_inputs,
@@ -26,12 +28,7 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import (
-    CompileAdapterContext,
-    LoadedMacro,
-    MacroContext,
-    MacroExpansionResult,
-)
+from sqlbuild.compiler.compile.models import LoadedMacro, MacroContext
 from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge

@@ -13,6 +13,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_RECORDS: &str = "sqlbuild._native";
 const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
 const HOOKS: &str = "sqlbuild.runtime.contracts.models";
@@ -167,11 +169,11 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
         )?;
         let full_refresh = boolean(py, args.contains("--full-refresh")?);
         let selection = call_with(
-            &imported(py, PLANNER_MODELS, "PlannerSelection")?,
+            &imported(py, NATIVE_RECORDS_MODULE, "PlannerSelection")?,
             &[("select", selected.clone())],
         )?;
         let overrides = call_with(
-            &imported(py, PLANNER_MODELS, "PlannerOverrides")?,
+            &imported(py, NATIVE_RECORDS_MODULE, "PlannerOverrides")?,
             &[
                 ("cursor_overrides", cursor),
                 ("full_refresh", full_refresh.clone()),
@@ -193,7 +195,7 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
                 ("deferral", deferral),
                 (
                     "policies",
-                    imported(py, PLANNER_MODELS, "PlannerPolicies")?.call0()?,
+                    imported(py, NATIVE_RECORDS_MODULE, "PlannerPolicies")?.call0()?,
                 ),
                 ("on_progress", hooks.getattr("on_progress")?),
                 ("project_config", discovered.getattr("project_config")?),

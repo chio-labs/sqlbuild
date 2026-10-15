@@ -16,6 +16,8 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::types::CompilerDetach;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
@@ -78,7 +80,7 @@ fn infer_fixture_column_facts<'py>(
         PyFrozenSet::new(py, facts.null_literal_names)?,
     )?;
     arguments.set_item("quoted_names", PyFrozenSet::new(py, facts.quoted_names)?)?;
-    py.import(COMPILE_MODELS_MODULE)?
+    py.import(NATIVE_RECORDS_MODULE)?
         .getattr("FixtureColumnInference")?
         .call((), Some(&arguments))
 }

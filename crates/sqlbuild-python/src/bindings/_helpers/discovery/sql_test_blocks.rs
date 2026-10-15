@@ -1,5 +1,6 @@
 //! SQL `TEST(...)` blocks validated natively and built as discovery records.
 
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
 use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
@@ -9,6 +10,8 @@ use sqlbuild_model_config::sql_tests::models::{SqlTestBlock, SqlTestCase};
 use sqlbuild_model_config::sql_values::models::{RawKey, RawSqlValue};
 
 use crate::bindings::_helpers::contracts::sql_values::{SqlValueClasses, raw_value, sql_value};
+
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 const ERRORS_MODULE: &str = "sqlbuild._native";
@@ -47,7 +50,7 @@ fn case_record<'py>(
             [name.into_bound_py_any(py)?, sql_value(value, classes)?],
         )?);
     }
-    py.import(MODELS_MODULE)?
+    py.import(NATIVE_RECORDS_MODULE)?
         .getattr("DiscoveredSqlTestCase")?
         .call1((case.name.as_str(), PyTuple::new(py, values)?, case_index))
 }
@@ -93,9 +96,7 @@ fn block_record<'py>(
     keywords.set_item("cursor_start", block.cursor_start)?;
     keywords.set_item("cursor_end", block.cursor_end)?;
     keywords.set_item("sql_body_span", &native.2)?;
-    models
-        .getattr("DiscoveredSqlTestBlock")?
-        .call((), Some(&keywords))
+    shape_class(models.as_any(), "DiscoveredSqlTestBlock")?.call((), Some(&keywords))
 }
 
 /// Each `(header, sql_body, span)` block of a SQL test file as a `DiscoveredSqlTestBlock`.

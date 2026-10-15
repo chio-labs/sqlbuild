@@ -1,5 +1,6 @@
 //! Seeds, functions, sources, SQL tests, scenarios and audits attached from discovered inputs.
 
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class_at;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyCFunction, PyDict, PyDictMethods, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
@@ -24,6 +25,8 @@ use crate::bindings::_helpers::compiled_project::sql_test_loop::{
 };
 use crate::bindings::_helpers::sql_test_glue::constants::SQL_TEST_CTE_SCAN_ALGORITHM;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_RECORDS: &str = "sqlbuild._native";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
@@ -31,7 +34,6 @@ const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
 const SCOPE_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
 const AUDITING_TYPES_MODULE: &str = "sqlbuild.compiler.auditing.types";
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
 const SQL_VALUE_ERRORS_MODULE: &str = "sqlbuild.sql_values.exceptions";
 const YAML_FILE_SUFFIXES: [&str; 2] = [".yml", ".yaml"];
@@ -341,7 +343,7 @@ fn sql_test_settings<'py>(
         ("scenario_input", "CompileSqlScenarioInput"),
         ("scenario_cte", "CompileSqlScenarioCte"),
     ] {
-        settings.set_item(key, imported(py, COMPILE_MODELS_MODULE, class)?)?;
+        settings.set_item(key, shape_class_at(py, COMPILE_MODELS_MODULE, class)?)?;
     }
     settings.set_item("modes", by_value(py, COMPILE_TYPES_MODULE, "SqlTestMode")?)?;
     settings.set_item(
@@ -417,7 +419,7 @@ fn builtin_audit_file<'py>(
     let relative_path: Bound<'py, PyAny> =
         path_class.call1((format!("audits/generic/{name}.sql"),))?;
     let block: Bound<'py, PyAny> = call_with(
-        &imported(py, DISCOVERY_MODELS_MODULE, "DiscoveredAuditBlock")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "DiscoveredAuditBlock")?,
         &[
             ("audit_index", 0.into_bound_py_any(py)?),
             ("header_values", PyDict::new(py).into_any()),
@@ -425,7 +427,7 @@ fn builtin_audit_file<'py>(
         ],
     )?;
     call_with(
-        &imported(py, DISCOVERY_MODELS_MODULE, "DiscoveredAuditFile")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "DiscoveredAuditFile")?,
         &[
             (
                 "file_path",

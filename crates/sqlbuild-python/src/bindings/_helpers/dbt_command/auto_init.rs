@@ -14,10 +14,11 @@ use sqlbuild_core::dbt_command::models::ForwardedArg;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, flag, path, stream};
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const DISCOVERY_CONSTANTS: &str = "sqlbuild.compiler.discovery.constants";
 const PROGRESS_REPORTER_MODULE: &str = "sqlbuild._native";
-const DBT_MODELS: &str = "sqlbuild.integrations.dbt.models";
 
 fn project_config_found(directory: &Bound<'_, PyAny>) -> PyResult<bool> {
     let name: Bound<'_, PyAny> = imported(
@@ -91,7 +92,7 @@ pub(crate) fn ensure_twin_project<'py>(
         ],
     )?;
     let callbacks: Bound<'py, PyAny> = call_with(
-        &imported(py, DBT_MODELS, "DbtInitProgressCallbacks")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "DbtInitProgressCallbacks")?,
         &[
             ("start", progress.getattr("start")?),
             ("complete", progress.getattr("complete")?),
@@ -107,7 +108,7 @@ pub(crate) fn ensure_twin_project<'py>(
         None => none.clone(),
     };
     let request: Bound<'py, PyAny> = call_with(
-        &imported(py, DBT_MODELS, "DbtInitRequest")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "DbtInitRequest")?,
         &[
             ("cwd", effective_dir),
             ("dbt_project_dir", dbt_project_dir),

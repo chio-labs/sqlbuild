@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from sqlbuild.compiler.python_nodes.types import PythonIdentityStatus
+from sqlbuild._native import PythonIdentityStatus
 
 
 @dataclass(frozen=True)

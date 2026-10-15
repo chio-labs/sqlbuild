@@ -1,5 +1,6 @@
 //! The layouts of every native record class.
 
+use crate::bindings::_helpers::compile_records::constants::COMPILE_VALUE_RECORDS;
 use crate::bindings::_helpers::compiler_records::constants::{
     COMPILER_ENUMS, COMPILER_ERRORS, COMPILER_RECORDS,
 };
@@ -135,6 +136,7 @@ pub(crate) const RECORDS: &[&[RecordSpec]] = &[
     SQL_VALUE_RECORDS,
     DIAGNOSTIC_RECORDS,
     COMPILER_RECORDS,
+    COMPILE_VALUE_RECORDS,
 ];
 
 /// Records whose bound values are normalized before the record is created.
@@ -760,11 +762,7 @@ const LINEAGE_COMMAND_REQUEST: RecordSpec = RecordSpec {
         FieldSpec::new("exclude", FieldDefault::EmptyTuple),
         FieldSpec::new(
             "lineage_mode",
-            FieldDefault::Member(
-                "sqlbuild.compiler.lineage.types",
-                "ColumnLineageMode",
-                "RICH",
-            ),
+            FieldDefault::Member("sqlbuild._native", "ColumnLineageMode", "RICH"),
         ),
         FieldSpec::new("include_uses", FieldDefault::False),
         FieldSpec::new("cli_vars", FieldDefault::None),

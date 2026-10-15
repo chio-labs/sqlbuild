@@ -7,6 +7,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Literal
 
+from sqlbuild._native import CollectionRendering
 from sqlbuild.compiler.auditing.models import MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.cost.constants import DEFAULT_USD_PER_CREDIT
@@ -26,7 +27,6 @@ from sqlbuild.spec.contracts.types import (
     TimeTravelRetentionSource,
     WarehouseGroup,
 )
-from sqlbuild.sql_values.types import CollectionRendering
 
 
 @dataclass(frozen=True)

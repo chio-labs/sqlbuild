@@ -14,6 +14,8 @@ import pytest
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    CollectionRendering,
+    CompileAdapterContext,
     assemble_project,
     build_compile_inputs,
     discover_project_inputs,
@@ -21,11 +23,7 @@ from sqlbuild._native import (
     record_compile_input_reads,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import (
-    CompileAdapterContext,
-)
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
-from sqlbuild.sql_values.types import CollectionRendering
 
 _PYTHON_RESOURCE_FUNCTIONS: tuple[str, ...] = ("validate_sql_syntax", "validate_hook_sql_syntax")
 _ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(

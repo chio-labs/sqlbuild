@@ -16,7 +16,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 
-const DBT_MODELS: &str = "sqlbuild.integrations.dbt.models";
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const DBT_ERRORS_MODULE: &str = "sqlbuild.integrations.dbt.exceptions";
 const INIT_TOML_OPTIONS: (&[&str], &[&str]) = (
     &[
@@ -82,7 +83,7 @@ fn normalized_connection<'py>(
         connection.set_item(key, value)?;
     }
     call_with(
-        &imported(py, DBT_MODELS, "NormalizedDbtProfileConnection")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "NormalizedDbtProfileConnection")?,
         &[
             ("adapter", PyString::new(py, profile.adapter).into_any()),
             ("connection", connection.into_any()),

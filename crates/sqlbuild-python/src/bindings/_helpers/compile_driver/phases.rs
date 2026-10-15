@@ -13,13 +13,14 @@ use crate::bindings::_helpers::compile_driver::python_calls::{Status, call_with,
 use crate::bindings::_helpers::dag_artifact::artifact::build_dag_json;
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const OUTPUT_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const EMPTY_DAG_PATH: &str = "";
 const TARGET_DIRECTORY: &str = "target";
 const DEFAULT_DAG_FILE: &str = "sqlbuild_dag.json";
@@ -185,11 +186,11 @@ pub(crate) fn sql_test_planning_diagnostics<'py>(
         &[
             (
                 "phase",
-                imported(py, COMPILE_TYPES_MODULE, "DiagnosticPhase")?.getattr("TEST")?,
+                imported(py, NATIVE_RECORDS_MODULE, "DiagnosticPhase")?.getattr("TEST")?,
             ),
             (
                 "severity",
-                imported(py, COMPILE_TYPES_MODULE, "DiagnosticSeverity")?.getattr("ERROR")?,
+                imported(py, NATIVE_RECORDS_MODULE, "DiagnosticSeverity")?.getattr("ERROR")?,
             ),
             ("code", value.getattr("code")?),
             ("message", value.str()?.into_any()),

@@ -6,6 +6,7 @@ import pytest
 
 from sqlbuild import _native as native
 from sqlbuild._native import (
+    NormalizedDbtProfileConnection,
     ProjectConfigError,
     resolve_connection_config,
     resolve_project_connection_config,
@@ -14,7 +15,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.integrations.dbt.models import NormalizedDbtProfileConnection
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
     LocalTargetConfig,

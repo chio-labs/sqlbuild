@@ -12,7 +12,12 @@ from sqlbuild._native import (
     BackfillResult,
     ColumnRenameHint,
     CursorWatermarkMode,
+    DirectSourceFreshnessPlanningResult,
+    FunctionReturnColumn,
     GraphResourceKind,
+    MigrationCompatibility,
+    MigrationDiscovery,
+    OldNameViewAction,
     PlanProviderUsage,
     PlanWarning,
     ScenarioArtifactName,
@@ -20,9 +25,10 @@ from sqlbuild._native import (
     SchemaAction,
     SchemaChangeKind,
     SchemaColumnSource,
+    SqlTestAssertionStep,
 )
 from sqlbuild._native import cursor_parse as parse
-from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, RetentionRequest
+from sqlbuild.adapter.contract.models import ColumnInfo, RetentionRequest
 from sqlbuild.adapter.contract.types import MigrationTransfer
 from sqlbuild.compiler.auditing.models import MeasurementThresholds
 from sqlbuild.compiler.auditing.types import (
@@ -31,25 +37,17 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledRelationLocation,
-    FunctionReturnColumn,
-)
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
-    CompiledModelView,
     FunctionLanguage,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, SqlTestParameterDeclaration
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.migrations.types import (
     ColumnMigrationDecision,
-    MigrationCompatibility,
     MigrationDecision,
-    MigrationDiscovery,
     MigrationPromotion,
-    OldNameViewAction,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import (
@@ -63,10 +61,6 @@ from sqlbuild.compiler.planner.types import (
     RetentionDirection,
     RetentionPlanPhase,
     ScenarioArtifactKind,
-    SelectorKind,
-)
-from sqlbuild.compiler.source_freshness.models import (
-    DirectSourceFreshnessPlanningResult,
 )
 from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError
 from sqlbuild.cursor_algebra.models import (
@@ -193,26 +187,6 @@ class CursorOverrides:
                 f"{field_name} value '{value}' is not a valid integer"
             ) from None
         raise PlannerInputError(f"{field_name} value '{value}' is not a valid integer")
-
-
-@dataclass(frozen=True)
-class ParsedSelector:
-    """One parsed selector token before graph resolution."""
-
-    kind: SelectorKind
-    value: str
-    upstream: bool = False
-    downstream: bool = False
-
-
-@dataclass(frozen=True)
-class PathSelector:
-    """A directed path selector between two model names with optional endpoint expansion."""
-
-    start_name: str
-    end_name: str
-    upstream: bool = False
-    downstream: bool = False
 
 
 @dataclass(frozen=True)
@@ -561,45 +535,6 @@ class SchemaFinding:
     source: SchemaColumnSource
     expected_type: str | None = None
     actual_type: str | None = None
-
-
-@dataclass(frozen=True)
-class SqlTestSelection:
-    """Unit tests selected or excluded by name, beside the tests of the selected resources."""
-
-    names: frozenset[str] = frozenset()
-    excluded_names: frozenset[str] = frozenset()
-    models_selected: bool = True
-
-
-@dataclass(frozen=True)
-class PlannerScope:
-    """Resolved graph scope for one planner invocation."""
-
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
-    downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
-    all_keys: dict[str, CompiledObjectKey]
-    models_by_name: dict[str, CompiledModelView]
-    selected_keys: frozenset[CompiledObjectKey]
-    execution_order: tuple[CompiledObjectKey, ...]
-    user_selected_keys: frozenset[CompiledObjectKey] = frozenset()
-    python_read_source_names: frozenset[str] = frozenset()
-    sql_test_selection: SqlTestSelection = field(default_factory=SqlTestSelection)
-
-
-@dataclass(frozen=True)
-class PlannerRelationsContext:
-    """Resolved relation and source inputs for plan entry construction."""
-
-    model_locations: dict[str, CompiledRelationLocation]
-    seed_locations: dict[str, CompiledRelationLocation]
-    function_locations: dict[str, CompiledRelationLocation]
-    source_map: dict[str, SourceEntry]
-    source_read_map: dict[str, SourceEntry]
-    python_source_read_map: dict[str, SourceEntry]
-    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]]
-    star_exclude_keyword: str
-    listed_source_names: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -971,16 +906,6 @@ class ChainStep:
 
 
 @dataclass(frozen=True)
-class SqlTestAssertionStep:
-    """One zero-row assertion step in a SQL-native unit test."""
-
-    name: str
-    resolved_sql: str
-    lifted_ctes: tuple[tuple[str, str], ...] = field(default_factory=tuple)
-    comparison_body_sql: str | None = None
-
-
-@dataclass(frozen=True)
 class SqlTestPlanEntry:
     """Per-test execution plan entry with chained resolution."""
 
@@ -1124,46 +1049,3 @@ class PlanOutput:
         """Return the source entries Python reads resolve, as a selected SQL read sees them."""
 
         return self.python_source_read_map or self.source_read_map or self.source_map
-
-
-@dataclass(frozen=True)
-class PlannerSelection:
-    """User-facing selection inputs for one planner invocation."""
-
-    select: tuple[str, ...] = ()
-    exclude: tuple[str, ...] = ()
-    selected_keys: frozenset[CompiledObjectKey] | None = None
-    python_read_source_names: frozenset[str] = frozenset()
-    sql_test_selection: SqlTestSelection = field(default_factory=SqlTestSelection)
-
-
-@dataclass(frozen=True)
-class PlannerOverrides:
-    """Explicit user overrides that force or bound planner decisions."""
-
-    cursor_overrides: CursorOverrides | None = None
-    full_refresh: bool = False
-    reload_sources: bool = False
-    forced_stale_model_names: tuple[str, ...] = ()
-    external_blocked_model_names: tuple[str, ...] = ()
-    max_microbatches: int | None = None
-
-
-@dataclass(frozen=True)
-class DeferralInputs:
-    """Deferred relation and source-deferral inputs for planning."""
-
-    deferred_locations: dict[str, CompiledRelationLocation] | None = None
-    deferred_relations: dict[str, RelationInfo] | None = None
-    defer_sources_to: str | None = None
-    source_deferral_enabled: bool = True
-
-
-@dataclass(frozen=True)
-class PlannerPolicies:
-    """Behavior policies selected by the caller for one planner invocation."""
-
-    auto_load_sources: bool = False
-    selection_diagnostics: bool = False
-    plan_sql_tests: bool = True
-    record_migration_fingerprints: bool = True

@@ -27,6 +27,8 @@ use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild._native";
 const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
@@ -34,7 +36,6 @@ const TARGET_NAME_MODULE: &str = "sqlbuild._native";
 const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
-const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const NO_DESTINATION: (&str, &str) = (
     "C406",
@@ -254,11 +255,11 @@ fn prepare<'py>(
                 ],
             )?;
             let destination_connection: Bound<'py, PyAny> = call_with(
-                &imported(py, PIPELINE_MODELS, "ClonePipelineConnection")?,
+                &imported(py, NATIVE_RECORDS_MODULE, "ClonePipelineConnection")?,
                 &[("config", config.clone()), ("handle", connection.clone())],
             )?;
             let options: Bound<'py, PyAny> = call_with(
-                &imported(py, PIPELINE_MODELS, "ClonePipelineOptions")?,
+                &imported(py, NATIVE_RECORDS_MODULE, "ClonePipelineOptions")?,
                 &[
                     ("no_sql_validation", request.getattr("no_sql_validation")?),
                     ("select", request.getattr("select")?),

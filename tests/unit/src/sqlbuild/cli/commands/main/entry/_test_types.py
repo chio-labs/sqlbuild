@@ -2,9 +2,14 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild._native import CliUserError, CompileLineageMode, ProjectConfigError, SpecConfigError
+from sqlbuild._native import (
+    CliUserError,
+    ColumnLineageMode,
+    CompileLineageMode,
+    ProjectConfigError,
+    SpecConfigError,
+)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.lineage.types import ColumnLineageMode
 
 
 @dataclass(frozen=True)

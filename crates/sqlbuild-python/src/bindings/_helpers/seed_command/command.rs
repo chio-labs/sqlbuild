@@ -18,10 +18,11 @@ use crate::bindings::_helpers::command_runtime::invocation::resolve_command_invo
 use crate::bindings::_helpers::compile_driver::plan_result::connection_with_hooks;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
 const STATIC_COMMAND_MODULE: &str = "sqlbuild._native";
-const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const SEED_PLAN_MODULE: &str = "sqlbuild._native";
 const SEED_STATE_MODULE: &str = "sqlbuild._native";
 const RUNTIME_CONTRACT_MODELS: &str = "sqlbuild.runtime.contracts.models";
@@ -201,7 +202,7 @@ fn compile_seeds<'py>(
         ],
     )?;
     let options: Bound<'py, PyAny> = call_with(
-        &imported(py, PIPELINE_MODELS, "CompilePipelineOptions")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "CompilePipelineOptions")?,
         &[
             ("selected_target", request.getattr("selected_target")?),
             ("select", request.getattr("select")?),

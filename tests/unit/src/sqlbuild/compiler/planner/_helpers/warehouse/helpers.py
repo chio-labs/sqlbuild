@@ -6,13 +6,17 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
-from sqlbuild._native import check_selected_source_tables_exist
+from sqlbuild._native import (
+    CompiledSource,
+    PlannerRelationsContext,
+    PlannerScope,
+    check_selected_source_tables_exist,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject, CompiledSource
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledResourceType, CompiledSourceView
 from sqlbuild.compiler.discovery.models import DiscoveredSourceFile
-from sqlbuild.compiler.planner.models import PlannerRelationsContext, PlannerScope
 from sqlbuild.spec.contracts.models import SourceEntry
 
 

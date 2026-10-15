@@ -1,11 +1,8 @@
 from pathlib import Path
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredSqlModelFile,
-    DiscoveredSqlScenarioFile,
-    DiscoveredSqlTestBlock,
-)
+from sqlbuild._native import DiscoveredSqlTestBlock
+from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile, DiscoveredSqlScenarioFile
 from sqlbuild.spec.contracts.models import (
     SchemaModelEntry,
     SchemaSeedEntry,

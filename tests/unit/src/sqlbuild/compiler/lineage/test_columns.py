@@ -6,23 +6,19 @@ import pytest
 
 from sqlbuild._native import (
     ColumnLineage,
+    ColumnLineageConfidence,
+    ColumnLineageMode,
+    ColumnTransformKind,
+    CompiledLineageColumnFact,
     ModelColumnLineage,
     ProjectColumnLineage,
     compiled_model_record,
 )
-from sqlbuild.compiler.compile.models import (
-    CompiledLineageColumnFact,
-    CompiledLineageSourceFact,
-)
+from sqlbuild.compiler.compile.models import CompiledLineageSourceFact
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
-)
-from sqlbuild.compiler.lineage.types import (
-    ColumnLineageConfidence,
-    ColumnLineageMode,
-    ColumnTransformKind,
 )
 from tests.unit.src.sqlbuild.compiler.lineage._test_types import (
     ColumnLineageAnalyzerTestCase,

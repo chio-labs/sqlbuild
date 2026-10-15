@@ -1,5 +1,6 @@
 //! Finished session outcomes and pivot proof rows as Python's analysis objects.
 
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
 use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
@@ -7,8 +8,9 @@ use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
-const SQL_ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.sql_analysis.models";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const LINEAGE_NATIVE: &str = "native";
 
@@ -57,7 +59,7 @@ fn session_outcome_analysis<'py>(
         PyTuple::empty(py).into_any()
     };
     let binding_class: Bound<'py, PyAny> = py
-        .import(SQL_ANALYSIS_MODELS_MODULE)?
+        .import(NATIVE_RECORDS_MODULE)?
         .getattr("SqlBindingDiagnostic")?;
     let mut bindings: Vec<Bound<'py, PyAny>> = Vec::new();
     for row in raw.try_iter()? {
@@ -66,7 +68,7 @@ fn session_outcome_analysis<'py>(
         bindings.push(binding_class.call1(row)?);
     }
     let result: Bound<'py, PyAny> = call(
-        &models.getattr("PolyglotAnalysisResult")?,
+        &shape_class(models.as_any(), "PolyglotAnalysisResult")?,
         &[
             ("analysis_succeeded", succeeded),
             ("columns", inferred_columns(&columns)?),
@@ -81,7 +83,7 @@ fn session_outcome_analysis<'py>(
         ],
     )?;
     call(
-        &models.getattr("ModelSqlAnalysis")?,
+        &shape_class(models.as_any(), "ModelSqlAnalysis")?,
         &[
             ("polyglot_analysis", result),
             ("placeholders", request.get("placeholders")?),
@@ -106,7 +108,7 @@ fn proof<'py>(row: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let (output_proven, columns, families, inputs, failure_reason, bare): ProofObjects<'py> =
         row.extract()?;
     let models = py.import(COMPILE_MODELS_MODULE)?;
-    let family_class: Bound<'py, PyAny> = models.getattr("DynamicColumnFamilyProof")?;
+    let family_class: Bound<'py, PyAny> = shape_class(models.as_any(), "DynamicColumnFamilyProof")?;
     let mut proofs: Vec<Bound<'py, PyAny>> = Vec::new();
     for family in families.try_iter()? {
         let (name, inferred_type): (Bound<'py, PyAny>, Bound<'py, PyAny>) = family?.extract()?;
@@ -122,7 +124,7 @@ fn proof<'py>(row: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         PyTuple::empty(py).into_any()
     };
     call(
-        &models.getattr("DynamicColumnContractProof")?,
+        &shape_class(models.as_any(), "DynamicColumnContractProof")?,
         &[
             ("output_proven", output_proven),
             ("fixed_columns", fixed),
@@ -228,7 +230,8 @@ fn compact_lineage<'py>(rows: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
 fn lineage_facts<'py>(rows: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = rows.py();
     let models = py.import(COMPILE_MODELS_MODULE)?;
-    let column_class: Bound<'py, PyAny> = models.getattr("CompiledLineageColumnFact")?;
+    let column_class: Bound<'py, PyAny> =
+        shape_class(models.as_any(), "CompiledLineageColumnFact")?;
     let source_class: Bound<'py, PyAny> = models.getattr("CompiledLineageSourceFact")?;
     let compact: Bound<'py, PyAny> = models.getattr("CompactLineageFacts")?;
     let mut facts: Vec<Bound<'py, PyAny>> = Vec::new();

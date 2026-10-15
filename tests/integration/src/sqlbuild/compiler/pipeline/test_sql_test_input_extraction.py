@@ -5,12 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import build_compiled_project, discover_project_inputs
-from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import (
+from sqlbuild._native import (
     CompiledDirectLogicSqlTestPayload,
     CompiledModelSqlTestPayload,
+    build_compiled_project,
+    discover_project_inputs,
 )
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import ExpectedCountTestCase
 

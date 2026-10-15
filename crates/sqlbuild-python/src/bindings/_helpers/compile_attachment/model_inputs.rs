@@ -16,6 +16,8 @@ use crate::bindings::_helpers::model_config::unicode_environment::unicode_enviro
 use crate::bindings::_helpers::render::declaration_values::constant_declaration_sql;
 use crate::bindings::_helpers::render::macro_expansion_result::macro_expansion_classes;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
@@ -132,7 +134,7 @@ fn sql_hook_inputs<'py>(
         vec![
             (
                 "named_sql_hook_entry",
-                imported(py, DISCOVERY_MODELS_MODULE, "NamedSqlHookEntry")?,
+                imported(py, NATIVE_RECORDS_MODULE, "NamedSqlHookEntry")?,
             ),
             (
                 "python_hook_entry",
@@ -215,7 +217,7 @@ pub(crate) fn build_model_inputs<'py>(
         "PROJECT_CONFIG_FILENAME",
     )?)?;
     let config_inputs: Bound<'py, PyAny> = call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "NativeModelConfigInputs")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "NativeModelConfigInputs")?,
         &[
             (
                 "project_config",
@@ -253,7 +255,7 @@ pub(crate) fn build_model_inputs<'py>(
             ),
             (
                 "visible_declarations",
-                imported(py, COMPILE_MODELS_MODULE, "VisibleModelDeclarations")?,
+                imported(py, NATIVE_RECORDS_MODULE, "VisibleModelDeclarations")?,
             ),
             ("config_session", session),
             ("syntax_help", opt_out_help(py, true)?),

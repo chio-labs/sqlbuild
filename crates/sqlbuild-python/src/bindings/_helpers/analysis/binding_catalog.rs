@@ -14,6 +14,8 @@ use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::models::{CatalogInput, ProjectCatalog};
 use crate::bindings::types::CompilerDetach;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 /// Dialects whose quoted identifiers bind case-sensitively unless the session says otherwise.
 pub(crate) const CASE_SENSITIVE_BINDING_DIALECTS: [&str; 2] = ["snowflake", "postgresql"];
 /// Adapter dialect names and the native dialect each validates as.
@@ -27,7 +29,6 @@ const SNOWFLAKE_DIALECT: &str = "snowflake";
 const QUOTED_CASE_PARAMETER: &str = "QUOTED_IDENTIFIERS_IGNORE_CASE";
 const SESSION_PARAMETERS: &str = "session_parameters";
 const GENERIC_DIALECT: &str = "generic";
-const MODELS_MODULE: &str = "sqlbuild.compiler.sql_analysis.models";
 
 /// One native project catalog and the relation shapes the compile has told it about.
 #[pyclass(module = "sqlbuild._native")]
@@ -321,9 +322,12 @@ pub(crate) fn schema_validations<'py>(
             None => groups.push((catalog, own, vec![index])),
         }
     }
-    let result_type: Bound<'py, PyAny> = py.import(MODELS_MODULE)?.getattr("SqlBindingResult")?;
-    let diagnostic_type: Bound<'py, PyAny> =
-        py.import(MODELS_MODULE)?.getattr("SqlBindingDiagnostic")?;
+    let result_type: Bound<'py, PyAny> = py
+        .import(NATIVE_RECORDS_MODULE)?
+        .getattr("SqlBindingResult")?;
+    let diagnostic_type: Bound<'py, PyAny> = py
+        .import(NATIVE_RECORDS_MODULE)?
+        .getattr("SqlBindingDiagnostic")?;
     let empty: Bound<'py, PyAny> = result_type.call0()?;
     let mut results: Vec<Bound<'py, PyAny>> = vec![empty; requests.len()];
     for (catalog, any_explicit, members) in groups {

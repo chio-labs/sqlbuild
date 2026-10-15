@@ -23,8 +23,8 @@ use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
 use crate::bindings::_helpers::graph::views::{GraphViewMappings, graph_from_view_mappings};
 use crate::bindings::_helpers::planner_selection::carrier::{Carrier, py_strings};
 
-const PLANNER_MODELS_MODULE: &str = "sqlbuild.compiler.planner.models";
-const PLANNER_TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const VIEW_OPTIONS: &[&str] = &[
     "all_keys",
     "upstream_deps",
@@ -46,11 +46,11 @@ pub(crate) fn parsed_selector<'py>(
             upstream,
             downstream,
         } => call_with(
-            &imported(py, PLANNER_MODELS_MODULE, "ParsedSelector")?,
+            &imported(py, NATIVE_RECORDS_MODULE, "ParsedSelector")?,
             &[
                 (
                     "kind",
-                    imported(py, PLANNER_TYPES_MODULE, "SelectorKind")?.call1((kind,))?,
+                    imported(py, NATIVE_RECORDS_MODULE, "SelectorKind")?.call1((kind,))?,
                 ),
                 ("value", carrier.back(&value)?.into_any()),
                 ("upstream", PyBool::new(py, upstream).to_owned().into_any()),
@@ -66,7 +66,7 @@ pub(crate) fn parsed_selector<'py>(
             upstream,
             downstream,
         } => call_with(
-            &imported(py, PLANNER_MODELS_MODULE, "PathSelector")?,
+            &imported(py, NATIVE_RECORDS_MODULE, "PathSelector")?,
             &[
                 ("start_name", carrier.back(&start)?.into_any()),
                 ("end_name", carrier.back(&end)?.into_any()),

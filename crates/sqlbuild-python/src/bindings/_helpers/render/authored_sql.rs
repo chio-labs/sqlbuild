@@ -19,6 +19,8 @@ use crate::bindings::_helpers::render::macro_expansion_result::expand_sql_macros
 use crate::bindings::_helpers::sqltext::declaration_references::declaration_scan;
 use crate::bindings::_helpers::sqltext::static_sql::{InterpolationSources, interpolation_batch};
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
@@ -65,7 +67,7 @@ fn substituted<'py>(
 
 /// `ExpansionSpan` objects for span rows, in order.
 fn span_objects<'py>(py: Python<'py>, spans: &[SpanRow]) -> PyResult<Bound<'py, PyTuple>> {
-    let span_class: Bound<'py, PyAny> = imported(py, COMPILE_MODELS_MODULE, "ExpansionSpan")?;
+    let span_class: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS_MODULE, "ExpansionSpan")?;
     let objects: Vec<Bound<'py, PyAny>> = spans
         .iter()
         .map(|span| span_class.call1(*span))

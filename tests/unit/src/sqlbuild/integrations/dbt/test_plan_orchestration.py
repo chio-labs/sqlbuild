@@ -5,9 +5,12 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    DbtCliOptions,
     DbtCombinedGraph,
+    DbtCommandResult,
     DbtInteropCommandArgs,
     DbtInteropPlan,
+    DbtInteropRuntimeError,
     DbtManifestIndex,
     DbtRunner,
     build_dbt_combined_graph,
@@ -16,8 +19,6 @@ from sqlbuild._native import (
     plan_dbt_interop_command,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtPlanOrchestrationErrorTestCase,
     DbtPlanOrchestrationTestCase,

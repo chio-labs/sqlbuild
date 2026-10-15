@@ -7,8 +7,9 @@ use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
 use crate::bindings::_helpers::compile_driver::assembly_checks::test_model_query_overrides;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const COLLECTOR_MODULE: &str = "sqlbuild._native";
 const DECIMAL_MODULE: &str = "decimal";
@@ -38,7 +39,7 @@ pub(crate) fn assembled_sql_tests<'py>(
     }
     let report: Bound<'py, PyAny> = imported(py, COLLECTOR_MODULE, "report_compile_diagnostic")?;
     let mocked_input: Bound<'py, PyAny> =
-        imported(py, COMPILE_MODELS_MODULE, "CompileModelSqlTestInputPayload")?;
+        imported(py, NATIVE_RECORDS_MODULE, "CompileModelSqlTestInputPayload")?;
     let mut tests: Vec<Bound<'py, PyAny>> = Vec::with_capacity(assemblies.len());
     for (test_input, assembly) in test_inputs.iter().zip(assemblies) {
         let failure: Bound<'py, PyAny> = assembly.getattr("failure")?;
@@ -100,7 +101,7 @@ fn with_model_queries<'py>(
     let payload: Bound<'py, PyAny> = test.getattr("payload")?;
     if !payload.is_instance(&imported(
         py,
-        COMPILE_MODELS_MODULE,
+        NATIVE_RECORDS_MODULE,
         "CompiledModelSqlTestPayload",
     )?)? {
         return Ok(test.clone());

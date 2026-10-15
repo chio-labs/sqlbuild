@@ -8,9 +8,9 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
-const PIPELINE_MODELS_MODULE: &str = "sqlbuild.compiler.pipeline.models";
 const CLONE_PLANNING_MODULE: &str = "sqlbuild._native";
 /// The `ClonePipelineResult` fields after the two projects, in `run_clone_planning` order.
 const PLANNED_FIELDS: [&str; 8] = [
@@ -54,7 +54,7 @@ fn compiled_environment<'py>(
             (
                 "analysis_selection",
                 call_with(
-                    &imported(py, COMPILE_MODELS_MODULE, "CompileAnalysisSelection")?,
+                    &imported(py, NATIVE_RECORDS_MODULE, "CompileAnalysisSelection")?,
                     &[("no_cache", options.getattr("no_cache")?)],
                 )?,
             ),
@@ -131,7 +131,7 @@ pub(crate) fn prepared_clone_pipeline<'py>(
         fields.push((*name, planned.get_item(index)?));
     }
     call_with(
-        &imported(py, PIPELINE_MODELS_MODULE, "ClonePipelineResult")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "ClonePipelineResult")?,
         &fields,
     )
 }

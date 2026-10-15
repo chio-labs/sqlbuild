@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from sqlbuild._native import DisplayOptions
-from sqlbuild.compiler.pipeline.models import PythonPlanEntry
+from sqlbuild._native import DisplayOptions, PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
     CursorInputRelation,
     PlanOutput,

@@ -82,7 +82,7 @@ fn projections(model: &Bound<'_, PyAny>) -> PyResult<Vec<FixtureTypeProjection>>
     }
     let direct = model
         .py()
-        .import("sqlbuild.compiler.lineage.types")?
+        .import("sqlbuild._native")?
         .getattr("ColumnTransformKind")?
         .getattr("DIRECT")?;
     for column in lineage.try_iter()? {

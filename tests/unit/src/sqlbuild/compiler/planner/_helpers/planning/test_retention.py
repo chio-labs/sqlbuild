@@ -8,6 +8,7 @@ import pytest
 
 from sqlbuild._native import (
     PlannerRuntime,
+    PlannerScope,
     PlannerWarehouseState,
     WarehouseFingerprints,
     plan_retention,
@@ -26,11 +27,7 @@ from sqlbuild.adapter.contract.types import (
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.models import (
-    PlannerScope,
-    RetentionPlanEntry,
-    TableTypePlanEntry,
-)
+from sqlbuild.compiler.planner.models import RetentionPlanEntry, TableTypePlanEntry
 from sqlbuild.compiler.planner.types import (
     MaterializationType,
     RetentionDirection,

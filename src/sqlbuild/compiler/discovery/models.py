@@ -6,11 +6,23 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild._native import DiscoveredSqlModelFile, NativeDiscoverySession
-from sqlbuild.compiler.auditing.models import MeasurementContract
-from sqlbuild.compiler.auditing.types import AuditEvaluationMode
-from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
-from sqlbuild.compiler.compile.types import SqlTestMode
+from sqlbuild._native import (
+    CollectionRendering,
+    DiscoveredAdapterFile,
+    DiscoveredAuditFile,
+    DiscoveredConstantFile,
+    DiscoveredEnumFile,
+    DiscoveredModelSchemaFile,
+    DiscoveredPythonFunctionFile,
+    DiscoveredSchemaFile,
+    DiscoveredSeedFile,
+    DiscoveredSqlFunctionFile,
+    DiscoveredSqlHookFile,
+    DiscoveredSqlModelFile,
+    DiscoveredSqlTestBlock,
+    EnumMember,
+    NativeDiscoverySession,
+)
 from sqlbuild.compiler.discovery.constants import (
     SQL_SCENARIOS_OWNERSHIP_ROOT,
     SQL_TESTS_OWNERSHIP_ROOT,
@@ -19,7 +31,7 @@ from sqlbuild.compiler.discovery.types import (
     LoaderConnectionMode,
     ProjectProvider,
 )
-from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
+from sqlbuild.compiler.scopes.types import ScopeKind
 from sqlbuild.python_nodes.models import AuditCase, ColumnLineageRef, RetryPolicy, SqlResourceRef
 from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.runtime.event_exporting.constants import EVENT_EXPORT_KINDS
@@ -27,15 +39,12 @@ from sqlbuild.runtime.output_capture.types import CommandOutputStream
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
     ProjectConfig,
-    SchemaColumn,
-    SchemaModelEntry,
-    SchemaSeedEntry,
     SourceColumnEntry,
     SourceEntry,
 )
 from sqlbuild.spec.contracts.types import EventExportSeverity, SourceWriteStrategy
 from sqlbuild.sql_values.models import SqlLogicalType, SqlValue
-from sqlbuild.sql_values.types import CollectionRendering, SqlValueKind
+from sqlbuild.sql_values.types import SqlValueKind
 
 
 @dataclass(frozen=True)
@@ -52,55 +61,11 @@ class SqlHookEntry:
 
 
 @dataclass(frozen=True)
-class NamedSqlHookEntry:
-    """An unresolved invocation of a discovered SQL hook resource."""
-
-    name: str
-    kwargs: dict[str, object]
-
-
-@dataclass(frozen=True)
 class PythonHookEntry:
     """A model lifecycle hook that invokes a discovered Python hook."""
 
     name: str
     kwargs: dict[str, object]
-
-
-@dataclass(frozen=True)
-class DiscoveredSqlFunctionFile:
-    """A discovered SQL function file and its raw contents."""
-
-    file_path: Path
-    relative_path: Path
-    contents: str
-    header_values: dict[str, object]
-    body_sql: str
-
-
-@dataclass(frozen=True)
-class DiscoveredSqlHookFile:
-    """A discovered named SQL lifecycle hook resource."""
-
-    file_path: Path
-    relative_path: Path
-    contents: str
-    header_values: dict[str, object]
-    sql_body: str
-    name: str
-    description: str | None = None
-    scope_kind: ScopeKind = ScopeKind.GLOBAL
-    ownership_root: Path | None = None
-    owning_path: Path | None = None
-    declaration_root: Path | None = None
-
-
-@dataclass(frozen=True)
-class EnumMember:
-    """One named member in a SQLBuild enum declaration."""
-
-    name: str
-    value: str | int
 
 
 @dataclass(frozen=True)
@@ -146,82 +111,6 @@ class ConstantDeclaration:
 
 
 @dataclass(frozen=True)
-class DiscoveredEnumFile:
-    """A public SQL file containing one or more enum declarations."""
-
-    file_path: Path
-    relative_path: Path
-    contents: str
-    declarations: tuple[EnumDeclaration, ...]
-    scope_kind: ScopeKind = ScopeKind.GLOBAL
-    ownership_root: Path | None = None
-    owning_path: Path | None = None
-    declaration_root: Path | None = None
-
-
-@dataclass(frozen=True)
-class DiscoveredConstantFile:
-    """A public SQL file containing one or more constant declarations."""
-
-    file_path: Path
-    relative_path: Path
-    contents: str
-    declarations: tuple[ConstantDeclaration, ...]
-    scope_kind: ScopeKind = ScopeKind.GLOBAL
-    ownership_root: Path | None = None
-    owning_path: Path | None = None
-    declaration_root: Path | None = None
-
-
-@dataclass(frozen=True)
-class ModelSchemaDeclaration:
-    """One public reusable model column schema declaration."""
-
-    name: str
-    columns: tuple[SchemaColumn, ...]
-    relative_path: Path
-    extends: str | None = None
-    description: str | None = None
-
-
-@dataclass(frozen=True)
-class DiscoveredModelSchemaFile:
-    """A public SQL file containing reusable model schemas."""
-
-    file_path: Path
-    relative_path: Path
-    contents: str
-    declarations: tuple[ModelSchemaDeclaration, ...]
-    scope_kind: ScopeKind = ScopeKind.GLOBAL
-    ownership_root: Path | None = None
-    owning_path: Path | None = None
-    declaration_root: Path | None = None
-
-
-@dataclass(frozen=True)
-class DiscoveredPythonFunctionFile:
-    """A discovered Python function file and its parsed UDF metadata."""
-
-    file_path: Path
-    relative_path: Path
-    contents: str
-    header_values: dict[str, object]
-    entry_point: str
-    body_python: str
-
-
-@dataclass(frozen=True)
-class DiscoveredSchemaFile:
-    """A discovered schema.yml file and its raw contents."""
-
-    file_path: Path
-    relative_path: Path
-    contents: str
-    model_entries: tuple[SchemaModelEntry, ...]
-    seed_entries: tuple[SchemaSeedEntry, ...]
-
-
-@dataclass(frozen=True)
 class DiscoveredSourceFile:
     """A discovered source declaration file and its raw contents."""
 
@@ -229,14 +118,6 @@ class DiscoveredSourceFile:
     relative_path: Path
     contents: str
     source_entries: tuple[SourceEntry, ...]
-
-
-@dataclass(frozen=True)
-class DiscoveredSeedFile:
-    """A discovered seed file."""
-
-    file_path: Path
-    relative_path: Path
 
 
 @dataclass(frozen=True)
@@ -260,31 +141,6 @@ class SqlTestParameterDeclaration:
 
 
 @dataclass(frozen=True)
-class DiscoveredSqlTestCase:
-    """One ordered named case belonging to a SQL-native test template."""
-
-    name: str
-    values: tuple[tuple[str, SqlValue], ...]
-    case_index: int
-
-
-@dataclass(frozen=True)
-class DiscoveredSqlTestBlock:
-    """One raw TEST(...) block discovered from a SQL-native test file."""
-
-    test_index: int
-    header_values: dict[str, object]
-    sql_body: str
-    name: str | None = None
-    mode: SqlTestMode = DEFAULT_SQL_TEST_MODE
-    parameters: tuple[SqlTestParameterDeclaration, ...] = field(default_factory=tuple)
-    cases: tuple[DiscoveredSqlTestCase, ...] = field(default_factory=tuple)
-    cursor_start: str | None = None
-    cursor_end: str | None = None
-    sql_body_span: tuple[int, int] | None = None
-
-
-@dataclass(frozen=True)
 class DiscoveredSqlScenarioFile:
     """A discovered SQL-native scenario file and its raw contents."""
 
@@ -299,35 +155,6 @@ class DiscoveredSqlScenarioFile:
 
 
 @dataclass(frozen=True)
-class DiscoveredAuditFile:
-    """A discovered audit SQL file and its raw contents."""
-
-    file_path: Path
-    relative_path: Path
-    contents: str
-    blocks: tuple[DiscoveredAuditBlock, ...]
-    declaration_kind: DeclarationKind = DeclarationKind.AUDIT
-    scope_kind: ScopeKind = ScopeKind.GLOBAL
-    ownership_root: Path | None = None
-    owning_path: Path | None = None
-    declaration_root: Path | None = None
-
-
-@dataclass(frozen=True)
-class DiscoveredAuditBlock:
-    """One raw AUDIT(...) block discovered from a SQL audit file."""
-
-    audit_index: int
-    header_values: dict[str, object]
-    sql_body: str
-    name: str | None = None
-    evaluation_mode: AuditEvaluationMode = AuditEvaluationMode.VIOLATIONS
-    measurement_contract: MeasurementContract | None = None
-    measure_sql: str | None = None
-    evidence_sql: str | None = None
-
-
-@dataclass(frozen=True)
 class DiscoveredMacroFile:
     """A discovered project macro file and its raw contents."""
 
@@ -338,14 +165,6 @@ class DiscoveredMacroFile:
     ownership_root: Path | None = None
     owning_path: Path | None = None
     declaration_root: Path | None = None
-
-
-@dataclass(frozen=True)
-class DiscoveredAdapterFile:
-    """A detected project adapter Python file."""
-
-    file_path: Path
-    relative_path: Path
 
 
 @dataclass(frozen=True)
@@ -588,22 +407,3 @@ class DiscoveredRuntimeExtensions:
     event_exporters: tuple[DiscoveredEventExporter, ...] = field(default_factory=tuple)
     command_output_sinks: tuple[DiscoveredCommandOutputSink, ...] = field(default_factory=tuple)
     lifecycle_shutdown_timeout_seconds: int | None = None
-
-
-@dataclass(frozen=True)
-class DiscoveryFileFault:
-    """One project-relative authored file fault captured during tolerant discovery."""
-
-    path: Path | None
-    message: str
-
-
-@dataclass(frozen=True)
-class TolerantScopeDiscovery:
-    """Parsed scope inputs and independently categorized tolerant discovery faults."""
-
-    discovered_inputs: DiscoveredProjectInputs
-    resource_faults: tuple[DiscoveryFileFault, ...] = field(default_factory=tuple)
-    declaration_faults: tuple[DiscoveryFileFault, ...] = field(default_factory=tuple)
-    relationship_faults: tuple[DiscoveryFileFault, ...] = field(default_factory=tuple)
-    config_faults: tuple[DiscoveryFileFault, ...] = field(default_factory=tuple)

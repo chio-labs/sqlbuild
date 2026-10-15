@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import plan_has_executable_work
-from sqlbuild.compiler.pipeline.models import PythonPlanEntry
-from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.compiler.python_nodes.types import (
+from sqlbuild._native import (
     PythonIdentityStatus,
-    PythonNodeKind,
+    PythonPlanEntry,
     PythonRunPhase,
+    plan_has_executable_work,
 )
+from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from tests.unit.src.sqlbuild.compiler.pipeline.main._test_types import PlanWorkTestCase
 from tests.unit.src.sqlbuild.compiler.pipeline.main.helpers import build_plan_output_with_model
 

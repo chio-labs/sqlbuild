@@ -24,6 +24,8 @@ use crate::bindings::_helpers::discovery::sql_test_records::{
 };
 use crate::bindings::_helpers::discovery::yaml_records::discover_source_files;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
 const PROJECT_CONFIG_FILENAME: &str = "sqlbuild_project.toml";
@@ -66,7 +68,7 @@ impl<'py> Faults<'py> {
             None => py.None().into_bound(py),
         };
         call_with(
-            &imported(py, MODELS_MODULE, "DiscoveryFileFault")?,
+            &imported(py, NATIVE_RECORDS_MODULE, "DiscoveryFileFault")?,
             &[
                 ("path", path),
                 ("message", PyString::new(py, &message).into_any()),
@@ -229,7 +231,7 @@ fn tolerant_discovery<'py>(project_dir: &Bound<'py, PyAny>) -> PyResult<Bound<'p
     let discovered_inputs: Bound<'py, PyAny> =
         imported(py, MODELS_MODULE, "DiscoveredProjectInputs")?.call((), Some(&inputs))?;
     call_with(
-        &imported(py, MODELS_MODULE, "TolerantScopeDiscovery")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "TolerantScopeDiscovery")?,
         &[
             ("discovered_inputs", discovered_inputs),
             (

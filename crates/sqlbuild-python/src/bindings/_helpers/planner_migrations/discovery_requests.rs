@@ -145,12 +145,8 @@ pub(super) fn automatic<'py>(
                     ("model", item.clone()),
                     (
                         "discovery",
-                        imported(
-                            py,
-                            "sqlbuild.compiler.migrations.types",
-                            "MigrationDiscovery",
-                        )?
-                        .getattr("AUTOMATIC")?,
+                        imported(py, "sqlbuild._native", "MigrationDiscovery")?
+                            .getattr("AUTOMATIC")?,
                     ),
                     ("origin_location", location),
                     ("origin_model", origin_model),

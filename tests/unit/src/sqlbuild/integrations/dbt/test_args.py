@@ -3,13 +3,13 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
+    DbtInteropArgumentError,
     DbtInteropCommand,
     DbtInteropParsedArgs,
     DbtInteropRoutedArgs,
     parse_dbt_execution_args,
     route_dbt_interop_args,
 )
-from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtArgParseErrorTestCase,
     DbtArgParseTestCase,

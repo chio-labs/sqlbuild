@@ -1,5 +1,6 @@
 //! The native config builder, validator and inherited storage policies of one compile.
 
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class_at;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
@@ -9,8 +10,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::compiled_project::loop_classes::table_backed;
 use crate::bindings::_helpers::model_config::unicode_environment::unicode_environment;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
 
@@ -34,7 +36,7 @@ pub(crate) fn native_model_config_session<'py>(
         py,
         ["SqlHookEntry", "NamedSqlHookEntry", "PythonHookEntry"]
             .iter()
-            .map(|name| imported(py, DISCOVERY_MODELS_MODULE, name))
+            .map(|name| shape_class_at(py, DISCOVERY_MODELS_MODULE, name))
             .collect::<PyResult<Vec<_>>>()?,
     )?;
     let target_namespace: Bound<'py, PyAny> = if target.is_none() {
@@ -67,7 +69,7 @@ pub(crate) fn native_model_config_session<'py>(
         inherited.set_item(&materialized, storage)?;
     }
     call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "NativeModelConfigSession")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "NativeModelConfigSession")?,
         &[
             ("path_defaults", project_config.getattr("path_defaults")?),
             ("builder", builder),

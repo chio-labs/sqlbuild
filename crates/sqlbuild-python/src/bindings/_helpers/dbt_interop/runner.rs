@@ -22,8 +22,8 @@ use crate::bindings::_helpers::dbt_interop::cli::{
 };
 use crate::bindings::types::CompilerDetach;
 
-const DBT_MODELS: &str = "sqlbuild.integrations.dbt.models";
-const DBT_EXCEPTIONS: &str = "sqlbuild.integrations.dbt.exceptions";
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const LAUNCH_FAILURE: &str = "failed to execute dbt";
 const POISONED_CACHE: &str = "dbt ls cache is poisoned";
@@ -123,7 +123,7 @@ impl DbtRunner {
         let result: Bound<'py, PyAny> = self.run(command, &options.getattr("project_dir")?)?;
         let stdout: String = result.getattr("stdout")?.extract()?;
         let listing: Bound<'py, PyAny> = call_with(
-            &imported(py, DBT_MODELS, "DbtLsResult")?,
+            &imported(py, NATIVE_RECORDS_MODULE, "DbtLsResult")?,
             &[
                 ("nodes", ls_nodes(py, &stdout)?.into_any()),
                 ("command", result),
@@ -191,7 +191,7 @@ impl DbtRunner {
         });
         let output: DbtProcessOutput = output.map_err(|error| launch_failure(py, error))?;
         call_with(
-            &imported(py, DBT_MODELS, "DbtCommandResult")?,
+            &imported(py, NATIVE_RECORDS_MODULE, "DbtCommandResult")?,
             &[
                 ("argv", command.into_any()),
                 ("returncode", output.returncode.into_pyobject_any(py)?),
@@ -282,8 +282,9 @@ pub(crate) fn launch_failure(py: Python<'_>, error: PyErr) -> PyErr {
     let created = || -> PyResult<PyErr> {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("help", error.value(py).str()?)?;
-        let instance: Bound<'_, PyAny> = imported(py, DBT_EXCEPTIONS, "DbtInteropRuntimeError")?
-            .call((LAUNCH_FAILURE,), Some(&options))?;
+        let instance: Bound<'_, PyAny> =
+            imported(py, NATIVE_RECORDS_MODULE, "DbtInteropRuntimeError")?
+                .call((LAUNCH_FAILURE,), Some(&options))?;
         let raised: PyErr = PyErr::from_value(instance);
         raised.set_cause(py, Some(error.clone_ref(py)));
         Ok(raised)

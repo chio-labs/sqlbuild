@@ -31,6 +31,8 @@ use crate::bindings::_helpers::discovery::yaml_entries::{
 };
 use crate::bindings::models::{NativeProjectTree, YamlDiscoveryRequest};
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 /// The most YAML bytes one native load reads before its files are built and released.
 const YAML_BATCH_BYTES: u64 = 4 * 1024 * 1024;
@@ -282,7 +284,7 @@ pub(crate) fn discover_schema_files<'py>(
         if paths.is_empty() {
             return record_tuple(py, Vec::new());
         }
-        let class: Bound<'py, PyAny> = imported(py, MODELS_MODULE, "DiscoveredSchemaFile")?;
+        let class: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS_MODULE, "DiscoveredSchemaFile")?;
         let mut records: Vec<Bound<'py, PyAny>> = Vec::new();
         load_files(
             project_dir,

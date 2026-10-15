@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.compiler.planner.models import SqlTestSelection
+from sqlbuild._native import SqlTestSelection
 
 
 @dataclass(frozen=True)

@@ -6,6 +6,9 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild._native import (
+    CompiledFunction,
+    CompileModelConfig,
+    FunctionArgument,
     PreparedCompileArtifacts,
     WrittenTarget,
     project_with,
@@ -19,13 +22,10 @@ from sqlbuild.compiler.auditing.types import (
     AuditSeverity,
 )
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
-    CompileModelConfig,
-    FunctionArgument,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,

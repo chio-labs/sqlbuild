@@ -4,11 +4,11 @@ from typing import ClassVar
 
 import pytest
 
+from sqlbuild._native import FunctionArgument
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile, RetentionRequest
 from sqlbuild.adapter.contract.types import RetentionScope
-from sqlbuild.compiler.compile.models import FunctionArgument
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from tests.unit.src.sqlbuild.adapter.contract.classes.base_adapter._test_types import (
     BaseAdapterDurableCloneTestCase,

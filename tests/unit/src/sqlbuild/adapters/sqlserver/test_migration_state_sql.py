@@ -6,10 +6,14 @@ from datetime import UTC, datetime
 
 import pytest
 
-from sqlbuild._native import read_migration_state_events, write_migration_state_event
+from sqlbuild._native import (
+    MigrationDiscovery,
+    read_migration_state_events,
+    write_migration_state_event,
+)
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.migrations.models import MigrationEvent, MigrationRelation
-from sqlbuild.compiler.migrations.types import MigrationDecision, MigrationDiscovery
+from sqlbuild.compiler.migrations.types import MigrationDecision
 from tests.unit.src.sqlbuild.adapters.sqlserver._test_types import (
     SqlServerMigrationEventReadTestCase,
     SqlServerMigrationEventWriteTestCase,

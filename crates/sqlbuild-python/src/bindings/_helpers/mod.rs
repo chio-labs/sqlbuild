@@ -16,6 +16,7 @@ pub(crate) mod compile_attachment;
 pub(crate) mod compile_command;
 pub(crate) mod compile_driver;
 pub(crate) mod compile_outputs;
+pub(crate) mod compile_records;
 pub(crate) mod compiled_project;
 pub(crate) mod compiler_records;
 pub(crate) mod compute_logs;

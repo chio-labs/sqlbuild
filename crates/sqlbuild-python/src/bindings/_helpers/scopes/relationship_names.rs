@@ -16,7 +16,8 @@ use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 use crate::bindings::types::CompilerDetach;
 
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 
 /// One scan's error, or its values.
@@ -112,7 +113,7 @@ fn extract_sql_test_ctes<'py>(
         }
     };
     let cte_class: Bound<'py, PyAny> = py
-        .import(COMPILE_MODELS_MODULE)?
+        .import(NATIVE_RECORDS_MODULE)?
         .getattr("CompileSqlTestCte")?;
     let mut built: Vec<Bound<'py, PyAny>> = Vec::with_capacity(ctes.len());
     for (name, body) in ctes {

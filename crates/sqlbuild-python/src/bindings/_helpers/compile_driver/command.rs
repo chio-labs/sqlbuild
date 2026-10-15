@@ -27,10 +27,10 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::rules::results::format_skipped_type_proof_rules;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const BYPASS_OUTCOME: &str = "bypass";
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 
 /// What one full compile reports for reuse recording.
 struct CommandOutcome<'py> {
@@ -331,7 +331,7 @@ fn analysis_options<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = request.py();
     let selection: Bound<'py, PyAny> = call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "CompileAnalysisSelection")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "CompileAnalysisSelection")?,
         &[
             ("select", request.getattr("select")?),
             ("exclude", request.getattr("exclude")?),
@@ -358,7 +358,7 @@ fn analysis_options<'py>(
 fn rules_failed(analysis: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py: Python<'_> = analysis.py();
     let rule_phase: Bound<'_, PyAny> =
-        imported(py, COMPILE_TYPES_MODULE, "DiagnosticPhase")?.getattr("RULE")?;
+        imported(py, NATIVE_RECORDS_MODULE, "DiagnosticPhase")?.getattr("RULE")?;
     for diagnostic in analysis.getattr("diagnostics")?.try_iter()? {
         let diagnostic: Bound<'_, PyAny> = diagnostic?;
         if diagnostic.getattr("is_error")?.is_truthy()?

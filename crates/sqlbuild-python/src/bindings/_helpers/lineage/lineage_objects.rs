@@ -1,5 +1,6 @@
 //! The Python lineage models and enums native lineage builds.
 
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyResult, Python};
 use pyo3::types::{PyDict, PyTuple};
 use sqlbuild_analysis::lineage::models::{LineageColumn, LineageSource};
@@ -48,12 +49,12 @@ impl<'py> LineageClasses<'py> {
             column_lineage: models.getattr("ColumnLineage")?,
             model_lineage: models.getattr("ModelColumnLineage")?,
             semantic_use: models.getattr("DirectSemanticColumnUse")?,
-            column_fact: compile_models.getattr("CompiledLineageColumnFact")?,
+            column_fact: shape_class(compile_models.as_any(), "CompiledLineageColumnFact")?,
             source_fact: compile_models.getattr("CompiledLineageSourceFact")?,
             compact_facts: compile_models.getattr("CompactLineageFacts")?,
-            transform_kind: types.getattr("ColumnTransformKind")?,
-            confidence: types.getattr("ColumnLineageConfidence")?,
-            analysis_dialect: types.getattr("PolyglotAnalysisDialect")?,
+            transform_kind: shape_class(types.as_any(), "ColumnTransformKind")?,
+            confidence: shape_class(types.as_any(), "ColumnLineageConfidence")?,
+            analysis_dialect: shape_class(types.as_any(), "PolyglotAnalysisDialect")?,
             model_resource: resource_type.getattr("MODEL")?,
             unknown_nullability: nullability.getattr("UNKNOWN")?,
             nullability,

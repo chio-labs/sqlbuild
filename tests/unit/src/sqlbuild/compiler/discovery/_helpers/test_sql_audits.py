@@ -5,9 +5,8 @@ from typing import cast
 
 import pytest
 
-from sqlbuild._native import SqlAuditParseError
+from sqlbuild._native import DiscoveredAuditBlock, DiscoveredAuditFile, SqlAuditParseError
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode
-from sqlbuild.compiler.discovery.models import DiscoveredAuditBlock, DiscoveredAuditFile
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ParseMeasurementAuditTestCase,
     ParseSqlAuditFileErrorTestCase,

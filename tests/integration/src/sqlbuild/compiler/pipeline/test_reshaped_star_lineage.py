@@ -9,7 +9,7 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledLineageColumnFact
+from sqlbuild._native import CompiledLineageColumnFact
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     ReshapedStarIntegrationTestCase,
     ReshapedStarLineageIntegrationTestCase,

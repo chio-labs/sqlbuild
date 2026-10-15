@@ -349,7 +349,7 @@ const LINEAGE_FIELDS: [Field; 11] = [
     field(
         "lineage_mode",
         Source::Member(
-            class("sqlbuild.compiler.lineage.types", "ColumnLineageMode"),
+            class("sqlbuild._native", "ColumnLineageMode"),
             "lineage_mode",
         ),
     ),

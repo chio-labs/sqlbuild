@@ -5,12 +5,12 @@ from datetime import date, datetime
 import pytest
 
 from sqlbuild._native import (
+    CompileModelConfig,
     compute_cursor_bounds,
     resolve_effective_timestamp_grain,
     watermark_type_is_compatible,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompileModelConfig
 from sqlbuild.compiler.planner.models import CursorBounds, CursorInputRelation, ModelCursorSnapshot
 from sqlbuild.cursor_algebra.models import DateValue, TimestampValue
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (

@@ -14,7 +14,7 @@ use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::compiled_project::records::plain_typed_value;
 use crate::bindings::_helpers::compiled_project::values::plain_value;
 
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 const MODEL_PAYLOAD_CLASS: &str = "CompiledModelSqlTestPayload";
 const DESCRIPTION_KEY: &str = "description";
 
@@ -89,7 +89,7 @@ fn with_payload(test: &Bound<'_, PyAny>, mut fact: SqlTestFact) -> PyResult<SqlT
     let payload: Bound<'_, PyAny> = test.getattr("payload")?;
     let model_payload: Bound<'_, PyAny> = test
         .py()
-        .import(COMPILE_MODELS_MODULE)?
+        .import(NATIVE_RECORDS_MODULE)?
         .getattr(MODEL_PAYLOAD_CLASS)?;
     if !payload.is_instance(&model_payload)? {
         return Ok(fact);

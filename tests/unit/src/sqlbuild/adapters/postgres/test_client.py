@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import FunctionArgument
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo, SchemaDiffResult
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
-from sqlbuild.compiler.compile.models import FunctionArgument
 from tests.unit.src.sqlbuild.adapters.postgres._test_types import (
     PostgresAdapterDefaultsTestCase,
     PostgresDescribeRelationTestCase,

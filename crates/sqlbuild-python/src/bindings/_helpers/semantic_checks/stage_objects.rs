@@ -1,10 +1,12 @@
 //! The Python models, enums and compile helpers the semantic completion stage reads and builds.
 
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString};
 
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
+
+const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const UNNEEDED_SQL_ANALYSIS_OPT_OUT_CODE: &str = "P009";
 const SQL_ANALYSIS_CONFIG_KEY: &str = "sql_analysis";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
@@ -43,7 +45,7 @@ impl<'py> StageClasses<'py> {
     pub(crate) fn new(py: Python<'py>) -> PyResult<Self> {
         let models = py.import(COMPILE_MODELS_MODULE)?;
         let types = py.import(COMPILE_TYPES_MODULE)?;
-        let severity = types.getattr("DiagnosticSeverity")?;
+        let severity = shape_class(types.as_any(), "DiagnosticSeverity")?;
         let resource = types.getattr("CompiledResourceType")?;
         let kinds = py
             .import(REFERENCE_TYPES_MODULE)?
@@ -53,8 +55,8 @@ impl<'py> StageClasses<'py> {
             location: py
                 .import(CONTRACT_MODELS_MODULE)?
                 .getattr("SourceLocation")?,
-            model_test_payload: models.getattr("CompiledModelSqlTestPayload")?,
-            compile_phase: types.getattr("DiagnosticPhase")?.getattr("COMPILE")?,
+            model_test_payload: shape_class(models.as_any(), "CompiledModelSqlTestPayload")?,
+            compile_phase: shape_class(types.as_any(), "DiagnosticPhase")?.getattr("COMPILE")?,
             error: severity.getattr("ERROR")?,
             warning: severity.getattr("WARNING")?,
             model_resource: resource.getattr("MODEL")?,

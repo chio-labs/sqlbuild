@@ -5,15 +5,13 @@ from typing import cast
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    CompileModelConfig,
+    NativeModelConfigInputs,
+    NativeModelConfigSession,
     build_compile_inputs,
     discover_project_inputs,
     native_model_config_session,
     record_template_reads,
-)
-from sqlbuild.compiler.compile.models import (
-    CompileModelConfig,
-    NativeModelConfigInputs,
-    NativeModelConfigSession,
 )
 from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.spec.contracts.models import (

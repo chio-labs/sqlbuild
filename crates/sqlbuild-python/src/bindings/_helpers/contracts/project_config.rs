@@ -40,7 +40,7 @@ const ENUM_MODULES: [(&str, &str); 10] = [
     ),
     ("EventExportSeverity", "sqlbuild.spec.contracts.types"),
     ("AuditSeverity", "sqlbuild.compiler.auditing.types"),
-    ("CollectionRendering", "sqlbuild.sql_values.types"),
+    ("CollectionRendering", "sqlbuild._native"),
 ];
 
 /// The four configuration file paths of a project directory, as Python and native paths.

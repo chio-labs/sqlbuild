@@ -2,14 +2,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlbuild._native import CompiledLineageColumnFact, ExpansionSpan
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile.models import (
-    CompiledLineageColumnFact,
-    CompiledObjectKey,
-    CompileSqlReference,
-    ExpansionSpan,
-    InferredColumn,
-)
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompileSqlReference, InferredColumn
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompileInputsView
 from sqlbuild.compiler.lineage.types import (
     InferredNullability,

@@ -1,5 +1,6 @@
 //! Compiled records and views: projecting native views as records, and recording later stages.
 
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class_at;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRef, PyResult, Python,
 };
@@ -12,6 +13,8 @@ use crate::bindings::_helpers::compiled_project::inputs_view::NativeInputsView;
 use crate::bindings::_helpers::compiled_project::model_input_view::NativeModelInput;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView;
+
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
@@ -36,7 +39,7 @@ pub(crate) fn replace<'py>(
 /// `value` when it already is a `class` record, else `class(**{field: getattr(value, field)})`.
 fn record<'py>(value: &Bound<'py, PyAny>, class: &str) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = value.py();
-    let class: Bound<'py, PyAny> = imported(py, COMPILE_MODELS_MODULE, class)?;
+    let class: Bound<'py, PyAny> = shape_class_at(py, COMPILE_MODELS_MODULE, class)?;
     if value.is_instance(&class)? {
         return Ok(value.clone());
     }
@@ -220,7 +223,7 @@ fn with_changes<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = value.py();
     let changes: Bound<'py, PyDict> = changes.unwrap_or_else(|| PyDict::new(py));
-    if value.is_instance(&imported(py, COMPILE_MODELS_MODULE, class)?)? {
+    if value.is_instance(&shape_class_at(py, COMPILE_MODELS_MODULE, class)?)? {
         return imported(py, DATACLASSES_MODULE, "replace")?.call((value,), Some(&changes));
     }
     value.call_method("with_changes", (), Some(&changes))
@@ -250,7 +253,7 @@ pub(crate) fn compile_inputs_view<'py>(
     }
     let keywords: Bound<'py, PyDict> = fields.copy()?;
     keywords.set_item("native_project", native_project)?;
-    imported(py, COMPILE_MODELS_MODULE, "CompileProjectInputs")?.call((), Some(&keywords))
+    imported(py, NATIVE_RECORDS_MODULE, "CompileProjectInputs")?.call((), Some(&keywords))
 }
 
 /// A typed SQL value as the plain value native consumers read.

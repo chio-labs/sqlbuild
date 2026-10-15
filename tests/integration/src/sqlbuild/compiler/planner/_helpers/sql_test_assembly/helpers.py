@@ -4,25 +4,25 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild._native import (
+    CompiledModelSqlTestPayload,
+    CompileModelConfig,
+    CompileSqlTestCte,
+    DiscoveredSqlTestBlock,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
-    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
     CompiledSqlTest,
-    CompileModelConfig,
-    CompileSqlTestCte,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredSqlTestBlock,
-    DiscoveredSqlTestFile,
-)
+from sqlbuild.compiler.discovery.models import DiscoveredSqlTestFile
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from tests.integration.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     ExecuteChainTestCase,

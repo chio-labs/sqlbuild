@@ -10,10 +10,10 @@ import pytest
 from sqlbuild._native import (
     DbtEventStream,
     DbtEventStreamUpdate,
+    DbtInteropRuntimeError,
+    DbtNodeExecutionResult,
     execute_dbt_json_event_stream,
 )
-from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.models import DbtNodeExecutionResult
 from sqlbuild.observability import (
     EventDispatcher,
     LifecycleEvent,

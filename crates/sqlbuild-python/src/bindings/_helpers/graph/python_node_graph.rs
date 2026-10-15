@@ -1,5 +1,6 @@
 //! The executable Python-node graph built from discovered project inputs.
 
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class_at;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -10,6 +11,8 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::graph::python_selection::resolve_python_sql_run_selection;
 use crate::bindings::_helpers::graph::views::compiled_graph_keys;
+
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const USER_INVENTORY_MODULE: &str = "sqlbuild.compiler.python_nodes._helpers.user_inventory";
 const NODE_MODELS_MODULE: &str = "sqlbuild.compiler.python_nodes.models";
@@ -58,7 +61,7 @@ fn kind_parts<'py>(
             .iter()
             .map(|field| Ok((*field, get(field)?)))
             .collect::<PyResult<_>>()?;
-        call_with(&imported(py, NODE_MODELS_MODULE, class)?, &pairs)
+        call_with(&shape_class_at(py, NODE_MODELS_MODULE, class)?, &pairs)
     };
     Ok(match kind {
         "LOADER" => {
@@ -256,7 +259,7 @@ fn graph_record<'py>(
         paths,
     } = indexes;
     let edge_class: Bound<'py, PyAny> =
-        imported(py, NODE_MODELS_MODULE, "PythonNodeDependencyEdge")?;
+        imported(py, NATIVE_RECORDS_MODULE, "PythonNodeDependencyEdge")?;
     let dependency_edges: Vec<Bound<'py, PyAny>> = edges
         .into_iter()
         .map(|(upstream_name, downstream_name)| {
@@ -327,7 +330,7 @@ pub(crate) fn run_selection_from_inputs<'py>(
     let (sql_keys, python_node_names) =
         resolve_python_sql_run_selection(project_graph, &python_graph, select, exclude)?;
     call_with(
-        &imported(py, NODE_MODELS_MODULE, "PythonSqlRunSelection")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "PythonSqlRunSelection")?,
         &[
             ("sql_keys", compiled_graph_keys(py, sql_keys)?.into_any()),
             (

@@ -6,8 +6,9 @@ use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const UTF8: &str = "utf-8";
 
@@ -139,7 +140,7 @@ fn applied<'py>(
     let keywords: Bound<'py, PyDict> = PyDict::new(py);
     keywords.set_item("no_cache", true)?;
     let selection: Bound<'py, PyAny> =
-        imported(py, COMPILE_MODELS_MODULE, "CompileAnalysisSelection")?
+        imported(py, NATIVE_RECORDS_MODULE, "CompileAnalysisSelection")?
             .call((), Some(&keywords))?;
     call_with(
         &native.getattr("build_compiled_project")?,

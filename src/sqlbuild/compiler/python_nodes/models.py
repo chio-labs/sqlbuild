@@ -6,50 +6,16 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild._native import (
+    DiscoveredPythonAssetMetadata,
+    DiscoveredPythonCheckMetadata,
+    DiscoveredPythonLoaderMetadata,
+    DiscoveredPythonTaskMetadata,
+    PythonNodeDependencyEdge,
+)
 from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
-from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
-from sqlbuild.python_nodes.models import ColumnLineageRef, RetryPolicy, SqlResourceRef
-from sqlbuild.python_nodes.types import PythonCheckSeverity
-from sqlbuild.spec.contracts.models import SourceColumnEntry
-from sqlbuild.spec.contracts.types import SourceWriteStrategy
-
-
-@dataclass(frozen=True)
-class DiscoveredPythonLoaderMetadata:
-    """Loader-specific metadata carried by an internal Python loader node."""
-
-    destination: str | None = None
-    write_strategy: SourceWriteStrategy | None = None
-    cursor_column: str | None = None
-    unique_key: tuple[str, ...] = field(default_factory=tuple)
-    columns: tuple[SourceColumnEntry, ...] = field(default_factory=tuple)
-    contract: str | None = None
-    connection_mode: LoaderConnectionMode = LoaderConnectionMode.SQLBUILD
-
-
-@dataclass(frozen=True)
-class DiscoveredPythonTaskMetadata:
-    """Task-specific metadata carried by an internal Python task node."""
-
-    retry: RetryPolicy | None = None
-
-
-@dataclass(frozen=True)
-class DiscoveredPythonAssetMetadata:
-    """Asset-specific metadata carried by an internal Python asset node."""
-
-    columns: tuple[SourceColumnEntry, ...] = field(default_factory=tuple)
-    column_lineage: dict[str, tuple[ColumnLineageRef, ...]] | None = None
-    retry: RetryPolicy | None = None
-
-
-@dataclass(frozen=True)
-class DiscoveredPythonCheckMetadata:
-    """Check-specific metadata carried by an internal Python check node."""
-
-    severity: PythonCheckSeverity = PythonCheckSeverity.ERROR
+from sqlbuild.python_nodes.models import SqlResourceRef
 
 
 @dataclass(frozen=True)
@@ -73,14 +39,6 @@ class DiscoveredPythonNode:
     asset: DiscoveredPythonAssetMetadata | None = None
     check: DiscoveredPythonCheckMetadata | None = None
     identity: PythonNodeIdentity | None = None
-
-
-@dataclass(frozen=True)
-class PythonNodeDependencyEdge:
-    """Internal dependency edge between two discovered Python nodes."""
-
-    upstream_name: str
-    downstream_name: str
 
 
 @dataclass(frozen=True)
@@ -112,14 +70,6 @@ class PythonNodeGraph:
                 refs.update(node.sql_deps)
             pending.extend(self.upstream_deps.get(node_name, ()))
         return frozenset(refs)
-
-
-@dataclass(frozen=True)
-class PythonSqlRunSelection:
-    """Unified run-command selection excluding Python checks."""
-
-    sql_keys: frozenset[CompiledObjectKey]
-    python_node_names: frozenset[str]
 
 
 @dataclass(frozen=True)

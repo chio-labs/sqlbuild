@@ -12,9 +12,10 @@ use sqlbuild_rules::rule_cache::main::rules_bulk_cache_path::rules_bulk_cache_pa
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const RULE_THREADS_MODULE: &str = "sqlbuild._native";
-const RULES_MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
 const LINT_MODELS_MODULE: &str = "sqlbuild._native";
 /// The lint thresholds used when the project leaves them unset.
 const DEFAULT_MAX_LITERAL_LENGTH: i64 = 100;
@@ -267,7 +268,7 @@ impl EarlySqlLint {
             declaration_scope
         } else {
             call_with(
-                &imported(py, RULES_MODELS_MODULE, "SqlExpansionReuse")?,
+                &imported(py, NATIVE_RECORDS_MODULE, "SqlExpansionReuse")?,
                 &[
                     ("discovered_inputs", inputs.getattr("discovered_inputs")?),
                     ("declaration_scope", declaration_scope),

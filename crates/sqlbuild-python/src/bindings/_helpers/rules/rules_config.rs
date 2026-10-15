@@ -16,9 +16,13 @@ use crate::bindings::_helpers::boundary::panics::compiler_guard;
 
 const MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
 const ERRORS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
+const NATIVE_MODULE: &str = "sqlbuild._native";
+/// The rules configuration models that stay Python for the custom-rule API.
+const PYTHON_CLASSES: &[&str] = &["RulesConfig", "LayoutConfig"];
 
 struct Models<'py> {
     module: Bound<'py, PyModule>,
+    native: Bound<'py, PyModule>,
 }
 
 impl<'py> Models<'py> {
@@ -31,7 +35,12 @@ impl<'py> Models<'py> {
         for (name, value) in fields {
             arguments.set_item(name, value)?;
         }
-        self.module.getattr(class)?.call((), Some(&arguments))
+        let module: &Bound<'py, PyModule> = if PYTHON_CLASSES.contains(&class) {
+            &self.module
+        } else {
+            &self.native
+        };
+        module.getattr(class)?.call((), Some(&arguments))
     }
 }
 
@@ -121,6 +130,7 @@ fn tables<'py, T>(
 fn config_object<'py>(py: Python<'py>, config: &RulesConfig) -> PyResult<Bound<'py, PyAny>> {
     let models = Models {
         module: py.import(MODELS_MODULE)?,
+        native: py.import(NATIVE_MODULE)?,
     };
     let threshold_overrides = tables(py, &config.threshold_overrides, |item| {
         models.build(

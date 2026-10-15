@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
+from sqlbuild._native import FunctionArgument, FunctionReturnColumn
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
@@ -26,10 +27,6 @@ from sqlbuild.adapter.contract.types import (
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.bigquery.classes.bigquery_connection import _BigQueryConnection
 from sqlbuild.adapters.bigquery.classes.bigquery_cursor import _BigQueryCursor
-from sqlbuild.compiler.compile.models import (
-    FunctionArgument,
-    FunctionReturnColumn,
-)
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.observability import (

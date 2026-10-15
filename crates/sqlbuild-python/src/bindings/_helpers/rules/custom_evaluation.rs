@@ -24,8 +24,9 @@ use crate::bindings::_helpers::rules::custom_hosts::{
 };
 use crate::bindings::_helpers::rules::custom_rule_cache::CustomRuleCache;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const RULES_MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
 const RULES_CONSTANTS_MODULE: &str = "sqlbuild.rule_engine.constants";
 const RULES_ERRORS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
 const RULE_CONTEXT_MODULE: &str = "sqlbuild.rule_engine.classes.rule_context";
@@ -179,7 +180,7 @@ pub(crate) fn outcome<'py>(
     (custom_ms, custom_cpu_ms): (i64, i64),
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(py, RULES_MODELS_MODULE, "CustomRulesOutcome")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "CustomRulesOutcome")?,
         &[
             ("findings", PyTuple::new(py, findings)?.into_any()),
             ("cache_hits", hits.into_bound_py_any(py)?),

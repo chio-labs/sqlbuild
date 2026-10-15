@@ -3,12 +3,12 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
+    DirectSourceFreshnessPlanningResult,
     DirectSourceFreshnessPropagationResult,
+    PlannerScope,
     SourceFreshnessAgeStatus,
     build_direct_source_freshness_propagation_result,
 )
-from sqlbuild.compiler.planner.models import PlannerScope
-from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
 from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
     DirectSourceFreshnessPropagationTestCase,
 )

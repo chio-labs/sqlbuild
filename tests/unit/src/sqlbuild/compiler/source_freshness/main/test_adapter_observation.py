@@ -7,12 +7,12 @@ import pytest
 
 from sqlbuild._native import (
     AdapterSourceFreshnessBatch,
+    DirectSourceFreshnessPlanningResult,
     SourceFreshnessUnknownReason,
     build_direct_source_freshness_planning_result,
     observe_adapter_sources_freshness,
 )
 from sqlbuild.adapter.contract.models import TableFreshnessMetadata
-from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
 from sqlbuild.observability import (
     EventDispatcher,
     LifecycleEvent,

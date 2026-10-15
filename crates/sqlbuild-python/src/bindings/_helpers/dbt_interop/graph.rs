@@ -24,8 +24,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::dbt_interop::manifest::resolve_sqlbuild_model_dbt_refs;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_RECORDS: &str = "sqlbuild._native";
-const DBT_EXCEPTIONS: &str = "sqlbuild.integrations.dbt.exceptions";
 const SELECTOR_EXPANSION_MODULE: &str = "sqlbuild._native";
 const MODEL_SELECTORS_MODULE: &str = "sqlbuild._native";
 const MODEL_RESOURCE_TYPE: &str = "model";
@@ -232,7 +233,7 @@ fn selection_error(py: Python<'_>, error: DbtSelectionError<PyErr>) -> PyErr {
                 let keywords: Bound<'_, PyDict> = PyDict::new(py);
                 keywords.set_item("code", PATH_SELECTOR_ERROR_CODE)?;
                 let error: Bound<'_, PyAny> =
-                    imported(py, DBT_EXCEPTIONS, "DbtInteropArgumentError")?
+                    imported(py, NATIVE_RECORDS_MODULE, "DbtInteropArgumentError")?
                         .call((message,), Some(&keywords))?;
                 Ok(PyErr::from_value(error))
             };

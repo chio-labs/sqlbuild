@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 
-from sqlbuild.rule_engine.models import RuleExemption, RuleIgnore
+from sqlbuild._native import RuleExemption, RuleIgnore
 
 
 @dataclass(frozen=True)

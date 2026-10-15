@@ -20,6 +20,8 @@ use crate::bindings::_helpers::scopes::scope_tolerant::scope_tolerant_index;
 use crate::bindings::_helpers::scopes::scope_validation::scope_index_with_compile_usages;
 use crate::bindings::_helpers::sql_test_glue::constants::SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const SCOPE_CACHE_DIRECTORY_NAME: &str = "declaration-scopes-v2";
 const SCOPE_CACHE_FILENAME: &str = "scope-index.json";
@@ -27,7 +29,6 @@ const SQL_ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.sql_analysis.models"
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const COLLECTION_RENDERING_MODULE: &str = "sqlbuild._native";
 const RESOLVE_ADAPTER_MODULE: &str = "sqlbuild.adapter.discovery.main.resolve_adapter";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const FRONTIER_TYPES_MODULE: &str = "sqlbuild._native";
 const MACRO_INVENTORY_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.user_macros";
 
@@ -90,7 +91,7 @@ fn compiled_index<'py>(
         ],
     )?;
     let adapter_context: Bound<'py, PyAny> = call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "CompileAdapterContext")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "CompileAdapterContext")?,
         &[
             ("value_renderer", adapter.clone()),
             ("collection_rendering", collection_rendering),

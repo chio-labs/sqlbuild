@@ -7,6 +7,14 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    DiscoveredAuditBlock,
+    DiscoveredAuditFile,
+    DiscoveredConstantFile,
+    DiscoveredEnumFile,
+    DiscoveredSqlFunctionFile,
+    DiscoveredSqlHookFile,
+    DiscoveredSqlTestBlock,
+    EnumMember,
     ScopeValidationError,
     build_scope_index,
     build_scope_lookup,
@@ -18,19 +26,11 @@ from sqlbuild._native import (
 from sqlbuild.compiler.compile.models import LoadedMacro
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
-    DiscoveredAuditBlock,
-    DiscoveredAuditFile,
-    DiscoveredConstantFile,
-    DiscoveredEnumFile,
     DiscoveredMacroFile,
     DiscoveredSourceFile,
-    DiscoveredSqlFunctionFile,
-    DiscoveredSqlHookFile,
     DiscoveredSqlScenarioFile,
-    DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
     EnumDeclaration,
-    EnumMember,
 )
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,

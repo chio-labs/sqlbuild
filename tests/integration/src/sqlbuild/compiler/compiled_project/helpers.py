@@ -15,6 +15,10 @@ import pytest
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    CollectionRendering,
+    CompileAdapterContext,
+    CompileModelConfig,
+    CompileProjectInputs,
     assemble_project,
     build_compile_inputs,
     build_compiled_project,
@@ -25,13 +29,7 @@ from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.models import MeasurementThresholdBound, MeasurementThresholds
 from sqlbuild.compiler.compile import models as compile_models
-from sqlbuild.compiler.compile.models import (
-    CompileAdapterContext,
-    CompileModelConfig,
-    CompileModelInput,
-    CompileProjectInputs,
-    CompilerDiagnostic,
-)
+from sqlbuild.compiler.compile.models import CompileModelInput, CompilerDiagnostic
 from sqlbuild.compiler.compile.types import (
     CompiledAuditView,
     CompiledFunctionView,
@@ -43,7 +41,6 @@ from sqlbuild.compiler.compile.types import (
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SourceColumnEntry
-from sqlbuild.sql_values.types import CollectionRendering
 from tests.integration.src.sqlbuild.compiler.graph.helpers import write_files
 
 TYPE_PROOF_FILES: dict[str, str] = {
@@ -118,7 +115,7 @@ def count_legacy_constructions(*, monkeypatch: pytest.MonkeyPatch) -> Counter[st
 
     counts: Counter[str] = Counter()
     for name in LEGACY_PROJECT_TYPES:
-        model_type: type = getattr(compile_models, name)
+        model_type: type = getattr(compile_models, name, None) or getattr(_native, name)
         monkeypatch.setattr(
             model_type, "__init__", _counted_init(counts=counts, name=name, model_type=model_type)
         )

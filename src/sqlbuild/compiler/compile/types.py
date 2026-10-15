@@ -12,48 +12,50 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     import sqlbuild._native as _native
-    from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
-    from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
-    from sqlbuild.compiler.compile.models import (
+    from sqlbuild._native import (
         CompiledLineageColumnFact,
-        CompiledObjectKey,
-        CompiledRelationLocation,
         CompiledSeed,
         CompiledSource,
         CompiledSqlExpansion,
-        CompiledSqlScenario,
-        CompiledSqlTest,
         CompileModelConfig,
-        CompilerDiagnostic,
-        CompileSqlReference,
         CompileSqlScenarioInput,
         CompileSqlTestInput,
         DeclarationScopeBuild,
+        DiscoveredAuditBlock,
+        DiscoveredAuditFile,
+        DiscoveredPythonFunctionFile,
+        DiscoveredSchemaFile,
+        DiscoveredSeedFile,
+        DiscoveredSqlFunctionFile,
+        DiscoveredSqlHookFile,
         DynamicColumnContractProof,
         FunctionArgument,
         FunctionReturnColumn,
+        LiteralSqlRelation,
+    )
+    from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
+    from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
+    from sqlbuild.compiler.compile.models import (
+        CompiledObjectKey,
+        CompiledRelationLocation,
+        CompiledSqlScenario,
+        CompiledSqlTest,
+        CompilerDiagnostic,
+        CompileSqlReference,
         InferredColumn,
         LoadedMacro,
         MacroContext,
     )
     from sqlbuild.compiler.discovery.models import (
         ConstantDeclaration,
-        DiscoveredAuditBlock,
-        DiscoveredAuditFile,
         DiscoveredHookFunction,
         DiscoveredLoaderFunction,
         DiscoveredMaterializationFile,
         DiscoveredProjectInputs,
-        DiscoveredPythonFunctionFile,
-        DiscoveredSchemaFile,
-        DiscoveredSeedFile,
         DiscoveredSourceFile,
-        DiscoveredSqlFunctionFile,
-        DiscoveredSqlHookFile,
         DiscoveredSqlModelFile,
         EnumDeclaration,
     )
-    from sqlbuild.compiler.references.models import LiteralSqlRelation
     from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
     from sqlbuild.compiler.scopes.models import ScopeIndex, UsageRecord
     from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
@@ -628,27 +630,6 @@ class CompiledResourceType(StrEnum):
     AUDIT = "audit"
     SQL_TEST = "sql_test"
     SQL_SCENARIO = "sql_scenario"
-
-
-class DiagnosticPhase(StrEnum):
-    """Phase that produced a compiler diagnostic."""
-
-    COMPILE = "compile"
-    CONTRACT = "contract"
-    RULE = "rule"
-    PLAN = "plan"
-    BUILD = "build"
-    AUDIT = "audit"
-    TEST = "test"
-    CONNECTION = "connection"
-
-
-class DiagnosticSeverity(StrEnum):
-    """Severity for a compiler diagnostic."""
-
-    ERROR = "error"
-    WARNING = "warning"
-    INFO = "info"
 
 
 class FunctionLanguage(StrEnum):

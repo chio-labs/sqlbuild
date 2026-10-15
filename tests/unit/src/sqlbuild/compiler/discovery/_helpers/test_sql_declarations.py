@@ -7,15 +7,16 @@ from typing import cast
 import pytest
 
 import sqlbuild._native as _native
-from sqlbuild._native import AuthoredSqlValueCall, DeclarationParseError, ResourceIdentityError
-from sqlbuild.compiler.discovery.models import (
-    ConstantDeclaration,
+from sqlbuild._native import (
+    AuthoredSqlValueCall,
+    DeclarationParseError,
     DiscoveredConstantFile,
     DiscoveredEnumFile,
     DiscoveredModelSchemaFile,
-    EnumDeclaration,
     ModelSchemaDeclaration,
+    ResourceIdentityError,
 )
+from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
 from sqlbuild.sql_values.models import SqlValue
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DeclarationResourceIdentityErrorTestCase,

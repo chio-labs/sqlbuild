@@ -2,6 +2,7 @@
 
 use std::collections::HashSet;
 
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -19,10 +20,11 @@ use crate::bindings::_helpers::semantic_shapes::shapes::{
     model_inputs, project_shapes, published_shape,
 };
 
+const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const BINDING_UNKNOWN_TABLE_INTERNAL_CODE: &str = "B000";
 const DATACLASSES_MODULE: &str = "dataclasses";
@@ -308,8 +310,8 @@ fn validated_diagnostics<'py>(
     let models_module = py.import(COMPILE_MODELS_MODULE)?;
     let types = py.import(COMPILE_TYPES_MODULE)?;
     let diagnostic_class: Object<'py> = models_module.getattr("CompilerDiagnostic")?;
-    let severity_class: Object<'py> = types.getattr("DiagnosticSeverity")?;
-    let phase: Object<'py> = types.getattr("DiagnosticPhase")?.getattr("COMPILE")?;
+    let severity_class: Object<'py> = shape_class(types.as_any(), "DiagnosticSeverity")?;
+    let phase: Object<'py> = shape_class(types.as_any(), "DiagnosticPhase")?.getattr("COMPILE")?;
     let model_type: Object<'py> = types.getattr("CompiledResourceType")?.getattr("MODEL")?;
     let mut diagnostics: Vec<Object<'py>> = Vec::new();
     for ((model, request), result) in models.iter().zip(&requests).zip(results.try_iter()?) {

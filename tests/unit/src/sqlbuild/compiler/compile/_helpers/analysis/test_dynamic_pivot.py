@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import NativePivotTables, prove_native_dynamic_contracts
+from sqlbuild._native import (
+    DynamicColumnContractProof,
+    NativePivotTables,
+    prove_native_dynamic_contracts,
+)
 from sqlbuild._native import dynamic_contract_proof as contract_proof
-from sqlbuild.compiler.compile.models import DynamicColumnContractProof
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 from tests.unit.src.sqlbuild.compiler.compile._helpers.analysis._test_types import (
     DynamicPivotAnalysisTestCase,

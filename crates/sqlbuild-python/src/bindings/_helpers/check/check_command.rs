@@ -25,18 +25,17 @@ use crate::bindings::_helpers::compile_outputs::runtime_target::write_python_che
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::graph::python_selection::python_node_names;
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild._native";
 const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
 const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
 const STATIC_COMMAND_MODULE: &str = "sqlbuild._native";
-const PIPELINE_MODELS: &str = "sqlbuild.compiler.pipeline.models";
 const RELATION_PLAN_MODULE: &str = "sqlbuild._native";
 const SELECTOR_PARSE_MODULE: &str = "sqlbuild._native";
-const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
 const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
-const PYTHON_NODE_MODELS: &str = "sqlbuild.compiler.python_nodes.models";
 const PYTHON_NODE_TYPES: &str = "sqlbuild.compiler.python_nodes.types";
 const EXECUTOR_MODELS: &str = "sqlbuild.executor.python_nodes.models";
 const CHECKS_MODULE: &str = "sqlbuild.executor.python_nodes.main._checks";
@@ -82,7 +81,7 @@ fn empty_tuple(py: Python<'_>) -> Bound<'_, PyAny> {
 /// Refuse `+`, `~` and path selectors, splitting selectors as Python's `split` does.
 fn refuse_graph_selectors(py: Python<'_>, selectors: &[Bound<'_, PyAny>]) -> PyResult<()> {
     let parse: Bound<'_, PyAny> = imported(py, SELECTOR_PARSE_MODULE, "parse_project_selector")?;
-    let path_selector: Bound<'_, PyAny> = imported(py, PLANNER_MODELS, "PathSelector")?;
+    let path_selector: Bound<'_, PyAny> = imported(py, NATIVE_RECORDS_MODULE, "PathSelector")?;
     for selector in selectors {
         for token in selector.call_method0("split")?.try_iter()? {
             for part in token?.call_method1("split", (",",))?.try_iter()? {
@@ -230,7 +229,7 @@ fn compile_pipeline<'py>(
         ],
     )?;
     let options: Bound<'py, PyAny> = call_with(
-        &imported(py, PIPELINE_MODELS, "CompilePipelineOptions")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "CompilePipelineOptions")?,
         &[
             ("selected_target", request.getattr("selected_target")?),
             ("no_sql_validation", request.getattr("no_sql_validation")?),
@@ -323,7 +322,7 @@ fn prepare<'py>(
         }
     }
     let selection: Bound<'py, PyAny> = call_with(
-        &imported(py, PYTHON_NODE_MODELS, "PythonSqlRunSelection")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "PythonSqlRunSelection")?,
         &[
             ("sql_keys", PyFrozenSet::empty(py)?.into_any()),
             ("python_node_names", PyFrozenSet::empty(py)?.into_any()),

@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from concurrent.futures import Future
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from sqlbuild._native import LintRunResult
-from sqlbuild.compiler.compile.models import DeclarationScopeBuild, SqlExpansionContext
-from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild._native import (
+    GraphEdgeExclusion,
+    RuleExemption,
+    RuleGuidance,
+    RuleIgnore,
+    RulesCacheConfig,
+    SelectStarAllow,
+    SqlTestRulesConfig,
+    ThresholdOverride,
+)
 from sqlbuild.rule_engine.types import RuleCheck, RuleOptionValue, RuleSubject
 
 
@@ -176,15 +181,6 @@ class RuleOption[T]:
 
 
 @dataclass(frozen=True)
-class RuleGuidance:
-    """Structured authoring guidance shared by diagnostics and generated documentation."""
-
-    good_example: str
-    anti_tautology: str
-    mutation_check: str
-
-
-@dataclass(frozen=True)
 class Rule:
     """Immutable metadata and implementation for one rule."""
 
@@ -223,53 +219,6 @@ class Finding:
     unevaluated: bool = False
     affected_rules: tuple[str, ...] = ()
     fixable: bool = False
-
-
-@dataclass(frozen=True)
-class RuleExemption:
-    rule: str
-    path: str
-    reason: str
-
-
-@dataclass(frozen=True)
-class GraphEdgeExclusion:
-    """One exact, temporary internal-layer dependency exception."""
-
-    consumer: str
-    dependency: str
-    reason: str
-
-
-@dataclass(frozen=True)
-class RuleIgnore:
-    rules: tuple[str, ...]
-    paths: tuple[str, ...]
-    reason: str
-    selectors: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class SelectStarAllow:
-    paths: tuple[str, ...]
-    reason: str
-
-
-@dataclass(frozen=True)
-class ThresholdOverride:
-    paths: tuple[str, ...]
-    thresholds: dict[str, int]
-    reason: str
-
-
-@dataclass(frozen=True)
-class RulesCacheConfig:
-    enabled: bool = True
-
-
-@dataclass(frozen=True)
-class SqlTestRulesConfig:
-    pipeline_directory: str = "pipelines"
 
 
 @dataclass(frozen=True)
@@ -313,71 +262,6 @@ class RulesResult:
     built_in_ms: int = 0
     custom_ms: int = 0
     custom_cpu_ms: int = 0
-
-
-@dataclass(frozen=True)
-class PreparedSqlLintResult:
-    """Reusable expansion context and completed preliminary SQL checks."""
-
-    result: LintRunResult
-    context: SqlExpansionContext
-
-
-@dataclass(frozen=True)
-class SqlExpansionReuse:
-    """Compiler declaration scope for post-assembly SQL checks; assembly still runs its macros."""
-
-    discovered_inputs: DiscoveredProjectInputs
-    declaration_scope: DeclarationScopeBuild
-
-
-@dataclass(frozen=True)
-class PreparedSqlLint:
-    """Process-local SQL checks started after compiler expansion has completed."""
-
-    codes: tuple[str, ...]
-    future: Future[PreparedSqlLintResult]
-    project_dir: Path | None = None
-
-
-@dataclass(frozen=True)
-class SqlRulesEvaluation:
-    """SQL rule findings of one run, their cache accounting and elapsed time."""
-
-    findings: tuple[Finding, ...]
-    cache_hits: int
-    cache_misses: int
-    sql_ms: int = 0
-
-
-@dataclass(frozen=True)
-class RuleRunPlan:
-    """The catalogue, selected rules, project slice and settings one rules run evaluates."""
-
-    effective_config: RulesConfig
-    project_dir: Path
-    catalogue: tuple[Rule, ...]
-    custom_payloads: list[dict[str, object]]
-    selected: tuple[Rule, ...]
-    skipped_type_proof_rules: tuple[str, ...]
-    model_paths: frozenset[str] | None
-    project: CompiledProjectView
-    config: RulesConfig
-
-
-@dataclass(frozen=True)
-class RulesRunResult:
-    """Unified findings and phase measurements for configured rules."""
-
-    findings: tuple[Finding, ...]
-    evaluated_models: int
-    built_in_ms: int
-    custom_ms: int
-    custom_cpu_ms: int = 0
-    unevaluated_resources: int = 0
-    cache_hits: int = 0
-    cache_misses: int = 0
-    skipped_type_proof_rules: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -441,30 +325,6 @@ class CustomRuleRun:
     uncacheable_codes: frozenset[str] = frozenset()
     observed: tuple[tuple[tuple[str, ...], str | None], ...] = ()
     stateful_codes: frozenset[str] = frozenset()
-
-
-@dataclass(frozen=True)
-class NativeRulesEvaluation:
-    """The built-in rules response, decoded natively."""
-
-    findings: tuple[Finding, ...]
-    selected_codes: tuple[str, ...]
-    evaluated_models: int
-    cache_hits: int
-    cache_misses: int
-    built_in_ms: int
-    reused: bool
-
-
-@dataclass(frozen=True)
-class CustomRulesOutcome:
-    """Custom-rule findings in canonical order and their cache accounting."""
-
-    findings: tuple[Finding, ...]
-    cache_hits: int
-    cache_misses: int
-    custom_ms: int
-    custom_cpu_ms: int = 0
 
 
 @dataclass(frozen=True)

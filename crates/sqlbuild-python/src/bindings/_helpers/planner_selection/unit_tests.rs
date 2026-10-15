@@ -13,7 +13,8 @@ use sqlbuild_analysis::planner_selection::models::{
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::planner_selection::carrier::{Carrier, py_strings};
 
-const PLANNER_MODELS_MODULE: &str = "sqlbuild.compiler.planner.models";
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const RESOURCE_ENTRY_FILES: [(&str, &str); 3] = [
     ("schema_files", "model_entries"),
     ("schema_files", "seed_entries"),
@@ -110,7 +111,7 @@ fn split_python<'py>(
     )
     .map_err(|error| carrier.error(error))?;
     let selection: Bound<'py, PyAny> = call_with(
-        &imported(py, PLANNER_MODELS_MODULE, "SqlTestSelection")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "SqlTestSelection")?,
         &[
             ("names", PyFrozenSet::new(py, &split.test_names)?.into_any()),
             (

@@ -55,13 +55,6 @@ _BLOCKING_DECISIONS: frozenset[MigrationDecision] = frozenset(
 )
 
 
-class MigrationDiscovery(StrEnum):
-    """How a migration was requested."""
-
-    MANUAL = "manual"
-    AUTOMATIC = "automatic"
-
-
 class MigrationPromotion(StrEnum):
     """How a completed migration stage replaces or creates the destination."""
 
@@ -74,14 +67,6 @@ class MigrationPromotion(StrEnum):
         """Return the human-readable plan label for this promotion."""
 
         return self.value.replace("_", " ")
-
-
-class MigrationCompatibility(StrEnum):
-    """Outcome of checking the origin relation against the destination model."""
-
-    COMPATIBLE = "compatible"
-    INCOMPATIBLE = "incompatible"
-    NOT_CHECKED = "not_checked"
 
 
 class ColumnMigrationDecision(StrEnum):
@@ -145,15 +130,6 @@ class OldNameViewStatus(StrEnum):
     LIVE = "live"
     EXPIRED = "expired"
     DROPPED = "dropped"
-
-
-class OldNameViewAction(StrEnum):
-    """What a build does at a migrated model's old name."""
-
-    ARCHIVE_AND_VIEW = "archive_and_view"
-    VIEW_ONLY = "view_only"
-    LIVE = "live"
-    NONE = "none"
 
 
 _RECORDING_COLUMN_DECISIONS: frozenset[ColumnMigrationDecision] = frozenset(

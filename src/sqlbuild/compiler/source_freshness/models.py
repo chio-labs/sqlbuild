@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 
 from sqlbuild._native import (
-    DirectSourceFreshnessPropagationResult,
-    SourceFreshnessAgeStatus,
     SourceFreshnessIdentity,
-    SourceFreshnessUnknown,
     require_aware_utc_datetime,
 )
 
@@ -44,19 +41,3 @@ class SourceFreshnessRecord:
             target_schema=self.target_schema,
             target_name=self.target_name,
         )
-
-
-@dataclass(frozen=True)
-class DirectSourceFreshnessPlanningResult:
-    """Direct planning-time source freshness observations and comparisons."""
-
-    observed_records: tuple[SourceFreshnessRecord, ...] = ()
-    previous_records: tuple[SourceFreshnessRecord, ...] = ()
-    changed_identities: frozenset[SourceFreshnessIdentity] = frozenset()
-    unchanged_identities: frozenset[SourceFreshnessIdentity] = frozenset()
-    unknown_source_names: tuple[str, ...] = ()
-    unknown_sources: dict[str, SourceFreshnessUnknown] = field(default_factory=dict)
-    age_statuses: dict[SourceFreshnessIdentity, SourceFreshnessAgeStatus] = field(
-        default_factory=dict
-    )
-    propagation: DirectSourceFreshnessPropagationResult | None = None

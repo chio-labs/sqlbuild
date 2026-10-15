@@ -5,6 +5,8 @@ from pathlib import Path
 from sqlbuild._native import (
     ChangeKind,
     MissingUpstream,
+    ParsedSelector,
+    PathSelector,
     PlanWarning,
     ScenarioArtifactIdentity,
     ScenarioGraphPlan,
@@ -24,8 +26,6 @@ from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledPro
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
-    ParsedSelector,
-    PathSelector,
     ScenarioRelationMap,
     SchemaFinding,
     SourceLoadPlanEntry,

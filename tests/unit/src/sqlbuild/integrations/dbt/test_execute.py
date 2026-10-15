@@ -13,6 +13,7 @@ from sqlbuild import _native as execute_module
 from sqlbuild import _native as phases_module
 from sqlbuild import _native as plan_module
 from sqlbuild._native import (
+    DbtCliOptions,
     DbtCombinedGraph,
     DbtCommandExecutionResult,
     DbtInteropCommand,
@@ -25,6 +26,7 @@ from sqlbuild._native import (
     DbtInteropSelectionResult,
     DbtLsNode,
     DbtManifestIndex,
+    DbtNodeExecutionResult,
     DbtRunner,
     build_dbt_interop_plan,
     build_failed_sqlbuild_model_names,
@@ -34,7 +36,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtNodeExecutionResult
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtCompileFullRefreshPipelineTestCase,
     DbtExecutionSelectionStatusTestCase,

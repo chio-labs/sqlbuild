@@ -4,15 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import resolve_defer_clone_selection
+from sqlbuild._native import CompileModelConfig, PlannerScope, resolve_defer_clone_selection
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledRelationLocation,
-    CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
-from sqlbuild.compiler.planner.models import PlannerScope
 from tests.unit.src.sqlbuild.cli.commands.main.build._test_types import (
     DeferCloneBoundaryTestCase,
     DeferCloneModelCountTestCase,

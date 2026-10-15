@@ -1,5 +1,6 @@
 //! dbt argv building, executable choice, `dbt ls` output, `sqb dbt` argument routing and config.
 
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class_at;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
@@ -250,8 +251,8 @@ pub(crate) fn raised(py: Python<'_>, class_name: &str, error: DbtCliError) -> Py
         if let Some(help) = error.help {
             keywords.set_item("help", help)?;
         }
-        let instance: Bound<'_, PyAny> =
-            imported(py, DBT_EXCEPTIONS, class_name)?.call((error.message,), Some(&keywords))?;
+        let instance: Bound<'_, PyAny> = shape_class_at(py, DBT_EXCEPTIONS, class_name)?
+            .call((error.message,), Some(&keywords))?;
         Ok(PyErr::from_value(instance))
     };
     created().unwrap_or_else(|failure| failure)

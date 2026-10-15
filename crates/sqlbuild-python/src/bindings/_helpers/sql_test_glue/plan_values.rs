@@ -5,7 +5,7 @@ use pyo3::types::PyString;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 
-use crate::bindings::_helpers::sql_test_glue::constants::COMPILE_MODELS;
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 pub(super) fn string<'py>(py: Python<'py>, value: &str) -> Bound<'py, PyAny> {
     PyString::new(py, value).into_any()
@@ -14,7 +14,7 @@ pub(super) fn string<'py>(py: Python<'py>, value: &str) -> Bound<'py, PyAny> {
 pub(super) fn model_payload(test: &Bound<'_, PyAny>) -> PyResult<bool> {
     test.getattr("payload")?.is_instance(&imported(
         test.py(),
-        COMPILE_MODELS,
+        NATIVE_RECORDS_MODULE,
         "CompiledModelSqlTestPayload",
     )?)
 }

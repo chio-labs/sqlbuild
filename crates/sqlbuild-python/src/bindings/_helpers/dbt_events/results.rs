@@ -7,8 +7,9 @@ use sqlbuild_core::dbt_events::models::{DbtNodeMessage, DbtNodeResult};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_RECORDS: &str = "sqlbuild._native";
-const DBT_MODELS: &str = "sqlbuild.integrations.dbt.models";
 
 fn optional<'py, T: pyo3::IntoPyObject<'py>>(
     py: Python<'py>,
@@ -48,7 +49,7 @@ pub(crate) fn python_result<'py>(
         })
         .collect::<PyResult<_>>()?;
     call_with(
-        &imported(py, DBT_MODELS, "DbtNodeExecutionResult")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "DbtNodeExecutionResult")?,
         &[
             ("unique_id", text(py, &result.unique_id)),
             ("resource_type", text(py, &result.resource_type)),

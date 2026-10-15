@@ -10,6 +10,11 @@ from unittest.mock import Mock
 import pytest
 
 from sqlbuild._native import (
+    CompileModelConfig,
+    DiscoveredSeedFile,
+    PlannerRelationsContext,
+    PlannerScope,
+    PlannerSelection,
     build_audit_command_plan,
     build_seed_command_plan,
     build_test_command_plan,
@@ -19,17 +24,9 @@ from sqlbuild._native import (
     resolve_static_command_scope,
     resolve_static_relation_context,
 )
-from sqlbuild.compiler.compile.models import CompileModelConfig
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledSeedView
-from sqlbuild.compiler.discovery.models import DiscoveredSeedFile
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.models import (
-    PlannerRelationsContext,
-    PlannerScope,
-    PlannerSelection,
-    PlanOutput,
-    SeedPlanEntry,
-)
+from sqlbuild.compiler.planner.models import PlanOutput, SeedPlanEntry
 from sqlbuild.compiler.planner.types import PlanReason
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
     PlannerTestAdapter,

@@ -4,6 +4,7 @@ import pytest
 
 from sqlbuild._native import (
     DbtCombinedGraph,
+    DbtInteropArgumentError,
     DbtInteropSelectionResult,
     DbtManifestIndex,
     build_dbt_combined_graph,
@@ -11,7 +12,6 @@ from sqlbuild._native import (
     resolve_dbt_interop_sqlbuild_selection,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtSelectionErrorTestCase,
     DbtSelectionTestCase,

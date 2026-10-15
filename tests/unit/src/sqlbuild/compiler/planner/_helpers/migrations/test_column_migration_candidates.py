@@ -9,7 +9,11 @@ from unittest.mock import Mock
 import pytest
 
 from sqlbuild._native import (
+    CompileModelConfig,
+    DeferralInputs,
+    PlannerOverrides,
     PlannerRuntime,
+    PlannerScope,
     WarehouseFingerprints,
     WarehouseSnapshot,
     plan_column_migrations,
@@ -20,16 +24,10 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
-    CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.models import (
-    DeferralInputs,
-    PlannerOverrides,
-    PlannerScope,
-)
 from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations._test_types import (
     UnfingerprintableCandidateTestCase,
 )

@@ -1,5 +1,6 @@
 //! Declaration file collections discovered natively and built as Python discovery records.
 
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class_at;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
@@ -29,6 +30,8 @@ use crate::bindings::_helpers::discovery::sorted_keys::sorted_keys;
 use crate::bindings::_helpers::model_config::header_columns::schema_columns;
 use crate::bindings::_helpers::sqltext::authored_values::map_to_python;
 use crate::bindings::models::{NativeDiscoverySession, NativeProjectTree};
+
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
@@ -73,7 +76,7 @@ impl<'py> FileContext<'_, 'py> {
     }
 
     fn record(&self, class: &str, fields: &Bound<'py, PyDict>) -> PyResult<Bound<'py, PyAny>> {
-        imported(self.py(), MODELS_MODULE, class)?.call((), Some(fields))
+        shape_class_at(self.py(), MODELS_MODULE, class)?.call((), Some(fields))
     }
 }
 
@@ -129,7 +132,7 @@ fn single_value<'py>(
 
 fn enum_file<'py>(context: &FileContext<'_, 'py>, file: &EnumFile) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = context.py();
-    let member_class: Bound<'py, PyAny> = imported(py, MODELS_MODULE, "EnumMember")?;
+    let member_class: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS_MODULE, "EnumMember")?;
     let declaration_class: Bound<'py, PyAny> = imported(py, MODELS_MODULE, "EnumDeclaration")?;
     let mut declarations: Vec<Bound<'py, PyAny>> = Vec::with_capacity(file.declarations.len());
     for declaration in &file.declarations {
@@ -217,7 +220,7 @@ fn schema_file<'py>(
     let py: Python<'py> = context.py();
     let file_path: String = context.file_path.str()?.to_string();
     let declaration_class: Bound<'py, PyAny> =
-        imported(py, MODELS_MODULE, "ModelSchemaDeclaration")?;
+        imported(py, NATIVE_RECORDS_MODULE, "ModelSchemaDeclaration")?;
     let mut declarations: Vec<Bound<'py, PyAny>> = Vec::with_capacity(file.declarations.len());
     for declaration in &file.declarations {
         let raw_columns: Bound<'py, PyAny> =
@@ -313,7 +316,7 @@ fn audit_block<'py>(py: Python<'py>, block: &AuditBlock) -> PyResult<Bound<'py, 
             py.None().into_bound(py)
         };
     call_with(
-        &imported(py, MODELS_MODULE, "DiscoveredAuditBlock")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "DiscoveredAuditBlock")?,
         &[
             ("audit_index", block.audit_index.into_bound_py_any(py)?),
             ("header_values", header_values.into_any()),
@@ -521,7 +524,7 @@ fn seed_records<'py, T>(
     files: &[ScopedFile<T>],
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = faults.project_dir.py();
-    let class: Bound<'py, PyAny> = imported(py, MODELS_MODULE, "DiscoveredSeedFile")?;
+    let class: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS_MODULE, "DiscoveredSeedFile")?;
     let seeds: Vec<Bound<'py, PyAny>> = files
         .iter()
         .map(|scoped| {
@@ -669,7 +672,7 @@ pub(crate) fn discover_adapter_file<'py>(
         return Ok(py.None().into_bound(py));
     }
     call_with(
-        &imported(py, MODELS_MODULE, "DiscoveredAdapterFile")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "DiscoveredAdapterFile")?,
         &[
             ("file_path", file_path),
             ("relative_path", path_class(py)?.call1(("adapter.py",))?),

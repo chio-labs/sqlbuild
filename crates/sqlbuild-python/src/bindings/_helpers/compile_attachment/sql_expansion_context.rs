@@ -8,6 +8,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const USER_MACROS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.user_macros";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
@@ -176,7 +178,7 @@ pub(crate) fn build_sql_expansion_context<'py>(
         ],
     )?;
     call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "SqlExpansionContext")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "SqlExpansionContext")?,
         &[
             ("effective_vars", effective_vars),
             ("loaded_macros", scope.getattr("loaded_macros")?),

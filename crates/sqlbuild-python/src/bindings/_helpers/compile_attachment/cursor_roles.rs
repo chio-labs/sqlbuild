@@ -6,7 +6,8 @@ use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const CURSOR_INPUTS_KEY: &str = "cursor_inputs";
 const FILTER_ROLE: &str = "filter";
 const WATERMARK_ROLE: &str = "watermark";
@@ -93,7 +94,7 @@ pub(crate) fn resolve_cursor_input_roles<'py>(
         }
     }
     call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "CursorInputRoles")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "CursorInputRoles")?,
         &[
             ("filter_inputs", filter.into_any()),
             ("watermark_inputs", watermark.into_any()),

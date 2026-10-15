@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
+from sqlbuild._native import CompiledSeed, CompiledSource, CompileModelConfig
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import (
@@ -25,9 +26,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
-    CompiledSeed,
-    CompiledSource,
-    CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledProjectView,

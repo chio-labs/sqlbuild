@@ -6,7 +6,11 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    DbtCliOptions,
+    DbtCommandResult,
+    DbtInteropRuntimeError,
     DbtLsNode,
+    DbtLsResult,
     DbtRunner,
     build_dbt_compile_argv,
     build_dbt_debug_argv,
@@ -14,12 +18,6 @@ from sqlbuild._native import (
     build_dbt_ls_argv,
     dbt_fqn_selector_term,
     parse_dbt_ls_json_lines,
-)
-from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.models import (
-    DbtCliOptions,
-    DbtCommandResult,
-    DbtLsResult,
 )
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtArgvTestCase,

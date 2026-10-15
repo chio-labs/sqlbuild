@@ -6,6 +6,16 @@ from types import MappingProxyType
 from typing import cast
 
 from sqlbuild._native import (
+    CollectionRendering,
+    ColumnLineageConfidence,
+    ColumnTransformKind,
+    CompileAdapterContext,
+    CompiledDirectLogicSqlTestPayload,
+    CompiledLineageColumnFact,
+    CompiledModelSqlTestPayload,
+    DeclarationExpansionContext,
+    DeclarationRuntimeProjection,
+    DeclarationScopeResolver,
     NativeColumnQuery,
     NativeQueryColumns,
     assemble_project,
@@ -30,20 +40,13 @@ from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapt
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
 from sqlbuild.compiler.compile.models import (
-    CompileAdapterContext,
-    CompiledDirectLogicSqlTestPayload,
-    CompiledLineageColumnFact,
     CompiledLineageSourceFact,
-    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledRelationLocation,
     CompiledSqlTest,
     CompilerDiagnostic,
     CompileSqlReference,
-    DeclarationExpansionContext,
     DeclarationResolutionContext,
-    DeclarationRuntimeProjection,
-    DeclarationScopeResolver,
     LoadedMacro,
     MacroContext,
 )
@@ -58,11 +61,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredMacroFile,
     DiscoveredProjectInputs,
 )
-from sqlbuild.compiler.lineage.types import (
-    ColumnLineageConfidence,
-    ColumnTransformKind,
-    InferredNullability,
-)
+from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
@@ -74,7 +73,6 @@ from sqlbuild.compiler.scopes.models import (
     ScopeLookup,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, ScopeKind
-from sqlbuild.sql_values.types import CollectionRendering
 
 DUCKDB_COMPILE_ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(
     value_renderer=DuckDbAdapter(),

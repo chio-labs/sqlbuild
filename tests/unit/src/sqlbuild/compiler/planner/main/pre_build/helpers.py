@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-from sqlbuild._native import DisplayOptions, format_pre_build_work
+from sqlbuild._native import (
+    DisplayOptions,
+    MigrationCompatibility,
+    MigrationDiscovery,
+    format_pre_build_work,
+)
 from sqlbuild.adapter.contract.types import MigrationTransfer
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.migrations.types import (
     ColumnMigrationDecision,
-    MigrationCompatibility,
     MigrationDecision,
-    MigrationDiscovery,
     MigrationPromotion,
 )
 from sqlbuild.compiler.planner.models import (

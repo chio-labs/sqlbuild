@@ -3,6 +3,9 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
+    ColumnLineageConfidence,
+    ColumnTransformKind,
+    CompiledLineageColumnFact,
     NativeColumnQuery,
     NativeQueryColumns,
     infer_native_query_columns,
@@ -10,17 +13,12 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.models import (
-    CompiledLineageColumnFact,
     CompiledLineageSourceFact,
     CompileSqlReference,
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.lineage.types import (
-    ColumnLineageConfidence,
-    ColumnTransformKind,
-    InferredNullability,
-)
+from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     InferColumnsTestCase,

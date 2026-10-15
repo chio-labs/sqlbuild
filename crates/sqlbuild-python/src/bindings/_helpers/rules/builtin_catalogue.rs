@@ -1,5 +1,6 @@
 //! The built-in rule catalogue returned as the Python `Rule` models.
 
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -62,7 +63,7 @@ fn rule<'py>(
         .map(|declared| option(&option_class, declared))
         .collect::<PyResult<_>>()?;
     let guidance: Bound<'py, PyAny> = match metadata.guidance {
-        Some(guidance) => models.getattr("RuleGuidance")?.call(
+        Some(guidance) => shape_class(models.as_any(), "RuleGuidance")?.call(
             (),
             Some(&keywords(
                 py,

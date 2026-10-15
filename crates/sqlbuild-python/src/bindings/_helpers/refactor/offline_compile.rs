@@ -2,11 +2,14 @@
 
 use std::path::Path;
 
+use crate::bindings::_helpers::compiler_records::shape_classes::shape_class_at;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyBool, PyString};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
@@ -27,7 +30,7 @@ pub(crate) struct OfflineCompile<'py> {
 }
 
 fn enum_member<'py>(py: Python<'py>, class: &str, member: &str) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, COMPILE_TYPES, class)?.getattr(member)
+    shape_class_at(py, COMPILE_TYPES, class)?.getattr(member)
 }
 
 fn matches_any_class(py: Python<'_>, error: &PyErr, classes: &[(&str, &str)]) -> PyResult<bool> {
@@ -102,7 +105,7 @@ fn analyzed<'py>(
     no_cache: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
     let selection: Bound<'py, PyAny> = call_with(
-        &imported(py, COMPILE_MODELS, "CompileAnalysisSelection")?,
+        &imported(py, NATIVE_RECORDS_MODULE, "CompileAnalysisSelection")?,
         &[("no_cache", PyBool::new(py, no_cache).to_owned().into_any())],
     )?;
     call_with(

@@ -13,8 +13,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 
+const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+
 const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
-const PLANNER_MODELS_MODULE: &str = "sqlbuild.compiler.planner.models";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const PROJECT_VARS_MODULE: &str = "sqlbuild._native";
 const PRESERVE_TARGET_VALUE: &str = "preserve";
@@ -321,7 +322,7 @@ fn resolve_model_deferral_inputs<'py>(
             &[],
         ),
     )?;
-    let inputs: Bound<'py, PyAny> = imported(py, PLANNER_MODELS_MODULE, "DeferralInputs")?;
+    let inputs: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS_MODULE, "DeferralInputs")?;
     let defer_to: Bound<'py, PyAny> = arguments.value("defer_to")?;
     if defer_to.is_none() {
         return inputs.call0();
