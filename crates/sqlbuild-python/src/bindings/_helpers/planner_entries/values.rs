@@ -9,7 +9,8 @@ pub(super) const NATIVE_MODULE: &str = "sqlbuild._native";
 pub(super) const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
 pub(super) const PLANNER_TYPES: &str = "sqlbuild.compiler.planner.types";
 pub(super) const PLANNER_EXCEPTIONS: &str = "sqlbuild.compiler.planner.exceptions";
-pub(super) const PLANNER_CONSTANTS: &str = "sqlbuild.compiler.planner.constants";
+pub(super) const MICROBATCH_CONCURRENCY_MESSAGE: &str =
+    "batch_concurrency > 1 requires concurrent microbatches; selected model(s): ";
 pub(super) const COMPILE_EXCEPTIONS: &str = "sqlbuild.compiler.compile.exceptions";
 pub(super) const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
 pub(super) const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";

@@ -3,6 +3,9 @@
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::planner_scenario::constants::{
+    SCENARIO_PLAN_MISSING_RELATION_TARGET, SCENARIO_PLAN_UNRESOLVED_RELATION_MARKER,
+};
 use crate::bindings::_helpers::planner_scenario::{
     models::SqlContext,
     values::{error, string},
@@ -48,7 +51,7 @@ pub(super) fn resolve_sql(
             if target.is_none() {
                 let marker = string(py, marker).repr()?.to_str()?.to_owned();
                 return Err(error(py, &format!("Scenario SQL in {} references {marker}, which is not a relation in this scenario", context.label),
-                    "SCENARIO_PLAN_UNRESOLVED_RELATION_MARKER", Some("Reference a model, seed, source, or dbt ref the scenario builds or provides as a fixture."))?);
+                    SCENARIO_PLAN_UNRESOLVED_RELATION_MARKER, Some("Reference a model, seed, source, or dbt ref the scenario builds or provides as a fixture."))?);
             }
             target.extract::<String>()
         }).map_err(|failure| match failure {
@@ -56,7 +59,7 @@ pub(super) fn resolve_sql(
             MarkerError::Scan(unclosed) => {
                 let construct = match unclosed {Unclosed::BlockComment => "block comment", Unclosed::Quote => "quoted string", Unclosed::Parenthesis => "parenthesis"};
                 error(py, &format!("Scenario SQL in {} could not be scanned for relation markers: SQL reference resolution contains an unclosed {construct}", context.label),
-                    "SCENARIO_PLAN_UNRESOLVED_RELATION_MARKER", Some("Close every quoted string and block comment using the project dialect's quoting and comment rules.")).unwrap_or_else(|error| error)
+                    SCENARIO_PLAN_UNRESOLVED_RELATION_MARKER, Some("Close every quoted string and block comment using the project dialect's quoting and comment rules.")).unwrap_or_else(|error| error)
             }
         })?;
     }
@@ -106,7 +109,7 @@ pub(super) fn required_target<'py>(
         return Err(error(
             relations.py(),
             &format!("Scenario relation plan is missing {kind} target '{name}'"),
-            "SCENARIO_PLAN_MISSING_RELATION_TARGET",
+            SCENARIO_PLAN_MISSING_RELATION_TARGET,
             Some("This is likely a SQLBuild bug. Please file an issue with the scenario name."),
         )?);
     }

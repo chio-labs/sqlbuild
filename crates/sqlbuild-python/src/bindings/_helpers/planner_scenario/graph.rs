@@ -2,7 +2,8 @@
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::graph::keys::{KeyCache, native_key};
-use crate::bindings::_helpers::planner_scenario::values::{CONSTANTS, MODELS, TYPES, string};
+use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_GRAPH_VALIDATION;
+use crate::bindings::_helpers::planner_scenario::values::{MODELS, TYPES, string};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, pyfunction};
 use pyo3::types::PyTuple;
 use sqlbuild_analysis::planner_scenario::main::graph::graph;
@@ -101,10 +102,7 @@ pub(crate) fn plan_scenario_graph<'py>(
             ("message", string(py, &message)),
         ];
         if coded {
-            values.push((
-                "code",
-                imported(py, CONSTANTS, "SCENARIO_PLAN_GRAPH_VALIDATION")?,
-            ));
+            values.push(("code", string(py, SCENARIO_PLAN_GRAPH_VALIDATION)));
         }
         warnings.push(call_with(&imported(py, MODELS, "PlanWarning")?, &values)?);
     }

@@ -221,11 +221,11 @@ fn apply_maximum_start_policy<'py>(
         Err(PyErr::from_value(call_with(
             &imported(py, EXCEPTIONS, "MaximumAutomaticStartError")?,
             &[
-                ("evidence", evidence.clone()),
                 (
-                    "non_idempotent",
-                    non_idempotent.into_pyobject(py)?.to_owned().into_any(),
+                    "message",
+                    string(py, &exceeded_message(&evidence, non_idempotent)?),
                 ),
+                ("evidence", evidence.clone()),
             ],
         )?))
     };
@@ -244,6 +244,40 @@ fn apply_maximum_start_policy<'py>(
         &bounds,
         &[("start", effective), ("maximum_start_safety", evidence)],
     )
+}
+
+fn rendered(value: &Bound<'_, PyAny>) -> PyResult<String> {
+    call_with(
+        &imported(value.py(), "sqlbuild._native", "cursor_render")?,
+        &[("value", value.clone())],
+    )?
+    .extract()
+}
+
+/// The message of an automatic start that exceeds its horizon.
+fn exceeded_message(evidence: &Bound<'_, PyAny>, non_idempotent: bool) -> PyResult<String> {
+    let detail: &str = if non_idempotent {
+        " on a non-idempotent materialization"
+    } else {
+        ""
+    };
+    let highest = evidence.getattr("highest_eligible_target_max")?;
+    let highest: String = if highest.is_none() {
+        "None".to_owned()
+    } else {
+        string(evidence.py(), &rendered(&highest)?)
+            .repr()?
+            .to_string()
+    };
+    Ok(format!(
+        "maximum automatic start policy exceeded{detail}: physical target MAX='{}', highest eligible MAX={highest}, effective post-lookback start='{}', horizon='{}', action={}, input={}.{}",
+        rendered(&evidence.getattr("physical_target_max")?)?,
+        rendered(&evidence.getattr("effective_start")?)?,
+        rendered(&evidence.getattr("maximum_allowed_start")?)?,
+        evidence.getattr("action")?.getattr("value")?.str()?,
+        evidence.getattr("target_relation")?.str()?,
+        evidence.getattr("cursor_column")?.str()?,
+    ))
 }
 
 pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

@@ -10,10 +10,6 @@ from sqlbuild._native import (
     is_scenario_artifact_physical_name,
     parse_scenario_artifact_physical_name,
 )
-from sqlbuild.compiler.planner.constants import (
-    SCENARIO_PLAN_HASH_COLLISION,
-    SCENARIO_PLAN_RELATION_COLLISION,
-)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     ParsedScenarioArtifactName,
@@ -102,7 +98,7 @@ def test_given_colliding_scenario_hashes_when_building_index_then_raises_clear_e
             prefix_length=test_case.prefix_length,
             run_namespace=test_case.run_namespace,
         )
-    assert exc_info.value.code == SCENARIO_PLAN_HASH_COLLISION
+    assert exc_info.value.code == "S502"
 
 
 @pytest.mark.parametrize(
@@ -315,4 +311,4 @@ def test_given_colliding_scenario_artifacts_when_building_relation_map_then_rais
             artifacts=test_case.artifacts,
             normalize_identifier=test_case.normalize_identifier,
         )
-    assert exc_info.value.code == SCENARIO_PLAN_RELATION_COLLISION
+    assert exc_info.value.code == "S503"

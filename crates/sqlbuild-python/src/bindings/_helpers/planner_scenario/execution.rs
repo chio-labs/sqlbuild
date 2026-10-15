@@ -4,6 +4,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::compiled_project::loop_classes::by_attribute;
+use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_INVALID_FIXTURE;
 use crate::bindings::_helpers::planner_scenario::{
     entries::{function_entry, seed_entries},
     fixtures::{extract_fixtures, fixture_plans},
@@ -239,7 +240,7 @@ fn complete_fixtures<'py>(
                 context.label,
                 details.join("\n")
             ),
-            "SCENARIO_PLAN_INVALID_FIXTURE",
+            SCENARIO_PLAN_INVALID_FIXTURE,
             None,
         )?);
     }

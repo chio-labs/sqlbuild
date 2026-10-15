@@ -18,7 +18,6 @@ from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.constants import RECORDED_RELATION_MISSING_WARNING_CODE
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     ChangeDetectionResult,
@@ -465,7 +464,7 @@ def test_given_dropped_relation_with_recorded_build_when_planning_then_plans_fir
         False,
         (),
     )
-    assert [warning.code for warning in warnings] == [RECORDED_RELATION_MISSING_WARNING_CODE]
+    assert [warning.code for warning in warnings] == ["RECORDED_RELATION_MISSING"]
     assert warnings[0].severity == WarningSeverity.WARNING
     assert warnings[0].model_name == "orders"
 

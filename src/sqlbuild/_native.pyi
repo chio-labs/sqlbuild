@@ -296,8 +296,6 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import (
     CursorGrain,
     CursorType,
-    FixtureGroups,
-    InputColumns,
     MaterializationType,
     OnSchemaChange,
     PlanAction,
@@ -749,6 +747,9 @@ class NativeProjectFacts:
     @property
     def resources(self) -> NativeProjectResources: ...
 
+type FixtureKey = tuple[CompiledResourceType, str]
+type InputColumns = Callable[[str, str], frozenset[str] | None]
+type FixtureGroups = tuple[tuple[CompiledResourceType, dict[str, str]], ...]
 type _GraphKey = tuple[str, str]
 type _GraphEdges = list[tuple[_GraphKey, list[_GraphKey]]]
 type _GraphIndexes = tuple[

@@ -2,7 +2,11 @@
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::planner_migrations::column_objects::{model, text};
-use crate::bindings::_helpers::planner_migrations::constants::DONE;
+use crate::bindings::_helpers::planner_migrations::constants::{
+    DONE, MISSING_ORIGIN_ALLOW_OUTCOME, MISSING_ORIGIN_CONFIRMATION_OUTCOME,
+    MISSING_ORIGIN_DENY_OUTCOME,
+};
+use pyo3::exceptions::PyKeyError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use sqlbuild_analysis::planner_migrations::main::column_warning::column_warning;
 use sqlbuild_analysis::planner_migrations::models::ColumnWarning;
@@ -31,7 +35,6 @@ pub(super) fn warning<'py>(
 }
 
 pub(super) fn entry_warning<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let py = entry.py();
     let destination = entry.getattr("destination")?;
     let qualified = destination.getattr("qualified_name")?;
     let relation: String = if qualified.is_truthy()? {
@@ -59,13 +62,8 @@ pub(super) fn entry_warning<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Option<B
     } else {
         "default".into()
     };
-    let outcome: String = imported(
-        py,
-        "sqlbuild.compiler.planner.constants",
-        "MISSING_ORIGIN_OUTCOMES",
-    )?
-    .get_item(entry.getattr("missing_origin_policy")?)?
-    .extract()?;
+    let outcome: String =
+        missing_origin_outcome(&entry.getattr("missing_origin_policy")?)?.to_owned();
     let message: String = entry.getattr("message")?.str()?.extract()?;
     let Some((code, message)) = column_warning(
         &decision,
@@ -110,4 +108,14 @@ pub(super) fn unavailable<'py>(
         pyo3::exceptions::PyValueError::new_err("missing column migration diagnostic")
     })?;
     warning(entry, code, &message, false)
+}
+
+/// The build outcome a missing migration origin has under its policy.
+pub(super) fn missing_origin_outcome(policy: &Bound<'_, PyAny>) -> PyResult<&'static str> {
+    match policy.extract::<String>()?.as_str() {
+        "allow" => Ok(MISSING_ORIGIN_ALLOW_OUTCOME),
+        "require_confirmation" => Ok(MISSING_ORIGIN_CONFIRMATION_OUTCOME),
+        "deny" => Ok(MISSING_ORIGIN_DENY_OUTCOME),
+        _ => Err(PyKeyError::new_err(policy.clone().unbind())),
+    }
 }

@@ -2,8 +2,8 @@
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::planner_entries::values::{
-    COMPILE_EXCEPTIONS, COMPILE_TYPES, PLANNER_CONSTANTS, PLANNER_EXCEPTIONS, PLANNER_TYPES,
-    boolean, error_of, native, none, planner_model, planner_type, replaced, string,
+    COMPILE_EXCEPTIONS, COMPILE_TYPES, MICROBATCH_CONCURRENCY_MESSAGE, PLANNER_EXCEPTIONS,
+    PLANNER_TYPES, boolean, error_of, native, none, planner_model, planner_type, replaced, string,
 };
 use crate::bindings::_helpers::planner_resolution::cursor_ranges::{
     CursorWindowInputs, config_str, cursor_safety_configs, empty_cursor_inputs, microbatch_range,
@@ -333,8 +333,7 @@ fn check_microbatch_concurrency<'py>(
     let settings = project.getattr("settings")?;
     if !configured.is_empty() && !settings.getattr("microbatch_concurrency")?.is_truthy()? {
         let guidance = native(py, "microbatch_guidance", &[])?;
-        let prefix: String =
-            imported(py, PLANNER_CONSTANTS, "MICROBATCH_CONCURRENCY_MESSAGE")?.extract()?;
+        let prefix: &str = MICROBATCH_CONCURRENCY_MESSAGE;
         return Err(error_of(
             py,
             (COMPILE_EXCEPTIONS, "CompileInputError"),

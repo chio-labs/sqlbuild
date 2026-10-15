@@ -2,32 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from enum import StrEnum
-from typing import TYPE_CHECKING, Protocol
-
-from sqlbuild.compiler.compile.types import CompiledResourceType
-
-type FixtureKey = tuple[CompiledResourceType, str]
-type InputColumns = Callable[[str, str], frozenset[str] | None]
-type FixtureGroups = tuple[tuple[CompiledResourceType, dict[str, str]], ...]
-
-if TYPE_CHECKING:
-    from sqlbuild.compiler.planner.models import GraphNodeKey
-
-
-class GraphIdentityComposer(Protocol):
-    def __call__(
-        self,
-        *,
-        local_hash: str,
-        upstream_hashes: tuple[tuple[GraphNodeKey, str], ...],
-    ) -> str: ...
-
-
-class CursorInputRole(StrEnum):
-    FILTER = "filter"
-    WATERMARK = "watermark"
 
 
 class SelectorKind(StrEnum):
@@ -170,12 +145,6 @@ class InitialValidFrom(StrEnum):
     UPDATED_AT = "updated_at"
     OBSERVED_AT = "observed_at"
     EXECUTION_TIME = "execution_time"
-
-
-class SnapshotFullRefreshPolicy(StrEnum):
-    DENY = "deny"
-    REQUIRE_CONFIRMATION = "require_confirmation"
-    ALLOW = "allow"
 
 
 class SnapshotSchemaChangePolicy(StrEnum):

@@ -15,6 +15,8 @@ use sqlbuild_core::plan_display::main::{
 };
 use std::collections::BTreeMap;
 
+const MANUAL_RENAME_HINT: &str = "matched by unchanged definition; sqb rename <old> <new> rewrites references and declares migrate_from so the move does not depend on discovery";
+
 fn label(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
     if value.is_none() {
         return Ok(None);
@@ -116,11 +118,7 @@ pub(crate) fn migration_lines(
             .map(column)
             .collect::<PyResult<_>>()?,
         display: display_limit(display_options)?,
-        manual_rename_hint: plan
-            .py()
-            .import("sqlbuild.compiler.planner.constants")?
-            .getattr("MANUAL_RENAME_HINT")?
-            .extract()?,
+        manual_rename_hint: MANUAL_RENAME_HINT.to_owned(),
     };
     Ok(format_model_migrations::format_model_migrations(
         lines, &report,

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlbuild._native import MigrationFingerprintCache
 from sqlbuild._native import cursor_parse as parse
@@ -52,7 +52,6 @@ from sqlbuild.compiler.planner.types import (
     CursorGrain,
     CursorType,
     CursorWatermarkMode,
-    FixtureKey,
     GraphResourceKind,
     MaterializationType,
     OnSchemaChange,
@@ -97,6 +96,9 @@ from sqlbuild.spec.contracts.types import (
     SourceWriteStrategy,
 )
 from sqlbuild.sql_values.models import SqlValue
+
+if TYPE_CHECKING:
+    from sqlbuild._native import FixtureKey
 
 
 @dataclass(frozen=True)
@@ -157,14 +159,6 @@ class RelationFixturePlanningContext:
 
 
 @dataclass(frozen=True)
-class GraphNodeKey:
-    """Neutral graph key matching fingerprint identity fields."""
-
-    node_type: str
-    node_name: str
-
-
-@dataclass(frozen=True)
 class SelectorExpansion:
     """One selector split into graph expansion flags and core text."""
 
@@ -180,16 +174,6 @@ class ParsedScenarioArtifactName:
     hash_prefix: str
     kind: str
     logical_name: str
-
-
-@dataclass(frozen=True)
-class GraphIdentityNode:
-    """Neutral node input for dependency-aware identity resolution."""
-
-    key: GraphNodeKey
-    resource_kind: GraphResourceKind
-    upstream_keys: tuple[GraphNodeKey, ...]
-    local_hash: str | None
 
 
 @dataclass(frozen=True, kw_only=True, init=False)
@@ -784,14 +768,6 @@ class SqlTestSelection:
     names: frozenset[str] = frozenset()
     excluded_names: frozenset[str] = frozenset()
     models_selected: bool = True
-
-
-@dataclass(frozen=True)
-class UnitTestSelectorNames:
-    """Names selectors can match: unit tests, and every other selectable resource."""
-
-    tests: frozenset[str]
-    resources: frozenset[str]
 
 
 @dataclass(frozen=True)

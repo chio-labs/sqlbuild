@@ -3,6 +3,10 @@
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::planner_scenario::constants::{
+    SCENARIO_PLAN_HASH_COLLISION, SCENARIO_PLAN_INVALID_HASH_PREFIX,
+    SCENARIO_PLAN_RELATION_COLLISION,
+};
 use crate::bindings::_helpers::planner_scenario::values::{MODELS, TYPES, error, string};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
@@ -43,7 +47,7 @@ fn compute_prefix(
         return Err(error(
             py,
             "Scenario hash prefix length must be at least 1",
-            "SCENARIO_PLAN_INVALID_HASH_PREFIX",
+            SCENARIO_PLAN_INVALID_HASH_PREFIX,
             None,
         )?);
     }
@@ -89,7 +93,7 @@ pub(crate) fn build_scenario_hash_index<'py>(
                 &format!(
                     "Scenario artifact hash collision: scenarios '{existing}' and '{name}' both map to hash prefix '{prefix}'. Rename one scenario file so SQLBuild can generate distinct warehouse artifact prefixes."
                 ),
-                "SCENARIO_PLAN_HASH_COLLISION",
+                SCENARIO_PLAN_HASH_COLLISION,
                 Some(
                     "Rename one scenario file so SQLBuild can generate distinct artifact prefixes.",
                 ),
@@ -239,7 +243,7 @@ pub(crate) fn build_scenario_relation_map<'py>(
                 &format!(
                     "Scenario relation name collision in scenario '{scenario}'. Both scenario artifacts map to '{physical}': {old_kind} {old_name} and {new_kind} {new_name}. Rename one artifact or shorten one model/source name."
                 ),
-                "SCENARIO_PLAN_RELATION_COLLISION",
+                SCENARIO_PLAN_RELATION_COLLISION,
                 Some("Rename or shorten one of the colliding scenario artifacts."),
             )?);
         }

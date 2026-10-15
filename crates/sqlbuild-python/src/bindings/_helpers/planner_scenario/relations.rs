@@ -4,6 +4,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::planner_scenario::constants::{REF, SOURCE};
+use crate::bindings::_helpers::planner_scenario::constants::{
+    SCENARIO_PLAN_INTERNAL, SCENARIO_PLAN_MISSING_RELATION_TARGET,
+};
 use crate::bindings::_helpers::planner_scenario::values::{MODELS, error};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods};
@@ -90,7 +93,7 @@ pub(crate) fn build_scenario_relation_plan<'py>(
             return Err(error(
                 py,
                 &format!("Scenario relation plan is missing seed target '{name}'"),
-                "SCENARIO_PLAN_MISSING_RELATION_TARGET",
+                SCENARIO_PLAN_MISSING_RELATION_TARGET,
                 Some("This is likely a SQLBuild bug. Please file an issue with the scenario name."),
             )?);
         };
@@ -124,7 +127,7 @@ fn target_for_artifact<'py>(
         return Err(error(
             py,
             &format!("Scenario relation map is missing {kind} artifact '{name}'"),
-            "SCENARIO_PLAN_INTERNAL",
+            SCENARIO_PLAN_INTERNAL,
             Some("This is likely a SQLBuild bug. Please file an issue with the scenario name."),
         )?);
     };

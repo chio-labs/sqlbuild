@@ -1,7 +1,9 @@
 //! Adapt diagnostic display facts while preserving policy and code ordering.
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
-use crate::bindings::_helpers::planner_migrations::column_warnings::warning;
+use crate::bindings::_helpers::planner_migrations::column_warnings::{
+    missing_origin_outcome, warning,
+};
+use crate::bindings::_helpers::planner_migrations::constants::HIDDEN_ORIGIN_REMEDY;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::PyString;
 use sqlbuild_analysis::planner_migrations::main::model_warning::model_warning;
@@ -21,19 +23,8 @@ pub(super) fn entry_warning<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Option<B
     };
     let target: String = entry.getattr("target_label")?.extract()?;
     let policy = entry.getattr("missing_origin_policy")?;
-    let remedy: String = imported(
-        py,
-        "sqlbuild.compiler.planner.constants",
-        "HIDDEN_ORIGIN_REMEDY",
-    )?
-    .extract()?;
-    let outcome: String = imported(
-        py,
-        "sqlbuild.compiler.planner.constants",
-        "MISSING_ORIGIN_OUTCOMES",
-    )?
-    .get_item(&policy)?
-    .extract()?;
+    let remedy: String = HIDDEN_ORIGIN_REMEDY.to_owned();
+    let outcome: String = missing_origin_outcome(&policy)?.to_owned();
     let findings: String = PyString::new(py, "; ")
         .call_method1("join", (entry.getattr("compatibility_findings")?,))?
         .extract()?;

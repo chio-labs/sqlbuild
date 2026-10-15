@@ -25,7 +25,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     CursorOverrides,
@@ -57,6 +56,7 @@ from tests.integration.src.sqlbuild.compiler.planner._helpers.helpers import (
     with_leading_enforced_model_contracts,
 )
 
+METADATA_NAME_FILTER_LIMIT: int = 250
 _INCREMENTAL_MODEL: _IncrementalModelSpec = _IncrementalModelSpec(
     name="fact_orders",
     schema="staging",
