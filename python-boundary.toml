@@ -278,11 +278,6 @@ rule = 3
 note = "Rule 3 shapes: public storage errors re-exported by sqlbuild.compute_logs and raised by the native storage."
 
 [[stays]]
-path = "runtime/compute_logs/constants.py"
-rule = 1
-note = "Rule 1 capture shim constants: the SQL log record field and redaction message the Python diagnostic log handler uses; format version, retention and read limits are native (sqlbuild._native)."
-
-[[stays]]
 path = "runtime/event_exporting/__init__.py"
 rule = 3
 note = "Package marker of the public sink declarations below; the dispatcher, queue, accounting and command scope are native EventExporterDispatcher/EventExporterCommandScope."
@@ -375,8 +370,6 @@ note = "Rule 3 shapes: CommandOutputValidationError re-exported by sqlbuild.sink
 [[stays]]
 path = "runtime/output_capture/constants.py"
 rule = 3
-note = "Rule 3 shapes: the command-output sink parameter name and producer version; INVOCATION_CONTEXT_ENV is re-exported from sqlbuild._native for integrations."
-reason = "public-api"
 note = "Rule 3 shapes: the command-output sink parameter name and the installed producer version, no logic."
 
 [[stays]]
@@ -665,11 +658,6 @@ rule = 4
 note = "Shape rule: data records only (CompileReuseRequest, SettingsEnvironmentInputs, SettingsInputsResult), no logic; consumed by cli/compile_reuse/_helpers/provider_settings.py, and read natively by the compile reuse check."
 
 [[stays]]
-path = "compiler/source_freshness/constants.py"
-rule = 1
-note = "Shape rule: source freshness column names and adapter column types, no logic; SOURCE_FRESHNESS_TABLE_NAME is re-exported from sqlbuild._native."
-
-[[stays]]
 path = "compiler/auditing/types.py"
 rule = 1
 note = "Shape rule: data enums and aliases only (AuditSeverity, AuditRunScope, AuditAttachmentKind, AuditEvaluationMode, ...), no logic; consumed by audits.py, compiler/auditing/main/above.py, compiler/auditing/main/below.py and 17 more."
@@ -747,8 +735,6 @@ note = "Shape rule: data exceptions only (DbtProfileError), no logic; consumed b
 [[stays]]
 path = "diagnostics/constants.py"
 rule = 4
-note = "Shape rule: data constants only (LOGGER_ROOT_NAME, LOGGER_PREFIX, SQL_DIGEST_FIELD, SQL_TEXT_FIELD, ...), no logic; consumed by diagnostics/_helpers/logging.py, diagnostics/_helpers/redaction.py, diagnostics/classes/invocation_diagnostic_routing.py and 2 more."
-reason = "public-api"
 note = "Shape rule: Python logging policy constants only (LOGGER_ROOT_NAME, SQL_DIGEST_FIELD, SQL_PRIVATE_RECORD_FIELD, REDACTED_SQL_LOG_MESSAGE, ...), no logic; the logger prefix and SQL text field are native (sqlbuild._native)."
 
 [[stays]]
@@ -770,11 +756,6 @@ note = "Shape rule: data constants only (NATIVE_ALLOCATOR_PURGE_DELAY_VARIABLE, 
 path = "sql_values/exceptions.py"
 rule = 1
 note = "Shape rule: data exceptions only (SqlValueRenderingError), no logic; consumed by adapter/contract/classes/base_adapter.py, adapter/contract/exceptions.py."
-
-[[stays]]
-path = "cli/output/constants.py"
-rule = 4
-note = "Shape rule: re-export only (INTEGRATION_RESULT_PATH_ENV, from sqlbuild._native), no logic; consumed by integrations/dagster/_helpers/invocation_factory.py."
 
 [[stays]]
 path = "compiler/compile/types.py"
