@@ -1,7 +1,7 @@
 pub mod cursor_bound_display;
 pub mod effective_microbatch_batch_size;
-pub mod format_model_migrations;
 pub mod effective_timestamp_grain;
+pub mod format_model_migrations;
 pub mod format_no_input_rows;
 pub mod format_waiting_on_empty_inputs;
 pub mod model_execution_annotation;

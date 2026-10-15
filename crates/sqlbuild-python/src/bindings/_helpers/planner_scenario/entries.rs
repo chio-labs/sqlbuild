@@ -54,12 +54,7 @@ pub(super) fn seed_entries<'py>(
                 ),
                 (
                     "columns",
-                    imported(
-                        py,
-                        "sqlbuild._native",
-                        "extract_seed_columns",
-                    )?
-                    .call1((&seed,))?,
+                    imported(py, "sqlbuild._native", "extract_seed_columns")?.call1((&seed,))?,
                 ),
                 (
                     "csv_settings",
