@@ -30,11 +30,6 @@ reason = "Native bindings own lint entry points, expansion preparation and compi
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
-path = "src/sqlbuild/sql_values/constants.py"
-reason = "Typed SQL values are normalized and state literals rendered natively; the namespace package keeps the value models, types, limits and errors the native bindings build and raise."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
 path = "src/sqlbuild/cli/compile_reuse/__init__.py"
 reason = "Native bindings own the compile reuse check, replay and launch records; this package declares the reuse models and constants and keeps the provider settings, runtime identity and startup inputs the native code reads from the interpreter."
 
@@ -177,6 +172,11 @@ reason = "SQL test assembly and planning run natively; the package keeps the req
 rule = "FFR309"
 path = "src/sqlbuild/compiler/graph/__init__.py"
 reason = "Graph algorithms and views run natively; the package keeps only the edge and view models their callers read."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/sql_values/exceptions.py"
+reason = "Typed SQL values are normalized and state literals rendered natively; the namespace package keeps the value models, types and the rendering error adapters raise."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"

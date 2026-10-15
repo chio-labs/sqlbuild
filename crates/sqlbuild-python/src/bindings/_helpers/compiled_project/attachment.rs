@@ -21,6 +21,7 @@ use crate::bindings::_helpers::compiled_project::sql_test_loop::{
 };
 use crate::bindings::_helpers::sql_test_glue::constants::SQL_TEST_CTE_SCAN_ALGORITHM;
 
+const NATIVE_RECORDS: &str = "sqlbuild._native";
 const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
@@ -296,7 +297,7 @@ fn parameter_renderer<'py>(value_renderer: &Bound<'py, PyAny>) -> PyResult<Bound
         py,
         [
             imported(py, SQL_VALUE_ERRORS_MODULE, "SqlValueRenderingError")?,
-            imported(py, SQL_VALUE_ERRORS_MODULE, "SqlValueValidationError")?,
+            imported(py, NATIVE_RECORDS, "SqlValueValidationError")?,
         ],
     )?
     .into_any()

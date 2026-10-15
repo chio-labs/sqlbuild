@@ -379,7 +379,7 @@ from sqlbuild.spec.contracts.types import (
     SourceFreshnessValueKind,
     WarehouseGroup,
 )
-from sqlbuild.sql_values.models import SqlValue, SqlValueLimits
+from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import CollectionRendering, StateSqlValueType
 
 BUILD_IDENTITY: str
@@ -9423,3 +9423,37 @@ class DbtInteropSkipReason(StrEnum):
 
     NO_DBT_WORK = "no_dbt_work"
     NO_SQLBUILD_WORK = "no_sqlbuild_work"
+
+class AuthoredSqlSet(NativeRecord):
+    """Set literal entries retained in authored order until validation."""
+
+    values: tuple[object, ...]
+    def __init__(
+        self,
+        values: tuple[object, ...],
+    ) -> None: ...
+
+class AuthoredSqlValueCall(NativeRecord):
+    """Source-preserving representation of an authored ``constant(...)`` call."""
+
+    arguments: tuple[tuple[str, object], ...]
+    def __init__(
+        self,
+        arguments: tuple[tuple[str, object], ...],
+    ) -> None: ...
+
+class SqlValueLimits(NativeRecord):
+    """Safety limits applied while normalizing recursively authored values."""
+
+    max_depth: int
+    max_elements: int
+    max_size: int
+    def __init__(
+        self,
+        max_depth: int = ...,
+        max_elements: int = ...,
+        max_size: int = ...,
+    ) -> None: ...
+
+class SqlValueValidationError(ValueError):
+    """An authored value cannot be represented by the typed SQL value domain."""

@@ -15,7 +15,7 @@ use sqlbuild_model_config::sql_values::models::{RawKey, RawSqlValue, SqlValueLim
 
 const MODELS_MODULE: &str = "sqlbuild.sql_values.models";
 const TYPES_MODULE: &str = "sqlbuild.sql_values.types";
-const EXCEPTIONS_MODULE: &str = "sqlbuild.sql_values.exceptions";
+const NATIVE_MODULE: &str = "sqlbuild._native";
 
 /// The Python classes authored values are told apart by and normalized values are built from.
 pub(crate) struct SqlValueClasses<'py> {
@@ -30,10 +30,11 @@ pub(crate) struct SqlValueClasses<'py> {
 impl<'py> SqlValueClasses<'py> {
     pub(crate) fn load(py: Python<'py>) -> PyResult<Self> {
         let models = py.import(MODELS_MODULE)?;
+        let native = py.import(NATIVE_MODULE)?;
         Ok(Self {
             decimal: py.import("decimal")?.getattr("Decimal")?,
-            authored_set: models.getattr("AuthoredSqlSet")?,
-            value_call: models.getattr("AuthoredSqlValueCall")?,
+            authored_set: native.getattr("AuthoredSqlSet")?,
+            value_call: native.getattr("AuthoredSqlValueCall")?,
             sql_value: models.getattr("SqlValue")?,
             logical_type: models.getattr("SqlLogicalType")?,
             kind: py.import(TYPES_MODULE)?.getattr("SqlValueKind")?,
@@ -177,7 +178,7 @@ pub(crate) fn sql_value<'py>(
 pub(crate) fn sql_value_error(py: Python<'_>, failure: SqlValueFailure) -> PyResult<PyErr> {
     Ok(match failure {
         SqlValueFailure::Invalid(message) => PyErr::from_value(
-            py.import(EXCEPTIONS_MODULE)?
+            py.import(NATIVE_MODULE)?
                 .getattr("SqlValueValidationError")?
                 .call1((message,))?,
         ),
@@ -204,7 +205,7 @@ fn normalize_sql_value<'py>(
     let applied: Bound<'py, PyAny> = match limits {
         Some(limits) if !limits.is_none() => limits.clone(),
         _ => py
-            .import(MODELS_MODULE)?
+            .import(NATIVE_MODULE)?
             .getattr("SqlValueLimits")?
             .call0()?,
     };

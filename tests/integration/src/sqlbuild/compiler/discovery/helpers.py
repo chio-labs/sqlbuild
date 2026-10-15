@@ -21,6 +21,8 @@ from typing import Any, cast
 
 from sqlbuild import _native
 from sqlbuild._native import (
+    AuthoredSqlSet,
+    AuthoredSqlValueCall,
     discover_audit_files,
     discover_constant_files,
     discover_enum_files,
@@ -42,7 +44,6 @@ from sqlbuild.compiler.discovery.models import (
     SqlHookEntry,
     TolerantScopeDiscovery,
 )
-from sqlbuild.sql_values.models import AuthoredSqlSet, AuthoredSqlValueCall
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     GeneratedDeclarationFileTestCase,
 )

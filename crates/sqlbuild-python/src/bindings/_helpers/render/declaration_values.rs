@@ -401,7 +401,7 @@ pub(crate) fn constant_declaration_sql<'py>(
     let rendering_error: Bound<'py, PyAny> =
         imported(py, SQL_VALUE_ERRORS_MODULE, "SqlValueRenderingError")?;
     let validation_error: Bound<'py, PyAny> =
-        imported(py, SQL_VALUE_ERRORS_MODULE, "SqlValueValidationError")?;
+        imported(py, NATIVE_MODULE, "SqlValueValidationError")?;
     let raised: Bound<'py, PyAny> = error.value(py).clone().into_any();
     if !(raised.is_instance(&rendering_error)? || raised.is_instance(&validation_error)?) {
         return Err(error);

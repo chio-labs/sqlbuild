@@ -28,6 +28,7 @@ pub(crate) const RECORDS: &[&[RecordSpec]] = &[
     DBT_RECORDS,
     FRESHNESS_RECORDS,
     COST_RECORDS,
+    SQL_VALUE_RECORDS,
 ];
 
 /// Records whose bound values are normalized before the record is created.
@@ -1395,6 +1396,30 @@ const PLAYGROUND_TEMPLATE: EnumSpec = EnumSpec {
         ("PYTHON_NODES", "python_nodes"),
     ],
 };
+
+const AUTHORED_SQL_SET: RecordSpec = RecordSpec {
+    name: "AuthoredSqlSet",
+    doc: "Set literal entries retained in authored order until validation.",
+    fields: &[FieldSpec::required("values")],
+};
+const AUTHORED_SQL_VALUE_CALL: RecordSpec = RecordSpec {
+    name: "AuthoredSqlValueCall",
+    doc: "Source-preserving representation of an authored ``constant(...)`` call.",
+    fields: &[FieldSpec::required("arguments")],
+};
+const SQL_VALUE_LIMITS: RecordSpec = RecordSpec {
+    name: "SqlValueLimits",
+    doc: "Safety limits applied while normalizing recursively authored values.",
+    fields: &[
+        FieldSpec::new("max_depth", FieldDefault::Int(32)),
+        FieldSpec::new("max_elements", FieldDefault::Int(10000)),
+        FieldSpec::new("max_size", FieldDefault::Int(1000000)),
+    ],
+};
+
+/// Authored typed SQL values and normalization limits.
+const SQL_VALUE_RECORDS: &[RecordSpec] =
+    &[AUTHORED_SQL_SET, AUTHORED_SQL_VALUE_CALL, SQL_VALUE_LIMITS];
 
 /// `sqb` commands, compile lineage modes and playground templates.
 const CLI_ENUMS: &[EnumSpec] = &[COMPILE_LINEAGE_MODE, CLI_COMMAND, PLAYGROUND_TEMPLATE];

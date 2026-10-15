@@ -7,6 +7,7 @@ from typing import cast
 import pytest
 
 import sqlbuild._native as _native
+from sqlbuild._native import AuthoredSqlValueCall
 from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
@@ -17,7 +18,7 @@ from sqlbuild.compiler.discovery.models import (
     ModelSchemaDeclaration,
 )
 from sqlbuild.compiler.resource_names.exceptions import ResourceIdentityError
-from sqlbuild.sql_values.models import AuthoredSqlValueCall, SqlValue
+from sqlbuild.sql_values.models import SqlValue
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DeclarationResourceIdentityErrorTestCase,
     ParseDeclarationFileErrorTestCase,

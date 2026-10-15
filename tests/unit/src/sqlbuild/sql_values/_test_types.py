@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sqlbuild.sql_values.models import SqlValueLimits
+from sqlbuild._native import SqlValueLimits
 
 
 @dataclass(frozen=True)
