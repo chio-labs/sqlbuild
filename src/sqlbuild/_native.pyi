@@ -20,6 +20,8 @@ from sqlbuild.adapter.contract.models import (
     ExpressionInferenceProfile,
     QueryResult,
     RelationInfo,
+    RowDiffSampling,
+    RowDiffTolerances,
 )
 from sqlbuild.adapter.contract.types import (
     AdapterExecute,
@@ -297,7 +299,7 @@ from sqlbuild.executor.build.models import (
     SeedExecutionResult,
 )
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
-from sqlbuild.executor.diff.models import DiffExecutionResult
+from sqlbuild.executor.diff.models import DiffExecutionResult, RowDiffSamplingOverride
 from sqlbuild.executor.janitor.models import JanitorExecutionResult, JanitorPlan
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.models import (
@@ -4915,6 +4917,16 @@ def scope_test_ctes(
 ) -> list[tuple[str | None, list[tuple[str, str]]]]: ...
 def omitted_ceremonial_select(sql: str, syntax: dict[str, object]) -> int | None: ...
 def extract_sql_tests_json(request_json: str) -> str: ...
+def parse_row_diff_tolerances(
+    *, raw: object, label: str = "row_diff_tolerances"
+) -> RowDiffTolerances: ...
+def parse_cli_tolerance_overrides(*, values: Sequence[str]) -> RowDiffTolerances: ...
+def resolve_row_diff_sampling(
+    *, raw_row_limit: object, raw_seed: object, override: RowDiffSamplingOverride, label: str
+) -> RowDiffSampling | None: ...
+def merge_row_diff_tolerances(
+    *, base: RowDiffTolerances, override: RowDiffTolerances | None
+) -> RowDiffTolerances: ...
 def fit_artifact_logical_name(
     *, logical_name: str, fixed_prefix: str, identifier_limit: int, artifact_label: str
 ) -> str: ...

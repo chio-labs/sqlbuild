@@ -11,3 +11,6 @@ pub(crate) const EMPTY_SELECTOR_CODE: &str = "S001";
 pub(crate) const UNKNOWN_NAME_CODE: &str = "S007";
 pub(crate) const UNKNOWN_TAG_CODE: &str = "S008";
 pub(crate) const UNKNOWN_PATH_CODE: &str = "S009";
+pub(crate) const RAW_QUERY_READ_ONLY_ROOTS: [&str; 5] =
+    ["except", "intersect", "select", "union", "values"];
+pub(crate) const RAW_QUERY_GUARD: &str = r#"{"maxFunctionCallDepth": 512}"#;

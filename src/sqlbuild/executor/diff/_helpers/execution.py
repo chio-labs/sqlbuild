@@ -5,6 +5,11 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
+from sqlbuild._native import (
+    merge_row_diff_tolerances,
+    parse_row_diff_tolerances,
+    resolve_row_diff_sampling,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
@@ -16,11 +21,6 @@ from sqlbuild.adapter.contract.models import (
 )
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.diff._helpers.bounds import resolve_bounded_cursors
-from sqlbuild.executor.diff._helpers.config import (
-    merge_row_diff_tolerances,
-    parse_row_diff_tolerances,
-    resolve_row_diff_sampling,
-)
 from sqlbuild.executor.diff._helpers.selection import (
     get_row_diff_exclude_columns,
     get_unique_key,

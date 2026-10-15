@@ -4,13 +4,13 @@ from decimal import Decimal
 
 import pytest
 
-from sqlbuild.adapter.contract.models import RowDiffSampling, RowDiffTolerance, RowDiffTolerances
-from sqlbuild.errors.contracts.exceptions import ExecutorInputError
-from sqlbuild.executor.diff._helpers.config import (
+from sqlbuild._native import (
     parse_cli_tolerance_overrides,
     parse_row_diff_tolerances,
     resolve_row_diff_sampling,
 )
+from sqlbuild.adapter.contract.models import RowDiffSampling, RowDiffTolerance, RowDiffTolerances
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.diff.models import RowDiffSamplingOverride
 from tests.unit.src.sqlbuild.executor.diff._test_types import (
     CliToleranceTestCase,
