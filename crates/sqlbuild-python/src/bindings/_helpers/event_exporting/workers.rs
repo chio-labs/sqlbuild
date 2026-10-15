@@ -20,6 +20,7 @@ use crate::bindings::_helpers::event_exporting::models::{
     EventExportSummary, EventExporterFailure,
 };
 use crate::bindings::_helpers::event_exporting::values::error_type_of;
+use crate::bindings::_helpers::native_threads::exit_signal::interpreter_exiting;
 
 /// Which long-lived dispatcher thread a worker runs.
 #[derive(Clone, Copy)]
@@ -38,7 +39,7 @@ pub(crate) struct DispatcherWorker {
 
 /// Whether an invocation finished, and the sanitized type of what it raised.
 #[derive(Default)]
-struct Completion {
+pub(crate) struct Completion {
     done: bool,
     error_type: Option<String>,
 }
@@ -47,7 +48,8 @@ struct Completion {
 #[pyclass(module = "sqlbuild._native", frozen)]
 pub(crate) struct InvocationCompletion {
     shared: Arc<Shared>,
-    invocation: u64,
+    /// The live invocation this call ends; `None` when its caller tracks the invocation.
+    invocation: Option<u64>,
     completion: Arc<Mutex<Completion>>,
 }
 
@@ -59,7 +61,8 @@ enum Notification {
     Stop,
 }
 
-fn completion_state(completion: &Mutex<Completion>) -> PyResult<(bool, Option<String>)> {
+/// Whether the call finished, and the sanitized type of what it raised.
+pub(crate) fn completion_state(completion: &Mutex<Completion>) -> PyResult<(bool, Option<String>)> {
     let completion = completion
         .lock()
         .map_err(|_| PyRuntimeError::new_err("event exporter invocation lock is poisoned"))?;
@@ -185,11 +188,7 @@ impl DispatcherWorker {
         let completion: Arc<Mutex<Completion>> = Arc::new(Mutex::new(Completion::default()));
         let name: String = format!("{INVOCATION_THREAD_PREFIX}{}", exporter.name);
         let invocation: u64 = shared.begin_invocation(py)?;
-        let reporter = InvocationCompletion {
-            shared: Arc::clone(shared),
-            invocation,
-            completion: Arc::clone(&completion),
-        };
+        let reporter = InvocationCompletion::new(Arc::clone(shared), Some(invocation), &completion);
         let started = Py::new(py, reporter).and_then(|reporter| {
             let arguments = PyDict::new(py);
             arguments.set_item("function", exporter.function.bind(py))?;
@@ -243,7 +242,7 @@ impl DispatcherWorker {
             let effective: Instant = state.deadline.map_or(invocation_deadline, |deadline| {
                 deadline.min(invocation_deadline)
             });
-            let force_stop: bool = state.force_stop;
+            let force_stop: bool = state.force_stop || interpreter_exiting(py)?;
             drop(state);
             let remaining: f64 = effective
                 .saturating_duration_since(Instant::now())
@@ -377,6 +376,21 @@ impl DispatcherWorker {
     }
 }
 
+impl InvocationCompletion {
+    /// A reporter that records into `completion` and, when given, ends `invocation`.
+    pub(crate) fn new(
+        shared: Arc<Shared>,
+        invocation: Option<u64>,
+        completion: &Arc<Mutex<Completion>>,
+    ) -> Self {
+        Self {
+            shared,
+            invocation,
+            completion: Arc::clone(completion),
+        }
+    }
+}
+
 #[pymethods]
 impl InvocationCompletion {
     #[pyo3(signature = (error, /))]
@@ -387,7 +401,10 @@ impl InvocationCompletion {
                 completion.error_type = Some(error_type);
             }
         }
-        let finished = self.shared.invocation_finished(py, self.invocation);
+        let finished = match self.invocation {
+            Some(invocation) => self.shared.invocation_finished(py, invocation),
+            None => Ok(()),
+        };
         let _held = self.shared.hold(py)?;
         if let Ok(mut completion) = self.completion.lock() {
             completion.done = true;

@@ -11,7 +11,10 @@ import pytest
 
 from sqlbuild._native import OutputCaptureDispatcher
 from sqlbuild.runtime.output_capture.classes.text_tee import TextOutputTee
-from sqlbuild.runtime.output_capture.models import CommandOutputCaptureSummary
+from sqlbuild.runtime.output_capture.models import (
+    CommandOutputCaptureSummary,
+    CommandOutputRecord,
+)
 from sqlbuild.runtime.output_capture.types import CommandOutputStream
 from tests.unit.src.sqlbuild.runtime.output_capture.classes._test_types import (
     ChunkingTestCase,
@@ -23,6 +26,7 @@ from tests.unit.src.sqlbuild.runtime.output_capture.classes.helpers import (
     FailingOutputExporter,
     RecordingOutputExporter,
     make_dispatcher,
+    sink_scope,
 )
 
 
@@ -329,6 +333,37 @@ def test_given_exporter_diagnostic_when_exporting_then_diagnostic_is_not_recaptu
     assert sink.getvalue() == "command output\nexport diagnostic\n"
     assert summary.accepted == 1
     assert summary.failed == 1
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (OutputCaptureTestCase(description="sink_output_not_recaptured", expected_success=True),),
+    ids=lambda case: case.description,
+)
+def test_given_printing_command_output_sink_when_exporting_then_sink_output_is_not_recaptured(
+    test_case: OutputCaptureTestCase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert test_case.expected_success is True
+    sink: io.StringIO = io.StringIO()
+    messages: list[str] = []
+
+    def record(*, record: CommandOutputRecord) -> None:
+        messages.append(record.message)
+        print("sink diagnostic", file=sys.stderr)
+
+    dispatcher: OutputCaptureDispatcher = make_dispatcher(exporter=sink_scope(record))
+    tee: TextOutputTee = TextOutputTee(
+        sink=sink, dispatcher=dispatcher, stream=CommandOutputStream.STDERR
+    )
+    monkeypatch.setattr(sys, "stderr", tee)
+
+    tee.write("command output\n")
+    summary: CommandOutputCaptureSummary = dispatcher.close()
+
+    assert messages == ["command output\n"]
+    assert sink.getvalue() == "command output\nsink diagnostic\n"
+    assert summary.accepted == 1
+    assert summary.delivered == 1
 
 
 if __name__ == "__main__":

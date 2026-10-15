@@ -13,6 +13,7 @@ pub(crate) const SCOPE_CONTEXT_VARIABLE: &str = "sqlbuild_event_exporter_command
 pub(crate) const DISPATCHER_THREAD_NAME: &str = "sqlbuild-event-exporter-dispatcher";
 pub(crate) const NOTIFIER_THREAD_NAME: &str = "sqlbuild-event-exporter-notifier";
 pub(crate) const HEALTH_THREAD_NAME: &str = "sqlbuild-event-exporter-health";
+pub(crate) const OUTPUT_SINK_THREAD_NAME: &str = "sqlbuild-command-output-sink";
 pub(crate) const INVOCATION_THREAD_PREFIX: &str = "sqlbuild-event-exporter-";
 /// Attribute naming the worker of a long-lived dispatcher thread, for the exit hook.
 pub(crate) const WORKER_ATTRIBUTE: &str = "_sqlbuild_event_exporter_worker";

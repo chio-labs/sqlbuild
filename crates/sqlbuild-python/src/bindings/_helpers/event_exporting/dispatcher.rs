@@ -29,7 +29,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::event_exporting::constants::{
     DISPATCHER_THREAD_NAME, EXIT_JOIN_SECONDS, HEALTH_THREAD_NAME, INVOKE_OUTPUT_MODULE,
-    JOIN_GRACE_SECONDS, NO_SECONDS, NOTIFIER_THREAD_NAME, POLL_SECONDS, WORKER_ATTRIBUTE,
+    JOIN_GRACE_SECONDS, NO_SECONDS, NOTIFIER_THREAD_NAME, OUTPUT_SINK_THREAD_NAME, POLL_SECONDS,
+    WORKER_ATTRIBUTE,
 };
 use crate::bindings::_helpers::event_exporting::models::{
     BoundEventExporter, EventExportSummary, EventExporterFailure,
@@ -37,7 +38,13 @@ use crate::bindings::_helpers::event_exporting::models::{
 use crate::bindings::_helpers::event_exporting::values::{
     export_policy, input_error, severity_from, state_error,
 };
-use crate::bindings::_helpers::event_exporting::workers::{DispatcherWorker, WorkerRole};
+use crate::bindings::_helpers::event_exporting::workers::{
+    Completion, DispatcherWorker, InvocationCompletion, WorkerRole, completion_state,
+};
+use crate::bindings::_helpers::native_threads::constants::OUTPUT_SUPPRESSED_ATTRIBUTE;
+use crate::bindings::_helpers::native_threads::exit_signal::{
+    interpreter_exiting, signal_interpreter_exit,
+};
 
 /// One bound lifecycle-event sink.
 pub(crate) struct Exporter {
@@ -115,6 +122,14 @@ pub(crate) struct EventExporterDispatcher {
 
 /// The dispatcher's Python condition, entered while alive and exited on drop.
 pub(crate) struct Held<'py>(Bound<'py, PyAny>);
+
+/// How one command-output sink call ended.
+pub(crate) enum Delivery {
+    /// The sink returned; `true` when it raised.
+    Delivered(bool),
+    /// Interpreter exit began while the sink was still running.
+    Abandoned,
+}
 
 /// Validated dispatcher limits, in seconds and items.
 struct Limits {
@@ -294,6 +309,7 @@ fn limits(options: &KeywordArguments<'_>) -> PyResult<Limits> {
 /// Stop every live dispatcher's threads and join them before finalization ends them inside native code.
 #[pyfunction]
 pub(crate) fn stop_event_exporter_threads(py: Python<'_>) -> PyResult<()> {
+    signal_interpreter_exit(py)?;
     let mut threads: Vec<Bound<'_, PyAny>> = Vec::new();
     for thread in imported(py, "threading", "enumerate")?
         .call0()?
@@ -459,6 +475,58 @@ impl Shared {
         state.notification_stopping = true;
         drop(state);
         self.notify_all(py)
+    }
+
+    /// Call one command-output sink on its own daemon thread and wait until it returns or exit begins.
+    fn call_output_sink(
+        self: &Arc<Self>,
+        py: Python<'_>,
+        sink: &OutputSink,
+        record: &Bound<'_, PyAny>,
+    ) -> PyResult<Delivery> {
+        let completion: Arc<Mutex<Completion>> = Arc::new(Mutex::new(Completion::default()));
+        let reporter = Py::new(
+            py,
+            InvocationCompletion::new(Arc::clone(self), None, &completion),
+        )?;
+        let arguments = PyDict::new(py);
+        arguments.set_item("function", sink.function.bind(py))?;
+        arguments.set_item("provider_arguments", sink.provider_arguments.bind(py))?;
+        arguments.set_item("record", record)?;
+        arguments.set_item("completion", reporter)?;
+        let started = call_with(
+            &imported(py, "threading", "Thread")?,
+            &[
+                (
+                    "target",
+                    imported(py, INVOKE_OUTPUT_MODULE, "invoke_command_output_sink")?,
+                ),
+                ("kwargs", arguments.into_any()),
+                (
+                    "name",
+                    PyString::new(py, OUTPUT_SINK_THREAD_NAME).into_any(),
+                ),
+                ("daemon", PyBool::new(py, true).to_owned().into_any()),
+            ],
+        )
+        .and_then(|thread| {
+            thread.setattr(OUTPUT_SUPPRESSED_ATTRIBUTE, true)?;
+            thread.call_method0("start")
+        });
+        if started.is_err() {
+            return Ok(Delivery::Delivered(true));
+        }
+        let _held = self.hold(py)?;
+        loop {
+            let (done, error_type) = completion_state(&completion)?;
+            if done {
+                return Ok(Delivery::Delivered(error_type.is_some()));
+            }
+            if interpreter_exiting(py)? {
+                return Ok(Delivery::Abandoned);
+            }
+            self.wait(py, POLL_SECONDS)?;
+        }
     }
 
     /// The final summary once another caller's shutdown completes.
@@ -710,9 +778,7 @@ impl EventExporterDispatcher {
             Arc::clone(&shared.locked()?.output_sinks)
         };
         let mut failed: bool = false;
-        let delivered = (|| -> PyResult<()> {
-            let invoke: Bound<'_, PyAny> =
-                imported(py, INVOKE_OUTPUT_MODULE, "invoke_command_output_sink")?;
+        let delivered = (|| -> PyResult<Delivery> {
             for record in records.try_iter()? {
                 let record: Bound<'_, PyAny> = record?;
                 let is_output: bool = record
@@ -730,22 +796,20 @@ impl EventExporterDispatcher {
                     {
                         continue;
                     }
-                    let called = call_with(
-                        &invoke,
-                        &[
-                            ("function", sink.function.bind(py).clone()),
-                            (
-                                "provider_arguments",
-                                sink.provider_arguments.bind(py).clone(),
-                            ),
-                            ("record", record.clone()),
-                        ],
-                    );
-                    failed |= called.is_err();
+                    match shared.call_output_sink(py, sink, &record)? {
+                        Delivery::Delivered(sink_failed) => failed |= sink_failed,
+                        Delivery::Abandoned => return Ok(Delivery::Abandoned),
+                    }
                 }
             }
-            Ok(())
+            Ok(Delivery::Delivered(failed))
         })();
+        if let Ok(Delivery::Abandoned) = delivered {
+            return Err(state_error(
+                py,
+                "output export stopped because the interpreter is exiting",
+            ));
+        }
         shared.invocation_finished(py, invocation)?;
         delivered?;
         if failed {

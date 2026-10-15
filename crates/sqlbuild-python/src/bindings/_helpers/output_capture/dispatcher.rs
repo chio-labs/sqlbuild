@@ -7,7 +7,7 @@ use std::time::Instant;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python, pyclass,
-    pymethods,
+    pyfunction, pymethods, wrap_pyfunction,
 };
 use pyo3::types::{PyDict, PyString, PyTuple};
 use sqlbuild_core::command_output::constants::{
@@ -23,12 +23,18 @@ use sqlbuild_core::command_output::models::{
 };
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::native_threads::constants::OUTPUT_SUPPRESSED_ATTRIBUTE;
+use crate::bindings::_helpers::native_threads::exit_signal::signal_interpreter_exit;
 use crate::bindings::_helpers::output_capture::records::{MODELS_MODULE, TYPES_MODULE};
 use crate::bindings::_helpers::output_capture::values::{
     freeze, object, output_error, pass_text, python_text, unencodable,
 };
 
 const THREAD_NAME: &str = "sqlbuild-output-exporter";
+/// Attribute naming a capture thread's worker, for the exit hook.
+const WORKER_ATTRIBUTE: &str = "_sqlbuild_output_capture_worker";
+/// How long interpreter exit waits for each stopped capture worker.
+const EXIT_JOIN_SECONDS: f64 = 1.0;
 const DEFAULT_QUEUE_CAPACITY: i64 = 1024;
 const DEFAULT_BATCH_SIZE: i64 = 64;
 const DEFAULT_MAX_RECORD_BYTES: i64 = 64 * 1024;
@@ -102,6 +108,50 @@ fn priority_value(priority: RecordPriority) -> &'static str {
 
 fn thread_ident(py: Python<'_>) -> PyResult<u64> {
     imported(py, "threading", "get_ident")?.call0()?.extract()
+}
+
+/// Whether the current thread runs a command-output sink, whose writes are never captured.
+fn delivering_thread(py: Python<'_>) -> PyResult<bool> {
+    imported(py, "threading", "current_thread")?
+        .call0()?
+        .hasattr(OUTPUT_SUPPRESSED_ATTRIBUTE)
+}
+
+/// Stop every capture worker and join it before finalization ends it inside native code.
+#[pyfunction]
+fn stop_output_capture_threads(py: Python<'_>) -> PyResult<()> {
+    signal_interpreter_exit(py)?;
+    let mut threads: Vec<Bound<'_, PyAny>> = Vec::new();
+    for thread in imported(py, "threading", "enumerate")?
+        .call0()?
+        .try_iter()?
+    {
+        let thread: Bound<'_, PyAny> = thread?;
+        let Ok(worker) = thread.getattr(WORKER_ATTRIBUTE) else {
+            continue;
+        };
+        if let Ok(worker) = worker.downcast::<OutputDeliveryWorker>() {
+            let shared = &worker.get().shared;
+            let _held = shared.hold(py)?;
+            {
+                let mut state = shared.locked()?;
+                state.accepting = false;
+                state.stopping = true;
+                state.force_stop = true;
+            }
+            shared.notify(py, "notify_all")?;
+            threads.push(thread);
+        }
+    }
+    for thread in threads {
+        if thread.call_method0("is_alive")?.is_truthy()? {
+            call_with(
+                &thread.getattr("join")?,
+                &[("timeout", object(py, EXIT_JOIN_SECONDS)?)],
+            )?;
+        }
+    }
+    Ok(())
 }
 
 impl Shared {
@@ -387,14 +437,16 @@ impl OutputCaptureDispatcher {
                 shared: Arc::clone(&shared),
             },
         )?;
+        let worker = worker.into_bound(py).into_any();
         let thread = call_with(
             &imported(py, "threading", "Thread")?,
             &[
-                ("target", worker.into_bound(py).into_any()),
+                ("target", worker.clone()),
                 ("name", object(py, THREAD_NAME)?),
                 ("daemon", object(py, true)?),
             ],
         )?;
+        thread.setattr(WORKER_ATTRIBUTE, worker)?;
         thread.call_method0("start")?;
         Ok(Self {
             shared,
@@ -412,7 +464,10 @@ impl OutputCaptureDispatcher {
     ) -> PyResult<()> {
         let shared = &self.shared;
         let thread = thread_ident(py)?;
-        if text.is_empty()? || shared.locked()?.suppressed_threads.contains(&thread) {
+        if text.is_empty()?
+            || shared.locked()?.suppressed_threads.contains(&thread)
+            || delivering_thread(py)?
+        {
             return Ok(());
         }
         let stream = match stream.getattr("value")?.extract::<String>()?.as_str() {
@@ -506,7 +561,11 @@ impl OutputCaptureDispatcher {
     }
 }
 
+/// Add the capture classes and run `stop_output_capture_threads` at interpreter exit.
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    let hook = wrap_pyfunction!(stop_output_capture_threads, module)?;
+    module.add_function(hook.clone())?;
+    imported(module.py(), "atexit", "register")?.call1((hook,))?;
     module.add_class::<OutputCaptureDispatcher>()?;
     module.add_class::<OutputDeliveryWorker>()
 }

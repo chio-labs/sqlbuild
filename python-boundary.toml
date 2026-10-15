@@ -332,7 +332,7 @@ note = "Rule 2 shim: the daemon delivery thread's target that calls one user lif
 [[stays]]
 path = "runtime/event_exporting/main/_invoke_command_output_sink.py"
 reason = "user-code"
-note = "Rule 2 shim: calls one user command-output sink with its bound providers for the native dispatcher's export_output (event_exporting/dispatcher.rs)."
+note = "Rule 2 shim: the daemon thread target that calls one user command-output sink with its bound providers and reports how it ended to the native export_output, so user code never runs above native frames that interpreter finalization would abort (event_exporting/dispatcher.rs)."
 
 [[stays]]
 path = "runtime/event_exporting/models.py"

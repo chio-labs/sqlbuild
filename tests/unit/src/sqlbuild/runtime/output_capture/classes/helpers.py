@@ -6,8 +6,13 @@ import threading
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 
-from sqlbuild._native import OutputCaptureDispatcher
-from sqlbuild.runtime.output_capture.models import CommandOutputRecord
+from sqlbuild._native import (
+    EventExporterCommandScope,
+    EventExporterDispatcher,
+    OutputCaptureDispatcher,
+)
+from sqlbuild.runtime.output_capture.models import BoundCommandOutputSink, CommandOutputRecord
+from sqlbuild.runtime.output_capture.types import CommandOutputStream
 
 
 class RecordingOutputExporter:
@@ -88,3 +93,22 @@ def make_dispatcher(
         clock=fixed_clock,
         failure_callback=failure_callback,
     )
+
+
+def sink_scope(
+    function: Callable[..., object],
+) -> EventExporterCommandScope:
+    """A native exporter scope delivering every stream to one command-output sink."""
+
+    dispatcher: EventExporterDispatcher = EventExporterDispatcher(exporters=())
+    dispatcher.bind_command_output_sinks(
+        (
+            BoundCommandOutputSink(
+                name="recorder",
+                function=function,
+                provider_arguments={},
+                streams=frozenset(CommandOutputStream),
+            ),
+        )
+    )
+    return EventExporterCommandScope(dispatcher=dispatcher)
