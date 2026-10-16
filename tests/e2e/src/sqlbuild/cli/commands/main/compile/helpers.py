@@ -4806,7 +4806,6 @@ def full_macro_call_runs(
 
 
 _ANALYSIS_SEAMS: tuple[tuple[ModuleType, str], ...] = (
-    (native_module, "assemble_native_project_resources"),
     (native_module, "infer_native_expression_source_shapes"),
     (native_module, "analyze_native_model_sql"),
     (native_module, "assemble_native_sql_tests"),
