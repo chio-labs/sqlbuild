@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use pyo3::exceptions::PyKeyboardInterrupt;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
-use pyo3::types::{PyBytes, PyBytesMethods, PyDict, PyDictMethods, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use serde_json::{Map, Value, json};
 use sqlbuild_rules::custom_host_pool::constants::{
     CGROUP_ROOT, HOST_TIMEOUT_MILLIS, MIN_INVOCATIONS_PER_HOST, PROC_CGROUP,
@@ -375,20 +375,33 @@ fn host_outcome(spec: &str) -> HostOutcome {
 /// Publish the pickled project and config atomically; hosts started earlier wait for it.
 fn write_inputs(py: Python<'_>, path: &Path, request: &HostRequest<'_, '_>) -> PyResult<()> {
     let payload: Bound<'_, PyAny> = host_payload_project(request.project)?;
-    let pickled: Bound<'_, PyAny> = imported(py, "pickle", "dumps")?
-        .call1((PyTuple::new(py, [payload, request.config.clone()])?,))?;
-    let bytes: &[u8] = pickled.cast::<PyBytes>()?.as_bytes();
     let parent: &Path = path.parent().unwrap_or(path);
     let partial: PathBuf = parent.join(format!(
         "writing-{}-{}.pickle",
         std::process::id(),
         INPUT_COUNTER.fetch_add(1, Ordering::Relaxed)
     ));
-    if let Err(error) = std::fs::write(&partial, bytes) {
+    let written: PyResult<()> = pickle_into(
+        &partial,
+        &PyTuple::new(py, [payload, request.config.clone()])?,
+    );
+    if let Err(error) = written {
         remove_file(&partial);
-        return Err(error.into());
+        return Err(error);
     }
     std::fs::rename(&partial, path)?;
+    Ok(())
+}
+
+/// Pickle `value` straight into a new file at `path`, never holding the whole pickle in memory.
+fn pickle_into(path: &Path, value: &Bound<'_, PyTuple>) -> PyResult<()> {
+    let py: Python<'_> = value.py();
+    let handle: Bound<'_, PyAny> = imported(py, "builtins", "open")?.call1((text(path), "wb"))?;
+    let dumped: PyResult<Bound<'_, PyAny>> =
+        imported(py, "pickle", "dump")?.call1((value, &handle));
+    let closed: PyResult<Bound<'_, PyAny>> = handle.call_method0("close");
+    dumped?;
+    closed?;
     Ok(())
 }
 
