@@ -24,6 +24,8 @@ use crate::bindings::_helpers::clone::clone_execution::{
 use crate::bindings::_helpers::clone::clone_pipeline::{ClonePipeline, prepared_clone_pipeline};
 use crate::bindings::_helpers::clone::clone_progress::{clone_item_text, write_line};
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
@@ -132,9 +134,9 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
     let stream: Bound<'py, PyAny> = py.import("sys")?.getattr("stdout")?;
     let progress: Bound<'py, PyAny> = progress_reporter(&stream, style)?;
     progress.call_method1("start", ("Discovering project...",))?;
-    let discovered: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
-        &[("project_dir", project_dir.clone())],
+    let discovered: Bound<'py, PyAny> = discover_project_inputs(
+        py,
+        Some(keywords(py, &[("project_dir", project_dir.clone())])?),
     )?;
     progress.call_method1("complete", ("Discovered project.",))?;
     call_with(

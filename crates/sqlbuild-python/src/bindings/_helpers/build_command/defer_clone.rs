@@ -13,12 +13,13 @@ use sqlbuild_core::build_command::errors::BuildCommandError;
 
 use crate::bindings::_helpers::build_command::invocation::BuildContext;
 use crate::bindings::_helpers::build_command::policies::build_command_error;
+use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const VIEW_MATERIALIZATION: &str = "view";
 const RECREATED_TYPES: [&str; 2] = ["udf", "table_fn"];
@@ -41,9 +42,7 @@ fn user_error(py: Python<'_>, message: String, code: &str) -> PyErr {
 }
 
 fn resource_type(key: &Bound<'_, PyAny>) -> PyResult<String> {
-    native_field(key, "resource_type")?
-        .getattr("value")?
-        .extract()
+    native_field(&key, "resource_type")?.getattr("value")?.extract()
 }
 
 /// Functions and view models are recreated over cloned boundaries instead of cloned.
@@ -53,7 +52,7 @@ fn recreated_over_clones(scope: &Bound<'_, PyAny>, key: &Bound<'_, PyAny>) -> Py
     }
     let model: Bound<'_, PyAny> = scope
         .getattr("models_by_name")?
-        .call_method1("get", (native_field(key, "name")?,))?;
+        .call_method1("get", (native_field(&key, "name")?,))?;
     if model.is_none() {
         return Ok(false);
     }
@@ -109,8 +108,8 @@ fn traversed_names<'py>(
     let keys: Bound<'py, PyAny> = call_with(
         &registry::native(py, function)?,
         &[
-            ("selected", native_field(scope, "selected_keys")?),
-            ("upstream", native_field(scope, "upstream_deps")?),
+            ("selected", native_field(&scope, "selected_keys")?),
+            ("upstream", native_field(&scope, "upstream_deps")?),
             ("is_clonable", is_clonable.clone()),
             ("is_view", is_view.clone()),
         ],
@@ -125,9 +124,9 @@ fn traversed_names<'py>(
 
 /// Selected models except those explicitly disabled.
 fn selected_executable_model_count(scope: &Bound<'_, PyAny>) -> PyResult<usize> {
-    let models: Bound<'_, PyAny> = native_field(scope, "models_by_name")?;
+    let models: Bound<'_, PyAny> = native_field(&scope, "models_by_name")?;
     let mut count: usize = 0;
-    for key in native_field(scope, "selected_keys")?.try_iter()? {
+    for key in native_field(&scope, "selected_keys")?.try_iter()? {
         let key: Bound<'_, PyAny> = key?;
         if resource_type(&key)? != MODEL_TYPE {
             continue;
@@ -219,9 +218,8 @@ fn clone_input<'py>(
     on_item: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = context.py();
-    let project: Bound<'py, PyAny> = native_field(pipeline, "destination_project")?;
-    let destination_models: Bound<'py, PyAny> =
-        native_field(pipeline, "destination_model_entries")?;
+    let project: Bound<'py, PyAny> = native_field(&pipeline, "destination_project")?;
+    let destination_models: Bound<'py, PyAny> = native_field(&pipeline, "destination_model_entries")?;
     let target: Bound<'py, PyAny> = native(
         py,
         NativeAttr::ResolveTargetConfig,
@@ -230,10 +228,7 @@ fn clone_input<'py>(
                 "project_config",
                 native_field(&prephase.discovered, "project_config")?,
             ),
-            (
-                "local_config",
-                native_field(&prephase.discovered, "local_config")?,
-            ),
+            ("local_config", native_field(&prephase.discovered, "local_config")?),
             ("target_name", prephase.destination.clone()),
         ],
     )?;
@@ -245,10 +240,7 @@ fn clone_input<'py>(
         &host::entry(py, ExecutorHost::BuildDestinationRetentionRequests)?,
         &[
             ("project", project.clone()),
-            (
-                "adapter_name",
-                native_field(&prephase.adapter, "adapter_name")?,
-            ),
+            ("adapter_name", native_field(&prephase.adapter, "adapter_name")?),
             (
                 "selected_model_names",
                 PyFrozenSet::new(py, &selected)?.into_any(),
@@ -265,10 +257,10 @@ fn clone_input<'py>(
     let sources: Bound<'py, PyAny> = call_with(
         &host::entry(py, ExecutorHost::CloneSourceEntries)?,
         &[
-            ("origin", native_field(pipeline, "origin_source_entries")?),
+            ("origin", native_field(&pipeline, "origin_source_entries")?),
             (
                 "destination",
-                native_field(pipeline, "destination_source_entries")?,
+                native_field(&pipeline, "destination_source_entries")?,
             ),
         ],
     )?;
@@ -278,24 +270,24 @@ fn clone_input<'py>(
             ("source_entries", sources),
             (
                 "origin_model_entries",
-                native_field(pipeline, "origin_model_entries")?,
+                native_field(&pipeline, "origin_model_entries")?,
             ),
             ("destination_model_entries", destination_models),
             (
                 "origin_seed_entries",
-                native_field(pipeline, "origin_seed_entries")?,
+                native_field(&pipeline, "origin_seed_entries")?,
             ),
             (
                 "destination_seed_entries",
-                native_field(pipeline, "destination_seed_entries")?,
+                native_field(&pipeline, "destination_seed_entries")?,
             ),
             (
                 "destination_function_entries",
-                native_field(pipeline, "destination_function_entries")?,
+                native_field(&pipeline, "destination_function_entries")?,
             ),
             (
                 "execution_order",
-                native_field(pipeline, "clone_plan")?.getattr("execution_order")?,
+                native_field(&pipeline, "clone_plan")?.getattr("execution_order")?,
             ),
             ("adapter", prephase.adapter.clone()),
             ("destination_connection", connection.clone()),
@@ -386,12 +378,9 @@ fn executed_clone<'py>(
 fn failed_items(result: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     let py: Python<'_> = result.py();
     let status: Bound<'_, PyAny> = host::entry(py, ExecutorHost::CloneStatus)?;
-    let (failed, warning) = (
-        native_field(&status, "FAILED")?,
-        native_field(&status, "WARNING")?,
-    );
+    let (failed, warning) = (native_field(&status, "FAILED")?, native_field(&status, "WARNING")?);
     let mut items: Vec<String> = Vec::new();
-    for item in native_field(result, "item_results")?.try_iter()? {
+    for item in native_field(&result, "item_results")?.try_iter()? {
         let item: Bound<'_, PyAny> = item?;
         let item_status: Bound<'_, PyAny> = native_field(&item, "status")?;
         if !(item_status.eq(&failed)? || item_status.eq(&warning)?) {
@@ -438,10 +427,7 @@ fn clone_boundaries<'py>(
                 call_with(
                     &registry::class(py, RecordId::ClonePipelineConnection)?,
                     &[
-                        (
-                            "config",
-                            native_field(&context.invocation, "connection_config")?,
-                        ),
+                        ("config", native_field(&context.invocation, "connection_config")?),
                         ("handle", connection.clone()),
                     ],
                 )?,
@@ -451,13 +437,10 @@ fn clone_boundaries<'py>(
                 call_with(
                     &registry::class(py, RecordId::ClonePipelineOptions)?,
                     &[
-                        (
-                            "no_sql_validation",
-                            native_field(request, "no_sql_validation")?,
-                        ),
-                        ("no_cache", native_field(request, "no_cache")?),
+                        ("no_sql_validation", native_field(&request, "no_sql_validation")?),
+                        ("no_cache", native_field(&request, "no_cache")?),
                         ("select", PyTuple::new(py, &prephase.select)?.into_any()),
-                        ("cli_vars", native_field(request, "cli_vars")?),
+                        ("cli_vars", native_field(&request, "cli_vars")?),
                     ],
                 )?,
             ),
@@ -567,13 +550,13 @@ pub(crate) fn run_defer_clone_boundary_prephase(
 ) -> PyResult<()> {
     let py: Python<'_> = context.py();
     let (request, invocation) = (&context.request, &context.invocation);
-    let discovered: Bound<'_, PyAny> = native_field(invocation, "discovered_inputs")?;
+    let discovered: Bound<'_, PyAny> = native_field(&invocation, "discovered_inputs")?;
     let split: Bound<'_, PyAny> = native(
         py,
         NativeAttr::SplitUnitTestSelectors,
         &[
-            ("select", native_field(request, "select")?),
-            ("exclude", native_field(request, "exclude")?),
+            ("select", native_field(&request, "select")?),
+            ("exclude", native_field(&request, "exclude")?),
             ("discovered_inputs", discovered.clone()),
         ],
     )?;
@@ -584,32 +567,31 @@ pub(crate) fn run_defer_clone_boundary_prephase(
     {
         return Ok(());
     }
-    let adapter: Bound<'_, PyAny> = native_field(invocation, "adapter")?;
-    let project_dir: Bound<'_, PyAny> = native_field(invocation, "effective_project_dir")?;
-    let project: Bound<'_, PyAny> = native(
+    let adapter: Bound<'_, PyAny> = native_field(&invocation, "adapter")?;
+    let project_dir: Bound<'_, PyAny> = native_field(&invocation, "effective_project_dir")?;
+    let project: Bound<'_, PyAny> = build_compiled_project(
         py,
-        NativeAttr::BuildCompiledProject,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("adapter", adapter.clone()),
-            ("selected_target", native_field(request, "selected_target")?),
-            (
-                "no_sql_validation",
-                native_field(request, "no_sql_validation")?,
-            ),
-            (
-                "analysis_selection",
-                call_with(
-                    &registry::class(py, RecordId::CompileAnalysisSelection)?,
-                    &[("no_cache", native_field(request, "no_cache")?)],
-                )?,
-            ),
-            ("cli_vars", native_field(request, "cli_vars")?),
-            (
-                "external_sql_reference_resolver",
-                external_resolver(&project_dir, &discovered)?,
-            ),
-        ],
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", discovered.clone()),
+                ("adapter", adapter.clone()),
+                ("selected_target", native_field(&request, "selected_target")?),
+                ("no_sql_validation", native_field(&request, "no_sql_validation")?),
+                (
+                    "analysis_selection",
+                    call_with(
+                        &registry::class(py, RecordId::CompileAnalysisSelection)?,
+                        &[("no_cache", native_field(&request, "no_cache")?)],
+                    )?,
+                ),
+                ("cli_vars", native_field(&request, "cli_vars")?),
+                (
+                    "external_sql_reference_resolver",
+                    external_resolver(&project_dir, &discovered)?,
+                ),
+            ],
+        )?),
     )?;
     let scope: Bound<'_, PyAny> = native(
         py,
@@ -620,7 +602,7 @@ pub(crate) fn run_defer_clone_boundary_prephase(
             ("exclude", native_field(&split, "exclude")?),
             (
                 "auto_load_sources",
-                native_field(invocation, "should_load_sources")?,
+                native_field(&invocation, "should_load_sources")?,
             ),
         ],
     )?;
@@ -631,11 +613,8 @@ pub(crate) fn run_defer_clone_boundary_prephase(
         NativeAttr::EnforceModelExecutionLimit,
         &[
             ("model_count", model_count.into_pyobject(py)?.into_any()),
-            (
-                "target_name",
-                native_field(invocation, "effective_target_name")?,
-            ),
-            ("limits", native_field(invocation, "execution_limits")?),
+            ("target_name", native_field(&invocation, "effective_target_name")?),
+            ("limits", native_field(&invocation, "execution_limits")?),
             (
                 "refusal_note",
                 EXECUTION_LIMIT_BUILD_NOTE.into_bound_py_any(py)?,

@@ -163,7 +163,7 @@ fn model_resource_type(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 /// Every model's column contract diagnostics, in model order.
 #[pyfunction]
 #[pyo3(signature = (*, project, dialect = None))]
-fn evaluate_model_contracts<'py>(
+pub(crate) fn evaluate_model_contracts<'py>(
     py: Python<'py>,
     project: &Bound<'py, PyAny>,
     dialect: Option<&Bound<'py, PyAny>>,

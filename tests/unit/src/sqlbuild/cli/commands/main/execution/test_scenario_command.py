@@ -59,7 +59,10 @@ def test_given_scenario_compile_when_running_then_presentation_has_one_owner(
         return pipeline_result
 
     configure_native_scenario_command(
-        monkeypatch=monkeypatch, stream=stream, compile_project=compile_project
+        monkeypatch=monkeypatch,
+        stream=stream,
+        compile_project=compile_project,
+        project_dir=tmp_path,
     )
     events: list[LifecycleEvent] = []
     dispatcher: EventDispatcher = EventDispatcher()
@@ -119,7 +122,10 @@ def test_given_scenario_compile_failure_when_running_then_lifecycle_fails_and_pr
         raise RuntimeError("compile failed")
 
     configure_native_scenario_command(
-        monkeypatch=monkeypatch, stream=stream, compile_project=fail_compile
+        monkeypatch=monkeypatch,
+        stream=stream,
+        compile_project=fail_compile,
+        project_dir=tmp_path,
     )
     events: list[LifecycleEvent] = []
     dispatcher: EventDispatcher = EventDispatcher()

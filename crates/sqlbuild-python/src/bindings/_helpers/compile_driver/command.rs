@@ -10,6 +10,7 @@ use crate::bindings::_helpers::compile_command::models::CompileReuseAttempt;
 use crate::bindings::_helpers::compile_command::report::{
     format_compile_json, format_compile_text, json_semantic_notice,
 };
+use crate::bindings::_helpers::compile_command::reuse_recording::write_reusable_compile;
 use crate::bindings::_helpers::compile_command::reuse_recording::{
     CompileArtifactWrites, RecordedCompileOutput, compile_reuse_timings, new_artifact_recorder,
 };
@@ -17,6 +18,7 @@ use crate::bindings::_helpers::compile_driver::analysis::analyze;
 use crate::bindings::_helpers::compile_driver::compile_timings::{
     CompileTimingsHandle, collect_compile_timings, timing_milliseconds,
 };
+use crate::bindings::_helpers::compile_driver::input_reads::record_compile_input_reads;
 use crate::bindings::_helpers::compile_driver::phases::{
     elapsed_ms, manifest_payload, monotonic, resolved_dag_path, sql_test_planning_diagnostics,
     target_dir, write_artifacts, write_dag_artifact,
@@ -151,7 +153,7 @@ fn recorded_compile<'py>(
     let compiled: PyResult<(CommandOutcome<'py>, Bound<'py, PyAny>, Bound<'py, PyAny>)> =
         collect_compile_timings(|detailed_timings| {
             within(
-                &registry::native(py, NativeAttr::RecordCompileInputReads)?.call0()?,
+                &Bound::new(py, record_compile_input_reads())?.into_any(),
                 |input_reads| {
                     let artifact_writes: Py<CompileArtifactWrites> = new_artifact_recorder(py)?;
                     let manager: Bound<'py, PyAny> = call_with(
@@ -192,29 +194,32 @@ fn recorded_compile<'py>(
         });
     close_status(status)?;
     let (outcome, input_reads, artifact_writes) = compiled?;
-    let stored: PyResult<Bound<'py, PyAny>> = call_with(
-        &registry::native(py, NativeAttr::WriteReusableCompile)?,
-        &[
-            ("attempt", attempt.clone()),
-            ("output", output.clone()),
-            ("exit_code", outcome.exit_code.into_pyobject(py)?.into_any()),
-            ("input_reads", input_reads),
-            ("artifact_writes", artifact_writes),
-            (
-                "compile_cache_enabled",
-                PyBool::new(py, outcome.compile_cache_enabled)
-                    .to_owned()
-                    .into_any(),
-            ),
-            (
-                "artifacts_written",
-                PyBool::new(py, outcome.artifacts_written)
-                    .to_owned()
-                    .into_any(),
-            ),
-            ("dag_artifact_path", outcome.dag_artifact_path),
-            ("json_output", request.getattr("json_output")?),
-        ],
+    let stored: PyResult<()> = write_reusable_compile(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("attempt", attempt.clone()),
+                ("output", output.clone()),
+                ("exit_code", outcome.exit_code.into_pyobject(py)?.into_any()),
+                ("input_reads", input_reads),
+                ("artifact_writes", artifact_writes),
+                (
+                    "compile_cache_enabled",
+                    PyBool::new(py, outcome.compile_cache_enabled)
+                        .to_owned()
+                        .into_any(),
+                ),
+                (
+                    "artifacts_written",
+                    PyBool::new(py, outcome.artifacts_written)
+                        .to_owned()
+                        .into_any(),
+                ),
+                ("dag_artifact_path", outcome.dag_artifact_path),
+                ("json_output", request.getattr("json_output")?),
+            ],
+        )?),
     );
     let printed: PyResult<Bound<'py, PyAny>> = output.call_method0("print_stdout");
     printed?;

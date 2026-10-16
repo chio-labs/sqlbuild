@@ -293,7 +293,7 @@ fn frontier_compile_inputs<'py>(
 /// Build a static graph with an explicit deep-analysis selection.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn build_project_graph_with_analysis_selection<'py>(
+pub(crate) fn build_project_graph_with_analysis_selection<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

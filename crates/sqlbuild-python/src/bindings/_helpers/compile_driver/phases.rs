@@ -9,10 +9,13 @@ use crate::bindings::_helpers::compile_command::reuse_recording::ArtifactRecorde
 use crate::bindings::_helpers::compile_command::target_writer::{
     Prepared, planning_diagnostics, write_static_target,
 };
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{Status, call_with, imported};
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::dag_artifact::artifact::build_dag_json;
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::manifest::builder::build_manifest;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
 const EMPTY_DAG_PATH: &str = "";
@@ -55,15 +58,10 @@ pub(crate) fn manifest_payload<'py>(
     let discovered: Bound<'py, PyAny> = analysis.getattr("discovered_inputs")?;
     let project_config: Bound<'py, PyAny> = discovered.getattr("project_config")?;
     let graph: Bound<'py, PyAny> = analysis.getattr("graph")?;
-    let adapter_type: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-        &[
-            ("project_config", project_config.clone()),
-            ("local_config", discovered.getattr("local_config")?),
-        ],
-    )?;
-    let payload: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildManifest)?,
+    let adapter_type: Bound<'py, PyAny> =
+        resolve_effective_adapter_name(&project_config, &discovered.getattr("local_config")?)?;
+    let payload: Bound<'py, PyAny> = build_manifest(Some(&keywords(
+        py,
         &[
             ("project", graph.getattr("project")?),
             ("plan_output", py.None().into_bound(py)),
@@ -71,7 +69,9 @@ pub(crate) fn manifest_payload<'py>(
             ("adapter_type", adapter_type),
             ("graph", graph.getattr("native")?),
         ],
-    )?;
+    )?))?
+    .into_bound(py)
+    .into_any();
     status.complete(&format!(
         "Built manifest. ({}s)",
         seconds_since(py, started)?

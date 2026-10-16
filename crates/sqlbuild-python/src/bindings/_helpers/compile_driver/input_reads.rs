@@ -78,7 +78,7 @@ pub(crate) fn record_settings_class_read(settings_class: &Bound<'_, PyAny>) -> P
 
 /// Records environment variables and run-identity reads while entered.
 #[pyclass(frozen, module = "sqlbuild._native")]
-struct CompileInputRecording {
+pub(crate) struct CompileInputRecording {
     recorder: Mutex<Option<Py<CompileInputReads>>>,
 }
 
@@ -111,7 +111,7 @@ impl CompileInputRecording {
 
 /// Record template input reads from every thread until the returned block exits.
 #[pyfunction]
-fn record_compile_input_reads() -> CompileInputRecording {
+pub(crate) fn record_compile_input_reads() -> CompileInputRecording {
     CompileInputRecording {
         recorder: Mutex::new(None),
     }

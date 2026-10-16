@@ -9,6 +9,8 @@ use sqlbuild_core::dbt_cli::main::dbt_debug_args::dbt_debug_args;
 use std::time::Instant;
 
 use crate::bindings::_helpers::build_command::support::{boolean, none, text};
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::dbt_interop::pipeline_prologue::progress;
 use crate::bindings::_helpers::dbt_interop::runtime_config::config_overrides;
@@ -322,10 +324,12 @@ fn plan_dbt_interop_from_project<'py>(
 #[pyo3(signature = (**options))]
 fn debug_dbt_from_project(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<i64> {
     let args = KeywordArguments::read(py, "debug_dbt_from_project", options, DEBUG_OPTIONS)?;
-    let discovered = native(
+    let discovered = discover_project_inputs(
         py,
-        NativeAttr::DiscoverProjectInputs,
-        &[("project_dir", args.value("project_dir")?)],
+        Some(keywords(
+            py,
+            &[("project_dir", args.value("project_dir")?)],
+        )?),
     )?;
     let dbt_args: Vec<String> = args
         .value("args")?

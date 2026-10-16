@@ -35,7 +35,7 @@ const GENERIC_DIALECT: &str = "generic";
 
 /// The project's column lineage graph in `mode`, or `None` without SQL analysis.
 #[pyfunction]
-fn build_project_column_lineage<'py>(
+pub(crate) fn build_project_column_lineage<'py>(
     project: &Bound<'py, PyAny>,
     dialect: Option<&Bound<'py, PyAny>>,
     mode: &Bound<'py, PyAny>,

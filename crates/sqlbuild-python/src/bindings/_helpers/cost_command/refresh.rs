@@ -10,22 +10,22 @@ use sqlbuild_core::cost_command::main::accepts_cost_refresh::accepts_cost_refres
 use sqlbuild_core::cost_command::models::CostCoverage;
 
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::cost_telemetry::values::cost_aware;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 fn coverage(summary: &Bound<'_, PyAny>) -> PyResult<CostCoverage> {
     Ok(CostCoverage {
-        status: native_field(summary, "status")?
-            .getattr("value")?
-            .extract()?,
-        expected_statement_count: native_field(summary, "expected_statement_count")?.extract()?,
-        observed_statement_count: native_field(summary, "observed_statement_count")?.extract()?,
-        query_count: native_field(summary, "query_count")?.extract()?,
+        status: native_field(&summary, "status")?.getattr("value")?.extract()?,
+        expected_statement_count: native_field(&summary, "expected_statement_count")?.extract()?,
+        observed_statement_count: native_field(&summary, "observed_statement_count")?.extract()?,
+        query_count: native_field(&summary, "query_count")?.extract()?,
         limitations: summary
             .getattr("limitations")?
             .try_iter()?
@@ -72,7 +72,7 @@ fn target_database<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = target_config.py();
     if !target_config.is_none() {
-        let database: Bound<'py, PyAny> = native_field(target_config, "database")?;
+        let database: Bound<'py, PyAny> = native_field(&target_config, "database")?;
         if !database.is_none() {
             return Ok(database);
         }
@@ -85,11 +85,11 @@ fn target_database<'py>(
 }
 
 fn refresh(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<()> {
-    let selector: Bound<'_, PyAny> = native_field(request, "selector")?;
+    let selector: Bound<'_, PyAny> = native_field(&request, "selector")?;
     if selector.extract::<String>()? == HISTORY_SELECTOR {
         return Ok(());
     }
-    let requested: Bound<'_, PyAny> = native_field(request, "project_dir")?;
+    let requested: Bound<'_, PyAny> = native_field(&request, "project_dir")?;
     let project_dir: Bound<'_, PyAny> = if requested.is_none() {
         imported(py, "pathlib", "Path")?.call_method0("cwd")?
     } else {
@@ -100,16 +100,14 @@ fn refresh(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<()> {
         return Ok(());
     }
     let current: Bound<'_, PyAny> = native_field(&record, "cost")?;
-    let status: String = native_field(&current, "status")?
-        .getattr("value")?
-        .extract()?;
+    let status: String = native_field(&current, "status")?.getattr("value")?.extract()?;
     if !REFRESHABLE_STATUSES.contains(&status.as_str()) {
         return Ok(());
     }
     let target_name: Bound<'_, PyAny> = native_field(&record, "target_name")?;
-    let discovered: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
-        &[("project_dir", project_dir.clone())],
+    let discovered: Bound<'_, PyAny> = discover_project_inputs(
+        py,
+        Some(keywords(py, &[("project_dir", project_dir.clone())])?),
     )?;
     let target_config: Bound<'_, PyAny> = call_with(
         &registry::native(py, NativeAttr::BuildEffectiveTargetConfig)?,
@@ -121,10 +119,7 @@ fn refresh(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<()> {
     let adapter_name: Bound<'_, PyAny> = call_with(
         &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
-            (
-                "project_config",
-                native_field(&discovered, "project_config")?,
-            ),
+            ("project_config", native_field(&discovered, "project_config")?),
             ("local_config", native_field(&discovered, "local_config")?),
         ],
     )?;

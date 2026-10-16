@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 import sqlbuild._native as native_module
 from sqlbuild._native import (
-    DiscoveredProjectInputs,
     LintBody,
     LintConfig,
     LintRunResult,
@@ -44,30 +42,16 @@ HEADER: str = 'MODEL (\n  materialized table,\n  description "ok"\n);\n'
 def test_given_lint_context_when_building_then_project_is_discovered_once(
     test_case: LintBehaviorTestCase,
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _ = (tmp_path / "sqlbuild_project.toml").write_text(PROJECT_TOML, encoding="utf-8")
-    discovery_count: list[int] = [0]
-    discover: Callable[..., DiscoveredProjectInputs] = native_module.discover_project_inputs
-
-    def counted_discovery(
-        *,
-        project_dir: Path,
-        sql_analysis_enabled_override: bool | None = None,
-        extract_output_column_locations: bool = True,
-    ) -> DiscoveredProjectInputs:
-        discovery_count[0] += 1
-        return discover(
-            project_dir=project_dir,
-            sql_analysis_enabled_override=sql_analysis_enabled_override,
-            extract_output_column_locations=extract_output_column_locations,
-        )
-
-    monkeypatch.setattr(native_module, "discover_project_inputs", counted_discovery)
+    _ = native_module.compile_stage_work_info(reset=True)
 
     _ = build_lint_expansion_context(project_dir=tmp_path)
 
-    assert discovery_count[0] == test_case.expected_value
+    assert (
+        native_module.compile_stage_work_info()["discover_project_inputs"]
+        == test_case.expected_value
+    )
 
 
 @pytest.mark.parametrize(

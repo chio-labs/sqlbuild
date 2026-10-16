@@ -30,6 +30,11 @@ fn current_variable(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     context_variable(py, &CURRENT_TRACKER, TRACKER_VARIABLE)
 }
 
+/// The active build timing tracker, or None.
+pub(crate) fn current_tracker(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
+    current_variable(py)?.call_method0("get")
+}
+
 /// `monotonic`, or `time.monotonic` when none is given.
 fn clock<'py>(
     py: Python<'py>,

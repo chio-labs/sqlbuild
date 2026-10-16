@@ -7,16 +7,27 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString, PyTuple, PyTupleMetho
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::project::build_project_graph_with_analysis_selection;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     Status, call_with, imported, keywords, within,
 };
+use crate::bindings::_helpers::compile_driver::stage_work::{
+    COLUMN_LINEAGE, MODEL_CONTRACTS, count_stage,
+};
+use crate::bindings::_helpers::contracts::contract_diagnostics::evaluate_model_contracts;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
+use crate::bindings::_helpers::lineage::project_lineage::build_project_column_lineage;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::planner_selection::selectors::select_project_graph;
+use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::constants::RULE_FIX_AVAILABLE_NOTE;
 use crate::bindings::_helpers::rules::early_sql_lint::EarlySqlLint;
 use crate::bindings::_helpers::rules::results::rules_progress;
+use crate::bindings::_helpers::rules::rule_dispatch::evaluate_rules;
 use crate::bindings::_helpers::rules::rules_config::load_rules_config;
 
 const RICH_LINEAGE: &str = "rich";
@@ -46,11 +57,16 @@ fn compile_lineage<'py>(
     } else {
         return Ok(py.None().into_bound(py));
     };
-    registry::native(py, NativeAttr::BuildProjectColumnLineage)?.call1((
-        graph.getattr("project")?,
-        dialect,
-        column_lineage_mode(py, member)?,
-        py.None(),
+    count_stage(py, COLUMN_LINEAGE, 1)?;
+    Ok(build_project_column_lineage(
+        &graph.getattr("project")?,
+        Some(dialect),
+        &column_lineage_mode(py, member)?,
+        None,
+    )?
+    .map_or_else(
+        || py.None().into_bound(py),
+        |lineage| lineage.into_bound(py),
     ))
 }
 
@@ -186,14 +202,8 @@ fn analyzed<'py>(
     }
     let (lineage, lineage_ms): (Bound<'py, PyAny>, u64) = driver.lineage(&graph, &dialect)?;
     let contracts: ContractPhase<'py> = driver.contracts(&project, &dialect)?;
-    let selected_keys: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::SelectProjectGraph)?,
-        &[
-            ("graph", graph.clone()),
-            ("select", driver.select.clone()),
-            ("exclude", driver.exclude.clone()),
-        ],
-    )?;
+    let selected_keys: Bound<'py, PyAny> =
+        select_project_graph(&graph, &driver.select, &driver.exclude)?.into_any();
     let core_diagnostics: Bound<'py, PyTuple> = PyTuple::new(
         py,
         project
@@ -283,22 +293,18 @@ impl<'py> Driver<'_, 'py> {
         } else {
             py.None().into_bound(py)
         };
-        let discovered: Bound<'py, PyAny> = call_with(
-            &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
-            &[
-                ("project_dir", self.options.project_dir.clone()),
-                ("extract_output_column_locations", false_value),
-                ("sql_analysis_enabled_override", override_analysis),
-            ],
+        let discovered: Bound<'py, PyAny> = discover_project_inputs(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("project_dir", self.options.project_dir.clone()),
+                    ("extract_output_column_locations", false_value),
+                    ("sql_analysis_enabled_override", override_analysis),
+                ],
+            )?),
         )?;
-        call_with(
-            &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
-            &[
-                ("select", self.select.clone()),
-                ("exclude", self.exclude.clone()),
-                ("discovered_inputs", discovered.clone()),
-            ],
-        )?;
+        reject_unit_test_selectors(&self.select, &self.exclude, &discovered)?;
         let discover_ms: u64 = elapsed_ms(started);
         self.status
             .complete(&format!("Discovered project. ({}s)", seconds(discover_ms)))?;
@@ -307,12 +313,9 @@ impl<'py> Driver<'_, 'py> {
 
     /// The adapter the project and local configuration select.
     fn adapter(&self, discovered: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-        let adapter_name: Bound<'py, PyAny> = call_with(
-            &registry::native(self.py, NativeAttr::ResolveEffectiveAdapterName)?,
-            &[
-                ("project_config", discovered.getattr("project_config")?),
-                ("local_config", discovered.getattr("local_config")?),
-            ],
+        let adapter_name: Bound<'py, PyAny> = resolve_effective_adapter_name(
+            &discovered.getattr("project_config")?,
+            &discovered.getattr("local_config")?,
         )?;
         resolve_cli_adapter(&adapter_name, &self.options.project_dir)
     }
@@ -354,21 +357,24 @@ impl<'py> Driver<'_, 'py> {
             },
         )?;
         let graph: Bound<'py, PyAny> = within(&lifecycle, |_| {
-            call_with(
-                &registry::native(py, NativeAttr::BuildProjectGraphWithAnalysisSelection)?,
-                &[
-                    ("discovered_inputs", discovered.clone()),
-                    ("adapter", adapter.clone()),
-                    ("selected_target", options.selected_target.clone()),
-                    ("no_sql_validation", options.no_sql_validation.clone()),
-                    (
-                        "skip_column_inference",
-                        options.profile_flags.getattr("skip_column_inference")?,
-                    ),
-                    ("column_lineage_mode", lineage_mode),
-                    ("cli_vars", options.cli_vars.clone()),
-                    ("analysis_selection", analysis_selection),
-                ],
+            build_project_graph_with_analysis_selection(
+                py,
+                Some(keywords(
+                    py,
+                    &[
+                        ("discovered_inputs", discovered.clone()),
+                        ("adapter", adapter.clone()),
+                        ("selected_target", options.selected_target.clone()),
+                        ("no_sql_validation", options.no_sql_validation.clone()),
+                        (
+                            "skip_column_inference",
+                            options.profile_flags.getattr("skip_column_inference")?,
+                        ),
+                        ("column_lineage_mode", lineage_mode),
+                        ("cli_vars", options.cli_vars.clone()),
+                        ("analysis_selection", analysis_selection),
+                    ],
+                )?),
             )
         })?;
         let graph_ms: u64 = elapsed_ms(started);
@@ -417,10 +423,8 @@ impl<'py> Driver<'_, 'py> {
             )?
         } else {
             self.status.start("Validating model contracts...")?;
-            call_with(
-                &registry::native(py, NativeAttr::EvaluateModelContracts)?,
-                &[("project", project.clone()), ("dialect", dialect.clone())],
-            )?
+            count_stage(py, MODEL_CONTRACTS, 1)?;
+            evaluate_model_contracts(py, project, Some(dialect))?
         };
         let wall_ms: u64 = elapsed_ms(started);
         let cpu_ended: f64 = thread_time.call0()?.extract()?;
@@ -476,18 +480,21 @@ impl<'py> Driver<'_, 'py> {
         } else {
             py.None().into_bound(py)
         };
-        let result: Bound<'py, PyAny> = call_with(
-            &registry::native(py, NativeAttr::EvaluateRules)?,
-            &[
-                ("graph", graph.clone()),
-                ("discovered_inputs", discovered.clone()),
-                ("config", rules_config),
-                ("project_dir", project_dir.clone()),
-                ("dialect", lint_dialect.clone()),
-                ("selected_keys", selected),
-                ("early_lint", self.early_lint.clone().into_any()),
-                ("no_sql_analysis", options.no_sql_validation.clone()),
-            ],
+        let result: Bound<'py, PyAny> = evaluate_rules(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("graph", graph.clone()),
+                    ("discovered_inputs", discovered.clone()),
+                    ("config", rules_config),
+                    ("project_dir", project_dir.clone()),
+                    ("dialect", lint_dialect.clone()),
+                    ("selected_keys", selected),
+                    ("early_lint", self.early_lint.clone().into_any()),
+                    ("no_sql_analysis", options.no_sql_validation.clone()),
+                ],
+            )?),
         )?;
         let ended: f64 = monotonic.call0()?.extract()?;
         let progress: String = rules_progress(ended - started, &result, false)?;

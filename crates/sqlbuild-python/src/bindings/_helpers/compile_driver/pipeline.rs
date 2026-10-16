@@ -4,6 +4,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PySet, PySetMethods};
 use pyo3::{IntoPyObject, PyErr, pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_connection_config;
 use crate::bindings::_helpers::compile_driver::phases::monotonic;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::{
     compile_analysis_selection, project_graph,
@@ -11,15 +12,21 @@ use crate::bindings::_helpers::compile_driver::pipeline_entries::{
 use crate::bindings::_helpers::compile_driver::plan_result::{
     PlanningInputs, connection_with_hooks, pipeline_result,
 };
+use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
+use crate::bindings::_helpers::compile_driver::selection_phases::{
+    apply_unit_test_selectors, resolve_configured_rule_selection,
+};
+use crate::bindings::_helpers::diagnostics::trackers::current_tracker;
 use crate::bindings::_helpers::frontier::stage_capture::write_plan_capture;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::results::{format_rules_result, rules_progress};
+use crate::bindings::_helpers::rules::rule_dispatch::evaluate_rules;
 use crate::bindings::_helpers::rules::rules_config::load_rules_config;
 
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
@@ -27,7 +34,7 @@ const GENERIC_DIALECT: &str = "generic";
 
 /// The current build's phase timing tracker, when one is recording.
 fn timing_tracker(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    registry::native(py, NativeAttr::BuildPhaseTimingTracker)?.call_method0("current")
+    current_tracker(py)
 }
 
 /// Report `message` through `on_progress` when a callback is set.
@@ -78,13 +85,10 @@ fn compiled_phase<'py>(
     };
     let configured: Bound<'py, PyAny> = options.getattr("connection_config")?;
     let connection_config: Bound<'py, PyAny> = if configured.is_none() {
-        call_with(
-            &registry::native(py, NativeAttr::BuildEffectiveConnectionConfig)?,
-            &[
-                ("discovered_inputs", discovered.clone()),
-                ("selected_target", options.getattr("selected_target")?),
-                ("cli_vars", options.getattr("cli_vars")?),
-            ],
+        build_effective_connection_config(
+            discovered,
+            Some(options.getattr("selected_target")?),
+            Some(options.getattr("cli_vars")?),
         )?
     } else {
         configured
@@ -93,21 +97,24 @@ fn compiled_phase<'py>(
     let started: f64 = monotonic(py)?;
     let compiled: PyResult<Bound<'py, PyAny>> = (|| {
         let selection: Bound<'py, PyAny> = compile_analysis_selection(&options, discovered)?;
-        call_with(
-            &registry::native(py, NativeAttr::BuildCompiledProject)?,
-            &[
-                ("discovered_inputs", discovered.clone()),
-                ("adapter", adapter.clone()),
-                ("selected_target", options.getattr("selected_target")?),
-                ("no_sql_validation", options.getattr("no_sql_validation")?),
-                ("cli_vars", options.getattr("cli_vars")?),
-                (
-                    "external_sql_reference_resolver",
-                    options.getattr("external_sql_reference_resolver")?,
-                ),
-                ("resolved_connection", connection_config.clone()),
-                ("analysis_selection", selection),
-            ],
+        build_compiled_project(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("discovered_inputs", discovered.clone()),
+                    ("adapter", adapter.clone()),
+                    ("selected_target", options.getattr("selected_target")?),
+                    ("no_sql_validation", options.getattr("no_sql_validation")?),
+                    ("cli_vars", options.getattr("cli_vars")?),
+                    (
+                        "external_sql_reference_resolver",
+                        options.getattr("external_sql_reference_resolver")?,
+                    ),
+                    ("resolved_connection", connection_config.clone()),
+                    ("analysis_selection", selection),
+                ],
+            )?),
         )
     })();
     let compile_seconds: f64 = monotonic(py)? - started;
@@ -208,13 +215,8 @@ fn run_compile_pipeline<'py>(
     )?;
     let discovered: Bound<'py, PyAny> = arguments.value("discovered_inputs")?;
     let adapter: Bound<'py, PyAny> = arguments.value("adapter")?;
-    let options: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ApplyUnitTestSelectors)?,
-        &[
-            ("options", arguments.value("options")?),
-            ("discovered_inputs", discovered.clone()),
-        ],
-    )?;
+    let options: Bound<'py, PyAny> =
+        apply_unit_test_selectors(&arguments.value("options")?, &discovered)?;
     let hooks: Bound<'py, PyAny> = arguments.value("hooks")?;
     let hooks: Bound<'py, PyAny> = if hooks.is_none() {
         host::entry(py, ExecutorHost::ConnectionHooks)?.call0()?
@@ -266,25 +268,22 @@ fn run_rules_gate<'py>(
     } else {
         GENERIC_DIALECT.into_pyobject(py)?.into_any()
     };
-    let selected_keys: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveConfiguredRuleSelection)?,
-        &[
-            ("options", options.clone()),
-            ("discovered_inputs", discovered.clone()),
-            ("project", project.clone()),
-        ],
-    )?;
-    let result: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::EvaluateRules)?,
-        &[
-            ("graph", graph.clone()),
-            ("discovered_inputs", discovered.clone()),
-            ("config", config),
-            ("project_dir", project_dir),
-            ("dialect", dialect),
-            ("selected_keys", selected_keys),
-            ("no_sql_analysis", options.getattr("no_sql_validation")?),
-        ],
+    let selected_keys: Bound<'py, PyAny> =
+        resolve_configured_rule_selection(options, discovered, project)?;
+    let result: Bound<'py, PyAny> = evaluate_rules(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("graph", graph.clone()),
+                ("discovered_inputs", discovered.clone()),
+                ("config", config),
+                ("project_dir", project_dir),
+                ("dialect", dialect),
+                ("selected_keys", selected_keys),
+                ("no_sql_analysis", options.getattr("no_sql_validation")?),
+            ],
+        )?),
     )?;
     if !on_progress.is_none() {
         let elapsed: f64 = monotonic(py)? - started;

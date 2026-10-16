@@ -21,6 +21,8 @@ use sqlbuild_core::scenario_command::models::{
 };
 
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
 use crate::bindings::_helpers::discovery::guidance::sql_analysis_guidance;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
@@ -114,9 +116,9 @@ pub(crate) fn discover_project<'py>(
         directory if !directory.is_none() => directory,
         _ => py.import("pathlib")?.getattr("Path")?.call_method0("cwd")?,
     };
-    let discovered: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
-        &[("project_dir", project_dir.clone())],
+    let discovered: Bound<'py, PyAny> = discover_project_inputs(
+        py,
+        Some(keywords(py, &[("project_dir", project_dir.clone())])?),
     )?;
     let selectors: Bound<'py, PyAny> = native_field(request, "selectors")?;
     let exclude: Bound<'py, PyAny> = native_field(request, "exclude")?;

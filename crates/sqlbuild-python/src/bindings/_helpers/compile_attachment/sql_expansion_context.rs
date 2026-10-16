@@ -6,6 +6,8 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods};
 
 use crate::bindings::_helpers::compile_attachment::declaration_scope::rebind_declaration_scope;
 use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_vars;
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_collection_rendering;
@@ -156,15 +158,18 @@ pub(crate) fn sql_expansion_inputs(sources: ExpansionSources<'_>) -> PyResult<Sq
     let value_renderer = sources.value_renderer;
     let discovered = match sources.discovered_inputs {
         Some(discovered) => discovered,
-        None => call_with(
-            &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
-            &[
-                ("project_dir", sources.project_dir.clone()),
-                (
-                    "sql_analysis_enabled_override",
-                    PyBool::new(py, false).to_owned().into_any(),
-                ),
-            ],
+        None => discover_project_inputs(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("project_dir", sources.project_dir.clone()),
+                    (
+                        "sql_analysis_enabled_override",
+                        PyBool::new(py, false).to_owned().into_any(),
+                    ),
+                ],
+            )?),
         )?,
     };
     let project_config: Bound<'_, PyAny> = native_field(&discovered, "project_config")?;

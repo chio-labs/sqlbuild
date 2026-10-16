@@ -40,6 +40,7 @@ use sqlbuild_state::execution_history::models::{
 use sqlbuild_state::execution_history::types::UtcTime;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::execution_history::appends::prepared_batch;
 use crate::bindings::_helpers::execution_history::conversion::{
     checked, event_filter_spec, exact_int, history_error_of_kind, new_namespace, now,
@@ -498,20 +499,17 @@ impl SqliteExecutionHistory {
             let sqlite = py.import(SQLITE_MODULE)?;
             let opened: Bound<'_, PyAny> = native_field(&sqlite, "connect")?.call(
                 (database.as_str(),),
-                Some(
-                    &crate::bindings::_helpers::compile_driver::python_calls::keywords(
-                        py,
-                        &[
-                            (
-                                "timeout",
-                                (busy_timeout_ms as f64 / MILLIS_PER_SECOND)
-                                    .into_bound_py_any(py)?,
-                            ),
-                            ("isolation_level", py.None().into_bound(py)),
-                            ("check_same_thread", false.into_bound_py_any(py)?),
-                        ],
-                    )?,
-                ),
+                Some(&keywords(
+                    py,
+                    &[
+                        (
+                            "timeout",
+                            (busy_timeout_ms as f64 / MILLIS_PER_SECOND).into_bound_py_any(py)?,
+                        ),
+                        ("isolation_level", py.None().into_bound(py)),
+                        ("check_same_thread", false.into_bound_py_any(py)?),
+                    ],
+                )?),
             )?;
             connection = Some(opened.clone());
             slf.setattr("_connection", &opened)?;

@@ -7,6 +7,8 @@ use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 use pyo3::wrap_pyfunction;
 
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
@@ -154,9 +156,9 @@ fn rule_inputs<'py>(
     project_dir: &Bound<'py, PyAny>,
 ) -> PyResult<RuleInputs<'py>> {
     let py: Python<'py> = request.py();
-    let discovered: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
-        &[("project_dir", project_dir.clone())],
+    let discovered: Bound<'py, PyAny> = discover_project_inputs(
+        py,
+        Some(keywords(py, &[("project_dir", project_dir.clone())])?),
     )?;
     let select: Bound<'py, PyAny> = native_field(request, "select")?;
     let exclude: Bound<'py, PyAny> = native_field(request, "exclude")?;

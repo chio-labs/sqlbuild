@@ -30,6 +30,8 @@ use crate::bindings::_helpers::command_runtime::warehouse_scope::command_warehou
 use crate::bindings::_helpers::command_runtime::warehouses::{
     CommandScope, WarehouseInputs, apply_warehouse, command_scope, find_authored, resolve_warehouse,
 };
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, within,
 };
@@ -259,9 +261,12 @@ fn build_report(
 ) -> PyResult<DebugReport> {
     let project_dir_object: Bound<'_, PyAny> =
         imported(py, "pathlib", "Path")?.call1((project_dir,))?;
-    let discovered_inputs: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
-        &[("project_dir", project_dir_object.clone())],
+    let discovered_inputs: Bound<'_, PyAny> = discover_project_inputs(
+        py,
+        Some(keywords(
+            py,
+            &[("project_dir", project_dir_object.clone())],
+        )?),
     )?;
     let files: DebugConfigFiles = debug_config_files(project_dir);
     let adapter_name: Bound<'_, PyAny> = call_with(

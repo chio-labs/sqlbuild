@@ -11,6 +11,7 @@ use crate::bindings::_helpers::compile_driver::integration_loaders::integration_
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, keywords, within,
 };
+use crate::bindings::_helpers::compile_driver::stage_work::{PROJECT_DISCOVERIES, count_stage};
 use crate::bindings::_helpers::contracts::project_config::{
     load_local_config_file, load_project_config_file,
 };
@@ -203,6 +204,7 @@ pub(crate) fn discover_project_inputs<'py>(
             ],
         ),
     )?;
+    count_stage(py, PROJECT_DISCOVERIES, 1)?;
     let request: DiscoveryRequest = DiscoveryRequest {
         project_dir: arguments.value("project_dir")?.unbind(),
         sql_analysis_enabled_override: arguments.value("sql_analysis_enabled_override")?.unbind(),

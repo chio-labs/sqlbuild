@@ -92,7 +92,7 @@ fn scoped_models<'py>(scopes: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
 /// Return options whose selectors name only resources, with unit tests selected apart.
 #[pyfunction]
 #[pyo3(signature = (*, options, discovered_inputs))]
-fn apply_unit_test_selectors<'py>(
+pub(crate) fn apply_unit_test_selectors<'py>(
     options: &Bound<'py, PyAny>,
     discovered_inputs: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -102,7 +102,7 @@ fn apply_unit_test_selectors<'py>(
 /// Align configured-rule subjects with models that received deep SQL analysis.
 #[pyfunction]
 #[pyo3(signature = (*, options, discovered_inputs, project))]
-fn resolve_configured_rule_selection<'py>(
+pub(crate) fn resolve_configured_rule_selection<'py>(
     options: &Bound<'py, PyAny>,
     discovered_inputs: &Bound<'py, PyAny>,
     project: &Bound<'py, PyAny>,

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class BuildProcessReportTestCase:
     description: str
+    provider_source: str
     error_type: type[BaseException]
     verbose: bool
     expected_fragments: tuple[str, ...]

@@ -116,13 +116,6 @@ def _panicked(*arguments):
 
 native.build_project_column_lineage = _panicked
 """
-_RICH_COMPILE: tuple[str, ...] = (
-    "compile",
-    "--json",
-    "--no-cache",
-    "--lineage-mode",
-    "rich",
-)
 
 
 @pytest.mark.parametrize(
@@ -247,13 +240,6 @@ def test_given_project_when_tracing_rich_lineage_then_it_is_traced(
 @pytest.mark.parametrize(
     "test_case",
     [
-        NativeRichLineageFailureCliTestCase(
-            description="compile --lineage-mode rich",
-            files=_RICH_FILES,
-            command=_RICH_COMPILE,
-            expected_returncode=1,
-            expected_error_line=f"_native.NativeCompilerError: {_NATIVE_PANIC_ERROR}",
-        ),
         NativeRichLineageFailureCliTestCase(
             description="lineage --mode rich",
             files=_RICH_FILES,

@@ -17,6 +17,7 @@ from sqlbuild._native import (
     SourceEntry,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 
@@ -104,12 +105,35 @@ class ManualClock:
 
 
 class SlowConnectionDuckDbAdapter(DuckDbAdapter):
-    """An in-memory DuckDB adapter whose connections take `connection_seconds` on a manual clock."""
+    """An in-memory DuckDB adapter whose connections, compile profile and rules dialect take
+    `connection_seconds`, `compile_seconds` and `rules_seconds` on a manual clock.
 
-    def __init__(self, *, clock: ManualClock, connection_seconds: float) -> None:
+    The compile profile takes its time on its first call; the dialect on its second, which the
+    rules gate makes after the compile's own dialect read."""
+
+    def __init__(
+        self,
+        *,
+        clock: ManualClock,
+        connection_seconds: float,
+        compile_seconds: float = 0.0,
+        rules_seconds: float = 0.0,
+    ) -> None:
         super().__init__()
         self._clock: ManualClock = clock
         self._connection_seconds: float = connection_seconds
+        self._compile_seconds: float = compile_seconds
+        self._dialect_seconds: list[float] = [0.0, rules_seconds]
+
+    def expression_inference_profile(self) -> ExpressionInferenceProfile:
+        self._clock.advance(self._compile_seconds)
+        self._compile_seconds = 0.0
+        return super().expression_inference_profile()
+
+    def sql_analysis_dialect(self) -> str | None:
+        self._clock.advance(sum(self._dialect_seconds[:1]))
+        del self._dialect_seconds[:1]
+        return super().sql_analysis_dialect()
 
     def connect(self, config: dict[str, Any]) -> Any:
         del config

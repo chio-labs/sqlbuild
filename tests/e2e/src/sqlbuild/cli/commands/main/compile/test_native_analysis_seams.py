@@ -9,9 +9,7 @@ import pytest
 
 import sqlbuild._native as native_module
 from sqlbuild._native import (
-    ContractValidationResult,
     NativeSqlTestArtifact,
-    ProjectColumnLineage,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     NativeAnalysisSeamTestCase,
@@ -29,11 +27,11 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
             description="models_contracts_lineage_and_sql_tests",
             expected_native_returns={
                 "infer_native_expression_source_shapes": [ANY, ANY, ANY],
-                "evaluate_model_contracts": [ANY],
-                "build_project_column_lineage": [ANY],
                 "plan_compiled_sql_test_artifacts": [ANY],
             },
             expected_stage_work={
+                "evaluate_model_contracts": 1,
+                "build_project_column_lineage": 1,
                 "infer_native_expression_source_shapes": 1,
                 "analyze_native_model_sql": 1,
                 "complete_semantic_project": 1,
@@ -64,13 +62,11 @@ def test_given_project_when_compiling_then_native_seams_answer(
         stage: stage_work.get(stage, 0) for stage in test_case.expected_stage_work
     } == test_case.expected_stage_work
     for seams in (native_seams,):
-        assert isinstance(seams["build_project_column_lineage"][0], ProjectColumnLineage)
         assert isinstance(seams["infer_native_expression_source_shapes"][0], tuple)
         planned_artifacts: object = seams["plan_compiled_sql_test_artifacts"][0]
         assert isinstance(planned_artifacts, tuple)
         assert planned_artifacts
         assert all(isinstance(artifact, NativeSqlTestArtifact) for artifact in planned_artifacts)
-        assert isinstance(seams["evaluate_model_contracts"][0], ContractValidationResult)
 
 
 if __name__ == "__main__":
