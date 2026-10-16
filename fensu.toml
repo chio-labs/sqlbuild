@@ -242,6 +242,12 @@ reason = "These collector methods preserve dlt's external positional progress pr
 
 [[targets.python.rule_exceptions]]
 rule = "FFS120"
+path = "src/sqlbuild/runtime/user_code/classes/user_code_finder.py"
+symbols = ["UserCodeFinder.find_spec"]
+reason = "importlib calls meta-path finders positionally as find_spec(fullname, path, target)."
+
+[[targets.python.rule_exceptions]]
+rule = "FFS120"
 path = "src/sqlbuild/assets.py"
 symbols = ["asset"]
 reason = "Bare @asset is evaluated by Python as asset(function), requiring positional function calling."

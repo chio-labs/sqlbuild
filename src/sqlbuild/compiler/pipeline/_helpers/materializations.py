@@ -22,7 +22,7 @@ def load_custom_materializations(
     mat_file: DiscoveredMaterializationFile
     for mat_file in materialization_files:
         file_path: Path = Path(mat_file.file_path)
-        spec: Any = user_code_spec(mat_file.name, file_path, root=file_path.parent)
+        spec: Any = user_code_spec(name=mat_file.name, file_path=file_path, root=file_path.parent)
         if spec is None or spec.loader is None:
             raise PlannerInputError(
                 f"materialization '{mat_file.name}' at {mat_file.file_path} "

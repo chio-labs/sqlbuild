@@ -20,7 +20,7 @@ _LOAD_SCRIPT: str = (
     "from sqlbuild.runtime.user_code.main.user_code_spec import user_code_spec\n"
     "root = Path(sys.argv[1])\n"
     "sys.path.insert(0, str(root))\n"
-    "spec = user_code_spec('rule_naming', root / 'rules' / 'naming.py', root=root)\n"
+    "spec = user_code_spec(name='rule_naming', file_path=root / 'rules' / 'naming.py', root=root)\n"
     "module = module_from_spec(spec)\n"
     "spec.loader.exec_module(module)\n"
     "print(module.RULE_LIMIT)\n"

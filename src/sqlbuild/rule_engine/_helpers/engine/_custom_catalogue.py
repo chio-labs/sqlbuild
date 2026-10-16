@@ -30,7 +30,9 @@ def load_custom_rules(*, project_dir: Path) -> tuple[Rule, ...]:
             if RULE_DECORATOR_TOKEN not in file_path.read_text(encoding="utf-8"):
                 continue
             name: str = _rule_module_name(file_path=file_path, project_dir=project_dir)
-            spec: ModuleSpec | None = user_code_spec(name, file_path, root=project_dir)
+            spec: ModuleSpec | None = user_code_spec(
+                name=name, file_path=file_path, root=project_dir
+            )
             if spec is None or spec.loader is None:
                 raise RulesError(f"could not load rule file {file_path}")
             module: ModuleType = importlib.util.module_from_spec(spec)

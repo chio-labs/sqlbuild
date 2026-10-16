@@ -5,11 +5,7 @@ from types import CodeType
 
 
 class SourceOnlyLoader(SourceFileLoader):
-    """Compile a module from its current source on every load.
-
-    Timestamp bytecode caches are validated by whole-second mtime and size, so a same-size edit
-    within one second would otherwise load the previous code.
-    """
+    """Compile a module from current source; whole-second pyc checks miss same-size edits."""
 
     def get_code(self, fullname: str) -> CodeType:
         source_path: str = self.get_filename(fullname)

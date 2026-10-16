@@ -1398,7 +1398,7 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
             source_file_path.with_suffix("").parts[-4:]
         ).replace("-", "_")
         spec: ModuleSpec | None = user_code_spec(
-            module_name, source_file_path, root=source_file_path.parent
+            name=module_name, file_path=source_file_path, root=source_file_path.parent
         )
         if spec is None or spec.loader is None:
             raise AdapterUserError(message=f"Could not load Python UDF from '{source_file_path}'")

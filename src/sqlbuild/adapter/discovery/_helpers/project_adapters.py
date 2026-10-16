@@ -70,7 +70,9 @@ def _is_public_adapter_file(*, adapters_dir: Path, file_path: Path) -> bool:
 
 def _load_adapter_module(*, project_dir: Path, file_path: Path) -> ModuleType:
     module_name: str = _module_name_for_path(project_dir=project_dir, file_path=file_path)
-    spec: ModuleSpec | None = user_code_spec(module_name, file_path, root=project_dir)
+    spec: ModuleSpec | None = user_code_spec(
+        name=module_name, file_path=file_path, root=project_dir
+    )
     if spec is None or spec.loader is None:
         raise AdapterUserError(
             message=f"Could not load project-local adapter module from {file_path}"
