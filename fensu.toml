@@ -75,11 +75,6 @@ reason = "Native bindings own migration planning and state rows; this package on
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
-path = "src/sqlbuild/compiler/source_freshness/__init__.py"
-reason = "Native bindings own source freshness observation, planning, propagation and state reads and writes; this package only declares the models, types and constants they build."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
 path = "src/sqlbuild/compiler/pipeline/__init__.py"
 reason = "Native bindings own the compile-and-plan pipeline; this package declares the pipeline models and keeps the custom materialization loader that imports project code."
 
@@ -162,11 +157,6 @@ reason = "SQL references are scanned natively; the package keeps the reference m
 rule = "FFR309"
 path = "src/sqlbuild/sql_values/exceptions.py"
 reason = "Typed SQL values are normalized and state literals rendered natively; the namespace package keeps the value models, types and the rendering error adapters raise."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
-path = "src/sqlbuild/cli/output/__init__.py"
-reason = "Execution-result output is rendered natively; the package keeps only the integration-result constants its callers and readers share."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
