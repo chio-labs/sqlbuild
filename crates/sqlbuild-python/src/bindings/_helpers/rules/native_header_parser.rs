@@ -1,11 +1,10 @@
 //! DSL header values parsed natively for header rules, compared as Python compares their objects.
 
-use std::cell::RefCell;
-
-use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
-use sqlbuild_rules::dsl_headers::models::{ParseFailure, ParseOutcome};
+use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
+use sqlbuild_rules::dsl_headers::main::inner_header_text::inner_header_text;
+use sqlbuild_rules::dsl_headers::models::{HeaderSpan, ParseFailure, ParseOutcome};
 use sqlbuild_rules::dsl_headers::types::HeaderParser;
 use sqlbuild_sqltext::compiler::main::header_word_value::header_word_value;
 use sqlbuild_sqltext::compiler::main::model_header_parsing::parse_batch;
@@ -15,55 +14,43 @@ use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sqltext::model_headers::header_failure;
-use crate::bindings::types::CompilerDetach;
 
 /// The path header rules report header syntax errors at.
 const SENTINEL_PATH: &str = "<lint>";
 const DESCRIPTION_KEY: &str = "description";
+const FUNCTION_KIND: &str = "FUNCTION";
+const ARGUMENTS_KEY: &str = "arguments";
 const NEGATIVE_ZERO: &str = "-0";
 const ZERO: &str = "0";
 
-/// Header values parsed natively; a rejected parse keeps its message for raising.
-pub(crate) struct NativeHeaderParser<'py> {
-    py: Python<'py>,
-    rejected: RefCell<Option<ParseFailure>>,
+/// Header values parsed natively, compared as their Python projections compare.
+#[derive(Default)]
+pub(crate) struct NativeHeaderParser;
+
+/// The `ModelSqlParseError` a rejected header parse raises.
+pub(crate) fn rejection(py: Python<'_>, failure: ParseFailure) -> PyErr {
+    let raised: PyResult<PyErr> = (|| {
+        let keywords: Bound<'_, PyDict> = PyDict::new(py);
+        keywords.set_item("help", failure.help)?;
+        let error: Bound<'_, PyAny> = registry::error(py, ErrorId::ModelSqlParse)?
+            .call((failure.message,), Some(&keywords))?;
+        Ok(PyErr::from_value(error))
+    })();
+    raised.unwrap_or_else(|error| error)
 }
 
-impl<'py> NativeHeaderParser<'py> {
-    pub(crate) fn new(py: Python<'py>) -> Self {
-        Self {
-            py,
-            rejected: RefCell::new(None),
-        }
-    }
-
-    /// The `ModelSqlParseError` of the last rejected parse.
-    pub(crate) fn rejected_error(&self) -> PyErr {
-        let Some(failure) = self.rejected.take() else {
-            return PyValueError::new_err("no header parse was rejected");
-        };
-        let raised: PyResult<PyErr> = (|| {
-            let keywords: Bound<'py, PyDict> = PyDict::new(self.py);
-            keywords.set_item("help", failure.help)?;
-            let error: Bound<'py, PyAny> = registry::error(self.py, ErrorId::ModelSqlParse)?
-                .call((failure.message,), Some(&keywords))?;
-            Ok(PyErr::from_value(error))
-        })();
-        raised.unwrap_or_else(|error| error)
-    }
-}
-
-impl HeaderParser for NativeHeaderParser<'_> {
+impl HeaderParser for NativeHeaderParser {
     type Values = AuthoredValue;
-    type Error = PyErr;
+    /// A native failure's message.
+    type Error = String;
 
-    fn parse(&self, kind: &str, inner: &str) -> ParseOutcome<AuthoredValue, PyErr> {
+    fn parse(&self, kind: &str, inner: &str) -> ParseOutcome<AuthoredValue, String> {
         let headers: Vec<String> = vec![inner.to_owned()];
-        let parsed = match self.py.compiler_detach(|| parse_batch(&headers)) {
+        let parsed = match catch_compiler_panic(|| parse_batch(&headers)) {
             Ok(parsed) => parsed,
             Err(message) => {
                 return ParseOutcome::Raised(
-                    value_error(message.clone()),
+                    message.clone(),
                     ParseFailure {
                         message,
                         help: None,
@@ -83,14 +70,10 @@ impl HeaderParser for NativeHeaderParser<'_> {
             ),
             help,
         };
-        self.rejected.replace(Some(ParseFailure {
-            message: failure.message.clone(),
-            help: failure.help.clone(),
-        }));
         ParseOutcome::Rejected(failure)
     }
 
-    fn description(&self, values: &AuthoredValue) -> PyResult<Option<String>> {
+    fn description(&self, values: &AuthoredValue) -> Result<Option<String>, String> {
         Ok(match map_value(values, DESCRIPTION_KEY) {
             Some(AuthoredValue::String(text)) => Some(text.clone()),
             Some(AuthoredValue::BareWord(word)) if header_word_value(word) == HeaderWord::Text => {
@@ -100,9 +83,58 @@ impl HeaderParser for NativeHeaderParser<'_> {
         })
     }
 
-    fn same(&self, left: &AuthoredValue, right: &AuthoredValue) -> PyResult<bool> {
+    fn same(&self, left: &AuthoredValue, right: &AuthoredValue) -> Result<bool, String> {
         Ok(python_equal(left, right))
     }
+}
+
+/// Why a header could not be read: a header syntax error, or a native failure's message.
+pub(crate) enum HeaderFailure {
+    Rejected(ParseFailure),
+    Native(String),
+}
+
+impl HeaderFailure {
+    pub(crate) fn into_pyerr(self, py: Python<'_>) -> PyErr {
+        match self {
+            Self::Rejected(failure) => rejection(py, failure),
+            Self::Native(message) => value_error(message),
+        }
+    }
+}
+
+/// The SQL function argument names the first FUNCTION header declares, lowercased and sorted.
+pub(crate) fn external_identifiers(
+    text: &[char],
+    headers: &[HeaderSpan],
+    parser: &NativeHeaderParser,
+) -> Result<Vec<String>, HeaderFailure> {
+    for header in headers {
+        if header.kind != FUNCTION_KIND {
+            continue;
+        }
+        let inner: String = inner_header_text(&text[header.start..header.end])
+            .iter()
+            .collect();
+        let values: AuthoredValue = match parser.parse(&header.kind, &inner) {
+            ParseOutcome::Parsed(values) => values,
+            ParseOutcome::Rejected(failure) => return Err(HeaderFailure::Rejected(failure)),
+            ParseOutcome::Raised(message, _) => return Err(HeaderFailure::Native(message)),
+        };
+        let Some(arguments) = map_value(&values, ARGUMENTS_KEY) else {
+            continue;
+        };
+        if !matches!(arguments, AuthoredValue::Map(_)) {
+            continue;
+        }
+        let mut names: Vec<String> = map_keys(arguments)
+            .into_iter()
+            .map(str::to_lowercase)
+            .collect();
+        names.sort_unstable();
+        return Ok(names);
+    }
+    Ok(Vec::new())
 }
 
 /// The value a header map projects for `key`: its last entry, as a Python dict keeps it.

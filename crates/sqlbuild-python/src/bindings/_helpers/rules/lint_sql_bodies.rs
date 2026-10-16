@@ -1,20 +1,16 @@
 //! Native SQL lint of prepared lint bodies, as Python lint violations.
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyString};
-use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
+use pyo3::types::{PyDict, PyDictMethods};
+use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_rules::lint_text::main::lint_sql_bodies::lint_sql_bodies;
 use sqlbuild_rules::lint_text::models::{
     AuthoredDiagnostic, ExpansionSpan, LintSqlBody, LintSqlOptions,
 };
 
 use crate::bindings::_helpers::boundary::panics::value_error;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
-use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::rules::lint_pipeline::{LintViolationRow, ViolationClasses};
 use crate::bindings::types::CompilerDetach;
-
-const NATIVE_ENGINE: &str = "native";
 
 fn spans(passes: &Bound<'_, PyAny>) -> PyResult<Vec<Vec<ExpansionSpan>>> {
     passes.try_iter()?.map(|pass| pass_spans(&pass?)).collect()
@@ -84,82 +80,6 @@ fn options(config: &Bound<'_, PyAny>) -> PyResult<LintSqlOptions> {
     })
 }
 
-/// The lint model classes native SQL diagnostics are built as.
-struct ViolationClasses<'py> {
-    violation: Bound<'py, PyAny>,
-    edit: Bound<'py, PyAny>,
-    severity: Bound<'py, PyAny>,
-}
-
-impl<'py> ViolationClasses<'py> {
-    fn new(py: Python<'py>) -> PyResult<Self> {
-        Ok(Self {
-            violation: registry::class(py, RecordId::LintViolation)?,
-            edit: registry::class(py, RecordId::LintEdit)?,
-            severity: registry::class(py, RecordId::LintSeverity)?,
-        })
-    }
-
-    fn violation(
-        &self,
-        file_path: &Bound<'py, PyAny>,
-        diagnostic: AuthoredDiagnostic,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let py: Python<'py> = file_path.py();
-        let none = || py.None().into_bound(py);
-        let code: Bound<'py, PyAny> = PyString::new(py, &diagnostic.code).into_any();
-        let fix: Bound<'py, PyAny> = match diagnostic.fix {
-            Some(edit) => call_with(
-                &self.edit,
-                &[
-                    ("file_path", file_path.clone()),
-                    ("code", code.clone()),
-                    ("start", edit.start.into_pyobject(py)?.into_any()),
-                    ("end", edit.end.into_pyobject(py)?.into_any()),
-                    (
-                        "replacement",
-                        PyString::new(py, &edit.replacement).into_any(),
-                    ),
-                ],
-            )?,
-            None => none(),
-        };
-        let (end_line, end_column) = match diagnostic.end {
-            Some((line, column)) => (
-                line.into_pyobject(py)?.into_any(),
-                column.into_pyobject(py)?.into_any(),
-            ),
-            None => (none(), none()),
-        };
-        let severity: &str = if diagnostic.fault { "FAULT" } else { "WARNING" };
-        call_with(
-            &self.violation,
-            &[
-                ("file_path", file_path.clone()),
-                ("line", diagnostic.line.into_pyobject(py)?.into_any()),
-                ("column", diagnostic.column.into_pyobject(py)?.into_any()),
-                ("code", code),
-                ("message", PyString::new(py, &diagnostic.message).into_any()),
-                ("severity", self.severity.getattr(severity)?),
-                ("engine", PyString::new(py, NATIVE_ENGINE).into_any()),
-                ("end_line", end_line),
-                ("end_column", end_column),
-                (
-                    "remediation",
-                    PyString::new(py, &diagnostic.remediation).into_any(),
-                ),
-                ("fix", fix),
-                (
-                    "fix_unavailable_reason",
-                    diagnostic
-                        .fix_unavailable_reason
-                        .map_or_else(none, |reason| PyString::new(py, &reason).into_any()),
-                ),
-            ],
-        )
-    }
-}
-
 /// Lint expanded bodies natively and map every diagnostic onto authored source.
 #[pyfunction]
 fn lint_native_sql_bodies<'py>(
@@ -191,7 +111,10 @@ fn lint_native_sql_bodies<'py>(
     let classes: ViolationClasses<'py> = ViolationClasses::new(py)?;
     diagnostics
         .into_iter()
-        .map(|diagnostic| classes.violation(&paths[diagnostic.file], diagnostic))
+        .map(|diagnostic| {
+            let row: LintViolationRow = LintViolationRow::diagnostic(diagnostic);
+            classes.violation(&paths[row.file], &row)
+        })
         .collect()
 }
 

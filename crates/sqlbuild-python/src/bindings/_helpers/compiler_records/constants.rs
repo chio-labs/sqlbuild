@@ -324,41 +324,6 @@ const R_LINT_BODY: RecordSpec = RecordSpec {
         FieldSpec::new("dependency_relations", FieldDefault::EmptyTuple),
     ],
 };
-const R_PENDING_LINT_BODY: RecordSpec = RecordSpec {
-    name: "PendingLintBody",
-    doc: "One expanded authored body awaiting its native lexical preparation.",
-    fields: &[
-        FieldSpec::required("file_path"),
-        FieldSpec::required("body_start"),
-        FieldSpec::required("body_end"),
-        FieldSpec::required("expansion_input"),
-        FieldSpec::required("expanded"),
-        FieldSpec::required("expansion_passes"),
-        FieldSpec::required("pre_expansion_sites"),
-        FieldSpec::required("external_identifiers"),
-        FieldSpec::required("allows_ceremonial_select"),
-        FieldSpec::required("allows_dynamic_output_star"),
-        FieldSpec::required("allows_empty_fixture_star"),
-        FieldSpec::required("request"),
-    ],
-};
-const R_EXPANDED_LINT_FILE: RecordSpec = RecordSpec {
-    name: "ExpandedLintFile",
-    doc: "The expanded bodies of one file, up to the first body that could not be expanded.",
-    fields: &[
-        FieldSpec::required("file_path"),
-        FieldSpec::required("bodies"),
-        FieldSpec::required("failure"),
-    ],
-};
-const R_PREPARED_LINT_FILES: RecordSpec = RecordSpec {
-    name: "PreparedLintFiles",
-    doc: "Lint bodies of every expandable file, and why the skipped files could not expand.",
-    fields: &[
-        FieldSpec::required("bodies"),
-        FieldSpec::required("unexpandable"),
-    ],
-};
 const R_LINT_EDIT: RecordSpec = RecordSpec {
     name: "LintEdit",
     doc: "One deterministic authored-source edit proposed by a lint rule.",
@@ -1007,9 +972,6 @@ pub(crate) const COMPILER_RECORDS: &[RecordSpec] = &[
     R_LINT_FILE_ROLE,
     R_INTERPOLATION_SITE,
     R_LINT_BODY,
-    R_PENDING_LINT_BODY,
-    R_EXPANDED_LINT_FILE,
-    R_PREPARED_LINT_FILES,
     R_LINT_EDIT,
     R_LINT_VIOLATION,
     R_RULE_FIX_RESULT,

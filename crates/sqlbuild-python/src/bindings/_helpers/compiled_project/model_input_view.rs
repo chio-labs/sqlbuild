@@ -109,7 +109,7 @@ impl NativeModelInput {
         Self { owner, index }
     }
 
-    fn read<'py, T>(
+    pub(crate) fn read<'py, T>(
         &self,
         py: Python<'py>,
         read: impl FnOnce(&ModelInputRecord, Python<'py>) -> PyResult<T>,

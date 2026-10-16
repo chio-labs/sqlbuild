@@ -236,7 +236,7 @@ impl NativeCompiledModel {
         Self::with_overlay(self.owner.clone_ref(py), self.index, overlay)
     }
 
-    fn read<'py, T>(
+    pub(crate) fn read<'py, T>(
         &self,
         py: Python<'py>,
         read: impl FnOnce(&ModelInputRecord, Python<'py>) -> PyResult<T>,

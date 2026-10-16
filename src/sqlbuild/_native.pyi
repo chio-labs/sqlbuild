@@ -4,7 +4,6 @@ import logging
 import threading
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence, Set
-from concurrent.futures import Executor, Future
 from contextlib import AbstractContextManager
 from contextvars import Token
 from dataclasses import Field
@@ -12,7 +11,6 @@ from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 from pathlib import Path, PurePath
-from threading import Event
 from types import TracebackType
 from typing import Any, ClassVar, Literal, Protocol, Self, TextIO, TypedDict, overload
 
@@ -2396,14 +2394,6 @@ def compile_facts(*, project: CompiledProjectView, project_dir: Path) -> Compile
 def lint_file_role(
     *, file_path: Path, project_dir: Path, relative_path: PurePath | None = None
 ) -> LintFileRole: ...
-def lint_body_ranges(
-    *,
-    contents: str,
-    headers: tuple[HeaderSpan, ...],
-    file_path: Path,
-    project_dir: Path,
-    role: LintFileRole | None = None,
-) -> tuple[tuple[int, int], ...]: ...
 def prepare_lint_body(
     *,
     role: LintFileRole,
@@ -2412,39 +2402,7 @@ def prepare_lint_body(
     body_range: tuple[int, int],
     context: SqlExpansionContext,
     dialect: str,
-    external_identifiers: tuple[str, ...] = (),
-    allows_ceremonial_select: bool = False,
-    allows_dynamic_output_star: bool = False,
-    compiled_expansion: CompiledSqlExpansion | None = None,
 ) -> LintBody: ...
-def expand_lint_body(
-    *,
-    role: LintFileRole,
-    file_path: Path,
-    contents: str,
-    body_range: tuple[int, int],
-    context: SqlExpansionContext,
-    dialect: str,
-    external_identifiers: tuple[str, ...] = (),
-    allows_ceremonial_select: bool = False,
-    allows_dynamic_output_star: bool = False,
-    compiled_expansion: CompiledSqlExpansion | None = None,
-) -> PendingLintBody: ...
-def expand_file_bodies(
-    *,
-    file_path: Path,
-    contents: str,
-    headers: tuple[HeaderSpan, ...],
-    context: SqlExpansionContext,
-    dialect: str,
-    project_dir: Path,
-    relative_path: Path,
-    dynamic_output_paths: frozenset[Path],
-    compiled_expansions: dict[Path, CompiledSqlExpansion] | None,
-) -> ExpandedLintFile: ...
-def prepare_expanded_files(
-    *, expanded_files: tuple[ExpandedLintFile, ...], dialect: str, skip_unexpandable: bool
-) -> PreparedLintFiles: ...
 def plan_rule_fixes(
     *,
     project_dir: Path,
@@ -4140,9 +4098,6 @@ def lint_sql_batch_json(request_json: str) -> str: ...
 def prepare_lint_sql(
     request: LintPreparationRequest,
 ) -> tuple[str, list[tuple[str, int, int, int, int, str]], list[str]] | None: ...
-def prepare_lint_sql_batch(
-    requests: list[LintPreparationRequest],
-) -> list[tuple[bool, tuple[str, list[tuple[str, int, int, int, int, str]], list[str]] | None]]: ...
 def lint_backtick_identifiers(dialect: str) -> bool: ...
 def neutralize_lint_interpolation(
     body: str, dialect: str, for_formatting: bool = False
@@ -4863,12 +4818,6 @@ class ProcessResourceTracker:
     ) -> None: ...
     def finish(self) -> ProcessResourceUsage: ...
 
-class LintStopScope:
-    def __enter__(self) -> None: ...
-    def __exit__(self, *exception: object) -> bool: ...
-
-def lint_stop_scope(stop: Event, /) -> LintStopScope: ...
-def active_lint_stop() -> Event | None: ...
 def error_code(*, error: BaseException, fallback_code: str) -> str: ...
 def error_help(error: BaseException, /) -> str | None: ...
 def error_message(error: BaseException, /) -> str: ...
@@ -7064,22 +7013,9 @@ def evaluate_rules(
     project_dir: Path,
     dialect: str,
     selected_keys: frozenset[CompiledObjectKey] | None = None,
-    prepared_sql: PreparedSqlLint | None = None,
-    expansion_reuse: SqlExpansionReuse | None = None,
+    early_lint: EarlySqlLint | None = None,
     no_sql_analysis: bool = False,
 ) -> RulesRunResult: ...
-def prepare_sql_rules(
-    *, inputs: CompileInputsView, executor: Executor, dialect: str, stop: Event
-) -> PreparedSqlLint | None: ...
-def prepare_early_sql_lint(
-    *,
-    project_dir: Path,
-    config: LintConfig,
-    discovered_inputs: DiscoveredProjectInputs,
-    static_declaration_scope: DeclarationScopeBuild | None,
-    compiled_expansions: dict[Path, CompiledSqlExpansion],
-    stop: Event,
-) -> PreparedSqlLintResult: ...
 def custom_rule_test_evidence(
     *, rule: Rule, project_dir: Path
 ) -> list[tuple[str, int, int, str]]: ...
@@ -7096,8 +7032,7 @@ def run_rules(
     project_dir: Path,
     dialect: str,
     selected_keys: frozenset[CompiledObjectKey] | None = None,
-    prepared_sql: PreparedSqlLint | None = None,
-    expansion_reuse: SqlExpansionReuse | None = None,
+    early_lint: EarlySqlLint | None = None,
     no_sql_analysis: bool = False,
 ) -> RulesRunResult: ...
 def rules_bulk_cache_path(*, project_dir: Path, file_name: str) -> Path: ...
@@ -7115,15 +7050,8 @@ def run_planned_sql_rules(
     graph: ProjectGraph,
     discovered_inputs: DiscoveredProjectInputs,
     dialect: str,
-    prepared_sql: PreparedSqlLint | None,
-    expansion_reuse: SqlExpansionReuse | None,
+    early_lint: EarlySqlLint | None,
 ) -> SqlRulesEvaluation: ...
-def sql_lint_preparation(
-    *, inputs: CompileInputsView, dialect: str
-) -> tuple[Path, tuple[str, ...], LintConfig] | None: ...
-def early_lint_expansions(
-    model_inputs: tuple[ModelInput, ...],
-) -> dict[Path, CompiledSqlExpansion]: ...
 
 class EarlySqlLint:
     """Own speculative SQL checks for one compilation invocation."""
@@ -7131,14 +7059,13 @@ class EarlySqlLint:
     def __init__(self, *, enabled: bool) -> None: ...
     @property
     def enabled(self) -> bool: ...
-    @property
-    def preparation(self) -> PreparedSqlLint | None: ...
-    @property
-    def expansion_reuse(self) -> SqlExpansionReuse | None: ...
     def __enter__(self) -> EarlySqlLint: ...
     def __exit__(self, *exception: object) -> None: ...
     def start(self, *, inputs: CompileInputsView, dialect: str) -> None: ...
     def stop(self) -> int: ...
+
+class PreparedSqlLint:
+    """One early SQL lint running on a native thread, for one project and SQL rule codes."""
 
 def with_duplicate_literal_hints(
     *, findings: tuple[Finding, ...], project_dir: Path
@@ -7176,9 +7103,6 @@ def safe_format_files(
 def reject_unparseable_header_rewrites(
     *, updated: dict[Path, str], config: LintConfig, faults: list[LintViolation]
 ) -> tuple[dict[Path, str], list[LintViolation]]: ...
-def external_identifiers_for_headers(
-    *, contents: str, headers: tuple[HeaderSpan, ...]
-) -> tuple[str, ...]: ...
 def prepare_model_header_tokens(headers: Sequence[str], /) -> None: ...
 def parse_header_values(
     *,
@@ -10841,61 +10765,6 @@ class LintBody(NativeRecord):
         dependency_relations: tuple[tuple[str, str], ...] = ...,
     ) -> None: ...
 
-class PendingLintBody(NativeRecord):
-    """One expanded authored body awaiting its native lexical preparation."""
-
-    file_path: Path
-    body_start: int
-    body_end: int
-    expansion_input: str
-    expanded: str
-    expansion_passes: tuple[tuple[ExpansionSpan, ...], ...]
-    pre_expansion_sites: tuple[InterpolationSite, ...]
-    external_identifiers: tuple[str, ...]
-    allows_ceremonial_select: bool
-    allows_dynamic_output_star: bool
-    allows_empty_fixture_star: bool
-    request: NativeLintPreparationRequest
-    def __init__(
-        self,
-        file_path: Path,
-        body_start: int,
-        body_end: int,
-        expansion_input: str,
-        expanded: str,
-        expansion_passes: tuple[tuple[ExpansionSpan, ...], ...],
-        pre_expansion_sites: tuple[InterpolationSite, ...],
-        external_identifiers: tuple[str, ...],
-        allows_ceremonial_select: bool,
-        allows_dynamic_output_star: bool,
-        allows_empty_fixture_star: bool,
-        request: NativeLintPreparationRequest,
-    ) -> None: ...
-
-class ExpandedLintFile(NativeRecord):
-    """The expanded bodies of one file, up to the first body that could not be expanded."""
-
-    file_path: Path
-    bodies: tuple[PendingLintBody, ...]
-    failure: ProjectCompileError | None
-    def __init__(
-        self,
-        file_path: Path,
-        bodies: tuple[PendingLintBody, ...],
-        failure: ProjectCompileError | None,
-    ) -> None: ...
-
-class PreparedLintFiles(NativeRecord):
-    """Lint bodies of every expandable file, and why the skipped files could not expand."""
-
-    bodies: tuple[LintBody, ...]
-    unexpandable: dict[Path, str]
-    def __init__(
-        self,
-        bodies: tuple[LintBody, ...],
-        unexpandable: dict[Path, str],
-    ) -> None: ...
-
 class LintEdit(NativeRecord):
     """One deterministic authored-source edit proposed by a lint rule."""
 
@@ -13142,41 +13011,6 @@ class SqlTestRulesConfig(NativeRecord):
     def __init__(
         self,
         pipeline_directory: str = ...,
-    ) -> None: ...
-
-class PreparedSqlLintResult(NativeRecord):
-    """Reusable expansion context and completed preliminary SQL checks."""
-
-    result: LintRunResult
-    context: SqlExpansionContext
-    def __init__(
-        self,
-        result: LintRunResult,
-        context: SqlExpansionContext,
-    ) -> None: ...
-
-class SqlExpansionReuse(NativeRecord):
-    """Compiler declaration scope for post-assembly SQL checks; assembly still runs its macros."""
-
-    discovered_inputs: DiscoveredProjectInputs
-    declaration_scope: DeclarationScopeBuild
-    def __init__(
-        self,
-        discovered_inputs: DiscoveredProjectInputs,
-        declaration_scope: DeclarationScopeBuild,
-    ) -> None: ...
-
-class PreparedSqlLint(NativeRecord):
-    """Process-local SQL checks started after compiler expansion has completed."""
-
-    codes: tuple[str, ...]
-    future: Future[PreparedSqlLintResult]
-    project_dir: Path | None
-    def __init__(
-        self,
-        codes: tuple[str, ...],
-        future: Future[PreparedSqlLintResult],
-        project_dir: Path | None = ...,
     ) -> None: ...
 
 class SqlRulesEvaluation(NativeRecord):

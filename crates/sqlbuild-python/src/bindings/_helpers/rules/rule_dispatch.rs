@@ -11,13 +11,11 @@ use pyo3::exceptions::{PyKeyboardInterrupt, PyRuntimeError};
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
+use pyo3::types::{PyDict, PyFrozenSet, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::cache::native_store::current_code_identity;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, within,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
@@ -59,23 +57,7 @@ const EVALUATE_RULES_OPTIONS: (&[&str], &[&str]) = (
         "project_dir",
         "dialect",
     ],
-    &[
-        "selected_keys",
-        "prepared_sql",
-        "expansion_reuse",
-        "no_sql_analysis",
-    ],
-);
-const PREPARE_OPTIONS: (&[&str], &[&str]) = (
-    &[
-        "project_dir",
-        "config",
-        "discovered_inputs",
-        "static_declaration_scope",
-        "compiled_expansions",
-        "stop",
-    ],
-    &[],
+    &["selected_keys", "early_lint", "no_sql_analysis"],
 );
 
 /// A running custom-rule evaluation, whose result is a `CustomRulesOutcome`.
@@ -312,8 +294,7 @@ pub(crate) fn evaluate_rules<'py>(
             ("graph", graph),
             ("discovered_inputs", arguments.value("discovered_inputs")?),
             ("dialect", dialect),
-            ("prepared_sql", arguments.value("prepared_sql")?),
-            ("expansion_reuse", arguments.value("expansion_reuse")?),
+            ("early_lint", arguments.value("early_lint")?),
         ],
     );
     cancel_on_interrupt(py, &sql_result, &run.cancel);
@@ -328,97 +309,6 @@ pub(crate) fn evaluate_rules<'py>(
             ("result", result),
         ],
     )
-}
-
-/// Start early SQL lint on `executor` when the project selects SQL rules without a cache.
-#[pyfunction]
-#[pyo3(signature = (*, inputs, executor, dialect, stop))]
-pub(crate) fn prepare_sql_rules<'py>(
-    inputs: &Bound<'py, PyAny>,
-    executor: &Bound<'py, PyAny>,
-    dialect: &Bound<'py, PyAny>,
-    stop: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = inputs.py();
-    let preparation: Bound<'py, PyAny> = call_with(
-        &native(py, NativeAttr::SqlLintPreparation)?,
-        &[("inputs", inputs.clone()), ("dialect", dialect.clone())],
-    )?;
-    if preparation.is_none() {
-        return Ok(preparation);
-    }
-    let (project_dir, codes, config): (Bound<'py, PyAny>, Bound<'py, PyAny>, Bound<'py, PyAny>) =
-        preparation.extract()?;
-    let expansions: Bound<'py, PyAny> =
-        native(py, NativeAttr::EarlyLintExpansions)?.call1((inputs.getattr("model_inputs")?,))?;
-    let work: Bound<'py, PyDict> = PyDict::new(py);
-    work.set_item("project_dir", &project_dir)?;
-    work.set_item("config", config)?;
-    work.set_item("discovered_inputs", inputs.getattr("discovered_inputs")?)?;
-    work.set_item(
-        "static_declaration_scope",
-        inputs.getattr("declaration_scope")?,
-    )?;
-    work.set_item("compiled_expansions", expansions)?;
-    work.set_item("stop", stop)?;
-    let future: Bound<'py, PyAny> = executor.call_method(
-        "submit",
-        (wrap_pyfunction!(prepare_early_sql_lint, py)?,),
-        Some(&work),
-    )?;
-    call_with(
-        &registry::class(py, RecordId::PreparedSqlLint)?,
-        &[
-            ("codes", codes),
-            ("project_dir", project_dir),
-            ("future", future),
-        ],
-    )
-}
-
-/// Expand and lint SQL early, stopping when `stop` is set; runs on the early-lint executor.
-#[pyfunction]
-#[pyo3(signature = (**options))]
-fn prepare_early_sql_lint<'py>(
-    py: Python<'py>,
-    options: Option<Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let arguments: KeywordArguments<'py> =
-        KeywordArguments::read(py, "prepare_early_sql_lint", options, PREPARE_OPTIONS)?;
-    let project_dir: Bound<'py, PyAny> = arguments.value("project_dir")?;
-    let discovered_inputs: Bound<'py, PyAny> = arguments.value("discovered_inputs")?;
-    let scope: Bound<'py, PyAny> =
-        native(py, NativeAttr::LintStopScopeFunction)?.call1((arguments.value("stop")?,))?;
-    within(&scope, |_| {
-        let context: Bound<'py, PyAny> = call_with(
-            &native(py, NativeAttr::BuildLintExpansionContext)?,
-            &[
-                ("project_dir", project_dir.clone()),
-                ("discovered_inputs", discovered_inputs.clone()),
-                (
-                    "static_declaration_scope",
-                    arguments.value("static_declaration_scope")?,
-                ),
-            ],
-        )?;
-        let result: Bound<'py, PyAny> = call_with(
-            &native(py, NativeAttr::RunLint)?,
-            &[
-                ("project_dir", project_dir.clone()),
-                ("config", arguments.value("config")?),
-                ("discovered_inputs", discovered_inputs.clone()),
-                (
-                    "compiled_expansions",
-                    arguments.value("compiled_expansions")?,
-                ),
-                ("expansion_context", context.clone()),
-            ],
-        )?;
-        call_with(
-            &registry::class(py, RecordId::PreparedSqlLintResult)?,
-            &[("result", result), ("context", context)],
-        )
-    })
 }
 
 /// Evaluate built-in rules natively while custom rules run beside them.
@@ -690,7 +580,5 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(evaluate_project_rules, module)?)?;
     module.add_function(wrap_pyfunction!(evaluate_native_rules, module)?)?;
     module.add_function(wrap_pyfunction!(evaluate_custom_rules, module)?)?;
-    module.add_function(wrap_pyfunction!(evaluate_rules, module)?)?;
-    module.add_function(wrap_pyfunction!(prepare_sql_rules, module)?)?;
-    module.add_function(wrap_pyfunction!(prepare_early_sql_lint, module)?)
+    module.add_function(wrap_pyfunction!(evaluate_rules, module)?)
 }

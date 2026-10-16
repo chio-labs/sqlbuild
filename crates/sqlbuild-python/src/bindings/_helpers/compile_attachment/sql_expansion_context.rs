@@ -1,6 +1,6 @@
 //! The SQL expansion inputs lint uses to expand authored SQL outside a compile.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::{PyBool, PyDict, PyDictMethods};
 
@@ -74,70 +74,125 @@ fn local_declarations<'py>(discovered: &Bound<'py, PyAny>) -> PyResult<Bound<'py
     Ok(local)
 }
 
-/// Assemble SQL expansion inputs; a static scope lends only its index to private macros.
-#[pyfunction]
-#[pyo3(signature = (**options))]
-pub(crate) fn build_sql_expansion_context<'py>(
-    py: Python<'py>,
-    options: Option<Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let arguments: KeywordArguments<'py> = KeywordArguments::read(
-        py,
-        "build_sql_expansion_context",
-        options,
-        (
-            &["project_dir", "value_renderer"],
+/// The inputs authored SQL is expanded with outside a compile; the handles carry user values.
+pub(crate) struct SqlExpansionInputs {
+    pub(crate) effective_vars: Py<PyAny>,
+    pub(crate) loaded_macros: Py<PyAny>,
+    pub(crate) macro_context: Py<PyAny>,
+    pub(crate) enums: Py<PyAny>,
+    pub(crate) constants: Py<PyAny>,
+    pub(crate) value_renderer: Py<PyAny>,
+    pub(crate) collection_rendering: Py<PyAny>,
+    /// Each model file's own declarations, by file path.
+    pub(crate) local_declarations: Py<PyDict>,
+    pub(crate) declaration_resolver: Py<PyAny>,
+}
+
+impl SqlExpansionInputs {
+    /// The inputs a `SqlExpansionContext` record holds.
+    pub(crate) fn from_record(record: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let field = |name: &str| -> PyResult<Py<PyAny>> { Ok(record.getattr(name)?.unbind()) };
+        Ok(Self {
+            effective_vars: field("effective_vars")?,
+            loaded_macros: field("loaded_macros")?,
+            macro_context: field("macro_context")?,
+            enums: field("enums")?,
+            constants: field("constants")?,
+            value_renderer: field("value_renderer")?,
+            collection_rendering: field("collection_rendering")?,
+            local_declarations: record
+                .getattr("local_declarations")?
+                .downcast_into::<PyDict>()?
+                .unbind(),
+            declaration_resolver: field("declaration_resolver")?,
+        })
+    }
+
+    /// These inputs as a `SqlExpansionContext` record.
+    pub(crate) fn record<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        call_with(
+            &registry::class(py, RecordId::SqlExpansionContext)?,
             &[
-                "cli_vars",
-                "discovered_inputs",
-                "declaration_scope",
-                "static_declaration_scope",
+                ("effective_vars", self.effective_vars.bind(py).clone()),
+                ("loaded_macros", self.loaded_macros.bind(py).clone()),
+                ("macro_context", self.macro_context.bind(py).clone()),
+                ("enums", self.enums.bind(py).clone()),
+                ("constants", self.constants.bind(py).clone()),
+                ("value_renderer", self.value_renderer.bind(py).clone()),
+                (
+                    "collection_rendering",
+                    self.collection_rendering.bind(py).clone(),
+                ),
+                (
+                    "local_declarations",
+                    self.local_declarations.bind(py).clone().into_any(),
+                ),
+                (
+                    "declaration_resolver",
+                    self.declaration_resolver.bind(py).clone(),
+                ),
             ],
-        ),
-    )?;
-    let value_renderer: Bound<'py, PyAny> = arguments.value("value_renderer")?;
-    let mut discovered: Bound<'py, PyAny> = arguments.value("discovered_inputs")?;
-    if discovered.is_none() {
-        discovered = call_with(
+        )
+    }
+}
+
+/// Where SQL expansion inputs come from: the project, its discovery and the scope to reuse.
+pub(crate) struct ExpansionSources<'py> {
+    pub(crate) project_dir: Bound<'py, PyAny>,
+    pub(crate) value_renderer: Bound<'py, PyAny>,
+    pub(crate) cli_vars: Option<Bound<'py, PyAny>>,
+    pub(crate) discovered_inputs: Option<Bound<'py, PyAny>>,
+    pub(crate) declaration_scope: Option<Bound<'py, PyAny>>,
+    pub(crate) static_declaration_scope: Option<Bound<'py, PyAny>>,
+}
+
+/// Assemble SQL expansion inputs; a static scope lends only its index to private macros.
+pub(crate) fn sql_expansion_inputs(sources: ExpansionSources<'_>) -> PyResult<SqlExpansionInputs> {
+    let py: Python<'_> = sources.project_dir.py();
+    let value_renderer = sources.value_renderer;
+    let discovered = match sources.discovered_inputs {
+        Some(discovered) => discovered,
+        None => call_with(
             &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
             &[
-                ("project_dir", arguments.value("project_dir")?),
+                ("project_dir", sources.project_dir.clone()),
                 (
                     "sql_analysis_enabled_override",
                     PyBool::new(py, false).to_owned().into_any(),
                 ),
             ],
-        )?;
-    }
-    let project_config: Bound<'py, PyAny> = discovered.getattr("project_config")?;
-    let local_config: Bound<'py, PyAny> = discovered.getattr("local_config")?;
-    let mut cli_vars: Bound<'py, PyAny> = arguments.value("cli_vars")?;
-    if cli_vars.is_none() {
-        cli_vars = PyDict::new(py).into_any();
-    }
-    let effective_vars: Bound<'py, PyAny> = build_effective_vars(
+        )?,
+    };
+    let project_config: Bound<'_, PyAny> = discovered.getattr("project_config")?;
+    let local_config: Bound<'_, PyAny> = discovered.getattr("local_config")?;
+    let cli_vars: Bound<'_, PyAny> = sources
+        .cli_vars
+        .unwrap_or_else(|| PyDict::new(py).into_any());
+    let effective_vars: Bound<'_, PyAny> = build_effective_vars(
         &project_config.clone(),
         &local_config.clone(),
         &py.None().into_bound(py),
         &cli_vars,
     )
     .and_then(|value| value.into_bound_py_any(py))?;
-    let mut scope: Bound<'py, PyAny> = arguments.value("declaration_scope")?;
-    if scope.is_none() {
-        scope = declaration_scope(
+    let scope: Bound<'_, PyAny> = match sources.declaration_scope {
+        Some(scope) => scope,
+        None => declaration_scope(
             &discovered,
-            arguments.value("static_declaration_scope")?,
+            sources
+                .static_declaration_scope
+                .unwrap_or_else(|| py.None().into_bound(py)),
             value_renderer.getattr("sql_lexical_syntax")?,
-        )?;
-    }
-    let (enums, constants): (Bound<'py, PyAny>, Bound<'py, PyAny>) =
+        )?,
+    };
+    let (enums, constants): (Bound<'_, PyAny>, Bound<'_, PyAny>) =
         registry::native(py, NativeAttr::PublicDeclarationIndexes)?
             .call1((&discovered,))?
             .extract()?;
-    let collection_rendering: Bound<'py, PyAny> =
+    let collection_rendering: Bound<'_, PyAny> =
         resolve_effective_collection_rendering(&project_config.clone(), &py.None().into_bound(py))
             .and_then(|value| value.into_bound_py_any(py))?;
-    let macro_context: Bound<'py, PyAny> = call_with(
+    let macro_context: Bound<'_, PyAny> = call_with(
         &registry::class(py, RecordId::MacroContext)?,
         &[
             (
@@ -161,21 +216,52 @@ pub(crate) fn build_sql_expansion_context<'py>(
             ),
         ],
     )?;
-    call_with(
-        &registry::class(py, RecordId::SqlExpansionContext)?,
-        &[
-            ("effective_vars", effective_vars),
-            ("loaded_macros", scope.getattr("loaded_macros")?),
-            ("macro_context", macro_context),
-            ("enums", enums),
-            ("constants", constants),
-            ("value_renderer", value_renderer),
-            ("collection_rendering", collection_rendering),
-            (
-                "local_declarations",
-                local_declarations(&discovered)?.into_any(),
-            ),
-            ("declaration_resolver", scope.getattr("resolver")?),
-        ],
-    )
+    Ok(SqlExpansionInputs {
+        effective_vars: effective_vars.unbind(),
+        loaded_macros: scope.getattr("loaded_macros")?.unbind(),
+        macro_context: macro_context.unbind(),
+        enums: enums.unbind(),
+        constants: constants.unbind(),
+        value_renderer: value_renderer.unbind(),
+        collection_rendering: collection_rendering.unbind(),
+        local_declarations: local_declarations(&discovered)?.unbind(),
+        declaration_resolver: scope.getattr("resolver")?.unbind(),
+    })
+}
+
+/// `value`, or `None` when it is Python `None`.
+pub(crate) fn present(value: Bound<'_, PyAny>) -> Option<Bound<'_, PyAny>> {
+    (!value.is_none()).then_some(value)
+}
+
+/// Assemble SQL expansion inputs; a static scope lends only its index to private macros.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+pub(crate) fn build_sql_expansion_context<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let arguments: KeywordArguments<'py> = KeywordArguments::read(
+        py,
+        "build_sql_expansion_context",
+        options,
+        (
+            &["project_dir", "value_renderer"],
+            &[
+                "cli_vars",
+                "discovered_inputs",
+                "declaration_scope",
+                "static_declaration_scope",
+            ],
+        ),
+    )?;
+    sql_expansion_inputs(ExpansionSources {
+        project_dir: arguments.value("project_dir")?,
+        value_renderer: arguments.value("value_renderer")?,
+        cli_vars: present(arguments.value("cli_vars")?),
+        discovered_inputs: present(arguments.value("discovered_inputs")?),
+        declaration_scope: present(arguments.value("declaration_scope")?),
+        static_declaration_scope: present(arguments.value("static_declaration_scope")?),
+    })?
+    .record(py)
 }

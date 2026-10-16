@@ -6,10 +6,11 @@ use pyo3::prelude::{
 use pyo3::types::{PyBool, PyDict};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_attachment::sql_expansion_context::build_sql_expansion_context;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, keywords,
+use crate::bindings::_helpers::compile_attachment::sql_expansion_context::{
+    ExpansionSources, SqlExpansionInputs, present, sql_expansion_inputs,
 };
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
@@ -39,59 +40,75 @@ pub(crate) fn build_lint_expansion_context<'py>(
             ],
         ),
     )?;
-    expansion_context(py, &arguments).or_else(|error| Err(compile_first_error(py, error)?))
+    let renderer: Bound<'py, PyAny> = arguments.value("value_renderer")?;
+    lint_expansion_inputs(LintExpansionSources {
+        project_dir: arguments.value("project_dir")?,
+        value_renderer: renderer.is_truthy()?.then_some(renderer),
+        discovered_inputs: present(arguments.value("discovered_inputs")?),
+        declaration_scope: present(arguments.value("declaration_scope")?),
+        static_declaration_scope: present(arguments.value("static_declaration_scope")?),
+    })?
+    .record(py)
 }
 
-fn expansion_context<'py>(
-    py: Python<'py>,
-    arguments: &KeywordArguments<'py>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let project_dir: Bound<'py, PyAny> = arguments.value("project_dir")?;
-    let mut discovered: Bound<'py, PyAny> = arguments.value("discovered_inputs")?;
-    if discovered.is_none() {
-        let no: Bound<'py, PyAny> = PyBool::new(py, false).to_owned().into_any();
-        discovered = call_with(
-            &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
-            &[
-                ("project_dir", project_dir.clone()),
-                ("sql_analysis_enabled_override", no.clone()),
-                ("extract_output_column_locations", no),
-            ],
-        )?;
-    }
-    let mut renderer: Bound<'py, PyAny> = arguments.value("value_renderer")?;
-    if !renderer.is_truthy()? {
-        let adapter_name: Bound<'py, PyAny> = call_with(
-            &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-            &[
-                ("project_config", discovered.getattr("project_config")?),
-                ("local_config", discovered.getattr("local_config")?),
-            ],
-        )?;
-        renderer = call_with(
-            &host::entry(py, AdapterHost::ResolveAdapter)?,
-            &[
-                ("adapter_name", adapter_name),
-                ("project_dir", project_dir.clone()),
-            ],
-        )?;
-    }
-    build_sql_expansion_context(
-        py,
-        Some(keywords(
-            py,
-            &[
-                ("project_dir", project_dir),
-                ("discovered_inputs", discovered),
-                ("value_renderer", renderer),
-                ("declaration_scope", arguments.value("declaration_scope")?),
-                (
-                    "static_declaration_scope",
-                    arguments.value("static_declaration_scope")?,
-                ),
-            ],
-        )?),
-    )
+/// Where lint's expansion inputs come from; a missing renderer is the project's adapter.
+pub(crate) struct LintExpansionSources<'py> {
+    pub(crate) project_dir: Bound<'py, PyAny>,
+    pub(crate) value_renderer: Option<Bound<'py, PyAny>>,
+    pub(crate) discovered_inputs: Option<Bound<'py, PyAny>>,
+    pub(crate) declaration_scope: Option<Bound<'py, PyAny>>,
+    pub(crate) static_declaration_scope: Option<Bound<'py, PyAny>>,
+}
+
+/// Lint's expansion inputs, reporting compile failures as `ProjectCompileError`.
+pub(crate) fn lint_expansion_inputs(
+    sources: LintExpansionSources<'_>,
+) -> PyResult<SqlExpansionInputs> {
+    let py: Python<'_> = sources.project_dir.py();
+    expansion_inputs(sources).or_else(|error| Err(compile_first_error(py, error)?))
+}
+
+fn expansion_inputs(sources: LintExpansionSources<'_>) -> PyResult<SqlExpansionInputs> {
+    let py: Python<'_> = sources.project_dir.py();
+    let project_dir: Bound<'_, PyAny> = sources.project_dir;
+    let discovered: Bound<'_, PyAny> = match sources.discovered_inputs {
+        Some(discovered) => discovered,
+        None => {
+            let no: Bound<'_, PyAny> = PyBool::new(py, false).to_owned().into_any();
+            call_with(
+                &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
+                &[
+                    ("project_dir", project_dir.clone()),
+                    ("sql_analysis_enabled_override", no.clone()),
+                    ("extract_output_column_locations", no),
+                ],
+            )?
+        }
+    };
+    let renderer: Bound<'_, PyAny> = match sources.value_renderer {
+        Some(renderer) => renderer,
+        None => {
+            let adapter_name: Bound<'_, PyAny> = resolve_effective_adapter_name(
+                &discovered.getattr("project_config")?,
+                &discovered.getattr("local_config")?,
+            )?;
+            call_with(
+                &host::entry(py, AdapterHost::ResolveAdapter)?,
+                &[
+                    ("adapter_name", adapter_name),
+                    ("project_dir", project_dir.clone()),
+                ],
+            )?
+        }
+    };
+    sql_expansion_inputs(ExpansionSources {
+        project_dir,
+        value_renderer: renderer,
+        cli_vars: None,
+        discovered_inputs: Some(discovered),
+        declaration_scope: sources.declaration_scope,
+        static_declaration_scope: sources.static_declaration_scope,
+    })
 }
 
 /// Adapter, compile and discovery errors as `ProjectCompileError`; any other error unchanged.

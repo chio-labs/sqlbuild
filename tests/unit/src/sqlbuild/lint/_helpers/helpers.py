@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import astuple
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from sqlbuild._native import (
     HeaderSpan,
@@ -18,9 +17,6 @@ from sqlbuild._native import (
     scan_headers,
     sql_body_ranges,
 )
-
-if TYPE_CHECKING:
-    from sqlbuild._native import NativeLintPreparationRequest, NativePreparedSql
 
 
 def lint_bodies_for(*, file_path: Path, contents: str) -> tuple[LintBody, ...]:
@@ -91,20 +87,6 @@ def write_lint_project(*, root: Path, files: dict[str, str]) -> None:
         path: Path = root / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(contents, encoding="utf-8")
-
-
-def prepare_nothing_in_batch(
-    requests: list[NativeLintPreparationRequest],
-) -> list[tuple[bool, NativePreparedSql | None]]:
-    """Report every body as unprepared so each one takes the per-body native call."""
-
-    return [(False, None) for _request in requests]
-
-
-def refuse_preparation(request: NativeLintPreparationRequest) -> NativePreparedSql | None:
-    """Fail the per-body native preparation of any body."""
-
-    raise ValueError(f"cannot prepare {request['dialect']} body")
 
 
 def write_orders_lint_project(*, project_dir: Path, model_bytes: bytes) -> Path:

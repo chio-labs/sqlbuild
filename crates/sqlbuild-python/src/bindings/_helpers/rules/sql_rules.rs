@@ -1,34 +1,51 @@
 //! Run the planned SQL rules through native lint, reusing cached and early-lint results.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{
-    PyDict, PyDictMethods, PyFrozenSet, PyList, PyListMethods, PySet, PySetMethods, PyString,
-    PyTuple,
+use pyo3::prelude::{
+    Bound, IntoPyObject, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyRef, PyResult,
+    Python,
 };
+use pyo3::types::{PyBytes, PyDict, PyString, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
+use sqlbuild_core::text::main::python_splitlines::python_splitlines;
+use sqlbuild_rules::rule_cache::main::file_rule_key::file_rule_key;
+use sqlbuild_rules::rule_results::main::duplicate_literal_hints::duplicate_literal_hints;
+use sqlbuild_rules::rule_results::models::RuleFinding;
 
 use crate::bindings::_helpers::analysis::model_reads::output_proven;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::constants::SAFE_RULE_FIX_CODES;
-use crate::bindings::_helpers::rules::early_sql_lint::{sql_lint_config, sql_rule_cache_path};
+use crate::bindings::_helpers::rules::early_sql_lint::{
+    EarlyLintResult, EarlySqlLint, PreparedSqlLint, sql_lint_settings, sql_rule_cache_path,
+};
+use crate::bindings::_helpers::rules::lint_expansion::{
+    LintExpansionSources, lint_expansion_inputs,
+};
+use crate::bindings::_helpers::rules::lint_inputs::project_sql_expansions;
+use crate::bindings::_helpers::rules::lint_pipeline::{
+    CompiledExpansion, LintFile, LintOutcome, LintRequest, LintSettings, LintViolationRow, lint,
+    lint_sources, outside_project, resolved,
+};
+use crate::bindings::_helpers::rules::relation_keys::project_relation_keys;
+use crate::bindings::_helpers::rules::rule_cache::{
+    StoredEntries, cached_rule_findings, encoded_findings, model_rule_keys, settings_lint_key,
+    stored_entries, write_rule_cache,
+};
 
 const DATACLASSES_MODULE: &str = "dataclasses";
 const JSON_MODULE: &str = "json";
 const BUILTINS_MODULE: &str = "builtins";
+const PATHLIB_MODULE: &str = "pathlib";
 const SQL_RULE_PREFIX: &str = "SQBRSQL";
 const SQL_RULE_SUPPRESSION_CODE: &str = "SQBRSQL000";
 const DEFAULT_REMEDIATION: &str = "Update the authored SQL to satisfy this rule.";
-
-/// `native.name`, looked up at call time.
-fn native<'py>(py: Python<'py>, name: NativeAttr) -> PyResult<Bound<'py, PyAny>> {
-    registry::native(py, name)
-}
+const UTF8: &str = "utf-8";
 
 /// The SQL rule codes among `rules`, in order.
 fn sql_rule_codes(rules: &[Bound<'_, PyAny>]) -> PyResult<Vec<String>> {
@@ -45,14 +62,30 @@ fn sql_rule_codes(rules: &[Bound<'_, PyAny>]) -> PyResult<Vec<String>> {
 /// The settings, project and inputs one SQL rules evaluation reads.
 struct SqlRun<'a, 'py> {
     codes: &'a [String],
-    project_dir: Bound<'py, PyAny>,
+    project_dir: PathBuf,
     discovered_inputs: Bound<'py, PyAny>,
     project: Bound<'py, PyAny>,
-    lint_config: Bound<'py, PyAny>,
-    selected_model_paths: Bound<'py, PyAny>,
+    settings: LintSettings,
+    /// Whether the plan selected model paths, rather than the whole project.
+    model_selection: bool,
     cache_enabled: bool,
-    prepared_sql: Bound<'py, PyAny>,
-    expansion_reuse: Bound<'py, PyAny>,
+    early_lint: Option<PyRef<'py, EarlySqlLint>>,
+}
+
+impl<'py> SqlRun<'_, 'py> {
+    /// The early SQL lint that started for this compile, if any.
+    fn prepared(&self) -> Option<&PreparedSqlLint> {
+        self.early_lint
+            .as_ref()
+            .and_then(|early| early.preparation())
+            .map(|preparation| preparation.get())
+    }
+}
+
+/// `path` with forward slashes, as `PurePath.as_posix` writes it.
+fn posix(path: &Path) -> String {
+    path.to_string_lossy()
+        .replace(std::path::MAIN_SEPARATOR, "/")
 }
 
 /// Run the planned SQL rules on the caller while built-in rules evaluate natively.
@@ -72,39 +105,43 @@ fn run_planned_sql_rules<'py>(options: Option<&Bound<'py, PyDict>>) -> PyResult<
         }
     }
     let codes: Vec<String> = sql_rule_codes(&native_rules)?;
-    let lint_config: Bound<'py, PyAny> = sql_lint_config(
-        &options.get("dialect")?,
+    let thresholds: Bound<'py, PyAny> = effective_config.getattr("thresholds")?;
+    let dialect: String = options.get("dialect")?.extract()?;
+    let settings: LintSettings = sql_lint_settings(
+        &dialect,
         &codes,
-        &effective_config.getattr("thresholds")?,
+        |key| thresholds.call_method1("get", (key,))?.extract(),
         (
-            native(py, NativeAttr::CompiledRelationKeys)?.call1((graph.getattr("project")?,))?,
-            effective_config.getattr("allow_exceptions")?,
+            project_relation_keys(&graph.getattr("project")?)?,
+            effective_config.getattr("allow_exceptions")?.is_truthy()?,
         ),
     )?;
+    let early_lint: Bound<'py, PyAny> = options.get("early_lint")?;
     let run = SqlRun {
         codes: &codes,
-        project_dir: plan.getattr("project_dir")?,
+        project_dir: plan.getattr("project_dir")?.extract()?,
         discovered_inputs: options.get("discovered_inputs")?,
         project: plan.getattr("project")?,
-        lint_config,
-        selected_model_paths: plan.getattr("model_paths")?,
+        settings,
+        model_selection: !plan.getattr("model_paths")?.is_none(),
         cache_enabled: effective_config
             .getattr("cache")?
             .getattr("enabled")?
             .is_truthy()?,
-        prepared_sql: options.get("prepared_sql")?,
-        expansion_reuse: options.get("expansion_reuse")?,
+        early_lint: if early_lint.is_none() {
+            None
+        } else {
+            Some(early_lint.downcast::<EarlySqlLint>()?.borrow())
+        },
     };
-    let lint_key: String = lint_key(&run.lint_config)?;
+    let lint_key: String = settings_lint_key(&run.settings);
     let identities: Vec<(String, String)> = model_rule_identities(&run, &lint_key)?;
-    let project_files: Option<Bound<'py, PyAny>> = if !identities.is_empty()
-        && run.prepared_sql.is_none()
-        && run.selected_model_paths.is_none()
-    {
-        Some(collected_project_files(&run.project_dir)?)
-    } else {
-        None
-    };
+    let project_files: Option<Vec<LintFile>> =
+        if !identities.is_empty() && run.prepared().is_none() && !run.model_selection {
+            Some(lint_sources(&run.project_dir, None, None)?)
+        } else {
+            None
+        };
     let started: Instant = Instant::now();
     let (findings, hits, misses) =
         evaluated_sql_rules(&run, (&lint_key, identities), project_files)?;
@@ -112,7 +149,7 @@ fn run_planned_sql_rules<'py>(options: Option<&Bound<'py, PyDict>>) -> PyResult<
     call_with(
         &registry::class(py, RecordId::SqlRulesEvaluation)?,
         &[
-            ("findings", findings),
+            ("findings", finding_objects(py, findings)?.into_any()),
             ("cache_hits", hits.into_bound_py_any(py)?),
             ("cache_misses", misses.into_bound_py_any(py)?),
             ("sql_ms", sql_ms.into_bound_py_any(py)?),
@@ -120,23 +157,32 @@ fn run_planned_sql_rules<'py>(options: Option<&Bound<'py, PyDict>>) -> PyResult<
     )
 }
 
-fn lint_key(lint_config: &Bound<'_, PyAny>) -> PyResult<String> {
-    call_with(
-        &native(lint_config.py(), NativeAttr::SqlRuleLintKey)?,
-        &[("config", lint_config.clone())],
-    )?
-    .extract()
-}
-
-fn collected_project_files<'py>(project_dir: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = project_dir.py();
-    call_with(
-        &native(py, NativeAttr::CollectLintProjectFiles)?,
-        &[
-            ("project_dir", project_dir.clone()),
-            ("selected_paths", py.None().into_bound(py)),
-        ],
-    )
+/// Finding rows as `Finding` records.
+fn finding_objects(py: Python<'_>, findings: Vec<RuleFinding>) -> PyResult<Bound<'_, PyTuple>> {
+    let class: Bound<'_, PyAny> = registry::class(py, RecordId::Finding)?;
+    let path_class: Bound<'_, PyAny> = imported(py, PATHLIB_MODULE, "Path")?;
+    let objects: Vec<Bound<'_, PyAny>> = findings
+        .into_iter()
+        .map(|finding| {
+            call_with(
+                &class,
+                &[
+                    ("code", PyString::new(py, &finding.code).into_any()),
+                    ("path", path_class.call1((finding.path,))?),
+                    ("line", finding.line.into_pyobject(py)?.into_any()),
+                    ("column", finding.column.into_pyobject(py)?.into_any()),
+                    ("message", PyString::new(py, &finding.message).into_any()),
+                    (
+                        "remediation",
+                        PyString::new(py, &finding.remediation).into_any(),
+                    ),
+                    ("unevaluated", finding.unevaluated.into_bound_py_any(py)?),
+                    ("fixable", finding.fixable.into_bound_py_any(py)?),
+                ],
+            )
+        })
+        .collect::<PyResult<_>>()?;
+    PyTuple::new(py, objects)
 }
 
 /// The project's models SQL rules analyse, keyed by relative path in project order.
@@ -174,192 +220,127 @@ fn sql_rule_models<'py>(project: &Bound<'py, PyAny>) -> PyResult<Vec<(String, Bo
 
 /// Each analysed model's SQL rule cache key, in project order.
 fn model_rule_identities(run: &SqlRun<'_, '_>, lint_key: &str) -> PyResult<Vec<(String, String)>> {
-    let py: Python<'_> = run.project.py();
     if run.codes.is_empty() {
         return Ok(Vec::new());
     }
-    let mut models: Vec<Bound<'_, PyTuple>> = Vec::new();
-    let mut paths: Vec<String> = Vec::new();
+    let mut models: Vec<(String, String, String, Option<String>)> = Vec::new();
     for (path, model) in sql_rule_models(&run.project)? {
-        models.push(PyTuple::new(
-            py,
-            [
-                PyString::new(py, &path).into_any(),
-                model.getattr("authored_sql")?,
-                model.getattr("query_sql")?,
-                contract_text(&model)?,
-            ],
-        )?);
-        paths.push(path);
+        models.push((
+            path,
+            model.getattr("authored_sql")?.extract()?,
+            model.getattr("query_sql")?.extract()?,
+            contract_text(&model)?,
+        ));
     }
-    let keys: Bound<'_, PyAny> = call_with(
-        &native(py, NativeAttr::SqlModelRuleKeys)?,
-        &[
-            ("lint_key", PyString::new(py, lint_key).into_any()),
-            ("codes", PyList::new(py, run.codes)?.into_any()),
-            ("models", PyList::new(py, models)?.into_any()),
-        ],
-    )?;
-    paths
+    let keys: BTreeMap<String, String> = model_rule_keys(lint_key, run.codes, &models);
+    Ok(models
         .into_iter()
-        .map(|path| {
-            let key: String = keys.get_item(&path)?.extract()?;
-            Ok((path, key))
+        .map(|(path, ..)| {
+            let key: String = keys[&path].clone();
+            (path, key)
         })
-        .collect()
+        .collect())
 }
 
 /// Canonical text of the dynamic column contract that SQL rule findings depend on.
-fn contract_text<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = model.py();
-    let contract: Bound<'py, PyAny> = model.getattr("dynamic_column_contract")?;
+fn contract_text(model: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
+    let py: Python<'_> = model.py();
+    let contract: Bound<'_, PyAny> = model.getattr("dynamic_column_contract")?;
     if contract.is_none() {
-        return Ok(contract);
-    }
-    imported(py, JSON_MODULE, "dumps")?.call(
-        (imported(py, DATACLASSES_MODULE, "asdict")?.call1((contract,))?,),
-        Some(&keywords(
-            py,
-            &[
-                ("sort_keys", true.into_bound_py_any(py)?),
-                ("separators", (",", ":").into_bound_py_any(py)?),
-                ("default", imported(py, BUILTINS_MODULE, "str")?),
-            ],
-        )?),
-    )
-}
-
-/// The stored findings of every path whose key still matches; undecodable ones miss.
-fn cached_findings<'py>(
-    bucket: &Bound<'py, PyAny>,
-    keys: Vec<(String, String)>,
-) -> PyResult<Bound<'py, PyDict>> {
-    let py: Python<'py> = bucket.py();
-    Ok(call_with(
-        &native(py, NativeAttr::LookupSqlRuleCache)?,
-        &[
-            ("entries", bucket.clone()),
-            ("keys", keys.into_bound_py_any(py)?),
-        ],
-    )?
-    .downcast_into()?)
-}
-
-/// The early SQL lint's full-project file read, when it ran for this project and these codes.
-fn prepared_project_files<'py>(run: &SqlRun<'_, 'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let py: Python<'py> = run.project_dir.py();
-    let prepared: &Bound<'py, PyAny> = &run.prepared_sql;
-    if prepared.is_none()
-        || prepared.getattr("project_dir")?.ne(&run.project_dir)?
-        || !same_codes(&prepared.getattr("codes")?, run.codes)?
-        || !prepared
-            .getattr("future")?
-            .call_method0("exception")?
-            .is_none()
-    {
         return Ok(None);
     }
-    let texts: Bound<'py, PyAny> = prepared
-        .getattr("future")?
-        .call_method0("result")?
-        .getattr("result")?
-        .getattr("source_texts")?;
-    Ok(Some(
-        imported(py, BUILTINS_MODULE, "dict")?.call1((texts,))?,
-    ))
+    imported(py, JSON_MODULE, "dumps")?
+        .call(
+            (imported(py, DATACLASSES_MODULE, "asdict")?.call1((contract,))?,),
+            Some(&keywords(
+                py,
+                &[
+                    ("sort_keys", true.into_bound_py_any(py)?),
+                    ("separators", (",", ":").into_bound_py_any(py)?),
+                    ("default", imported(py, BUILTINS_MODULE, "str")?),
+                ],
+            )?),
+        )?
+        .extract()
+        .map(Some)
 }
 
-fn same_codes(codes: &Bound<'_, PyAny>, expected: &[String]) -> PyResult<bool> {
-    let mut known: BTreeSet<String> = BTreeSet::new();
-    if !codes.is_none() {
-        for code in codes.try_iter()? {
-            known.insert(code?.extract()?);
-        }
+/// The early SQL lint's result, when it ran for this project and these codes.
+fn prepared_result<'a>(
+    run: &'a SqlRun<'_, '_>,
+    py: Python<'_>,
+) -> Option<&'a Result<EarlyLintResult, PyErr>> {
+    let prepared: &PreparedSqlLint = run.prepared()?;
+    if !prepared.matches(&run.project_dir, run.codes) {
+        return None;
     }
-    Ok(known == expected.iter().cloned().collect())
+    Some(prepared.result(py))
 }
 
 /// Each analysed model's findings, cached or linted, then cache accounting.
-fn evaluated_sql_rules<'py>(
-    run: &SqlRun<'_, 'py>,
+fn evaluated_sql_rules(
+    run: &SqlRun<'_, '_>,
     (lint_key, identities): (&str, Vec<(String, String)>),
-    prepared_files: Option<Bound<'py, PyAny>>,
-) -> PyResult<(Bound<'py, PyAny>, usize, usize)> {
-    let py: Python<'py> = run.project_dir.py();
+    prepared_files: Option<Vec<LintFile>>,
+) -> PyResult<(Vec<RuleFinding>, usize, usize)> {
+    let py: Python<'_> = run.project.py();
     if run.codes.is_empty() {
-        return Ok((PyTuple::empty(py).into_any(), 0, 0));
+        return Ok((Vec::new(), 0, 0));
     }
-    let project_dir: &Bound<'py, PyAny> = &run.project_dir;
-    let models: Vec<(String, Bound<'py, PyAny>)> = sql_rule_models(&run.project)?;
-    let cache_path: Bound<'py, PyAny> = sql_rule_cache_path(project_dir)?;
-    let bucket: Bound<'py, PyAny> = if run.cache_enabled {
-        call_with(
-            &native(py, NativeAttr::LoadSqlRuleCache)?,
-            &[("path", cache_path.clone())],
-        )?
+    let project_dir: &Path = &run.project_dir;
+    let models: Vec<(String, Bound<'_, PyAny>)> = sql_rule_models(&run.project)?;
+    let cache_path: PathBuf = sql_rule_cache_path(project_dir);
+    let mut bucket: StoredEntries = if run.cache_enabled {
+        stored_entries(&cache_path)?
     } else {
-        PyDict::new(py).into_any()
+        StoredEntries::new()
     };
-    let findings: Bound<'py, PyList> = PyList::empty(py);
-    let model_hits: Bound<'py, PyDict> = cached_findings(&bucket, identities.clone())?;
+    let mut findings: Vec<RuleFinding> = Vec::new();
+    let mut model_hits: BTreeMap<String, Vec<RuleFinding>> =
+        cached_rule_findings(&bucket, &identities)?;
     let mut misses: Vec<(String, String)> = Vec::new();
     for (path, identity) in &identities {
-        match model_hits.get_item(path)? {
-            Some(hit) => {
-                for finding in hit.try_iter()? {
-                    findings.append(finding?)?;
-                }
-            }
+        match model_hits.remove(path) {
+            Some(hit) => findings.extend(hit),
             None => misses.push((path.clone(), identity.clone())),
         }
     }
-    let selected_paths: Bound<'py, PySet> = PySet::empty(py)?;
-    for (path, _) in &misses {
-        selected_paths.add(project_dir.div(path)?)?;
-    }
+    let mut selected_paths: BTreeSet<PathBuf> = misses
+        .iter()
+        .map(|(path, _)| project_dir.join(path))
+        .collect();
     let mut file_identities: Vec<(String, String)> = Vec::new();
-    let mut project_files: Bound<'py, PyAny> = py.None().into_bound(py);
-    if run.selected_model_paths.is_none() {
-        let model_paths: Bound<'py, PySet> = PySet::empty(py)?;
+    let mut project_files: Option<Vec<LintFile>> = None;
+    let compiled: HashMap<PathBuf, CompiledExpansion> = project_sql_expansions(&run.project)?;
+    if !run.model_selection {
+        let mut model_paths: HashSet<PathBuf> = HashSet::new();
         for model in run.project.getattr("models")?.try_iter()? {
-            model_paths.add(project_dir.div(model?.getattr("relative_path")?)?)?;
+            model_paths
+                .insert(project_dir.join(model?.getattr("relative_path")?.extract::<PathBuf>()?));
         }
-        project_files = match prepared_project_files(run)? {
-            Some(files) => files,
-            None => match prepared_files {
+        let files: Vec<LintFile> = match prepared_result(run, py) {
+            Some(Ok(result)) => result.outcome.files.clone(),
+            Some(Err(_)) | None => match prepared_files {
                 Some(files) => files,
-                None => collected_project_files(project_dir)?,
+                None => lint_sources(project_dir, None, None)?,
             },
         };
-        let expansions: Bound<'py, PyAny> = run.project.getattr("sql_expansions")?;
-        let mut file_keys: Vec<(Bound<'py, PyAny>, String, Option<String>)> = Vec::new();
-        for item in project_files.downcast::<PyDict>()?.iter() {
-            let (file_path, contents) = item;
-            if model_paths.contains(&file_path)? {
+        let mut file_keys: Vec<(PathBuf, String, Option<String>)> = Vec::new();
+        for file in &files {
+            if model_paths.contains(&file.path) {
                 continue;
             }
-            let relative_path: String = file_path
-                .call_method1("relative_to", (project_dir,))?
-                .call_method0("as_posix")?
-                .extract()?;
-            let key: Option<String> = call_with(
-                &native(py, NativeAttr::SqlFileRuleKey)?,
-                &[
-                    ("lint_key", PyString::new(py, lint_key).into_any()),
-                    ("codes", PyList::new(py, run.codes)?.into_any()),
-                    (
-                        "relative_path",
-                        PyString::new(py, &relative_path).into_any(),
-                    ),
-                    ("contents", contents),
-                    (
-                        "expanded",
-                        expansions.contains(&file_path)?.into_bound_py_any(py)?,
-                    ),
-                ],
-            )?
-            .extract()?;
-            file_keys.push((file_path, relative_path, key));
+            let Ok(relative) = file.path.strip_prefix(project_dir) else {
+                return Err(outside_project(&file.path, project_dir));
+            };
+            let relative_path: String = posix(relative);
+            let key: Option<String> = file_rule_key(
+                lint_key,
+                run.codes,
+                (&relative_path, &file.contents),
+                compiled.contains_key(&file.path),
+            );
+            file_keys.push((file.path.clone(), relative_path, key));
         }
         let mut keyed: Vec<(String, String)> = Vec::new();
         for (_, path, key) in &file_keys {
@@ -367,246 +348,230 @@ fn evaluated_sql_rules<'py>(
                 keyed.push((path.clone(), key.clone()));
             }
         }
-        let file_hits: Bound<'py, PyDict> = cached_findings(&bucket, keyed)?;
+        let mut file_hits: BTreeMap<String, Vec<RuleFinding>> =
+            cached_rule_findings(&bucket, &keyed)?;
         for (file_path, relative_path, identity) in file_keys {
-            match file_hits.get_item(&relative_path)? {
-                Some(hit) => {
-                    for finding in hit.try_iter()? {
-                        findings.append(finding?)?;
-                    }
-                }
+            match file_hits.remove(&relative_path) {
+                Some(hit) => findings.extend(hit),
                 None => {
-                    selected_paths.add(file_path)?;
+                    selected_paths.insert(file_path);
                     if let Some(identity) = identity {
                         file_identities.push((relative_path, identity));
                     }
                 }
             }
         }
+        project_files = Some(files);
     }
-    let violations: Vec<Bound<'py, PyAny>> = if selected_paths.is_empty() {
+    let violations: Vec<(PathBuf, LintViolationRow)> = if selected_paths.is_empty() {
         Vec::new()
     } else {
-        let mut dynamic: Vec<Bound<'py, PyAny>> = Vec::new();
+        let mut dynamic: HashSet<PathBuf> = HashSet::new();
         for (_, model) in &models {
             if output_proven(model)? {
-                dynamic.push(
-                    project_dir
-                        .div(model.getattr("relative_path")?)?
-                        .call_method0("resolve")?,
-                );
+                dynamic.insert(resolved(
+                    &project_dir.join(model.getattr("relative_path")?.extract::<PathBuf>()?),
+                ));
             }
         }
-        prepared_lint_violations(
-            run,
-            &PyFrozenSet::new(py, selected_paths.iter())?,
-            &PyFrozenSet::new(py, dynamic)?,
-            &project_files,
-        )?
+        prepared_lint_violations(run, (&selected_paths, &dynamic), &compiled, project_files)?
     };
     let model_paths: BTreeSet<String> = models.into_iter().map(|(path, _)| path).collect();
-    let evaluated: Vec<Bound<'py, PyAny>> = violation_findings(run, &violations, &model_paths)?;
-    for finding in &evaluated {
-        findings.append(finding)?;
-    }
+    let evaluated: Vec<RuleFinding> = violation_findings(run, &violations, &model_paths)?;
+    findings.extend(evaluated.iter().cloned());
     let mut written: Vec<(String, String)> = misses.clone();
     written.extend(file_identities);
     if run.cache_enabled && !written.is_empty() {
-        write_cache(&bucket, (&cache_path, written), &evaluated)?;
+        let mut by_path: HashMap<&str, Vec<&RuleFinding>> = HashMap::new();
+        for finding in &evaluated {
+            by_path
+                .entry(finding.path.as_str())
+                .or_default()
+                .push(finding);
+        }
+        for (path, identity) in written {
+            let own: &[&RuleFinding] = by_path.get(path.as_str()).map_or(&[], Vec::as_slice);
+            let encoded: String = encoded_findings(own)?;
+            bucket.insert(path, (identity, encoded));
+        }
+        write_rule_cache(&cache_path, &bucket)?;
     }
-    let hinted: Bound<'py, PyAny> = call_with(
-        &native(py, NativeAttr::WithDuplicateLiteralHints)?,
-        &[
-            ("findings", PyTuple::new(py, findings.iter())?.into_any()),
-            ("project_dir", project_dir.clone()),
-        ],
-    )?;
-    Ok((hinted, identities.len() - misses.len(), misses.len()))
+    let hints: Vec<Option<String>> =
+        duplicate_literal_hints::<PyErr>(&findings, |path| file_lines(py, project_dir, path))?;
+    for (finding, hint) in findings.iter_mut().zip(hints) {
+        if let Some(remediation) = hint {
+            finding.remediation = remediation;
+        }
+    }
+    Ok((findings, identities.len() - misses.len(), misses.len()))
 }
 
-/// Store each rewritten path's evaluated findings in `bucket` and replace the cache file.
-fn write_cache<'py>(
-    bucket: &Bound<'py, PyAny>,
-    (cache_path, written): (&Bound<'py, PyAny>, Vec<(String, String)>),
-    evaluated: &[Bound<'py, PyAny>],
-) -> PyResult<()> {
-    let py: Python<'py> = bucket.py();
-    let encode: Bound<'py, PyAny> = native(py, NativeAttr::EncodeSqlRuleFindings)?;
-    let mut by_path: HashMap<String, Vec<Bound<'py, PyAny>>> = HashMap::new();
-    for finding in evaluated {
-        let path: String = finding
-            .getattr("path")?
-            .call_method0("as_posix")?
-            .extract()?;
-        by_path.entry(path).or_default().push(finding.clone());
-    }
-    for (path, identity) in written {
-        let own: &[Bound<'py, PyAny>] = by_path.get(&path).map(Vec::as_slice).unwrap_or_default();
-        let encoded: Bound<'py, PyAny> =
-            call_with(&encode, &[("findings", PyList::new(py, own)?.into_any())])?;
-        bucket.set_item(path, (identity, encoded))?;
-    }
-    let _ = call_with(
-        &native(py, NativeAttr::WriteSqlRuleCache)?,
-        &[("path", cache_path.clone()), ("entries", bucket.clone())],
-    )?;
-    Ok(())
-}
-
-/// Lint violations of `selected_paths`, reusing a matching early SQL lint.
-fn prepared_lint_violations<'py>(
-    run: &SqlRun<'_, 'py>,
-    selected_paths: &Bound<'py, PyFrozenSet>,
-    dynamic_output_paths: &Bound<'py, PyFrozenSet>,
-    source_files: &Bound<'py, PyAny>,
-) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    let py: Python<'py> = run.project_dir.py();
-    let run_lint: Bound<'py, PyAny> = native(py, NativeAttr::RunLint)?;
-    let compiled_expansions: Bound<'py, PyAny> = run.project.getattr("sql_expansions")?;
-    let enabled_codes: Bound<'py, PyAny> = run.lint_config.getattr("enabled_native_rules")?;
-    let enabled: Vec<String> = if enabled_codes.is_none() {
-        Vec::new()
-    } else {
-        enabled_codes.extract()?
+/// The authored lines of one finding's file; an unreadable file has none.
+fn file_lines(py: Python<'_>, project_dir: &Path, path: &str) -> PyResult<Vec<String>> {
+    let bytes: Vec<u8> = match std::fs::read(project_dir.join(path)) {
+        Ok(bytes) => bytes,
+        Err(_) => return Ok(Vec::new()),
     };
-    if run.prepared_sql.is_none() || !same_codes(&run.prepared_sql.getattr("codes")?, &enabled)? {
-        let expansion_context: Bound<'py, PyAny> =
-            if run.lint_config.getattr("native_enabled")?.is_truthy()? {
-                lint_expansion_context(run)?
-            } else {
-                py.None().into_bound(py)
-            };
-        return call_with(
-            &run_lint,
-            &[
-                ("project_dir", run.project_dir.clone()),
-                ("config", run.lint_config.clone()),
-                ("selected_paths", selected_paths.clone().into_any()),
-                ("discovered_inputs", run.discovered_inputs.clone()),
-                ("compiled_expansions", compiled_expansions),
-                (
-                    "dynamic_output_paths",
-                    dynamic_output_paths.clone().into_any(),
-                ),
-                ("expansion_context", expansion_context),
-                ("source_files", source_files.clone()),
-            ],
-        )?
-        .getattr("violations")?
-        .try_iter()?
-        .collect();
-    }
-    let completed: Bound<'py, PyAny> =
-        run.prepared_sql.getattr("future")?.call_method0("result")?;
-    let prepared: Bound<'py, PyAny> = completed.getattr("result")?;
-    let proof_paths: Bound<'py, PyAny> =
-        selected_paths.call_method1("__and__", (dynamic_output_paths,))?;
-    let mut violations: Vec<Bound<'py, PyAny>> = Vec::new();
-    for violation in prepared.getattr("violations")?.try_iter()? {
-        let violation: Bound<'py, PyAny> = violation?;
-        let path: Bound<'py, PyAny> = violation.getattr("file_path")?;
-        if selected_paths.contains(&path)? && !proof_paths.contains(&path)? {
-            violations.push(violation);
+    let text: String = match String::from_utf8(bytes) {
+        Ok(text) => text,
+        Err(error) => {
+            return PyBytes::new(py, error.as_bytes())
+                .call_method1("decode", (UTF8,))?
+                .extract();
         }
-    }
-    if proof_paths.is_truthy()? {
-        let proven: Bound<'py, PyAny> = call_with(
-            &run_lint,
-            &[
-                ("project_dir", run.project_dir.clone()),
-                ("config", run.lint_config.clone()),
-                ("selected_paths", proof_paths.clone()),
-                ("discovered_inputs", run.discovered_inputs.clone()),
-                ("compiled_expansions", compiled_expansions),
-                ("dynamic_output_paths", proof_paths),
-                ("expansion_context", completed.getattr("context")?),
-                (
-                    "source_files",
-                    imported(py, BUILTINS_MODULE, "dict")?
-                        .call1((prepared.getattr("source_texts")?,))?,
-                ),
-            ],
+    };
+    Ok(python_splitlines(&text)
+        .into_iter()
+        .map(str::to_owned)
+        .collect())
+}
+
+/// Lint violations of `selected_paths` by file path, reusing a matching early SQL lint.
+fn prepared_lint_violations(
+    run: &SqlRun<'_, '_>,
+    (selected_paths, dynamic_output_paths): (&BTreeSet<PathBuf>, &HashSet<PathBuf>),
+    compiled: &HashMap<PathBuf, CompiledExpansion>,
+    source_files: Option<Vec<LintFile>>,
+) -> PyResult<Vec<(PathBuf, LintViolationRow)>> {
+    let py: Python<'_> = run.project.py();
+    let enabled: &[String] = run
+        .settings
+        .sql
+        .enabled_rules
+        .as_deref()
+        .unwrap_or_default();
+    let prepared: Option<&PreparedSqlLint> = run
+        .prepared()
+        .filter(|prepared| prepared.has_codes(enabled));
+    let Some(prepared) = prepared else {
+        let context = if run.settings.native_enabled {
+            Some(lint_expansion_context(run)?)
+        } else {
+            None
+        };
+        let files: Vec<LintFile> =
+            lint_sources(&run.project_dir, Some(selected_paths), source_files)?;
+        let outcome: LintOutcome = lint(
+            py,
+            &LintRequest {
+                project_dir: &run.project_dir,
+                settings: &run.settings,
+                dynamic_output_paths,
+                compiled_expansions: compiled,
+                context: context.as_ref(),
+                skip_unexpandable: false,
+                stop: None,
+            },
+            files,
         )?;
-        for violation in proven.getattr("violations")?.try_iter()? {
-            violations.push(violation?);
-        }
+        return Ok(path_rows(outcome));
+    };
+    let result: &EarlyLintResult = match prepared.result(py) {
+        Ok(result) => result,
+        Err(error) => return Err(error.clone_ref(py)),
+    };
+    let proof_paths: BTreeSet<PathBuf> = selected_paths
+        .iter()
+        .filter(|path| dynamic_output_paths.contains(*path))
+        .cloned()
+        .collect();
+    let early: &LintOutcome = &result.outcome;
+    let mut violations: Vec<(PathBuf, LintViolationRow)> = early
+        .violations
+        .iter()
+        .filter_map(|row| {
+            let path: &PathBuf = &early.files[row.file].path;
+            (selected_paths.contains(path) && !proof_paths.contains(path))
+                .then(|| (path.clone(), row.clone()))
+        })
+        .collect();
+    if !proof_paths.is_empty() {
+        let proof_set: HashSet<PathBuf> = proof_paths.iter().cloned().collect();
+        let files: Vec<LintFile> = lint_sources(
+            &run.project_dir,
+            Some(&proof_paths),
+            Some(early.files.clone()),
+        )?;
+        let proven: LintOutcome = lint(
+            py,
+            &LintRequest {
+                project_dir: &run.project_dir,
+                settings: &run.settings,
+                dynamic_output_paths: &proof_set,
+                compiled_expansions: compiled,
+                context: Some(&result.context),
+                skip_unexpandable: false,
+                stop: None,
+            },
+            files,
+        )?;
+        violations.extend(path_rows(proven));
     }
     Ok(violations)
 }
 
+/// An outcome's violations with their file paths.
+fn path_rows(outcome: LintOutcome) -> Vec<(PathBuf, LintViolationRow)> {
+    let files: Vec<LintFile> = outcome.files;
+    outcome
+        .violations
+        .into_iter()
+        .map(|row| (files[row.file].path.clone(), row))
+        .collect()
+}
+
 /// Build lint expansion, reusing the compiler's scope only for the same discovery.
-fn lint_expansion_context<'py>(run: &SqlRun<'_, 'py>) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = run.project_dir.py();
-    let reuse: &Bound<'py, PyAny> = &run.expansion_reuse;
-    let declaration_scope: Bound<'py, PyAny> = if !reuse.is_none()
-        && reuse
-            .getattr("discovered_inputs")?
-            .is(&run.discovered_inputs)
-    {
-        reuse.getattr("declaration_scope")?
-    } else {
-        py.None().into_bound(py)
-    };
-    call_with(
-        &native(py, NativeAttr::BuildLintExpansionContext)?,
-        &[
-            ("project_dir", run.project_dir.clone()),
-            ("discovered_inputs", run.discovered_inputs.clone()),
-            ("declaration_scope", declaration_scope),
-        ],
-    )
+fn lint_expansion_context(
+    run: &SqlRun<'_, '_>,
+) -> PyResult<
+    crate::bindings::_helpers::compile_attachment::sql_expansion_context::SqlExpansionInputs,
+> {
+    let py: Python<'_> = run.project.py();
+    let declaration_scope: Option<Bound<'_, PyAny>> = run
+        .early_lint
+        .as_ref()
+        .and_then(|early| early.expansion_reuse())
+        .filter(|reuse| reuse.discovered_inputs.bind(py).is(&run.discovered_inputs))
+        .map(|reuse| reuse.declaration_scope.bind(py).clone());
+    lint_expansion_inputs(LintExpansionSources {
+        project_dir: run.project_dir.clone().into_pyobject(py)?.into_any(),
+        value_renderer: None,
+        discovered_inputs: (!run.discovered_inputs.is_none())
+            .then(|| run.discovered_inputs.clone()),
+        declaration_scope,
+        static_declaration_scope: None,
+    })
 }
 
 /// The findings of the selected SQL rules' violations; an engine failure leaves each unevaluated.
-fn violation_findings<'py>(
-    run: &SqlRun<'_, 'py>,
-    violations: &[Bound<'py, PyAny>],
+fn violation_findings(
+    run: &SqlRun<'_, '_>,
+    violations: &[(PathBuf, LintViolationRow)],
     model_paths: &BTreeSet<String>,
-) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    let py: Python<'py> = run.project_dir.py();
+) -> PyResult<Vec<RuleFinding>> {
+    let py: Python<'_> = run.project.py();
     let engine_error: String = registry::error(py, ErrorId::NativeLint)?
         .getattr("code")?
         .extract()?;
-    let safe_fixes: Bound<'py, PyAny> = PyFrozenSet::new(py, SAFE_RULE_FIX_CODES)?.into_any();
-    let resolved: Bound<'py, PyAny> = run.project_dir.call_method0("resolve")?;
-    let replace: Bound<'py, PyAny> = imported(py, DATACLASSES_MODULE, "replace")?;
+    let resolved_dir: PathBuf = resolved(&run.project_dir);
     let no_paths: BTreeSet<String> = BTreeSet::new();
-    let mut evaluated: Vec<Bound<'py, PyAny>> = Vec::new();
-    for violation in violations {
-        let code: String = violation.getattr("code")?.extract()?;
-        if code == SQL_RULE_SUPPRESSION_CODE || run.codes.contains(&code) {
-            evaluated.push(lint_finding(
-                violation,
-                (&resolved, &safe_fixes),
-                model_paths,
-            )?);
+    let mut evaluated: Vec<RuleFinding> = Vec::new();
+    for (path, violation) in violations {
+        let code: &str = &violation.code;
+        if code == SQL_RULE_SUPPRESSION_CODE || run.codes.iter().any(|known| known == code) {
+            evaluated.push(lint_finding((path, violation), &resolved_dir, model_paths));
         } else if code == engine_error {
-            let finding: Bound<'py, PyAny> =
-                lint_finding(violation, (&resolved, &safe_fixes), &no_paths)?;
-            let message: String = violation.getattr("message")?.extract()?;
+            let finding: RuleFinding = lint_finding((path, violation), &resolved_dir, &no_paths);
             for rule_code in run.codes {
-                evaluated.push(
-                    replace.call(
-                        (&finding,),
-                        Some(&keywords(
-                            py,
-                            &[
-                                ("code", PyString::new(py, rule_code).into_any()),
-                                (
-                                    "message",
-                                    PyString::new(
-                                        py,
-                                        &format!(
-                                            "Rule {rule_code} could not be evaluated: {message}"
-                                        ),
-                                    )
-                                    .into_any(),
-                                ),
-                                ("unevaluated", true.into_bound_py_any(py)?),
-                            ],
-                        )?),
-                    )?,
-                );
+                evaluated.push(RuleFinding {
+                    code: rule_code.clone(),
+                    message: format!(
+                        "Rule {rule_code} could not be evaluated: {}",
+                        violation.message
+                    ),
+                    unevaluated: true,
+                    ..finding.clone()
+                });
             }
         }
     }
@@ -614,44 +579,35 @@ fn violation_findings<'py>(
 }
 
 /// One lint violation as a finding; fixable when `format --fix` would attempt its edit.
-fn lint_finding<'py>(
-    violation: &Bound<'py, PyAny>,
-    (resolved_dir, safe_fixes): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+fn lint_finding(
+    (path, violation): (&Path, &LintViolationRow),
+    resolved_dir: &Path,
     fixable_paths: &BTreeSet<String>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = violation.py();
-    let mut path: Bound<'py, PyAny> = violation.getattr("file_path")?;
-    if path.call_method0("is_absolute")?.is_truthy()?
-        && path
-            .call_method1("is_relative_to", (resolved_dir,))?
-            .is_truthy()?
-    {
-        path = path.call_method1("relative_to", (resolved_dir,))?;
+) -> RuleFinding {
+    let path: &Path = if path.is_absolute() {
+        path.strip_prefix(resolved_dir).unwrap_or(path)
+    } else {
+        path
+    };
+    let path: String = posix(path);
+    let fixable: bool = violation.fix.is_some()
+        && SAFE_RULE_FIX_CODES.contains(&violation.code.as_str())
+        && fixable_paths.contains(&path);
+    RuleFinding {
+        code: violation.code.clone(),
+        path,
+        line: violation.line,
+        column: violation.column,
+        message: violation.message.clone(),
+        remediation: violation
+            .remediation
+            .clone()
+            .filter(|remediation| !remediation.is_empty())
+            .unwrap_or_else(|| DEFAULT_REMEDIATION.to_owned()),
+        unevaluated: false,
+        affected_rules: Vec::new(),
+        fixable,
     }
-    let code: Bound<'py, PyAny> = violation.getattr("code")?;
-    let remediation: Bound<'py, PyAny> = violation.getattr("remediation")?;
-    let fixable: bool = !violation.getattr("fix")?.is_none()
-        && safe_fixes.contains(&code)?
-        && fixable_paths.contains(&path.call_method0("as_posix")?.extract::<String>()?);
-    call_with(
-        &registry::class(py, RecordId::Finding)?,
-        &[
-            ("code", code),
-            ("path", path),
-            ("line", violation.getattr("line")?),
-            ("column", violation.getattr("column")?),
-            ("message", violation.getattr("message")?),
-            (
-                "remediation",
-                if remediation.is_truthy()? {
-                    remediation
-                } else {
-                    PyString::new(py, DEFAULT_REMEDIATION).into_any()
-                },
-            ),
-            ("fixable", fixable.into_bound_py_any(py)?),
-        ],
-    )
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

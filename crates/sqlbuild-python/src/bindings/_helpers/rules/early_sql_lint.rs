@@ -3,187 +3,271 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use pyo3::prelude::{
-    Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRefMut, PyResult, Python,
-};
-use pyo3::types::{PyDict, PyDictMethods, PyList, PyTuple};
-use pyo3::{IntoPyObject, IntoPyObjectExt, pyclass, pyfunction, pymethods, wrap_pyfunction};
-use sqlbuild_rules::rule_cache::main::rules_bulk_cache_path::rules_bulk_cache_path;
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::thread::JoinHandle;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use pyo3::exceptions::PyRuntimeError;
+use pyo3::prelude::{
+    Bound, IntoPyObject, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyRefMut,
+    PyResult, Python,
+};
+use pyo3::types::PyTuple;
+use pyo3::{pyclass, pymethods};
+use sqlbuild_rules::lint_text::models::LintSqlOptions;
+use sqlbuild_rules::rule_cache::main::rules_bulk_cache_path::rules_bulk_cache_path;
+use sqlbuild_rules::rules::main::selected_sql_codes::selected_sql_codes;
+
+use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::compile_attachment::sql_expansion_context::{
+    SqlExpansionInputs, present,
+};
+use crate::bindings::_helpers::rules::lint_expansion::{
+    LintExpansionSources, lint_expansion_inputs,
+};
+use crate::bindings::_helpers::rules::lint_inputs::{model_key_row, model_lint_expansion};
+use crate::bindings::_helpers::rules::lint_pipeline::{
+    CompiledExpansion, LintFile, LintOutcome, LintRequest, LintSettings, lint, lint_sources,
+};
+use crate::bindings::_helpers::rules::relation_keys::{
+    RelationKeyRow, RelationKeys, relation_keys,
+};
+use crate::bindings::_helpers::rules::rule_cache::stored_entries;
+use crate::bindings::_helpers::rules::rules_config::rules_config_of;
 
 /// The lint thresholds used when the project leaves them unset.
 const DEFAULT_MAX_LITERAL_LENGTH: i64 = 100;
 const DEFAULT_MAX_RANKING_ORDER_BY: i64 = 5;
-const FUTURES_MODULE: &str = "concurrent.futures";
-const THREADING_MODULE: &str = "threading";
-const LINT_THREAD_PREFIX: &str = "sqlbuild-lint";
+const MAX_LITERAL_LENGTH: &str = "max_literal_length";
+const MAX_RANKING_ORDER_BY: &str = "max_ranking_order_by";
+const LINT_THREAD: &str = "sqlbuild-lint";
 const SQL_RULES_CACHE_FILE: &str = "sql.json";
 
 /// The SQL rule result cache file of `project_dir`.
-pub(crate) fn sql_rule_cache_path<'py>(
-    project_dir: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let root: PathBuf = project_dir.extract()?;
-    Ok(rules_bulk_cache_path(&root, SQL_RULES_CACHE_FILE)
-        .into_pyobject(project_dir.py())?
-        .into_any())
+pub(crate) fn sql_rule_cache_path(project_dir: &Path) -> PathBuf {
+    rules_bulk_cache_path(project_dir, SQL_RULES_CACHE_FILE)
 }
 
-/// The native SQL lint configuration that SQL rules run with.
-pub(crate) fn sql_lint_config<'py>(
-    dialect: &Bound<'py, PyAny>,
+/// The native SQL lint settings that SQL rules run with.
+pub(crate) fn sql_lint_settings(
+    dialect: &str,
     codes: &[String],
-    thresholds: &Bound<'py, PyAny>,
-    (relation_keys, allow_suppressions): (Bound<'py, PyAny>, Bound<'py, PyAny>),
-) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = dialect.py();
-    let threshold = |key: &str, default: i64| -> PyResult<Bound<'py, PyAny>> {
-        thresholds.call_method1("get", (key, default))
-    };
-    call_with(
-        &registry::class(py, RecordId::LintConfig)?,
-        &[
-            ("dialect", dialect.clone()),
-            ("enabled_native_rules", PyTuple::new(py, codes)?.into_any()),
-            ("header_rules_enabled", false.into_bound_py_any(py)?),
-            (
-                "max_literal_length",
-                threshold("max_literal_length", DEFAULT_MAX_LITERAL_LENGTH)?,
-            ),
-            (
-                "max_ranking_order_by",
-                threshold("max_ranking_order_by", DEFAULT_MAX_RANKING_ORDER_BY)?,
-            ),
-            ("relation_keys", relation_keys),
-            ("allow_suppressions", allow_suppressions),
-        ],
-    )
+    threshold: impl Fn(&str) -> PyResult<Option<i64>>,
+    (relation_keys, allow_suppressions): (RelationKeys, bool),
+) -> PyResult<LintSettings> {
+    let defaults: LintSettings = LintSettings::default();
+    Ok(LintSettings {
+        header_rules_enabled: false,
+        sql: LintSqlOptions {
+            dialect: dialect.to_owned(),
+            enabled_rules: Some(codes.to_vec()),
+            max_literal_length: threshold(MAX_LITERAL_LENGTH)?
+                .unwrap_or(DEFAULT_MAX_LITERAL_LENGTH),
+            max_ranking_order_by: threshold(MAX_RANKING_ORDER_BY)?
+                .unwrap_or(DEFAULT_MAX_RANKING_ORDER_BY),
+            ..defaults.sql
+        },
+        allow_suppressions,
+        relation_keys,
+        ..defaults
+    })
 }
 
-/// The project, SQL rule codes and lint settings early SQL lint runs with, if it should run.
-#[pyfunction]
-#[pyo3(signature = (*, inputs, dialect))]
-fn sql_lint_preparation<'py>(
-    inputs: &Bound<'py, PyAny>,
-    dialect: &Bound<'py, PyAny>,
-) -> PyResult<Option<Bound<'py, PyTuple>>> {
-    let py: Python<'py> = inputs.py();
-    let native = |name: NativeAttr| registry::native(py, name);
-    let project_dir: Bound<'py, PyAny> = inputs
+/// What early SQL lint runs with: the project, its selected SQL rule codes and lint settings.
+struct EarlyLintPlan {
+    project_dir: PathBuf,
+    codes: Vec<String>,
+    settings: LintSettings,
+}
+
+/// The plan early SQL lint runs with, when the project selects SQL rules without a warm cache.
+fn early_lint_plan(inputs: &Bound<'_, PyAny>, dialect: &str) -> PyResult<Option<EarlyLintPlan>> {
+    let py: Python<'_> = inputs.py();
+    let project_dir: Bound<'_, PyAny> = inputs
         .getattr("discovered_inputs")?
         .getattr("project_dir")?;
     if project_dir.is_none() {
         return Ok(None);
     }
+    let project_dir: PathBuf = project_dir.extract()?;
     for diagnostic in inputs.getattr("diagnostics")?.try_iter()? {
         if diagnostic?.getattr("is_error")?.is_truthy()? {
             return Ok(None);
         }
     }
-    let config: Bound<'py, PyAny> = call_with(
-        &native(NativeAttr::ValidRulesConfig)?,
-        &[("project_dir", project_dir.clone())],
-    )?;
-    if config.is_none() || !config.getattr("select")?.is_truthy()? {
+    let Ok(config) = rules_config_of(&project_dir)? else {
+        return Ok(None);
+    };
+    if config.select.is_empty() {
         return Ok(None);
     }
-    if config.getattr("cache")?.getattr("enabled")?.is_truthy()?
-        && call_with(
-            &native(NativeAttr::LoadSqlRuleCache)?,
-            &[("path", sql_rule_cache_path(&project_dir)?)],
-        )?
-        .is_truthy()?
-    {
+    if config.cache.enabled && !stored_entries(&sql_rule_cache_path(&project_dir))?.is_empty() {
         return Ok(None);
     }
-    let codes: Vec<String> = call_with(
-        &native(NativeAttr::SelectedSqlRuleCodes)?,
-        &[
-            (
-                "select",
-                PyList::new(
-                    py,
-                    config
-                        .getattr("select")?
-                        .try_iter()?
-                        .collect::<PyResult<Vec<_>>>()?,
-                )?
-                .into_any(),
-            ),
-            (
-                "ignore",
-                PyList::new(
-                    py,
-                    config
-                        .getattr("ignore")?
-                        .try_iter()?
-                        .collect::<PyResult<Vec<_>>>()?,
-                )?
-                .into_any(),
-            ),
-        ],
-    )?
-    .extract()?;
+    let codes: Vec<String> =
+        compiler_guard(|| Ok(selected_sql_codes(&config.select, &config.ignore)))?;
     if codes.is_empty() {
         return Ok(None);
     }
-    let mut model_rows: Vec<Bound<'py, PyAny>> = Vec::new();
+    let mut rows: Vec<RelationKeyRow> = Vec::new();
     for model in inputs.getattr("model_inputs")?.try_iter()? {
-        model_rows.push(model?.getattr("relation_key_row")?);
+        rows.push(model_key_row(&model?)?);
     }
-    let mut seeds: Vec<Bound<'py, PyAny>> = Vec::new();
+    let mut seeds: Vec<Bound<'_, PyAny>> = Vec::new();
     for seed in inputs.getattr("seed_inputs")?.try_iter()? {
         seeds.push(seed?.getattr("schema_entry")?);
     }
-    let mut sources: Vec<Bound<'py, PyAny>> = Vec::new();
+    let mut sources: Vec<Bound<'_, PyAny>> = Vec::new();
     for source in inputs.getattr("source_inputs")?.try_iter()? {
         sources.push(source?.getattr("source_entry")?);
     }
-    let relation_keys: Bound<'py, PyAny> = call_with(
-        &native(NativeAttr::DeclaredRelationKeys)?,
-        &[
-            ("model_rows", PyList::new(py, model_rows)?.into_any()),
-            ("seeds", PyList::new(py, seeds)?.into_any()),
-            ("sources", PyList::new(py, sources)?.into_any()),
-        ],
+    let keys: RelationKeys = relation_keys(
+        py,
+        rows,
+        (
+            PyTuple::new(py, seeds)?.as_any(),
+            PyTuple::new(py, sources)?.as_any(),
+        ),
     )?;
-    let lint_config: Bound<'py, PyAny> = sql_lint_config(
+    let settings: LintSettings = sql_lint_settings(
         dialect,
         &codes,
-        &config.getattr("thresholds")?,
-        (relation_keys, config.getattr("allow_exceptions")?),
+        |key| Ok(config.thresholds.get(key).map(|value| i64::from(*value))),
+        (keys, config.allow_exceptions),
     )?;
-    Ok(Some(PyTuple::new(
-        py,
-        [
-            project_dir,
-            PyTuple::new(py, codes)?.into_any(),
-            lint_config,
-        ],
-    )?))
+    Ok(Some(EarlyLintPlan {
+        project_dir,
+        codes,
+        settings,
+    }))
 }
 
-/// Each model's compile expansion for early lint, whole when the compile handed one over.
-#[pyfunction]
-fn early_lint_expansions<'py>(model_inputs: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
-    let expansions: Bound<'py, PyDict> = PyDict::new(model_inputs.py());
-    for model in model_inputs.try_iter()? {
-        let model: Bound<'py, PyAny> = model?;
-        let mut expansion: Bound<'py, PyAny> = model.getattr("lint_expansion")?;
-        if !expansion.is_truthy()? {
-            expansion = model.getattr("sql_expansion")?;
-        }
-        if !expansion.is_none() {
-            expansions.set_item(
-                model.getattr("model_file")?.getattr("file_path")?,
-                expansion,
-            )?;
+/// Early SQL lint's outcome and the expansion inputs it linted with.
+pub(crate) struct EarlyLintResult {
+    pub(crate) outcome: LintOutcome,
+    pub(crate) context: SqlExpansionInputs,
+}
+
+/// One early SQL lint running on a native thread, for one project and SQL rule codes.
+#[pyclass(module = "sqlbuild._native", frozen)]
+pub(crate) struct PreparedSqlLint {
+    codes: Vec<String>,
+    project_dir: PathBuf,
+    thread: Mutex<Option<JoinHandle<PyResult<EarlyLintResult>>>>,
+    result: OnceLock<Result<EarlyLintResult, PyErr>>,
+}
+
+impl PreparedSqlLint {
+    /// Whether this lint ran for `project_dir` with exactly `codes`.
+    pub(crate) fn matches(&self, project_dir: &Path, codes: &[String]) -> bool {
+        self.project_dir == project_dir && same_codes(&self.codes, codes)
+    }
+
+    /// Whether this lint ran with exactly `codes`.
+    pub(crate) fn has_codes(&self, codes: &[String]) -> bool {
+        same_codes(&self.codes, codes)
+    }
+
+    /// The lint's result, waiting without the GIL until it finishes.
+    pub(crate) fn result(&self, py: Python<'_>) -> &Result<EarlyLintResult, PyErr> {
+        self.result.get_or_init(|| {
+            let thread = self
+                .thread
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .take();
+            match thread {
+                Some(thread) => py.detach(|| thread.join()).unwrap_or_else(|_| {
+                    Err(PyRuntimeError::new_err("early SQL lint thread panicked"))
+                }),
+                None => Err(PyRuntimeError::new_err("early SQL lint was already joined")),
+            }
+        })
+    }
+}
+
+fn same_codes(left: &[String], right: &[String]) -> bool {
+    left.iter().collect::<BTreeSet<_>>() == right.iter().collect::<BTreeSet<_>>()
+}
+
+/// Start early SQL lint on a native thread when the project selects SQL rules without a cache.
+fn start_early_lint(
+    inputs: &Bound<'_, PyAny>,
+    dialect: &str,
+    stop: &Arc<AtomicBool>,
+) -> PyResult<Option<PreparedSqlLint>> {
+    let Some(plan) = early_lint_plan(inputs, dialect)? else {
+        return Ok(None);
+    };
+    let mut compiled: HashMap<PathBuf, CompiledExpansion> = HashMap::new();
+    for model in inputs.getattr("model_inputs")?.try_iter()? {
+        if let Some((path, expansion)) = model_lint_expansion(&model?)? {
+            compiled.insert(path, expansion);
         }
     }
-    Ok(expansions)
+    let work: EarlyLintWork = EarlyLintWork {
+        project_dir: plan.project_dir.clone(),
+        settings: plan.settings,
+        discovered: inputs.getattr("discovered_inputs")?.unbind(),
+        static_scope: inputs.getattr("declaration_scope")?.unbind(),
+        compiled,
+        stop: Arc::clone(stop),
+    };
+    let thread: JoinHandle<PyResult<EarlyLintResult>> = std::thread::Builder::new()
+        .name(LINT_THREAD.to_owned())
+        .spawn(move || Python::attach(|py| early_lint(py, &work)))
+        .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+    Ok(Some(PreparedSqlLint {
+        codes: plan.codes,
+        project_dir: plan.project_dir,
+        thread: Mutex::new(Some(thread)),
+        result: OnceLock::new(),
+    }))
+}
+
+/// What one early SQL lint thread lints: the project, its settings and the compile's expansions.
+struct EarlyLintWork {
+    project_dir: PathBuf,
+    settings: LintSettings,
+    discovered: Py<PyAny>,
+    static_scope: Py<PyAny>,
+    compiled: HashMap<PathBuf, CompiledExpansion>,
+    stop: Arc<AtomicBool>,
+}
+
+/// Expand and lint the project's SQL early, stopping between files once `stop` is set.
+fn early_lint(py: Python<'_>, work: &EarlyLintWork) -> PyResult<EarlyLintResult> {
+    let project_dir: &Path = &work.project_dir;
+    let context: SqlExpansionInputs = lint_expansion_inputs(LintExpansionSources {
+        project_dir: project_dir.into_pyobject(py)?.into_any(),
+        value_renderer: None,
+        discovered_inputs: Some(work.discovered.bind(py).clone()),
+        declaration_scope: None,
+        static_declaration_scope: present(work.static_scope.bind(py).clone()),
+    })?;
+    let files: Vec<LintFile> = lint_sources(project_dir, None, None)?;
+    let outcome: LintOutcome = lint(
+        py,
+        &LintRequest {
+            project_dir,
+            settings: &work.settings,
+            dynamic_output_paths: &HashSet::new(),
+            compiled_expansions: &work.compiled,
+            context: Some(&context),
+            skip_unexpandable: false,
+            stop: Some(&work.stop),
+        },
+        files,
+    )?;
+    Ok(EarlyLintResult { outcome, context })
+}
+
+/// The compiler's discovery and declaration scope, which lint expansion reuses for the same discovery.
+pub(crate) struct ExpansionReuse {
+    pub(crate) discovered_inputs: Py<PyAny>,
+    pub(crate) declaration_scope: Py<PyAny>,
 }
 
 /// Own speculative SQL checks for one compilation invocation.
@@ -191,34 +275,40 @@ fn early_lint_expansions<'py>(model_inputs: &Bound<'py, PyAny>) -> PyResult<Boun
 pub(crate) struct EarlySqlLint {
     #[pyo3(get)]
     enabled: bool,
-    #[pyo3(get)]
-    preparation: Py<PyAny>,
-    #[pyo3(get)]
-    expansion_reuse: Py<PyAny>,
-    stop_requested: Py<PyAny>,
-    executor: Py<PyAny>,
+    preparation: Option<Py<PreparedSqlLint>>,
+    expansion_reuse: Option<ExpansionReuse>,
+    stop_requested: Arc<AtomicBool>,
 }
 
 impl EarlySqlLint {
     /// A manager that starts speculative checks only when `enabled`.
-    pub(crate) fn new(py: Python<'_>, enabled: bool) -> PyResult<Self> {
-        let executor: Bound<'_, PyAny> = call_with(
-            &imported(py, FUTURES_MODULE, "ThreadPoolExecutor")?,
-            &[
-                ("max_workers", 1.into_bound_py_any(py)?),
-                (
-                    "thread_name_prefix",
-                    LINT_THREAD_PREFIX.into_bound_py_any(py)?,
-                ),
-            ],
-        )?;
-        Ok(Self {
+    pub(crate) fn new(enabled: bool) -> Self {
+        Self {
             enabled,
-            preparation: py.None(),
-            expansion_reuse: py.None(),
-            stop_requested: imported(py, THREADING_MODULE, "Event")?.call0()?.unbind(),
-            executor: executor.unbind(),
-        })
+            preparation: None,
+            expansion_reuse: None,
+            stop_requested: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    /// The running early SQL lint, if one started.
+    pub(crate) fn preparation(&self) -> Option<&Py<PreparedSqlLint>> {
+        self.preparation.as_ref()
+    }
+
+    /// The compile's discovery and declaration scope, if it had one.
+    pub(crate) fn expansion_reuse(&self) -> Option<&ExpansionReuse> {
+        self.expansion_reuse.as_ref()
+    }
+
+    /// Abandon unconsumed speculative work and return the milliseconds spent joining it.
+    pub(crate) fn stop(&self, py: Python<'_>) -> u64 {
+        let started: Instant = Instant::now();
+        self.stop_requested.store(true, Ordering::Release);
+        if let Some(preparation) = &self.preparation {
+            let _ = preparation.get().result(py);
+        }
+        u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
     }
 }
 
@@ -226,8 +316,8 @@ impl EarlySqlLint {
 impl EarlySqlLint {
     #[new]
     #[pyo3(signature = (*, enabled))]
-    fn py_new(py: Python<'_>, enabled: bool) -> PyResult<Self> {
-        Self::new(py, enabled)
+    fn py_new(enabled: bool) -> Self {
+        Self::new(enabled)
     }
 
     fn __enter__(slf: PyRefMut<'_, Self>) -> PyRefMut<'_, Self> {
@@ -235,9 +325,8 @@ impl EarlySqlLint {
     }
 
     #[pyo3(signature = (*_exception))]
-    fn __exit__(&self, py: Python<'_>, _exception: &Bound<'_, PyTuple>) -> PyResult<()> {
-        let _ = self.stop(py)?;
-        Ok(())
+    fn __exit__(&self, py: Python<'_>, _exception: &Bound<'_, PyTuple>) {
+        let _ = self.stop(py);
     }
 
     /// Start early SQL lint for `inputs` when enabled and the project selects SQL rules.
@@ -245,60 +334,37 @@ impl EarlySqlLint {
     fn start(
         mut slf: PyRefMut<'_, Self>,
         inputs: &Bound<'_, PyAny>,
-        dialect: &Bound<'_, PyAny>,
+        dialect: &str,
     ) -> PyResult<()> {
         if !slf.enabled {
             return Ok(());
         }
         let py: Python<'_> = inputs.py();
-        let preparation: Bound<'_, PyAny> = call_with(
-            &registry::native(py, NativeAttr::PrepareSqlRules)?,
-            &[
-                ("inputs", inputs.clone()),
-                ("executor", slf.executor.bind(py).clone()),
-                ("dialect", dialect.clone()),
-                ("stop", slf.stop_requested.bind(py).clone()),
-            ],
-        )?;
+        let stop: Arc<AtomicBool> = Arc::clone(&slf.stop_requested);
+        slf.preparation = start_early_lint(inputs, dialect, &stop)?
+            .map(|preparation| Py::new(py, preparation))
+            .transpose()?;
         let declaration_scope: Bound<'_, PyAny> = inputs.getattr("declaration_scope")?;
-        let expansion_reuse: Bound<'_, PyAny> = if declaration_scope.is_none() {
-            declaration_scope
+        slf.expansion_reuse = if declaration_scope.is_none() {
+            None
         } else {
-            call_with(
-                &registry::class(py, RecordId::SqlExpansionReuse)?,
-                &[
-                    ("discovered_inputs", inputs.getattr("discovered_inputs")?),
-                    ("declaration_scope", declaration_scope),
-                ],
-            )?
+            Some(ExpansionReuse {
+                discovered_inputs: inputs.getattr("discovered_inputs")?.unbind(),
+                declaration_scope: declaration_scope.unbind(),
+            })
         };
-        slf.preparation = preparation.unbind();
-        slf.expansion_reuse = expansion_reuse.unbind();
         Ok(())
     }
 
     /// Abandon unconsumed speculative work and return the milliseconds spent joining it.
-    fn stop(&self, py: Python<'_>) -> PyResult<u64> {
-        let started: Instant = Instant::now();
-        let _ = self.stop_requested.bind(py).call_method0("set")?;
-        let _ = self.executor.bind(py).call_method(
-            "shutdown",
-            (),
-            Some(&keywords(
-                py,
-                &[
-                    ("wait", true.into_bound_py_any(py)?),
-                    ("cancel_futures", true.into_bound_py_any(py)?),
-                ],
-            )?),
-        )?;
-        Ok(u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX))
+    #[pyo3(name = "stop")]
+    fn py_stop(&self, py: Python<'_>) -> u64 {
+        self.stop(py)
     }
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<EarlySqlLint>()?;
-    module.add_function(wrap_pyfunction!(sql_lint_preparation, module)?)?;
-    module.add_function(wrap_pyfunction!(early_lint_expansions, module)?)?;
+    module.add_class::<PreparedSqlLint>()?;
     Ok(())
 }

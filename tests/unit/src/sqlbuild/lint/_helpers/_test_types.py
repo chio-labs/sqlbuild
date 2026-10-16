@@ -219,7 +219,7 @@ class ManyViolationLocationTestCase:
 
 @dataclass(frozen=True)
 class BatchedPreparationTestCase:
-    """A project whose lint is compared between batched and per-body native preparation."""
+    """A project whose bodies of every kind are prepared natively in one batch."""
 
     description: str
     files: dict[str, str]
@@ -227,13 +227,20 @@ class BatchedPreparationTestCase:
 
 
 @dataclass(frozen=True)
-class BatchedPreparationFailureTestCase:
-    """A native preparation failure and an unexpandable file, in a given file order."""
+class UnexpandableFailureTestCase:
+    """Unexpandable files linted without skipping, and the file whose failure is raised."""
 
     description: str
-    unexpandable_file: str
-    skip_unexpandable: bool
-    expected_error: type[Exception] | None
+    expected_error_file: str
+
+
+@dataclass(frozen=True)
+class UnexpandableSkipTestCase:
+    """Unexpandable files linted with skipping, and the files reported as skipped."""
+
+    description: str
+    expected_unexpandable: tuple[str, ...]
+    expected_codes: tuple[str, ...]
 
 
 @dataclass(frozen=True)

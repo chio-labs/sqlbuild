@@ -1,6 +1,6 @@
 //! Compiler-verified fixed-point repair planning, entirely in memory.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 
 use pyo3::exceptions::PyException;
@@ -11,6 +11,7 @@ use sqlbuild_rules::fix_verification::main::refusal::refusal;
 use sqlbuild_rules::fix_verification::main::with_edits::with_edits;
 use sqlbuild_rules::fix_verification::models::{FixEdit, FixEligibility};
 
+use crate::bindings::_helpers::compile_attachment::sql_expansion_context::SqlExpansionInputs;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
@@ -19,11 +20,20 @@ use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::constants::SAFE_RULE_FIX_CODES;
 use crate::bindings::_helpers::rules::fix_facts::compile_facts;
 use crate::bindings::_helpers::rules::fix_verdict::fix_verdict;
+use crate::bindings::_helpers::rules::lint_expansion::{
+    LintExpansionSources, lint_expansion_inputs,
+};
+use crate::bindings::_helpers::rules::lint_pipeline::{
+    LintFile, LintOutcome, LintRequest, LintSettings, ViolationClasses, lint, lint_sources,
+};
+use crate::bindings::_helpers::rules::relation_keys::{RelationKeys, project_relation_keys};
+use crate::bindings::_helpers::rules::run_lint::given_files;
 
 const VERIFICATION_FAILURE: &str =
     "Compilation could not prove unchanged output columns, types, dependencies and lineage";
 const APPLIED_REASON: &str = "Meaning-preserving rewrite; compiler invariants verified";
 const MAX_PASSES: usize = 128;
+const SQL_RULE_PREFIX: &str = "SQBRSQL";
 
 struct FixSession<'py> {
     project_dir: Bound<'py, PyAny>,
@@ -141,42 +151,59 @@ impl<'py> FixSession<'py> {
         model_paths: &Bound<'py, PyAny>,
     ) -> PyResult<PlannedPass<'py>> {
         let py = files.py();
-        let relation_keys = self.relation_keys()?;
-        let config = replace(
-            &self.config,
-            &[
-                (
-                    "enabled_native_rules",
-                    PyTuple::new(py, ["SQBRSQL"])?.into_any(),
-                ),
-                ("relation_keys", relation_keys),
-            ],
+        let mut settings: LintSettings = LintSettings::from_record(&self.config)?;
+        settings.sql.enabled_rules = Some(vec![SQL_RULE_PREFIX.to_owned()]);
+        settings.relation_keys = self.relation_keys()?;
+        let project_dir: PathBuf = self.project_dir.extract()?;
+        let given: Option<Vec<LintFile>> = given_files(files.as_any())?;
+        let selected: BTreeSet<PathBuf> = given
+            .iter()
+            .flatten()
+            .map(|file| file.path.clone())
+            .collect();
+        let sources: Vec<LintFile> = lint_sources(&project_dir, Some(&selected), given)?;
+        let context: Option<SqlExpansionInputs> = if settings.native_enabled {
+            Some(lint_expansion_inputs(LintExpansionSources {
+                project_dir: self.project_dir.clone(),
+                value_renderer: self.adapter.is_truthy()?.then(|| self.adapter.clone()),
+                discovered_inputs: Some(updated_inputs(&self.inputs, files)?),
+                declaration_scope: None,
+                static_declaration_scope: None,
+            })?)
+        } else {
+            None
+        };
+        let lint: LintOutcome = lint(
+            py,
+            &LintRequest {
+                project_dir: &project_dir,
+                settings: &settings,
+                dynamic_output_paths: &HashSet::new(),
+                compiled_expansions: &HashMap::new(),
+                context: context.as_ref(),
+                skip_unexpandable: true,
+                stop: None,
+            },
+            sources,
         )?;
-        let lint = call_with(
-            &registry::native(py, NativeAttr::RunLint)?,
-            &[
-                ("project_dir", self.project_dir.clone()),
-                ("config", config),
-                ("value_renderer", self.adapter.clone()),
-                ("discovered_inputs", updated_inputs(&self.inputs, files)?),
-                ("source_files", files.clone().into_any()),
-                (
-                    "selected_paths",
-                    PyFrozenSet::new(py, files.keys())?.into_any(),
-                ),
-                (
-                    "skip_unexpandable",
-                    true.into_pyobject(py)?.to_owned().into_any(),
-                ),
-            ],
-        )?;
-        self.skipped
-            .call_method1("update", (lint.getattr("unexpandable")?,))?;
+        let paths: Vec<Bound<'py, PyAny>> = lint
+            .files
+            .iter()
+            .map(|file| Ok(file.path.clone().into_pyobject(py)?.into_any()))
+            .collect::<PyResult<_>>()?;
+        for (file, message) in &lint.unexpandable {
+            self.skipped.set_item(&paths[*file], message)?;
+        }
+        let classes: ViolationClasses<'py> = ViolationClasses::new(py)?;
+        let violations: Vec<Bound<'py, PyAny>> = lint
+            .violations
+            .iter()
+            .map(|row| classes.violation(&paths[row.file], row))
+            .collect::<PyResult<_>>()?;
         let edits = PyDict::new(py);
         let mut pending: Vec<Bound<'py, PyAny>> = Vec::new();
         let mut remaining: Vec<Bound<'py, PyAny>> = Vec::new();
-        for violation in lint.getattr("violations")?.try_iter()? {
-            let violation = violation?;
+        for violation in violations {
             if !violation
                 .getattr("code")?
                 .extract::<String>()?
@@ -353,7 +380,7 @@ impl<'py> FixSession<'py> {
         Ok(baseline)
     }
 
-    fn relation_keys(&mut self) -> PyResult<Bound<'py, PyAny>> {
+    fn relation_keys(&mut self) -> PyResult<RelationKeys> {
         let py = self.inputs.py();
         let baseline = match self.baseline() {
             Ok(value) => value,
@@ -362,11 +389,11 @@ impl<'py> FixSession<'py> {
                     .value(py)
                     .is_instance(&registry::error(py, ErrorId::CompileInput)?)? =>
             {
-                return Ok(PyDict::new(py).into_any());
+                return Ok(RelationKeys::new());
             }
             Err(error) => return Err(error),
         };
-        registry::native(py, NativeAttr::CompiledRelationKeys)?.call1((baseline,))
+        project_relation_keys(&baseline)
     }
 
     fn verdict(&mut self, files: &Bound<'py, PyDict>) -> PyResult<Option<Bound<'py, PyAny>>> {
