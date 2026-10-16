@@ -1,6 +1,12 @@
 //! `helper_ctes`: the helper CTEs a model test reads and the references it cannot resolve.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
+use std::convert::Infallible;
+
+use sqlbuild_core::graph_walk::main::breadth_first_path::breadth_first_path;
+use sqlbuild_core::graph_walk::main::breadth_first_reach::breadth_first_reach;
+use sqlbuild_core::graph_walk::models::VisitOrder;
+use sqlbuild_core::graph_walk::types::NodeSet;
 
 use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
 use sqlbuild_sqltext::sql_references::models::{ReferenceExtraction, SqlReference};
@@ -39,26 +45,18 @@ impl CteGraph<'_> {
 
     /// `reachable_cte_keys`: the roots then what they read, breadth first, in visit order.
     fn reachable(&self, roots: &[String]) -> Vec<String> {
-        let mut pending: VecDeque<String> = roots
+        let known: Vec<&String> = roots
             .iter()
             .filter(|root| self.ctes.contains_key(*root))
-            .cloned()
             .collect();
-        let mut visited: Vec<String> = Vec::new();
-        for root in &pending {
-            if !visited.contains(root) {
-                visited.push(root.clone());
-            }
+        let mut visited: VisitOrder<&String> = VisitOrder::default();
+        for root in &known {
+            let Ok(_) = visited.insert_new(root);
         }
-        while let Some(key) = pending.pop_front() {
-            for dependency in self.reads.get(&key).into_iter().flatten() {
-                if !visited.contains(dependency) {
-                    visited.push(dependency.clone());
-                    pending.push_back(dependency.clone());
-                }
-            }
-        }
-        visited
+        let Ok(()) = breadth_first_reach(known, None, &mut visited, |key| {
+            Ok::<_, Infallible>(self.reads.get(*key).into_iter().flatten())
+        });
+        visited.order.into_iter().cloned().collect()
     }
 
     /// `_read_helper_keys`: reachable authored CTEs that are not mocks.
@@ -304,22 +302,11 @@ pub(crate) fn unresolvable_test_references<M: SqlTestTextMatcher>(
 fn first_cycle(graph: &CteGraph<'_>, keys: &[String]) -> Option<Vec<String>> {
     let allowed: HashSet<&String> = keys.iter().collect();
     for origin in keys {
-        let mut pending: VecDeque<Vec<String>> = VecDeque::from([vec![origin.clone()]]);
-        let mut visited: HashSet<String> = HashSet::new();
-        while let Some(path) = pending.pop_front() {
-            let last: &String = path.last()?;
-            for dependency in graph.parsed_reads.get(last).into_iter().flatten() {
-                if dependency == origin {
-                    let mut closed: Vec<String> = path.clone();
-                    closed.push(origin.clone());
-                    return Some(closed);
-                }
-                if allowed.contains(dependency) && visited.insert(dependency.clone()) {
-                    let mut next: Vec<String> = path.clone();
-                    next.push(dependency.clone());
-                    pending.push_back(next);
-                }
-            }
+        let reads = |last: &&String| graph.parsed_reads.get(*last).into_iter().flatten();
+        let closes = |dependency: &&String| *dependency == origin;
+        let enters = |dependency: &&String| allowed.contains(*dependency);
+        if let Some(path) = breadth_first_path(origin, (reads, closes, enters)) {
+            return Some(path.into_iter().cloned().collect());
         }
     }
     None

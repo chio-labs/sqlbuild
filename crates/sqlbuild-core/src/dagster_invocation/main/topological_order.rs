@@ -1,31 +1,26 @@
 //! DAG node order for emitting Dagster events.
 
-use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::collections::{HashMap, VecDeque};
 
 use crate::dagster_invocation::_helpers::graph::{
-    EdgeSets, edge_sets, id_positions, initially_ready, unique_positions,
+    EdgeSets, edge_sets, id_positions, unique_positions,
 };
+use crate::graph_walk::main::kahn_order::kahn_order;
 
 /// Node positions in Kahn order over known edges, or `None` when a cycle leaves nodes out.
 #[must_use]
 pub fn topological_order(ids: &[String], edges: &[(String, String)]) -> Option<Vec<usize>> {
     let positions: HashMap<&str, usize> = id_positions(ids);
     let unique: Vec<usize> = unique_positions(ids, &positions);
-    let EdgeSets {
-        mut incoming,
-        outgoing,
-    } = edge_sets(&unique, (&positions, edges));
-    let mut ready: VecDeque<usize> = initially_ready(&unique, &incoming);
-    let mut ordered: Vec<usize> = Vec::new();
-    while let Some(position) = ready.pop_front() {
-        ordered.push(position);
-        for downstream in outgoing.get(&position).cloned().unwrap_or_default() {
-            let waiting: &mut BTreeSet<usize> = incoming.entry(downstream).or_default();
-            waiting.remove(&position);
-            if waiting.is_empty() {
-                ready.push_back(downstream);
-            }
-        }
-    }
+    let EdgeSets { incoming, outgoing } = edge_sets(&unique, (&positions, edges));
+    let remaining: HashMap<usize, usize> = incoming
+        .iter()
+        .map(|(position, upstream)| (*position, upstream.len()))
+        .collect();
+    let ordered: Vec<usize> = kahn_order(
+        (unique.iter().copied(), remaining),
+        VecDeque::new(),
+        |position| outgoing.get(position).cloned().unwrap_or_default(),
+    );
     (ordered.len() == ids.len()).then_some(ordered)
 }

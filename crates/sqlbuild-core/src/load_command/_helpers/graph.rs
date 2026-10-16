@@ -1,7 +1,10 @@
 //! Loader graph lookups: dependencies, closures and execution order.
 
 use std::collections::{BTreeSet, HashMap};
+use std::convert::Infallible;
 
+use crate::graph_walk::main::breadth_first_reach::breadth_first_reach;
+use crate::graph_walk::main::depth_first_postorder::depth_first_postorder;
 use crate::load_command::models::LoadGraph;
 
 /// Indexed views of a load graph, as the Python dictionaries keyed them.
@@ -50,30 +53,25 @@ impl GraphIndex {
 
     /// The loader and every loader it transitively depends on.
     pub(crate) fn upstream_closure(&self, loader: &str) -> BTreeSet<String> {
-        let mut closure: BTreeSet<String> = BTreeSet::new();
-        let mut pending: Vec<String> = vec![loader.to_owned()];
-        while let Some(next) = pending.pop() {
-            if closure.insert(next.clone()) {
-                pending.extend(self.dependencies(&next).iter().cloned());
-            }
-        }
+        let mut closure: BTreeSet<String> = BTreeSet::from([loader.to_owned()]);
+        let Ok(()) = breadth_first_reach([loader.to_owned()], None, &mut closure, |next| {
+            Ok::<_, Infallible>(self.dependencies(next).iter().cloned())
+        });
         closure
     }
 
     /// The loader, every loader depending on it transitively, and all their sources.
     pub(crate) fn downstream_closure(&self, loader: &str) -> (BTreeSet<String>, BTreeSet<String>) {
-        let mut loaders: BTreeSet<String> = BTreeSet::new();
-        let mut pending: Vec<String> = vec![loader.to_owned()];
-        while let Some(next) = pending.pop() {
-            if !loaders.insert(next.clone()) {
-                continue;
-            }
-            for (candidate, dependencies) in &self.upstream {
-                if dependencies.contains(&next) {
-                    pending.push(candidate.clone());
-                }
-            }
-        }
+        let mut loaders: BTreeSet<String> = BTreeSet::from([loader.to_owned()]);
+        let Ok(()) = breadth_first_reach([loader.to_owned()], None, &mut loaders, |next| {
+            Ok::<_, Infallible>(
+                self.upstream
+                    .iter()
+                    .filter(|(_, dependencies)| dependencies.contains(next))
+                    .map(|(candidate, _)| candidate.clone())
+                    .collect::<Vec<String>>(),
+            )
+        });
         let sources: BTreeSet<String> = loaders
             .iter()
             .flat_map(|name| {
@@ -89,28 +87,12 @@ impl GraphIndex {
 
     /// `names` ordered dependencies first, visiting in sorted order.
     pub(crate) fn topological_order(&self, names: &BTreeSet<String>) -> Vec<String> {
-        let mut ordered: Vec<String> = Vec::new();
-        let mut visited: BTreeSet<String> = BTreeSet::new();
-        for name in names {
-            self.visit(name, names, (&mut ordered, &mut visited));
-        }
-        ordered
-    }
-
-    fn visit(
-        &self,
-        name: &str,
-        names: &BTreeSet<String>,
-        (ordered, visited): (&mut Vec<String>, &mut BTreeSet<String>),
-    ) {
-        if !visited.insert(name.to_owned()) {
-            return;
-        }
-        for dependency in self.dependencies(name) {
-            if names.contains(dependency) {
-                self.visit(dependency, names, (ordered, visited));
-            }
-        }
-        ordered.push(name.to_owned());
+        depth_first_postorder(names.iter().cloned(), |name| {
+            self.dependencies(name)
+                .iter()
+                .filter(|dependency| names.contains(*dependency))
+                .cloned()
+                .collect::<Vec<String>>()
+        })
     }
 }

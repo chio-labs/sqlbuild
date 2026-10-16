@@ -4,6 +4,7 @@ use std::cmp::Reverse;
 use std::collections::{BTreeSet, BinaryHeap, HashMap};
 
 use sha2::{Digest, Sha256};
+use sqlbuild_core::graph_walk::main::kahn_order::kahn_order;
 
 use crate::macro_modules::constants::{SYNTHETIC_DIGEST_LENGTH, SYNTHETIC_PACKAGE_PREFIX};
 use crate::macro_modules::models::MacroModuleSpec;
@@ -50,22 +51,13 @@ pub(crate) fn load_order(modules: &[MacroModuleSpec]) -> Vec<String> {
                 .push(&module.name);
         }
     }
-    let mut ready: BinaryHeap<Reverse<&str>> = remaining
-        .iter()
-        .filter(|(_, count)| **count == 0)
-        .map(|(name, _)| Reverse(*name))
-        .collect();
-    let mut order: Vec<String> = Vec::new();
-    while let Some(Reverse(name)) = ready.pop() {
-        order.push(name.to_owned());
-        for dependent in dependents.get(name).into_iter().flatten() {
-            if let Some(count) = remaining.get_mut(dependent) {
-                *count -= 1;
-                if *count == 0 {
-                    ready.push(Reverse(dependent));
-                }
-            }
-        }
-    }
-    order
+    let names: Vec<&str> = remaining.keys().copied().collect();
+    kahn_order(
+        (names, remaining),
+        BinaryHeap::<Reverse<&str>>::new(),
+        |name| dependents.get(name).cloned().unwrap_or_default(),
+    )
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
 }

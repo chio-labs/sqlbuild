@@ -1,6 +1,9 @@
 //! Python's `recover_output_types`: unknown types for outputs poisoned by located root errors.
 
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::convert::Infallible;
+
+use sqlbuild_core::graph_walk::main::breadth_first_reach::breadth_first_reach;
 
 use crate::semantic_checks::_helpers::recovery::bindings::{BindingOwner, binding_positions};
 use crate::semantic_checks::_helpers::recovery::poison::Poison;
@@ -266,19 +269,18 @@ fn unchecked_uses(
     let mut counts: HashMap<usize, usize> = HashMap::new();
     for model in &request.models {
         for output in &model.lineage {
-            let mut pending: Vec<usize> = output
+            let roots: Vec<usize> = output
                 .upstream
                 .iter()
                 .filter_map(|(resource, column)| poisoned.get(resource, column))
                 .collect();
-            let mut visited: HashSet<usize> = HashSet::new();
-            while let Some(root) = pending.pop() {
-                if !visited.insert(root) {
-                    continue;
-                }
-                match redirected.get(&root) {
-                    Some(targets) => pending.extend(targets.iter().copied()),
-                    None => *counts.entry(root).or_default() += 1,
+            let mut visited: HashSet<usize> = roots.iter().copied().collect();
+            let Ok(()) = breadth_first_reach(roots, None, &mut visited, |root| {
+                Ok::<_, Infallible>(redirected.get(root).into_iter().flatten().copied())
+            });
+            for root in visited {
+                if !redirected.contains_key(&root) {
+                    *counts.entry(root).or_default() += 1;
                 }
             }
         }

@@ -1,6 +1,11 @@
 //! Ordered loader facts used by planner scope resolution.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::HashMap;
+use std::convert::Infallible;
+
+use sqlbuild_core::graph_walk::main::breadth_first_reach::breadth_first_reach;
+use sqlbuild_core::graph_walk::models::VisitOrder;
+use sqlbuild_core::graph_walk::types::NodeSet;
 
 use crate::assembly::project::types::ObjectKey;
 use crate::planner_scope::constants::SOURCE;
@@ -15,19 +20,14 @@ pub struct LoaderGraph {
 impl LoaderGraph {
     /// Upstream loader names in breadth-first, first-seen order.
     pub fn upstream(&self, dependencies: &[String]) -> Vec<String> {
-        let mut pending: VecDeque<String> = dependencies.iter().cloned().collect();
-        let mut seen: HashSet<String> = HashSet::new();
-        let mut names: Vec<String> = Vec::new();
-        while let Some(name) = pending.pop_front() {
-            if !seen.insert(name.clone()) {
-                continue;
-            }
-            if let Some(dependencies) = self.loaders.get(&name) {
-                pending.extend(dependencies.iter().cloned());
-            }
-            names.push(name);
+        let mut names: VisitOrder<&String> = VisitOrder::default();
+        for name in dependencies {
+            let Ok(_) = names.insert_new(&name);
         }
-        names
+        let Ok(()) = breadth_first_reach(dependencies, None, &mut names, |name| {
+            Ok::<_, Infallible>(self.loaders.get(*name).into_iter().flatten())
+        });
+        names.order.into_iter().cloned().collect()
     }
 
     /// Source key for a loader, using the last source declaration for that loader.

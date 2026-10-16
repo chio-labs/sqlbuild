@@ -1,6 +1,7 @@
 //! Model ordering, selection and metadata at the migration discovery boundary.
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::graph::node_set::PyNodeSet;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::planner_migrations::column_objects::native;
@@ -9,6 +10,7 @@ use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PySet, PySetMethods};
 use sqlbuild_analysis::planner_migrations::main::discovery_order::discovery_order;
+use sqlbuild_core::graph_walk::main::breadth_first_reach::breadth_first_reach;
 use std::collections::BTreeMap;
 
 pub(super) fn ordered<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {
@@ -44,20 +46,15 @@ pub(super) fn triggered(
         .getattr("selected_keys")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
-    let relevant = PySet::new(py, &selected)?;
-    let mut frontier = selected;
-    while let Some(key) = frontier.pop() {
-        let upstream = scope
+    let mut relevant = PyNodeSet(PySet::new(py, &selected)?);
+    breadth_first_reach(selected, None, &mut relevant, |key| {
+        scope
             .getattr("upstream_deps")?
-            .call_method1("get", (key, pyo3::types::PyTuple::empty(py)))?;
-        for dependency in upstream.try_iter()? {
-            let dependency = dependency?;
-            if !relevant.contains(&dependency)? {
-                relevant.add(&dependency)?;
-                frontier.push(dependency);
-            }
-        }
-    }
+            .call_method1("get", (key, pyo3::types::PyTuple::empty(py)))?
+            .try_iter()?
+            .collect::<PyResult<Vec<Bound<'_, PyAny>>>>()
+    })?;
+    let relevant = relevant.0;
     let fingerprints = snapshot.getattr("fingerprints")?.getattr("models")?;
     for item in models {
         let name = item.getattr("name")?;

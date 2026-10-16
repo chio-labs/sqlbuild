@@ -1,8 +1,8 @@
 //! One selector term at a time: path selectors, SQLBuild selectors and dbt anchors.
 
 use std::collections::HashSet;
+use std::convert::Infallible;
 
-use crate::dbt_graph::_helpers::closure::{path_nodes, reachable};
 use crate::dbt_graph::_helpers::endpoints::{endpoint_key, endpoint_names};
 use crate::dbt_graph::constants::PATH_SELECTOR_SEPARATOR;
 use crate::dbt_graph::errors::DbtSelectionError;
@@ -11,6 +11,8 @@ use crate::dbt_graph::models::{
     DbtSelectionState, DbtSelectorExpansion,
 };
 use crate::dbt_graph::types::DbtSelectorResolver;
+use crate::graph_walk::main::breadth_first_reach::breadth_first_reach;
+use crate::graph_walk::main::directed_path_nodes::directed_path_nodes;
 
 fn added(
     mut state: DbtSelectionState,
@@ -30,18 +32,20 @@ fn expanded(
     parsed: &DbtSelectorExpansion,
     graph: &DbtCombinedGraph,
 ) -> HashSet<DbtGraphKey> {
-    let mut result: HashSet<DbtGraphKey> = keys.clone();
-    if parsed.upstream {
-        for key in &keys {
-            result.extend(reachable(key, &graph.upstream));
+    let mut reached: HashSet<&DbtGraphKey> = keys.iter().collect();
+    for (requested, edges) in [
+        (parsed.upstream, &graph.upstream),
+        (parsed.downstream, &graph.downstream),
+    ] {
+        if requested {
+            let mut visited: HashSet<&DbtGraphKey> = HashSet::new();
+            let Ok(()) = breadth_first_reach(keys.iter(), None, &mut visited, |key| {
+                Ok::<_, Infallible>(edges.targets.get(*key).into_iter().flatten())
+            });
+            reached.extend(visited);
         }
     }
-    if parsed.downstream {
-        for key in &keys {
-            result.extend(reachable(key, &graph.downstream));
-        }
-    }
-    result
+    reached.into_iter().cloned().collect()
 }
 
 fn path_keys<E>(
@@ -53,7 +57,20 @@ fn path_keys<E>(
     let start: DbtGraphKey =
         endpoint_key(resolver, request.manifest_models, (start_name, raw_term))?;
     let end: DbtGraphKey = endpoint_key(resolver, request.manifest_models, (end_name, raw_term))?;
-    Ok(path_nodes((&start, &end), &graph.downstream, &graph.upstream).unwrap_or_default())
+    let (mut reachable, mut path): (HashSet<&DbtGraphKey>, HashSet<&DbtGraphKey>) =
+        (HashSet::new(), HashSet::new());
+    let Ok(found) = directed_path_nodes(
+        (&start, &end),
+        (
+            |key: &&DbtGraphKey| Ok(graph.downstream.targets.get(*key).into_iter().flatten()),
+            |key: &&DbtGraphKey| Ok(graph.upstream.targets.get(*key).into_iter().flatten()),
+        ),
+        (&mut reachable, &mut path),
+    );
+    if !found {
+        return Ok(HashSet::new());
+    }
+    Ok(path.into_iter().cloned().collect())
 }
 
 fn with_anchor(mut selection: DbtSelection, term: &str, unique_ids: &[String]) -> DbtSelection {
@@ -82,10 +99,12 @@ fn anchored(
         .map_or(&[], Vec::as_slice);
     state.selection = with_anchor(state.selection, term, anchors);
     for unique_id in anchors {
-        state = added(
-            state,
-            reachable(&DbtGraphKey::dbt_model(unique_id), &graph.downstream),
-        );
+        let start: DbtGraphKey = DbtGraphKey::dbt_model(unique_id);
+        let mut reached: HashSet<&DbtGraphKey> = HashSet::new();
+        let Ok(()) = breadth_first_reach([&start], None, &mut reached, |key| {
+            Ok::<_, Infallible>(graph.downstream.targets.get(*key).into_iter().flatten())
+        });
+        state = added(state, reached.into_iter().cloned());
     }
     state
 }

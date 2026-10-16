@@ -1,6 +1,7 @@
 //! Coarse project-level planning for SQL-native test artifacts.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::convert::Infallible;
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::time::Instant;
 
@@ -9,6 +10,8 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use regex::Regex;
 #[cfg(test)]
 use serde::Serialize;
+use sqlbuild_core::graph_walk::main::breadth_first_reach::breadth_first_reach;
+use sqlbuild_core::graph_walk::main::depth_first_postorder::depth_first_postorder;
 
 use crate::compiler::_helpers::sql_tests::cte_rename::defined_cte_keys;
 use crate::compiler::_helpers::sql_tests::cte_slices::{SliceDialect, strip_statement_terminators};
@@ -256,22 +259,12 @@ impl TextualChain {
     /// Return the generated CTEs needed by `roots`, dependencies first, each exactly once.
     fn closure_ctes(&self, roots: &[String], include_roots: bool) -> Vec<(String, String)> {
         let mut needed: HashSet<String> = HashSet::new();
-        let mut stack: Vec<String> = Vec::new();
-        for root in roots {
-            if include_roots {
-                stack.push(root.clone());
-            } else if let Some(dependencies) = self.dependencies.get(root) {
-                stack.extend(dependencies.iter().cloned());
-            }
+        if include_roots {
+            needed.extend(roots.iter().cloned());
         }
-        while let Some(name) = stack.pop() {
-            if !needed.insert(name.clone()) {
-                continue;
-            }
-            if let Some(dependencies) = self.dependencies.get(&name) {
-                stack.extend(dependencies.iter().cloned());
-            }
-        }
+        let Ok(()) = breadth_first_reach(roots.iter().cloned(), None, &mut needed, |name| {
+            Ok::<_, Infallible>(self.dependencies.get(name).into_iter().flatten().cloned())
+        });
         let mut ctes: Vec<(String, String)> = with_unique_ctes(
             Vec::new(),
             self.order
@@ -1310,60 +1303,27 @@ fn classify_fixtures(
 }
 
 fn topo_sort_model_chain(request: TopoSortRequest<'_>) -> Vec<String> {
-    fn visit(
-        name: &str,
-        models: &HashMap<String, ModelInputOwned>,
-        overrides: &BTreeMap<String, String>,
-        mock_refs: &BTreeMap<String, String>,
-        patterns: &SqlTestPatterns,
-        visited: &mut HashSet<String>,
-        ordered: &mut Vec<String>,
-    ) {
-        if !visited.insert(name.to_string()) {
-            return;
-        }
-        if let Some(model) = models.get(name) {
-            let mut dependencies = if let Some(override_sql) = overrides.get(name) {
-                marker_names(&patterns.reference, &patterns.lexical, override_sql)
-            } else {
-                model.model_dependencies.clone()
-            };
-            dependencies.retain(|dependency| {
-                !mock_refs.contains_key(dependency) && models.contains_key(dependency)
-            });
-            dependencies.sort();
-            dependencies.dedup();
-            for dependency in dependencies {
-                visit(
-                    &dependency,
-                    models,
-                    overrides,
-                    mock_refs,
-                    patterns,
-                    visited,
-                    ordered,
-                );
-            }
-        }
-        ordered.push(name.to_string());
-    }
-
-    let mut roots = request.expected_names.to_vec();
+    let mut roots: Vec<String> = request.expected_names.to_vec();
     roots.sort();
-    let mut visited: HashSet<String> = HashSet::new();
-    let mut ordered: Vec<String> = Vec::new();
-    for root in roots {
-        visit(
-            &root,
-            request.models,
-            request.overrides,
-            request.mock_refs,
-            request.patterns,
-            &mut visited,
-            &mut ordered,
-        );
-    }
-    ordered
+    depth_first_postorder(roots, |name| {
+        let Some(model) = request.models.get(name) else {
+            return Vec::new();
+        };
+        let mut dependencies: Vec<String> = match request.overrides.get(name) {
+            Some(override_sql) => marker_names(
+                &request.patterns.reference,
+                &request.patterns.lexical,
+                override_sql,
+            ),
+            None => model.model_dependencies.clone(),
+        };
+        dependencies.retain(|dependency| {
+            !request.mock_refs.contains_key(dependency) && request.models.contains_key(dependency)
+        });
+        dependencies.sort();
+        dependencies.dedup();
+        dependencies
+    })
 }
 
 fn analyze_and_resolve_sql(

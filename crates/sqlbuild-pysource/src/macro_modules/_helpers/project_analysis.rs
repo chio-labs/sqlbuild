@@ -11,7 +11,7 @@ use crate::macro_modules::_helpers::declarations::{
     top_level_functions,
 };
 use crate::macro_modules::_helpers::module_analysis::{
-    ModuleAnalysis, ModuleSet, ParsedModule, analyze_module, parsed_module, visit_cycle,
+    ModuleAnalysis, ModuleSet, ParsedModule, analyze_module, parsed_module, repeated_path,
 };
 use crate::macro_modules::_helpers::module_names::{module_name, package_name};
 use crate::macro_modules::constants::CYCLE_SEPARATOR;
@@ -123,18 +123,16 @@ fn validate_import_cycles(
         .collect();
     let mut sorted: Vec<&String> = edges.keys().collect();
     sorted.sort();
-    let mut completed: HashSet<String> = HashSet::new();
-    for name in sorted {
-        completed = visit_cycle(name, (&edges, &[]), completed).map_err(|cycle| {
-            let repeated: &str = cycle.last().map_or("", String::as_str);
-            format!(
-                "Macro import cycle in '{}': {}",
-                project.sources[files[repeated]].relative_path.display,
-                cycle.join(CYCLE_SEPARATOR)
-            )
-        })?;
-    }
-    Ok(())
+    let Some(cycle) = repeated_path(sorted, &edges) else {
+        return Ok(());
+    };
+    let repeated: &str = cycle.last().map_or("", |name| name.as_str());
+    let names: Vec<&str> = cycle.iter().map(|name| name.as_str()).collect();
+    Err(format!(
+        "Macro import cycle in '{}': {}",
+        project.sources[files[repeated]].relative_path.display,
+        names.join(CYCLE_SEPARATOR)
+    ))
 }
 
 fn source_digest(contents: &str) -> String {

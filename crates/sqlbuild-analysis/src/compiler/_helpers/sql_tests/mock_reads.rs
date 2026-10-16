@@ -1,11 +1,15 @@
 //! Python's `report_mocks_reading_referencing_helpers`: P013s for mocks reading referencing helpers.
 
 use std::collections::HashSet;
+use std::convert::Infallible;
 
 use polyglot_sql::expressions::With;
 use polyglot_sql::{
     ComplexityGuardOptions, Dialect, DialectType, Expression, ExpressionWalk, ParseOptions,
 };
+use sqlbuild_core::graph_walk::main::breadth_first_reach::breadth_first_reach;
+use sqlbuild_core::graph_walk::models::VisitOrder;
+use sqlbuild_core::graph_walk::types::NodeSet;
 use sqlbuild_core::text::main::ignorecase_key::ignorecase_key;
 use sqlbuild_core::text::main::is_word_char::is_word_char;
 use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
@@ -111,30 +115,18 @@ impl CteGraph<'_> {
 
     /// Python's `reachable_cte_keys`: breadth first, roots included, in visit order.
     fn reachable(&self, roots: &[String]) -> Vec<String> {
-        let mut pending: Vec<String> = Vec::new();
-        for root in roots {
-            if self.cte(root).is_some() {
-                pending.push(root.clone());
-            }
+        let known: Vec<&String> = roots
+            .iter()
+            .filter(|root| self.cte(root).is_some())
+            .collect();
+        let mut visited: VisitOrder<&String> = VisitOrder::default();
+        for root in &known {
+            let Ok(_) = visited.insert_new(root);
         }
-        let mut visited: Vec<String> = Vec::new();
-        for key in &pending {
-            if !visited.contains(key) {
-                visited.push(key.clone());
-            }
-        }
-        let mut cursor = 0;
-        while cursor < pending.len() {
-            let key = pending[cursor].clone();
-            cursor += 1;
-            for dependency in self.reads(&key) {
-                if !visited.contains(dependency) {
-                    visited.push(dependency.clone());
-                    pending.push(dependency.clone());
-                }
-            }
-        }
-        visited
+        let Ok(()) = breadth_first_reach(known, None, &mut visited, |key| {
+            Ok::<_, Infallible>(self.reads(key))
+        });
+        visited.order.into_iter().cloned().collect()
     }
 }
 
