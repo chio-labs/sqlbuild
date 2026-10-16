@@ -5,95 +5,17 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_threads::exit_signal::signal_interpreter_exit;
-use crate::bindings::_helpers::planner_entries::values::{
-    COMPILE_TYPES, boolean, native, replaced, string,
+use crate::bindings::_helpers::planner_entries::test_planning::{
+    PlanningRequest, SqlTestPlanning, start_planning,
 };
+use crate::bindings::_helpers::planner_entries::values::{COMPILE_TYPES, native, replaced};
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 use std::time::Instant;
 
 const INSPECTION_CATALOG: AdapterHost = AdapterHost::OpenInspectionCatalog;
-const TEST_PLANNING_THREAD: &str = "sqlbuild-test-planning";
-/// How long interpreter exit waits for each SQL test planning thread still running native code.
-const PLANNING_EXIT_JOIN_SECONDS: f64 = 5.0;
-
-/// The planned SQL tests' future and, when planning runs in the background, its daemon thread.
-type TestPlanning<'py> = (Bound<'py, PyAny>, Option<Bound<'py, PyAny>>);
-
-/// `thread.join(timeout)` for a live thread; no timeout when `timeout` is `None`.
-fn join_thread(thread: &Bound<'_, PyAny>, timeout: Option<f64>) -> PyResult<()> {
-    if thread.call_method0("is_alive")?.is_truthy()? {
-        let options = PyDict::new(thread.py());
-        options.set_item("timeout", timeout)?;
-        thread.call_method("join", (), Some(&options))?;
-    }
-    Ok(())
-}
-
-/// Join SQL test planning threads at exit: finalization ending one inside native planning aborts.
-#[pyfunction]
-fn join_sql_test_planning_threads(py: Python<'_>) -> PyResult<()> {
-    signal_interpreter_exit(py)?;
-    for thread in imported(py, "threading", "enumerate")?
-        .call0()?
-        .try_iter()?
-    {
-        let thread: Bound<'_, PyAny> = thread?;
-        if thread.getattr("name")?.eq(TEST_PLANNING_THREAD)? {
-            join_thread(&thread, Some(PLANNING_EXIT_JOIN_SECONDS))?;
-        }
-    }
-    Ok(())
-}
-
-/// A future resolving to the planned SQL tests, planned on a daemon thread when enabled.
-fn sql_test_planning<'py>(
-    (project, adapter): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
-    (selected_keys, sql_test_selection): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
-    enabled: bool,
-) -> PyResult<TestPlanning<'py>> {
-    let py = project.py();
-    let future = imported(py, "concurrent.futures", "Future")?.call0()?;
-    if !enabled {
-        future.call_method1(
-            "set_result",
-            (native(
-                py,
-                RecordId::PlannedSqlTests,
-                &[
-                    ("selected_keys", selected_keys.clone()),
-                    ("sql_test_selection", sql_test_selection.clone()),
-                ],
-            )?,),
-        )?;
-        return Ok((future, None));
-    }
-    let kwargs = PyDict::new(py);
-    kwargs.set_item("future", &future)?;
-    kwargs.set_item("project", project)?;
-    kwargs.set_item("adapter", adapter)?;
-    kwargs.set_item("selected_keys", selected_keys)?;
-    kwargs.set_item("sql_test_selection", sql_test_selection)?;
-    let thread = call_with(
-        &imported(py, "threading", "Thread")?,
-        &[
-            (
-                "target",
-                registry::native(py, NativeAttr::PlanSelectedSqlTestsInto)?,
-            ),
-            ("kwargs", kwargs.into_any()),
-            ("name", string(py, TEST_PLANNING_THREAD)),
-            ("daemon", boolean(py, true)?),
-        ],
-    )?;
-    thread.call_method0("start")?;
-    Ok((future, Some(thread)))
-}
-
 /// Selected scopes, and the overrides with cursor overrides typed for the selected models.
 fn scopes_and_cursor_overrides<'py>(
     args: &KeywordArguments<'py>,
@@ -192,7 +114,7 @@ fn planned_output<'py>(
     args: &KeywordArguments<'py>,
     runtime: &Bound<'py, PyAny>,
     (scopes, overrides): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
-    test_planning: &Bound<'py, PyAny>,
+    test_planning: &SqlTestPlanning,
 ) -> PyResult<Bound<'py, PyAny>> {
     let project = args.value("project")?;
     let py = project.py();
@@ -295,7 +217,7 @@ fn planned_output<'py>(
             ("source_freshness", source_freshness.clone()),
         ],
     )?;
-    let planned_sql_tests = test_planning.call_method0("result")?;
+    let planned_sql_tests = test_planning.result(py)?.into_bound(py);
     let mut plan_output = native(
         py,
         NativeAttr::AssembleBasePlanOutput,
@@ -398,12 +320,14 @@ fn build_execution_plan<'py>(
     )?;
     let (scopes, overrides) = scopes_and_cursor_overrides(&args)?;
     let inspection = scopes.getattr("inspection_scope")?;
-    let (test_planning, planning_thread) = sql_test_planning(
-        (&project, &adapter),
-        (
-            &inspection.getattr("selected_keys")?,
-            &inspection.getattr("sql_test_selection")?,
-        ),
+    let test_planning = start_planning(
+        py,
+        PlanningRequest {
+            project: project.clone().unbind(),
+            adapter: adapter.clone().unbind(),
+            selected_keys: inspection.getattr("selected_keys")?.unbind(),
+            sql_test_selection: inspection.getattr("sql_test_selection")?.unbind(),
+        },
         args.value("policies")?
             .getattr("plan_sql_tests")?
             .is_truthy()?,
@@ -414,56 +338,16 @@ fn build_execution_plan<'py>(
             &[("adapter", adapter), ("connection", connection)],
         )?;
         within(&catalog, |_| {
-            planned_output(&args, &runtime, (&scopes, &overrides), &test_planning)
+            planned_output(&args, &runtime, (&scopes, &overrides), test_planning.get())
         })
     })();
-    let joined = planning_thread
-        .as_ref()
-        .map_or(Ok(()), |thread| join_thread(thread, None));
+    let joined = test_planning.get().result(py);
     let planned = planned?;
     joined?;
     Ok(planned)
 }
 
-/// Start SQL test planning on a daemon thread, or resolve to no tests when disabled.
-#[pyfunction]
-#[pyo3(signature = (**kwargs))]
-fn start_sql_test_planning<'py>(
-    py: Python<'py>,
-    kwargs: Option<Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let args = KeywordArguments::read(
-        py,
-        "start_sql_test_planning",
-        kwargs,
-        (
-            &[
-                "project",
-                "adapter",
-                "selected_keys",
-                "sql_test_selection",
-                "enabled",
-            ],
-            &[],
-        ),
-    )?;
-    let (future, _) = sql_test_planning(
-        (&args.value("project")?, &args.value("adapter")?),
-        (
-            &args.value("selected_keys")?,
-            &args.value("sql_test_selection")?,
-        ),
-        args.flag("enabled")?,
-    )?;
-    Ok(future)
-}
-
-/// Add the execution plan entry points and join SQL test planning threads at interpreter exit.
+/// Add the execution plan entry point.
 pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(build_execution_plan, module)?)?;
-    module.add_function(wrap_pyfunction!(start_sql_test_planning, module)?)?;
-    let hook = wrap_pyfunction!(join_sql_test_planning_threads, module)?;
-    module.add_function(hook.clone())?;
-    imported(module.py(), "atexit", "register")?.call1((hook,))?;
-    Ok(())
+    module.add_function(wrap_pyfunction!(build_execution_plan, module)?)
 }

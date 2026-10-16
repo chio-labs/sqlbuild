@@ -1038,7 +1038,6 @@ native_ids! {
         PlanRuleFixes => "plan_rule_fixes",
         PlanRuleRun => "plan_rule_run",
         PlanSelectedSqlTests => "plan_selected_sql_tests",
-        PlanSelectedSqlTestsInto => "plan_selected_sql_tests_into",
         PlanSqlTests => "plan_sql_tests",
         PlanSqlTestsNatively => "plan_sql_tests_natively",
         PlanStaticSqlTests => "plan_static_sql_tests",

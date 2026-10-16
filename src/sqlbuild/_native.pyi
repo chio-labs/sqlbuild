@@ -6775,14 +6775,6 @@ def plan_selected_sql_tests(
     selected_keys: frozenset[CompiledObjectKey],
     sql_test_selection: SqlTestSelection,
 ) -> PlannedSqlTests: ...
-def plan_selected_sql_tests_into(
-    *,
-    future: Future[PlannedSqlTests],
-    project: CompiledProjectView,
-    adapter: BaseAdapter,
-    selected_keys: frozenset[CompiledObjectKey],
-    sql_test_selection: SqlTestSelection,
-) -> None: ...
 def sql_test_is_selected(
     *,
     test: CompiledSqlTest,
@@ -6888,6 +6880,12 @@ def build_execution_plan(
     project_config: ProjectConfig | None = None,
     local_config: LocalConfig | None = None,
 ) -> PlanOutput: ...
+
+class SqlTestPlanning:
+    """The planned SQL tests of one plan, planned on a native thread when enabled."""
+
+    def result(self) -> PlannedSqlTests: ...
+
 def start_sql_test_planning(
     *,
     project: CompiledProjectView,
@@ -6895,7 +6893,7 @@ def start_sql_test_planning(
     selected_keys: frozenset[CompiledObjectKey],
     sql_test_selection: SqlTestSelection,
     enabled: bool,
-) -> Future[PlannedSqlTests]: ...
+) -> SqlTestPlanning: ...
 def join_sql_test_planning_threads() -> None: ...
 def build_display_only_sqlbuild_plan(
     *, project: CompiledProjectView, selected_model_names: tuple[str, ...], full_refresh: bool

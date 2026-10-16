@@ -761,45 +761,6 @@ fn plan_selected_sql_tests<'py>(
     planned_sql_tests(project, adapter, selected_keys, sql_test_selection)
 }
 
-/// Plan selected SQL tests into `future`, which re-raises any failure on the joining thread.
-#[pyfunction]
-#[pyo3(signature = (**kwargs))]
-fn plan_selected_sql_tests_into<'py>(
-    py: Python<'py>,
-    kwargs: Option<Bound<'py, PyDict>>,
-) -> PyResult<()> {
-    let args = KeywordArguments::read(
-        py,
-        "plan_selected_sql_tests_into",
-        kwargs,
-        (
-            &[
-                "future",
-                "project",
-                "adapter",
-                "selected_keys",
-                "sql_test_selection",
-            ],
-            &[],
-        ),
-    )?;
-    let future = args.value("future")?;
-    match native(
-        py,
-        NativeAttr::PlanSelectedSqlTests,
-        &[
-            ("project", args.value("project")?),
-            ("adapter", args.value("adapter")?),
-            ("selected_keys", args.value("selected_keys")?),
-            ("sql_test_selection", args.value("sql_test_selection")?),
-        ],
-    ) {
-        Ok(planned) => future.call_method1("set_result", (planned,))?,
-        Err(error) => future.call_method1("set_exception", (error.value(future.py()),))?,
-    };
-    Ok(())
-}
-
 /// Return model closures resolved natively in one project batch, keyed by SQL test key.
 #[pyfunction]
 #[pyo3(signature = (*, project, tests))]
@@ -863,7 +824,6 @@ pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(build_plan_output, module)?)?;
     module.add_function(wrap_pyfunction!(plan_function, module)?)?;
     module.add_function(wrap_pyfunction!(plan_selected_sql_tests, module)?)?;
-    module.add_function(wrap_pyfunction!(plan_selected_sql_tests_into, module)?)?;
     module.add_function(wrap_pyfunction!(sql_test_is_selected, module)?)?;
     module.add_function(wrap_pyfunction!(sql_test_model_chain_names_by_key, module)?)?;
     module.add_function(wrap_pyfunction!(build_selected_test_entries, module)?)
