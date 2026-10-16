@@ -24,6 +24,7 @@ use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compile_attachment::sql_expansion_context::{
     SqlExpansionInputs, present,
 };
+use crate::bindings::_helpers::native_threads::interruptible_join::{Joined, join_interruptibly};
 use crate::bindings::_helpers::rules::lint_expansion::{
     LintExpansionSources, lint_expansion_inputs,
 };
@@ -157,6 +158,7 @@ pub(crate) struct PreparedSqlLint {
     project_dir: PathBuf,
     thread: Mutex<Option<JoinHandle<PyResult<EarlyLintResult>>>>,
     result: OnceLock<Result<EarlyLintResult, PyErr>>,
+    stop: Arc<AtomicBool>,
 }
 
 impl PreparedSqlLint {
@@ -170,7 +172,7 @@ impl PreparedSqlLint {
         same_codes(&self.codes, codes)
     }
 
-    /// The lint's result, waiting without the GIL until it finishes.
+    /// The lint's result, waiting without the GIL until it finishes or a signal handler raises.
     pub(crate) fn result(&self, py: Python<'_>) -> &Result<EarlyLintResult, PyErr> {
         self.result.get_or_init(|| {
             let thread = self
@@ -178,11 +180,14 @@ impl PreparedSqlLint {
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
                 .take();
-            match thread {
-                Some(thread) => py.detach(|| thread.join()).unwrap_or_else(|_| {
+            let Some(thread) = thread else {
+                return Err(PyRuntimeError::new_err("early SQL lint was already joined"));
+            };
+            match join_interruptibly(py, thread, || self.stop.store(true, Ordering::Release)) {
+                Joined::Finished(joined) => joined.unwrap_or_else(|_| {
                     Err(PyRuntimeError::new_err("early SQL lint thread panicked"))
                 }),
-                None => Err(PyRuntimeError::new_err("early SQL lint was already joined")),
+                Joined::Interrupted(signal) => Err(signal),
             }
         })
     }
@@ -224,6 +229,7 @@ fn start_early_lint(
         project_dir: plan.project_dir,
         thread: Mutex::new(Some(thread)),
         result: OnceLock::new(),
+        stop: Arc::clone(stop),
     }))
 }
 

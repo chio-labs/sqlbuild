@@ -576,6 +576,16 @@ class EarlyLintCompileTestCase:
 
 
 @dataclass(frozen=True)
+class EarlyLintInterruptTestCase:
+    """A rules-enabled project whose lint-thread macro expansions are slow enough to interrupt."""
+
+    description: str
+    model_count: int
+    macro_seconds: float
+    expected_max_stop_seconds: float
+
+
+@dataclass(frozen=True)
 class CompileReuseInvalidationTestCase:
     """One compile input change that must make the stored compile miss."""
 

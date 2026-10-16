@@ -171,7 +171,7 @@ pub(super) fn checked<'py>(
         &[
             (
                 "connection",
-                runtime_field(&runtime, |runtime| &runtime.connection)?,
+                runtime_field(runtime, |runtime| &runtime.connection)?,
             ),
             ("destination", relation),
         ],

@@ -21,7 +21,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use std::time::Instant;
 
 fn progress(runtime: &Bound<'_, PyAny>, message: &str) -> PyResult<()> {
-    let on_progress = runtime_field(&runtime, |runtime| &runtime.on_progress)?;
+    let on_progress = runtime_field(runtime, |runtime| &runtime.on_progress)?;
     if !on_progress.is_none() {
         on_progress.call1((message,))?;
     }
@@ -38,7 +38,7 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = runtime.py();
     let started = Instant::now();
-    let project = runtime_field(&runtime, |runtime| &runtime.project)?;
+    let project = runtime_field(runtime, |runtime| &runtime.project)?;
     let fingerprints = Py::new(
         py,
         MigrationFingerprintCache::open(py, Some(project.getattr("compile_cache_dir")?))?,
@@ -48,7 +48,7 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
     progress(runtime, "Inspecting warehouse state...")?;
     let selected_scope = scopes.getattr("selected_scope")?;
     let full_refresh: bool = overrides.getattr("full_refresh")?.extract()?;
-    let config = runtime_field(&runtime, |runtime| &runtime.project_config)?;
+    let config = runtime_field(runtime, |runtime| &runtime.project_config)?;
     let cursor_scope = native(
         py,
         RecordId::CursorSnapshotScope,
@@ -60,7 +60,7 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
             ),
             (
                 "invocation_time",
-                runtime_field(&runtime, |runtime| &runtime.invocation_time)?,
+                runtime_field(runtime, |runtime| &runtime.invocation_time)?,
             ),
             (
                 "start_cursor_config",
@@ -73,7 +73,7 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
             ("cursor_overrides", overrides.getattr("cursor_overrides")?),
         ],
     )?;
-    let adapter = runtime_field(&runtime, |runtime| &runtime.adapter)?;
+    let adapter = runtime_field(runtime, |runtime| &runtime.adapter)?;
     let stale_keys = pyo3::types::PyFrozenSet::new(
         py,
         scopes
@@ -87,12 +87,12 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
     let snapshot = warehouse_snapshot(&SnapshotRequest {
         project: project.clone(),
         adapter: adapter.clone(),
-        connection: runtime_field(&runtime, |runtime| &runtime.connection)?,
+        connection: runtime_field(runtime, |runtime| &runtime.connection)?,
         execute: adapter.getattr("execute")?,
         selected_keys: stale_keys,
         full_refresh: false,
         full_refresh_model_names: effectively_full_refreshed_model_names(&project, full_refresh)?,
-        on_progress: runtime_field(&runtime, |runtime| &runtime.on_progress)?,
+        on_progress: runtime_field(runtime, |runtime| &runtime.on_progress)?,
         deferred_locations: deferral.getattr("deferred_locations")?,
         cursor_scope,
     })?;
@@ -108,11 +108,11 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
     let inspection_relations = planner_relations_context(RelationsRequest {
         project: project.clone(),
         adapter: adapter.clone(),
-        connection: runtime_field(&runtime, |runtime| &runtime.connection)?,
+        connection: runtime_field(runtime, |runtime| &runtime.connection)?,
         scope: scopes.getattr("inspection_scope")?,
         deferral: deferral.clone(),
         project_config: config,
-        local_config: runtime_field(&runtime, |runtime| &runtime.local_config)?,
+        local_config: runtime_field(runtime, |runtime| &runtime.local_config)?,
         known_source_columns: py.None().into_bound(py),
         relation_keys: py.None().into_bound(py),
     })?;
@@ -161,7 +161,7 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
         },
         (&migration_entries, &column_entries),
     )?;
-    if !runtime_field(&runtime, |runtime| &runtime.on_progress)?.is_none() {
+    if !runtime_field(runtime, |runtime| &runtime.on_progress)?.is_none() {
         progress(
             runtime,
             &format!(

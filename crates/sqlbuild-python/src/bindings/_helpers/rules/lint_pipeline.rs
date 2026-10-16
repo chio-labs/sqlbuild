@@ -1,7 +1,6 @@
 //! The lint pipeline over native data: header rules, expanded bodies, native SQL lint and suppressions.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -30,6 +29,7 @@ use sqlbuild_rules::lint_text::models::{
     AuthoredDiagnostic, ExpansionSpan, InterpolationSite, LintSqlBody, LintSqlOptions, Neutralized,
     RetainedViolation, SuppressibleViolation, SuppressionFinding,
 };
+use sqlbuild_rules::project_tree::main::project_real_path::project_real_path;
 use sqlbuild_rules::sql_lint::main::preparation::prepare;
 use sqlbuild_rules::sql_lint::types::PreparedSql;
 
@@ -412,7 +412,7 @@ pub(crate) struct LintRequest<'a> {
 
 /// `path` resolved through the filesystem, or unchanged when it cannot be.
 pub(crate) fn resolved(path: &Path) -> PathBuf {
-    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+    project_real_path(path)
 }
 
 /// `given` filtered to the selection, or the project's lint files read from disk.

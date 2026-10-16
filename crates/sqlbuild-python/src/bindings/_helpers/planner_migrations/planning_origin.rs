@@ -33,7 +33,7 @@ fn named<'py>(
     runtime: &Bound<'py, PyAny>,
     state: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    for item in runtime_field(&runtime, |runtime| &runtime.project)?
+    for item in runtime_field(runtime, |runtime| &runtime.project)?
         .getattr("models")?
         .try_iter()?
     {
@@ -74,7 +74,7 @@ fn input_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
 #[pyfunction]
 #[pyo3(signature = (*, runtime))]
 fn migration_planning_database<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let project = runtime_field(&runtime, |runtime| &runtime.project)?;
+    let project = runtime_field(runtime, |runtime| &runtime.project)?;
     let fallback = project.getattr("effective_target_database")?;
     for item in project.getattr("models")?.try_iter()? {
         let database = item?.getattr("destination")?.getattr("database")?;
@@ -89,7 +89,7 @@ fn migration_planning_database<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Bou
 #[pyo3(signature = (*, runtime))]
 fn migration_project_schemas<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let schemas = PySet::empty(runtime.py())?;
-    for item in runtime_field(&runtime, |runtime| &runtime.project)?
+    for item in runtime_field(runtime, |runtime| &runtime.project)?
         .getattr("models")?
         .try_iter()?
     {

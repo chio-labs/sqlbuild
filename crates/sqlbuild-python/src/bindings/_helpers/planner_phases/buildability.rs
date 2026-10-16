@@ -18,7 +18,7 @@ pub(crate) fn check_selected_scope_buildability<'py>(
     deferral: &Bound<'py, PyAny>,
 ) -> PyResult<()> {
     let py = runtime.py();
-    let project = runtime_field(&runtime, |runtime| &runtime.project)?;
+    let project = runtime_field(runtime, |runtime| &runtime.project)?;
     let selected_scope = scopes.getattr("selected_scope")?;
     let mut external_seeds: Vec<_> = Vec::new();
     for seed in project.getattr("seeds")?.try_iter()? {
@@ -35,7 +35,7 @@ pub(crate) fn check_selected_scope_buildability<'py>(
             ("upstream_deps", selected_scope.getattr("upstream_deps")?),
             (
                 "snapshot",
-                warehouse_field(&warehouse, |warehouse| &warehouse.snapshot)?,
+                warehouse_field(warehouse, |warehouse| &warehouse.snapshot)?,
             ),
             (
                 "deferred_relations",
@@ -70,10 +70,10 @@ pub(crate) fn check_selected_scope_buildability<'py>(
     check_selected_source_tables_exist(
         &project,
         (
-            &runtime_field(&runtime, |runtime| &runtime.adapter)?,
-            &runtime_field(&runtime, |runtime| &runtime.connection)?,
+            &runtime_field(runtime, |runtime| &runtime.adapter)?,
+            &runtime_field(runtime, |runtime| &runtime.connection)?,
         ),
         &selected_scope,
-        &warehouse_field(&warehouse, |warehouse| &warehouse.inspection_relations)?,
+        &warehouse_field(warehouse, |warehouse| &warehouse.inspection_relations)?,
     )
 }

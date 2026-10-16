@@ -26,7 +26,7 @@ fn migration_promotion<'py>(
     runtime: &Bound<'py, PyAny>,
     decision: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let adapter = runtime_field(&runtime, |runtime| &runtime.adapter)?;
+    let adapter = runtime_field(runtime, |runtime| &runtime.adapter)?;
     let promotion = registry::class(runtime.py(), RecordId::MigrationPromotion)?;
     if adapter
         .call_method0("supports_transactional_ddl")?
@@ -48,7 +48,7 @@ fn migration_with_execution<'py>(
     entry: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = runtime.py();
-    let adapter = runtime_field(&runtime, |runtime| &runtime.adapter)?;
+    let adapter = runtime_field(runtime, |runtime| &runtime.adapter)?;
     let transient = if adapter.getattr("adapter_name")?.eq("snowflake")? {
         PyBool::new(
             py,

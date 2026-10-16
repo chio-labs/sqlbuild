@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import os
+import signal
+import subprocess
+import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -9,10 +14,12 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     EarlyLintCompileTestCase,
+    EarlyLintInterruptTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     compile_json_payload,
     diagnostic_location_keys,
+    slow_lint_model_files,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project
 
@@ -87,3 +94,53 @@ def test_given_rules_enabled_project_when_compiling_cold_and_warm_then_lint_wait
         wait_ms: object = payload["compile_timings"]["early_lint_wait_ms"]
         assert isinstance(wait_ms, int)
         assert wait_ms >= 0
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        EarlyLintInterruptTestCase(
+            description="ctrl-c stops after the file being expanded",
+            model_count=8,
+            macro_seconds=3.0,
+            expected_max_stop_seconds=8.0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_slow_background_lint_when_interrupted_then_compile_stops_promptly(
+    test_case: EarlyLintInterruptTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="commerce",
+        repo_files={
+            "sqlbuild_project.toml": _PROJECT_TOML,
+            "models/orders.sql": _ORDERS_SQL,
+            **slow_lint_model_files(model_count=test_case.model_count),
+        },
+    )
+    marker: Path = tmp_path / "slow_macro_marker.txt"
+    process: subprocess.Popen[str] = subprocess.Popen(
+        [str(Path(sys.executable).with_name("sqb")), "--project-dir", str(project_dir), "compile"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        env={
+            **os.environ,
+            "SLOW_MACRO_MARKER": str(marker),
+            "SLOW_MACRO_SECONDS": str(test_case.macro_seconds),
+        },
+    )
+    deadline: float = time.monotonic() + 60.0
+    while not marker.exists() and time.monotonic() < deadline and process.poll() is None:
+        time.sleep(0.05)
+    interrupted_at: float = time.monotonic()
+    process.send_signal(signal.SIGINT)
+    output: str = process.communicate(timeout=120)[0]
+    stop_seconds: float = time.monotonic() - interrupted_at
+
+    assert process.returncode in (-signal.SIGINT, 130), output
+    assert stop_seconds < test_case.expected_max_stop_seconds, output
+    assert marker.read_text(encoding="utf-8").count("expanding") < test_case.model_count

@@ -93,11 +93,11 @@ pub(crate) fn base_plan_output<'py>(
     )?;
     let mut output = PlanOutputFields {
         fields: plan_output_fields(PlanOutputInputs {
-            project: runtime_field(&runtime, |runtime| &runtime.project)?,
-            adapter: runtime_field(&runtime, |runtime| &runtime.adapter)?,
+            project: runtime_field(runtime, |runtime| &runtime.project)?,
+            adapter: runtime_field(runtime, |runtime| &runtime.adapter)?,
             scope: execution_scope.clone(),
-            snapshot: warehouse_field(&warehouse, |warehouse| &warehouse.snapshot)?,
-            relations: warehouse_field(&warehouse, |warehouse| &warehouse.inspection_relations)?,
+            snapshot: warehouse_field(warehouse, |warehouse| &warehouse.snapshot)?,
+            relations: warehouse_field(warehouse, |warehouse| &warehouse.inspection_relations)?,
             changes: reconciliation.changes.clone(),
             model_entries: entries.entries,
             model_warnings: entries.warnings,
@@ -163,7 +163,7 @@ pub(crate) fn add_storage_policies<'py>(
         .is_truthy()?
     {
         let models = PyDict::new(py);
-        for model in runtime_field(&runtime, |runtime| &runtime.project)?
+        for model in runtime_field(runtime, |runtime| &runtime.project)?
             .getattr("models")?
             .try_iter()?
         {
@@ -178,7 +178,7 @@ pub(crate) fn add_storage_policies<'py>(
                 ("models_by_name", models.into_any()),
                 (
                     "fingerprints",
-                    warehouse_field(&warehouse, |warehouse| &warehouse.migration_fingerprints)?,
+                    warehouse_field(warehouse, |warehouse| &warehouse.migration_fingerprints)?,
                 ),
                 (
                     "dialect",
@@ -191,18 +191,18 @@ pub(crate) fn add_storage_policies<'py>(
     }
     let entries = with_column_rename_hints(
         &entries,
-        &warehouse_field(&warehouse, |warehouse| &warehouse.column_rename_hints)?,
+        &warehouse_field(warehouse, |warehouse| &warehouse.column_rename_hints)?,
     )?;
-    let migration_entries = warehouse_field(&warehouse, |warehouse| &warehouse.migration_entries)?;
+    let migration_entries = warehouse_field(warehouse, |warehouse| &warehouse.migration_entries)?;
     let column_entries =
-        warehouse_field(&warehouse, |warehouse| &warehouse.column_migration_entries)?;
+        warehouse_field(warehouse, |warehouse| &warehouse.column_migration_entries)?;
     let old_name_entries =
-        warehouse_field(&warehouse, |warehouse| &warehouse.old_name_view_entries)?;
-    let old_name_views = warehouse_field(&warehouse, |warehouse| &warehouse.old_name_views)?;
+        warehouse_field(warehouse, |warehouse| &warehouse.old_name_view_entries)?;
+    let old_name_views = warehouse_field(warehouse, |warehouse| &warehouse.old_name_views)?;
     let warnings = concat(
         py,
         &[
-            warehouse_field(&warehouse, |warehouse| &warehouse.migration_warnings)?,
+            warehouse_field(warehouse, |warehouse| &warehouse.migration_warnings)?,
             output.field("warnings")?,
         ],
     )?;
@@ -254,7 +254,7 @@ pub(crate) fn add_plan_warnings<'py>(
             ("changes", stale_warning_changes.clone()),
             (
                 "snapshot",
-                warehouse_field(&warehouse, |warehouse| &warehouse.snapshot)?,
+                warehouse_field(warehouse, |warehouse| &warehouse.snapshot)?,
             ),
             (
                 "version_identities",

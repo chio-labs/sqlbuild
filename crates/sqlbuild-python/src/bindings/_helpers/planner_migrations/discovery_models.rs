@@ -17,7 +17,7 @@ use std::collections::BTreeMap;
 pub(super) fn ordered<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let mut models: BTreeMap<String, Bound<'py, PyAny>> = BTreeMap::new();
     let mut dependencies: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for item in runtime_field(&runtime, |runtime| &runtime.project)?
+    for item in runtime_field(runtime, |runtime| &runtime.project)?
         .getattr("models")?
         .try_iter()?
     {
@@ -77,7 +77,7 @@ pub(super) fn metadata<'py>(
     models: &[Bound<'py, PyAny>],
 ) -> PyResult<Bound<'py, PyDict>> {
     let py = runtime.py();
-    let project = runtime_field(&runtime, |runtime| &runtime.project)?;
+    let project = runtime_field(runtime, |runtime| &runtime.project)?;
     let functions = native(
         py,
         NativeAttr::BuildFunctionLocalHashes,

@@ -125,7 +125,7 @@ pub(super) fn overlay<'py>(
 }
 
 fn cursor_enabled(runtime: &Bound<'_, PyAny>, name: &Bound<'_, PyAny>) -> PyResult<bool> {
-    for item in runtime_field(&runtime, |runtime| &runtime.project)?
+    for item in runtime_field(runtime, |runtime| &runtime.project)?
         .getattr("models")?
         .try_iter()?
     {

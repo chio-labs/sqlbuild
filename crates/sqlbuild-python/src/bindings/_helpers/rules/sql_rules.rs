@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use pyo3::exceptions::PyException;
 use pyo3::prelude::{
     Bound, IntoPyObject, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyRef, PyResult,
     Python,
@@ -320,6 +321,9 @@ fn evaluated_sql_rules(
         }
         let files: Vec<LintFile> = match prepared_result(run, py) {
             Some(Ok(result)) => result.outcome.files.clone(),
+            Some(Err(error)) if !error.is_instance_of::<PyException>(py) => {
+                return Err(error.clone_ref(py));
+            }
             Some(Err(_)) | None => match prepared_files {
                 Some(files) => files,
                 None => lint_sources(project_dir, None, None)?,
