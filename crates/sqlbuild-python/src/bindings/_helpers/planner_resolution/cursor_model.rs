@@ -1,6 +1,9 @@
 //! Model cursor orchestration over live warehouse snapshot facts.
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::model_config::config_values::{
+    config_cursor_bound, config_str as authored_config_str,
+};
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
@@ -16,20 +19,13 @@ use pyo3::types::PyDict;
 use pyo3::{IntoPyObject, PyErr, pyfunction, wrap_pyfunction};
 
 fn config<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
-    call_with(
-        &registry::native(
-            model.py(),
-            if key == CURSOR_START {
-                NativeAttr::GetConfigCursorBound
-            } else {
-                NativeAttr::GetConfigStr
-            },
-        )?,
-        &[
-            ("values", model.getattr("config")?.getattr("values")?),
-            ("key", string(model.py(), key)),
-        ],
-    )
+    let values: Bound<'py, PyAny> = model.getattr("config")?.getattr("values")?;
+    let value: Option<Bound<'py, PyAny>> = if key == CURSOR_START {
+        config_cursor_bound(&values, key)?
+    } else {
+        authored_config_str(&values, key)?
+    };
+    Ok(value.unwrap_or_else(|| model.py().None().into_bound(model.py())))
 }
 
 fn unbounded(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {

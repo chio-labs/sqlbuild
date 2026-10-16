@@ -1,9 +1,10 @@
 //! Boundary helpers shared by the native planner phases.
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::models::HostId;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, NativeItem, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeItem, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyFrozenSet, PyString, PyTuple};
@@ -154,15 +155,9 @@ pub(crate) fn by_name<'py>(
 
 /// A model config value as text, `None` when absent or not text.
 pub(crate) fn config_str(model: &Bound<'_, PyAny>, key: &str) -> PyResult<Option<String>> {
-    native(
-        model.py(),
-        NativeAttr::GetConfigStr,
-        &[
-            ("values", model.getattr("config")?.getattr("values")?),
-            ("key", text(model.py(), key)),
-        ],
-    )?
-    .extract()
+    authored_config_str(&model.getattr("config")?.getattr("values")?, key)?
+        .map(|value| value.extract())
+        .transpose()
 }
 
 /// The compiled object key of the model `name`.

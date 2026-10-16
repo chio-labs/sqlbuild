@@ -1,5 +1,6 @@
 //! Detect how each selected model and function changed since its recorded build.
 
+use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::planner_changes::results::native_enum;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
@@ -427,14 +428,12 @@ pub(crate) fn model_change<'py>(
 /// The model's resolved `replay_on_change` policy.
 fn replay_policy(model: &Bound<'_, PyAny>) -> PyResult<Backfill> {
     let py: Python<'_> = model.py();
-    let raw: Option<String> = call_with(
-        &registry::native(py, NativeAttr::GetConfigStr)?,
-        &[
-            ("values", model.getattr("config")?.getattr("values")?),
-            ("key", PyString::new(py, REPLAY_CONFIG_KEY).into_any()),
-        ],
+    let raw: Option<String> = authored_config_str(
+        &model.getattr("config")?.getattr("values")?,
+        REPLAY_CONFIG_KEY,
     )?
-    .extract()?;
+    .map(|value| value.extract())
+    .transpose()?;
     resolve_replay_on_change(raw.as_deref()).map_err(|error| replay_policy_error(py, error))
 }
 

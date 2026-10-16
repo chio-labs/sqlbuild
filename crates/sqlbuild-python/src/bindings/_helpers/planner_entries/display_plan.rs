@@ -1,5 +1,6 @@
 //! Display-only plans for external plan surfaces when warehouse planning cannot resolve.
 
+use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::planner_entries::values::{
     boolean, native, none, planner_model, planner_type, string,
 };
@@ -33,13 +34,9 @@ fn display_action(
 }
 
 fn config<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
-    native(
-        model.py(),
-        NativeAttr::GetConfigStr,
-        &[
-            ("values", model.getattr("config")?.getattr("values")?),
-            ("key", string(model.py(), key)),
-        ],
+    Ok(
+        authored_config_str(&model.getattr("config")?.getattr("values")?, key)?
+            .unwrap_or_else(|| model.py().None().into_bound(model.py())),
     )
 }
 

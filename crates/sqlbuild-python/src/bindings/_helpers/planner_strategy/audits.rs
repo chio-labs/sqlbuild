@@ -58,7 +58,7 @@ fn attachment_value(kind: AuditAttachmentKind) -> &'static str {
 /// Audit attachment kind and attached target name; attached audits gate their target.
 #[pyfunction]
 #[pyo3(signature = (*, audit, downstream_deps))]
-fn resolve_attachment_kind<'py>(
+pub(crate) fn resolve_attachment_kind<'py>(
     audit: &Bound<'py, PyAny>,
     downstream_deps: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
@@ -110,7 +110,7 @@ fn resolve_attachment_kind<'py>(
 /// Whether an attached audit reads anything besides its target and the target's upstream.
 #[pyfunction]
 #[pyo3(signature = (*, audit, upstream_deps))]
-fn reads_outside_target_lineage(
+pub(crate) fn reads_outside_target_lineage(
     audit: &Bound<'_, PyAny>,
     upstream_deps: &Bound<'_, PyAny>,
 ) -> PyResult<bool> {
@@ -135,7 +135,7 @@ fn reads_outside_target_lineage(
 /// The run scope after degradation: delta-and-final only for incremental and snapshot targets.
 #[pyfunction]
 #[pyo3(signature = (*, requested_run_scope, attached_model_materialization))]
-fn resolve_effective_run_scope<'py>(
+pub(crate) fn resolve_effective_run_scope<'py>(
     requested_run_scope: &Bound<'py, PyAny>,
     attached_model_materialization: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {

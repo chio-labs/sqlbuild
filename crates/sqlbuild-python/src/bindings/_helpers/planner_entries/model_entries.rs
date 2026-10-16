@@ -1,15 +1,24 @@
 //! Per-model plan entries from resolved change results and warehouse snapshot facts.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::{
+    KeywordArguments, imported, keywords,
+};
 use crate::bindings::_helpers::planner_entries::values::{
     COMPILE_TYPES, MICROBATCH_CONCURRENCY_MESSAGE, boolean, error_of, native, none, planner_type,
     replaced, string,
 };
+use crate::bindings::_helpers::planner_phases::full_refresh::resolve_model_full_refresh;
 use crate::bindings::_helpers::planner_resolution::cursor_ranges::{
     CursorWindowInputs, config_str, cursor_safety_configs, empty_cursor_inputs, microbatch_range,
     model_cursor_overrides, plan_cursor_bounds,
 };
 use crate::bindings::_helpers::planner_resolution::cursor_warnings::with_cursor_safety_warnings;
+use crate::bindings::_helpers::planner_resolution::orchestration::{
+    resolve_model_hook_entries, resolve_model_sql,
+};
+use crate::bindings::_helpers::planner_strategy::microbatch_limits::apply_configured_microbatch_limits;
+use crate::bindings::_helpers::planner_strategy::model_entries::assemble_model_plan_entry;
+use crate::bindings::_helpers::planner_strategy::strategy::resolve_model_plan_action;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -68,15 +77,7 @@ fn plan_model_from_change<'py>(
             ),
         ],
     )?;
-    let resolved = native(
-        py,
-        NativeAttr::ResolveModelPlanAction,
-        &[
-            ("model", model.clone()),
-            ("change_result", request.change_result.clone()),
-            ("full_refresh", full_refresh.clone()),
-        ],
-    )?;
+    let resolved = resolve_model_plan_action(model, &request.change_result, request.full_refresh)?;
     let (action, reason) = (resolved.get_item(0)?, resolved.get_item(1)?);
     let materialization_type = native(
         py,
@@ -123,37 +124,32 @@ fn plan_model_from_change<'py>(
             ("end_cursor_override", request.overrides.1.clone()),
         ],
     )?;
-    let resolved_sql = native(
+    let resolved_sql = resolve_model_sql(
         py,
-        NativeAttr::ResolveModelSql,
-        &[
-            ("adapter", request.adapter.clone()),
-            ("model", model.clone()),
-            ("snapshot", request.snapshot.clone()),
-            ("context", context.clone()),
-            ("backfill", backfill.clone()),
-            ("full_refresh", full_refresh.clone()),
-            ("cursor_overrides", pair),
-            (
-                "external_sql_reference_resolver",
-                request.external_resolver.clone(),
-            ),
-            ("replaces_relation", boolean(py, replaces_relation)?),
-            ("full_rebuild_cause", full_rebuild_cause),
-        ],
+        Some(keywords(
+            py,
+            &[
+                ("adapter", request.adapter.clone()),
+                ("model", model.clone()),
+                ("snapshot", request.snapshot.clone()),
+                ("context", context.clone()),
+                ("backfill", backfill.clone()),
+                ("full_refresh", full_refresh.clone()),
+                ("cursor_overrides", pair),
+                (
+                    "external_sql_reference_resolver",
+                    request.external_resolver.clone(),
+                ),
+                ("replaces_relation", boolean(py, replaces_relation)?),
+                ("full_rebuild_cause", full_rebuild_cause),
+            ],
+        )?),
     )?;
-    let hooks = native(
-        py,
-        NativeAttr::ResolveModelHookEntries,
-        &[
-            ("model", model.clone()),
-            ("adapter", request.adapter.clone()),
-            ("context", context.clone()),
-            (
-                "external_sql_reference_resolver",
-                request.external_resolver.clone(),
-            ),
-        ],
+    let hooks = resolve_model_hook_entries(
+        model,
+        request.adapter.clone(),
+        context.clone(),
+        request.external_resolver.clone(),
     )?;
     let (future_config, start_config) = cursor_safety_configs(model, context)?;
     native(
@@ -206,9 +202,8 @@ fn plan_model_from_change<'py>(
     let cursor_bounds = plan_cursor_bounds(model, &window)?;
     let (empty_inputs, waiting_on_empty_inputs) = empty_cursor_inputs(model, &window)?;
     let range = microbatch_range(model, &window)?;
-    let assembled = native(
+    let assembled = assemble_model_plan_entry(Some(&keywords(
         py,
-        NativeAttr::AssembleModelPlanEntry,
         &[
             ("model", model.clone()),
             ("adapter", request.adapter.clone()),
@@ -238,7 +233,7 @@ fn plan_model_from_change<'py>(
             ("start_cursor_config", start_config),
             ("invocation_time", context.getattr("invocation_time")?),
         ],
-    )?;
+    )?))?;
     let bounds = if range.is_truthy()? {
         range
     } else {
@@ -504,15 +499,7 @@ fn plan_entries<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>
             &cursor_overrides,
             (start_override.clone(), end_override.clone()),
         )?;
-        let effective_full_refresh = native(
-            py,
-            NativeAttr::ResolveModelFullRefresh,
-            &[
-                ("model", model.clone()),
-                ("cli_full_refresh", full_refresh.clone()),
-            ],
-        )?
-        .is_truthy()?;
+        let effective_full_refresh = resolve_model_full_refresh(&model, full_refresh.is_truthy()?)?;
         let (mut entry, entry_warnings) = plan_model_from_change(&ModelPlanRequest {
             model: model.clone(),
             snapshot: snapshot.clone(),
@@ -560,11 +547,7 @@ fn plan_entries<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>
             };
             entry = replaced(&entry, &[("unaccounted_partition_policy", policy)])?;
             if entry.getattr("action")?.ne(&skip)? {
-                let limited = native(
-                    py,
-                    NativeAttr::ApplyConfiguredMicrobatchLimits,
-                    &[("entry", entry), ("inputs", inputs.clone())],
-                )?;
+                let limited = apply_configured_microbatch_limits(&entry, &inputs)?;
                 entry = limited.get_item(0)?;
                 for warning in limited.get_item(1)?.try_iter()? {
                     warnings.push(warning?);

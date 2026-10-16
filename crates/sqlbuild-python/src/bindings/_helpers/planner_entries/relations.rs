@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_entries::values::{native, none, planner_model};
+use crate::bindings::_helpers::planner_strategy::audit_entries::audit_is_selected;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PySet, PySetMethods, PyTuple};
@@ -16,16 +17,7 @@ fn selected_audit_relation_keys<'py>(
     let keys = PySet::empty(py)?;
     for audit in project.getattr("audits")?.try_iter()? {
         let audit = audit?;
-        if native(
-            py,
-            NativeAttr::AuditIsSelected,
-            &[
-                ("audit", audit.clone()),
-                ("selected_keys", selected_keys.clone()),
-            ],
-        )?
-        .is_truthy()?
-        {
+        if audit_is_selected(&audit, selected_keys)? {
             for dependency in audit.getattr("scope_deps")?.try_iter()? {
                 keys.add(dependency?)?;
             }

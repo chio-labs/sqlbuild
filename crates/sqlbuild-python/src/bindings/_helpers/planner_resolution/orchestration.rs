@@ -4,6 +4,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
+use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::planner_resolution::values::string;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -135,7 +136,7 @@ impl<'py> Resolution<'py> {
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn resolve_model_sql<'py>(
+pub(crate) fn resolve_model_sql<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -166,13 +167,9 @@ fn resolve_model_sql<'py>(
         context: args.value("context")?,
         external: args.value("external_sql_reference_resolver")?,
     };
-    let cursor_type = call_with(
-        &registry::native(py, NativeAttr::GetConfigStr)?,
-        &[
-            ("values", model.getattr("config")?.getattr("values")?),
-            ("key", string(py, "cursor_type")),
-        ],
-    )?;
+    let cursor_type =
+        authored_config_str(&model.getattr("config")?.getattr("values")?, "cursor_type")?
+            .unwrap_or_else(|| py.None().into_bound(py));
     let overrides = args.value("cursor_overrides")?;
     let bounds = call_with(
         &registry::native(py, NativeAttr::ComputeModelCursorBounds)?,
@@ -242,13 +239,11 @@ fn resolve_model_sql<'py>(
 /// Effective append cursor lower-bound inclusivity.
 fn append_cursor_inclusive<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py = model.py();
-    let strategy = call_with(
-        &registry::native(py, NativeAttr::GetConfigStr)?,
-        &[
-            ("values", model.getattr("config")?.getattr("values")?),
-            ("key", string(py, "incremental_strategy")),
-        ],
-    )?;
+    let strategy = authored_config_str(
+        &model.getattr("config")?.getattr("values")?,
+        "incremental_strategy",
+    )?
+    .unwrap_or_else(|| py.None().into_bound(py));
     let raw = model
         .getattr("config")?
         .getattr("values")?
@@ -352,7 +347,7 @@ fn resolve_function_sql<'py>(
 
 #[pyfunction]
 #[pyo3(signature = (*, model, adapter, context, external_sql_reference_resolver))]
-fn resolve_model_hook_entries<'py>(
+pub(crate) fn resolve_model_hook_entries<'py>(
     model: &Bound<'py, PyAny>,
     adapter: Bound<'py, PyAny>,
     context: Bound<'py, PyAny>,
