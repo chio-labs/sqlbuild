@@ -1,28 +1,23 @@
-//! Model fixture schema materialization at the Python boundary.
+//! A model's fixture relation metadata from its inferred and declared columns.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
-use pyo3::types::PyTuple;
-use pyo3::{pyfunction, wrap_pyfunction};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use sqlbuild_analysis::planner_fixtures::main::merge_metadata::merge_metadata;
 use sqlbuild_analysis::planner_fixtures::models::FixtureColumn;
 use sqlbuild_core::text::main::python_casefold::python_casefold;
 
 use crate::bindings::_helpers::analysis::model_reads::{inferred_rows, star_flags};
 use crate::bindings::_helpers::compiled_project::compiled_model_view::InferredRow;
-use crate::bindings::_helpers::planner_strategy::fixture_values::{columns, metadata};
+use crate::bindings::_helpers::planner_strategy::fixture_values::columns;
+use crate::bindings::_helpers::planner_strategy::models::FixtureRelation;
 
-#[pyfunction]
-#[pyo3(signature = (*, model))]
-pub(crate) fn model_fixture_metadata<'py>(
-    model: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let py = model.py();
+/// The model's merged inferred and declared columns, authoritative unless its analysis saw a star.
+pub(crate) fn model_fixture_relation(model: &Bound<'_, PyAny>) -> PyResult<FixtureRelation> {
     let inferred: Option<Vec<InferredRow>> = inferred_rows(model)?;
     let schema = model.getattr("schema_entry")?;
-    let declared = if schema.is_none() {
-        PyTuple::empty(py).into_any()
+    let declared: Vec<FixtureColumn> = if schema.is_none() {
+        Vec::new()
     } else {
-        schema.getattr("columns")?
+        columns(&schema.getattr("columns")?, false)?
     };
     let mut inferred_columns: Vec<FixtureColumn> = Vec::new();
     for (name, sql_type, _) in inferred.iter().flatten() {
@@ -33,7 +28,6 @@ pub(crate) fn model_fixture_metadata<'py>(
             nullable: None,
         });
     }
-    let merged = merge_metadata(inferred_columns, columns(&declared, false)?);
     let authoritative = !star_flags(model)?.0
         && (model
             .getattr("config")?
@@ -41,9 +35,8 @@ pub(crate) fn model_fixture_metadata<'py>(
             .call_method1("get", ("contract",))?
             .eq("enforced")?
             || inferred.is_some());
-    metadata(py, &merged, authoritative)
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(model_fixture_metadata, module)?)
+    Ok(FixtureRelation {
+        columns: merge_metadata(inferred_columns, declared),
+        authoritative,
+    })
 }

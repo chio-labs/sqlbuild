@@ -226,8 +226,8 @@ def test_given_source_contract_when_completing_fixture_then_respects_authoritati
         ),
         planning_context=context,
     )
-    assert context.relations[key].authoritative_names is test_case.expected_authoritative
-    assert context.expected_types[key] == {"order_id": "INTEGER"}
+    assert context.authoritative_names(key) is test_case.expected_authoritative
+    assert context.expected_types(key) == {"order_id": "INTEGER"}
     assert (
         tuple(diagnostic.message for diagnostic in completed.diagnostics)
         == test_case.expected_diagnostics

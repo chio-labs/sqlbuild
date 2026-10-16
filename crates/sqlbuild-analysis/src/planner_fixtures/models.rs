@@ -58,14 +58,14 @@ pub struct FixtureStarRelation {
 }
 
 /// One upstream typed column identified by its resource and folded name.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct FixtureTypeRead {
     pub key: (String, String),
     pub column: String,
 }
 
 /// Direct lineage facts used to propagate fixture types.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct FixtureTypeProjection {
     pub output_column: String,
     pub upstream: Vec<FixtureTypeRead>,

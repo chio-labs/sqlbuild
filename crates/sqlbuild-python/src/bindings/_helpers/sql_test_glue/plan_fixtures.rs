@@ -3,18 +3,18 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
+use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanningContext;
 use crate::bindings::_helpers::sql_test_glue::authored_ctes::prefixed_ctes;
 use crate::bindings::_helpers::sql_test_glue::fixture_validation::validated_fixtures;
+use crate::bindings::_helpers::sql_test_glue::plan_driver::resolve_sql_test_model_chains;
 use crate::bindings::_helpers::sql_test_glue::plan_values::model_payload;
 
 pub(super) fn validated_test<'py>(
     test: &Bound<'py, PyAny>,
     chain: &Bound<'py, PyAny>,
     inputs: (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
-    context: &Bound<'py, PyAny>,
+    context: &RelationFixturePlanningContext,
 ) -> PyResult<Result<Bound<'py, PyAny>, Vec<String>>> {
     let py = test.py();
     let payload = test.getattr("payload")?;
@@ -78,9 +78,9 @@ pub(super) fn validated_test<'py>(
 pub(super) fn validate<'py>(
     tests: &[Bound<'py, PyAny>],
     inputs: (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
-    context: &Bound<'py, PyAny>,
+    context: &RelationFixturePlanningContext,
 ) -> PyResult<super::types::ValidatedTests<'py>> {
-    let py = context.py();
+    let py = inputs.0.py();
     let mut model_tests: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut indexes: Vec<usize> = Vec::new();
     for (index, test) in tests.iter().enumerate() {
@@ -92,12 +92,15 @@ pub(super) fn validate<'py>(
     if indexes.is_empty() {
         return Ok((tests.to_vec(), Default::default()));
     }
-    let chains = call_with(
-        &registry::native(py, NativeAttr::ResolveSqlTestModelChains)?,
-        &[
-            ("project", inputs.0.clone()),
-            ("tests", PyTuple::new(py, model_tests)?.into_any()),
-        ],
+    let chains = resolve_sql_test_model_chains(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("project", inputs.0.clone()),
+                ("tests", PyTuple::new(py, model_tests)?.into_any()),
+            ],
+        )?),
     )?;
     let chains: Vec<Bound<'py, PyAny>> = chains.extract()?;
     if chains.len() != indexes.len() {

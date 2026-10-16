@@ -3,11 +3,13 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyListMethods, PyTuple};
 
-use crate::bindings::_helpers::analysis::sql_test_comparisons::describe_missing_expected_columns;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::planner_strategy::constants::MODEL_REFERENCE_KIND;
+use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanningContext;
 use crate::bindings::_helpers::sql_test_glue::constants::COMPILE_TYPES;
 use crate::bindings::_helpers::sql_test_glue::constants::{TABLE_FN, UDF};
 use crate::bindings::_helpers::sql_test_glue::plan_values::model_payload;
+use sqlbuild_analysis::compiler::main::missing_expected_columns::missing_expected_columns;
 
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
@@ -132,29 +134,32 @@ pub(super) fn entry<'py>(
 pub(super) fn expected_diagnostics(
     test: &Bound<'_, PyAny>,
     plan: &Bound<'_, PyAny>,
-    context: &Bound<'_, PyAny>,
+    context: Option<&RelationFixturePlanningContext>,
 ) -> PyResult<Vec<String>> {
     let mut result: Vec<String> = Vec::new();
-    if context.is_none() {
+    let Some(context) = context else {
         return Ok(result);
-    }
+    };
     let py = test.py();
     let resource_types = imported(py, COMPILE_TYPES, "CompiledResourceType")?;
     for step in plan.getattr("chain")?.try_iter()? {
         let step = step?;
         let name = step.getattr("model_name")?;
+        let model_name: String = name.extract()?;
         let available = context
-            .getattr("authoritative_columns")?
-            .call_method1("get", ((resource_types.getattr("MODEL")?, &name),))?;
+            .authoritative_columns
+            .get(&(MODEL_REFERENCE_KIND.to_owned(), model_name));
         let expected = step.getattr("expected_columns")?;
-        if expected.is_none() || available.is_none() {
+        let Some(available) = available else {
+            continue;
+        };
+        if expected.is_none() {
             continue;
         }
-        let Some(message) = describe_missing_expected_columns(
-            &name.extract::<String>()?,
-            expected.extract()?,
-            available,
-        )?
+        let available: Vec<String> = available.iter().cloned().collect();
+        let expected: Vec<String> = expected.extract()?;
+        let Some(message) =
+            missing_expected_columns(&name.extract::<String>()?, &expected, &available)
         else {
             continue;
         };

@@ -1013,37 +1013,6 @@ const R_RELATION_FIXTURE_COMPLETION: RecordSpec = RecordSpec {
         FieldSpec::required("diagnostics"),
     ],
 };
-const R_FIXTURE_COLUMN_METADATA: RecordSpec = RecordSpec {
-    name: "FixtureColumnMetadata",
-    doc: "Known type and nullability for one relation fixture column.",
-    fields: &[
-        FieldSpec::required("name"),
-        FieldSpec::required("type"),
-        FieldSpec::required("nullable"),
-    ],
-};
-const R_FIXTURE_RELATION_METADATA: RecordSpec = RecordSpec {
-    name: "FixtureRelationMetadata",
-    doc: "Known columns and whether they form an authoritative relation shape.",
-    fields: &[
-        FieldSpec::required("columns"),
-        FieldSpec::required("authoritative_names"),
-    ],
-};
-const R_RELATION_FIXTURE_PLANNING_CONTEXT: RecordSpec = RecordSpec {
-    name: "RelationFixturePlanningContext",
-    doc: "Project-wide fixture metadata shared across test and scenario planning.",
-    fields: &[
-        FieldSpec::required("models_by_name"),
-        FieldSpec::required("relations"),
-        FieldSpec::required("authoritative_columns"),
-        FieldSpec::required("expected_types"),
-        FieldSpec::uncompared_shown(
-            "fixture_inferences",
-            FieldDefault::NativeClassCall(NativeAttr::FixtureColumnInferences),
-        ),
-    ],
-};
 const R_SELECTOR_EXPANSION: RecordSpec = RecordSpec {
     name: "SelectorExpansion",
     doc: "One selector split into graph expansion flags and core text.",
@@ -1579,9 +1548,6 @@ pub(crate) const PLANNER_VALUE_RECORDS: &[RecordSpec] = &[
     R_NATIVE_SQL_TEST_ARTIFACT,
     R_RELATION_FIXTURE_DIAGNOSTIC,
     R_RELATION_FIXTURE_COMPLETION,
-    R_FIXTURE_COLUMN_METADATA,
-    R_FIXTURE_RELATION_METADATA,
-    R_RELATION_FIXTURE_PLANNING_CONTEXT,
     R_SELECTOR_EXPANSION,
     R_PARSED_SCENARIO_ARTIFACT_NAME,
     R_MISSING_UPSTREAM,

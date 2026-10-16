@@ -62,23 +62,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     module.add_function(wrap_pyfunction!(super::retention::plan_retention, module)?)?;
     module.add_function(wrap_pyfunction!(
-        super::output_assembly::assemble_base_plan_output,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
         super::output_assembly::with_column_rename_hints,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
-        super::output_assembly::with_storage_policies,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
-        super::output_assembly::with_plan_warnings,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
-        super::output_assembly::with_plan_metadata,
         module
     )?)?;
     module.add_function(wrap_pyfunction!(

@@ -768,42 +768,23 @@ class RelationFixtureCompletion(NativeRecord):
     ) -> None: ...
     def __replace__(self, **changes: Any) -> RelationFixtureCompletion: ...
 
-class FixtureColumnMetadata(NativeRecord):
-    """Known type and nullability for one relation fixture column."""
-
-    name: str
-    type: str | None
-    nullable: bool | None
-    def __init__(self, name: str, type: str | None, nullable: bool | None) -> None: ...
-    def __replace__(self, **changes: Any) -> FixtureColumnMetadata: ...
-
-class FixtureRelationMetadata(NativeRecord):
-    """Known columns and whether they form an authoritative relation shape."""
-
-    columns: tuple[FixtureColumnMetadata, ...]
-    authoritative_names: bool
-    def __init__(
-        self, columns: tuple[FixtureColumnMetadata, ...], authoritative_names: bool
-    ) -> None: ...
-    def __replace__(self, **changes: Any) -> FixtureRelationMetadata: ...
-
-class RelationFixturePlanningContext(NativeRecord):
+class RelationFixturePlanningContext:
     """Project-wide fixture metadata shared across test and scenario planning."""
 
-    models_by_name: dict[str, CompiledModelView]
-    relations: dict[FixtureKey, FixtureRelationMetadata]
-    authoritative_columns: dict[FixtureKey, frozenset[str]]
-    expected_types: dict[FixtureKey, dict[str, str]]
-    fixture_inferences: FixtureColumnInferences
     def __init__(
         self,
+        *,
         models_by_name: dict[str, CompiledModelView],
-        relations: dict[FixtureKey, FixtureRelationMetadata],
-        authoritative_columns: dict[FixtureKey, frozenset[str]],
-        expected_types: dict[FixtureKey, dict[str, str]],
-        fixture_inferences: FixtureColumnInferences = ...,
+        relations: dict[
+            tuple[CompiledResourceType, str],
+            tuple[tuple[tuple[str, str | None, bool | None], ...], bool],
+        ],
     ) -> None: ...
-    def __replace__(self, **changes: Any) -> RelationFixturePlanningContext: ...
+    def authoritative_names(self, key: tuple[CompiledResourceType, str]) -> bool | None: ...
+    def expected_types(self, key: tuple[CompiledResourceType, str]) -> dict[str, str] | None: ...
+    def authoritative_columns(
+        self, key: tuple[CompiledResourceType, str]
+    ) -> frozenset[str] | None: ...
 
 class SelectorExpansion(NativeRecord):
     """One selector split into graph expansion flags and core text."""
@@ -4179,58 +4160,13 @@ def lint_interpolation_text_at(body: str, start: int, dialect: str) -> str | Non
 def scan_fixture_typed_null_candidates(
     project_dir: Path, selected_paths: frozenset[Path] | None = None
 ) -> tuple[frozenset[Path], frozenset[str]]: ...
-def simplify_fixture_null_projections(*, sql: str, relation: FixtureRelationMetadata) -> str: ...
+def simplify_fixture_null_projections(*, sql: str, relation: Any) -> str: ...
 def is_empty_fixture_query(sql: str) -> bool: ...
-def complete_empty_fixture_sql(
-    *, sql: str, relation: FixtureRelationMetadata | None, adapter: BaseAdapter
-) -> tuple[str, str | None]: ...
-def complete_typed_null_columns(
-    *,
-    sql: str,
-    inference: FixtureColumnInference,
-    expected_types: dict[str, str],
-    adapter: BaseAdapter,
-) -> str: ...
-def model_fixture_metadata(*, model: CompiledModelView) -> FixtureRelationMetadata: ...
-def expected_fixture_types(
-    *,
-    base_expected_types: dict[tuple[CompiledResourceType, str], dict[str, str]],
-    ordered_model_names: tuple[str, ...],
-    model_map: dict[str, CompiledModelView],
-) -> Mapping[tuple[CompiledResourceType, str], dict[str, str]]: ...
 def fixture_read_cache_info(*, reset: bool = False) -> tuple[int, int]: ...
-def required_fixture_columns(
-    *,
-    model_inputs: tuple[tuple[str, ...], dict[str, CompiledModelView]],
-    fixture_inputs: tuple[
-        frozenset[tuple[CompiledResourceType, str]],
-        dict[tuple[CompiledResourceType, str], FixtureRelationMetadata],
-        dict[tuple[CompiledResourceType, str], frozenset[str]],
-    ],
-    adapter: BaseAdapter,
-) -> tuple[
-    dict[tuple[CompiledResourceType, str], dict[str, set[str]]],
-    frozenset[tuple[CompiledResourceType, str]],
-]: ...
+def fixture_planning_work_info(*, reset: bool = False) -> tuple[int, int]: ...
 def build_relation_fixture_context(
     *, project: CompiledProjectView, models_by_name: dict[str, CompiledModelView] | None = None
 ) -> RelationFixturePlanningContext: ...
-def authoritative_fixture_columns(
-    *, relations: dict[tuple[CompiledResourceType, str], FixtureRelationMetadata]
-) -> dict[tuple[CompiledResourceType, str], frozenset[str]]: ...
-def base_expected_fixture_types(
-    *, relations: dict[tuple[CompiledResourceType, str], FixtureRelationMetadata]
-) -> dict[tuple[CompiledResourceType, str], dict[str, str]]: ...
-def fixture_keys_requiring_analysis(
-    *,
-    inferred_by_fixture: dict[tuple[CompiledResourceType, str], tuple[InferredColumn, ...]],
-    authoritative_columns: dict[tuple[CompiledResourceType, str], frozenset[str]],
-) -> frozenset[tuple[CompiledResourceType, str]]: ...
-def unknown_fixture_column_diagnostics(
-    *,
-    inferred_by_fixture: dict[tuple[CompiledResourceType, str], tuple[InferredColumn, ...]],
-    relations: dict[tuple[CompiledResourceType, str], FixtureRelationMetadata],
-) -> tuple[RelationFixtureDiagnostic, ...]: ...
 def build_relation_fixture_completion(
     *,
     project: CompiledProjectView,
@@ -7940,48 +7876,9 @@ def plan_table_types(
 def plan_retention(
     *, runtime: PlannerRuntime, warehouse: PlannerWarehouseState, scope: PlannerScope
 ) -> tuple[RetentionPlanEntry, ...]: ...
-def assemble_base_plan_output(
-    *,
-    runtime: PlannerRuntime,
-    warehouse: PlannerWarehouseState,
-    identities: PlannerIdentityContext,
-    overrides: PlannerOverrides,
-    pruning: PlannerScopePruningResult,
-    reconciliation: PlannerChangeReconciliation,
-    entries: PlannerEntryResults,
-    source_freshness: DirectSourceFreshnessPlanningResult,
-    planned_sql_tests: PlannedSqlTests | None = None,
-) -> PlanOutput: ...
 def with_column_rename_hints(
     *, entries: tuple[ModelPlanEntry, ...], hints: tuple[ColumnRenameHint, ...]
 ) -> tuple[ModelPlanEntry, ...]: ...
-def with_storage_policies(
-    *,
-    plan_output: PlanOutput,
-    runtime: PlannerRuntime,
-    warehouse: PlannerWarehouseState,
-    scopes: PlannerScopeResolution,
-    policies: PlannerPolicies,
-) -> PlanOutput: ...
-def with_plan_warnings(
-    *,
-    runtime: PlannerRuntime,
-    scopes: PlannerScopeResolution,
-    warehouse: PlannerWarehouseState,
-    identities: PlannerIdentityContext,
-    stale_warning_changes: PlannerChangeResults,
-    pruning: PlannerScopePruningResult,
-    source_freshness: DirectSourceFreshnessPlanningResult,
-    plan_output: PlanOutput,
-    policies: PlannerPolicies,
-) -> PlanOutput: ...
-def with_plan_metadata(
-    *,
-    plan_output: PlanOutput,
-    pruning: PlannerScopePruningResult,
-    source_freshness: DirectSourceFreshnessPlanningResult,
-    policies: PlannerPolicies,
-) -> PlanOutput: ...
 def gather_planner_warehouse_state(
     *,
     runtime: PlannerRuntime,

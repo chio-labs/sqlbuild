@@ -19,7 +19,7 @@ use crate::bindings::_helpers::planner_phases::identities::{
     build_planner_identity_context, detect_stale_warning_changes,
 };
 use crate::bindings::_helpers::planner_phases::output_assembly::{
-    assemble_base_plan_output, with_plan_metadata, with_plan_warnings, with_storage_policies,
+    add_plan_metadata, add_plan_warnings, add_storage_policies, base_plan_output,
 };
 use crate::bindings::_helpers::planner_phases::scopes::resolve_planner_scopes;
 use crate::bindings::_helpers::planner_phases::warehouse_state::gather_planner_warehouse_state;
@@ -192,54 +192,19 @@ fn planned_output<'py>(
         )?),
     )?;
     let planned_sql_tests = test_planning.result(py)?.into_bound(py);
-    let mut plan_output = assemble_base_plan_output(
-        py,
-        Some(keywords(
-            py,
-            &[
-                ("runtime", runtime.clone()),
-                ("warehouse", warehouse.clone()),
-                ("identities", identities.clone()),
-                ("overrides", overrides.clone()),
-                ("pruning", pruning.clone()),
-                ("reconciliation", reconciliation),
-                ("entries", entries),
-                ("source_freshness", source_freshness.clone()),
-                ("planned_sql_tests", planned_sql_tests),
-            ],
-        )?),
+    let output = base_plan_output(
+        (runtime, &warehouse, &identities, overrides),
+        (&pruning, &reconciliation, &entries, &source_freshness),
+        &planned_sql_tests,
     )?;
-    plan_output = with_storage_policies(
-        py,
-        Some(keywords(
-            py,
-            &[
-                ("plan_output", plan_output),
-                ("runtime", runtime.clone()),
-                ("warehouse", warehouse.clone()),
-                ("scopes", scopes.clone()),
-                ("policies", policies.clone()),
-            ],
-        )?),
+    let output = add_storage_policies(output, (runtime, &warehouse, scopes, &policies))?;
+    let output = add_plan_warnings(
+        output,
+        (scopes, &warehouse, &identities, &stale_warning_changes),
+        (&pruning, &source_freshness, &policies),
     )?;
-    plan_output = with_plan_warnings(
-        py,
-        Some(keywords(
-            py,
-            &[
-                ("runtime", runtime.clone()),
-                ("scopes", scopes.clone()),
-                ("warehouse", warehouse),
-                ("identities", identities),
-                ("stale_warning_changes", stale_warning_changes),
-                ("pruning", pruning.clone()),
-                ("source_freshness", source_freshness.clone()),
-                ("plan_output", plan_output),
-                ("policies", policies.clone()),
-            ],
-        )?),
-    )?;
-    plan_output = with_plan_metadata(&plan_output, &pruning, &source_freshness, &policies)?;
+    let plan_output =
+        add_plan_metadata(output, &pruning, &source_freshness, &policies)?.build(py)?;
     let on_progress = args.value("on_progress")?;
     if !on_progress.is_none() {
         on_progress.call1((format!(

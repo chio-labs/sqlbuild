@@ -1,66 +1,60 @@
-//! Fixture analysis selection and diagnostic boundary conversions.
+//! Fixture analysis selection and unknown-column diagnostics over the planning context.
 
-use std::collections::BTreeSet;
+use std::collections::HashSet;
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
-use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
-use pyo3::{pyfunction, wrap_pyfunction};
+use pyo3::prelude::{Bound, PyAny, PyResult};
+use pyo3::types::PyDictMethods;
 use sqlbuild_analysis::planner_fixtures::main::{
     fixture_schema::fixture_schema, requires_analysis::requires_analysis,
     unknown_columns::unknown_columns,
 };
 
+use crate::bindings::_helpers::planner_strategy::fixture_preparation::PreparedFixtures;
 use crate::bindings::_helpers::planner_strategy::fixture_values::{columns, diagnostic, label};
+use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanningContext;
+use crate::bindings::_helpers::planner_strategy::types::FixtureKey;
 
-#[pyfunction]
-#[pyo3(signature = (*, inferred_by_fixture, authoritative_columns))]
-pub(crate) fn fixture_keys_requiring_analysis<'py>(
-    inferred_by_fixture: &Bound<'py, PyDict>,
-    authoritative_columns: &Bound<'py, PyDict>,
-) -> PyResult<Bound<'py, PyFrozenSet>> {
-    let mut selected: Vec<Bound<'py, PyAny>> = Vec::new();
-    for (key, inferred) in inferred_by_fixture.iter() {
-        let expected: Option<BTreeSet<String>> = authoritative_columns
-            .get_item(&key)?
-            .map(|names| names.extract())
-            .transpose()?;
-        if requires_analysis(&columns(&inferred, true)?, expected.as_ref()) {
-            selected.push(key);
-        }
-    }
-    PyFrozenSet::new(inferred_by_fixture.py(), selected)
-}
-
-#[pyfunction]
-#[pyo3(signature = (*, inferred_by_fixture, relations))]
-pub(crate) fn unknown_fixture_column_diagnostics<'py>(
-    inferred_by_fixture: &Bound<'py, PyDict>,
-    relations: &Bound<'py, PyDict>,
-) -> PyResult<Bound<'py, PyTuple>> {
-    let mut diagnostics = Vec::<Bound<'py, PyAny>>::new();
-    for (key, inferred) in inferred_by_fixture.iter() {
-        let Some(relation) = relations.get_item(&key)? else {
+/// Fixtures whose inferred columns do not already match an authoritative relation shape.
+pub(crate) fn fixture_keys_requiring_analysis(
+    prepared: &PreparedFixtures<'_>,
+    context: &RelationFixturePlanningContext,
+) -> PyResult<HashSet<FixtureKey>> {
+    let mut selected: HashSet<FixtureKey> = HashSet::new();
+    for (key, python_key) in &prepared.keys {
+        let Some(inferred) = prepared.inferred.get_item(python_key)? else {
             continue;
         };
-        let schema = fixture_schema(
-            &columns(&relation.getattr("columns")?, false)?,
-            relation.getattr("authoritative_names")?.extract()?,
-        );
+        if requires_analysis(
+            &columns(&inferred, true)?,
+            context.authoritative_columns.get(key),
+        ) {
+            selected.insert(key.clone());
+        }
+    }
+    Ok(selected)
+}
+
+/// Diagnostics for fixtures that supply columns an authoritative relation does not have.
+pub(crate) fn unknown_fixture_column_diagnostics<'py>(
+    prepared: &PreparedFixtures<'py>,
+    context: &RelationFixturePlanningContext,
+) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    let mut diagnostics: Vec<Bound<'py, PyAny>> = Vec::new();
+    for (key, python_key) in &prepared.keys {
+        let Some(inferred) = prepared.inferred.get_item(python_key)? else {
+            continue;
+        };
+        let Some(relation) = context.relations.get(key) else {
+            continue;
+        };
+        let schema = fixture_schema(&relation.columns, relation.authoritative);
         if let Some(message) = unknown_columns(
-            &label(&key)?,
+            &label(python_key)?,
             &columns(&inferred, true)?,
             schema.authoritative_names.as_ref(),
         ) {
-            diagnostics.push(diagnostic(&key, &message)?);
+            diagnostics.push(diagnostic(python_key, &message)?);
         }
     }
-    PyTuple::new(inferred_by_fixture.py(), diagnostics)
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(fixture_keys_requiring_analysis, module)?)?;
-    module.add_function(wrap_pyfunction!(
-        unknown_fixture_column_diagnostics,
-        module
-    )?)
+    Ok(diagnostics)
 }

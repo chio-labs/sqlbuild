@@ -312,14 +312,4 @@ impl FieldSpec {
             shown: false,
         }
     }
-
-    /// A field left out of equality and hashing but shown in repr.
-    pub(crate) const fn uncompared_shown(name: &'static str, default: FieldDefault) -> Self {
-        Self {
-            name,
-            default,
-            compared: false,
-            shown: true,
-        }
-    }
 }

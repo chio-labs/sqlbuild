@@ -1,8 +1,12 @@
 //! Plan output assembly: storage policies, warnings and direct-mode metadata.
 
 use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::compile_driver::python_calls::{
+    KeywordArguments, call_with, keywords,
+};
+use crate::bindings::_helpers::planner_entries::plan_output::plan_output_fields;
+use crate::bindings::_helpers::planner_phases::constants::PLAN_OUTPUT_INPUTS;
+use crate::bindings::_helpers::planner_phases::models::PlanOutputFields;
 use crate::bindings::_helpers::planner_phases::objects::{
     model_key_names, native, replace, sorted_names, strings, text, tuple,
 };
@@ -11,7 +15,6 @@ use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
-use pyo3::types::PyDict as KeywordDict;
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
 use std::collections::BTreeSet;
 
@@ -25,57 +28,51 @@ fn concat<'py>(py: Python<'py>, parts: &[Bound<'py, PyAny>]) -> PyResult<Bound<'
     tuple(py, items)
 }
 
-fn with_metadata<'py>(
-    plan_output: &Bound<'py, PyAny>,
-    items: &[(&str, Bound<'py, PyAny>)],
-) -> PyResult<Bound<'py, PyAny>> {
-    let py = plan_output.py();
-    let metadata = PyDict::new(py);
-    metadata.update(
-        plan_output
-            .getattr("metadata")?
-            .downcast::<pyo3::types::PyMapping>()?,
-    )?;
-    for (name, value) in items {
-        metadata.set_item(*name, value)?;
+impl<'py> PlanOutputFields<'py> {
+    fn field(&self, name: &str) -> PyResult<Bound<'py, PyAny>> {
+        self.fields
+            .iter()
+            .find(|(field, _)| *field == name)
+            .map(|(_, value)| value.clone())
+            .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(name.to_owned()))
     }
-    replace(plan_output, &[("metadata", metadata.into_any())])
+
+    fn set(&mut self, name: &'static str, value: Bound<'py, PyAny>) {
+        match self.fields.iter_mut().find(|(field, _)| *field == name) {
+            Some(existing) => existing.1 = value,
+            None => self.fields.push((name, value)),
+        }
+    }
+
+    /// The `PlanOutput` hand-off, built once from every field the phases set.
+    pub(crate) fn build(mut self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        if !self.metadata.is_empty() {
+            let metadata = PyDict::new(py);
+            for (name, value) in &self.metadata {
+                metadata.set_item(*name, value)?;
+            }
+            self.set("metadata", metadata.into_any());
+        }
+        call_with(&registry::class(py, RecordId::PlanOutput)?, &self.fields)
+    }
 }
 
-#[pyfunction]
-#[pyo3(signature = (**options))]
-pub(crate) fn assemble_base_plan_output<'py>(
-    py: pyo3::Python<'py>,
-    options: Option<Bound<'py, KeywordDict>>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let args = KeywordArguments::read(
-        py,
-        "assemble_base_plan_output",
-        options,
-        (
-            &[
-                "runtime",
-                "warehouse",
-                "identities",
-                "overrides",
-                "pruning",
-                "reconciliation",
-                "entries",
-                "source_freshness",
-            ],
-            &["planned_sql_tests"],
-        ),
-    )?;
-    let runtime = &args.value("runtime")?;
-    let warehouse = &args.value("warehouse")?;
-    let identities = &args.value("identities")?;
-    let overrides = &args.value("overrides")?;
-    let pruning = &args.value("pruning")?;
-    let reconciliation = &args.value("reconciliation")?;
-    let entries = &args.value("entries")?;
-    let source_freshness = &args.value("source_freshness")?;
-    let planned_sql_tests = &args.value("planned_sql_tests")?;
-
+/// The plan output's base fields from the planned entries, relations and source freshness.
+pub(crate) fn base_plan_output<'py>(
+    (runtime, warehouse, identities, overrides): (
+        &Bound<'py, PyAny>,
+        &Bound<'py, PyAny>,
+        &Bound<'py, PyAny>,
+        &Bound<'py, PyAny>,
+    ),
+    (pruning, reconciliation, entries, source_freshness): (
+        &Bound<'py, PyAny>,
+        &Bound<'py, PyAny>,
+        &Bound<'py, PyAny>,
+        &Bound<'py, PyAny>,
+    ),
+    planned_sql_tests: &Bound<'py, PyAny>,
+) -> PyResult<PlanOutputFields<'py>> {
     let py = runtime.py();
     let version = identities.getattr("version_identities")?;
     let extras = native(
@@ -93,8 +90,8 @@ pub(crate) fn assemble_base_plan_output<'py>(
             ("planned_sql_tests", planned_sql_tests.clone()),
         ],
     )?;
-    let plan_output = call_with(
-        &registry::native(py, NativeAttr::BuildPlanOutput)?,
+    let inputs = keywords(
+        py,
         &[
             ("project", runtime.getattr("project")?),
             ("adapter", runtime.getattr("adapter")?),
@@ -110,18 +107,22 @@ pub(crate) fn assemble_base_plan_output<'py>(
             ("extras", extras),
         ],
     )?;
-    let plan_output = replace(
-        &plan_output,
-        &[
-            ("source_freshness", source_freshness.clone()),
-            ("cursor_overrides", overrides.getattr("cursor_overrides")?),
-        ],
-    )?;
+    let mut output = PlanOutputFields {
+        fields: plan_output_fields(&KeywordArguments::read(
+            py,
+            "build_plan_output",
+            Some(inputs),
+            (PLAN_OUTPUT_INPUTS, &["extras"]),
+        )?)?,
+        metadata: Vec::new(),
+    };
+    output.set("source_freshness", source_freshness.clone());
+    output.set("cursor_overrides", overrides.getattr("cursor_overrides")?);
     let pruned = pruning.getattr("pruned_direct_model_names")?;
     if pruned.is_truthy()? {
-        return with_metadata(&plan_output, &[("direct_pruned_model_names", pruned)]);
+        output.metadata.push(("direct_pruned_model_names", pruned));
     }
-    Ok(plan_output)
+    Ok(output)
 }
 
 /// Attach near-match column rename hints to the model entries they describe.
@@ -159,29 +160,18 @@ pub(crate) fn with_column_rename_hints<'py>(
     tuple(py, attached)
 }
 
-#[pyfunction]
-#[pyo3(signature = (**options))]
-pub(crate) fn with_storage_policies<'py>(
-    py: pyo3::Python<'py>,
-    options: Option<Bound<'py, KeywordDict>>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let args = KeywordArguments::read(
-        py,
-        "with_storage_policies",
-        options,
-        (
-            &["plan_output", "runtime", "warehouse", "scopes", "policies"],
-            &[],
-        ),
-    )?;
-    let plan_output = &args.value("plan_output")?;
-    let runtime = &args.value("runtime")?;
-    let warehouse = &args.value("warehouse")?;
-    let scopes = &args.value("scopes")?;
-    let policies = &args.value("policies")?;
-
+/// Add migration fingerprints, rename hints, migration, table-type and retention entries.
+pub(crate) fn add_storage_policies<'py>(
+    mut output: PlanOutputFields<'py>,
+    (runtime, warehouse, scopes, policies): (
+        &Bound<'py, PyAny>,
+        &Bound<'py, PyAny>,
+        &Bound<'py, PyAny>,
+        &Bound<'py, PyAny>,
+    ),
+) -> PyResult<PlanOutputFields<'py>> {
     let py = runtime.py();
-    let mut entries = plan_output.getattr("model_entries")?;
+    let mut entries = output.field("model_entries")?;
     if policies
         .getattr("record_migration_fingerprints")?
         .is_truthy()?
@@ -216,7 +206,7 @@ pub(crate) fn with_storage_policies<'py>(
         py,
         &[
             warehouse.getattr("migration_warnings")?,
-            plan_output.getattr("warnings")?,
+            output.field("warnings")?,
         ],
     )?;
     let selected = scopes.getattr("selected_scope")?;
@@ -227,65 +217,40 @@ pub(crate) fn with_storage_policies<'py>(
     ];
     let table_types = native(py, NativeAttr::PlanTableTypes, &storage)?;
     let retention = native(py, NativeAttr::PlanRetention, &storage)?;
-    replace(
-        plan_output,
-        &[
-            ("model_entries", entries),
-            ("migration_entries", migration_entries),
-            ("column_migration_entries", column_entries),
-            ("old_name_view_entries", old_name_entries),
-            ("old_name_views", old_name_views),
-            ("warnings", warnings),
-            ("table_type_entries", table_types),
-            ("retention_entries", retention),
-        ],
-    )
+    output.set("model_entries", entries);
+    output.set("migration_entries", migration_entries);
+    output.set("column_migration_entries", column_entries);
+    output.set("old_name_view_entries", old_name_entries);
+    output.set("old_name_views", old_name_views);
+    output.set("warnings", warnings);
+    output.set("table_type_entries", table_types);
+    output.set("retention_entries", retention);
+    Ok(output)
 }
 
-#[pyfunction]
-#[pyo3(signature = (**options))]
-pub(crate) fn with_plan_warnings<'py>(
-    py: pyo3::Python<'py>,
-    options: Option<Bound<'py, KeywordDict>>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let args = KeywordArguments::read(
-        py,
-        "with_plan_warnings",
-        options,
-        (
-            &[
-                "runtime",
-                "scopes",
-                "warehouse",
-                "identities",
-                "stale_warning_changes",
-                "pruning",
-                "source_freshness",
-                "plan_output",
-                "policies",
-            ],
-            &[],
-        ),
-    )?;
-    let runtime = &args.value("runtime")?;
-    let scopes = &args.value("scopes")?;
-    let warehouse = &args.value("warehouse")?;
-    let identities = &args.value("identities")?;
-    let stale_warning_changes = &args.value("stale_warning_changes")?;
-    let pruning = &args.value("pruning")?;
-    let source_freshness = &args.value("source_freshness")?;
-    let plan_output = &args.value("plan_output")?;
-    let policies = &args.value("policies")?;
-
-    let py = runtime.py();
-    let mut plan_output = plan_output.clone();
+/// Add unknown source freshness warnings and, with selection diagnostics, stale-selection warnings.
+pub(crate) fn add_plan_warnings<'py>(
+    mut output: PlanOutputFields<'py>,
+    (scopes, warehouse, identities, stale_warning_changes): (
+        &Bound<'py, PyAny>,
+        &Bound<'py, PyAny>,
+        &Bound<'py, PyAny>,
+        &Bound<'py, PyAny>,
+    ),
+    (pruning, source_freshness, policies): (
+        &Bound<'py, PyAny>,
+        &Bound<'py, PyAny>,
+        &Bound<'py, PyAny>,
+    ),
+) -> PyResult<PlanOutputFields<'py>> {
+    let py = scopes.py();
     let freshness = source_freshness_unknown_warnings(source_freshness)?;
     if freshness.is_truthy()? {
-        let warnings = concat(py, &[plan_output.getattr("warnings")?, freshness])?;
-        plan_output = replace(&plan_output, &[("warnings", warnings)])?;
+        let warnings = concat(py, &[output.field("warnings")?, freshness])?;
+        output.set("warnings", warnings);
     }
     if !policies.getattr("selection_diagnostics")?.is_truthy()? {
-        return Ok(plan_output);
+        return Ok(output);
     }
     let stale = native(
         py,
@@ -311,10 +276,10 @@ pub(crate) fn with_plan_warnings<'py>(
         ],
     )?;
     if stale.is_truthy()? {
-        let warnings = concat(py, &[plan_output.getattr("warnings")?, stale])?;
-        plan_output = replace(&plan_output, &[("warnings", warnings)])?;
+        let warnings = concat(py, &[output.field("warnings")?, stale])?;
+        output.set("warnings", warnings);
     }
-    Ok(plan_output)
+    Ok(output)
 }
 
 fn source_names<'py>(items: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -387,15 +352,14 @@ fn freshness_metadata<'py>(source_freshness: &Bound<'py, PyAny>) -> PyResult<Bou
     Ok(metadata.into_any())
 }
 
-#[pyfunction]
-#[pyo3(signature = (*, plan_output, pruning, source_freshness, policies))]
-pub(crate) fn with_plan_metadata<'py>(
-    plan_output: &Bound<'py, PyAny>,
+/// Add the direct-mode source freshness, remaining stale models and selection diagnostics metadata.
+pub(crate) fn add_plan_metadata<'py>(
+    mut output: PlanOutputFields<'py>,
     pruning: &Bound<'py, PyAny>,
     source_freshness: &Bound<'py, PyAny>,
     policies: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let py = plan_output.py();
+) -> PyResult<PlanOutputFields<'py>> {
+    let py = pruning.py();
     let selected: BTreeSet<String> = model_key_names(
         &pruning
             .getattr("inspection_scope")?
@@ -412,18 +376,16 @@ pub(crate) fn with_plan_metadata<'py>(
     let diagnostics = PyDict::new(py);
     diagnostics.set_item("mode", text(py, "direct"))?;
     diagnostics.set_item("enabled", policies.getattr("selection_diagnostics")?)?;
-    with_metadata(
-        plan_output,
-        &[
-            (
-                "direct_source_freshness",
-                freshness_metadata(source_freshness)?,
-            ),
-            (
-                "direct_remaining_stale_model_names",
-                sorted_names(py, remaining)?,
-            ),
-            ("selection_diagnostics", diagnostics.into_any()),
-        ],
-    )
+    output.metadata.push((
+        "direct_source_freshness",
+        freshness_metadata(source_freshness)?,
+    ));
+    output.metadata.push((
+        "direct_remaining_stale_model_names",
+        sorted_names(py, remaining)?,
+    ));
+    output
+        .metadata
+        .push(("selection_diagnostics", diagnostics.into_any()));
+    Ok(output)
 }

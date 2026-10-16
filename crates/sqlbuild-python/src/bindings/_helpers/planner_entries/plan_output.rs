@@ -1,12 +1,15 @@
 //! `PlanOutput` assembly from planned model entries, seeds, sources, functions, audits and tests.
 
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, keywords};
 use crate::bindings::_helpers::planner_entries::model_entries::scope_overlaps;
 use crate::bindings::_helpers::planner_entries::values::{
     error_of, native, none, planner_model, planner_type, string,
 };
+use crate::bindings::_helpers::planner_phases::constants::PLAN_OUTPUT_INPUTS;
+use crate::bindings::_helpers::planner_strategy::fixture_context::planning_context;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::sql_test_glue::plan_assembly::assemble_sql_test_plans;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyList, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -474,28 +477,26 @@ pub(super) fn selected_test_entries<'py>(
     }
     let analysis = project.getattr("settings")?.getattr("sql_analysis")?;
     let fixture_context = if analysis.is_truthy()? {
-        native(
-            py,
-            NativeAttr::BuildRelationFixtureContext,
-            &[("project", project.clone())],
-        )?
+        Bound::new(py, planning_context(project, None)?)?.into_any()
     } else {
         none(py)
     };
-    let results = native(
+    let results = assemble_sql_test_plans(
         py,
-        NativeAttr::PlanSqlTests,
-        &[
-            ("tests", tuple_of(py, selected)?),
-            ("project", project.clone()),
-            ("adapter", adapter.clone()),
-            ("sql_analysis_enabled", analysis),
-            (
-                "validate_fixtures",
-                pyo3::types::PyBool::new(py, true).to_owned().into_any(),
-            ),
-            ("fixture_planning_context", fixture_context),
-        ],
+        Some(keywords(
+            py,
+            &[
+                ("tests", tuple_of(py, selected)?),
+                ("project", project.clone()),
+                ("adapter", adapter.clone()),
+                ("sql_analysis_enabled", analysis),
+                (
+                    "validate_fixtures",
+                    pyo3::types::PyBool::new(py, true).to_owned().into_any(),
+                ),
+                ("fixture_planning_context", fixture_context),
+            ],
+        )?),
     )?;
     let mut diagnostics: Vec<String> = Vec::new();
     for result in results.try_iter()? {
@@ -544,7 +545,10 @@ fn planned_sql_tests<'py>(
     )
 }
 
-fn plan_output<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>> {
+/// The plan output's fields from planned entries and resolved relation inputs.
+pub(crate) fn plan_output_fields<'py>(
+    args: &KeywordArguments<'py>,
+) -> PyResult<Vec<(&'static str, Bound<'py, PyAny>)>> {
     let project = args.value("project")?;
     let py = project.py();
     let adapter = args.value("adapter")?;
@@ -627,65 +631,59 @@ fn plan_output<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>>
     for warning in planned.getattr("warnings")?.try_iter()? {
         warnings.push(warning?);
     }
-    planner_model(
-        py,
-        RecordId::PlanOutput,
-        &[
-            ("execution_order", tuple_of(py, scoped_order)?),
-            ("model_entries", model_entries.clone()),
-            ("seed_entries", tuple_of(py, seeds)?),
-            (
-                "source_load_entries",
-                PyTuple::new(
-                    py,
-                    source_load_entries
-                        .try_iter()?
-                        .collect::<PyResult<Vec<_>>>()?,
-                )?
-                .into_any(),
-            ),
-            ("function_entries", tuple_of(py, functions)?),
-            (
-                "audit_entries",
-                PyTuple::new(py, audit_entries.try_iter()?.collect::<PyResult<Vec<_>>>()?)?
-                    .into_any(),
-            ),
-            (
-                "test_entries",
-                PyTuple::new(py, test_entries.try_iter()?.collect::<PyResult<Vec<_>>>()?)?
-                    .into_any(),
-            ),
-            ("selected_keys", selected_keys),
-            ("warnings", tuple_of(py, warnings)?),
-            ("upstream_deps", scope.getattr("upstream_deps")?),
-            ("downstream_deps", scope.getattr("downstream_deps")?),
-            ("model_locations", relations.getattr("model_locations")?),
-            ("seed_locations", relations.getattr("seed_locations")?),
-            (
-                "function_locations",
-                relations.getattr("function_locations")?,
-            ),
-            ("source_map", source_map),
-            ("source_read_map", relations.getattr("source_read_map")?),
-            (
-                "python_source_read_map",
-                relations.getattr("python_source_read_map")?,
-            ),
-            ("hook_functions", project.getattr("hook_functions")?),
-            (
-                "enforce_explicit_references",
-                project.getattr("enforce_explicit_references")?,
-            ),
-            (
-                "provider_usages",
-                plan_provider_usages(&project, &model_entries, &source_load_entries)?,
-            ),
-            (
-                "python_identity_fingerprints",
-                snapshot.getattr("fingerprints")?.getattr("python_nodes")?,
-            ),
-        ],
-    )
+    Ok(vec![
+        ("execution_order", tuple_of(py, scoped_order)?),
+        ("model_entries", model_entries.clone()),
+        ("seed_entries", tuple_of(py, seeds)?),
+        (
+            "source_load_entries",
+            PyTuple::new(
+                py,
+                source_load_entries
+                    .try_iter()?
+                    .collect::<PyResult<Vec<_>>>()?,
+            )?
+            .into_any(),
+        ),
+        ("function_entries", tuple_of(py, functions)?),
+        (
+            "audit_entries",
+            PyTuple::new(py, audit_entries.try_iter()?.collect::<PyResult<Vec<_>>>()?)?.into_any(),
+        ),
+        (
+            "test_entries",
+            PyTuple::new(py, test_entries.try_iter()?.collect::<PyResult<Vec<_>>>()?)?.into_any(),
+        ),
+        ("selected_keys", selected_keys),
+        ("warnings", tuple_of(py, warnings)?),
+        ("upstream_deps", scope.getattr("upstream_deps")?),
+        ("downstream_deps", scope.getattr("downstream_deps")?),
+        ("model_locations", relations.getattr("model_locations")?),
+        ("seed_locations", relations.getattr("seed_locations")?),
+        (
+            "function_locations",
+            relations.getattr("function_locations")?,
+        ),
+        ("source_map", source_map),
+        ("source_read_map", relations.getattr("source_read_map")?),
+        (
+            "python_source_read_map",
+            relations.getattr("python_source_read_map")?,
+        ),
+        ("hook_functions", project.getattr("hook_functions")?),
+        (
+            "enforce_explicit_references",
+            project.getattr("enforce_explicit_references")?,
+        ),
+        (
+            "provider_usages",
+            plan_provider_usages(&project, &model_entries, &source_load_entries)?,
+        ),
+        (
+            "python_identity_fingerprints",
+            snapshot.getattr("fingerprints")?.getattr("python_nodes")?,
+        ),
+    ])
 }
 
 /// Assemble the plan output from planned entries and resolved relation inputs.
@@ -699,21 +697,9 @@ fn build_plan_output<'py>(
         py,
         "build_plan_output",
         kwargs,
-        (
-            &[
-                "project",
-                "adapter",
-                "scope",
-                "snapshot",
-                "relations",
-                "changes",
-                "model_entry_results",
-                "reload_sources",
-            ],
-            &["extras"],
-        ),
+        (PLAN_OUTPUT_INPUTS, &["extras"]),
     )?;
-    plan_output(&args)
+    planner_model(py, RecordId::PlanOutput, &plan_output_fields(&args)?)
 }
 
 /// Build one canonical function entry from resolved relation inputs.

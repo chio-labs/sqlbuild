@@ -1,22 +1,48 @@
-//! Project fixture context materialization and schema conversions.
+//! The project-wide fixture planning context: relation metadata and per-model facts as Rust data.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
+use std::collections::{BTreeSet, HashMap};
+use std::sync::{Arc, Mutex};
+
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet};
-use pyo3::{pyfunction, wrap_pyfunction};
+use pyo3::{pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_analysis::planner_fixtures::main::fixture_schema::fixture_schema;
+use sqlbuild_analysis::planner_fixtures::models::FixtureColumn;
+use sqlbuild_core::text::main::python_casefold::python_casefold;
 
 use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::planner_strategy::fixture_metadata::model_fixture_metadata;
-use crate::bindings::_helpers::planner_strategy::fixture_values::{columns, metadata, record};
-use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::analysis_session::fixture_inferences::FixtureColumnInferences;
+use crate::bindings::_helpers::planner_strategy::constants::{
+    MODEL_REFERENCE_KIND, SEED_REFERENCE_KIND, SOURCE_REFERENCE_KIND,
+};
+use crate::bindings::_helpers::planner_strategy::fixture_metadata::model_fixture_relation;
+use crate::bindings::_helpers::planner_strategy::fixture_reads::lineage_reads;
+use crate::bindings::_helpers::planner_strategy::fixture_types::projections;
+use crate::bindings::_helpers::planner_strategy::fixture_values::columns;
+use crate::bindings::_helpers::planner_strategy::models::{
+    FixtureReadCacheHost, FixtureRelation, ModelFixtureFacts, RelationFixturePlanningContext,
+};
+use crate::bindings::_helpers::planner_strategy::types::{FixtureKey, FixtureRelationInput};
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 
-#[pyfunction]
-#[pyo3(signature = (*, project, models_by_name = None))]
-pub(crate) fn build_relation_fixture_context<'py>(
-    project: &Bound<'py, PyAny>,
-    models_by_name: Option<Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyAny>> {
+/// Count one batch resolution of SQL-test model chains.
+pub(crate) fn count_chain_resolution(py: Python<'_>) -> PyResult<()> {
+    work_counts(py)?.borrow_mut().chain_resolutions += 1;
+    Ok(())
+}
+
+fn work_counts(py: Python<'_>) -> PyResult<Bound<'_, FixtureReadCacheHost>> {
+    Ok(registry::native(py, NativeAttr::FixtureReadCache)?.cast_into::<FixtureReadCacheHost>()?)
+}
+
+/// The planning context of a project, over its models or the given name-to-model map.
+pub(crate) fn planning_context(
+    project: &Bound<'_, PyAny>,
+    models_by_name: Option<Bound<'_, PyDict>>,
+) -> PyResult<RelationFixturePlanningContext> {
     let py = project.py();
+    work_counts(py)?.borrow_mut().context_builds += 1;
     let model_map = match models_by_name {
         Some(models) => models,
         None => {
@@ -28,92 +54,199 @@ pub(crate) fn build_relation_fixture_context<'py>(
             models
         }
     };
-    let relations = relation_metadata(project, &model_map)?;
-    let kwargs = PyDict::new(py);
-    kwargs.set_item("models_by_name", model_map)?;
-    kwargs.set_item(
-        "authoritative_columns",
-        authoritative_fixture_columns(&relations)?,
-    )?;
-    kwargs.set_item("expected_types", base_expected_fixture_types(&relations)?)?;
-    kwargs.set_item("relations", relations)?;
-    record(py, RecordId::RelationFixturePlanningContext, &kwargs)
-}
-
-fn relation_metadata<'py>(
-    project: &Bound<'py, PyAny>,
-    models: &Bound<'py, PyDict>,
-) -> PyResult<Bound<'py, PyDict>> {
-    let py = project.py();
-    let kinds = py
-        .import("sqlbuild.compiler.compile.types")?
-        .getattr("CompiledResourceType")?;
-    let relations = PyDict::new(py);
-    for (name, model) in models.iter() {
-        relations.set_item(
-            (kinds.getattr("MODEL")?, name),
-            model_fixture_metadata(&model)?,
-        )?;
+    let mut relations: HashMap<FixtureKey, FixtureRelation> = HashMap::new();
+    for (name, model) in model_map.iter() {
+        relations.insert(
+            (MODEL_REFERENCE_KIND.to_owned(), name.extract()?),
+            model_fixture_relation(&model)?,
+        );
     }
     for (collection, entry, kind, source) in [
-        ("sources", "source_entry", "SOURCE", true),
-        ("seeds", "schema_entry", "SEED", false),
+        ("sources", "source_entry", SOURCE_REFERENCE_KIND, true),
+        ("seeds", "schema_entry", SEED_REFERENCE_KIND, false),
     ] {
         for resource in project.getattr(collection)?.try_iter()? {
             let resource = resource?;
             let entry = resource.getattr(entry)?;
-            let columns = columns(&entry.getattr("columns")?, false)?;
+            let columns: Vec<FixtureColumn> = columns(&entry.getattr("columns")?, false)?;
             let authoritative = if source {
                 entry.getattr("contract")?.eq("enforced")?
             } else {
                 !columns.is_empty()
             };
-            relations.set_item(
-                (kinds.getattr(kind)?, resource.getattr("name")?),
-                metadata(py, &columns, authoritative)?,
-            )?;
+            relations.insert(
+                (kind.to_owned(), resource.getattr("name")?.extract()?),
+                FixtureRelation {
+                    columns,
+                    authoritative,
+                },
+            );
         }
     }
-    Ok(relations)
+    Ok(context_of(
+        model_map.unbind(),
+        relations,
+        Py::new(py, FixtureColumnInferences::new())?.into_any(),
+    ))
 }
 
-#[pyfunction]
-#[pyo3(signature = (*, relations))]
-pub(crate) fn authoritative_fixture_columns<'py>(
-    relations: &Bound<'py, PyDict>,
-) -> PyResult<Bound<'py, PyDict>> {
-    let result = PyDict::new(relations.py());
-    for (key, relation) in relations.iter() {
-        let schema = fixture_schema(
-            &columns(&relation.getattr("columns")?, false)?,
-            relation.getattr("authoritative_names")?.extract()?,
+fn context_of(
+    models_by_name: Py<PyDict>,
+    relations: HashMap<FixtureKey, FixtureRelation>,
+    fixture_inferences: Py<PyAny>,
+) -> RelationFixturePlanningContext {
+    let mut authoritative_columns: HashMap<FixtureKey, BTreeSet<String>> = HashMap::new();
+    let mut expected_types: HashMap<FixtureKey, Vec<(String, String)>> = HashMap::new();
+    for (key, relation) in &relations {
+        if let Some(names) =
+            fixture_schema(&relation.columns, relation.authoritative).authoritative_names
+        {
+            authoritative_columns.insert(key.clone(), names);
+        }
+        expected_types.insert(
+            key.clone(),
+            fixture_schema(&relation.columns, false).expected_types,
         );
-        if let Some(names) = schema.authoritative_names {
-            result.set_item(key, PyFrozenSet::new(relations.py(), names)?)?;
-        }
     }
-    Ok(result)
+    RelationFixturePlanningContext {
+        models_by_name,
+        relations,
+        authoritative_columns,
+        expected_types,
+        fixture_inferences,
+        model_facts: Mutex::new(HashMap::new()),
+    }
 }
 
-#[pyfunction]
-#[pyo3(signature = (*, relations))]
-pub(crate) fn base_expected_fixture_types<'py>(
-    relations: &Bound<'py, PyDict>,
-) -> PyResult<Bound<'py, PyDict>> {
-    let result = PyDict::new(relations.py());
-    for (key, relation) in relations.iter() {
-        let schema = fixture_schema(&columns(&relation.getattr("columns")?, false)?, false);
-        let types = PyDict::new(relations.py());
-        for (name, sql_type) in schema.expected_types {
-            types.set_item(name, sql_type)?;
+impl RelationFixturePlanningContext {
+    /// One model's lineage reads and type projections, derived once per context.
+    pub(crate) fn model_facts(
+        &self,
+        py: Python<'_>,
+        name: &str,
+    ) -> PyResult<Option<Arc<ModelFixtureFacts>>> {
+        if let Some(found) = self.facts_cache()?.get(name) {
+            return Ok(Some(Arc::clone(found)));
         }
-        result.set_item(key, types)?;
+        let Some(model) = self.models_by_name.bind(py).get_item(name)? else {
+            return Ok(None);
+        };
+        let facts = Arc::new(ModelFixtureFacts {
+            reads: lineage_reads(&model)?,
+            projections: projections(&model)?,
+        });
+        self.facts_cache()?
+            .insert(name.to_owned(), Arc::clone(&facts));
+        Ok(Some(facts))
     }
-    Ok(result)
+
+    fn facts_cache(
+        &self,
+    ) -> PyResult<std::sync::MutexGuard<'_, HashMap<String, Arc<ModelFixtureFacts>>>> {
+        self.model_facts
+            .lock()
+            .map_err(|_| pyo3::exceptions::PyRuntimeError::new_err("fixture model facts"))
+    }
+}
+
+#[pymethods]
+impl RelationFixturePlanningContext {
+    /// A context over explicit relation metadata: `{key: ((name, type, nullable), ...), authoritative}`.
+    #[new]
+    #[pyo3(signature = (*, models_by_name, relations))]
+    fn new(
+        py: Python<'_>,
+        models_by_name: Bound<'_, PyDict>,
+        relations: HashMap<FixtureKey, FixtureRelationInput>,
+    ) -> PyResult<Self> {
+        let mut known: HashMap<FixtureKey, FixtureRelation> = HashMap::new();
+        for (key, (columns, authoritative)) in relations {
+            let mut fixture_columns: Vec<FixtureColumn> = Vec::with_capacity(columns.len());
+            for (name, sql_type, nullable) in columns {
+                fixture_columns.push(FixtureColumn {
+                    folded_name: python_casefold(&name),
+                    name,
+                    sql_type,
+                    nullable,
+                });
+            }
+            known.insert(
+                key,
+                FixtureRelation {
+                    columns: fixture_columns,
+                    authoritative,
+                },
+            );
+        }
+        Ok(context_of(
+            models_by_name.unbind(),
+            known,
+            Py::new(py, FixtureColumnInferences::new())?.into_any(),
+        ))
+    }
+
+    /// Whether the relation's columns form an authoritative shape, `None` for unknown relations.
+    fn authoritative_names(&self, key: FixtureKey) -> Option<bool> {
+        self.relations
+            .get(&key)
+            .map(|relation| relation.authoritative)
+    }
+
+    /// The relation's known column types by name, `None` for unknown relations.
+    fn expected_types<'py>(
+        &self,
+        py: Python<'py>,
+        key: FixtureKey,
+    ) -> PyResult<Option<Bound<'py, PyDict>>> {
+        let Some(types) = self.expected_types.get(&key) else {
+            return Ok(None);
+        };
+        let result = PyDict::new(py);
+        for (name, sql_type) in types {
+            result.set_item(name, sql_type)?;
+        }
+        Ok(Some(result))
+    }
+
+    /// The relation's authoritative column names, `None` when the shape is not authoritative.
+    fn authoritative_columns<'py>(
+        &self,
+        py: Python<'py>,
+        key: FixtureKey,
+    ) -> PyResult<Option<Bound<'py, PyFrozenSet>>> {
+        self.authoritative_columns
+            .get(&key)
+            .map(|names| PyFrozenSet::new(py, names))
+            .transpose()
+    }
+}
+
+/// Build the project-wide fixture planning context once for many SQL-test plans.
+#[pyfunction]
+#[pyo3(signature = (*, project, models_by_name = None))]
+fn build_relation_fixture_context(
+    project: &Bound<'_, PyAny>,
+    models_by_name: Option<Bound<'_, PyDict>>,
+) -> PyResult<RelationFixturePlanningContext> {
+    planning_context(project, models_by_name)
+}
+
+/// Planning contexts built and SQL-test chain batches resolved, optionally resetting both.
+#[pyfunction]
+#[pyo3(signature = (*, reset = false))]
+fn fixture_planning_work_info(py: Python<'_>, reset: bool) -> PyResult<(u64, u64)> {
+    let host = work_counts(py)?;
+    let mut host = host.borrow_mut();
+    let counts = (host.context_builds, host.chain_resolutions);
+    if reset {
+        host.context_builds = 0;
+        host.chain_resolutions = 0;
+    }
+    Ok(counts)
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<RelationFixturePlanningContext>()?;
     module.add_function(wrap_pyfunction!(build_relation_fixture_context, module)?)?;
-    module.add_function(wrap_pyfunction!(authoritative_fixture_columns, module)?)?;
-    module.add_function(wrap_pyfunction!(base_expected_fixture_types, module)?)
+    module.add_function(wrap_pyfunction!(fixture_planning_work_info, module)?)
 }

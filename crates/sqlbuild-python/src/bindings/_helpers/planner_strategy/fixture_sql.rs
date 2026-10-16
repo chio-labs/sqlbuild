@@ -7,38 +7,37 @@ use sqlbuild_analysis::planner_fixtures::main::{
     empty_fixture_error::empty_fixture_error, empty_fixture_marker::empty_fixture_marker,
     render_completed::render_completed as native_render_completed, render_empty::render_empty,
 };
-use sqlbuild_analysis::planner_fixtures::models::{FixtureSqlInput, SuppliedProjection};
+use sqlbuild_analysis::planner_fixtures::models::{
+    FixtureColumn, FixtureSqlInput, SuppliedProjection,
+};
 
 use crate::bindings::_helpers::boundary::panics::value_error;
-use crate::bindings::_helpers::planner_strategy::fixture_values::columns;
+use crate::bindings::_helpers::planner_strategy::models::FixtureRelation;
 
 #[pyfunction(name = "is_empty_fixture_query")]
 pub(crate) fn fixture_marker(sql: &str) -> PyResult<bool> {
     empty_fixture_marker(sql).map_err(value_error)
 }
 
-#[pyfunction]
-#[pyo3(signature = (*, sql, relation, adapter))]
+/// An empty-fixture marker rendered as the relation's typed empty projection, or why it cannot be.
 pub(crate) fn complete_empty_fixture_sql(
     sql: &str,
-    relation: &Bound<'_, PyAny>,
+    relation: Option<&FixtureRelation>,
     adapter: &Bound<'_, PyAny>,
 ) -> PyResult<(String, Option<String>)> {
     if !fixture_marker(sql)? {
         return Ok((sql.into(), None));
     }
-    let authoritative =
-        !relation.is_none() && relation.getattr("authoritative_names")?.is_truthy()?;
-    let metadata = if authoritative {
-        columns(&relation.getattr("columns")?, false)?
-    } else {
-        Vec::new()
+    let authoritative = relation.is_some_and(|relation| relation.authoritative);
+    let metadata: &[FixtureColumn] = match relation {
+        Some(relation) if authoritative => &relation.columns,
+        _ => &[],
     };
-    if let Some(error) = empty_fixture_error(authoritative, &metadata) {
+    if let Some(error) = empty_fixture_error(authoritative, metadata) {
         return Ok((sql.into(), Some(error)));
     }
     Ok((
-        render_empty(&metadata, |name| {
+        render_empty(metadata, |name| {
             adapter
                 .call_method1("render_identifier", (name,))?
                 .extract::<String>()
@@ -52,7 +51,7 @@ pub(crate) struct CompletionSql<'py, 'a> {
     pub(crate) inferred: Bound<'py, PyAny>,
     pub(crate) typed_nulls: Bound<'py, PyDict>,
     pub(crate) quoted_names: Bound<'py, PyAny>,
-    pub(crate) completed: Bound<'py, PyAny>,
+    pub(crate) completed: Vec<FixtureColumn>,
 }
 
 pub(crate) fn render_completed(
@@ -81,7 +80,7 @@ pub(crate) fn render_completed(
             sql: input.sql,
             supplied: &supplied,
             typed_nulls: !input.typed_nulls.is_empty(),
-            completed: &columns(&input.completed, false)?,
+            completed: &input.completed,
         },
         |name, exact| {
             adapter
@@ -98,19 +97,19 @@ pub(crate) fn render_completed(
     )
 }
 
-#[pyfunction]
-#[pyo3(signature = (*, sql, inference, expected_types, adapter))]
+/// Fixture SQL with its untyped null columns cast to the expected types.
 pub(crate) fn complete_typed_null_columns(
     sql: &str,
     inference: &Bound<'_, PyAny>,
-    expected_types: &Bound<'_, PyDict>,
+    expected_types: &[(String, String)],
     adapter: &Bound<'_, PyAny>,
 ) -> PyResult<String> {
     let py = inference.py();
     let typed_nulls = PyDict::new(py);
     for name in inference.getattr("null_literal_names")?.try_iter()? {
         let name = name?;
-        if let Some(expected) = expected_types.get_item(&name)? {
+        let folded: String = name.extract()?;
+        if let Some((_, expected)) = expected_types.iter().find(|(column, _)| *column == folded) {
             typed_nulls.set_item(name, expected)?;
         }
     }
@@ -123,14 +122,12 @@ pub(crate) fn complete_typed_null_columns(
             inferred: inference.getattr("columns")?,
             typed_nulls,
             quoted_names: inference.getattr("quoted_names")?,
-            completed: pyo3::types::PyTuple::empty(py).into_any(),
+            completed: Vec::new(),
         },
         adapter,
     )
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(fixture_marker, module)?)?;
-    module.add_function(wrap_pyfunction!(complete_empty_fixture_sql, module)?)?;
-    module.add_function(wrap_pyfunction!(complete_typed_null_columns, module)?)
+    module.add_function(wrap_pyfunction!(fixture_marker, module)?)
 }

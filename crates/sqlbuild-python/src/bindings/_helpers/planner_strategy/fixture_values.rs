@@ -3,15 +3,11 @@
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods};
 use sqlbuild_analysis::planner_fixtures::models::FixtureColumn;
 
 pub(crate) fn folded(value: &Bound<'_, PyAny>) -> PyResult<String> {
     value.call_method0("casefold")?.extract()
-}
-
-pub(crate) fn strings(values: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
-    values.try_iter()?.map(|value| value?.extract()).collect()
 }
 
 pub(crate) fn columns(values: &Bound<'_, PyAny>, inferred: bool) -> PyResult<Vec<FixtureColumn>> {
@@ -40,27 +36,6 @@ pub(crate) fn record<'py>(
     kwargs: &Bound<'py, PyDict>,
 ) -> PyResult<Bound<'py, PyAny>> {
     registry::class(py, name)?.call((), Some(kwargs))
-}
-
-pub(crate) fn metadata<'py>(
-    py: Python<'py>,
-    columns: &[FixtureColumn],
-    authoritative: bool,
-) -> PyResult<Bound<'py, PyAny>> {
-    let values = columns
-        .iter()
-        .map(|column| {
-            let kwargs = PyDict::new(py);
-            kwargs.set_item("name", &column.name)?;
-            kwargs.set_item("type", &column.sql_type)?;
-            kwargs.set_item("nullable", column.nullable)?;
-            record(py, RecordId::FixtureColumnMetadata, &kwargs)
-        })
-        .collect::<PyResult<Vec<_>>>()?;
-    let kwargs = PyDict::new(py);
-    kwargs.set_item("columns", PyTuple::new(py, values)?)?;
-    kwargs.set_item("authoritative_names", authoritative)?;
-    record(py, RecordId::FixtureRelationMetadata, &kwargs)
 }
 
 pub(crate) fn label(key: &Bound<'_, PyAny>) -> PyResult<String> {

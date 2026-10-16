@@ -5,7 +5,7 @@ mod command_plans;
 mod display_plan;
 mod execution_plan;
 mod model_entries;
-mod plan_output;
+pub(crate) mod plan_output;
 pub(crate) mod registration;
 pub(crate) mod relations;
 mod test_planning;
