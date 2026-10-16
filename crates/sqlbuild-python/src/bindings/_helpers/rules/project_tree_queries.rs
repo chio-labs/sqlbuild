@@ -163,8 +163,11 @@ fn project_tree_read_text(root: PathBuf, path: &Bound<'_, PyAny>) -> PyResult<St
     let raised: Raised = match read_project_text(&root, Path::new(&text)) {
         Ok(contents) => return Ok(contents),
         Err(ProjectTextError::File(ProjectTreeFileError::Unreadable { path, errno })) => {
-            let Ok(path) = path.into_os_string().into_pyobject(py);
-            return Err(PyOSError::new_err((errno, strerror(errno), path.unbind())));
+            return Err(unreadable(py, path, errno));
+        }
+        #[cfg(not(unix))]
+        Err(ProjectTextError::Read { path: file, .. }) => {
+            return Err(python_read_error(py, &file, &text));
         }
         Err(error) => text_error(&error, &text),
     };
@@ -174,6 +177,50 @@ fn project_tree_read_text(root: PathBuf, path: &Bound<'_, PyAny>) -> PyResult<St
     Err(PyErr::from_value(
         registry::error(py, ErrorId::RuleUsage)?.call1((raised.message,))?,
     ))
+}
+
+/// The `OSError` `Path.is_file()` raises for a stat failure it does not ignore.
+#[cfg(unix)]
+fn unreadable(py: Python<'_>, path: PathBuf, errno: i32) -> PyErr {
+    let Ok(path) = path.into_os_string().into_pyobject(py);
+    PyOSError::new_err((errno, strerror(errno), path.unbind()))
+}
+
+/// The `OSError` `Path.is_file()` raises for a Windows stat failure it does not ignore.
+#[cfg(not(unix))]
+fn unreadable(py: Python<'_>, path: PathBuf, code: i32) -> PyErr {
+    let detail: String = strerror(code);
+    let detail: &str =
+        detail.trim_end_matches(|character: char| character <= ' ' || character == '.');
+    let Ok(path) = path.into_os_string().into_pyobject(py);
+    PyOSError::new_err((code, detail.to_owned(), path.unbind(), code))
+}
+
+/// The usage error for a Windows read failure, worded by Python's own `Path.read_text`.
+#[cfg(not(unix))]
+fn python_read_error(py: Python<'_>, file: &Path, text: &str) -> PyErr {
+    let read = || -> PyResult<PyErr> {
+        let reading = imported(py, "pathlib", "Path")?
+            .call1((file.as_os_str(),))?
+            .call_method1("read_text", ("utf-8",));
+        let error: PyErr = match reading {
+            Ok(_) => {
+                return Ok(PyOSError::new_err(format!(
+                    "could not read project file {text}"
+                )));
+            }
+            Err(error) => error,
+        };
+        let message: String = format!(
+            "could not read project file {text}: {}",
+            error.value(py).str()?
+        );
+        let usage: PyErr =
+            PyErr::from_value(registry::error(py, ErrorId::RuleUsage)?.call1((message,))?);
+        usage.set_cause(py, Some(error));
+        Ok(usage)
+    };
+    read().unwrap_or_else(|error| error)
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

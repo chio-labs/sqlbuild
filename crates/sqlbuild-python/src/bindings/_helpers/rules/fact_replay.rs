@@ -349,7 +349,7 @@ impl<'py> FactReplay<'py> {
         let text: String = pure_path_text(Path::new(path))
             .to_string_lossy()
             .into_owned();
-        let Some(index) = self.models()?.by_path.get(&text).copied() else {
+        let Some(index) = self.models()?.by_path.get(&path_key(&text)).copied() else {
             return Ok(Err(Raised::new(MISSING_MODEL, text)));
         };
         let model: Bound<'py, PyAny> = self.models()?.entries[index].model.clone();
@@ -636,7 +636,7 @@ fn indexed(entries: Vec<ModelEntry<'_>>) -> Models<'_> {
     let mut by_path: HashMap<String, usize> = HashMap::new();
     let mut by_key: HashMap<(String, String), usize> = HashMap::new();
     for (index, entry) in entries.iter().enumerate() {
-        by_path.insert(entry.path_text.clone(), index);
+        by_path.insert(path_key(&entry.path_text), index);
         by_key.insert(entry.key.clone(), index);
     }
     let mut dependents: HashMap<(String, String), Vec<usize>> = HashMap::new();
@@ -807,4 +807,16 @@ fn python_error(py: Python<'_>, error: &PyErr) -> PyResult<(String, String)> {
         error.get_type(py).name()?.to_string(),
         error.value(py).str()?.to_string_lossy().into_owned(),
     ))
+}
+
+/// A model path as the key `Path` equality compares by: case-insensitive on Windows.
+#[cfg(windows)]
+fn path_key(text: &str) -> String {
+    text.to_lowercase()
+}
+
+/// A model path as the key `Path` equality compares by.
+#[cfg(not(windows))]
+fn path_key(text: &str) -> String {
+    text.to_owned()
 }

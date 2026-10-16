@@ -25,6 +25,8 @@ use crate::bindings::_helpers::records::models::NativeRecord;
 const VALUE_LABEL: &str = "value";
 const ERROR_LABEL: &str = "error";
 const ENUM_CLASS: (&str, &str) = ("enum", "Enum");
+const INT_TAG: &str = "int";
+const FLOAT_TAG: &str = "float";
 
 static ENUM_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
@@ -85,10 +87,11 @@ impl FactEncoder {
         if let Ok(flag) = value.downcast::<PyBool>() {
             return Ok(JsonValue::Bool(flag.is_true()));
         }
-        if value.is_instance_of::<PyInt>() || value.is_instance_of::<PyFloat>() {
-            return Ok(JsonValue::String(
-                value.str()?.to_string_lossy().into_owned(),
-            ));
+        if value.is_instance_of::<PyInt>() {
+            return tagged(INT_TAG, value);
+        }
+        if value.is_instance_of::<PyFloat>() {
+            return tagged(FLOAT_TAG, value);
         }
         if value.is_instance_of::<PyList>() || value.is_instance_of::<PyTuple>() {
             let mut items: Vec<JsonValue> = Vec::new();
@@ -192,7 +195,10 @@ impl FactEncoder {
                 if let Some((_, encoded)) = self.enums.borrow().get(&identity) {
                     return Ok(encoded.clone());
                 }
-                let encoded: JsonValue = self.encode(&value.getattr("value")?)?;
+                let encoded: JsonValue = JsonValue::Array(vec![
+                    JsonValue::String(qualified_name),
+                    self.encode(&value.getattr("value")?)?,
+                ]);
                 self.enums
                     .borrow_mut()
                     .insert(identity, (value.clone().unbind(), encoded.clone()));
@@ -255,6 +261,14 @@ fn classify(class: &Bound<'_, PyType>) -> PyResult<TypeInfo> {
         qualified_name: format!("{}.{}", class.module()?, class.qualname()?),
         _class: class.clone().unbind(),
     })
+}
+
+/// A number as its type tag and `repr`, so it never collides with a string of the same text.
+fn tagged(tag: &str, value: &Bound<'_, PyAny>) -> Encoded<JsonValue> {
+    Ok(JsonValue::Array(vec![
+        JsonValue::String(tag.to_owned()),
+        JsonValue::String(value.repr()?.to_string_lossy().into_owned()),
+    ]))
 }
 
 /// The compact JSON text of `value`.

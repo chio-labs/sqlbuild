@@ -40,6 +40,16 @@ _TOTALS_CONTRACT: dict[str, str] = {
         'SELECT o.order_id FROM __ref("stg_orders") AS o\n'
     )
 }
+_STG_ACCEPTED_INTEGERS: dict[str, str] = {
+    _STG: (
+        "MODEL (\n  columns (\n    order_id (type INTEGER, audits [accepted_values(values [1, 2])]),\n"
+        "  ),\n);\n\n"
+        'SELECT CAST(id AS INTEGER) AS order_id FROM __source("raw_orders")\n'
+    )
+}
+_STG_ACCEPTED_STRINGS: dict[str, str] = {
+    _STG: _STG_ACCEPTED_INTEGERS[_STG].replace("values [1, 2]", "values ['1', '2']")
+}
 _TOTALS_WITHOUT_REF: dict[str, str] = {_TOTALS: "MODEL ();\n\nSELECT 1 AS order_id\n"}
 _TEST_EDITED: dict[str, str] = {
     "tests/unit/test_order_totals.sql": (
@@ -110,6 +120,12 @@ _TEST_EDITED: dict[str, str] = {
         FactDigestEditTestCase("contract", ("contracts.enforced", _TOTALS), _TOTALS_CONTRACT),
         FactDigestEditTestCase("model tests", ("tests.for_model", "order_totals"), _TEST_EDITED),
         FactDigestEditTestCase("model audits", ("audits.for_model", "stg_orders"), _STG_AUDITED),
+        FactDigestEditTestCase(
+            "audit argument numbers become strings",
+            ("columns.declared", _STG),
+            _STG_ACCEPTED_STRINGS,
+            base_files=_STG_ACCEPTED_INTEGERS,
+        ),
         FactDigestEditTestCase("tree children", ("tree.children", "models/marts"), _NEW_MODEL),
         FactDigestEditTestCase("tree descendants", ("tree.descendants", "models"), _NEW_MODEL),
         FactDigestEditTestCase("tree glob", ("tree.glob", "models/**/*.sql"), _NEW_MODEL),
@@ -128,7 +144,7 @@ _TEST_EDITED: dict[str, str] = {
 def test_given_fact_inputs_when_digesting_then_digest_is_stable_and_follows_edits(
     tmp_path: Path, test_case: FactDigestEditTestCase
 ) -> None:
-    write_files(root=tmp_path, files=PROJECT_FILES)
+    write_files(root=tmp_path, files={**PROJECT_FILES, **test_case.base_files})
     first: str | None = fact_digest(root=tmp_path, key=test_case.key)
     again: str | None = fact_digest(root=tmp_path, key=test_case.key)
     write_files(root=tmp_path, files=test_case.edited_files)
