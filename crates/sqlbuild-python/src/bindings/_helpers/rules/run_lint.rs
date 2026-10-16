@@ -15,7 +15,8 @@ use crate::bindings::_helpers::rules::lint_expansion::{
     LintExpansionSources, lint_expansion_inputs,
 };
 use crate::bindings::_helpers::rules::lint_pipeline::{
-    CompiledExpansion, LintFile, LintOutcome, LintRequest, LintSettings, lint, lint_sources,
+    CompiledExpansion, CompiledSource, LintFile, LintOutcome, LintRequest, LintSettings, lint,
+    lint_sources,
 };
 
 /// The selected paths, or `None` for every file.
@@ -51,14 +52,17 @@ pub(crate) fn given_files(files: &Bound<'_, PyAny>) -> PyResult<Option<Vec<LintF
 /// The compile's expansions of a `{path: CompiledSqlExpansion}` mapping.
 pub(crate) fn compiled_expansion_records(
     expansions: &Bound<'_, PyAny>,
-) -> PyResult<HashMap<PathBuf, CompiledExpansion>> {
-    let mut compiled: HashMap<PathBuf, CompiledExpansion> = HashMap::new();
+) -> PyResult<HashMap<PathBuf, CompiledSource>> {
+    let mut compiled: HashMap<PathBuf, CompiledSource> = HashMap::new();
     if expansions.is_none() {
         return Ok(compiled);
     }
     for (path, expansion) in expansions.downcast::<PyDict>()?.iter() {
         if !expansion.is_none() {
-            compiled.insert(path.extract()?, CompiledExpansion::from_record(&expansion)?);
+            compiled.insert(
+                path.extract()?,
+                CompiledSource::Owned(CompiledExpansion::from_record(&expansion)?),
+            );
         }
     }
     Ok(compiled)
