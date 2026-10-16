@@ -25,7 +25,7 @@ const VALUE_COLUMN_FIELD: &str = "value_column";
 const AGGREGATE_FIELD: &str = "aggregate";
 const NAME_PATTERN_FIELD: &str = "name_pattern";
 
-/// A Python column spec's fact; `declared_outside_model` compares its location with `model_path`.
+/// A Python column spec's fact; its location is kept when it differs from `model_path`.
 pub(crate) fn python_column_fact(
     column: &Bound<'_, PyAny>,
     model_path: Option<&Bound<'_, PyAny>>,
@@ -36,26 +36,27 @@ pub(crate) fn python_column_fact(
             audit_definitions.push(audit?.getattr(DEFINITION_NAME_FIELD)?.extract()?);
         }
     }
-    let (location_path, declared_outside_model) = match present(column, LOCATION_FIELD)? {
+    let location_path: Option<String> = match present(column, LOCATION_FIELD)? {
         Some(location) => {
             let path: Bound<'_, PyAny> = location.getattr(PATH_FIELD)?;
             let outside: bool = match model_path {
                 Some(model_path) => !path.is(model_path) && path.ne(model_path)?,
                 None => true,
             };
-            (Some(path.str()?.to_string()), outside)
+            outside
+                .then(|| path.str().map(|text| text.to_string()))
+                .transpose()?
         }
-        None => (None, false),
+        None => None,
     };
     Ok(SchemaColumnFact {
         name: column.getattr(NAME_FIELD)?.str()?.extract()?,
         data_type: optional(column, TYPE_FIELD)?,
         nullable: optional(column, NULLABLE_FIELD)?,
-        description: optional(column, DESCRIPTION_FIELD)?,
+        described: present(column, DESCRIPTION_FIELD)?.is_some(),
         migrate_from: optional(column, MIGRATE_FROM_FIELD)?,
         audit_definitions,
         location_path,
-        declared_outside_model,
     })
 }
 

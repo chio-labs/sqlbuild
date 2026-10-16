@@ -446,10 +446,9 @@ fn expansion_object(
     Ok(classes.sql_expansion.call((), Some(&fields))?.unbind())
 }
 
-/// A model input's attached schema: its name, column facts and dynamic column families.
+/// A model input's attached schema: its name and dynamic column families.
 pub(crate) struct AttachedSchema<'py> {
     pub(crate) name: String,
-    pub(crate) columns: Vec<SchemaColumnFact>,
     pub(crate) dynamic_columns: Bound<'py, PyAny>,
     pub(crate) type_enforcement: bool,
 }
@@ -460,14 +459,12 @@ pub(crate) fn attached_schema<'py>(
 ) -> PyResult<Option<AttachedSchema<'py>>> {
     let py: Python<'py> = model_input.py();
     if let Ok(native) = model_input.cast::<NativeModelInput>() {
-        return native.get().read_with_owner(py, |owner, record| {
-            let (Some(schema), Some(fact)) = (&record.schema, owner.input_schema_fact(record))
-            else {
+        return native.get().read(py, |record, py| {
+            let Some(schema) = &record.schema else {
                 return Ok(None);
             };
             Ok(Some(AttachedSchema {
                 name: record.name.clone(),
-                columns: fact.columns.clone(),
                 dynamic_columns: schema.dynamic_columns.bind(py).clone().into_any(),
                 type_enforcement: schema.type_enforcement,
             }))
@@ -479,10 +476,27 @@ pub(crate) fn attached_schema<'py>(
     }
     Ok(Some(AttachedSchema {
         name: entry.getattr("name")?.extract()?,
-        columns: python_column_facts(&entry.getattr("columns")?, None)?,
         dynamic_columns: entry.getattr("dynamic_columns")?,
         type_enforcement: entry.getattr("type_enforcement")?.is_truthy()?,
     }))
+}
+
+/// The declared column facts of `model_input`'s attached schema, empty without one.
+pub(crate) fn attached_columns(model_input: &Bound<'_, PyAny>) -> PyResult<Vec<SchemaColumnFact>> {
+    let py: Python<'_> = model_input.py();
+    if let Ok(native) = model_input.cast::<NativeModelInput>() {
+        return native.get().read_with_owner(py, |owner, record| {
+            Ok(owner
+                .input_schema_fact(record)
+                .map(|fact| fact.columns.clone())
+                .unwrap_or_default())
+        });
+    }
+    let entry: Bound<'_, PyAny> = model_input.getattr("schema_entry")?;
+    if entry.is_none() {
+        return Ok(Vec::new());
+    }
+    python_column_facts(&entry.getattr("columns")?, None)
 }
 
 /// The name of `model_input`, its file stem; a native input answers from its record.

@@ -11,7 +11,7 @@ use crate::bindings::_helpers::analysis_session::profile_inputs::{
     case_sensitive_shapes, nullability_rules, profile_dialect, return_types, shape_rows,
 };
 use crate::bindings::_helpers::analysis_session::session::{
-    CacheStatsRow, NativeModelAnalysisSession, start_model_analysis_session,
+    CacheStatsRow, NativeModelAnalysisSession, RequestRow, start_model_analysis_session,
 };
 use crate::bindings::_helpers::analysis_session::stage_functions::family_rows;
 use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_sql;
@@ -68,7 +68,7 @@ pub(crate) fn analyze_models<'py>(
     }
     let catalog: Bound<'py, PyAny> = request.profile.getattr("binding_catalog")?;
     let (rules, adapter_rules) = nullability_rules(&request.profile)?;
-    let session_request: Bound<'py, PyAny> = session_request(request, &catalog, rules)?;
+    let session_request: RequestRow = session_request(request, &catalog, rules)?.extract()?;
     let (cache, adapter) = match adapter_rules {
         Some((adapter, nullability)) => (None, Some((adapter, nullability))),
         None => (analysis_store(request)?, None),
@@ -77,7 +77,7 @@ pub(crate) fn analyze_models<'py>(
         py,
         start_model_analysis_session(
             catalog.getattr("native")?.extract()?,
-            session_request.extract()?,
+            session_request,
             cache,
             adapter,
         )?,

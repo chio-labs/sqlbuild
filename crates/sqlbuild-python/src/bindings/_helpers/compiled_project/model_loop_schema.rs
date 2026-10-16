@@ -219,7 +219,7 @@ fn check_augmentation(
     if local.nullable.is_some() {
         overridden.push(NULLABLE_FIELD);
     }
-    if local.description.is_some() {
+    if local.described {
         overridden.push(DESCRIPTION_FIELD);
     }
     if !overridden.is_empty() {

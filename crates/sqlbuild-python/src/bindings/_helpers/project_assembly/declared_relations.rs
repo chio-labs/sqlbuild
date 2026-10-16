@@ -5,7 +5,9 @@ use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::compiled_project::models::SchemaColumnFact;
 
-use crate::bindings::_helpers::compiled_project::model_input_view::attached_schema;
+use crate::bindings::_helpers::compiled_project::model_input_view::{
+    attached_columns, attached_schema,
+};
 use crate::bindings::_helpers::compiled_project::schema_facts::python_column_facts;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
@@ -82,7 +84,8 @@ fn declared_relations<'py>(inputs: Bound<'py, PyAny>) -> PyResult<DeclaredRelati
         let Some(schema) = attached_schema(&model)? else {
             continue;
         };
-        let (name, columns): (String, Vec<SchemaColumnFact>) = (schema.name, schema.columns);
+        let (name, columns): (String, Vec<SchemaColumnFact>) =
+            (schema.name, attached_columns(&model)?);
         types.set_item(&name, column_types(py, &columns, false)?)?;
         nulls.set_item(&name, column_nullability(&columns, &nullability)?)?;
         let contract: Option<Bound<'py, PyAny>> = model

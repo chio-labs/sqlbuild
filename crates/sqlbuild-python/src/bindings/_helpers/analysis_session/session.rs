@@ -58,7 +58,7 @@ type ModelRow = (
     Vec<FamilyRow>,
 );
 /// The profile settings, relation shapes and models one session analyses.
-type RequestRow = (
+pub(crate) type RequestRow = (
     String,
     bool,
     Pairs,

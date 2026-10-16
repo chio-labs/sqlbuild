@@ -105,7 +105,7 @@ pub(crate) fn header_schema<'py>(
         specs: column_tuple(py, context.contracts, &parsed_columns, &locations)?
             .iter()
             .collect(),
-        facts: local_column_facts(&parsed_columns, &locations, model_path)?,
+        facts: local_column_facts(&parsed_columns)?,
     };
     let columns: DeclaredColumns<'py> = match source.schema {
         Some(schema) => merged_columns(
@@ -226,13 +226,8 @@ fn raised_config_error(
     }
 }
 
-/// The facts of the header's own columns, located in the model file when the header places them.
-fn local_column_facts(
-    parsed: &[ParsedColumn<PyNode<'_>>],
-    locations: &Bound<'_, PyDict>,
-    model_path: &Bound<'_, PyAny>,
-) -> PyResult<Vec<SchemaColumnFact>> {
-    let path: String = model_path.str()?.to_string();
+/// The facts of the header's own columns, which are declared in the model file.
+fn local_column_facts(parsed: &[ParsedColumn<PyNode<'_>>]) -> PyResult<Vec<SchemaColumnFact>> {
     let mut facts: Vec<SchemaColumnFact> = Vec::with_capacity(parsed.len());
     for column in parsed {
         let text = |node: Option<&PyNode<'_>>| -> PyResult<Option<String>> {
@@ -246,15 +241,14 @@ fn local_column_facts(
                 .as_ref()
                 .map(|node| node.0.extract())
                 .transpose()?,
-            description: text(column.description.as_ref())?,
+            described: column.description.is_some(),
             migrate_from: text(column.migrate_from.as_ref())?,
             audit_definitions: column
                 .audits
                 .iter()
                 .map(|audit| audit.definition_name.0.extract())
                 .collect::<PyResult<_>>()?,
-            location_path: locations.contains(&column.name.0)?.then(|| path.clone()),
-            declared_outside_model: false,
+            location_path: None,
         });
     }
     Ok(facts)

@@ -89,7 +89,7 @@ fn fact_contract_schema(schema: &ModelSchemaFact) -> ContractSchema {
             name: column.name.clone(),
             declared_type: column.data_type.clone(),
             not_null: column.nullable == Some(false),
-            declared_in_named_schema: schema.named_schema && column.declared_outside_model,
+            declared_in_named_schema: schema.named_schema && column.location_path.is_some(),
         });
     }
     let mut dynamic_columns: Vec<DeclaredColumnFamily> =
