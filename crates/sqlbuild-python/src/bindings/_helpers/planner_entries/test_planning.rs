@@ -38,6 +38,15 @@ struct PlanningThreads {
     running: AtomicUsize,
 }
 
+/// Marks one planning thread finished when dropped, including when the thread panics.
+struct RunningPlanning(Py<PlanningThreads>);
+
+impl Drop for RunningPlanning {
+    fn drop(&mut self) {
+        self.0.get().finished();
+    }
+}
+
 impl PlanningThreads {
     fn started(&self) {
         self.running.fetch_add(1, Ordering::AcqRel);
@@ -191,13 +200,13 @@ pub(crate) fn start_planning(
     let spawned = std::thread::Builder::new()
         .name(TEST_PLANNING_THREAD.to_owned())
         .spawn(move || {
+            let _running = RunningPlanning(threads);
             let planned: Planned = Python::attach(|py| {
                 let planned: Planned = plan(py, &request);
                 drop(request);
                 planned
             });
             let _receiver_gone = sender.send(planned);
-            threads.get().finished();
         });
     if let Err(error) = spawned {
         planning_threads(py)?.get().finished();

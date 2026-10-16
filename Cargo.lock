@@ -1176,7 +1176,6 @@ version = "0.156.1"
 dependencies = [
  "blake3",
  "rayon",
- "rustc-hash",
  "serde_json",
  "sha2",
  "sqlbuild-core",
