@@ -151,13 +151,13 @@ pub(crate) fn is_tree_fact(key: &FactKey) -> bool {
 }
 
 /// What the facts read of one compiled model.
-struct ModelEntry<'py> {
-    model: Bound<'py, PyAny>,
-    name: String,
+pub(crate) struct ModelEntry<'py> {
+    pub(crate) model: Bound<'py, PyAny>,
+    pub(crate) name: String,
     path: Bound<'py, PyAny>,
     path_text: String,
-    posix: String,
-    config_values: Option<Bound<'py, PyDict>>,
+    pub(crate) posix: String,
+    pub(crate) config_values: Option<Bound<'py, PyDict>>,
     key: (String, String),
     deps: Vec<(String, String)>,
 }
@@ -536,16 +536,7 @@ impl<'py> FactReplay<'py> {
         for index in indexes {
             let (name, path, materialization) = {
                 let entry: &ModelEntry<'py> = &self.models()?.entries[*index];
-                let materialization: Option<String> = match &entry.config_values {
-                    Some(values) => match values.get_item(MATERIALIZED)? {
-                        Some(value) => match value.downcast::<PyString>() {
-                            Ok(text) => Some(text.to_string_lossy().into_owned()),
-                            Err(_) => None,
-                        },
-                        None => None,
-                    },
-                    None => None,
-                };
+                let materialization: Option<String> = materialization(entry)?;
                 (entry.name.clone(), entry.path.clone(), materialization)
             };
             let path: JsonValue = self.encoder.encode(&path)?;
@@ -561,16 +552,24 @@ impl<'py> FactReplay<'py> {
         Ok(JsonValue::Array(values))
     }
 
+    /// `(posix path, name, materialization)` of each model, in project order.
+    pub(crate) fn model_rows(&mut self) -> PyResult<Vec<(String, String, Option<String>)>> {
+        let models: &Models<'py> = self.models()?;
+        let mut rows: Vec<(String, String, Option<String>)> =
+            Vec::with_capacity(models.entries.len());
+        for entry in &models.entries {
+            rows.push((
+                entry.posix.clone(),
+                entry.name.clone(),
+                materialization(entry)?,
+            ));
+        }
+        Ok(rows)
+    }
+
     /// One project field, from a native project view or a project record.
     fn project_field(&mut self, name: &str) -> PyResult<Bound<'py, PyAny>> {
-        let py: Python<'py> = self.project.py();
-        if let Ok(view) = self.project.downcast::<NativeProjectView>()
-            && let Some(field) = view.get().fact_field(py, name)
-        {
-            return Ok(field.into_bound(py));
-        }
-        let project: Bound<'py, PyAny> = self.project.clone();
-        record_field(&self.encoder, &project, name)
+        project_field(&self.encoder, &self.project, name)
     }
 
     fn models(&mut self) -> PyResult<&Models<'py>> {
@@ -586,6 +585,45 @@ impl<'py> FactReplay<'py> {
             .as_ref()
             .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("models were not indexed"))
     }
+}
+
+/// One project field, from a native project view or a project record.
+fn project_field<'py>(
+    encoder: &FactEncoder,
+    project: &Bound<'py, PyAny>,
+    name: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = project.py();
+    if let Ok(view) = project.downcast::<NativeProjectView>()
+        && let Some(field) = view.get().fact_field(py, name)
+    {
+        return Ok(field.into_bound(py));
+    }
+    record_field(encoder, project, name)
+}
+
+/// Each model of a native project view or project record, read once without attribute lookups.
+pub(crate) fn project_models<'py>(project: &Bound<'py, PyAny>) -> PyResult<Vec<ModelEntry<'py>>> {
+    let encoder: FactEncoder = FactEncoder::new();
+    let mut entries: Vec<ModelEntry<'py>> = Vec::new();
+    for model in project_field(&encoder, project, "models")?.try_iter()? {
+        entries.push(model_entry(&encoder, &model?)?);
+    }
+    Ok(entries)
+}
+
+/// The model's `materialized` config value when it is a string.
+fn materialization(entry: &ModelEntry<'_>) -> PyResult<Option<String>> {
+    let Some(values) = &entry.config_values else {
+        return Ok(None);
+    };
+    Ok(match values.get_item(MATERIALIZED)? {
+        Some(value) => match value.downcast::<PyString>() {
+            Ok(text) => Some(text.to_string_lossy().into_owned()),
+            Err(_) => None,
+        },
+        None => None,
+    })
 }
 
 /// The models with their lookup indexes, as the Python fact views keyed them.

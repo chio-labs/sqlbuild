@@ -34,6 +34,7 @@ use crate::bindings::_helpers::compiled_project::records::declaration_rows;
 use crate::bindings::_helpers::compiled_project::values::plain_value;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::rules::fact_replay::project_models;
 use crate::bindings::_helpers::rules::findings::{FindingClasses, finding_fault};
 use crate::bindings::_helpers::rules::selection::rules_error;
 use crate::bindings::_helpers::rules::sql_test_objects::{scenario_fact, sql_test_fact};
@@ -166,10 +167,10 @@ fn built_request(options: &Request<'_, '_>) -> PyResult<NativeRulesRequest> {
         registry::native(py, NativeAttr::CompiledProjectFacts)?
             .call1((&project,))?
             .downcast_into()?;
-    let mut names: Vec<String> = Vec::new();
-    for model in project.getattr("models")?.try_iter()? {
-        names.push(model?.getattr("name")?.extract()?);
-    }
+    let names: Vec<String> = project_models(&project)?
+        .into_iter()
+        .map(|model| model.name)
+        .collect();
     let sql_tests: Vec<Bound<'_, PyAny>> = project
         .getattr("sql_tests")?
         .try_iter()?

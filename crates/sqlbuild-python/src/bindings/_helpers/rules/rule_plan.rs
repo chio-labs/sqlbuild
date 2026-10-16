@@ -15,6 +15,7 @@ use crate::bindings::_helpers::rules::catalogue::{
     verify_custom_rules,
 };
 use crate::bindings::_helpers::rules::constants::TYPE_PROOF_RULE_CODES;
+use crate::bindings::_helpers::rules::fact_replay::project_models;
 use crate::bindings::_helpers::rules::rule_run::freed_memory_released;
 
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
@@ -140,10 +141,9 @@ fn selected_model_paths<'py>(
         }
     }
     let paths: Bound<'py, PySet> = PySet::empty(py)?;
-    for model in graph.getattr("project")?.getattr("models")?.try_iter()? {
-        let model: Bound<'py, PyAny> = model?;
-        if names.contains(model.getattr("name")?)? {
-            paths.add(model.getattr("relative_path")?.call_method0("as_posix")?)?;
+    for model in project_models(&graph.getattr("project")?)? {
+        if names.contains(&model.name)? {
+            paths.add(model.posix)?;
         }
     }
     Ok(Some(PyFrozenSet::new(py, paths.iter())?))
@@ -156,10 +156,9 @@ fn selected_models_project<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project.py();
     let mut models: Vec<Bound<'py, PyAny>> = Vec::new();
-    for model in project.getattr("models")?.try_iter()? {
-        let model: Bound<'py, PyAny> = model?;
-        if model_paths.contains(model.getattr("relative_path")?.call_method0("as_posix")?)? {
-            models.push(model);
+    for entry in project_models(project)? {
+        if model_paths.contains(&entry.posix)? {
+            models.push(entry.model);
         }
     }
     call_with(
@@ -183,8 +182,8 @@ fn selection_rules_config<'py>(
     };
     let path_class: Bound<'py, PyAny> = imported(py, PATHLIB_MODULE, "Path")?;
     let model_names: Bound<'py, PySet> = PySet::empty(py)?;
-    for model in project.getattr("models")?.try_iter()? {
-        model_names.add(model?.getattr("name")?)?;
+    for model in project_models(project)? {
+        model_names.add(model.name)?;
     }
     let mut rule_exceptions: Vec<Bound<'py, PyAny>> = Vec::new();
     for entry in config.getattr("rule_exceptions")?.try_iter()? {

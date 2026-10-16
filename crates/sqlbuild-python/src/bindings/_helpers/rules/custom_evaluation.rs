@@ -117,14 +117,17 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
     } else {
         None
     };
+    let project_dir: PathBuf = run.project_dir.extract()?;
+    let mut digests: FactDigests<'py> = FactDigests::new(run.project, &project_dir)?;
+    let models: Vec<(String, String, Option<String>)> = digests.replay.model_rows()?;
+    let mut model_paths: Vec<String> = models.iter().map(|(path, _, _)| path.clone()).collect();
+    model_paths.sort();
     let mut cache: CustomRuleCache = CustomRuleCache::new(
         cache_path,
         rows,
         run.project.getattr("effective_target_name")?.extract()?,
-        model_rows(run.project)?,
+        models,
     );
-    let project_dir: PathBuf = run.project_dir.extract()?;
-    let mut digests: FactDigests<'py> = FactDigests::new(run.project, &project_dir)?;
     let pending: Vec<ReadSet> = cache.pending_readsets().to_vec();
     let mut readset_digests: Vec<Option<String>> = Vec::new();
     for readset in &pending {
@@ -136,11 +139,6 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
             .iter()
             .map(|(code, rule)| Ok((code.clone(), host_subject(rule)?)))
             .collect::<PyResult<_>>()?;
-        let mut model_paths: Vec<String> = model_rows(run.project)?
-            .into_iter()
-            .map(|(path, _, _)| path)
-            .collect();
-        model_paths.sort();
         let facts_project: Bound<'py, PyAny> = host_project(run.project)?;
         let host_run: HostRun = run_custom_hosts(
             py,
@@ -321,31 +319,6 @@ fn host_project<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
         registry::class(py, RecordId::ScopeIndex)?.call0()?,
     )?;
     imported(py, "dataclasses", "replace")?.call((record,), Some(&changes))
-}
-
-/// `(relative path, name, materialization)` of each compiled model, in project order.
-fn model_rows(project: &Bound<'_, PyAny>) -> PyResult<Vec<(String, String, Option<String>)>> {
-    let mut rows: Vec<(String, String, Option<String>)> = Vec::new();
-    for model in project.getattr("models")?.try_iter()? {
-        let model: Bound<'_, PyAny> = model?;
-        let materialized: Bound<'_, PyAny> = model
-            .getattr("config")?
-            .getattr("values")?
-            .call_method1("get", ("materialized",))?;
-        rows.push((
-            model
-                .getattr("relative_path")?
-                .call_method0("as_posix")?
-                .extract()?,
-            model.getattr("name")?.extract()?,
-            if materialized.is_instance_of::<pyo3::types::PyString>() {
-                Some(materialized.extract::<String>()?)
-            } else {
-                None
-            },
-        ));
-    }
-    Ok(rows)
 }
 
 fn subject_value(rule: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
