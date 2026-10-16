@@ -246,7 +246,7 @@ fn loader_destination_parts<'py>(
     loader_parts(py, destination, (default_database, default_schema))
 }
 
-fn loader_parts<'py>(
+pub(crate) fn loader_parts<'py>(
     py: Python<'py>,
     destination: &str,
     (default_database, default_schema): (Option<Bound<'py, PyAny>>, Option<Bound<'py, PyAny>>),

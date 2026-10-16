@@ -391,7 +391,6 @@ native_ids! {
         PolyglotAnalysisResult => "PolyglotAnalysisResult",
         Project => "Project",
         ProjectConfig => "ProjectConfig",
-        ProjectGraph => "ProjectGraph",
         ProjectPath => "ProjectPath",
         PythonHookEntry => "PythonHookEntry",
         PythonIdentityDependency => "PythonIdentityDependency",

@@ -13,9 +13,9 @@ use crate::bindings::_helpers::graph::python_selection::resolve_python_sql_run_s
 use crate::bindings::_helpers::graph::views::compiled_graph_keys;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
-use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const NAME_KEY: &str = "name";
 
@@ -32,7 +32,6 @@ struct Vocabulary<'py> {
     node: Bound<'py, PyAny>,
     kinds: Bound<'py, PyAny>,
     sql_ref: Bound<'py, PyAny>,
-    identity: Bound<'py, PyAny>,
     providers: Bound<'py, PyDict>,
 }
 
@@ -44,16 +43,72 @@ fn optional_value<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
     if value.is_none() {
         return Ok(value.clone());
     }
-    native_field(value, "value")
+    native_field(&value, "value")
 }
 
-/// The kind-specific decorator configuration and metadata record of one discovered function.
-fn kind_parts<'py>(
+/// The decorator configuration the identity of one node of `kind` hashes, read through `get`.
+fn decorator_config<'py>(
+    py: Python<'py>,
+    (kind, documented): (&str, bool),
+    get: &dyn Fn(&str) -> PyResult<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let config: Bound<'py, PyDict> = PyDict::new(py);
+    match kind {
+        "LOADER" => {
+            config.set_item("columns", get("columns")?)?;
+            config.set_item("contract", get("contract")?)?;
+            config.set_item("cursor_column", get("cursor_column")?)?;
+            config.set_item("destination", get("destination")?)?;
+            config.set_item("unique_key", get("unique_key")?)?;
+            config.set_item("write_strategy", optional_value(&get("write_strategy")?)?)?;
+        }
+        "ASSET" => {
+            config.set_item("columns", get("columns")?)?;
+            config.set_item("column_lineage", get("column_lineage")?)?;
+        }
+        "CHECK" => {
+            config.set_item("severity", get("severity")?.getattr("value")?)?;
+        }
+        _ => {}
+    }
+    if documented {
+        for field in ["description", "group", "meta", "tags"] {
+            config.set_item(field, get(field)?)?;
+        }
+    }
+    Ok(config)
+}
+
+/// The identity of one discovered node of `(kind, documented)`, hashed once by the user-code host.
+pub(crate) fn node_identity<'py>(
+    py: Python<'py>,
+    (kind, documented): (&str, bool),
+    get: &dyn Fn(&str) -> PyResult<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let kind_value: Bound<'py, PyAny> = host::entry(py, UserCodeHost::PythonNodeKind)?
+        .getattr(kind)?
+        .getattr("value")?;
+    call_with(
+        &host::entry(py, UserCodeHost::PythonNodeIdentity)?,
+        &[
+            ("kind", kind_value),
+            ("name", get("name")?),
+            ("function", get("function")?),
+            ("file_path", get("file_path")?),
+            (
+                "decorator_config",
+                decorator_config(py, (kind, documented), get)?.into_any(),
+            ),
+        ],
+    )
+}
+
+/// The kind's metadata field and record of one discovered function.
+fn kind_metadata<'py>(
     py: Python<'py>,
     kind: &str,
     discovered: &Bound<'py, PyAny>,
-) -> PyResult<(Bound<'py, PyDict>, &'static str, Bound<'py, PyAny>)> {
-    let config: Bound<'py, PyDict> = PyDict::new(py);
+) -> PyResult<(&'static str, Bound<'py, PyAny>)> {
     let get = |name: &str| attribute_value(discovered, name);
     let metadata = |class: RecordId, fields: &[&str]| -> PyResult<Bound<'py, PyAny>> {
         let pairs: Vec<(&str, Bound<'py, PyAny>)> = fields
@@ -63,14 +118,9 @@ fn kind_parts<'py>(
         call_with(&registry::class(py, class)?, &pairs)
     };
     Ok(match kind {
-        "LOADER" => {
-            config.set_item("columns", get("columns")?)?;
-            config.set_item("contract", get("contract")?)?;
-            config.set_item("cursor_column", get("cursor_column")?)?;
-            config.set_item("destination", get("destination")?)?;
-            config.set_item("unique_key", get("unique_key")?)?;
-            config.set_item("write_strategy", optional_value(&get("write_strategy")?)?)?;
-            let record = metadata(
+        "LOADER" => (
+            "loader",
+            metadata(
                 RecordId::DiscoveredPythonLoaderMetadata,
                 &[
                     "destination",
@@ -81,28 +131,23 @@ fn kind_parts<'py>(
                     "contract",
                     "connection_mode",
                 ],
-            )?;
-            (config, "loader", record)
-        }
+            )?,
+        ),
         "TASK" => (
-            config,
             "task",
             metadata(RecordId::DiscoveredPythonTaskMetadata, &["retry"])?,
         ),
-        "ASSET" => {
-            config.set_item("columns", get("columns")?)?;
-            config.set_item("column_lineage", get("column_lineage")?)?;
-            let record = metadata(
+        "ASSET" => (
+            "asset",
+            metadata(
                 RecordId::DiscoveredPythonAssetMetadata,
                 &["columns", "column_lineage", "retry"],
-            )?;
-            (config, "asset", record)
-        }
-        _ => {
-            config.set_item("severity", get("severity")?.getattr("value")?)?;
-            let record = metadata(RecordId::DiscoveredPythonCheckMetadata, &["severity"])?;
-            (config, "check", record)
-        }
+            )?,
+        ),
+        _ => (
+            "check",
+            metadata(RecordId::DiscoveredPythonCheckMetadata, &["severity"])?,
+        ),
     })
 }
 
@@ -114,24 +159,13 @@ fn python_node<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = discovered.py();
     let get = |name: &str| attribute_value(discovered, name);
-    let (config, metadata_field, metadata) = kind_parts(py, kind, discovered)?;
-    if documented {
-        for field in ["description", "group", "meta", "tags"] {
-            config.set_item(field, get(field)?)?;
-        }
-    }
+    let (metadata_field, metadata) = kind_metadata(py, kind, discovered)?;
     let kind_member: Bound<'py, PyAny> = vocabulary.kinds.getattr(kind)?;
     let usages: Bound<'py, PyAny> = provider_usages(&get("function")?, &vocabulary.providers)?;
-    let identity: Bound<'py, PyAny> = call_with(
-        &vocabulary.identity,
-        &[
-            ("kind", native_field(&kind_member, "value")?),
-            ("name", get("name")?),
-            ("function", get("function")?),
-            ("file_path", get("file_path")?),
-            ("decorator_config", config.into_any()),
-        ],
-    )?;
+    let mut identity: Bound<'py, PyAny> = get("identity")?;
+    if identity.is_none() {
+        identity = node_identity(py, (kind, documented), &get)?;
+    }
     let depends_on: Bound<'py, PyAny> = get("depends_on")?;
     let mut sql_deps: Vec<Bound<'py, PyAny>> = Vec::new();
     for dependency in depends_on.try_iter()? {
@@ -169,10 +203,10 @@ fn upstream_names(
 ) -> PyResult<Vec<Vec<String>>> {
     let by_key: Bound<'_, PyDict> = PyDict::new(py);
     for node in nodes {
-        by_key.set_item(native_field(node, "function")?, native_field(node, "name")?)?;
+        by_key.set_item(native_field(&node, "function")?, native_field(&node, "name")?)?;
     }
     for node in nodes {
-        let name: Bound<'_, PyAny> = native_field(node, "name")?;
+        let name: Bound<'_, PyAny> = native_field(&node, "name")?;
         by_key.set_item(
             PyTuple::new(py, [PyString::new(py, NAME_KEY).into_any(), name.clone()])?,
             name,
@@ -183,7 +217,7 @@ fn upstream_names(
         .iter()
         .map(|node| {
             let mut names: Vec<String> = Vec::new();
-            for dependency in native_field(node, "depends_on")?.try_iter()? {
+            for dependency in native_field(&node, "depends_on")?.try_iter()? {
                 let dependency: Bound<'_, PyAny> = dependency?;
                 if dependency.is_instance(sql_ref)? {
                     continue;
@@ -200,8 +234,8 @@ fn upstream_names(
 
 fn inventory_node(node: &Bound<'_, PyAny>, upstream: Vec<String>) -> PyResult<InventoryNode> {
     Ok(InventoryNode {
-        name: native_field(node, "name")?.extract()?,
-        tags: native_field(node, "tags")?.extract()?,
+        name: native_field(&node, "name")?.extract()?,
+        tags: native_field(&node, "tags")?.extract()?,
         relative_path: node
             .getattr("relative_path")?
             .call_method0("as_posix")?
@@ -216,7 +250,7 @@ pub(crate) fn python_node_graph<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = discovered_inputs.py();
     let providers: Bound<'py, PyDict> = PyDict::new(py);
-    for provider in native_field(discovered_inputs, "providers")?.try_iter()? {
+    for provider in native_field(&discovered_inputs, "providers")?.try_iter()? {
         let provider: Bound<'py, PyAny> = provider?;
         providers.set_item(native_field(&provider, "name")?, provider)?;
     }
@@ -224,7 +258,6 @@ pub(crate) fn python_node_graph<'py>(
         node: registry::class(py, RecordId::DiscoveredPythonNode)?,
         kinds: host::entry(py, UserCodeHost::PythonNodeKind)?,
         sql_ref: host::entry(py, UserCodeHost::SqlResourceRef)?,
-        identity: host::entry(py, UserCodeHost::PythonNodeIdentity)?,
         providers,
     };
     let mut nodes: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -292,8 +325,8 @@ fn graph_record<'py>(
     let by_name: Bound<'py, PyDict> = PyDict::new(py);
     let by_selector: Bound<'py, PyDict> = PyDict::new(py);
     for node in nodes {
-        let name: Bound<'py, PyAny> = native_field(node, "name")?;
-        let kind: String = native_field(node, "kind")?.getattr("value")?.extract()?;
+        let name: Bound<'py, PyAny> = native_field(&node, "name")?;
+        let kind: String = native_field(&node, "kind")?.getattr("value")?.extract()?;
         by_name.set_item(&name, node)?;
         by_selector.set_item(format!("{kind}:{}", name.str()?), node)?;
     }

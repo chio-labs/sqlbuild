@@ -862,19 +862,6 @@ const R_SQL_LEXICAL_SYNTAX: RecordSpec = RecordSpec {
         ),
     ],
 };
-const R_PROJECT_GRAPH: RecordSpec = RecordSpec {
-    name: "ProjectGraph",
-    doc: "Static compiled project graph held natively; dict views are built only when read.",
-    fields: &[
-        FieldSpec::required("project"),
-        FieldSpec {
-            name: "native",
-            default: FieldDefault::Required,
-            compared: false,
-            shown: false,
-        },
-    ],
-};
 const R_COMPILE_PIPELINE_RESULT: RecordSpec = RecordSpec {
     name: "CompilePipelineResult",
     doc: "Complete output from the compile-and-plan pipeline.",
@@ -964,6 +951,5 @@ pub(crate) const COMPILER_RECORDS: &[RecordSpec] = &[
     R_PYTHON_IDENTITY_DEPENDENCY,
     R_PYTHON_NODE_IDENTITY,
     R_SQL_LEXICAL_SYNTAX,
-    R_PROJECT_GRAPH,
     R_COMPILE_PIPELINE_RESULT,
 ];

@@ -16461,6 +16461,7 @@ class DiscoveredLoaderFunction(NativeRecord):
     description: str | None
     connection_mode: LoaderConnectionMode
     provider_usages: tuple[DiscoveredProviderUsage, ...]
+    identity: PythonNodeIdentity | None
     def __init__(
         self,
         file_path: Path,
@@ -16477,6 +16478,7 @@ class DiscoveredLoaderFunction(NativeRecord):
         description: str | None = ...,
         connection_mode: LoaderConnectionMode = ...,
         provider_usages: tuple[DiscoveredProviderUsage, ...] = ...,
+        identity: PythonNodeIdentity | None = ...,
     ) -> None: ...
 
 class DiscoveredTaskFunction(NativeRecord):
@@ -16493,6 +16495,7 @@ class DiscoveredTaskFunction(NativeRecord):
     meta: dict[str, object] | None
     retry: RetryPolicy | None
     provider_usages: tuple[DiscoveredProviderUsage, ...]
+    identity: PythonNodeIdentity | None
     def __init__(
         self,
         file_path: Path,
@@ -16506,6 +16509,7 @@ class DiscoveredTaskFunction(NativeRecord):
         meta: dict[str, object] | None = ...,
         retry: RetryPolicy | None = ...,
         provider_usages: tuple[DiscoveredProviderUsage, ...] = ...,
+        identity: PythonNodeIdentity | None = ...,
     ) -> None: ...
 
 class DiscoveredAssetFunction(NativeRecord):
@@ -16524,6 +16528,7 @@ class DiscoveredAssetFunction(NativeRecord):
     column_lineage: dict[str, tuple[ColumnLineageRef, ...]] | None
     retry: RetryPolicy | None
     provider_usages: tuple[DiscoveredProviderUsage, ...]
+    identity: PythonNodeIdentity | None
     def __init__(
         self,
         file_path: Path,
@@ -16539,6 +16544,7 @@ class DiscoveredAssetFunction(NativeRecord):
         column_lineage: dict[str, tuple[ColumnLineageRef, ...]] | None = ...,
         retry: RetryPolicy | None = ...,
         provider_usages: tuple[DiscoveredProviderUsage, ...] = ...,
+        identity: PythonNodeIdentity | None = ...,
     ) -> None: ...
 
 class DiscoveredCheckFunction(NativeRecord):
@@ -16555,6 +16561,7 @@ class DiscoveredCheckFunction(NativeRecord):
     description: str | None
     meta: dict[str, object] | None
     provider_usages: tuple[DiscoveredProviderUsage, ...]
+    identity: PythonNodeIdentity | None
     def __init__(
         self,
         file_path: Path,
@@ -16568,6 +16575,7 @@ class DiscoveredCheckFunction(NativeRecord):
         description: str | None = ...,
         meta: dict[str, object] | None = ...,
         provider_usages: tuple[DiscoveredProviderUsage, ...] = ...,
+        identity: PythonNodeIdentity | None = ...,
     ) -> None: ...
 
 class DiscoveredHookFunction(NativeRecord):
@@ -16808,16 +16816,19 @@ class DiscoveredRuntimeExtensions(NativeRecord):
         lifecycle_shutdown_timeout_seconds: int | None = ...,
     ) -> None: ...
 
-class ProjectGraph(NativeRecord):
+class ProjectGraph:
     """Static compiled project graph held natively; dict views are built only when read."""
 
-    project: CompiledProjectView
-    native: NativeProjectGraph
     def __init__(
         self,
+        *,
         project: CompiledProjectView,
         native: NativeProjectGraph,
     ) -> None: ...
+    @property
+    def project(self) -> CompiledProjectView: ...
+    @property
+    def native(self) -> NativeProjectGraph: ...
     @property
     def lineage_views(self) -> LineageGraphViews: ...
     @property

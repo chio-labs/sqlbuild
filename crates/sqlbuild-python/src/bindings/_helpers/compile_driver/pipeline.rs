@@ -41,7 +41,7 @@ fn progress(on_progress: &Bound<'_, PyAny>, message: &str) -> PyResult<()> {
 /// Compile a project without opening a warehouse planning connection.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn compile_project_phase<'py>(
+pub(crate) fn compile_project_phase<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

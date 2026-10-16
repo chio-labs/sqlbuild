@@ -64,7 +64,9 @@ def test_given_large_hook_integer_when_formatting_json_then_preserves_value(
             }
         ),
     )
-    graph = replace(graph, project=project_with(project=graph.project, models=(model,)))
+    graph = ProjectGraph(
+        project=project_with(project=graph.project, models=(model,)), native=graph.native
+    )
 
     payload: dict[str, object] = json.loads(
         format_compile_json(

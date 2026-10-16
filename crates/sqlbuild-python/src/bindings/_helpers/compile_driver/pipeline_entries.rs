@@ -4,8 +4,12 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyFloat};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::compile_driver::pipeline::compile_project_phase;
+use crate::bindings::_helpers::compile_driver::python_calls::{
+    KeywordArguments, call_with, keywords,
+};
+use crate::bindings::_helpers::graph::project_graph::{CompiledProjectGraph, NativeProjectGraph};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
 /// Discovered Python node functions whose selectors need the Python graph.
@@ -99,13 +103,12 @@ pub(crate) fn build_project_graph_from_compiled_project<'py>(
 
 /// The project's natively held graph; dict views are built only when a boundary reads them.
 pub(crate) fn project_graph<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    call_with(
-        &registry::class(project.py(), RecordId::ProjectGraph)?,
-        &[
-            ("project", project.clone()),
-            ("native", project.getattr("lineage_graph")?),
-        ],
-    )
+    let native: Bound<'py, NativeProjectGraph> = project.getattr("lineage_graph")?.cast_into()?;
+    Ok(Bound::new(
+        project.py(),
+        CompiledProjectGraph::new(project.clone().unbind(), native.unbind()),
+    )?
+    .into_any())
 }
 
 /// Return whether a planned build has runtime work to execute.
@@ -174,14 +177,17 @@ fn run_compile_only_pipeline<'py>(
             &["on_progress"],
         ),
     )?;
-    let compiled: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::CompileProjectPhase)?,
-        &[
-            ("discovered_inputs", arguments.value("discovered_inputs")?),
-            ("adapter", arguments.value("adapter")?),
-            ("options", arguments.value("options")?),
-            ("on_progress", arguments.value("on_progress")?),
-        ],
+    let compiled: Bound<'py, PyAny> = compile_project_phase(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", arguments.value("discovered_inputs")?),
+                ("adapter", arguments.value("adapter")?),
+                ("options", arguments.value("options")?),
+                ("on_progress", arguments.value("on_progress")?),
+            ],
+        )?),
     )?;
     call_with(
         &registry::class(py, RecordId::CompilePipelineResult)?,

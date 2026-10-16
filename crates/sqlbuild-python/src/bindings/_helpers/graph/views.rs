@@ -40,7 +40,7 @@ pub(crate) fn compiled_graph_keys<'py>(
 
 /// Selector name to key, in project order, without the other graph views.
 #[pyfunction]
-fn lineage_graph_names<'py>(
+pub(crate) fn lineage_graph_names<'py>(
     py: Python<'py>,
     graph: PyRef<'py, NativeProjectGraph>,
 ) -> PyResult<Bound<'py, PyDict>> {

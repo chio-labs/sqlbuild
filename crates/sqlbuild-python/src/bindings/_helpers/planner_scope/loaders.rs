@@ -1,13 +1,12 @@
 //! Loader dependency mapping and synthetic source boundary construction.
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::contracts::spec_resolution::loader_parts;
 use crate::bindings::_helpers::graph::keys::KeyCache;
 use crate::bindings::_helpers::graph::views::edge_dict;
 use crate::bindings::_helpers::planner_scope::values::{
     dependency_names, edges, keys, loader_graph, loader_names, project_graph,
 };
-use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, IntoPyObject, PyAny, PyAnyMethods, PyResult, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
@@ -15,6 +14,7 @@ use sqlbuild_analysis::planner_scope::main::{
     expand_loaders::expand_loaders, intermediate_sources::intermediate_sources,
 };
 use std::collections::HashSet;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 #[pyfunction]
 #[pyo3(signature = (*, loader_function, loader_functions))]
@@ -35,26 +35,20 @@ pub(crate) fn loader_to_source_entry<'py>(
     loader: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = project.py();
-    let name = native_field(loader, "name")?;
-    let mut destination = native_field(loader, "destination")?;
+    let name = native_field(&loader, "name")?;
+    let mut destination = native_field(&loader, "destination")?;
     if destination.is_none() {
         destination = format!("__loader__{}", name.extract::<String>()?)
             .into_pyobject(py)?
             .into_any();
     }
-    let parts = call_with(
-        &registry::native(py, NativeAttr::LoaderDestinationPartsFunction)?,
-        &[
-            ("destination", destination),
-            (
-                "default_database",
-                native_field(project, "effective_target_database")?,
-            ),
-            (
-                "default_schema",
-                native_field(project, "effective_target_schema")?,
-            ),
-        ],
+    let parts = loader_parts(
+        py,
+        &destination.extract::<String>()?,
+        (
+            Some(native_field(&project, "effective_target_database")?),
+            Some(native_field(&project, "effective_target_schema")?),
+        ),
     )?;
     let kwargs = PyDict::new(py);
     kwargs.set_item("name", &name)?;
@@ -85,7 +79,7 @@ pub(crate) fn intermediate_map<'py>(
     let graph = project_graph(project)?;
     let names = intermediate_sources(&graph, &keys(selected)?, upstream);
     let loaders = PyDict::new(project.py());
-    for loader in native_field(project, "loader_functions")?.try_iter()? {
+    for loader in native_field(&project, "loader_functions")?.try_iter()? {
         let loader = loader?;
         loaders.set_item(native_field(&loader, "name")?, &loader)?;
     }
