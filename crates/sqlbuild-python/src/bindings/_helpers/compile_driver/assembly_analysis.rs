@@ -18,8 +18,12 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::compiled_project::model_input_view::attached_schema;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::project_assembly::declared_relations::{
+    DeclaredRelations, declared_relations,
+};
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::semantic_shapes::declarations::{declared_types, function_names};
 
 const GENERIC_DIALECT: &str = "generic";
 const UDF_PREFIX: &str = "__sqlbuild_udf_";
@@ -78,11 +82,17 @@ pub(crate) fn analysis_context<'py>(
             .getattr("sql_analysis")?,
         request.skip_column_inference.bind(py),
     )?;
-    let relations: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::DeclaredRelations)?.call1((inputs,))?;
-    let column_types: Bound<'py, PyAny> = relations.get_item(0)?;
-    let nullability: Bound<'py, PyAny> = relations.get_item(1)?;
-    let complete_schemas: Bound<'py, PyAny> = relations.get_item(2)?;
+    let (column_types, nullability, complete_schemas): DeclaredRelations<'py> =
+        declared_relations(inputs.clone())?;
+    let (column_types, nullability, complete_schemas): (
+        Bound<'py, PyAny>,
+        Bound<'py, PyAny>,
+        Bound<'py, PyAny>,
+    ) = (
+        column_types.into_any(),
+        nullability.into_any(),
+        complete_schemas.into_any(),
+    );
     let dynamic_families: Bound<'py, PyAny> = dynamic_families_by_table(inputs)?.into_any();
     let profile: Bound<'py, PyAny> =
         profile_with_catalog(inputs, request.inference_profile.bind(py), &column_types)?;
@@ -141,15 +151,9 @@ pub(crate) fn declared_names<'py>(
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let py: Python<'py> = inputs.py();
     let functions: Bound<'py, PyAny> = inputs.getattr("sql_function_inputs")?;
-    let names: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::KnownFunctionNames)?.call1((functions.clone(),))?;
-    let types: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::KnownDeclaredTypes)?,
-        &[
-            ("functions", functions),
-            ("column_types", column_types.clone()),
-        ],
-    )?;
+    let names: Bound<'py, PyAny> = PyTuple::new(py, function_names(&functions)?)?.into_any();
+    let types: Bound<'py, PyAny> =
+        PyTuple::new(py, declared_types(&functions, column_types)?)?.into_any();
     Ok((names, types))
 }
 
