@@ -10,6 +10,7 @@ use pyo3::types::{
 };
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::analysis::model_reads::output_proven;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
@@ -388,8 +389,7 @@ fn evaluated_sql_rules<'py>(
     } else {
         let mut dynamic: Vec<Bound<'py, PyAny>> = Vec::new();
         for (_, model) in &models {
-            let contract: Bound<'py, PyAny> = model.getattr("dynamic_column_contract")?;
-            if !contract.is_none() && contract.getattr("output_proven")?.is_truthy()? {
+            if output_proven(model)? {
                 dynamic.push(
                     project_dir
                         .div(model.getattr("relative_path")?)?
