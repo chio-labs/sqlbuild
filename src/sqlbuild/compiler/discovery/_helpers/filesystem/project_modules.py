@@ -24,6 +24,7 @@ from sqlbuild._native import (
 )
 from sqlbuild.runtime.event_exporting.constants import EVENT_EXPORTER_EVENT_PARAMETER_NAME
 from sqlbuild.runtime.observability.models import LifecycleEvent
+from sqlbuild.runtime.user_code.main.user_code_spec import register_user_code_root, user_code_spec
 
 _PROJECT_PYTHON_PACKAGE_MARKER: str = "__sqlbuild_project_python__"
 
@@ -142,10 +143,14 @@ def install_python_root_package(*, node_root: Path, project_dir: Path) -> dict[s
         if not owned and module is not None:
             saved_modules[module_name] = module
     importlib.invalidate_caches()
+    register_user_code_root(project_dir)
     init_file: Path = node_root / f"{PYTHON_INIT_MODULE_STEM}.py"
     spec: ModuleSpec | None = (
-        importlib.util.spec_from_file_location(
-            PYTHON_NODE_ROOT, init_file, submodule_search_locations=[str(node_root)]
+        user_code_spec(
+            PYTHON_NODE_ROOT,
+            init_file,
+            root=project_dir,
+            submodule_search_locations=[str(node_root)],
         )
         if init_file.is_file()
         else ModuleSpec(PYTHON_NODE_ROOT, None, is_package=True)
@@ -188,6 +193,7 @@ def import_python_root_module(*, file_path: Path, project_dir: Path) -> ModuleTy
 
     relative_path: Path = project_relative_path(path=file_path, project_dir=project_dir)
     module_name: str = ".".join(relative_path.with_suffix("").parts)
+    register_user_code_root(project_dir)
     old_path: list[str] = list(sys.path)
     sys.path.insert(0, str(project_dir))
     try:
@@ -319,7 +325,7 @@ def _exec_project_module(
     file_label: str,
     error_type: type[Exception],
 ) -> ModuleType:
-    spec: ModuleSpec | None = importlib.util.spec_from_file_location(module_name, file_path)
+    spec: ModuleSpec | None = user_code_spec(module_name, file_path, root=project_dir)
     if spec is None or spec.loader is None:
         raise error_type(f"Could not load {file_label} file {file_path}")
     module: ModuleType = importlib.util.module_from_spec(spec)

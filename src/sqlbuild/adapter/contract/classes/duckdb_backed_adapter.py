@@ -90,6 +90,7 @@ from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.diagnostics.main.log_sql import log_sql
+from sqlbuild.runtime.user_code.main.user_code_spec import user_code_spec
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 
 
@@ -1396,8 +1397,8 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         module_name: str = "sqlbuild_python_udf_" + "_".join(
             source_file_path.with_suffix("").parts[-4:]
         ).replace("-", "_")
-        spec: ModuleSpec | None = importlib.util.spec_from_file_location(
-            module_name, source_file_path
+        spec: ModuleSpec | None = user_code_spec(
+            module_name, source_file_path, root=source_file_path.parent
         )
         if spec is None or spec.loader is None:
             raise AdapterUserError(message=f"Could not load Python UDF from '{source_file_path}'")

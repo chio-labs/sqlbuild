@@ -218,6 +218,11 @@ rule = 3
 note = "Rule 3 shapes: public storage errors re-exported by sqlbuild.execution_history and raised by the native backends."
 
 [[stays]]
+path = "runtime/user_code"
+rule = 2
+note = "Import machinery that loads project Python from current source, never from cached bytecode."
+
+[[stays]]
 path = "runtime/execution_limits"
 rule = 1
 note = "Deadline the executor scheduler and warehouse cursors enforce."

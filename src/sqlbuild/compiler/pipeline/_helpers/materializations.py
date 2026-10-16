@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import importlib.util
 from collections.abc import Callable
+from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 from sqlbuild._native import DiscoveredMaterializationFile, PlannerInputError
 from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
+from sqlbuild.runtime.user_code.main.user_code_spec import user_code_spec
 
 
 def load_custom_materializations(
@@ -19,7 +21,8 @@ def load_custom_materializations(
     registry: dict[str, Callable[[MaterializationContext], MaterializationResult]] = {}
     mat_file: DiscoveredMaterializationFile
     for mat_file in materialization_files:
-        spec: Any = importlib.util.spec_from_file_location(mat_file.name, mat_file.file_path)
+        file_path: Path = Path(mat_file.file_path)
+        spec: Any = user_code_spec(mat_file.name, file_path, root=file_path.parent)
         if spec is None or spec.loader is None:
             raise PlannerInputError(
                 f"materialization '{mat_file.name}' at {mat_file.file_path} "
