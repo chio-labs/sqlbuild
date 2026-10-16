@@ -231,8 +231,10 @@ pub(crate) fn schema_row(
     let mut column_rows: Vec<SchemaColumnPy> = Vec::with_capacity(columns.len());
     for column in columns.iter() {
         let location: Bound<'_, PyAny> = column.getattr(LOCATION_FIELD)?;
-        let declared_outside: bool =
-            !location.is_none() && location.getattr(PATH_FIELD)?.ne(model_path)?;
+        let declared_outside: bool = !location.is_none() && {
+            let path: Bound<'_, PyAny> = location.getattr(PATH_FIELD)?;
+            !path.is(model_path) && path.ne(model_path)?
+        };
         column_rows.push((
             column.getattr(NAME_FIELD)?.extract()?,
             column.getattr(TYPE_FIELD)?.extract()?,
