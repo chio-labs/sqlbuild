@@ -2,25 +2,27 @@
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods, PyTuple, PyTupleMethods};
-use sqlbuild_analysis::compiled_project::models::ModelSchemaFact;
+use sqlbuild_analysis::compiled_project::models::{
+    DynamicFamilyFact, ModelSchemaFact, SchemaColumnFact,
+};
 use sqlbuild_model_config::header_metadata::main::audit_factory_references::audit_factory_references;
 use sqlbuild_model_config::header_metadata::main::merged_audit_identities::merged_audit_identities;
 use sqlbuild_model_config::header_metadata::main::parse_dynamic_columns::parse_dynamic_columns;
 use sqlbuild_model_config::header_metadata::main::parse_header_metadata::parse_header_metadata;
-use sqlbuild_model_config::header_metadata::models::DynamicFamily;
+use sqlbuild_model_config::header_metadata::models::{DynamicFamily, ParsedColumn};
 use sqlbuild_model_config::model_validation::models::ColumnMigration;
 
 use crate::bindings::_helpers::compiled_project::model_loop::{
     LoopContext, compile_error, config_error,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_contracts::{
-    EnumColumns, audit_identity, dynamic_family_objects, enum_columns, factory_audits, schema_row,
+    EnumColumns, audit_identity, dynamic_family_objects, enum_columns, factory_audits,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::present;
 use crate::bindings::_helpers::compiled_project::model_loop_schema::{
-    ModelSchema, merged_columns, schema_enums,
+    DeclaredColumns, ModelSchema, merged_columns, schema_enums,
 };
-use crate::bindings::_helpers::compiled_project::project::schema_fact;
+use crate::bindings::_helpers::compiled_project::schema_facts::family_fact;
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::column_migrations::column_migration_error;
@@ -33,9 +35,6 @@ const AUDITS_KEY: &str = "audits";
 const DYNAMIC_COLUMNS_KEY: &str = "dynamic_columns";
 const AUDIT_FACTORIES_KEY: &str = "audit_factories";
 const STRIP_METHOD: &str = "strip";
-const NAME_FIELD: &str = "name";
-const TYPE_FIELD: &str = "type";
-const MIGRATE_FROM_FIELD: &str = "migrate_from";
 const ENUMS_FIELD: &str = "enums";
 
 /// What a model's header schema entry is attached from.
@@ -100,14 +99,21 @@ pub(crate) fn header_schema<'py>(
     let parsed_columns = metadata
         .columns
         .map_err(|error| raised_config_error(py, error))?;
-    let local_columns: Bound<'py, PyTuple> = column_tuple(
-        py,
-        context.contracts,
-        &parsed_columns,
-        &source.model_file.header_locations(py)?,
-    )?;
-    let columns: Bound<'py, PyTuple> = match source.schema {
-        Some(schema) => merged_columns(context, schema, &local_columns, model)?,
+    let locations: Bound<'py, PyDict> = source.model_file.header_locations(py)?;
+    let model_path: &Bound<'py, PyAny> = source.model_file.paths(py).1;
+    let local_columns: DeclaredColumns<'py> = DeclaredColumns {
+        specs: column_tuple(py, context.contracts, &parsed_columns, &locations)?
+            .iter()
+            .collect(),
+        facts: local_column_facts(&parsed_columns, &locations, model_path)?,
+    };
+    let columns: DeclaredColumns<'py> = match source.schema {
+        Some(schema) => merged_columns(
+            context,
+            schema,
+            local_columns,
+            (source.name, source.relative_path, model_path),
+        )?,
         None => local_columns,
     };
     let families = dynamic_families(py, &node(dynamic), model)?;
@@ -126,17 +132,23 @@ pub(crate) fn header_schema<'py>(
     merged_audit_identities(&direct_identities, &generated_identities, model)
         .map_err(|error| raised_config_error(py, error))?;
     let migrations: Vec<ColumnMigration> = columns
+        .facts
         .iter()
-        .map(|column| column_migration(&column))
-        .collect::<PyResult<_>>()?;
+        .map(|column| ColumnMigration {
+            name: column.name.clone(),
+            migrate_from: column.migrate_from.clone(),
+        })
+        .collect();
     if let Some(error) = column_migration_error(source.name, source.values, &migrations)? {
         let error = native_config_error(py, error)?.into_bound(py).into_any();
         return Err(config_error(&error, Some(source.values)));
     }
-    let mut type_enforcement: bool = !families.is_empty();
-    for column in columns.iter() {
-        type_enforcement |= !column.getattr(TYPE_FIELD)?.is_none();
-    }
+    let type_enforcement: bool = !families.is_empty()
+        || columns
+            .facts
+            .iter()
+            .any(|column| column.data_type.is_some());
+    let family_facts: Vec<DynamicFamilyFact> = families.iter().map(family_fact).collect();
     let audits: Bound<'py, PyTuple> = PyTuple::new(
         py,
         direct_audits.iter().chain(generated).collect::<Vec<_>>(),
@@ -152,13 +164,14 @@ pub(crate) fn header_schema<'py>(
         None => enums,
     };
     let resolved: EnumColumns<'py> =
-        enum_columns(context, (&enums, source.visible), source.values, &columns)?;
-    let fact: ModelSchemaFact = schema_fact(schema_row(
-        &resolved.columns,
-        (audits.len(), source.model_file.paths(py).1),
-        &families,
-        (type_enforcement, source.schema.is_some()),
-    )?);
+        enum_columns(context, (&enums, source.visible), source.values, columns)?;
+    let fact: ModelSchemaFact = ModelSchemaFact {
+        audit_count: u32::try_from(audits.len()).unwrap_or(u32::MAX),
+        columns: resolved.facts,
+        dynamic_columns: family_facts,
+        type_enforcement,
+        named_schema: source.schema.is_some(),
+    };
     Ok(AttachedHeader {
         description,
         schema: Some(HeaderSchema {
@@ -213,9 +226,36 @@ fn raised_config_error(
     }
 }
 
-fn column_migration(column: &Bound<'_, PyAny>) -> PyResult<ColumnMigration> {
-    Ok(ColumnMigration {
-        name: column.getattr(NAME_FIELD)?.str()?.to_string(),
-        migrate_from: column.getattr(MIGRATE_FROM_FIELD)?.extract()?,
-    })
+/// The facts of the header's own columns, located in the model file when the header places them.
+fn local_column_facts(
+    parsed: &[ParsedColumn<PyNode<'_>>],
+    locations: &Bound<'_, PyDict>,
+    model_path: &Bound<'_, PyAny>,
+) -> PyResult<Vec<SchemaColumnFact>> {
+    let path: String = model_path.str()?.to_string();
+    let mut facts: Vec<SchemaColumnFact> = Vec::with_capacity(parsed.len());
+    for column in parsed {
+        let text = |node: Option<&PyNode<'_>>| -> PyResult<Option<String>> {
+            node.map(|node| node.0.extract()).transpose()
+        };
+        facts.push(SchemaColumnFact {
+            name: column.name.0.str()?.extract()?,
+            data_type: text(column.column_type.as_ref())?,
+            nullable: column
+                .nullable
+                .as_ref()
+                .map(|node| node.0.extract())
+                .transpose()?,
+            description: text(column.description.as_ref())?,
+            migrate_from: text(column.migrate_from.as_ref())?,
+            audit_definitions: column
+                .audits
+                .iter()
+                .map(|audit| audit.definition_name.0.extract())
+                .collect::<PyResult<_>>()?,
+            location_path: locations.contains(&column.name.0)?.then(|| path.clone()),
+            declared_outside_model: false,
+        });
+    }
+    Ok(facts)
 }

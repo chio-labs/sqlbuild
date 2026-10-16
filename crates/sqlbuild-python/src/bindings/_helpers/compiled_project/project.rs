@@ -18,15 +18,16 @@ use pyo3::prelude::{
 use pyo3::types::{PyDict, PyDictMethods, PyString};
 use pyo3::{FromPyObject, pyclass, pymethods};
 use serde_json::Value;
+use sqlbuild_analysis::compiled_project::main::model_facts::model_facts as project_model;
 use sqlbuild_analysis::compiled_project::main::project_models::project_models;
 use sqlbuild_analysis::compiled_project::main::record_model::record_model;
 use sqlbuild_analysis::compiled_project::main::record_model_analysis::record_model_analysis;
 use sqlbuild_analysis::compiled_project::models::{
-    CompiledModelFacts, CompiledProjectFacts, DeclarationFact, DynamicFamilyFact, DynamicProofFact,
-    ModelAnalysisFact, ModelConfigFacts, ModelReferenceFact, ModelSchemaFact, SchemaColumnFact,
+    CompiledModelFacts, CompiledProjectFacts, DeclarationFact, DynamicProofFact, ModelAnalysisFact,
+    ModelConfigFacts, ModelReferenceFact, ModelSchemaFact,
 };
 
-use crate::bindings::_helpers::boundary::panics::{NativeCompilerError, compiler_guard};
+use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
 use crate::bindings::_helpers::compiled_project::audit_loop::{
     AttachmentOwner, AuditFileRow, AuditSettings, model_owner, resource_owner,
 };
@@ -69,20 +70,6 @@ const TABLE_MATERIALIZATION: &str = "table";
 
 /// `(name, type)`.
 type NamedType = (String, Option<String>);
-/// `(name, type, nullable, audit count, declared outside the model)`.
-pub(crate) type SchemaColumnPy = (String, Option<String>, Option<bool>, u32, bool);
-/// `(key, name, pivot column, value column, aggregate, type, name pattern)`.
-pub(crate) type DynamicFamilyPy = (
-    String,
-    String,
-    String,
-    String,
-    String,
-    String,
-    Option<String>,
-);
-/// `(entry audit count, columns, dynamic families, (type enforcement, named schema))`.
-pub(crate) type SchemaPy = (u32, Vec<SchemaColumnPy>, Vec<DynamicFamilyPy>, (bool, bool));
 /// `(output proven, bare dynamic pivot, (family key, inferred type), failure, (family, type))`.
 type ProofPy = (bool, bool, Vec<NamedType>, Option<String>, Vec<NamedType>);
 /// `(inferred, (name, type), nullable per column, has star, unchecked output columns)`.
@@ -97,7 +84,6 @@ pub(crate) struct ModelInputPy<'py>(
     (String, String, String, String, String),
     (Bound<'py, PyDict>, Vec<String>, Option<String>),
     Vec<(String, String, Option<String>)>,
-    Option<SchemaPy>,
     Vec<String>,
     (Vec<DeclarationPy<'py>>, Vec<DeclarationPy<'py>>),
 );
@@ -169,20 +155,22 @@ impl NativeCompiledProject {
     fn attachment_owners<'py>(&self, py: Python<'py>) -> PyResult<Vec<AttachmentOwner<'py>>> {
         let mut owners: Vec<AttachmentOwner<'py>> = Vec::new();
         for record in &self.inputs {
-            let Some(schema) = &record.schema else {
+            let (Some(schema), Some(fact)) = (&record.schema, self.input_schema_fact(record))
+            else {
                 continue;
             };
-            let model_file: &Bound<'py, PyAny> = record.model_file.bind(py);
             owners.push(model_owner(
-                model_file
-                    .getattr("file_path")?
-                    .getattr("stem")?
-                    .extract()?,
-                model_file
+                record.name.clone(),
+                record
+                    .model_file
+                    .bind(py)
                     .getattr(RELATIVE_PATH_ATTRIBUTE)?
                     .str()?
                     .to_string(),
-                (schema.audits.bind(py), schema.columns.bind(py)),
+                (
+                    schema.audits.bind(py),
+                    (schema.columns.bind(py), &fact.columns),
+                ),
             )?);
         }
         for source in &self.sources {
@@ -275,6 +263,11 @@ impl NativeCompiledProject {
         &self.seeds
     }
 
+    /// The schema fact recorded for an input record's model.
+    pub(crate) fn input_schema_fact(&self, record: &ModelInputRecord) -> Option<&ModelSchemaFact> {
+        project_model(&self.facts, &record.name).and_then(|facts| facts.schema.as_ref())
+    }
+
     /// Every model's input record, in loop order.
     pub(crate) fn inputs(&self) -> &[ModelInputRecord] {
         &self.inputs
@@ -335,15 +328,6 @@ impl NativeCompiledProject {
     #[new]
     fn new() -> Self {
         Self::default()
-    }
-
-    /// Retain one model's compile-input facts; a name recorded again is replaced in place.
-    pub(crate) fn record_model(&mut self, model: ModelInputPy<'_>) -> PyResult<()> {
-        compiler_guard(|| {
-            let facts: CompiledModelFacts = model_facts(model)?;
-            record_model(&mut self.facts, facts);
-            Ok(())
-        })
     }
 
     /// Attach a recorded model's typed analysis; `False` when that model was never recorded.
@@ -646,7 +630,6 @@ pub(crate) fn model_facts(model: ModelInputPy<'_>) -> PyResult<CompiledModelFact
         (name, relative_path, query_sql, authored_query_sql, authored_sql),
         (values, header_keys, layer_schema),
         references,
-        schema,
         enum_columns,
         (enum_declarations, constant_declarations),
     ) = model;
@@ -674,7 +657,7 @@ pub(crate) fn model_facts(model: ModelInputPy<'_>) -> PyResult<CompiledModelFact
                 package,
             })
             .collect(),
-        schema: schema.map(schema_fact),
+        schema: None,
         enum_columns,
         enum_declarations: declarations(enum_declarations)?,
         constant_declarations: declarations(constant_declarations)?,
@@ -704,45 +687,6 @@ pub(crate) fn text_value(values: &Bound<'_, PyDict>, key: &str) -> PyResult<Opti
     match values.get_item(key)? {
         Some(value) if value.is_instance_of::<PyString>() => Ok(Some(value.extract()?)),
         _ => Ok(None),
-    }
-}
-
-pub(crate) fn schema_fact(
-    (audit_count, columns, dynamic_columns, (type_enforcement, named_schema)): SchemaPy,
-) -> ModelSchemaFact {
-    ModelSchemaFact {
-        audit_count,
-        columns: columns
-            .into_iter()
-            .map(
-                |(name, data_type, nullable, audit_count, declared_outside_model)| {
-                    SchemaColumnFact {
-                        name,
-                        data_type,
-                        nullable,
-                        audit_count,
-                        declared_outside_model,
-                    }
-                },
-            )
-            .collect(),
-        dynamic_columns: dynamic_columns.into_iter().map(family_fact).collect(),
-        type_enforcement,
-        named_schema,
-    }
-}
-
-fn family_fact(
-    (key, name, pivot_column, value_column, aggregate, data_type, name_pattern): DynamicFamilyPy,
-) -> DynamicFamilyFact {
-    DynamicFamilyFact {
-        key,
-        name,
-        pivot_column,
-        value_column,
-        aggregate,
-        data_type,
-        name_pattern,
     }
 }
 

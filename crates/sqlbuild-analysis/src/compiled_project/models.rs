@@ -73,7 +73,12 @@ pub struct SchemaColumnFact {
     pub name: String,
     pub data_type: Option<String>,
     pub nullable: Option<bool>,
-    pub audit_count: u32,
+    pub description: Option<String>,
+    pub migrate_from: Option<String>,
+    /// Each column audit's definition name, in declaration order.
+    pub audit_definitions: Vec<String>,
+    /// The text of the file the column is authored in, when it has a location.
+    pub location_path: Option<String>,
     /// Whether the column is declared outside the model file, in a named schema.
     pub declared_outside_model: bool,
 }

@@ -251,10 +251,7 @@ fn missing_descriptions<'py>(
     let mut found: Vec<Option<Bound<'py, PyAny>>> = Vec::new();
     for record in project.inputs() {
         let model_file: &Bound<'py, PyAny> = record.model_file.bind(py);
-        let name: String = model_file
-            .getattr("file_path")?
-            .getattr("stem")?
-            .extract()?;
+        let name: String = record.name.clone();
         let path: String = model_file.getattr("relative_path")?.str()?.extract()?;
         let contents: String = model_file.getattr("contents")?.extract()?;
         let entry: String = format!("description \"What one row of {name} represents\"");
@@ -484,10 +481,7 @@ fn cursor_without_inputs<'py>(
         let cursor: Option<String> = config_text(&values, CURSOR_KEY)?;
         let strategy: Option<String> = config_text(&values, "microbatch_strategy")?;
         let model_file: &Bound<'py, PyAny> = record.model_file.bind(py);
-        let name: String = model_file
-            .getattr("file_path")?
-            .getattr("stem")?
-            .extract()?;
+        let name: String = record.name.clone();
         let Some((message, help)) = cursor_lacks_inputs(
             &name,
             &CursorModel {

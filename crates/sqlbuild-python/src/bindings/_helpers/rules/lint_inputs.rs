@@ -20,10 +20,12 @@ const FILE_PATH_ATTRIBUTE: &str = "file_path";
 pub(crate) fn model_key_row(model: &Bound<'_, PyAny>) -> PyResult<RelationKeyRow> {
     let py: Python<'_> = model.py();
     if let Ok(input) = model.downcast::<NativeModelInput>() {
-        return input.get().read(py, model_relation_key_row);
+        return input.get().read_with_owner(py, |owner, record| {
+            model_relation_key_row(owner, record, py)
+        });
     }
     if let Ok(compiled) = model.downcast::<NativeCompiledModel>() {
-        return compiled.get().read(py, model_relation_key_row);
+        return compiled.get().relation_key_row(py);
     }
     model.getattr("relation_key_row")?.extract()
 }

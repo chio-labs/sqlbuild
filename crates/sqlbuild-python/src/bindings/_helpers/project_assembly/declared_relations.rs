@@ -1,10 +1,12 @@
 //! What each model, seed, source and table function declares about its columns before analysis.
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyBool, PyDict, PyDictMethods};
+use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_analysis::compiled_project::models::SchemaColumnFact;
 
 use crate::bindings::_helpers::compiled_project::model_input_view::attached_schema;
+use crate::bindings::_helpers::compiled_project::schema_facts::python_column_facts;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -20,15 +22,19 @@ const UNKNOWN_MEMBER: &str = "UNKNOWN";
 type DeclaredRelations<'py> = (Bound<'py, PyDict>, Bound<'py, PyDict>, Bound<'py, PyDict>);
 
 /// `{column.name: column.type or "UNKNOWN"}`, or the declared type unchanged when `exact`.
-fn column_types<'py>(columns: &Bound<'py, PyAny>, exact: bool) -> PyResult<Bound<'py, PyDict>> {
-    let types: Bound<'py, PyDict> = PyDict::new(columns.py());
-    for column in columns.try_iter()? {
-        let column: Bound<'py, PyAny> = column?;
-        let declared: Bound<'py, PyAny> = column.getattr("type")?;
-        if exact || declared.is_truthy()? {
-            types.set_item(column.getattr("name")?, declared)?;
-        } else {
-            types.set_item(column.getattr("name")?, UNKNOWN_TYPE)?;
+fn column_types<'py>(
+    py: Python<'py>,
+    columns: &[SchemaColumnFact],
+    exact: bool,
+) -> PyResult<Bound<'py, PyDict>> {
+    let types: Bound<'py, PyDict> = PyDict::new(py);
+    for column in columns {
+        match column.data_type.as_deref() {
+            Some(declared) if exact || !declared.is_empty() => {
+                types.set_item(&column.name, declared)?;
+            }
+            None if exact => types.set_item(&column.name, py.None())?,
+            _ => types.set_item(&column.name, UNKNOWN_TYPE)?,
         }
     }
     Ok(types)
@@ -36,24 +42,24 @@ fn column_types<'py>(columns: &Bound<'py, PyAny>, exact: bool) -> PyResult<Bound
 
 /// Each column's declared nullability: non-null when `nullable` is false or a `not_null` audit.
 fn column_nullability<'py>(
-    columns: &Bound<'py, PyAny>,
+    columns: &[SchemaColumnFact],
     nullability: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let facts: Bound<'py, PyDict> = PyDict::new(columns.py());
-    for column in columns.try_iter()? {
-        let column: Bound<'py, PyAny> = column?;
-        let mut non_null: bool = column
-            .getattr("nullable")?
-            .is(PyBool::new(columns.py(), false).as_any());
-        for audit in column.getattr("audits")?.try_iter()? {
-            non_null = non_null || audit?.getattr("definition_name")?.eq(NOT_NULL_AUDIT_NAME)?;
-        }
-        let state: &str = if non_null {
-            NON_NULL_MEMBER
+    let facts: Bound<'py, PyDict> = PyDict::new(nullability.py());
+    let non_null_member: Bound<'py, PyAny> = nullability.getattr(NON_NULL_MEMBER)?;
+    let unknown_member: Bound<'py, PyAny> = nullability.getattr(UNKNOWN_MEMBER)?;
+    for column in columns {
+        let non_null: bool = column.nullable == Some(false)
+            || column
+                .audit_definitions
+                .iter()
+                .any(|definition| definition == NOT_NULL_AUDIT_NAME);
+        let state: &Bound<'py, PyAny> = if non_null {
+            &non_null_member
         } else {
-            UNKNOWN_MEMBER
+            &unknown_member
         };
-        facts.set_item(column.getattr("name")?, nullability.getattr(state)?)?;
+        facts.set_item(&column.name, state)?;
     }
     Ok(facts)
 }
@@ -76,8 +82,8 @@ fn declared_relations<'py>(inputs: Bound<'py, PyAny>) -> PyResult<DeclaredRelati
         let Some(schema) = attached_schema(&model)? else {
             continue;
         };
-        let (name, columns): (Bound<'py, PyAny>, Bound<'py, PyAny>) = (schema.name, schema.columns);
-        types.set_item(&name, column_types(&columns, false)?)?;
+        let (name, columns): (String, Vec<SchemaColumnFact>) = (schema.name, schema.columns);
+        types.set_item(&name, column_types(py, &columns, false)?)?;
         nulls.set_item(&name, column_nullability(&columns, &nullability)?)?;
         let contract: Option<Bound<'py, PyAny>> = model
             .getattr("config")?
@@ -88,55 +94,49 @@ fn declared_relations<'py>(inputs: Bound<'py, PyAny>) -> PyResult<DeclaredRelati
             Some(contract) => contract.eq(ENFORCED_CONTRACT)?,
             None => false,
         };
-        if enforced && columns.is_truthy()? && !schema.dynamic_columns.is_truthy()? {
-            let stem: Bound<'py, PyAny> = model
-                .getattr("model_file")?
-                .getattr("file_path")?
-                .getattr("stem")?;
-            complete.set_item(stem, column_types(&columns, false)?)?;
+        if enforced && !columns.is_empty() && !schema.dynamic_columns.is_truthy()? {
+            complete.set_item(&name, column_types(py, &columns, false)?)?;
         }
     }
-    let mut seeds: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)> = Vec::new();
+    let mut seeds: Vec<(Bound<'py, PyAny>, Vec<SchemaColumnFact>)> = Vec::new();
     for seed in inputs.getattr("seed_inputs")?.try_iter()? {
         let entry: Bound<'py, PyAny> = seed?.getattr("schema_entry")?;
         let name: Bound<'py, PyAny> = entry.getattr("name")?;
-        let columns: Bound<'py, PyAny> = entry.getattr("columns")?;
-        types.set_item(&name, column_types(&columns, false)?)?;
+        let columns: Vec<SchemaColumnFact> = python_column_facts(&entry.getattr("columns")?, None)?;
+        types.set_item(&name, column_types(py, &columns, false)?)?;
         nulls.set_item(&name, column_nullability(&columns, &nullability)?)?;
         seeds.push((name, columns));
     }
     for source in inputs.getattr("source_inputs")?.try_iter()? {
         let entry: Bound<'py, PyAny> = source?.getattr("source_entry")?;
         let name: Bound<'py, PyAny> = entry.getattr("name")?;
-        let columns: Bound<'py, PyAny> = entry.getattr("columns")?;
-        types.set_item(&name, column_types(&columns, false)?)?;
+        let columns: Vec<SchemaColumnFact> = python_column_facts(&entry.getattr("columns")?, None)?;
+        types.set_item(&name, column_types(py, &columns, false)?)?;
         nulls.set_item(&name, column_nullability(&columns, &nullability)?)?;
-        if entry.getattr(CONTRACT_KEY)?.eq(ENFORCED_CONTRACT)? && columns.is_truthy()? {
-            complete.set_item(&name, column_types(&columns, false)?)?;
+        if entry.getattr(CONTRACT_KEY)?.eq(ENFORCED_CONTRACT)? && !columns.is_empty() {
+            complete.set_item(&name, column_types(py, &columns, false)?)?;
         }
     }
     for (name, columns) in seeds {
-        if columns.is_truthy()? {
-            complete.set_item(name, column_types(&columns, false)?)?;
+        if !columns.is_empty() {
+            complete.set_item(name, column_types(py, &columns, false)?)?;
         }
     }
     for function in inputs.getattr("sql_function_inputs")?.try_iter()? {
         let function: Bound<'py, PyAny> = function?;
-        let columns: Bound<'py, PyAny> = function.getattr("return_columns")?;
-        if !columns.is_truthy()? {
+        let columns: Vec<SchemaColumnFact> =
+            python_column_facts(&function.getattr("return_columns")?, None)?;
+        if columns.is_empty() {
             continue;
         }
         let name: String = table_function_name(&function)?;
-        types.set_item(&name, column_types(&columns, true)?)?;
+        types.set_item(&name, column_types(py, &columns, true)?)?;
         let unknown: Bound<'py, PyDict> = PyDict::new(py);
-        for column in columns.try_iter()? {
-            unknown.set_item(
-                column?.getattr("name")?,
-                nullability.getattr(UNKNOWN_MEMBER)?,
-            )?;
+        for column in &columns {
+            unknown.set_item(&column.name, nullability.getattr(UNKNOWN_MEMBER)?)?;
         }
         nulls.set_item(&name, unknown)?;
-        complete.set_item(&name, column_types(&columns, true)?)?;
+        complete.set_item(&name, column_types(py, &columns, true)?)?;
     }
     Ok((types, nulls, complete))
 }

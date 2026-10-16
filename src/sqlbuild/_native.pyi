@@ -1882,7 +1882,6 @@ class NativeProjectView:
 
 class NativeCompiledProject:
     def __init__(self) -> None: ...
-    def record_model(self, model: tuple[object, ...]) -> None: ...
     def record_model_analysis(
         self,
         name: str,

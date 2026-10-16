@@ -234,6 +234,7 @@ pub(crate) fn finished_record<'py>(
         &[&authored, &macro_source, &expanded],
     )?;
     let record: ModelInputRecord = ModelInputRecord {
+        name: name.clone(),
         model_file: model_file.clone_ref(py).into_any(),
         config: config.unbind(),
         query_sql: query,

@@ -5,13 +5,15 @@ use pyo3::prelude::{
 };
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyFrozenSetMethods, PyList, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
+use sqlbuild_analysis::compiled_project::models::CompiledModelFacts;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
 use crate::bindings::_helpers::compiled_project::inputs_view::NativeInputsView;
 use crate::bindings::_helpers::compiled_project::model_input_view::NativeModelInput;
-use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::compiled_project::project::{NativeCompiledProject, model_facts};
 use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView;
+use crate::bindings::_helpers::compiled_project::schema_facts::entry_schema_fact;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -445,9 +447,12 @@ fn hand_built_project<'py>(
     let models: Bound<'py, PyAny> = project.getattr("models")?;
     for model in models.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
-        native
-            .borrow_mut()
-            .record_model(model_row(&model)?.as_any().extract()?)?;
+        let mut facts: CompiledModelFacts = model_facts(model_row(&model)?.as_any().extract()?)?;
+        facts.schema = entry_schema_fact(
+            &model.getattr("schema_entry")?,
+            &model.getattr("relative_path")?,
+        )?;
+        native.borrow_mut().retain(facts);
     }
     let _ = record_model_analyses(&native, &models)?;
     Ok(native)
@@ -519,7 +524,6 @@ fn model_row<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
             )?
             .into_any(),
             PyList::new(py, references)?.into_any(),
-            schema_row(&model.getattr("schema_entry")?, &relative_path)?,
             PyList::new(
                 py,
                 model
@@ -531,69 +535,6 @@ fn model_row<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
             PyTuple::new(py, [enums.into_any(), constants.into_any()])?.into_any(),
         ],
     )
-}
-
-fn schema_row<'py>(
-    entry: &Bound<'py, PyAny>,
-    relative_path: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = entry.py();
-    if entry.is_none() {
-        return Ok(entry.clone());
-    }
-    let columns: Vec<Bound<'py, PyTuple>> = entry
-        .getattr("columns")?
-        .try_iter()?
-        .map(|column| {
-            let column: Bound<'py, PyAny> = column?;
-            let location: Bound<'py, PyAny> = column.getattr("location")?;
-            let elsewhere: bool =
-                !location.is_none() && location.getattr("path")?.ne(relative_path)?;
-            PyTuple::new(
-                py,
-                [
-                    column.getattr("name")?,
-                    column.getattr("type")?,
-                    column.getattr("nullable")?,
-                    column.getattr("audits")?.len()?.into_bound_py_any(py)?,
-                    elsewhere.into_bound_py_any(py)?,
-                ],
-            )
-        })
-        .collect::<PyResult<_>>()?;
-    let families: Vec<Bound<'py, PyTuple>> = entry
-        .getattr("dynamic_columns")?
-        .try_iter()?
-        .map(|family| {
-            let family: Bound<'py, PyAny> = family?;
-            PyTuple::new(
-                py,
-                [
-                    family.getattr("name")?.call_method0("casefold")?,
-                    family.getattr("name")?,
-                    family.getattr("pivot_column")?,
-                    family.getattr("value_column")?,
-                    family.getattr("aggregate")?,
-                    family.getattr("type")?,
-                    family.getattr("name_pattern")?,
-                ],
-            )
-        })
-        .collect::<PyResult<_>>()?;
-    Ok(PyTuple::new(
-        py,
-        [
-            entry.getattr("audits")?.len()?.into_bound_py_any(py)?,
-            PyList::new(py, columns)?.into_any(),
-            PyList::new(py, families)?.into_any(),
-            (
-                entry.getattr("type_enforcement")?.is_truthy()?,
-                !entry.getattr("model_schema")?.is_none(),
-            )
-                .into_bound_py_any(py)?,
-        ],
-    )?
-    .into_any())
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

@@ -4,7 +4,9 @@ use std::sync::Arc;
 
 use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFloat, PyInt, PyList, PyString, PyTuple};
+use pyo3::types::{
+    PyBool, PyDict, PyDictMethods, PyFloat, PyInt, PyList, PyString, PyTuple, PyTupleMethods,
+};
 use sqlbuild_analysis::semantic_checks::main::check_semantic_metadata::check_semantic_metadata;
 use sqlbuild_analysis::semantic_checks::models::{
     AuditValue, MetadataAudit, MetadataFinding, MetadataFunction, MetadataModel, MetadataRequest,
@@ -473,32 +475,39 @@ fn metadata_model(classes: &StageClasses<'_>, model: &Bound<'_, PyAny>) -> PyRes
 
 fn metadata_audits(model: &Bound<'_, PyAny>) -> PyResult<Vec<MetadataAudit>> {
     let py: Python<'_> = model.py();
-    let (entry_audits, columns): (Bound<'_, PyAny>, Bound<'_, PyAny>) =
-        match model.downcast::<NativeCompiledModel>() {
-            Ok(view) => match view.get().schema_audits_and_columns(py)? {
-                Some((audits, columns)) => (
-                    audits.into_bound(py).into_any(),
-                    columns.into_bound(py).into_any(),
-                ),
-                None => return Ok(Vec::new()),
-            },
-            Err(_) => {
-                let entry: Bound<'_, PyAny> = model.getattr("schema_entry")?;
-                if entry.is_none() {
-                    return Ok(Vec::new());
-                }
-                (entry.getattr("audits")?, entry.getattr("columns")?)
-            }
-        };
     let mut attached: Vec<(Option<String>, Bound<'_, PyAny>)> = Vec::new();
-    for audit in entry_audits.try_iter()? {
-        attached.push((None, audit?));
-    }
-    for column in columns.try_iter()? {
-        let column: Bound<'_, PyAny> = column?;
-        let name: String = column.getattr("name")?.extract()?;
-        for audit in column.getattr("audits")?.try_iter()? {
-            attached.push((Some(name.clone()), audit?));
+    match model.downcast::<NativeCompiledModel>() {
+        Ok(view) => {
+            let Some((entry_audits, columns, audited)) =
+                view.get().schema_audits_and_columns(py)?
+            else {
+                return Ok(Vec::new());
+            };
+            for audit in entry_audits.bind(py).iter() {
+                attached.push((None, audit));
+            }
+            for (index, name) in audited {
+                let column: Bound<'_, PyAny> = columns.bind(py).get_item(index)?;
+                for audit in column.getattr("audits")?.try_iter()? {
+                    attached.push((Some(name.clone()), audit?));
+                }
+            }
+        }
+        Err(_) => {
+            let entry: Bound<'_, PyAny> = model.getattr("schema_entry")?;
+            if entry.is_none() {
+                return Ok(Vec::new());
+            }
+            for audit in entry.getattr("audits")?.try_iter()? {
+                attached.push((None, audit?));
+            }
+            for column in entry.getattr("columns")?.try_iter()? {
+                let column: Bound<'_, PyAny> = column?;
+                let name: String = column.getattr("name")?.extract()?;
+                for audit in column.getattr("audits")?.try_iter()? {
+                    attached.push((Some(name.clone()), audit?));
+                }
+            }
         }
     }
     let empty: Bound<'_, PyAny> = PyString::new(py, "").into_any();

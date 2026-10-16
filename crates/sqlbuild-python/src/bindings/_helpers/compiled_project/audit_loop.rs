@@ -6,6 +6,7 @@ use pyo3::FromPyObject;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString, PyTuple, PyTupleMethods};
 use sqlbuild_analysis::compiled_project::main::merge_call_site_references::merge_call_site_references;
+use sqlbuild_analysis::compiled_project::models::SchemaColumnFact;
 use sqlbuild_attachments::audits::main::attached_model_reference_error::attached_model_reference_error;
 use sqlbuild_attachments::audits::main::audit_reference_error::audit_reference_error;
 use sqlbuild_attachments::audits::main::render_attached_audit::render_attached_audit;
@@ -668,20 +669,26 @@ fn header_text(header: &Bound<'_, PyDict>, key: &str) -> PyResult<Option<String>
 pub(crate) fn model_owner<'py>(
     name: String,
     path: String,
-    schema: (&Bound<'py, PyTuple>, &Bound<'py, PyTuple>),
+    schema: (
+        &Bound<'py, PyTuple>,
+        (&Bound<'py, PyTuple>, &[SchemaColumnFact]),
+    ),
 ) -> PyResult<AttachmentOwner<'py>> {
-    let (audits, columns) = schema;
+    let (audits, (columns, facts)) = schema;
     let mut instances: Vec<(String, Option<String>, Bound<'py, PyAny>)> = Vec::new();
     for audit in audits.iter() {
         instances.push((path.clone(), explicit_column(&audit)?, audit));
     }
-    for column in columns.iter() {
-        let column_owner: String = location_path(&column)?.unwrap_or_else(|| path.clone());
-        let column_name: String = column.getattr("name")?.extract()?;
-        for audit in column.getattr("audits")?.try_iter()? {
+    for (index, fact) in facts.iter().enumerate() {
+        if fact.audit_definitions.is_empty() {
+            continue;
+        }
+        let column_owner: &str = fact.location_path.as_deref().unwrap_or(&path);
+        for audit in columns.get_item(index)?.getattr("audits")?.try_iter()? {
             let audit: Bound<'py, PyAny> = audit?;
-            let owner_file: String = location_path(&audit)?.unwrap_or_else(|| column_owner.clone());
-            instances.push((owner_file, Some(column_name.clone()), audit));
+            let owner_file: String =
+                location_path(&audit)?.unwrap_or_else(|| column_owner.to_owned());
+            instances.push((owner_file, Some(fact.name.clone()), audit));
         }
     }
     Ok(AttachmentOwner {
