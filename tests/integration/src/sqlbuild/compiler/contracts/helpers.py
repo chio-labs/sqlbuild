@@ -21,6 +21,7 @@ from sqlbuild._native import (
     DynamicColumnFamilyProof,
     IncrementalMode,
     InferredColumn,
+    InferredNullability,
     MaterializationType,
     SchemaColumn,
     SchemaDynamicColumnFamily,
@@ -34,7 +35,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.types import TypeDialect
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
-from sqlbuild.compiler.lineage.types import InferredNullability
 
 _PROJECT_TOML: str = (
     'name = "orders_contracts"\nadapter = "duckdb"\n\n[connection]\ndatabase = "orders.duckdb"\n'

@@ -1,8 +1,9 @@
 //! Selected-model inspection and untyped override conversion.
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::planner_resolution::values::{method, string};
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
@@ -27,7 +28,6 @@ fn type_cursor_overrides<'py>(
     if overrides.is_none() || !overrides.getattr("has_untyped")?.is_truthy()? {
         return Ok(overrides);
     }
-    let get_config = registry::native(py, NativeAttr::GetConfigStr)?;
     let mut models: Vec<(String, String)> = Vec::new();
     let selected = if args.passed("selected_models")? {
         args.value("selected_models")?
@@ -37,11 +37,8 @@ fn type_cursor_overrides<'py>(
     for model in selected.try_iter()? {
         let model = model?;
         let values = model.getattr("config")?.getattr("values")?;
-        let config = |key: &str| {
-            call_with(
-                &get_config,
-                &[("values", values.clone()), ("key", string(py, key))],
-            )
+        let config = |key: &str| -> PyResult<Bound<'_, PyAny>> {
+            Ok(authored_config_str(&values, key)?.unwrap_or_else(|| py.None().into_bound(py)))
         };
         if !config("materialized")?.eq("incremental")? || config("cursor")?.is_none() {
             continue;

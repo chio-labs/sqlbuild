@@ -10,7 +10,6 @@ use crate::bindings::_helpers::records::registry;
 
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const AUDITING_TYPES_MODULE: &str = "sqlbuild.compiler.auditing.types";
-const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 /// The materializations a model's storage policies are inherited for, besides none.
 const TABLE_BACKED_MATERIALIZATIONS: [&str; 3] = ["TABLE", "INCREMENTAL", "SNAPSHOT"];
 /// The declaration kinds whose project-owned records the loop names.
@@ -241,7 +240,7 @@ fn input_view_classes<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         ),
         (
             "nullability",
-            class(py, LINEAGE_TYPES_MODULE, "InferredNullability")?,
+            registry::class(py, RecordId::InferredNullability)?,
         ),
         (
             "compiler_diagnostic",

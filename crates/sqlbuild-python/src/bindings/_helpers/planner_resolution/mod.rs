@@ -12,7 +12,7 @@ mod cursor_windows;
 mod future_safety;
 mod locations;
 mod maximum_safety;
-mod orchestration;
+pub(crate) mod orchestration;
 mod refs;
 pub(crate) mod registration;
 mod sources;

@@ -1,9 +1,12 @@
 //! Assemble audit plan dataclasses using native rendering and scheduling.
 
+use crate::bindings::_helpers::planner_strategy::audits::{
+    reads_outside_target_lineage, resolve_attachment_kind, resolve_effective_run_scope,
+};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
 use pyo3::types::{
-    PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyTuple, PyTupleMethods,
+    PyBool, PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyTuple, PyTupleMethods,
 };
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
@@ -81,14 +84,8 @@ pub(crate) fn plan_audit<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<
             &format!("audit '{name}' planned evidence SQL"),
         )?
     };
-    let attachment = call_with(
-        &registry::native(py, NativeAttr::ResolveAttachmentKind)?,
-        &[
-            ("audit", audit.clone()),
-            ("downstream_deps", request.get("lineage_downstream_deps")?),
-        ],
-    )?;
-    let attachment = attachment.cast::<PyTuple>()?;
+    let attachment: Bound<'_, PyTuple> =
+        resolve_attachment_kind(&audit, &request.get("lineage_downstream_deps")?)?;
     let kind = attachment.get_item(0)?;
     let target = attachment.get_item(1)?;
     let kind_text: String = kind.extract()?;
@@ -101,13 +98,7 @@ pub(crate) fn plan_audit<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<
     };
     let requested = audit_enum(&audit, "run_scope", "AuditRunScope", "final")?;
     let severity = audit_enum(&audit, "severity", "AuditSeverity", "warn")?;
-    let effective = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveRunScope)?,
-        &[
-            ("requested_run_scope", requested.clone()),
-            ("attached_model_materialization", materialization),
-        ],
-    )?;
+    let effective = resolve_effective_run_scope(&requested, &materialization)?;
     let mut target_kind = audit.getattr("attached_target_kind")?;
     if target_kind.is_none() && (kind_text == MODEL_ATTACHMENT || kind_text == SOURCE_ATTACHMENT) {
         target_kind =
@@ -153,13 +144,12 @@ pub(crate) fn plan_audit<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<
         ("attached_target_name", target),
         (
             "reads_outside_target_lineage",
-            call_with(
-                &registry::native(py, NativeAttr::ReadsOutsideTargetLineage)?,
-                &[
-                    ("audit", audit),
-                    ("upstream_deps", request.get("lineage_upstream_deps")?),
-                ],
-            )?,
+            PyBool::new(
+                py,
+                reads_outside_target_lineage(&audit, &request.get("lineage_upstream_deps")?)?,
+            )
+            .to_owned()
+            .into_any(),
         ),
     ] {
         values.set_item(field, value)?;

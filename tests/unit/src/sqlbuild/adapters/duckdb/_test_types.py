@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild._native import InferredNullability
 
 
 @dataclass(frozen=True)

@@ -6,7 +6,6 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyList, PyString, PyTuple};
 
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 
 type Object<'py> = Bound<'py, PyAny>;
 
@@ -177,9 +176,7 @@ fn fallback_columns<'py>(rows: &Object<'py>) -> PyResult<Object<'py>> {
         return Ok(rows.clone());
     }
     let column_class: Object<'py> = registry::class(py, RecordId::InferredColumn)?;
-    let nullability: Object<'py> = py
-        .import(LINEAGE_TYPES_MODULE)?
-        .getattr("InferredNullability")?;
+    let nullability: Object<'py> = registry::class(py, RecordId::InferredNullability)?;
     let mut columns: Vec<Object<'py>> = Vec::new();
     for row in rows.try_iter()? {
         let (name, data_type, value): (Object<'py>, Object<'py>, Object<'py>) = row?.extract()?;
@@ -259,8 +256,7 @@ fn located<'py>(
     let types = py.import(COMPILE_TYPES_MODULE)?;
     let diagnostic_class: Object<'py> = registry::class(py, RecordId::CompilerDiagnostic)?;
     let location_class: Object<'py> = registry::class(py, RecordId::SourceLocation)?;
-    let phase: Object<'py> =
-        registry::class(types.py(), RecordId::DiagnosticPhase)?.getattr("COMPILE")?;
+    let phase: Object<'py> = registry::class(py, RecordId::DiagnosticPhase)?.getattr("COMPILE")?;
     let model: Object<'py> = types.getattr("CompiledResourceType")?.getattr("MODEL")?;
     let name: Object<'py> = model_file.getattr("file_path")?.getattr("stem")?;
     let mut built: Vec<Object<'py>> = Vec::new();

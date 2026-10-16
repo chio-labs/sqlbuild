@@ -8,7 +8,9 @@ use sqlbuild_analysis::semantic_checks::models::{
     CompletedDiagnostic, CompletionModel, CompletionRequest, SemanticDiagnostic, SemanticLocation,
 };
 
+use crate::bindings::_helpers::analysis::model_reads::{inferred_names, lineage_inputs};
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::compiled_project::compiled_model_view::LineageInput;
 use crate::bindings::_helpers::semantic_checks::failures::semantic_error;
 use crate::bindings::_helpers::semantic_checks::metadata::{ShapeRows, shape_rows};
 use crate::bindings::_helpers::semantic_checks::session_facts::{
@@ -16,8 +18,7 @@ use crate::bindings::_helpers::semantic_checks::session_facts::{
 };
 use crate::bindings::_helpers::semantic_checks::stage_objects::StageClasses;
 use crate::bindings::_helpers::semantic_checks::type_recovery::{
-    LineageInput, StageShared, diagnostic_ids, id_of, inferred_names, items, lineage_outputs,
-    lineage_payload,
+    StageShared, diagnostic_ids, id_of, items, lineage_outputs,
 };
 use crate::bindings::_helpers::semantic_shapes::shapes::project_shapes;
 use crate::bindings::types::CompilerDetach;
@@ -182,7 +183,7 @@ fn completion_model(
             .lineage
             .clone()
     } else {
-        lineage_payload(model)?
+        lineage_inputs(model)?
     };
     let opt_out: Bound<'_, PyAny> = model.getattr("rejected_sql_analysis_opt_out")?;
     let mut binding_codes: Vec<String> = Vec::new();

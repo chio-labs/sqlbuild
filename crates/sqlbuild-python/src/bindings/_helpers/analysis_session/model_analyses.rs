@@ -19,7 +19,6 @@ use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::semantic_shapes::shapes::{VALID_FROM_DEFAULT, VALID_TO_DEFAULT};
 
-const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const LOGGING_MODULE: &str = "logging";
 const DEBUG_LOGGER: &str = "sqlbuild.compile";
 const ANALYSIS_FAILURE_MESSAGE: &str = "native compact query analysis failed";
@@ -151,10 +150,8 @@ fn run_session<'py>(
     for failure in failures.try_iter()? {
         log_debug(py, ANALYSIS_FAILURE_MESSAGE, &failure?)?;
     }
-    let unknown: Bound<'py, PyAny> = py
-        .import(LINEAGE_TYPES_MODULE)?
-        .getattr("InferredNullability")?
-        .getattr("UNKNOWN")?;
+    let unknown: Bound<'py, PyAny> =
+        registry::class(py, RecordId::InferredNullability)?.getattr("UNKNOWN")?;
     for item in publications.try_iter()? {
         let (name, shape): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         let published: Bound<'py, PyAny> = dict_of(&shape)?;

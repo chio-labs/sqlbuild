@@ -72,7 +72,7 @@ fn materialization_of<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyA
 /// The plan action and reason for one model.
 #[pyfunction]
 #[pyo3(signature = (*, model, change_result, full_refresh))]
-fn resolve_model_plan_action<'py>(
+pub(crate) fn resolve_model_plan_action<'py>(
     model: &Bound<'py, PyAny>,
     change_result: &Bound<'py, PyAny>,
     full_refresh: bool,

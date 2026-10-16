@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import (
+    InferredNullability,
     SourceFreshnessValueKind,
     normalize_source_freshness_data_version,
     source_freshness_data_version_hash,
@@ -26,7 +27,6 @@ from sqlbuild.adapter.contract.models import (
 )
 from sqlbuild.adapter.contract.types import FunctionNullabilityRule
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
-from sqlbuild.compiler.lineage.types import InferredNullability
 from tests.integration.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakeBuildFlowTestCase,
     SnowflakeExpressionNullabilityRuleTestCase,

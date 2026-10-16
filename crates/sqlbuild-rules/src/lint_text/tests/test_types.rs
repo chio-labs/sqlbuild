@@ -86,3 +86,9 @@ pub(super) struct FixtureBlockTestCase {
     pub model_mode: bool,
     pub expected_sql: Option<&'static str>,
 }
+
+pub(crate) struct SitePatternTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) formatting: bool,
+    pub(crate) expected_other_start_bytes: Vec<u8>,
+}

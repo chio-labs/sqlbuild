@@ -1,10 +1,92 @@
+use crate::sql_scan::main::dialect_non_code_end::dialect_non_code_end;
 use crate::sql_scan::main::dialect_non_code_ranges::dialect_non_code_ranges;
+use crate::sql_scan::models::{LexicalSyntax, Unclosed};
 use crate::sql_scan::tests::helpers::{
     escape_strings, generic, raw_strings, single_quote_backslashes, triple_quotes,
 };
 use crate::sql_scan::tests::test_types::{
-    DialectFirstNonCodeRangeTestCase, DialectNonCodeRangesTestCase,
+    DialectFirstNonCodeRangeTestCase, DialectNonCodeEndTestCase, DialectNonCodeRangesTestCase,
 };
+
+#[test]
+fn given_an_offset_when_finding_dialect_non_code_end_then_only_opening_bytes_start_non_code() {
+    let test_cases = [
+        DialectNonCodeEndTestCase {
+            description: "a code byte opens nothing",
+            sql: "select 1",
+            index: 0,
+            syntax: generic(),
+            expected_end: Ok(None),
+        },
+        DialectNonCodeEndTestCase {
+            description: "a hash is code when it is not a line comment prefix",
+            sql: "# note\nx",
+            index: 0,
+            syntax: generic(),
+            expected_end: Ok(None),
+        },
+        DialectNonCodeEndTestCase {
+            description: "a hash opens a line comment when the dialect says so",
+            sql: "x # note\ny",
+            index: 2,
+            syntax: triple_quotes(),
+            expected_end: Ok(Some(9)),
+        },
+        DialectNonCodeEndTestCase {
+            description: "a lone slash is code",
+            sql: "a / b",
+            index: 2,
+            syntax: generic(),
+            expected_end: Ok(None),
+        },
+        DialectNonCodeEndTestCase {
+            description: "a dollar tag opens a dollar-quoted string",
+            sql: "$tag$ x $tag$ y",
+            index: 0,
+            syntax: generic(),
+            expected_end: Ok(Some(13)),
+        },
+        DialectNonCodeEndTestCase {
+            description: "a dollar parameter is code",
+            sql: "$1 + 2",
+            index: 0,
+            syntax: generic(),
+            expected_end: Ok(None),
+        },
+        DialectNonCodeEndTestCase {
+            description: "an unclosed quote is reported",
+            sql: "x 'open",
+            index: 2,
+            syntax: generic(),
+            expected_end: Err(Unclosed::Quote),
+        },
+        DialectNonCodeEndTestCase {
+            description: "the end of the text opens nothing",
+            sql: "x",
+            index: 1,
+            syntax: generic(),
+            expected_end: Ok(None),
+        },
+        DialectNonCodeEndTestCase {
+            description: "an empty line comment prefix matches at every offset",
+            sql: "ab\ncd",
+            index: 1,
+            syntax: LexicalSyntax {
+                line_comment_prefixes: vec![String::new()],
+                ..LexicalSyntax::default()
+            },
+            expected_end: Ok(Some(3)),
+        },
+    ];
+    for test_case in test_cases {
+        assert_eq!(
+            dialect_non_code_end(test_case.sql.as_bytes(), test_case.index, &test_case.syntax),
+            test_case.expected_end,
+            "{}",
+            test_case.description
+        );
+    }
+}
 
 #[test]
 fn given_dialect_lexical_syntax_when_scanning_non_code_then_dialect_decides_boundaries() {

@@ -17,6 +17,7 @@ polyglot-sql.workspace = true
 polyglot-sql-function-catalogs.workspace = true
 rayon.workspace = true
 regex.workspace = true
+rustc-hash.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

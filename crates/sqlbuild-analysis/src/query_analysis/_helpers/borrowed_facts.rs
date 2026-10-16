@@ -1,13 +1,15 @@
 //! Immutable CTE output graph over one borrowed syntax tree.
 
 use std::cell::Cell;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use polyglot_sql::expressions::{Column, Join, JoinKind, Select, Star, Values, With};
 use polyglot_sql::{
     DialectType, Expression, ExpressionWalk, ProjectionNullability, TransformKind, ValidationSchema,
 };
+use rustc_hash::{FxHashMap, FxHashSet};
+
 const SQL_WILDCARD: &str = "*";
 
 #[derive(Clone, Debug)]
@@ -22,14 +24,14 @@ pub(super) struct OutputFact {
 #[derive(Clone)]
 struct Source {
     outputs: Rc<Vec<OutputFact>>,
-    columns: Rc<HashMap<String, Option<usize>>>,
+    columns: Rc<FxHashMap<String, Option<usize>>>,
     physical: Option<String>,
     null_extended: bool,
 }
 
 impl Source {
     fn new(outputs: Vec<OutputFact>, physical: Option<String>) -> Self {
-        let mut columns: HashMap<String, Option<usize>> = HashMap::new();
+        let mut columns: FxHashMap<String, Option<usize>> = FxHashMap::default();
         for (index, output) in outputs.iter().enumerate() {
             let key = output.name.to_lowercase();
             let value = (!columns.contains_key(&key)).then_some(index);
@@ -44,13 +46,13 @@ impl Source {
     }
 }
 
-type Relations = HashMap<String, Source>;
+type Relations = FxHashMap<String, Source>;
 #[derive(Default)]
 struct Sources {
     items: Vec<(String, Source)>,
-    using_columns: HashMap<String, OutputFact>,
+    using_columns: FxHashMap<String, OutputFact>,
 }
-type Aliases = HashMap<String, Option<OutputFact>>;
+type Aliases = FxHashMap<String, Option<OutputFact>>;
 
 struct BindingProof {
     enabled: bool,
@@ -110,7 +112,7 @@ fn infer_with_binding_proof(
                 | DialectType::Databricks
         ),
     };
-    let mut relations = Relations::new();
+    let mut relations = Relations::default();
     if let Some(schema) = schema {
         for table in &schema.tables {
             let outputs: Vec<OutputFact> = table
@@ -147,7 +149,7 @@ fn query(expression: &Expression, inherited: &Relations, proof: &BindingProof) -
     ));
     let mut relations = inherited.clone();
     if let Some(with) = query_with(expression) {
-        let mut names: HashSet<String> = HashSet::new();
+        let mut names: FxHashSet<String> = FxHashSet::default();
         for cte in &with.ctes {
             if proof.enabled {
                 proof.require(!with.recursive && names.insert(cte.alias.name.to_lowercase()));
@@ -195,11 +197,19 @@ fn set_outputs(
     right: Vec<OutputFact>,
     by_name: bool,
 ) -> Vec<OutputFact> {
+    let mut right_by_name: FxHashMap<String, usize> = FxHashMap::default();
+    if by_name {
+        for (index, output) in right.iter().enumerate() {
+            right_by_name
+                .entry(output.name.to_ascii_lowercase())
+                .or_insert(index);
+        }
+    }
     for (index, output) in left.iter_mut().enumerate() {
         let other = if by_name {
-            right
-                .iter()
-                .find(|other| other.name.eq_ignore_ascii_case(&output.name))
+            right_by_name
+                .get(&output.name.to_ascii_lowercase())
+                .map(|position| &right[*position])
         } else {
             right.get(index)
         };
@@ -214,11 +224,12 @@ fn set_outputs(
         }
     }
     if by_name {
+        let mut left_names: FxHashSet<String> = left
+            .iter()
+            .map(|output| output.name.to_ascii_lowercase())
+            .collect();
         for mut output in right {
-            if !left
-                .iter()
-                .any(|other| other.name.eq_ignore_ascii_case(&output.name))
-            {
+            if left_names.insert(output.name.to_ascii_lowercase()) {
                 output.nullability = ProjectionNullability::Nullable;
                 left.push(output);
             }
@@ -273,7 +284,7 @@ fn select_outputs(select: &Select, relations: &Relations, proof: &BindingProof) 
         sources = joined_sources(sources, join, relations, proof);
     }
     let mut outputs: Vec<OutputFact> = Vec::new();
-    let mut aliases = Aliases::new();
+    let mut aliases = Aliases::default();
     for projection in &select.expressions {
         let projection = unwrapped(projection);
         if let Some(star) = projection_star(projection) {
@@ -402,7 +413,7 @@ fn source(
         Expression::Lateral(lateral) if matches!(unwrapped(&lateral.this), Expression::Function(function) if function.name.eq_ignore_ascii_case("FLATTEN")) =>
         {
             proof.require(false);
-            let fact = expression_fact(&lateral.this, preceding, &Aliases::new());
+            let fact = expression_fact(&lateral.this, preceding, &Aliases::default());
             let names: Vec<String> = if lateral.column_aliases.is_empty() {
                 ["SEQ", "KEY", "PATH", "INDEX", "VALUE", "THIS"]
                     .into_iter()
@@ -438,7 +449,7 @@ fn values_outputs(values: &Values) -> Vec<OutputFact> {
     for row in &values.expressions {
         let mut facts: Vec<OutputFact> = Vec::new();
         for (index, expression) in row.expressions.iter().enumerate() {
-            let mut fact = expression_fact(expression, &Sources::default(), &Aliases::new());
+            let mut fact = expression_fact(expression, &Sources::default(), &Aliases::default());
             fact.name = values.column_aliases.get(index).map_or_else(
                 || format!("column{}", index + 1),
                 |alias| alias.name.clone(),
@@ -483,7 +494,7 @@ fn joined_sources(
         items: vec![(name.clone(), right.clone())],
         ..Default::default()
     };
-    let mut joined: HashMap<String, OutputFact> = HashMap::new();
+    let mut joined: FxHashMap<String, OutputFact> = FxHashMap::default();
     for identifier in &join.using {
         let column = Column {
             name: identifier.clone(),
@@ -493,8 +504,8 @@ fn joined_sources(
             span: None,
             inferred_type: None,
         };
-        let left = column_fact(&column, &sources, &Aliases::new());
-        let right = column_fact(&column, &right_scope, &Aliases::new());
+        let left = column_fact(&column, &sources, &Aliases::default());
+        let right = column_fact(&column, &right_scope, &Aliases::default());
         proof.require(
             left.as_ref().is_some_and(|fact| fact.resolved)
                 && right.as_ref().is_some_and(|fact| fact.resolved),
@@ -535,7 +546,7 @@ fn joined_sources(
     {
         proof.require(
             scalar_binding_expression(on)
-                && expression_fact(on, &sources, &Aliases::new()).resolved,
+                && expression_fact(on, &sources, &Aliases::default()).resolved,
         );
     }
     sources
@@ -708,7 +719,7 @@ fn nullability(
 
 fn star_outputs(star: &Star, sources: &Sources) -> Vec<OutputFact> {
     let mut outputs: Vec<OutputFact> = Vec::new();
-    let mut merged: HashSet<String> = HashSet::new();
+    let mut merged: FxHashSet<String> = FxHashSet::default();
     for (name, source) in &sources.items {
         if star
             .table
@@ -756,7 +767,7 @@ fn star_outputs(star: &Star, sources: &Sources) -> Vec<OutputFact> {
                 .find(|alias| alias.alias.name.eq_ignore_ascii_case(&output.name))
             {
                 let name = output.name.clone();
-                output = expression_fact(&alias.this, sources, &Aliases::new());
+                output = expression_fact(&alias.this, sources, &Aliases::default());
                 output.name = name;
             }
             if let Some((_, alias)) = star

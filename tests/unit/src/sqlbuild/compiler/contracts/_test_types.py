@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild._native import InferredNullability
 
 
 @dataclass(frozen=True)

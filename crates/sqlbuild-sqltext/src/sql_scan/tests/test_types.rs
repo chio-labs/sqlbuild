@@ -15,6 +15,14 @@ pub(crate) struct NonCodeEndTestCase {
     pub(crate) expected_end: Result<Option<usize>, Unclosed>,
 }
 
+pub(crate) struct DialectNonCodeEndTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) index: usize,
+    pub(crate) syntax: LexicalSyntax,
+    pub(crate) expected_end: Result<Option<usize>, Unclosed>,
+}
+
 pub(crate) struct DialectFirstNonCodeRangeTestCase {
     pub(crate) description: &'static str,
     pub(crate) sql: &'static str,

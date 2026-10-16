@@ -170,6 +170,22 @@ fn given_authored_sql_tests_when_extracting_then_each_rule_holds() {
             expected_outcome: accepted_outcome(false),
         },
         ExtractionRuleTestCase {
+            description: "clause keywords after a dot or inside parentheses do not end the select list",
+            mode: "model",
+            raw: false,
+            syntax: "generic",
+            sql: "WITH __ref__orders AS (SELECT 1 AS id), __expected__orders AS (SELECT t.order, t.limit AS l, (SELECT max(id) FROM __ref__orders WHERE id > 0 ORDER BY 1) AS m FROM __ref__orders t WHERE t.id > 0 ORDER BY 1) SELECT 1",
+            expected_outcome: accepted_outcome(false),
+        },
+        ExtractionRuleTestCase {
+            description: "the first top-level clause keyword ends a select list without FROM",
+            mode: "model",
+            raw: false,
+            syntax: "generic",
+            sql: "WITH __ref__orders AS (SELECT 1 AS id), __expected__orders AS (SELECT 1 AS id WHERE TRUE LIMIT 1) SELECT 1",
+            expected_outcome: accepted_outcome(false),
+        },
+        ExtractionRuleTestCase {
             description: "IS DISTINCT FROM without an alias is rejected",
             mode: "model",
             raw: false,

@@ -44,9 +44,6 @@ pub(crate) fn read_entry(path: &Path) -> Option<(StoredInputs, StoredOutput)> {
         return None;
     };
     output.stdout = stdout;
-    if stdout_key(&output.stdout) != digest {
-        return None;
-    }
     Some((inputs, output))
 }
 

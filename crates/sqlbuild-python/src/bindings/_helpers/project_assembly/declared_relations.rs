@@ -4,13 +4,14 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyBool, PyDict, PyDictMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
+
 const UNKNOWN_TYPE: &str = "UNKNOWN";
 const NOT_NULL_AUDIT_NAME: &str = "not_null";
 const ENFORCED_CONTRACT: &str = "enforced";
 const CONTRACT_KEY: &str = "contract";
 const TABLE_FUNCTION_PREFIX: &str = "__sqlbuild_table_function_";
-const NULLABILITY_MODULE: &str = "sqlbuild.compiler.lineage.types";
-const NULLABILITY_CLASS: &str = "InferredNullability";
 const NON_NULL_MEMBER: &str = "NON_NULL";
 const UNKNOWN_MEMBER: &str = "UNKNOWN";
 
@@ -65,8 +66,7 @@ fn table_function_name(function: &Bound<'_, PyAny>) -> PyResult<String> {
 #[pyfunction]
 fn declared_relations<'py>(inputs: Bound<'py, PyAny>) -> PyResult<DeclaredRelations<'py>> {
     let py: Python<'py> = inputs.py();
-    let nullability: Bound<'py, PyAny> =
-        py.import(NULLABILITY_MODULE)?.getattr(NULLABILITY_CLASS)?;
+    let nullability: Bound<'py, PyAny> = registry::class(py, RecordId::InferredNullability)?;
     let types: Bound<'py, PyDict> = PyDict::new(py);
     let nulls: Bound<'py, PyDict> = PyDict::new(py);
     let complete: Bound<'py, PyDict> = PyDict::new(py);

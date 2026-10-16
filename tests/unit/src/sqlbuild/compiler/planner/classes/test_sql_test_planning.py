@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import threading
-from concurrent.futures import Future
 
 import pytest
 
@@ -11,6 +10,7 @@ from sqlbuild._native import (
     PlannedSqlTests,
     PlannerInputError,
     PlanWarning,
+    SqlTestPlanning,
     SqlTestSelection,
     WarningSeverity,
     start_sql_test_planning,
@@ -60,7 +60,7 @@ def test_given_enabled_planning_when_joining_then_returns_planned_tests(
 
     monkeypatch.setattr(native_module, "plan_selected_sql_tests", plan)
 
-    planning: Future[PlannedSqlTests] = start_sql_test_planning(
+    planning: SqlTestPlanning = start_sql_test_planning(
         sql_test_selection=SqlTestSelection(),
         project=object(),  # ty: ignore[invalid-argument-type]
         adapter=object(),  # ty: ignore[invalid-argument-type]
@@ -102,7 +102,7 @@ def test_given_disabled_planning_when_joining_then_returns_empty_tests(
 
     monkeypatch.setattr(native_module, "plan_selected_sql_tests", plan)
 
-    planning: Future[PlannedSqlTests] = start_sql_test_planning(
+    planning: SqlTestPlanning = start_sql_test_planning(
         sql_test_selection=SqlTestSelection(),
         project=object(),  # ty: ignore[invalid-argument-type]
         adapter=object(),  # ty: ignore[invalid-argument-type]
@@ -142,7 +142,7 @@ def test_given_failing_planning_when_joining_then_raises_original_error(
 
     monkeypatch.setattr(native_module, "plan_selected_sql_tests", plan)
 
-    planning: Future[PlannedSqlTests] = start_sql_test_planning(
+    planning: SqlTestPlanning = start_sql_test_planning(
         sql_test_selection=SqlTestSelection(),
         project=object(),  # ty: ignore[invalid-argument-type]
         adapter=object(),  # ty: ignore[invalid-argument-type]
@@ -157,14 +157,14 @@ def test_given_failing_planning_when_joining_then_raises_original_error(
     "test_case",
     [
         BackgroundSqlTestPlanningTestCase(
-            description="running planning never keeps the process alive",
+            description="running planning leaves no Python thread to keep the process alive",
             enabled=True,
             expected_planner_calls=1,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_running_planning_when_planner_fails_then_worker_is_daemon(
+def test_given_running_planning_when_listing_threads_then_no_python_worker_blocks_exit(
     test_case: BackgroundSqlTestPlanningTestCase, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     started: threading.Event = threading.Event()
@@ -184,7 +184,7 @@ def test_given_running_planning_when_planner_fails_then_worker_is_daemon(
 
     monkeypatch.setattr(native_module, "plan_selected_sql_tests", plan)
 
-    planning: Future[PlannedSqlTests] = start_sql_test_planning(
+    planning: SqlTestPlanning = start_sql_test_planning(
         sql_test_selection=SqlTestSelection(),
         project=object(),  # ty: ignore[invalid-argument-type]
         adapter=object(),  # ty: ignore[invalid-argument-type]
@@ -198,5 +198,5 @@ def test_given_running_planning_when_planner_fails_then_worker_is_daemon(
     release.set()
     planning.result()
 
-    assert daemon_by_name["sqlbuild-test-planning"] is True
+    assert daemon_by_name.get("sqlbuild-test-planning", True) is True
     assert test_case.expected_planner_calls == 1

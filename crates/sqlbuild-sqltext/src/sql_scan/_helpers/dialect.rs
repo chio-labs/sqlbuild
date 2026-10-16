@@ -13,6 +13,12 @@ pub(crate) fn non_code_end(
     index: usize,
     syntax: &LexicalSyntax,
 ) -> Result<Option<usize>, Unclosed> {
+    if sql
+        .get(index)
+        .is_some_and(|first| !may_open_non_code(*first, syntax))
+    {
+        return Ok(None);
+    }
     if sql[index..].starts_with(b"/*") {
         return block_comment_end(sql, index, syntax).map(Some);
     }
@@ -33,6 +39,15 @@ pub(crate) fn non_code_end(
         Some(b'\'' | b'"' | b'`') => quoted_text_end(sql, index, syntax).map(Some),
         _ => Ok(None),
     }
+}
+
+/// Whether a comment or quoted text may open with `byte`; most code bytes are rejected here cheaply.
+fn may_open_non_code(byte: u8, syntax: &LexicalSyntax) -> bool {
+    matches!(byte, b'/' | b'$' | b'\'' | b'"' | b'`')
+        || syntax
+            .line_comment_prefixes
+            .iter()
+            .any(|prefix| prefix.as_bytes().first().is_none_or(|start| *start == byte))
 }
 
 /// Return every comment and quoted-text range in `sql`; an unclosed one extends to the end.

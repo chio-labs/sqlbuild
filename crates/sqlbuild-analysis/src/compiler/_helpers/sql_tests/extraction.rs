@@ -39,6 +39,19 @@ const SCENARIO_CONTEXT: &str = "SQL scenario";
 const DECLARATION_CALLS: [&str; 4] = ["enum", "const", "var", "param"];
 /// Longest projection the alias help repeats verbatim.
 const ALIAS_HELP_EXPRESSION_LIMIT: usize = 80;
+const FROM_KEYWORD: &str = "FROM";
+const SELECT_LIST_END_KEYWORDS: [&str; 10] = [
+    FROM_KEYWORD,
+    "WHERE",
+    "GROUP",
+    "HAVING",
+    "QUALIFY",
+    "WINDOW",
+    "ORDER",
+    "LIMIT",
+    "OFFSET",
+    "FETCH",
+];
 const RESERVED_NAMES: [&str; 5] = [
     "__actual",
     "__expected__typed",
@@ -777,15 +790,7 @@ fn projection_names(
             }
         }
     }
-    let mut end = select_list_from(branch, select_end, syntax)?.unwrap_or(branch.len());
-    for keyword in [
-        "WHERE", "GROUP", "HAVING", "QUALIFY", "WINDOW", "ORDER", "LIMIT", "OFFSET", "FETCH",
-    ] {
-        if let Some(position) = find_top_level_clause_keyword(branch, select_end, keyword, syntax)?
-        {
-            end = end.min(position);
-        }
-    }
+    let end = select_list_end(branch, select_end, syntax)?.unwrap_or(branch.len());
     let expressions = split_top_level(&branch[select_end..end], b',', syntax)?;
     if expressions.is_empty() {
         return Err(
@@ -1379,20 +1384,32 @@ pub(crate) fn find_top_level_keyword(
     })
 }
 
-/// The top-level `FROM` that ends a select list, skipping the `FROM` of `IS [NOT] DISTINCT FROM`.
-fn select_list_from(
+/// The first top-level clause keyword ending a select list, skipping names and `IS DISTINCT FROM`.
+fn select_list_end(
     sql: &str,
     start: usize,
     syntax: &LexicalSyntax,
 ) -> Result<Option<usize>, String> {
-    let mut search_start = start;
-    while let Some(position) = find_top_level_clause_keyword(sql, search_start, "FROM", syntax)? {
-        if !trailing_distinct_operator(&sql[start..position], syntax)? {
-            return Ok(Some(position));
+    scan_code(sql, start, syntax, |index, depth| {
+        let Some(first) = byte_at(sql, index).filter(|_| depth == 0) else {
+            return Ok(CodeStep::Advance);
+        };
+        let first = first.to_ascii_uppercase();
+        let Some(keyword) = SELECT_LIST_END_KEYWORDS
+            .iter()
+            .filter(|keyword| keyword.as_bytes()[0] == first)
+            .find(|keyword| consume_keyword(sql, index, keyword).is_some())
+        else {
+            return Ok(CodeStep::Advance);
+        };
+        if previous_code_byte(sql, index, syntax)? == Some(b'.') {
+            return Ok(CodeStep::Advance);
         }
-        search_start = position + "FROM".len();
-    }
-    Ok(None)
+        if *keyword == FROM_KEYWORD && trailing_distinct_operator(&sql[start..index], syntax)? {
+            return Ok(CodeStep::Advance);
+        }
+        Ok(CodeStep::Stop(index))
+    })
 }
 
 /// Whether `prefix` ends with `IS DISTINCT` or `IS NOT DISTINCT`, ignoring comments.
@@ -1435,22 +1452,6 @@ fn trailing_word<'a>(
         .last()
         .map(|(index, _)| index);
     Ok(word_start.map(|start| (&code[..start], &code[start..])))
-}
-
-fn find_top_level_clause_keyword(
-    sql: &str,
-    start: usize,
-    keyword: &str,
-    syntax: &LexicalSyntax,
-) -> Result<Option<usize>, String> {
-    let mut search_start = start;
-    while let Some(position) = find_top_level_keyword(sql, search_start, keyword, syntax)? {
-        if previous_code_byte(sql, position, syntax)? != Some(b'.') {
-            return Ok(Some(position));
-        }
-        search_start = position + keyword.len();
-    }
-    Ok(None)
 }
 
 fn previous_code_byte(sql: &str, end: usize, syntax: &LexicalSyntax) -> Result<Option<u8>, String> {

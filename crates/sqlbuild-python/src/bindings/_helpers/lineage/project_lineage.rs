@@ -16,6 +16,7 @@ use sqlbuild_analysis::lineage_graph::main::analysis_dialect::analysis_dialect;
 use sqlbuild_analysis::lineage_graph::models::AnalysisDialect;
 use sqlbuild_analysis::semantic_validation::models as validation;
 
+use crate::bindings::_helpers::analysis::model_reads::star_flags;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::lineage::column_lineage_graph::ProjectColumnLineage;
 use crate::bindings::_helpers::lineage::lineage_objects::{LineageClasses, log_lineage_event};
@@ -137,9 +138,9 @@ fn selected_models<'py>(
 
 /// One model's FAST lineage work: its compact facts and whether its root star expands.
 struct FastModel<'py> {
-    model: Bound<'py, PyAny>,
     name: String,
     facts: Option<Bound<'py, PyAny>>,
+    has_star: bool,
     expands_star: bool,
 }
 
@@ -154,8 +155,8 @@ fn fast_lineage<'py>(
     let mut requests: Vec<FastLineageModel> = Vec::new();
     for model in models {
         let facts: Bound<'py, PyAny> = model.getattr("fast_lineage_columns")?;
-        let expands_star: bool = model.getattr("fast_lineage_has_star")?.is_truthy()?
-            && !model.getattr("fast_lineage_star_resolved")?.is_truthy()?;
+        let (has_star, star_resolved): (bool, bool) = star_flags(model)?;
+        let expands_star: bool = has_star && !star_resolved;
         if facts.is_none() {
             requests.push(FastLineageModel::Parse {
                 query_sql: model.getattr("query_sql")?.extract()?,
@@ -168,9 +169,9 @@ fn fast_lineage<'py>(
             });
         }
         work.push(FastModel {
-            model: model.clone(),
             name: model.getattr("name")?.extract()?,
             facts: (!facts.is_none()).then_some(facts),
+            has_star,
             expands_star,
         });
     }
@@ -211,10 +212,7 @@ fn fast_lineage<'py>(
                 }
                 columns = PyTuple::new(py, expanded)?.into_any();
             }
-            compact.set_item(
-                &model.name,
-                (columns, model.model.getattr("fast_lineage_has_star")?),
-            )?;
+            compact.set_item(&model.name, (columns, model.has_star))?;
             model_order.push(model.name);
             continue;
         }

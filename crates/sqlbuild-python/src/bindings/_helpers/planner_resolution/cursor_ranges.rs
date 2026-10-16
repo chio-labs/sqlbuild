@@ -6,6 +6,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::cursor::scalars::{parse_value, sentinel_to_token};
 use crate::bindings::_helpers::cursor::values::{local_date_time, replaced};
+use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_resolution::cursor_bounds::duration;
@@ -73,13 +74,9 @@ fn native<'py>(
 
 /// One string-valued model configuration entry.
 pub(crate) fn config_str<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
-    native(
-        model.py(),
-        NativeAttr::GetConfigStr,
-        &[
-            ("values", model.getattr("config")?.getattr("values")?),
-            ("key", string(model.py(), key)),
-        ],
+    Ok(
+        authored_config_str(&model.getattr("config")?.getattr("values")?, key)?
+            .unwrap_or_else(|| model.py().None().into_bound(model.py())),
     )
 }
 

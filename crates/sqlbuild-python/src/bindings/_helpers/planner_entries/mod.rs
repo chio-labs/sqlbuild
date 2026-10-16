@@ -8,4 +8,5 @@ mod model_entries;
 mod plan_output;
 pub(crate) mod registration;
 mod relations;
+mod test_planning;
 mod values;

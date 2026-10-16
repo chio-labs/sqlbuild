@@ -1,13 +1,13 @@
 from dataclasses import dataclass
 from datetime import datetime
 
+from sqlbuild._native import InferredNullability
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     RowDiffResult,
     RowDiffSampleRow,
     SchemaDiffResult,
 )
-from sqlbuild.compiler.lineage.types import InferredNullability
 
 
 @dataclass(frozen=True)

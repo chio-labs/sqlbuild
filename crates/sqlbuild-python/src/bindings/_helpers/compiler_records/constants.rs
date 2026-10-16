@@ -199,11 +199,7 @@ const R_COLUMN_LINEAGE: RecordSpec = RecordSpec {
         FieldSpec::required("upstream_columns"),
         FieldSpec::new(
             "nullability",
-            FieldDefault::Member(
-                "sqlbuild.compiler.lineage.types",
-                "InferredNullability",
-                "UNKNOWN",
-            ),
+            FieldDefault::NativeMember(RecordId::InferredNullability, "UNKNOWN"),
         ),
         FieldSpec::new(
             "confidence",

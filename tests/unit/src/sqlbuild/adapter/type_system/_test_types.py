@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
+from sqlbuild._native import InferredNullability
 from sqlbuild.adapter.contract.models import NormalizedType
-from sqlbuild.compiler.lineage.types import InferredNullability
 
 
 @dataclass(frozen=True)

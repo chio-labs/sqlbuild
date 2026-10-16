@@ -30,6 +30,7 @@ from sqlbuild._native import (
     DeclarationScopeResolver,
     DiscoveredMacroFile,
     DiscoveredProjectInputs,
+    InferredNullability,
     LoadedMacro,
     MacroMetadata,
     NativeColumnQuery,
@@ -68,7 +69,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.lineage.types import InferredNullability
 
 if TYPE_CHECKING:
     from sqlbuild._native import CompileInputsView, ModelInput

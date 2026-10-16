@@ -84,6 +84,8 @@ ruff_python_ast = "=0.0.4"
 ruff_python_parser = "=0.0.4"
 ruff_text_size = "=0.0.4"
 # Unix only: `sqb` shares the compute log prune lock with Python's `filelock` through `flock`.
+# Fast deterministic hasher for hot in-memory maps whose iteration order never reaches output.
+rustc-hash = "2"
 rustix = { version = "1.1.4", default-features = false, features = ["fs", "std"] }
 saphyr-parser = "0.1"
 regex = "1"

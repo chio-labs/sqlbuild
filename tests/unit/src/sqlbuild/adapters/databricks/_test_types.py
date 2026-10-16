@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from datetime import datetime
 
+from sqlbuild._native import InferredNullability
 from sqlbuild.adapter.contract.models import RelationInfo
-from sqlbuild.compiler.lineage.types import InferredNullability
 from tests.unit.src.sqlbuild.adapters.databricks.helpers import FakeDatabricksMetadataCursor
 
 

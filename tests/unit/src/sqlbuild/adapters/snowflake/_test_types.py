@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 from datetime import datetime
 
+from sqlbuild._native import InferredNullability
 from sqlbuild.adapter.contract.models import FunctionInfo, SchemaDiffResult
 from sqlbuild.adapter.contract.types import TableFreshnessStatus
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
-from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.cost.types import CostStatus
 
 

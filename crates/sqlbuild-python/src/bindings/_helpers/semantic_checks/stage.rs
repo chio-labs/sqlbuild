@@ -6,6 +6,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRef
 use pyo3::types::{PyDict, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::analysis::model_reads::output_proven;
 use crate::bindings::_helpers::analysis_session::session::NativeModelAnalysisSession;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
@@ -106,8 +107,7 @@ fn session_fact_models(
         if !kept.contains(&name) {
             continue;
         }
-        let proof: Bound<'_, PyAny> = model.getattr("dynamic_column_contract")?;
-        if !proof.is_none() && proof.getattr("output_proven")?.is_truthy()? {
+        if output_proven(&model)? {
             continue;
         }
         models.insert(name);
