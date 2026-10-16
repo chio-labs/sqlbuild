@@ -30,7 +30,7 @@ use crate::bindings::_helpers::rules::lint_expansion::{
 };
 use crate::bindings::_helpers::rules::lint_inputs::project_sql_expansions;
 use crate::bindings::_helpers::rules::lint_pipeline::{
-    CompiledExpansion, LintFile, LintOutcome, LintRequest, LintSettings, LintViolationRow, lint,
+    CompiledSource, LintFile, LintOutcome, LintRequest, LintSettings, LintViolationRow, lint,
     lint_sources, outside_project, resolved,
 };
 use crate::bindings::_helpers::rules::relation_keys::project_relation_keys;
@@ -312,7 +312,7 @@ fn evaluated_sql_rules(
         .collect();
     let mut file_identities: Vec<(String, String)> = Vec::new();
     let mut project_files: Option<Vec<LintFile>> = None;
-    let compiled: HashMap<PathBuf, CompiledExpansion> = project_sql_expansions(&run.project)?;
+    let compiled: HashMap<PathBuf, CompiledSource> = project_sql_expansions(&run.project)?;
     if !run.model_selection {
         let mut model_paths: HashSet<PathBuf> = HashSet::new();
         for model in run.project.getattr("models")?.try_iter()? {
@@ -434,7 +434,7 @@ fn file_lines(py: Python<'_>, project_dir: &Path, path: &str) -> PyResult<Vec<St
 fn prepared_lint_violations(
     run: &SqlRun<'_, '_>,
     (selected_paths, dynamic_output_paths): (&BTreeSet<PathBuf>, &HashSet<PathBuf>),
-    compiled: &HashMap<PathBuf, CompiledExpansion>,
+    compiled: &HashMap<PathBuf, CompiledSource>,
     source_files: Option<Vec<LintFile>>,
 ) -> PyResult<Vec<(PathBuf, LintViolationRow)>> {
     let py: Python<'_> = run.project.py();

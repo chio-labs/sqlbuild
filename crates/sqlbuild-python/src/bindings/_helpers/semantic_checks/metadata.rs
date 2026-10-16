@@ -4,7 +4,9 @@ use std::sync::Arc;
 
 use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFloat, PyInt, PyList, PyString, PyTuple};
+use pyo3::types::{
+    PyBool, PyDict, PyDictMethods, PyFloat, PyInt, PyList, PyString, PyTuple, PyTupleMethods,
+};
 use sqlbuild_analysis::semantic_checks::main::check_semantic_metadata::check_semantic_metadata;
 use sqlbuild_analysis::semantic_checks::models::{
     AuditValue, MetadataAudit, MetadataFinding, MetadataFunction, MetadataModel, MetadataRequest,
@@ -14,6 +16,7 @@ use sqlbuild_analysis::semantic_validation::models as validation;
 
 use crate::bindings::_helpers::analysis::model_reads::binding_validated;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
 use crate::bindings::_helpers::semantic_checks::failures::semantic_error;
 use crate::bindings::_helpers::semantic_checks::inputs::{
     column_names, resource_sql_diagnostics, sql_test_columns,
@@ -471,20 +474,40 @@ fn metadata_model(classes: &StageClasses<'_>, model: &Bound<'_, PyAny>) -> PyRes
 }
 
 fn metadata_audits(model: &Bound<'_, PyAny>) -> PyResult<Vec<MetadataAudit>> {
-    let entry: Bound<'_, PyAny> = model.getattr("schema_entry")?;
-    if entry.is_none() {
-        return Ok(Vec::new());
-    }
     let py: Python<'_> = model.py();
     let mut attached: Vec<(Option<String>, Bound<'_, PyAny>)> = Vec::new();
-    for audit in entry.getattr("audits")?.try_iter()? {
-        attached.push((None, audit?));
-    }
-    for column in entry.getattr("columns")?.try_iter()? {
-        let column: Bound<'_, PyAny> = column?;
-        let name: String = column.getattr("name")?.extract()?;
-        for audit in column.getattr("audits")?.try_iter()? {
-            attached.push((Some(name.clone()), audit?));
+    match model.downcast::<NativeCompiledModel>() {
+        Ok(view) => {
+            let Some((entry_audits, columns, audited)) =
+                view.get().schema_audits_and_columns(py)?
+            else {
+                return Ok(Vec::new());
+            };
+            for audit in entry_audits.bind(py).iter() {
+                attached.push((None, audit));
+            }
+            for (index, name) in audited {
+                let column: Bound<'_, PyAny> = columns.bind(py).get_item(index)?;
+                for audit in column.getattr("audits")?.try_iter()? {
+                    attached.push((Some(name.clone()), audit?));
+                }
+            }
+        }
+        Err(_) => {
+            let entry: Bound<'_, PyAny> = model.getattr("schema_entry")?;
+            if entry.is_none() {
+                return Ok(Vec::new());
+            }
+            for audit in entry.getattr("audits")?.try_iter()? {
+                attached.push((None, audit?));
+            }
+            for column in entry.getattr("columns")?.try_iter()? {
+                let column: Bound<'_, PyAny> = column?;
+                let name: String = column.getattr("name")?.extract()?;
+                for audit in column.getattr("audits")?.try_iter()? {
+                    attached.push((Some(name.clone()), audit?));
+                }
+            }
         }
     }
     let empty: Bound<'_, PyAny> = PyString::new(py, "").into_any();

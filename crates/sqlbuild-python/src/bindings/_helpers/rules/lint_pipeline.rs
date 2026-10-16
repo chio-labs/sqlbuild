@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use pyo3::exceptions::{PyException, PyValueError};
-use pyo3::prelude::{Bound, IntoPyObject, PyAny, PyAnyMethods, PyErr, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
+use pyo3::prelude::{Bound, IntoPyObject, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods, PyTuple};
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 use sqlbuild_core::text::main::python_isspace::python_isspace;
 use sqlbuild_core::text::main::python_str_repr::python_str_repr;
@@ -168,6 +168,42 @@ impl CompiledExpansion {
             expanded_sql: record.getattr("expanded_sql")?.extract()?,
             passes,
         })
+    }
+}
+
+/// A compile's expansion of one file: owned, or the compile's shared texts read when linted.
+pub(crate) enum CompiledSource {
+    Owned(CompiledExpansion),
+    Shared {
+        authored_sql: Py<PyString>,
+        expanded_sql: Py<PyString>,
+        passes: Vec<Vec<ExpansionSpan>>,
+    },
+}
+
+impl CompiledSource {
+    /// The owned expansion, readable without the GIL.
+    fn owned(&self) -> Option<&CompiledExpansion> {
+        match self {
+            Self::Owned(expansion) => Some(expansion),
+            Self::Shared { .. } => None,
+        }
+    }
+
+    /// The shared texts as an expansion of their own, built only while one file is linted.
+    fn shared(&self, py: Python<'_>) -> PyResult<Option<CompiledExpansion>> {
+        match self {
+            Self::Owned(_) => Ok(None),
+            Self::Shared {
+                authored_sql,
+                expanded_sql,
+                passes,
+            } => Ok(Some(CompiledExpansion {
+                authored_sql: authored_sql.bind(py).to_str()?.to_owned(),
+                expanded_sql: expanded_sql.bind(py).to_str()?.to_owned(),
+                passes: passes.clone(),
+            })),
+        }
     }
 }
 
@@ -402,7 +438,7 @@ pub(crate) struct LintRequest<'a> {
     pub(crate) settings: &'a LintSettings,
     /// Resolved paths of models whose output columns a dynamic `*` proves.
     pub(crate) dynamic_output_paths: &'a HashSet<PathBuf>,
-    pub(crate) compiled_expansions: &'a HashMap<PathBuf, CompiledExpansion>,
+    pub(crate) compiled_expansions: &'a HashMap<PathBuf, CompiledSource>,
     /// The expansion inputs; without them bodies are not expanded or SQL-linted.
     pub(crate) context: Option<&'a SqlExpansionInputs>,
     pub(crate) skip_unexpandable: bool,
@@ -478,8 +514,11 @@ struct BodyTraits {
 struct FilePlan {
     file: usize,
     header_violations: Vec<HeaderViolation>,
-    expansion: Option<Result<(BodyTraits, Vec<PlannedBody>), HeaderFailure>>,
+    expansion: Option<PlannedBodies>,
 }
+
+/// A file's body traits and planned bodies, or why its headers could not be read.
+type PlannedBodies = Result<(BodyTraits, Vec<PlannedBody>), HeaderFailure>;
 
 /// Why a file could not be planned.
 enum PlanFailure {
@@ -551,6 +590,14 @@ pub(crate) fn lint(
             }
         };
         let file: &LintFile = &files[plan.file];
+        let (traits, bodies) = match shared_plan(py, request, file)? {
+            Some(Ok(planned)) => planned,
+            Some(Err(failure)) => {
+                scan_failure = Some(failure.into_pyerr(py));
+                break;
+            }
+            None => (traits, bodies),
+        };
         let expanded: ExpandedFile =
             match expand_bodies(py, context, file, (plan.file, traits, bodies)) {
                 Ok(expanded) => expanded,
@@ -593,6 +640,32 @@ pub(crate) fn lint(
     })
 }
 
+/// A file's bodies planned again against its shared compile expansion, read only for this file.
+fn shared_plan(
+    py: Python<'_>,
+    request: &LintRequest<'_>,
+    file: &LintFile,
+) -> PyResult<Option<PlannedBodies>> {
+    let Some(source) = request.compiled_expansions.get(&file.path) else {
+        return Ok(None);
+    };
+    let Some(compiled) = source.shared(py)? else {
+        return Ok(None);
+    };
+    let Ok(relative) = file.path.strip_prefix(request.project_dir) else {
+        return Ok(None);
+    };
+    let parts: Vec<String> = path_parts(relative);
+    let text: Vec<char> = file.contents.chars().collect();
+    let headers: Vec<HeaderSpan> = scan_headers(&text, first_header_only(&parts));
+    Ok(Some(plan_bodies(
+        request,
+        file,
+        (&text, &headers),
+        (&parts, Some(&compiled)),
+    )))
+}
+
 /// Each file's headers, header violations and bodies in path order, up to the first failure.
 fn plan_files(
     request: &LintRequest<'_>,
@@ -633,7 +706,12 @@ fn plan_file(
     } else {
         Vec::new()
     };
-    let expansion = expanding.then(|| plan_bodies(request, file, (&text, &headers), &parts));
+    let compiled: Option<&CompiledExpansion> = request
+        .compiled_expansions
+        .get(&file.path)
+        .and_then(CompiledSource::owned);
+    let expansion =
+        expanding.then(|| plan_bodies(request, file, (&text, &headers), (&parts, compiled)));
     Ok(FilePlan {
         file: index,
         header_violations,
@@ -646,13 +724,12 @@ fn plan_bodies(
     request: &LintRequest<'_>,
     file: &LintFile,
     (text, headers): (&[char], &[HeaderSpan]),
-    parts: &[String],
+    (parts, compiled): (&[String], Option<&CompiledExpansion>),
 ) -> Result<(BodyTraits, Vec<PlannedBody>), HeaderFailure> {
     let kind: Option<&str> = named_declaration_role_kind(parts);
     let in_hook_directory: bool = parts.first().is_some_and(|part| part == HOOKS_FOLDER);
     let dynamic_star: bool = !request.dynamic_output_paths.is_empty()
         && request.dynamic_output_paths.contains(&resolved(&file.path));
-    let compiled: Option<&CompiledExpansion> = request.compiled_expansions.get(&file.path);
     let external: Vec<String> = external_identifiers(text, headers, &NativeHeaderParser)?;
     let ceremonial: bool = headers
         .iter()

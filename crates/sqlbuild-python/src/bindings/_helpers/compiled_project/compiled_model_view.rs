@@ -6,14 +6,17 @@ use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple, PyTuple
 use pyo3::{FromPyObject, pyclass, pymethods};
 
 use sqlbuild_analysis::assembly::analysis_session::models::LineageRow;
-use sqlbuild_analysis::compiled_project::models::{DynamicProofFact, ModelAnalysisFact};
+use sqlbuild_analysis::compiled_project::main::model_facts::model_facts;
+use sqlbuild_analysis::compiled_project::models::{
+    CompiledModelFacts, DynamicProofFact, ModelAnalysisFact,
+};
 
 use crate::bindings::_helpers::compiled_project::compiled_model_analysis::{
     AnalysisRecord, ProofArgument, SessionArgument, analysis_record,
 };
 use crate::bindings::_helpers::compiled_project::model_input_view::{
-    InputViewClasses, ModelInputRecord, model_relation_key_row, read_input, references,
-    rejected_opt_out, schema_entry, view_classes,
+    InputViewClasses, ModelInputRecord, model_relation_key_row, read_input, read_input_with_owner,
+    references, rejected_opt_out, schema_entry, view_classes,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
@@ -29,6 +32,9 @@ const LOGICAL_DATABASE_ATTRIBUTE: &str = "logical_database";
 const MODEL_RESOURCE: &str = "model";
 const TAGS_KEY: &str = "tags";
 const NULLABLE: &str = "nullable";
+
+/// A schema's entry audits, column specs and each audited column's index and name.
+pub(crate) type AuditedSchema = (Py<PyTuple>, Py<PyTuple>, Vec<(usize, String)>);
 
 /// `(name, type, nullability)` of one inferred output column.
 pub(crate) type InferredRow = (String, Option<String>, String);
@@ -72,8 +78,6 @@ pub(crate) struct DestinationFact {
 
 /// What assembly and the semantic checks finished for one compiled model.
 pub(crate) struct CompiledRecord {
-    /// The model's name, its file stem.
-    name: String,
     /// `(resource type, name)` of each dependency.
     deps: Vec<(String, String)>,
     destination: DestinationFact,
@@ -158,7 +162,6 @@ pub(crate) fn compiled_record(
     let config: &Bound<'_, PyAny> = input.config.bind(py);
     let values: Bound<'_, PyDict> = config.getattr(VALUES_ATTRIBUTE)?.downcast_into()?;
     Ok(CompiledRecord {
-        name: name.to_owned(),
         deps,
         destination: DestinationFact {
             database: text_value(&values, DATABASE_KEY)?,
@@ -254,7 +257,7 @@ impl NativeCompiledModel {
 
     /// This view's typed analysis as the owner's model facts read it, and the model's name.
     pub(crate) fn analysis_fact(&self, py: Python<'_>) -> PyResult<(String, ModelAnalysisFact)> {
-        self.read(py, |record, py| {
+        self.read(py, |record, _| {
             let analysis: &AnalysisRecord = &compiled_of(record)?.analysis;
             let rows: &[InferredRow] = analysis.inferred.as_deref().unwrap_or_default();
             let mut inferred_columns: Vec<(String, Option<String>)> =
@@ -282,7 +285,7 @@ impl NativeCompiledModel {
                 fast_lineage_has_star: analysis.has_star,
                 unchecked_output_columns: self.overlay.poisoned.clone(),
             };
-            Ok((model_name(record, py)?, fact))
+            Ok((model_name(record), fact))
         })
     }
 
@@ -331,6 +334,51 @@ impl NativeCompiledModel {
         })
     }
 
+    /// The attached schema's declared `SchemaColumn`s, or `None` without a schema.
+    pub(crate) fn declared_columns(&self, py: Python<'_>) -> PyResult<Option<Py<PyTuple>>> {
+        self.read(py, |record, py| {
+            Ok(record
+                .schema
+                .as_ref()
+                .map(|schema| schema.columns.clone_ref(py)))
+        })
+    }
+
+    /// The attached schema's entry audits, its column specs and each audited column's index and name.
+    pub(crate) fn schema_audits_and_columns(
+        &self,
+        py: Python<'_>,
+    ) -> PyResult<Option<AuditedSchema>> {
+        read_input_with_owner(&self.owner, self.index, py, |owner, record| {
+            let (Some(schema), Some(fact)) = (&record.schema, owner.input_schema_fact(record))
+            else {
+                return Ok(None);
+            };
+            let audited: Vec<(usize, String)> = fact
+                .columns
+                .iter()
+                .enumerate()
+                .filter(|(_, column)| !column.audit_definitions.is_empty())
+                .map(|(index, column)| (index, column.name.clone()))
+                .collect();
+            Ok(Some((
+                schema.audits.clone_ref(py),
+                schema.columns.clone_ref(py),
+                audited,
+            )))
+        })
+    }
+
+    /// The model's authored file text and expanded query, from its recorded facts.
+    pub(crate) fn sql_texts(&self, py: Python<'_>) -> PyResult<(String, String)> {
+        let name: String = self.name(py)?;
+        let owner = self.owner.bind(py).borrow();
+        let facts: &CompiledModelFacts = model_facts(owner.facts(), &name).ok_or_else(|| {
+            pyo3::exceptions::PyRuntimeError::new_err("the model was not assembled")
+        })?;
+        Ok((facts.authored_sql.clone(), facts.query_sql.clone()))
+    }
+
     fn model_file_attribute(&self, py: Python<'_>, name: &str) -> PyResult<Py<PyAny>> {
         self.read(py, |record, py| {
             Ok(record.model_file.bind(py).getattr(name)?.unbind())
@@ -374,7 +422,7 @@ impl NativeCompiledModel {
                 .key
                 .get_or_try_init(py, || {
                     let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
-                    object_key(&classes.compiled, MODEL_RESOURCE, &model_name(record, py)?)
+                    object_key(&classes.compiled, MODEL_RESOURCE, &model_name(record))
                 })
                 .map(|key| key.clone_ref(py))
         })
@@ -400,11 +448,11 @@ impl NativeCompiledModel {
 
     #[getter]
     pub(crate) fn name(&self, py: Python<'_>) -> PyResult<String> {
-        self.read(py, |record, py| model_name(record, py))
+        self.read(py, |record, _| Ok(model_name(record)))
     }
 
     #[getter]
-    fn relative_path(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn relative_path(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.model_file_attribute(py, "relative_path")
     }
 
@@ -414,7 +462,7 @@ impl NativeCompiledModel {
     }
 
     #[getter]
-    fn config(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn config(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.read(py, |record, py| Ok(record.config.clone_ref(py)))
     }
 
@@ -450,21 +498,23 @@ impl NativeCompiledModel {
 
     /// The model's declared key facts, for deriving its unique keys.
     #[getter]
-    fn relation_key_row(&self, py: Python<'_>) -> PyResult<RelationKeyRow> {
-        self.read(py, model_relation_key_row)
+    pub(crate) fn relation_key_row(&self, py: Python<'_>) -> PyResult<RelationKeyRow> {
+        read_input_with_owner(&self.owner, self.index, py, |owner, record| {
+            model_relation_key_row(owner, record, py)
+        })
     }
 
     /// `(resource type, name)` of the model's key.
     #[getter]
-    fn key_row(&self, py: Python<'_>) -> PyResult<(String, String)> {
-        self.read(py, |record, py| {
-            Ok((MODEL_RESOURCE.to_owned(), model_name(record, py)?))
+    pub(crate) fn key_row(&self, py: Python<'_>) -> PyResult<(String, String)> {
+        self.read(py, |record, _| {
+            Ok((MODEL_RESOURCE.to_owned(), model_name(record)))
         })
     }
 
     /// `(resource type, name)` of each dependency.
     #[getter]
-    fn dep_rows(&self, py: Python<'_>) -> PyResult<Vec<(String, String)>> {
+    pub(crate) fn dep_rows(&self, py: Python<'_>) -> PyResult<Vec<(String, String)>> {
         self.compiled(py, |compiled, _| Ok(compiled.deps.clone()))
     }
 
@@ -505,19 +555,21 @@ impl NativeCompiledModel {
     /// Each declared column of the attached schema as `(name, type)`, or `None` without one.
     #[getter]
     pub(crate) fn schema_column_rows(&self, py: Python<'_>) -> PyResult<Option<Vec<DeclaredRow>>> {
-        self.read(py, |record, py| {
-            let Some(schema) = &record.schema else {
-                return Ok(None);
-            };
-            let mut rows: Vec<DeclaredRow> = Vec::new();
-            for column in schema.columns.bind(py).iter() {
-                rows.push((
-                    column.getattr("name")?.extract()?,
-                    column.getattr("type")?.extract()?,
-                ));
-            }
-            Ok(Some(rows))
-        })
+        let name: String = self.name(py)?;
+        let owner = self.owner.bind(py).borrow();
+        let facts: &CompiledModelFacts = model_facts(owner.facts(), &name).ok_or_else(|| {
+            pyo3::exceptions::PyRuntimeError::new_err("the model was not assembled")
+        })?;
+        let Some(schema) = &facts.schema else {
+            return Ok(None);
+        };
+        Ok(Some(
+            schema
+                .columns
+                .iter()
+                .map(|column| (column.name.clone(), column.data_type.clone()))
+                .collect(),
+        ))
     }
 
     /// Whether the attached schema declares dynamic columns.
@@ -601,7 +653,7 @@ impl NativeCompiledModel {
     }
 
     #[getter]
-    fn authored_sql(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn authored_sql(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.model_file_attribute(py, "contents")
     }
 
@@ -626,12 +678,12 @@ impl NativeCompiledModel {
     }
 
     #[getter]
-    fn enum_declarations(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+    pub(crate) fn enum_declarations(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
         self.read(py, |record, py| Ok(record.enum_declarations.clone_ref(py)))
     }
 
     #[getter]
-    fn constant_declarations(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+    pub(crate) fn constant_declarations(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
         self.read(py, |record, py| {
             Ok(record.constant_declarations.clone_ref(py))
         })
@@ -649,7 +701,7 @@ impl NativeCompiledModel {
         }
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         self.read(py, |record, py| {
-            let name: String = model_name(record, py)?;
+            let name: String = model_name(record);
             let path: Bound<'_, PyAny> = record.model_file.bind(py).getattr("relative_path")?;
             compiled_of(record)?
                 .analysis
@@ -744,7 +796,7 @@ pub(crate) fn model_graph_row(
             .str()?
             .extract()?;
         Ok((
-            (MODEL_RESOURCE.to_owned(), model_name(record, py)?),
+            (MODEL_RESOURCE.to_owned(), model_name(record)),
             compiled.deps.clone(),
             tags,
             Some(folder),
@@ -752,16 +804,8 @@ pub(crate) fn model_graph_row(
     })
 }
 
-fn model_name(record: &ModelInputRecord, py: Python<'_>) -> PyResult<String> {
-    if let Some(compiled) = &record.compiled {
-        return Ok(compiled.name.clone());
-    }
-    record
-        .model_file
-        .bind(py)
-        .getattr("file_path")?
-        .getattr("stem")?
-        .extract()
+fn model_name(record: &ModelInputRecord) -> String {
+    record.name.clone()
 }
 
 /// The `CompiledRelationLocation` of a destination.

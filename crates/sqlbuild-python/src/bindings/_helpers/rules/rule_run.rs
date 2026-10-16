@@ -14,6 +14,7 @@ use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::rules::fact_replay::project_models;
 use crate::bindings::_helpers::rules::results::rule_finding;
 use crate::bindings::_helpers::rules::rows::finalize_rule_findings_rows;
 
@@ -80,12 +81,8 @@ fn finish_rule_run<'py>(
         .map(|finding| finding.path.clone())
         .collect();
     let mut unevaluated_models: i64 = 0;
-    for model in plan.getattr("project")?.getattr("models")?.try_iter()? {
-        let path: String = model?
-            .getattr("relative_path")?
-            .call_method0("as_posix")?
-            .extract()?;
-        unevaluated_models += i64::from(unevaluated.contains(&path));
+    for model in project_models(&plan.getattr("project")?)? {
+        unevaluated_models += i64::from(unevaluated.contains(&model.posix));
     }
     let findings: Vec<Bound<'py, PyAny>> = grouped
         .into_iter()

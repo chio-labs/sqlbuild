@@ -1,24 +1,28 @@
 //! One compile's native model analysis session, with Python's catalog and metric bookkeeping.
 
+use std::path::PathBuf;
+
 use pyo3::IntoPyObjectExt;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyList, PyString, PyTuple};
-use pyo3::{pyfunction, wrap_pyfunction};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::types::{IntoPyDict, PyDict, PyDictMethods, PyFrozenSet, PyList, PyString, PyTuple};
+use sqlbuild_analysis::assembly::analysis_session::types::Shapes;
 
 use crate::bindings::_helpers::analysis_session::profile_inputs::{
     case_sensitive_shapes, nullability_rules, profile_dialect, return_types, shape_rows,
 };
+use crate::bindings::_helpers::analysis_session::session::{
+    CacheStatsRow, NativeModelAnalysisSession, RequestRow, start_model_analysis_session,
+};
 use crate::bindings::_helpers::analysis_session::stage_functions::family_rows;
 use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_sql;
-use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::cache::native_store::current_code_identity;
+use crate::bindings::_helpers::cache::native_store::{content_digest, current_code_identity};
 use crate::bindings::_helpers::compile_driver::analysis_cache::record_analysis_cache_metrics;
 use crate::bindings::_helpers::compiled_project::model_input_view::{
-    AttachedSchema, attached_schema,
+    AttachedSchema, attached_schema, input_model_name,
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::semantic_shapes::shapes::{VALID_FROM_DEFAULT, VALID_TO_DEFAULT};
 
@@ -29,186 +33,165 @@ const STORE_FAILURE_MESSAGE: &str = "native model analysis cache not read or sav
 const STORE_FILE_NAME: &str = "model-analyses.bin";
 const STORE_VERSION: &str = "native-model-analysis-store-v1";
 
+/// What one compile's model analysis reads: the analysed models and the relation facts.
+pub(crate) struct ModelAnalysisRequest<'py> {
+    pub(crate) model_inputs: Vec<Bound<'py, PyAny>>,
+    pub(crate) profile: Bound<'py, PyAny>,
+    pub(crate) column_types: Bound<'py, PyAny>,
+    pub(crate) nullability: Bound<'py, PyAny>,
+    pub(crate) complete_schemas: Bound<'py, PyAny>,
+    pub(crate) dynamic_families: Bound<'py, PyAny>,
+    pub(crate) rich_type_inference: bool,
+    /// The `AnalysisCacheContext`, or `None` when the analysis store is bypassed.
+    pub(crate) cache: Bound<'py, PyAny>,
+}
+
+/// Each analysed model's position in the finished session, those that succeeded, and the session.
+pub(crate) struct ModelAnalyses<'py> {
+    pub(crate) positions: Bound<'py, PyDict>,
+    pub(crate) succeeded: Bound<'py, PyFrozenSet>,
+    /// The finished session, or `None` when no model was analysed.
+    pub(crate) session: Option<Bound<'py, NativeModelAnalysisSession>>,
+}
+
 /// Each model's analysis by name and the finished session; a native internal failure raises.
-#[pyfunction]
-#[pyo3(signature = (**request))]
-fn analyze_native_model_sql<'py>(
-    request: Option<&Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let request = Request::new("analyze_native_model_sql", request)?;
-    let py: Python<'py> = request.py();
-    let request: Bound<'py, PyAny> = request.get("request")?;
-    let analyses_class: Bound<'py, PyAny> = registry::class(py, RecordId::NativeModelAnalyses)?;
-    let model_inputs: Bound<'py, PyAny> = request.getattr("model_inputs")?;
-    if !model_inputs.is_truthy()? {
-        let arguments: Bound<'py, PyDict> = PyDict::new(py);
-        arguments.set_item("positions", PyDict::new(py))?;
-        arguments.set_item("succeeded", PyFrozenSet::empty(py)?)?;
-        arguments.set_item("session", py.None())?;
-        return analyses_class.call((), Some(&arguments));
+pub(crate) fn analyze_models<'py>(
+    request: &ModelAnalysisRequest<'py>,
+) -> PyResult<ModelAnalyses<'py>> {
+    let py: Python<'py> = request.profile.py();
+    if request.model_inputs.is_empty() {
+        return Ok(ModelAnalyses {
+            positions: PyDict::new(py),
+            succeeded: PyFrozenSet::empty(py)?,
+            session: None,
+        });
     }
-    let profile: Bound<'py, PyAny> = request.getattr("inference_profile")?;
-    let catalog: Bound<'py, PyAny> = profile.getattr("binding_catalog")?;
-    let python: Vec<Bound<'py, PyAny>> = model_inputs.try_iter()?.collect::<PyResult<_>>()?;
-    let (rules, adapter_rules) = nullability_rules(&profile)?;
-    let session_request: Bound<'py, PyAny> = session_request(&request, &python, &catalog, rules)?;
-    let (cache, adapter): (Bound<'py, PyAny>, Bound<'py, PyAny>) = match adapter_rules {
-        Some((adapter, nullability)) => (
-            py.None().into_bound(py),
-            PyTuple::new(
-                py,
-                [
-                    adapter.into_any().into_bound(py),
-                    nullability.into_bound(py),
-                ],
-            )?
-            .into_any(),
-        ),
-        None => (analysis_store(&request)?, py.None().into_bound(py)),
+    let catalog: Bound<'py, PyAny> = request.profile.getattr("binding_catalog")?;
+    let (rules, adapter_rules) = nullability_rules(&request.profile)?;
+    let session_request: RequestRow = session_request(request, &catalog, rules)?.extract()?;
+    let (cache, adapter) = match adapter_rules {
+        Some((adapter, nullability)) => (None, Some((adapter, nullability))),
+        None => (analysis_store(request)?, None),
     };
-    let session: Bound<'py, PyAny> = registry::native(py, NativeAttr::StartModelAnalysisSession)?
-        .call1((
-        catalog.getattr("native")?,
-        session_request,
-        cache,
-        adapter,
-    ))?;
-    run_session(&request, (&python, &catalog), &session, &analyses_class)
+    let session: Bound<'py, NativeModelAnalysisSession> = Bound::new(
+        py,
+        start_model_analysis_session(
+            catalog.getattr("native")?.extract()?,
+            session_request,
+            cache,
+            adapter,
+        )?,
+    )?;
+    run_session(request, &catalog, &session)
 }
 
 /// The session request row, in the order the native session reads it.
 fn session_request<'py>(
-    request: &Bound<'py, PyAny>,
-    python: &[Bound<'py, PyAny>],
+    request: &ModelAnalysisRequest<'py>,
     catalog: &Bound<'py, PyAny>,
     rules: Vec<(String, String)>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = request.py();
-    let profile: Bound<'py, PyAny> = request.getattr("inference_profile")?;
+    let py: Python<'py> = catalog.py();
+    let profile: &Bound<'py, PyAny> = &request.profile;
     let mut families: Vec<(String, Vec<_>)> = Vec::new();
-    for item in request
-        .getattr("dynamic_families_by_table")?
-        .call_method0("items")?
-        .try_iter()?
-    {
+    for item in request.dynamic_families.call_method0("items")?.try_iter()? {
         let (name, declared): (String, Bound<'py, PyAny>) = item?.extract()?;
         families.push((name, family_rows(&declared)?));
     }
     let items: Vec<Bound<'py, PyAny>> = vec![
-        profile_dialect(&profile)?.into_bound_py_any(py)?,
-        case_sensitive_shapes(&profile, &profile.getattr("sql_analysis_dialect")?)?
+        profile_dialect(profile)?.into_bound_py_any(py)?,
+        case_sensitive_shapes(profile, &profile.getattr("sql_analysis_dialect")?)?
             .into_bound_py_any(py)?,
-        return_types(&profile)?.into_bound_py_any(py)?,
+        return_types(profile)?.into_bound_py_any(py)?,
         rules.into_bound_py_any(py)?,
-        request.getattr("rich_type_inference")?,
-        shape_rows(&request.getattr("column_types_by_table")?)?.into_bound_py_any(py)?,
-        shape_rows(&request.getattr("column_nullability_by_table")?)?.into_bound_py_any(py)?,
-        shape_rows(&request.getattr("complete_binding_schemas")?)?.into_bound_py_any(py)?,
+        request.rich_type_inference.into_bound_py_any(py)?,
+        shape_rows(&request.column_types)?.into_bound_py_any(py)?,
+        shape_rows(&request.nullability)?.into_bound_py_any(py)?,
+        shape_rows(&request.complete_schemas)?.into_bound_py_any(py)?,
         shape_rows(&catalog.getattr("schemas")?)?.into_bound_py_any(py)?,
         families.into_bound_py_any(py)?,
-        model_rows(py, python)?,
+        model_rows(py, &request.model_inputs)?,
     ];
     Ok(PyTuple::new(py, items)?.into_any())
 }
 
 /// The analysis store's path and environment, or None where Python bypasses its cache.
-fn analysis_store<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = request.py();
-    let context: Bound<'py, PyAny> = request.getattr("analysis_cache")?;
+fn analysis_store(request: &ModelAnalysisRequest<'_>) -> PyResult<Option<(PathBuf, String)>> {
+    let context: &Bound<'_, PyAny> = &request.cache;
     if context.is_none() {
-        return Ok(py.None().into_bound(py));
+        return Ok(None);
     }
-    let path: Bound<'py, PyAny> = context
-        .getattr("root")?
-        .div(STORE_FILE_NAME)?
-        .str()?
-        .into_any();
-    let identity: Bound<'py, PyAny> = PyString::new(py, &current_code_identity(py)?).into_any();
-    let parts: Bound<'py, PyList> = PyList::new(
-        py,
-        [
-            PyString::new(py, STORE_VERSION).into_any(),
-            identity,
-            context.getattr("shared_fingerprint")?,
-            context.getattr("signature_namespace")?,
-        ],
-    )?;
-    let environment: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::ContentDigest)?.call1((parts,))?;
-    Ok(PyTuple::new(py, [path, environment])?.into_any())
+    let path: PathBuf = context.getattr("root")?.div(STORE_FILE_NAME)?.extract()?;
+    let environment: String = content_digest(vec![
+        STORE_VERSION.to_owned(),
+        current_code_identity(context.py())?,
+        context.getattr("shared_fingerprint")?.extract()?,
+        context.getattr("signature_namespace")?.extract()?,
+    ]);
+    Ok(Some((path, environment)))
 }
 
 /// Run and finish the session, leaving Python's catalog and metrics as its analysis did.
 fn run_session<'py>(
-    request: &Bound<'py, PyAny>,
-    (python, catalog): (&[Bound<'py, PyAny>], &Bound<'py, PyAny>),
-    session: &Bound<'py, PyAny>,
-    analyses_class: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = request.py();
-    let types: Bound<'py, PyDict> = copied(&request.getattr("column_types_by_table")?)?;
-    let nullability: Bound<'py, PyDict> = copied(&request.getattr("column_nullability_by_table")?)?;
-    let (publications, failures): (Bound<'py, PyAny>, Bound<'py, PyAny>) =
-        session.call_method0("run")?.extract()?;
-    for failure in failures.try_iter()? {
-        log_debug(py, ANALYSIS_FAILURE_MESSAGE, &failure?)?;
+    request: &ModelAnalysisRequest<'py>,
+    catalog: &Bound<'py, PyAny>,
+    session: &Bound<'py, NativeModelAnalysisSession>,
+) -> PyResult<ModelAnalyses<'py>> {
+    let py: Python<'py> = catalog.py();
+    let python: &[Bound<'py, PyAny>] = &request.model_inputs;
+    let types: Bound<'py, PyDict> = copied(&request.column_types)?;
+    let nullability: Bound<'py, PyDict> = copied(&request.nullability)?;
+    let (publications, failures) = session.borrow_mut().run(py)?;
+    for failure in failures {
+        log_debug(
+            py,
+            ANALYSIS_FAILURE_MESSAGE,
+            PyString::new(py, &failure).as_any(),
+        )?;
     }
     let unknown: Bound<'py, PyAny> =
         registry::class(py, RecordId::InferredNullability)?.getattr("UNKNOWN")?;
-    for item in publications.try_iter()? {
-        let (name, shape): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
-        let published: Bound<'py, PyAny> = dict_of(&shape)?;
+    for (name, shape) in publications {
+        let published: Bound<'py, PyDict> = shape.into_py_dict(py)?;
         types.call_method1("setdefault", (&name, &published))?;
-        let defaults: Bound<'py, PyAny> = PyDict::new(py)
-            .into_any()
-            .getattr("fromkeys")?
-            .call1((&published, &unknown))?;
+        let defaults: Bound<'py, PyDict> = PyDict::new(py);
+        for column in published.keys() {
+            defaults.set_item(column, &unknown)?;
+        }
         nullability.call_method1("setdefault", (&name, defaults))?;
     }
-    let (additions, analysis_names, succeeded): (
-        Bound<'py, PyAny>,
-        Bound<'py, PyAny>,
-        Bound<'py, PyAny>,
-    ) = session.call_method0("finish")?.extract()?;
-    record_catalog_changes(catalog, &additions, &analysis_names, (&types, &nullability))?;
-    record_cache(python, session)?;
+    let (additions, analysis_names, succeeded) = session.borrow_mut().finish(py)?;
+    record_catalog_changes(catalog, additions, &analysis_names, (&types, &nullability))?;
+    record_cache(py, python, session.borrow().cache_stats())?;
     let positions: Bound<'py, PyDict> = PyDict::new(py);
-    let mut names: Vec<Bound<'py, PyAny>> = Vec::new();
-    for model_input in python {
-        let name: Bound<'py, PyAny> = model_input
-            .getattr("model_file")?
-            .getattr("file_path")?
-            .getattr("stem")?;
-        positions.set_item(&name, names.len())?;
-        names.push(name);
+    let mut succeeded_names: Vec<Bound<'py, PyAny>> = Vec::new();
+    for (index, (model_input, success)) in python.iter().zip(&succeeded).enumerate() {
+        let name: Bound<'py, PyAny> = PyString::new(py, &input_model_name(model_input)?).into_any();
+        positions.set_item(&name, index)?;
+        if *success {
+            succeeded_names.push(name);
+        }
     }
-    let succeeded: Vec<bool> = succeeded.extract()?;
-    let succeeded_names: Vec<&Bound<'py, PyAny>> = names
-        .iter()
-        .zip(&succeeded)
-        .filter_map(|(name, success)| success.then_some(name))
-        .collect();
-    let arguments: Bound<'py, PyDict> = PyDict::new(py);
-    arguments.set_item("positions", positions)?;
-    arguments.set_item("succeeded", PyFrozenSet::new(py, succeeded_names)?)?;
-    arguments.set_item("session", session)?;
-    analyses_class.call((), Some(&arguments))
+    Ok(ModelAnalyses {
+        positions,
+        succeeded: PyFrozenSet::new(py, succeeded_names)?,
+        session: Some(session.clone()),
+    })
 }
 
 /// Leave Python's binding catalog as its own analysis would have.
 fn record_catalog_changes<'py>(
     catalog: &Bound<'py, PyAny>,
-    schema_additions: &Bound<'py, PyAny>,
-    analysis_names: &Bound<'py, PyAny>,
+    schema_additions: Shapes,
+    analysis_names: &[String],
     (types, nullability): (&Bound<'py, PyDict>, &Bound<'py, PyDict>),
 ) -> PyResult<()> {
     let py: Python<'py> = catalog.py();
     let schemas: Bound<'py, PyAny> = catalog.getattr("schemas")?;
     let additions: Bound<'py, PyDict> = PyDict::new(py);
-    for item in schema_additions.try_iter()? {
-        let (name, shape): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
+    for (name, shape) in schema_additions {
         if !schemas.contains(&name)? {
-            additions.set_item(name, dict_of(&shape)?)?;
+            additions.set_item(name, shape.into_py_dict(py)?)?;
         }
     }
     schemas.call_method1("update", (&additions,))?;
@@ -219,13 +202,12 @@ fn record_catalog_changes<'py>(
     }
     let selected_types: Bound<'py, PyDict> = PyDict::new(py);
     let selected_nullability: Bound<'py, PyDict> = PyDict::new(py);
-    let names: Vec<Bound<'py, PyAny>> = analysis_names.try_iter()?.collect::<PyResult<_>>()?;
-    for name in &names {
+    for name in analysis_names {
         if let Some(shape) = types.get_item(name)? {
             selected_types.set_item(name, shape)?;
         }
     }
-    for name in &names {
+    for name in analysis_names {
         if let Some(shape) = nullability.get_item(name)? {
             selected_nullability.set_item(name, shape)?;
         }
@@ -239,27 +221,29 @@ fn record_catalog_changes<'py>(
     Ok(())
 }
 
-fn record_cache(python: &[Bound<'_, PyAny>], session: &Bound<'_, PyAny>) -> PyResult<()> {
-    let py: Python<'_> = session.py();
-    let stats: Bound<'_, PyAny> = session.getattr("cache_stats")?;
-    if stats.is_none() {
-        return record_metrics(py, (0, 0, python.len()));
-    }
-    let (hits, misses, _, failure): (usize, usize, usize, Bound<'_, PyAny>) = stats.extract()?;
-    if !failure.is_none() {
-        log_debug(py, STORE_FAILURE_MESSAGE, &failure)?;
+fn record_cache(
+    py: Python<'_>,
+    python: &[Bound<'_, PyAny>],
+    stats: Option<CacheStatsRow>,
+) -> PyResult<()> {
+    let Some((hits, misses, _, failure)) = stats else {
+        return record_metrics((0, 0, python.len()));
+    };
+    if let Some(failure) = failure {
+        log_debug(
+            py,
+            STORE_FAILURE_MESSAGE,
+            PyString::new(py, &failure).as_any(),
+        )?;
     }
     if hits + misses == 0 {
-        return record_metrics(py, (0, 0, python.len()));
+        return record_metrics((0, 0, python.len()));
     }
-    record_metrics(py, (hits, misses, 0))
+    record_metrics((hits, misses, 0))
 }
 
 /// Record the analysis cache entries a native session read, missed and bypassed.
-fn record_metrics(
-    _py: Python<'_>,
-    (hits, misses, bypasses): (usize, usize, usize),
-) -> PyResult<()> {
+fn record_metrics((hits, misses, bypasses): (usize, usize, usize)) -> PyResult<()> {
     record_analysis_cache_metrics((0, hits, misses, bypasses));
     Ok(())
 }
@@ -320,10 +304,7 @@ fn model_rows<'py>(
             None => Vec::new(),
         };
         let row: Vec<Bound<'py, PyAny>> = vec![
-            model_input
-                .getattr("model_file")?
-                .getattr("file_path")?
-                .getattr("stem")?,
+            input_model_name(model_input)?.into_bound_py_any(py)?,
             query_sql,
             placeholders.into_bound_py_any(py)?,
             references.into_bound_py_any(py)?,
@@ -363,18 +344,4 @@ fn copied<'py>(mapping: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let copy: Bound<'py, PyDict> = PyDict::new(mapping.py());
     copy.update(mapping.downcast()?)?;
     Ok(copy)
-}
-
-/// `dict(pairs)`.
-fn dict_of<'py>(pairs: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let dict: Bound<'py, PyDict> = PyDict::new(pairs.py());
-    for item in pairs.try_iter()? {
-        let (key, value): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
-        dict.set_item(key, value)?;
-    }
-    Ok(dict.into_any())
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(analyze_native_model_sql, module)?)
 }

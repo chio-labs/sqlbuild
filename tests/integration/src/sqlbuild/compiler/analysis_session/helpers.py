@@ -8,6 +8,7 @@ from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from itertools import chain
+from operator import attrgetter
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -15,7 +16,6 @@ import pytest
 
 import sqlbuild._native as native_module
 from sqlbuild._native import (
-    AnalysisCacheContext,
     CollectionRendering,
     ColumnLineageMode,
     CompactLineageFacts,
@@ -24,12 +24,8 @@ from sqlbuild._native import (
     InferredColumn,
     InferredNullability,
     ModelSqlAnalysis,
-    NativeModelAnalyses,
-    NativeModelAnalysisRequest,
     NativePivotTables,
     SchemaDynamicColumnFamily,
-    analyze_native_model_sql,
-    build_analysis_cache_context,
     build_compile_inputs,
     cursor_intrinsics_analysis_sql,
     discover_project_inputs,
@@ -487,20 +483,6 @@ def shared_analysis_files(
     }
 
 
-def started_sessions(*, monkeypatch: pytest.MonkeyPatch) -> list[Any]:
-    """Record every native session started; return the list they are appended to."""
-
-    started: list[Any] = []
-    original: Callable[..., Any] = native_module.start_model_analysis_session
-
-    def start(catalog: object, request: tuple[object, ...], *options: Any) -> Any:
-        started.append(original(catalog, request, *options))
-        return started[-1]
-
-    monkeypatch.setattr(native_module, "start_model_analysis_session", start)
-    return started
-
-
 def compile_inputs(*, project_dir: Path, files: dict[str, str]) -> CompileInputsView:
     """Write a project and attach its compile inputs with the DuckDB compile context."""
 
@@ -549,7 +531,7 @@ def compiled_project_view(
 
 @dataclass
 class NativeAnalysisRuns:
-    """Each native analysis seam call's uncached, cold-cached and warm-cached views."""
+    """Each assembly's uncached, cold-cached and warm-cached views, and its uncached sessions."""
 
     names: list[object] = field(default_factory=list)
     uncached: list[object] = field(default_factory=list)
@@ -563,6 +545,7 @@ class NativeAnalysisRuns:
     native_enrichments: int = 0
     native_column_values: int = 0
     golden: list[GoldenEntry] = field(default_factory=list)
+    sessions: list[Any] = field(default_factory=list)
 
 
 def analyse_natively(
@@ -574,50 +557,19 @@ def analyse_natively(
     cache_root: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Assemble `inputs`, analysing each model batch natively uncached, cold-cached and warm.
+    """Assemble `inputs` with a cold, then a warm analysis cache, then uncached, and compare them.
 
     Every analysis, catalog change, session and standalone dynamic pivot proof, and expression
     shape must not depend on the analysis store, on the session, or on Python's shape inference.
-    `runs.golden` gathers the entries the Python oracle recorded for the same seam calls.
+    `runs.golden` gathers the entries the uncached assembly records, in the order it records them.
     """
 
-    original_analysis: Callable[..., NativeModelAnalyses] = analyze_native_model_sql
-
-    def analysed_three_ways(request: NativeModelAnalysisRequest) -> NativeModelAnalyses:
-        profile: ExpressionInferenceProfile = request.inference_profile
-        cache: AnalysisCacheContext | None = build_analysis_cache_context(
-            root=cache_root, inference_profile=profile, allow_compact_analysis=True
-        )
-        cached_views: list[object] = []
-        for _ in range(2):
-            catalog: Any = cast(Any, profile.binding_catalog).with_relations({})
-            cached: NativeModelAnalyses = analyze_native_model_sql(
-                request=replace(
-                    request,
-                    analysis_cache=cache,
-                    inference_profile=replace(profile, binding_catalog=catalog),
-                )
-            )
-            cached_views.append(
-                (_analysis_views(_projected(cached, request, runs)), _catalog_view(catalog))
-            )
-        native: NativeModelAnalyses = original_analysis(
-            request=replace(request, analysis_cache=None)
-        )
-        session: Any = native.session
-        analyses: dict[str, ModelSqlAnalysis] = _projected(native, request, runs)
-        uncached_view: object = (_analysis_views(analyses), _catalog_view(profile.binding_catalog))
-        columns: list[InferredColumn] = list(
-            chain.from_iterable(map(_native_columns, analyses.values()))
-        )
-        runs.native_column_values += len(set(columns))
-        runs.analysed_models += len(analyses)
-        runs.golden.append(golden_entry("models", _analysis_views(analyses)))
-        runs.golden.append(golden_entry("catalog", _catalog_view(profile.binding_catalog)))
-        for index, view in enumerate(cached_views):
-            _append(runs, f"model analyses, cached run {index}", uncached_view, view)
-        _compare_proofs(request=request, analyses=analyses, session=session, runs=runs)
-        return native
+    views: list[object] = []
+    sinks: list[NativeAnalysisRuns] = [runs]
+    profiles: list[ExpressionInferenceProfile] = []
+    proved: Callable[..., tuple[ProofRow | None, ...]] = (
+        native_module.prove_native_dynamic_contracts
+    )
 
     def recorded_shapes(
         *, expressions: tuple[str, ...], profile: ExpressionInferenceProfile
@@ -626,14 +578,27 @@ def analyse_natively(
         native: tuple[dict[str, str] | None, ...] = infer_native_expression_source_shapes(
             expressions=expressions, profile=profile
         )
-        runs.expression_shapes += sum(shape is not None for shape in native)
-        runs.golden.append(golden_entry("shapes", (native, catalog.expression_shapes)))
+        profiles.append(profile)
+        sinks[-1].expression_shapes += sum(shape is not None for shape in native)
+        sinks[-1].golden.append(golden_entry("shapes", (native, catalog.expression_shapes)))
         return native
+
+    def recorded_analyses(**keywords: Any) -> tuple[ProofRow | None, ...]:
+        for profile in profiles[-1:]:
+            _record_analyses(
+                inputs=inputs,
+                catalog=profile.binding_catalog,
+                proof_inputs=(keywords["tables"], keywords["session"]),
+                views=views,
+                runs=sinks[-1],
+            )
+        profiles.clear()
+        return proved(**keywords)
 
     completed: Callable[..., CompiledProjectView] = native_module.complete_semantic_project
 
     def recorded_proofs(*, project: CompiledProjectView, **keywords: Any) -> CompiledProjectView:
-        runs.golden.extend(
+        sinks[-1].golden.extend(
             golden_entry("proof", model.dynamic_column_contract) for model in project.models
         )
         with monkeypatch.context() as completing:
@@ -646,27 +611,57 @@ def analyse_natively(
 
     with monkeypatch.context() as patch:
         patch.setattr(native_module, "complete_semantic_project", recorded_proofs)
-        patch.setattr(native_module, "analyze_native_model_sql", analysed_three_ways)
         patch.setattr(native_module, "infer_native_expression_source_shapes", recorded_shapes)
-        with suppress(CompileInputError):
-            _ = native_module.assemble_project(
-                inputs=inputs,
-                inference_profile=replace(inference_profile),
-                column_lineage_mode=lineage_mode,
-            )
+        patch.setattr(native_module, "prove_native_dynamic_contracts", recorded_analyses)
+        for cache_dir, sink in (
+            (cache_root, NativeAnalysisRuns()),
+            (cache_root, NativeAnalysisRuns()),
+            (None, runs),
+        ):
+            sinks.append(sink)
+            with suppress(CompileInputError):
+                _ = native_module.assemble_project(
+                    inputs=inputs,
+                    inference_profile=replace(inference_profile),
+                    column_lineage_mode=lineage_mode,
+                    analysis_cache_dir=cache_dir,
+                )
+    for index, view in enumerate(views[:-1]):
+        _append(runs, f"model analyses, cached run {index}", views[-1], view)
 
 
-def duplicate_analysed_model_names(*, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Name every analysed model after the first, an invariant discovery guarantees (D007)."""
+def _record_analyses(
+    *,
+    inputs: CompileInputsView,
+    catalog: object,
+    proof_inputs: tuple[NativePivotTables, Any],
+    views: list[object],
+    runs: NativeAnalysisRuns,
+) -> None:
+    """Record one assembly's analyses, catalog and session, and compare its pivot proofs."""
 
-    original: Callable[..., Any] = native_module.start_model_analysis_session
-
-    def renamed(catalog: object, request: tuple[object, ...], *options: Any) -> Any:
-        rows: list[tuple[object, ...]] = cast(list[tuple[object, ...]], request[-1])
-        named: list[tuple[object, ...]] = [(rows[0][0], *row[1:]) for row in rows]
-        return original(catalog, (*request[:-1], named), *options)
-
-    monkeypatch.setattr(native_module, "start_model_analysis_session", renamed)
+    tables, session = proof_inputs
+    analysed: list[ModelInput] = list(
+        filter(attrgetter("sql_validation_enabled"), inputs.model_inputs)
+    )
+    sources: list[str] = [session.outcome_rows(position)[0][2] for position in range(len(analysed))]
+    runs.native_enrichments += sum(source != LINEAGE_NATIVE for source in sources)
+    analyses: dict[str, ModelSqlAnalysis] = {
+        model_input.model_file.file_path.stem: session_outcome_analysis(
+            session=session, position=position, placeholders=model_placeholders(model_input)
+        )
+        for position, model_input in enumerate(analysed)
+    }
+    views.append((_analysis_views(analyses), _catalog_view(catalog)))
+    columns: list[InferredColumn] = list(
+        chain.from_iterable(map(_native_columns, analyses.values()))
+    )
+    runs.native_column_values += len(set(columns))
+    runs.analysed_models += len(analyses)
+    runs.golden.append(golden_entry("models", _analysis_views(analyses)))
+    runs.golden.append(golden_entry("catalog", _catalog_view(catalog)))
+    _compare_proofs(inputs=inputs, tables=tables, analyses=analyses, session=session, runs=runs)
+    runs.sessions.append(session)
 
 
 def custom_nullability_rule(arguments: tuple[InferredNullability, ...]) -> InferredNullability:
@@ -675,57 +670,25 @@ def custom_nullability_rule(arguments: tuple[InferredNullability, ...]) -> Infer
     return InferredNullability.NULLABLE
 
 
-def analysis_request(
-    *,
-    inputs: CompileInputsView,
-    monkeypatch: pytest.MonkeyPatch,
-    inference_profile: ExpressionInferenceProfile = _DUCKDB_PROFILE,
-) -> NativeModelAnalysisRequest:
-    """The native request the model analysis seam builds while assembling `inputs`."""
-
-    requests: list[NativeModelAnalysisRequest] = []
-
-    def captured(request: NativeModelAnalysisRequest) -> NativeModelAnalyses:
-        requests.append(request)
-        return NativeModelAnalyses(positions={}, succeeded=frozenset(), session=None)
-
-    with (
-        monkeypatch.context() as patch,
-        suppress(CompileInputError, native_module.NativeCompilerError),
-    ):
-        patch.setattr(native_module, "analyze_native_model_sql", captured)
-        _ = native_module.assemble_project(
-            inputs=inputs,
-            inference_profile=inference_profile,
-        )
-    return requests[0]
-
-
 def _native_columns(analysis: ModelSqlAnalysis) -> tuple[InferredColumn, ...]:
     return analysis.polyglot_analysis.columns or ()
 
 
 def _compare_proofs(
     *,
-    request: NativeModelAnalysisRequest,
+    inputs: CompileInputsView,
+    tables: NativePivotTables,
     analyses: dict[str, ModelSqlAnalysis],
     session: Any,
     runs: NativeAnalysisRuns,
 ) -> None:
     """Each analysed pivot model's proof, proven again in the session and standalone."""
 
-    tables: NativePivotTables = NativePivotTables(
-        dialect=request.inference_profile.sql_analysis_dialect,
-        column_types_by_table=request.column_types_by_table,
-        authoritative_column_types_by_table=request.complete_binding_schemas,
-        column_nullability_by_table=request.column_nullability_by_table,
-        dynamic_families_by_table=request.dynamic_families_by_table,
-    )
     proved: list[bool] = [
         bool(_dynamic_families(model_input)) and model_input.model_file.file_path.stem in analyses
-        for model_input in request.model_inputs
+        for model_input in inputs.model_inputs
     ]
-    pivot_inputs: list[ModelInput] = list(itertools.compress(request.model_inputs, proved))
+    pivot_inputs: list[ModelInput] = list(itertools.compress(inputs.model_inputs, proved))
     for model_input in pivot_inputs:
         families: tuple[SchemaDynamicColumnFamily, ...] = _dynamic_families(model_input)
         analysis: ModelSqlAnalysis = analyses[model_input.model_file.file_path.stem]
@@ -760,28 +723,6 @@ def _append(runs: NativeAnalysisRuns, name: str, uncached: object, cached: objec
     runs.names.append(name)
     runs.uncached.append(uncached)
     runs.cached.append(cached)
-
-
-def _projected(
-    native: NativeModelAnalyses, request: NativeModelAnalysisRequest, runs: NativeAnalysisRuns
-) -> dict[str, ModelSqlAnalysis]:
-    """The test oracle's projection of each finished outcome as the analysis it replaced."""
-
-    placeholders: dict[str, dict[str, str] | None] = {
-        model_input.model_file.file_path.stem: model_placeholders(model_input)
-        for model_input in request.model_inputs
-    }
-    sources: list[str] = [
-        cast(Any, native.session).outcome_rows(position)[0][2]
-        for position in native.positions.values()
-    ]
-    runs.native_enrichments += sum(source != LINEAGE_NATIVE for source in sources)
-    return {
-        name: session_outcome_analysis(
-            session=native.session, position=position, placeholders=placeholders.get(name)
-        )
-        for name, position in native.positions.items()
-    }
 
 
 def _analysis_views(analyses: dict[str, ModelSqlAnalysis]) -> object:
@@ -821,17 +762,13 @@ class RecordingNullabilityRule:
         return self._outcomes[-1]()
 
 
-def adapter_rule_request(
-    *,
-    test_case: AdapterRuleCallbackTestCase,
-    rule: RecordingNullabilityRule,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> NativeModelAnalysisRequest:
-    """A generated project plus the adapter-rule models, analysed with `rule` for UPPER and IFF."""
+def adapter_rule_project(
+    *, test_case: AdapterRuleCallbackTestCase, rule: RecordingNullabilityRule, tmp_path: Path
+) -> tuple[CompileInputsView, ExpressionInferenceProfile]:
+    """A generated project with the adapter-rule models, and a profile calling `rule`."""
 
-    request: NativeModelAnalysisRequest = analysis_request(
-        inputs=compile_inputs(
+    return (
+        compile_inputs(
             project_dir=tmp_path / "project",
             files={
                 **generated_analysis_files(
@@ -840,14 +777,11 @@ def adapter_rule_request(
                 **ADAPTER_RULE_MODELS,
             },
         ),
-        monkeypatch=monkeypatch,
-        inference_profile=ExpressionInferenceProfile(
+        ExpressionInferenceProfile(
             sql_analysis_dialect="duckdb",
             function_nullability_rules={"UPPER": rule, "IFF": rule},
         ),
     )
-    rule.calls.clear()
-    return request
 
 
 def _nullable() -> InferredNullability:

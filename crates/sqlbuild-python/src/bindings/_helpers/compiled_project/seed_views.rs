@@ -4,7 +4,7 @@ use pyo3::exceptions::{PyIndexError, PyRuntimeError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::sync::PyOnceLock;
 use pyo3::types::PyTuple;
-use pyo3::{pyclass, pymethods};
+use pyo3::{IntoPyObjectExt, pyclass, pymethods};
 use sqlbuild_attachments::seeds::main::pair_seed_declarations::pair_seed_declarations;
 
 use crate::bindings::_helpers::compiled_project::compiled_model_view::{
@@ -281,5 +281,23 @@ impl NativeCompiledSeed {
     #[getter(external)]
     fn is_external(&self) -> bool {
         false
+    }
+}
+
+impl NativeCompiledSeed {
+    /// The `CompiledSeed` field values, in field order, without building the record.
+    pub(crate) fn record_values<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+        Ok(vec![
+            self.key(py)?.into_bound(py),
+            self.deps(py).into_any(),
+            self.name(py)?.into_bound_py_any(py)?,
+            self.seed_file(py)?.into_bound(py),
+            self.schema_entry(py)?.into_bound(py),
+            self.schema_file(py)?.into_bound(py),
+            self.destination(py)?.into_bound(py),
+            pyo3::types::PyBool::new(py, self.is_external())
+                .to_owned()
+                .into_any(),
+        ])
     }
 }

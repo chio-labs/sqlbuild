@@ -1882,7 +1882,6 @@ class NativeProjectView:
 
 class NativeCompiledProject:
     def __init__(self) -> None: ...
-    def record_model(self, model: tuple[object, ...]) -> None: ...
     def record_model_analysis(
         self,
         name: str,
@@ -5365,12 +5364,6 @@ def locate_model_binding_diagnostics(
 class NativeModelAnalysisSession:
     @property
     def fact_models(self) -> list[str]: ...
-    def run(
-        self,
-    ) -> tuple[list[tuple[str, list[tuple[str, str]]]], list[str]]: ...
-    def finish(
-        self,
-    ) -> tuple[list[tuple[str, list[tuple[str, str]]]], list[str], list[bool]]: ...
     def binding_rows(self) -> list[list[_AnalysisDiagnosticRow]]: ...
     def outcome_rows(self, index: int) -> tuple[Any, Any]: ...
     def prove_dynamic_contracts(
@@ -5381,13 +5374,6 @@ class NativeModelAnalysisSession:
     @property
     def cache_stats(self) -> tuple[int, int, int, str | None] | None: ...
 
-def start_model_analysis_session(
-    catalog: object,
-    request: tuple[object, ...],
-    cache: tuple[str, str] | None = None,
-    adapter_rules: tuple[Mapping[str, Callable[..., object]], type] | None = None,
-) -> NativeModelAnalysisSession: ...
-def analyze_native_model_sql(*, request: Any) -> Any: ...
 def session_outcome_analysis(
     *, session: Any, position: int, placeholders: dict[str, str] | None
 ) -> Any: ...
@@ -6716,7 +6702,9 @@ def finding_position(
 def rule_option_toml_value(value: object) -> str: ...
 def validate_project_relative(path: str) -> None: ...
 def project_tree_paths(root: Path) -> tuple[ProjectPath, ...]: ...
-def project_tree_file_path(root: Path, path: str) -> str: ...
+def project_tree_read_text(root: Path, path: str) -> str: ...
+def fact_value_digest(value: object) -> str | None: ...
+def fact_error_digest(error: BaseException) -> str | None: ...
 def project_tree_child_nodes(
     nodes: Iterable[ProjectPath], path: str | PurePath
 ) -> tuple[ProjectPath, ...]: ...
@@ -6726,7 +6714,6 @@ def project_tree_descendant_nodes(
 def project_tree_glob_nodes(
     nodes: Iterable[ProjectPath], pattern: str
 ) -> tuple[ProjectPath, ...]: ...
-def tracked_text_file_values(nodes: Iterable[ProjectPath]) -> tuple[str, ...]: ...
 def project_tree_relative_parts(
     *, root: Path, path: str | PurePath, under: str | PurePath
 ) -> tuple[str, ...]: ...
@@ -6781,6 +6768,9 @@ def evaluate_custom_rules(
     implementation_fingerprints: dict[str, str] | None = None,
 ) -> CustomRulesOutcome: ...
 def custom_host_payload(project: CompiledProjectView) -> CompiledProject: ...
+def custom_rule_fact_digest(
+    *, project: CompiledProjectView, project_dir: Path, key: tuple[str, ...]
+) -> str | None: ...
 
 class CustomHostObserver:
     def __init__(
@@ -9969,48 +9959,6 @@ class ConfigValueTypeError(ValueError):
     key: Any
     expected: Any
     actual_type: Any
-
-class NativeModelAnalysisRequest(NativeRecord):
-    """The Python model analysis's arguments plus the facts dynamic pivot proofs need."""
-
-    known_functions: tuple[str, ...]
-    known_types: tuple[str, ...]
-    model_inputs: tuple[ModelInput, ...]
-    column_nullability_by_table: dict[str, dict[str, InferredNullability]]
-    column_types_by_table: dict[str, dict[str, str]]
-    inference_profile: ExpressionInferenceProfile
-    allow_compact_analysis: bool
-    rich_type_inference: bool
-    analysis_cache: AnalysisCacheContext | None
-    complete_binding_schemas: dict[str, dict[str, str]]
-    dynamic_families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]]
-    def __init__(
-        self,
-        known_functions: tuple[str, ...],
-        known_types: tuple[str, ...],
-        model_inputs: tuple[ModelInput, ...],
-        column_nullability_by_table: dict[str, dict[str, InferredNullability]],
-        column_types_by_table: dict[str, dict[str, str]],
-        inference_profile: ExpressionInferenceProfile,
-        allow_compact_analysis: bool,
-        rich_type_inference: bool,
-        analysis_cache: AnalysisCacheContext | None,
-        complete_binding_schemas: dict[str, dict[str, str]],
-        dynamic_families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]],
-    ) -> None: ...
-
-class NativeModelAnalyses(NativeRecord):
-    """Each analysed model's position in the finished session that keeps its outcome."""
-
-    positions: dict[str, int]
-    succeeded: frozenset[str]
-    session: Any | None
-    def __init__(
-        self,
-        positions: dict[str, int],
-        succeeded: frozenset[str],
-        session: Any | None,
-    ) -> None: ...
 
 class NativePivotTables(NativeRecord):
     """The relation facts Python's dynamic pivot proofs read, for proofs outside a session."""
@@ -16344,9 +16292,6 @@ class NonHermeticRuleError(RulesError):
 
 class RuleAssertionError(RulesError):
     """Raised when a custom-rule harness case produces an unexpected result."""
-
-class FactDigestError(RulesError):
-    """Raised when a recorded custom-rule fact cannot be recomputed or encoded deterministically."""
 
 class OpaqueModuleStateError(RulesError):
     """Raised when custom-rule module state holds a value whose mutations cannot be observed."""

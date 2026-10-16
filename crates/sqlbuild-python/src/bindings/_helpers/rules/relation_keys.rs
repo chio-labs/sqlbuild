@@ -3,11 +3,13 @@
 use std::collections::BTreeMap;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyString, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PyList, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_analysis::compiled_project::models::SchemaColumnFact;
 use sqlbuild_rules::sql_quality::main::declared_relation_keys::declared_relation_keys as derive_keys;
 use sqlbuild_rules::sql_quality::models::{DeclaredKeyColumn, DeclaredRelation};
 
+use crate::bindings::_helpers::compiled_project::schema_facts::python_column_facts;
 use crate::bindings::_helpers::rules::lint_inputs::model_key_row;
 
 const MATERIALIZED_CONFIG: &str = "materialized";
@@ -37,18 +39,16 @@ pub(crate) fn relation_key_row(
     kind: &str,
     name: String,
     values: &Bound<'_, PyDict>,
-    declared: Option<(&Bound<'_, PyAny>, &Bound<'_, PyAny>)>,
+    declared: Option<(&[SchemaColumnFact], &Bound<'_, PyAny>)>,
 ) -> PyResult<RelationKeyRow> {
     let mut columns: Vec<(String, Vec<String>, bool)> = Vec::new();
     let mut audits: Vec<(String, Option<String>)> = Vec::new();
     if let Some((declared_columns, declared_audits)) = declared {
-        for column in declared_columns.try_iter()? {
-            let column: Bound<'_, PyAny> = column?;
-            let nullable: Option<Bound<'_, PyAny>> = column.getattr_opt("nullable")?;
+        for column in declared_columns {
             columns.push((
-                column.getattr("name")?.str()?.extract()?,
-                audit_names(column.getattr_opt("audits")?)?,
-                nullable.is_some_and(|value| value.is(PyBool::new(column.py(), false))),
+                column.name.clone(),
+                column.audit_definitions.clone(),
+                column.nullable == Some(false),
             ));
         }
         for audit in declared_audits.try_iter()? {
@@ -79,17 +79,6 @@ pub(crate) fn relation_key_row(
         columns,
         audits,
     ))
-}
-
-fn audit_names(audits: Option<Bound<'_, PyAny>>) -> PyResult<Vec<String>> {
-    let Some(audits) = audits.filter(|audits| !audits.is_none()) else {
-        return Ok(Vec::new());
-    };
-    let mut names: Vec<String> = Vec::new();
-    for audit in audits.try_iter()? {
-        names.push(audit?.getattr("definition_name")?.extract()?);
-    }
-    Ok(names)
 }
 
 /// `str(values.get(key, ""))`.
@@ -134,7 +123,8 @@ pub(crate) fn entry_relation_key_row(
     if entry.is_none() {
         return relation_key_row(kind, name, values, None);
     }
-    let columns: Bound<'_, PyAny> = declared_specs(entry, "columns")?;
+    let columns: Vec<SchemaColumnFact> =
+        python_column_facts(&declared_specs(entry, "columns")?, None)?;
     let audits: Bound<'_, PyAny> = declared_specs(entry, "audits")?;
     relation_key_row(kind, name, values, Some((&columns, &audits)))
 }

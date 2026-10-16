@@ -15,6 +15,7 @@ from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
 from sqlbuild.adapter.contract.constants import PYTHON_IDENTIFIER_REPLACEMENT, PYTHON_INIT_FILE_NAME
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.discovery.models import DiscoveredAdapter
+from sqlbuild.runtime.user_code.main.user_code_spec import user_code_spec
 
 
 def discover_project_adapters(
@@ -69,9 +70,8 @@ def _is_public_adapter_file(*, adapters_dir: Path, file_path: Path) -> bool:
 
 def _load_adapter_module(*, project_dir: Path, file_path: Path) -> ModuleType:
     module_name: str = _module_name_for_path(project_dir=project_dir, file_path=file_path)
-    spec: ModuleSpec | None = importlib.util.spec_from_file_location(
-        module_name,
-        file_path,
+    spec: ModuleSpec | None = user_code_spec(
+        name=module_name, file_path=file_path, root=project_dir
     )
     if spec is None or spec.loader is None:
         raise AdapterUserError(

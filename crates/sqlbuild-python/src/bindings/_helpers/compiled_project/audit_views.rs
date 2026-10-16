@@ -4,7 +4,7 @@ use pyo3::exceptions::{PyIndexError, PyRuntimeError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
 use pyo3::types::PyTuple;
-use pyo3::{FromPyObject, pyclass, pymethods};
+use pyo3::{FromPyObject, IntoPyObjectExt, pyclass, pymethods};
 
 use crate::bindings::_helpers::compiled_project::compiled_model_view::object_key;
 use crate::bindings::_helpers::compiled_project::function_views::ObjectKeyRow;
@@ -409,4 +409,36 @@ pub(crate) fn audit_reference_rows(
     read_audit(owner, index, py, |record, _| {
         Ok(Some(record.attached.references.clone()))
     })
+}
+
+impl NativeCompiledAudit {
+    /// The `CompiledAudit` field values, in field order, without building the record.
+    pub(crate) fn record_values<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+        Ok(vec![
+            self.key(py)?.into_bound(py),
+            self.scope_deps(py)?.into_any(),
+            self.name(py)?.into_bound_py_any(py)?,
+            self.definition_name(py)?.into_bound_py_any(py)?,
+            self.audit_file(py)?.into_bound(py),
+            self.audit_block(py)?.into_bound(py),
+            self.sql_body(py)?.into_bound_py_any(py)?,
+            self.evaluation_mode(py)?.into_bound(py),
+            self.measurement_contract(py)?.into_bound(py),
+            self.thresholds(py)?.into_bound(py),
+            self.minimum_samples(py)?.into_bound(py),
+            self.measure_sql(py)?.into_bound_py_any(py)?,
+            self.evidence_sql(py)?.into_bound_py_any(py)?,
+            self.evidence_limit(py)?.into_bound(py),
+            self.references(py)?.into_bound(py).into_any(),
+            self.attached_target_kind(py)?,
+            self.attached_target_name(py)?.into_bound_py_any(py)?,
+            self.attached_column_name(py)?.into_bound_py_any(py)?,
+            self.severity(py)?,
+            self.run_scope(py)?.into_bound_py_any(py)?,
+            pyo3::types::PyBool::new(py, self.always_run(py)?)
+                .to_owned()
+                .into_any(),
+            self.description(py)?.into_bound_py_any(py)?,
+        ])
+    }
 }

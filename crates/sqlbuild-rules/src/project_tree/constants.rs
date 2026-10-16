@@ -25,3 +25,8 @@ pub(crate) const CURRENT: &str = ".";
 pub(crate) const PARENT: &str = "..";
 /// Private-use characters standing for undecodable path bytes or unpaired surrogates.
 pub(crate) const ESCAPED_BASE: u32 = 0xF_0000;
+/// The `ValueError` text `os.fspath` paths raise for a NUL byte.
+pub(crate) const EMBEDDED_NUL_BYTE: &str = "embedded null byte";
+pub(crate) const LINE_FEED: &str = "\n";
+/// Bytes that can never start a UTF-8 sequence.
+pub(crate) const UTF8_INVALID_START: [std::ops::RangeInclusive<u8>; 2] = [0x80..=0xC1, 0xF5..=0xFF];

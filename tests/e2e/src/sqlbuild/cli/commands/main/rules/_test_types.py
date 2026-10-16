@@ -235,13 +235,3 @@ class OneModelCustomRuleEditCase:
     expected_warm_counts: tuple[int, int]
     expected_edit_counts: tuple[int, int]
     expected_edit_exit_code: int
-
-
-@dataclass(frozen=True)
-class BrokenInvalidationChainCase:
-    """An edit chain compiled with deliberately stale fact digests against a cache-free oracle."""
-
-    description: str
-    edits: tuple[RulesCacheEditCase, ...]
-    stale_digests_sitecustomize: str
-    expected_first_divergent_edit: str

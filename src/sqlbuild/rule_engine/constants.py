@@ -2,7 +2,6 @@
 
 CUSTOM_HOST_MAX_TRACKED_READS: int = 100_000
 CUSTOM_HOST_INPUT_TUPLE_SIZE: int = 2
-SHARED_FACT_DATACLASS_TAG: str = "\0dataclass"
 CUSTOM_HOST_INPUT_POLL_SECONDS: float = 0.002
 CUSTOM_HOST_INPUT_WAIT_SECONDS: float = 120.0
 CUSTOM_HOST_MODULE: str = "sqlbuild.rule_engine._helpers.host.custom_host"

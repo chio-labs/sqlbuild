@@ -63,7 +63,7 @@ fn schema_row(schema: &ModelSchemaFact) -> SchemaRow {
                 name: column.name.clone(),
                 data_type: column.data_type.clone(),
                 nullable: column.nullable,
-                audit_count: column.audit_count,
+                audit_count: u32::try_from(column.audit_definitions.len()).unwrap_or(u32::MAX),
             })
             .collect(),
         dynamic_columns: schema

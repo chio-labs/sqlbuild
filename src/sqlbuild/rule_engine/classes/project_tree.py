@@ -11,9 +11,9 @@ from sqlbuild._native import (
     RuleUsageError,
     project_tree_child_nodes,
     project_tree_descendant_nodes,
-    project_tree_file_path,
     project_tree_glob_nodes,
     project_tree_paths,
+    project_tree_read_text,
     project_tree_relative_parts,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
@@ -68,11 +68,7 @@ class ProjectTree:
         )
 
     def read_text(self, path: str) -> str:
-        file: str = project_tree_file_path(self._root, path)
-        try:
-            return Path(file).read_text(encoding="utf-8")
-        except (OSError, UnicodeError) as error:
-            raise RuleUsageError(f"could not read project file {path}: {error}") from error
+        return project_tree_read_text(self._root, path)
 
 
 def public_model(model: object) -> Model:

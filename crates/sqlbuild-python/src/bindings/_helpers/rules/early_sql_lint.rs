@@ -30,7 +30,7 @@ use crate::bindings::_helpers::rules::lint_expansion::{
 };
 use crate::bindings::_helpers::rules::lint_inputs::{model_key_row, model_lint_expansion};
 use crate::bindings::_helpers::rules::lint_pipeline::{
-    CompiledExpansion, LintFile, LintOutcome, LintRequest, LintSettings, lint, lint_sources,
+    CompiledSource, LintFile, LintOutcome, LintRequest, LintSettings, lint, lint_sources,
 };
 use crate::bindings::_helpers::rules::relation_keys::{
     RelationKeyRow, RelationKeys, relation_keys,
@@ -211,7 +211,7 @@ fn start_early_lint(
     let Some(plan) = early_lint_plan(inputs, dialect)? else {
         return Ok(None);
     };
-    let mut compiled: HashMap<PathBuf, CompiledExpansion> = HashMap::new();
+    let mut compiled: HashMap<PathBuf, CompiledSource> = HashMap::new();
     for model in inputs.getattr("model_inputs")?.try_iter()? {
         if let Some((path, expansion)) = model_lint_expansion(&model?)? {
             compiled.insert(path, expansion);
@@ -244,7 +244,7 @@ struct EarlyLintWork {
     settings: LintSettings,
     discovered: Py<PyAny>,
     static_scope: Py<PyAny>,
-    compiled: HashMap<PathBuf, CompiledExpansion>,
+    compiled: HashMap<PathBuf, CompiledSource>,
     stop: Arc<AtomicBool>,
 }
 

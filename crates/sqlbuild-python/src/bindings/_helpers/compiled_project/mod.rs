@@ -30,6 +30,7 @@ pub(crate) mod records;
 pub(crate) mod registration;
 pub(crate) mod resource_diagnostics;
 pub(crate) mod scenario_loop;
+pub(crate) mod schema_facts;
 pub(crate) mod seed_views;
 pub(crate) mod source_loop;
 pub(crate) mod source_views;

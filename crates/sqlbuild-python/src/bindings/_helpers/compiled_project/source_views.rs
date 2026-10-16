@@ -4,7 +4,7 @@ use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
-use pyo3::{pyclass, pymethods};
+use pyo3::{IntoPyObjectExt, pyclass, pymethods};
 
 use crate::bindings::_helpers::compiled_project::compiled_model_view::object_key;
 use crate::bindings::_helpers::compiled_project::model_input_view::{
@@ -244,6 +244,19 @@ impl NativeCompiledSource {
         read_source(&self.owner, self.index, py, |source, py| {
             Ok(source.attached.source_file.clone_ref(py))
         })
+    }
+}
+
+impl NativeCompiledSource {
+    /// The `CompiledSource` field values, in field order, without building the record.
+    pub(crate) fn record_values<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+        Ok(vec![
+            self.key(py)?.into_bound(py),
+            self.deps(py).into_any(),
+            self.name(py)?.into_bound_py_any(py)?,
+            self.source_entry(py)?.into_bound(py),
+            self.source_file(py)?.into_bound(py),
+        ])
     }
 }
 

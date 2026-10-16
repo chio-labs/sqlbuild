@@ -4,14 +4,15 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::PyStringMethods;
 
 use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
 use crate::bindings::_helpers::compiled_project::model_input_view::{
     ExpansionRecord, ModelInputRecord, NativeModelInput, model_relation_key_row,
 };
 use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView;
-use crate::bindings::_helpers::rules::lint_pipeline::{CompiledExpansion, span_pass};
+use crate::bindings::_helpers::rules::lint_pipeline::{
+    CompiledExpansion, CompiledSource, span_pass,
+};
 use crate::bindings::_helpers::rules::relation_keys::RelationKeyRow;
 
 const FILE_PATH_ATTRIBUTE: &str = "file_path";
@@ -20,10 +21,12 @@ const FILE_PATH_ATTRIBUTE: &str = "file_path";
 pub(crate) fn model_key_row(model: &Bound<'_, PyAny>) -> PyResult<RelationKeyRow> {
     let py: Python<'_> = model.py();
     if let Ok(input) = model.downcast::<NativeModelInput>() {
-        return input.get().read(py, model_relation_key_row);
+        return input.get().read_with_owner(py, |owner, record| {
+            model_relation_key_row(owner, record, py)
+        });
     }
     if let Ok(compiled) = model.downcast::<NativeCompiledModel>() {
-        return compiled.get().read(py, model_relation_key_row);
+        return compiled.get().relation_key_row(py);
     }
     model.getattr("relation_key_row")?.extract()
 }
@@ -37,23 +40,23 @@ fn record_path(record: &ModelInputRecord, py: Python<'_>) -> PyResult<PathBuf> {
         .extract()
 }
 
-/// An expansion record with the given passes.
+/// The record's shared texts with the given passes, read only when their file is linted.
 fn expansion(
     expansion: &ExpansionRecord,
     passes: &[&Vec<(usize, usize, usize, usize)>],
     py: Python<'_>,
-) -> PyResult<CompiledExpansion> {
-    Ok(CompiledExpansion {
-        authored_sql: expansion.authored_sql.bind(py).to_str()?.to_owned(),
-        expanded_sql: expansion.expanded_sql.bind(py).to_str()?.to_owned(),
+) -> CompiledSource {
+    CompiledSource::Shared {
+        authored_sql: expansion.authored_sql.clone_ref(py),
+        expanded_sql: expansion.expanded_sql.clone_ref(py),
         passes: passes.iter().map(|rows| span_pass(rows)).collect(),
-    })
+    }
 }
 
 /// A model input's whole compile expansion, variables included, keyed by its file path.
 pub(crate) fn model_lint_expansion(
     model: &Bound<'_, PyAny>,
-) -> PyResult<Option<(PathBuf, CompiledExpansion)>> {
+) -> PyResult<Option<(PathBuf, CompiledSource)>> {
     let py: Python<'_> = model.py();
     if let Ok(input) = model.downcast::<NativeModelInput>() {
         return input.get().read(py, |record, py| {
@@ -68,7 +71,7 @@ pub(crate) fn model_lint_expansion(
                         &whole.macro_spans,
                     ],
                     py,
-                )?,
+                ),
             )))
         });
     }
@@ -83,15 +86,18 @@ pub(crate) fn model_lint_expansion(
         .getattr("model_file")?
         .getattr(FILE_PATH_ATTRIBUTE)?
         .extract()?;
-    Ok(Some((path, CompiledExpansion::from_record(&record)?)))
+    Ok(Some((
+        path,
+        CompiledSource::Owned(CompiledExpansion::from_record(&record)?),
+    )))
 }
 
 /// A compiled project's authored expansions: models whose interpolation left the query unchanged.
 pub(crate) fn project_sql_expansions(
     project: &Bound<'_, PyAny>,
-) -> PyResult<HashMap<PathBuf, CompiledExpansion>> {
+) -> PyResult<HashMap<PathBuf, CompiledSource>> {
     let py: Python<'_> = project.py();
-    let mut expansions: HashMap<PathBuf, CompiledExpansion> = HashMap::new();
+    let mut expansions: HashMap<PathBuf, CompiledSource> = HashMap::new();
     if let Ok(view) = project.downcast::<NativeProjectView>() {
         let owner = view.get().owner().bind(py).borrow();
         for record in owner.inputs() {
@@ -103,7 +109,7 @@ pub(crate) fn project_sql_expansions(
                         authored,
                         &[&authored.declaration_spans, &authored.macro_spans],
                         py,
-                    )?,
+                    ),
                 );
             }
         }

@@ -73,9 +73,13 @@ pub struct SchemaColumnFact {
     pub name: String,
     pub data_type: Option<String>,
     pub nullable: Option<bool>,
-    pub audit_count: u32,
-    /// Whether the column is declared outside the model file, in a named schema.
-    pub declared_outside_model: bool,
+    /// Whether the column declares a description.
+    pub described: bool,
+    pub migrate_from: Option<String>,
+    /// Each column audit's definition name, in declaration order.
+    pub audit_definitions: Vec<String>,
+    /// The file of a column declared outside the model file, in a named schema.
+    pub location_path: Option<String>,
 }
 
 /// One declared dynamic-column family; `key` is its name casefolded.

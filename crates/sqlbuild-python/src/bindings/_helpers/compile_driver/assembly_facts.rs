@@ -24,16 +24,15 @@ pub(crate) fn native_project_facts<'py>(
     let py: Python<'py> = inputs.py();
     let model_inputs: Bound<'py, PyAny> = inputs.getattr("model_inputs")?;
     let dialect: Bound<'py, PyAny> = context.profile.getattr("sql_analysis_dialect")?;
-    let analysed: bool = !context.analyses.is_none();
-    let succeeded: Bound<'py, PyAny> = if analysed {
-        context.analyses.getattr("succeeded")?
-    } else {
-        PyFrozenSet::empty(py)?.into_any()
-    };
-    let positions: Bound<'py, PyAny> = if analysed {
-        context.analyses.getattr("positions")?
-    } else {
-        PyDict::new(py).into_any()
+    let (succeeded, positions): (Bound<'py, PyAny>, Bound<'py, PyAny>) = match &context.analyses {
+        Some(analyses) => (
+            analyses.succeeded.clone().into_any(),
+            analyses.positions.clone().into_any(),
+        ),
+        None => (
+            PyFrozenSet::empty(py)?.into_any(),
+            PyDict::new(py).into_any(),
+        ),
     };
     let syntax_checks: Bound<'py, PyAny> =
         model_syntax_checks(&model_inputs.clone(), &names.clone(), &succeeded)

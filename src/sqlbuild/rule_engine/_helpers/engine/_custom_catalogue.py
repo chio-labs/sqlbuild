@@ -15,6 +15,7 @@ from sqlbuild.rule_engine._helpers.engine.definition import (
     rule_from_value,
 )
 from sqlbuild.rule_engine.constants import RULE_DECORATOR_TOKEN
+from sqlbuild.runtime.user_code.main.user_code_spec import user_code_spec
 
 
 def load_custom_rules(*, project_dir: Path) -> tuple[Rule, ...]:
@@ -29,7 +30,9 @@ def load_custom_rules(*, project_dir: Path) -> tuple[Rule, ...]:
             if RULE_DECORATOR_TOKEN not in file_path.read_text(encoding="utf-8"):
                 continue
             name: str = _rule_module_name(file_path=file_path, project_dir=project_dir)
-            spec: ModuleSpec | None = importlib.util.spec_from_file_location(name, file_path)
+            spec: ModuleSpec | None = user_code_spec(
+                name=name, file_path=file_path, root=project_dir
+            )
             if spec is None or spec.loader is None:
                 raise RulesError(f"could not load rule file {file_path}")
             module: ModuleType = importlib.util.module_from_spec(spec)

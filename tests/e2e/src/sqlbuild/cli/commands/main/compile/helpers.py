@@ -4807,7 +4807,6 @@ def full_macro_call_runs(
 
 _ANALYSIS_SEAMS: tuple[tuple[ModuleType, str], ...] = (
     (native_module, "infer_native_expression_source_shapes"),
-    (native_module, "analyze_native_model_sql"),
     (native_module, "assemble_native_sql_tests"),
     (native_module, "complete_semantic_project"),
     (native_module, "evaluate_model_contracts"),
@@ -4973,11 +4972,10 @@ def compile_with_binding_error(project_dir: Path) -> dict[str, Any]:
 
 _SLOW_LINT_MACRO: str = (
     "import os\n"
-    "import threading\n"
     "import time\n\n\n"
     "def slow_total(amount: str) -> str:\n"
-    '    """Return the amount, pausing when the background SQL lint expands it."""\n'
-    "    if threading.current_thread() is not threading.main_thread():\n"
+    '    """Return the amount, pausing for the macro tests that only SQL lint expands."""\n'
+    "    if amount == 'slow_amount':\n"
     "        with open(os.environ['SLOW_MACRO_MARKER'], 'a', encoding='utf-8') as marker:\n"
     "            marker.write('expanding\\n')\n"
     "        time.sleep(float(os.environ['SLOW_MACRO_SECONDS']))\n"
@@ -4986,7 +4984,7 @@ _SLOW_LINT_MACRO: str = (
 
 
 def slow_lint_model_files(*, model_count: int) -> dict[str, str]:
-    """A macro used by a model, a function, and macro tests only background SQL lint expands."""
+    """A macro used by a model, a function, and macro tests that pause when linted."""
 
     return {
         "macros/slow.py": _SLOW_LINT_MACRO,
@@ -5002,9 +5000,9 @@ def slow_lint_model_files(*, model_count: int) -> dict[str, str]:
             f"tests/slow_total_{index}.sql": (
                 f'TEST (mode macro, name "slow_total_{index}");\n\n'
                 "WITH\n"
-                "input_values AS (SELECT 5 AS amount),\n"
+                "input_values AS (SELECT 5 AS slow_amount),\n"
                 "__macro_actual__ AS (\n"
-                '  SELECT @slow_total("amount") AS amount FROM input_values\n'
+                '  SELECT @slow_total("slow_amount") AS amount FROM input_values\n'
                 "),\n"
                 "__macro_expected__ AS (SELECT 5 AS amount)\n"
                 "SELECT 1\n"

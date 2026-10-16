@@ -52,11 +52,6 @@ pub(crate) enum UserCodeHost {
     SqlResourceRefKind,
     LoadCustomRules,
     CustomRulePayloads,
-    FactOutcomeDigest,
-    FullFactKeys,
-    IsTreeFact,
-    SharedFactEncoder,
-    BuildRuleFactViews,
     EventExporterInputError,
     EventExporterStateError,
     InvokeLifecycleEventSink,
@@ -298,31 +293,6 @@ pub(crate) const ENTRIES: &[HostEntry] = &[
     },
     HostEntry {
         name: "custom_rule_payloads",
-        kind: HostKind::Function,
-        edge: HostEdge::UserCode,
-    },
-    HostEntry {
-        name: "fact_outcome_digest",
-        kind: HostKind::Function,
-        edge: HostEdge::UserCode,
-    },
-    HostEntry {
-        name: "full_fact_keys",
-        kind: HostKind::Function,
-        edge: HostEdge::UserCode,
-    },
-    HostEntry {
-        name: "is_tree_fact",
-        kind: HostKind::Function,
-        edge: HostEdge::UserCode,
-    },
-    HostEntry {
-        name: "shared_fact_encoder",
-        kind: HostKind::Function,
-        edge: HostEdge::UserCode,
-    },
-    HostEntry {
-        name: "build_rule_fact_views",
         kind: HostKind::Function,
         edge: HostEdge::UserCode,
     },

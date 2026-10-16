@@ -4,32 +4,6 @@ use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::models::{FieldDefault, FieldSpec, RecordSpec};
 
-const R_NATIVE_MODEL_ANALYSIS_REQUEST: RecordSpec = RecordSpec {
-    name: "NativeModelAnalysisRequest",
-    doc: "The Python model analysis's arguments plus the facts dynamic pivot proofs need.",
-    fields: &[
-        FieldSpec::required("known_functions"),
-        FieldSpec::required("known_types"),
-        FieldSpec::required("model_inputs"),
-        FieldSpec::required("column_nullability_by_table"),
-        FieldSpec::required("column_types_by_table"),
-        FieldSpec::required("inference_profile"),
-        FieldSpec::required("allow_compact_analysis"),
-        FieldSpec::required("rich_type_inference"),
-        FieldSpec::required("analysis_cache"),
-        FieldSpec::required("complete_binding_schemas"),
-        FieldSpec::required("dynamic_families_by_table"),
-    ],
-};
-const R_NATIVE_MODEL_ANALYSES: RecordSpec = RecordSpec {
-    name: "NativeModelAnalyses",
-    doc: "Each analysed model's position in the finished session that keeps its outcome.",
-    fields: &[
-        FieldSpec::required("positions"),
-        FieldSpec::required("succeeded"),
-        FieldSpec::required("session"),
-    ],
-};
 const R_NATIVE_PIVOT_TABLES: RecordSpec = RecordSpec {
     name: "NativePivotTables",
     doc: "The relation facts Python's dynamic pivot proofs read, for proofs outside a session.",
@@ -944,8 +918,6 @@ const R_COMPILE_PIPELINE_RESULT: RecordSpec = RecordSpec {
 
 /// The compiler, lint and config value records.
 pub(crate) const COMPILER_RECORDS: &[RecordSpec] = &[
-    R_NATIVE_MODEL_ANALYSIS_REQUEST,
-    R_NATIVE_MODEL_ANALYSES,
     R_NATIVE_PIVOT_TABLES,
     R_NATIVE_COLUMN_QUERY,
     R_NATIVE_QUERY_COLUMNS,

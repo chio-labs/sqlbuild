@@ -10,7 +10,6 @@ import pytest
 import sqlbuild._native as native_module
 from sqlbuild._native import (
     ContractValidationResult,
-    NativeModelAnalyses,
     NativeSqlTestArtifact,
     NativeSqlTestAssembly,
     ProjectColumnLineage,
@@ -31,7 +30,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
             description="models_contracts_lineage_and_sql_tests",
             expected_native_returns={
                 "infer_native_expression_source_shapes": [ANY, ANY, ANY, ANY],
-                "analyze_native_model_sql": [ANY],
                 "assemble_native_sql_tests": [ANY],
                 "complete_semantic_project": [ANY],
                 "evaluate_model_contracts": [ANY],
@@ -63,8 +61,6 @@ def test_given_project_when_compiling_then_native_seams_answer(
     planned_counts: list[int] = []
     for seams in (native_seams,):
         assert isinstance(seams["build_project_column_lineage"][0], ProjectColumnLineage)
-        assert isinstance(seams["analyze_native_model_sql"][0], NativeModelAnalyses)
-        assert seams["analyze_native_model_sql"][0].session is not None
         assert isinstance(seams["infer_native_expression_source_shapes"][0], tuple)
         assembled_tests: object = seams["assemble_native_sql_tests"][0]
         assert isinstance(assembled_tests, tuple)
@@ -75,7 +71,9 @@ def test_given_project_when_compiling_then_native_seams_answer(
         assert planned_artifacts
         assert all(isinstance(artifact, NativeSqlTestArtifact) for artifact in planned_artifacts)
         planned_counts.append(len(planned_artifacts))
-        assert isinstance(seams["complete_semantic_project"][0], native_module.NativeProjectView)
+        completed: object = seams["complete_semantic_project"][0]
+        assert isinstance(completed, native_module.NativeProjectView)
+        assert any(model.inferred_columns for model in completed.models)
         assert isinstance(seams["evaluate_model_contracts"][0], ContractValidationResult)
     assert [
         len(call.args[0].tests) for call in native_sql_test_planning.call_args_list
