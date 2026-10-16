@@ -1,5 +1,8 @@
 //! Planner-ready project assembly: diagnostics collection, the macro bridge and explicit references.
 
+use std::sync::{Arc, Mutex, PoisonError};
+
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyCFunction, PyDict, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -17,6 +20,11 @@ use crate::bindings::_helpers::compiled_project::records::record_model_analyses;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 
+const STAGE_REACHED: &str = "assembly stopped before the requested stage";
+const EXPRESSION_SHAPES_STAGE: &str = "expression_shapes";
+const MODEL_FACTS_STAGE: &str = "model_facts";
+const SEMANTIC_COMPLETION_STAGE: &str = "semantic_completion";
+
 const OPTIONAL: [&str; 5] = [
     "inference_profile",
     "skip_column_inference",
@@ -33,6 +41,53 @@ pub(crate) struct AssemblyRequest {
     pub(crate) column_lineage_mode: Py<PyAny>,
     pub(crate) analysis_cache_dir: Py<PyAny>,
     pub(crate) analysis_model_names: Py<PyAny>,
+    /// The stage to stop before, keeping its inputs, when assembly runs for stage tests.
+    pub(crate) stop: Option<StageStop>,
+}
+
+/// An assembly stage whose inputs tests can take instead of running it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AssemblyStage {
+    ExpressionShapes,
+    ModelFacts,
+    SemanticCompletion,
+}
+
+/// Where an assembly stopped for a stage test keeps that stage's inputs.
+pub(crate) struct StageStop {
+    stage: AssemblyStage,
+    inputs: Arc<Mutex<Option<Py<PyDict>>>>,
+}
+
+impl AssemblyRequest {
+    /// Stop with `inputs` before `stage` when the request stops there; else continue.
+    pub(crate) fn before_stage<'py>(
+        &self,
+        stage: AssemblyStage,
+        inputs: impl FnOnce() -> PyResult<Bound<'py, PyDict>>,
+    ) -> PyResult<()> {
+        let Some(stop) = self.stop.as_ref().filter(|stop| stop.stage == stage) else {
+            return Ok(());
+        };
+        *stop.inputs.lock().unwrap_or_else(PoisonError::into_inner) = Some(inputs()?.unbind());
+        Err(PyRuntimeError::new_err(STAGE_REACHED))
+    }
+}
+
+/// The assembly request of `arguments`, stopping at `stop` when given.
+fn assembly_request(
+    arguments: &KeywordArguments<'_>,
+    stop: Option<StageStop>,
+) -> PyResult<AssemblyRequest> {
+    Ok(AssemblyRequest {
+        inputs: arguments.value("inputs")?.unbind(),
+        inference_profile: arguments.value("inference_profile")?.unbind(),
+        skip_column_inference: arguments.value_or_false("skip_column_inference")?.unbind(),
+        column_lineage_mode: lineage_mode(arguments)?.unbind(),
+        analysis_cache_dir: arguments.value("analysis_cache_dir")?.unbind(),
+        analysis_model_names: arguments.value("analysis_model_names")?.unbind(),
+        stop,
+    })
 }
 
 /// Convert compile inputs into the planner-ready project view.
@@ -44,14 +99,53 @@ pub(crate) fn assemble_project<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let arguments: KeywordArguments<'py> =
         KeywordArguments::read(py, "assemble_project", options, (&["inputs"], &OPTIONAL))?;
-    let request: AssemblyRequest = AssemblyRequest {
-        inputs: arguments.value("inputs")?.unbind(),
-        inference_profile: arguments.value("inference_profile")?.unbind(),
-        skip_column_inference: arguments.value_or_false("skip_column_inference")?.unbind(),
-        column_lineage_mode: lineage_mode(&arguments)?.unbind(),
-        analysis_cache_dir: arguments.value("analysis_cache_dir")?.unbind(),
-        analysis_model_names: arguments.value("analysis_model_names")?.unbind(),
+    collected_project(py, assembly_request(&arguments, None)?)
+}
+
+/// Test support: assemble like `assemble_project` but stop before `stage`, returning its inputs or None.
+#[pyfunction]
+#[pyo3(signature = (stage, **options))]
+pub(crate) fn assembly_stage_inputs<'py>(
+    py: Python<'py>,
+    stage: &str,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<Option<Bound<'py, PyDict>>> {
+    let stage: AssemblyStage = match stage {
+        EXPRESSION_SHAPES_STAGE => AssemblyStage::ExpressionShapes,
+        MODEL_FACTS_STAGE => AssemblyStage::ModelFacts,
+        SEMANTIC_COMPLETION_STAGE => AssemblyStage::SemanticCompletion,
+        _ => {
+            return Err(PyValueError::new_err(format!(
+                "unknown assembly stage '{stage}'"
+            )));
+        }
     };
+    let arguments: KeywordArguments<'py> = KeywordArguments::read(
+        py,
+        "assembly_stage_inputs",
+        options,
+        (&["inputs"], &OPTIONAL),
+    )?;
+    let inputs: Arc<Mutex<Option<Py<PyDict>>>> = Arc::new(Mutex::new(None));
+    let stop: StageStop = StageStop {
+        stage,
+        inputs: Arc::clone(&inputs),
+    };
+    let assembled: PyResult<Bound<'py, PyAny>> =
+        collected_project(py, assembly_request(&arguments, Some(stop))?);
+    let captured: Option<Py<PyDict>> = inputs.lock().unwrap_or_else(PoisonError::into_inner).take();
+    match (captured, assembled) {
+        (Some(captured), _) => Ok(Some(captured.into_bound(py))),
+        (None, Ok(_)) => Ok(None),
+        (None, Err(error)) => Err(error),
+    }
+}
+
+/// `request`'s project, with diagnostics collected while assembling appended.
+fn collected_project<'py>(
+    py: Python<'py>,
+    request: AssemblyRequest,
+) -> PyResult<Bound<'py, PyAny>> {
     let collector: Bound<'py, PyAny> = collect_compile_diagnostics(py)?.into_any();
     let (built, violations): (Bound<'py, PyAny>, Bound<'py, PyAny>) =
         within(&collector, |violations| {
@@ -155,5 +249,6 @@ fn with_native_project<'py>(
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(assemble_project, module)?)
+    module.add_function(wrap_pyfunction!(assemble_project, module)?)?;
+    module.add_function(wrap_pyfunction!(assembly_stage_inputs, module)?)
 }

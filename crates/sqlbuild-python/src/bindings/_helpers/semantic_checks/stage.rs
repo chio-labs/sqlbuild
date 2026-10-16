@@ -29,17 +29,41 @@ fn complete_semantic_project<'py>(
     request: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let request = Request::new("complete_semantic_project", request)?;
-    let project: Bound<'py, PyAny> = request.get("project")?;
-    let profile: Bound<'py, PyAny> = request.get("profile")?;
-    let binding_results: Bound<'py, PyAny> = request.get("binding_results")?;
-    let resource_sql_analysis: bool = request.get("resource_sql_analysis")?.extract()?;
-    let session: Option<PyRef<'py, NativeModelAnalysisSession>> =
-        match request.optional("session")? {
-            Some(session) if !session.is_none() => Some(session.extract()?),
-            _ => None,
-        };
+    completed_semantic_project(SemanticCompletion {
+        project: request.get("project")?,
+        profile: request.get("profile")?,
+        binding_results: request.get("binding_results")?,
+        resource_sql_analysis: request.get("resource_sql_analysis")?.extract()?,
+        session: request.optional("session")?,
+    })
+}
+
+/// The semantic completion stage's inputs.
+pub(crate) struct SemanticCompletion<'py> {
+    pub(crate) project: Bound<'py, PyAny>,
+    pub(crate) profile: Bound<'py, PyAny>,
+    pub(crate) binding_results: Bound<'py, PyAny>,
+    pub(crate) resource_sql_analysis: bool,
+    pub(crate) session: Option<Bound<'py, PyAny>>,
+}
+
+/// The completed project; an internal failure raises `NativeCompilerError`.
+pub(crate) fn completed_semantic_project<'py>(
+    stage: SemanticCompletion<'py>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let SemanticCompletion {
+        project,
+        profile,
+        binding_results,
+        resource_sql_analysis,
+        session,
+    } = stage;
+    let session: Option<PyRef<'py, NativeModelAnalysisSession>> = match session {
+        Some(session) if !session.is_none() => Some(session.extract()?),
+        _ => None,
+    };
     let catalog: PyRef<'py, ProjectCatalog> = project_catalog(&project)?;
-    let classes = StageClasses::new(request.py())?;
+    let classes = StageClasses::new(project.py())?;
     let shared = StageShared {
         catalog: &catalog.inner,
         session: session.as_deref(),
@@ -59,7 +83,7 @@ fn complete_semantic_project<'py>(
         &recovered,
         &[(
             "diagnostics",
-            &PyTuple::new(request.py(), diagnostics)?.into_any(),
+            &PyTuple::new(project.py(), diagnostics)?.into_any(),
         )],
     )?;
     completed_diagnostics(&classes, &combined, &shared)

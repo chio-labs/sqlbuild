@@ -18,7 +18,7 @@ from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     ExpressionMemoCase,
     RestoredShapeCase,
 )
-from tests.integration.src.sqlbuild.compiler.pipeline.helpers import traced_shape_batches
+from tests.integration.src.sqlbuild.compiler.pipeline.helpers import shape_batches
 
 
 @pytest.mark.parametrize(
@@ -30,7 +30,6 @@ def test_given_equal_source_expressions_when_compiling_then_infers_once_and_inva
     test_case: ExpressionMemoCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     (tmp_path / "sqlbuild_project.toml").write_text(
         'name = "orders"\nadapter = "duckdb"\n[rules]\nselect = []\n'
@@ -44,17 +43,17 @@ def test_given_equal_source_expressions_when_compiling_then_infers_once_and_inva
     source.write_text(
         f"sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n    expression: {test_case.expression}\n  - name: raw_customers\n    description: Test source raw_customers.\n    expression: {test_case.expression}\n"
     )
-    calls: list[tuple[str, ...]] = traced_shape_batches(monkeypatch)
+    _ = shape_batches(reset=True)
     args: list[str] = ["--project-dir", str(tmp_path), "compile", "--json"]
     assert main(args) == 0
     payload: dict[str, Any] = json.loads(capsys.readouterr().out)
     assert payload["diagnostics"] == []
-    assert len(calls) == test_case.expected_analysis_calls
+    assert shape_batches()[0] == test_case.expected_analysis_calls
     source.write_text(source.read_text().replace("AS id", "AS quantity"))
     assert main(args) == 1
     changed: dict[str, Any] = json.loads(capsys.readouterr().out)
     assert [item["code"] for item in changed["diagnostics"]] == ["B002"]
-    assert len(calls) == test_case.expected_analysis_calls * 2
+    assert shape_batches()[0] == test_case.expected_analysis_calls * 2
 
 
 @pytest.mark.parametrize(
@@ -73,7 +72,6 @@ def test_given_distinct_source_expressions_when_compiling_then_infers_them_in_on
     test_case: ExpressionBatchCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     (tmp_path / "sqlbuild_project.toml").write_text(
         'name = "orders"\nadapter = "duckdb"\n[rules]\nselect = []\n'
@@ -88,11 +86,14 @@ def test_given_distinct_source_expressions_when_compiling_then_infers_them_in_on
         f"  - name: raw_orders\n    description: Test source raw_orders.\n    expression: {test_case.orders_expression}\n"
         f"  - name: raw_customers\n    description: Test source raw_customers.\n    expression: {test_case.customers_expression}\n"
     )
-    batches: list[tuple[str, ...]] = traced_shape_batches(monkeypatch)
+    _ = shape_batches(reset=True)
     assert main(["--project-dir", str(tmp_path), "compile", "--json"]) == 0
     payload: dict[str, Any] = json.loads(capsys.readouterr().out)
     assert payload["diagnostics"] == []
-    assert tuple(batches) == test_case.expected_batches
+    assert shape_batches() == (
+        len(test_case.expected_batches),
+        sum(len(batch) for batch in test_case.expected_batches),
+    )
 
 
 @pytest.mark.parametrize(

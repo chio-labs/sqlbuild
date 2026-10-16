@@ -77,7 +77,6 @@ _NOTE_KINDS: tuple[str, ...] = ("downstream output uses", "downstream uses of", 
 def test_given_generated_failing_projects_when_completing_natively_then_matches_recorded_python(
     test_case: GeneratedSemanticParityTestCase,
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     rng: random.Random = random.Random(test_case.seed)
     statuses: Counter[str] = Counter()
@@ -90,7 +89,6 @@ def test_given_generated_failing_projects_when_completing_natively_then_matches_
             files=generated_semantic_files(
                 rng=rng, model_count=test_case.model_count, require_analysis=index % 2 == 0
             ),
-            monkeypatch=monkeypatch,
         )
         views: dict[str, object] = {}
         for dialect in test_case.dialects:
@@ -156,7 +154,6 @@ def test_given_generated_failing_projects_when_completing_natively_then_matches_
 def test_given_formerly_deferred_projects_when_completing_natively_then_matches_recorded_python(
     test_case: FormerlyDeferredSemanticTestCase,
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     rng: random.Random = random.Random(test_case.seed)
     golden: list[GoldenEntry] = []
@@ -169,7 +166,6 @@ def test_given_formerly_deferred_projects_when_completing_natively_then_matches_
         captured: SemanticInputs = captured_semantic_inputs(
             project_dir=project_dir,
             files=files_with_non_ascii(files=files, rng=rng, non_ascii=test_case.non_ascii),
-            monkeypatch=monkeypatch,
         )
         views: dict[str, object] = {}
         for dialect in test_case.dialects:
@@ -206,12 +202,10 @@ def test_given_formerly_deferred_projects_when_completing_natively_then_matches_
 def test_given_project_without_catalog_when_completing_then_raises_native_compiler_error(
     test_case: MissingCatalogTestCase,
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: SemanticInputs = captured_semantic_inputs(
         project_dir=tmp_path / "project",
         files=generated_semantic_files(rng=random.Random(5), model_count=8, require_analysis=False),
-        monkeypatch=monkeypatch,
     )
 
     with pytest.raises(native_module.NativeCompilerError) as raised:
@@ -253,7 +247,6 @@ def test_given_project_without_catalog_when_completing_then_raises_native_compil
 def test_given_compiles_when_completing_from_the_session_then_matches_payload_and_python(
     test_case: SessionCompletionTestCase,
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     rng: random.Random = random.Random(test_case.seed)
     captured: list[SemanticInputs] = [
@@ -262,7 +255,6 @@ def test_given_compiles_when_completing_from_the_session_then_matches_payload_an
             files=session_corpus_files(
                 corpus=test_case.corpus, rng=rng, model_count=test_case.model_count
             ),
-            monkeypatch=monkeypatch,
         )
         for index in range(test_case.count)
     ]

@@ -5,17 +5,20 @@ use pyo3::types::{PyDict, PyDictMethods, PyList, PyString, PyStringMethods, PyTu
 
 use sqlbuild_analysis::assembly::project::main::configured_namespace::configured_namespace;
 
-use crate::bindings::_helpers::compile_driver::assembly::AssemblyRequest;
+use crate::bindings::_helpers::compile_driver::assembly::{AssemblyRequest, AssemblyStage};
 use crate::bindings::_helpers::compile_driver::assembly_analysis::{
     AnalysisContext, analysis_context, and_not,
 };
 use crate::bindings::_helpers::compile_driver::assembly_checks::compiled_sql_scenarios;
-use crate::bindings::_helpers::compile_driver::assembly_facts::native_project_facts;
+use crate::bindings::_helpers::compile_driver::assembly_facts::{
+    native_project_facts, pivot_tables,
+};
 use crate::bindings::_helpers::compile_driver::assembly_models::{
     binding_rows, compiled_models, project_binding_diagnostics,
 };
 use crate::bindings::_helpers::compile_driver::assembly_sql_tests::assembled_sql_tests;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::compile_driver::stage_work::{SEMANTIC_COMPLETION, count_stage};
 use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
 use crate::bindings::_helpers::contracts::spec_resolution::{
     resolve_effective_adapter_name, resolve_effective_scenario_config,
@@ -23,10 +26,13 @@ use crate::bindings::_helpers::contracts::spec_resolution::{
 use crate::bindings::_helpers::model_config::template_data::early_model_templates;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_errors::report_scope_index_errors;
 use crate::bindings::_helpers::scopes::scope_validation::scope_index_with_compile_usages;
+use crate::bindings::_helpers::semantic_checks::stage::{
+    SemanticCompletion, completed_semantic_project,
+};
 use pyo3::IntoPyObjectExt;
 
 const SOURCE_SLOT: &str = "source";
@@ -87,6 +93,16 @@ pub(crate) fn assembled_project<'py>(
             || py.None().into_bound(py),
             |session| session.clone().into_any(),
         );
+    request.before_stage(AssemblyStage::ModelFacts, || {
+        keywords(
+            py,
+            &[
+                ("profile", context.profile.clone()),
+                ("session", native_session.clone()),
+                ("tables", pivot_tables(&context)?),
+            ],
+        )
+    })?;
     let native: Bound<'py, PyAny> = native_project_facts(inputs, &context, names, &native_session)?;
     let resources: Bound<'py, PyAny> = native.getattr("resources")?;
     let scope_index: Bound<'py, PyAny> = scope_index_with_compile_usages(inputs)?;
@@ -102,22 +118,30 @@ pub(crate) fn assembled_project<'py>(
     )?;
     let project: Bound<'py, PyAny> = project_view(inputs, &fields, &models)?;
     let binding_results: Bound<'py, PyDict> = binding_rows(py, context.analyses.as_ref())?;
-    call_with(
-        &registry::native(py, NativeAttr::CompleteSemanticProject)?,
-        &[
-            ("project", project),
-            ("profile", context.profile.clone()),
-            (
-                "resource_sql_analysis",
-                and_not(
-                    &context.sql_analysis_enabled,
-                    &inputs.getattr("no_sql_validation")?,
-                )?,
-            ),
-            ("session", native_session),
-            ("binding_results", binding_results.into_any()),
-        ],
-    )
+    let resource_sql_analysis: Bound<'py, PyAny> = and_not(
+        &context.sql_analysis_enabled,
+        &inputs.getattr("no_sql_validation")?,
+    )?;
+    request.before_stage(AssemblyStage::SemanticCompletion, || {
+        keywords(
+            py,
+            &[
+                ("project", project.clone()),
+                ("profile", context.profile.clone()),
+                ("resource_sql_analysis", resource_sql_analysis.clone()),
+                ("session", native_session.clone()),
+                ("binding_results", binding_results.clone().into_any()),
+            ],
+        )
+    })?;
+    count_stage(py, SEMANTIC_COMPLETION, 1)?;
+    completed_semantic_project(SemanticCompletion {
+        project,
+        profile: context.profile.clone(),
+        binding_results: binding_results.into_any(),
+        resource_sql_analysis: resource_sql_analysis.extract()?,
+        session: Some(native_session),
+    })
 }
 
 /// `value.strip()` when `value` is a string with non-blank text, else `None`.

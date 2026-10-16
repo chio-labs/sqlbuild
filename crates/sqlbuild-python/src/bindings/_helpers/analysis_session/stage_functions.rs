@@ -20,10 +20,13 @@ use crate::bindings::_helpers::analysis_session::session::{
     infer_expression_source_shapes, prove_dynamic_column_contracts,
 };
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::compile_driver::stage_work::{
+    EXPRESSION_SHAPE_BATCHES, EXPRESSION_SHAPES_INFERRED, count_stage,
+};
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::models::ProjectCatalog;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const BATCH_MODE: &str = "batch";
 const TABLE_FUNCTION_KIND: &str = "table_fn";
@@ -105,9 +108,16 @@ fn infer_native_expression_source_shapes<'py>(
     request: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let request = Request::new("infer_native_expression_source_shapes", request)?;
-    let py: Python<'py> = request.py();
-    let expressions: Bound<'py, PyAny> = request.get("expressions")?;
-    let profile: Bound<'py, PyAny> = request.get("profile")?;
+    expression_source_shapes(&request.get("expressions")?, &request.get("profile")?)
+}
+
+/// One shape per expression, cached on `profile`'s binding catalog; a failure raises.
+pub(crate) fn expression_source_shapes<'py>(
+    expressions: &Bound<'py, PyAny>,
+    profile: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let py: Python<'py> = profile.py();
+    let profile: Bound<'py, PyAny> = profile.clone();
     let dialect: String = aliased_dialect(py, profile_dialect(&profile)?)?;
     let catalog: Bound<'py, PyAny> = profile_catalog(&profile, &dialect)?;
     let cache: Bound<'py, PyAny> = native_field(&catalog, "expression_shapes")?;
@@ -119,6 +129,8 @@ fn infer_native_expression_source_shapes<'py>(
         }
     }
     if !pending.is_empty() {
+        count_stage(py, EXPRESSION_SHAPE_BATCHES, 1)?;
+        count_stage(py, EXPRESSION_SHAPES_INFERRED, pending.len() as u64)?;
         let (rules, adapter_rules) = nullability_rules(&profile)?;
         let native: PyRef<'py, ProjectCatalog> = native_field(&catalog, "native")?.extract()?;
         let pending_names: Vec<String> = pending
@@ -203,10 +215,7 @@ pub(crate) fn dynamic_contract_proofs<'py>(
             (
                 dialect_or_generic(&native_field(&tables, "dialect")?)?,
                 shape_rows(&native_field(&tables, "column_types_by_table")?)?,
-                shape_rows(&native_field(
-                    &tables,
-                    "authoritative_column_types_by_table",
-                )?)?,
+                shape_rows(&native_field(&tables, "authoritative_column_types_by_table")?)?,
                 shape_rows(&native_field(&tables, "column_nullability_by_table")?)?,
                 families,
                 rows,
@@ -264,16 +273,13 @@ pub(crate) fn query_column_rows(
     let dialect: String = aliased_dialect(py, normalization_dialect.clone())?;
     let mut batch: bool = false;
     for query in &queries {
-        if native_field(query, "mode")?.eq(BATCH_MODE)? {
+        if native_field(&query, "mode")?.eq(BATCH_MODE)? {
             batch = true;
             break;
         }
     }
     let catalog: Option<Bound<'_, PyAny>> = if batch {
-        Some(native_field(
-            &profile_catalog(profile, &dialect)?,
-            "native",
-        )?)
+        Some(native_field(&profile_catalog(profile, &dialect)?, "native")?)
     } else {
         None
     };
@@ -301,7 +307,7 @@ pub(crate) fn query_column_rows(
 }
 
 fn query_row(query: &Bound<'_, PyAny>) -> PyResult<QueryRow> {
-    let placeholders: Bound<'_, PyAny> = native_field(query, "placeholders")?;
+    let placeholders: Bound<'_, PyAny> = native_field(&query, "placeholders")?;
     let placeholders: Pairs = if placeholders.is_truthy()? {
         placeholders
             .call_method0("items")?
@@ -313,7 +319,7 @@ fn query_row(query: &Bound<'_, PyAny>) -> PyResult<QueryRow> {
     };
     let mut analysis_names: Vec<String> = Vec::new();
     let mut lineage: Vec<(String, String, String)> = Vec::new();
-    for reference in native_field(query, "references")?.try_iter()? {
+    for reference in native_field(&query, "references")?.try_iter()? {
         let reference: Bound<'_, PyAny> = reference?;
         let kind: String = native_field(&reference, "ref_kind")?.extract()?;
         let name: String = native_field(&reference, "ref_name")?.extract()?;
@@ -338,12 +344,12 @@ fn query_row(query: &Bound<'_, PyAny>) -> PyResult<QueryRow> {
         }
     }
     Ok((
-        native_field(query, "sql")?.extract()?,
+        native_field(&query, "sql")?.extract()?,
         placeholders,
         analysis_names,
         lineage,
-        native_field(query, "recover_cte_facts")?.extract()?,
-        native_field(query, "mode")?.extract()?,
+        native_field(&query, "recover_cte_facts")?.extract()?,
+        native_field(&query, "mode")?.extract()?,
     ))
 }
 

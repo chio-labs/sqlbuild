@@ -732,7 +732,6 @@ native_ids! {
         CompiledCodeIdentity => "compiled_code_identity",
         CompiledProjectFacts => "compiled_project_facts",
         CompiledProjectRecord => "compiled_project_record",
-        CompleteSemanticProject => "complete_semantic_project",
         ComputeCursorBounds => "compute_cursor_bounds",
         ConnectionProgressReporter => "ConnectionProgressReporter",
         ContentDigest => "content_digest",

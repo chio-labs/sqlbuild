@@ -10,19 +10,16 @@ from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-import pytest
-
 import sqlbuild._native as native_module
 from sqlbuild._native import (
     CompilerDiagnostic,
-    build_project_graph,
-    discover_project_inputs,
     project_with,
 )
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
+    compile_inputs,
     generated_analysis_files,
 )
 
@@ -188,29 +185,16 @@ def captured_semantic_inputs(
     *,
     project_dir: Path,
     files: dict[str, str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> SemanticInputs:
     """Compile and keep the semantic completion stage's inputs."""
 
-    for relative_path, contents in files.items():
-        path: Path = project_dir / relative_path
-        path.parent.mkdir(parents=True, exist_ok=True)
-        _ = path.write_text(contents, encoding="utf-8")
-    captured: list[SemanticInputs] = []
-
-    complete: Callable[..., CompiledProjectView] = native_module.complete_semantic_project
-
-    def capture(**arguments: Any) -> CompiledProjectView:
-        captured.append(SemanticInputs(**arguments))
-        return complete(**arguments)
-
-    with monkeypatch.context() as patch:
-        patch.setattr(native_module, "complete_semantic_project", capture)
-        _ = build_project_graph(
-            discovered_inputs=discover_project_inputs(project_dir=project_dir),
-            adapter=DuckDbAdapter(),
-        )
-    return captured[0]
+    stage: dict[str, Any] | None = native_module.assembly_stage_inputs(
+        "semantic_completion",
+        inputs=compile_inputs(project_dir=project_dir, files=files),
+        inference_profile=DuckDbAdapter().expression_inference_profile(),
+    )
+    assert stage is not None
+    return SemanticInputs(**stage)
 
 
 def with_dialect(inputs: SemanticInputs, dialect: str | None) -> SemanticInputs:

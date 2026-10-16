@@ -6,6 +6,11 @@ use pyo3::prelude::{Py, PyRefMut, PyResult, Python};
 use pyo3::sync::PyOnceLock;
 use pyo3::{pyclass, pyfunction};
 
+pub(crate) const EXPRESSION_SHAPES: &str = "infer_native_expression_source_shapes";
+pub(crate) const EXPRESSION_SHAPE_BATCHES: &str = "expression_shape_batches";
+pub(crate) const EXPRESSION_SHAPES_INFERRED: &str = "expression_shapes_inferred";
+pub(crate) const MODEL_ANALYSIS: &str = "analyze_native_model_sql";
+pub(crate) const SEMANTIC_COMPLETION: &str = "complete_semantic_project";
 pub(crate) const SQL_TEST_ASSEMBLY: &str = "assemble_native_sql_tests";
 pub(crate) const PROMOTION_CONFLICTS: &str = "promotion_conflict_diagnostics";
 pub(crate) const PIVOT_PROOFS: &str = "pivot_proofs";

@@ -4082,6 +4082,16 @@ def assemble_project(
     analysis_cache_dir: Path | None = None,
     analysis_model_names: frozenset[str] | None = None,
 ) -> CompiledProjectView: ...
+def assembly_stage_inputs(
+    stage: Literal["expression_shapes", "model_facts", "semantic_completion"],
+    *,
+    inputs: CompileInputsView,
+    inference_profile: ExpressionInferenceProfile | None = None,
+    skip_column_inference: bool = False,
+    column_lineage_mode: ColumnLineageMode = ...,
+    analysis_cache_dir: Path | None = None,
+    analysis_model_names: frozenset[str] | None = None,
+) -> dict[str, Any] | None: ...
 def build_project_graph_with_analysis_selection(
     *,
     discovered_inputs: DiscoveredProjectInputs,

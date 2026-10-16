@@ -1,7 +1,7 @@
 //! Project assembly's inference profile, binding catalog, source shapes and model analysis.
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple};
+use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple, PyTupleMethods};
 
 use sqlbuild_analysis::assembly::analysis_session::main::native_dialect::native_dialect;
 
@@ -9,19 +9,23 @@ use crate::bindings::_helpers::analysis::binding_catalog::{BindingCatalog, ignor
 use crate::bindings::_helpers::analysis_session::model_analyses::{
     ModelAnalyses, ModelAnalysisRequest, analyze_models,
 };
+use crate::bindings::_helpers::analysis_session::stage_functions::expression_source_shapes;
 use crate::bindings::_helpers::compile_driver::analysis_cache::analysis_cache_context;
-use crate::bindings::_helpers::compile_driver::assembly::AssemblyRequest;
+use crate::bindings::_helpers::compile_driver::assembly::{AssemblyRequest, AssemblyStage};
 use crate::bindings::_helpers::compile_driver::compile_timings::{
     record_compile_cpu_timing, record_compile_timing,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
+use crate::bindings::_helpers::compile_driver::stage_work::{
+    EXPRESSION_SHAPES, MODEL_ANALYSIS, count_stage,
+};
 use crate::bindings::_helpers::compiled_project::model_input_view::attached_schema;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::project_assembly::declared_relations::{
     DeclaredRelations, declared_relations,
 };
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::semantic_shapes::declarations::{declared_types, function_names};
 
@@ -106,7 +110,7 @@ pub(crate) fn analysis_context<'py>(
         analyses: None,
     };
     if context.sql_analysis_enabled.is_truthy()? {
-        record_expression_shapes(inputs, &context)?;
+        record_expression_shapes(request, &context)?;
     }
     let catalog: Bound<'py, PyAny> = context.profile.getattr("binding_catalog")?;
     catalog
@@ -259,10 +263,11 @@ fn function_return_types<'py>(
 
 /// Record each expression source's analysed shape as its declared relation.
 fn record_expression_shapes<'py>(
-    inputs: &Bound<'py, PyAny>,
+    request: &AssemblyRequest,
     context: &AnalysisContext<'py>,
 ) -> PyResult<()> {
-    let py: Python<'py> = inputs.py();
+    let py: Python<'py> = context.profile.py();
+    let inputs: &Bound<'py, PyAny> = request.inputs.bind(py);
     let mut sources: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut expressions: Vec<Bound<'py, PyAny>> = Vec::new();
     for source_input in inputs.getattr("source_inputs")?.try_iter()? {
@@ -275,15 +280,20 @@ fn record_expression_shapes<'py>(
             expressions.push(expression);
         }
     }
-    let shapes: Vec<Bound<'py, PyAny>> = call_with(
-        &registry::native(py, NativeAttr::InferNativeExpressionSourceShapes)?,
-        &[
-            ("expressions", PyTuple::new(py, expressions)?.into_any()),
-            ("profile", context.profile.clone()),
-        ],
-    )?
-    .try_iter()?
-    .collect::<PyResult<_>>()?;
+    let expressions: Bound<'py, PyAny> = PyTuple::new(py, expressions)?.into_any();
+    request.before_stage(AssemblyStage::ExpressionShapes, || {
+        keywords(
+            py,
+            &[
+                ("expressions", expressions.clone()),
+                ("profile", context.profile.clone()),
+            ],
+        )
+    })?;
+    count_stage(py, EXPRESSION_SHAPES, 1)?;
+    let shapes: Vec<Bound<'py, PyAny>> = expression_source_shapes(&expressions, &context.profile)?
+        .iter()
+        .collect();
     if shapes.len() != sources.len() {
         let relation: &str = if shapes.len() < sources.len() {
             "shorter"
@@ -362,6 +372,7 @@ fn model_analyses<'py>(
                     model_inputs.push(model_input);
                 }
             }
+            count_stage(py, MODEL_ANALYSIS, 1)?;
             analyze_models(&ModelAnalysisRequest {
                 model_inputs,
                 profile: context.profile.clone(),

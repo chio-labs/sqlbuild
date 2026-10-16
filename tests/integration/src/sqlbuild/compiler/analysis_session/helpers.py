@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, replace
 from itertools import chain
 from operator import attrgetter
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import pytest
 
@@ -538,6 +538,9 @@ class NativeAnalysisRuns:
     sessions: list[Any] = field(default_factory=list)
 
 
+type AssemblyStage = Literal["expression_shapes", "model_facts", "semantic_completion"]
+
+
 def analyse_natively(
     *,
     inputs: CompileInputsView,
@@ -545,7 +548,6 @@ def analyse_natively(
     lineage_mode: ColumnLineageMode,
     runs: NativeAnalysisRuns,
     cache_root: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Assemble `inputs` with a cold, then a warm analysis cache, then uncached, and compare them.
 
@@ -555,67 +557,67 @@ def analyse_natively(
     """
 
     views: list[object] = []
-    sinks: list[NativeAnalysisRuns] = [runs]
-    profiles: list[ExpressionInferenceProfile] = []
-    proved: Callable[..., tuple[ProofRow | None, ...]] = (
-        native_module.prove_native_dynamic_contracts
-    )
 
     def recorded_shapes(
-        *, expressions: tuple[str, ...], profile: ExpressionInferenceProfile
-    ) -> tuple[dict[str, str] | None, ...]:
+        sink: NativeAnalysisRuns,
+        *,
+        expressions: tuple[str, ...],
+        profile: ExpressionInferenceProfile,
+    ) -> None:
         catalog: Any = cast(Any, profile.binding_catalog)
         native: tuple[dict[str, str] | None, ...] = infer_native_expression_source_shapes(
             expressions=expressions, profile=profile
         )
-        profiles.append(profile)
-        sinks[-1].expression_shapes += sum(shape is not None for shape in native)
-        sinks[-1].golden.append(golden_entry("shapes", (native, catalog.expression_shapes)))
-        return native
+        sink.expression_shapes += sum(shape is not None for shape in native)
+        sink.golden.append(golden_entry("shapes", (native, catalog.expression_shapes)))
 
-    def recorded_analyses(**keywords: Any) -> tuple[ProofRow | None, ...]:
-        for profile in profiles[-1:]:
-            _record_analyses(
-                inputs=inputs,
-                catalog=profile.binding_catalog,
-                proof_inputs=(keywords["tables"], keywords["session"]),
-                views=views,
-                runs=sinks[-1],
-            )
-        profiles.clear()
-        return proved(**keywords)
+    def recorded_analyses(
+        sink: NativeAnalysisRuns,
+        *,
+        profile: ExpressionInferenceProfile,
+        session: Any,
+        tables: NativePivotTables,
+    ) -> None:
+        _record_analyses(
+            inputs=inputs,
+            catalog=profile.binding_catalog,
+            proof_inputs=(tables, session),
+            views=views,
+            runs=sink,
+        )
 
-    completed: Callable[..., CompiledProjectView] = native_module.complete_semantic_project
-
-    def recorded_proofs(*, project: CompiledProjectView, **keywords: Any) -> CompiledProjectView:
-        sinks[-1].golden.extend(
+    def recorded_proofs(
+        sink: NativeAnalysisRuns, *, project: CompiledProjectView, **keywords: Any
+    ) -> CompiledProjectView:
+        sink.golden.extend(
             golden_entry("proof", model.dynamic_column_contract) for model in project.models
         )
-        with monkeypatch.context() as completing:
-            completing.setattr(
-                native_module,
-                "infer_native_expression_source_shapes",
-                infer_native_expression_source_shapes,
-            )
-            return completed(project=project, **keywords)
+        return native_module.complete_semantic_project(project=project, **keywords)
 
-    with monkeypatch.context() as patch:
-        patch.setattr(native_module, "complete_semantic_project", recorded_proofs)
-        patch.setattr(native_module, "infer_native_expression_source_shapes", recorded_shapes)
-        patch.setattr(native_module, "prove_native_dynamic_contracts", recorded_analyses)
-        for cache_dir, sink in (
-            (cache_root, NativeAnalysisRuns()),
-            (cache_root, NativeAnalysisRuns()),
-            (None, runs),
-        ):
-            sinks.append(sink)
-            with suppress(CompileInputError):
-                _ = native_module.assemble_project(
-                    inputs=inputs,
-                    inference_profile=replace(inference_profile),
-                    column_lineage_mode=lineage_mode,
-                    analysis_cache_dir=cache_dir,
-                )
+    def stage_inputs(stage: AssemblyStage, cache_dir: Path | None) -> list[dict[str, Any]]:
+        found: dict[str, Any] | None = native_module.assembly_stage_inputs(
+            stage,
+            inputs=inputs,
+            inference_profile=replace(inference_profile),
+            column_lineage_mode=lineage_mode,
+            analysis_cache_dir=cache_dir,
+        )
+        return list(filter(None, [found]))
+
+    for cache_dir, sink in (
+        (cache_root, NativeAnalysisRuns()),
+        (cache_root, NativeAnalysisRuns()),
+        (None, runs),
+    ):
+        with suppress(CompileInputError):
+            shapes: list[dict[str, Any]] = stage_inputs("expression_shapes", cache_dir)
+            _ = [recorded_shapes(sink, **found) for found in shapes]
+            facts: list[dict[str, Any]] = stage_inputs("model_facts", cache_dir)
+            _ = [recorded_analyses(sink, **found) for found in facts[: len(shapes)]]
+            _ = [
+                recorded_proofs(sink, **found)
+                for found in stage_inputs("semantic_completion", cache_dir)
+            ]
     for index, view in enumerate(views[:-1]):
         _append(runs, f"model analyses, cached run {index}", views[-1], view)
 

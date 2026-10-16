@@ -84,14 +84,10 @@ pub(crate) fn native_project_facts<'py>(
     .into_any())
 }
 
-/// Each standalone pivot model's dynamic contract proof, by model position.
-fn pivot_proofs<'py>(
-    pivots: &Bound<'py, PyDict>,
-    context: &AnalysisContext<'py>,
-    session: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyDict>> {
-    let py: Python<'py> = pivots.py();
-    let tables: Bound<'py, PyAny> = call_with(
+/// The declared relation facts standalone pivot proofs read.
+pub(crate) fn pivot_tables<'py>(context: &AnalysisContext<'py>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = context.profile.py();
+    call_with(
         &registry::class(py, RecordId::NativePivotTables)?,
         &[
             ("dialect", context.profile.getattr("sql_analysis_dialect")?),
@@ -106,7 +102,17 @@ fn pivot_proofs<'py>(
                 context.dynamic_families.clone(),
             ),
         ],
-    )?;
+    )
+}
+
+/// Each standalone pivot model's dynamic contract proof, by model position.
+fn pivot_proofs<'py>(
+    pivots: &Bound<'py, PyDict>,
+    context: &AnalysisContext<'py>,
+    session: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let tables: Bound<'py, PyAny> = pivot_tables(context)?;
+    let py: Python<'py> = pivots.py();
     let proven: Vec<Bound<'py, PyAny>> = dynamic_contract_proofs(
         session,
         &tables,

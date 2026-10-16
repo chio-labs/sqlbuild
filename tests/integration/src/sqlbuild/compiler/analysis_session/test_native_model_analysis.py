@@ -199,7 +199,6 @@ def test_given_generated_projects_when_analysing_natively_then_cached_and_proven
                 lineage_mode=test_case.lineage_mode,
                 runs=runs,
                 cache_root=tmp_path / f"cache_{index}_{profile_index}",
-                monkeypatch=monkeypatch,
             )
 
     assert (
@@ -254,7 +253,6 @@ def test_given_equal_model_queries_when_analysing_natively_then_shares_and_cache
             lineage_mode=ColumnLineageMode.FAST,
             runs=runs,
             cache_root=tmp_path / f"cache_{dialect}",
-            monkeypatch=monkeypatch,
         )
         for dialect in test_case.dialects
     ]
@@ -312,7 +310,6 @@ def test_given_cyclic_models_when_analysing_natively_then_session_answers_and_ca
             lineage_mode=lineage_mode,
             runs=runs,
             cache_root=tmp_path / f"cache_{dialect}_{lineage_mode.value}",
-            monkeypatch=monkeypatch,
         )
         for dialect, lineage_mode in product(test_case.dialects, test_case.lineage_modes)
     ]

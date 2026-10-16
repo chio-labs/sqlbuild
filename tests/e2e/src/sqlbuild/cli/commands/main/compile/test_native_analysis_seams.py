@@ -28,13 +28,15 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
         NativeAnalysisSeamTestCase(
             description="models_contracts_lineage_and_sql_tests",
             expected_native_returns={
-                "infer_native_expression_source_shapes": [ANY, ANY, ANY, ANY],
-                "complete_semantic_project": [ANY],
+                "infer_native_expression_source_shapes": [ANY, ANY, ANY],
                 "evaluate_model_contracts": [ANY],
                 "build_project_column_lineage": [ANY],
                 "plan_compiled_sql_test_artifacts": [ANY],
             },
             expected_stage_work={
+                "infer_native_expression_source_shapes": 1,
+                "analyze_native_model_sql": 1,
+                "complete_semantic_project": 1,
                 "assemble_native_sql_tests": 1,
                 "promotion_conflict_diagnostics": 1,
             },
@@ -68,9 +70,6 @@ def test_given_project_when_compiling_then_native_seams_answer(
         assert isinstance(planned_artifacts, tuple)
         assert planned_artifacts
         assert all(isinstance(artifact, NativeSqlTestArtifact) for artifact in planned_artifacts)
-        completed: object = seams["complete_semantic_project"][0]
-        assert isinstance(completed, native_module.NativeProjectView)
-        assert any(model.inferred_columns for model in completed.models)
         assert isinstance(seams["evaluate_model_contracts"][0], ContractValidationResult)
 
 
