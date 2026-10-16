@@ -8,15 +8,20 @@ pub(crate) const TRACKED_TEXT_SUFFIXES: [&str; 5] = [".py", ".sql", ".toml", ".y
 pub(crate) const HIDDEN_PREFIX: u8 = b'.';
 /// `errno` values `pathlib` treats as a missing file when it tests `is_file()`.
 #[cfg(target_os = "macos")]
-pub(crate) const MISSING_FILE_ERRNOS: [i32; 4] = [2, 20, 9, 62];
-#[cfg(not(target_os = "macos"))]
-pub(crate) const MISSING_FILE_ERRNOS: [i32; 4] = [2, 20, 9, 40];
-pub(crate) const SEPARATOR: u8 = b'/';
-pub(crate) const ROOT: &[u8] = b"/";
-/// POSIX keeps exactly two leading slashes as their own root.
-pub(crate) const DOUBLE_ROOT: &[u8] = b"//";
-pub(crate) const DESCENDANT_SEPARATOR: &[u8] = b"/";
-pub(crate) const CURRENT: &[u8] = b".";
-pub(crate) const PARENT: &[u8] = b"..";
-/// Private-use characters standing for undecodable path bytes, one per byte value.
-pub(crate) const ESCAPED_BYTE_BASE: u32 = 0xF_0000;
+pub(crate) const MISSING_FILE_ERRORS: [i32; 4] = [2, 20, 9, 62];
+/// `errno` values `pathlib` treats as a missing file when it tests `is_file()`.
+#[cfg(all(unix, not(target_os = "macos")))]
+pub(crate) const MISSING_FILE_ERRORS: [i32; 4] = [2, 20, 9, 40];
+/// Windows error codes `pathlib` treats as a missing file: those mapping to its ignored `errno`s.
+#[cfg(not(unix))]
+pub(crate) const MISSING_FILE_ERRORS: [i32; 15] = [
+    2, 3, 15, 18, 53, 67, 161, 206, 6, 114, 130, 267, 21, 123, 1921,
+];
+/// The separator `as_posix()` spells and the project walk joins listed paths with.
+pub(crate) const POSIX_SEPARATOR: &str = "/";
+pub(crate) const POSIX_SEPARATOR_BYTE: u8 = b'/';
+/// `str()` of a path with no anchor and no components.
+pub(crate) const CURRENT: &str = ".";
+pub(crate) const PARENT: &str = "..";
+/// Private-use characters standing for undecodable path bytes or unpaired surrogates.
+pub(crate) const ESCAPED_BASE: u32 = 0xF_0000;

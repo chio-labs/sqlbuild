@@ -1,3 +1,4 @@
+pub mod project_path_escapes;
 pub mod project_relative_parts;
 pub mod project_tree_children;
 pub mod project_tree_descendants;

@@ -1,4 +1,3 @@
-pub mod posix_escapes_root;
 pub mod posix_join;
 pub mod posix_name;
 pub mod posix_parent;

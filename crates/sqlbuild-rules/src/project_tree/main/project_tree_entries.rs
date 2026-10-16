@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::project_tree::_helpers::entries::{kind, listed_directory};
+use crate::project_tree::_helpers::entries::{kind, listed_directory, posix_child};
 use crate::project_tree::models::{EntryKind, ProjectTreeEntry};
 
 /// Files and directories under `root`, without links, hidden or top-level tooling directories.
@@ -15,7 +15,7 @@ pub fn project_tree_entries(root: &Path) -> Vec<ProjectTreeEntry> {
             continue;
         };
         for entry in listing.flatten() {
-            let child: PathBuf = relative.join(entry.file_name());
+            let child: PathBuf = posix_child(&relative, &entry.file_name());
             match kind(&entry) {
                 EntryKind::Link => {}
                 EntryKind::Directory => {

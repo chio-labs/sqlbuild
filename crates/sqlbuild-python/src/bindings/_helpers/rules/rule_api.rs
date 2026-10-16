@@ -1,6 +1,6 @@
 //! Custom-rule API decisions: finding positions, harness option TOML and project-tree paths.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use pyo3::exceptions::{PyAttributeError, PyOSError, PyValueError};
 use pyo3::prelude::{
@@ -12,8 +12,8 @@ use pyo3::types::{
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_config::toml::main::toml_literal::toml_literal;
 use sqlbuild_config::toml::models::TomlLiteral;
-use sqlbuild_core::posix_path::main::posix_escapes_root::posix_escapes_root;
 use sqlbuild_rules::project_tree::errors::ProjectTreeFileError;
+use sqlbuild_rules::project_tree::main::project_path_escapes::project_path_escapes;
 use sqlbuild_rules::project_tree::main::project_tree_entries::project_tree_entries;
 use sqlbuild_rules::project_tree::main::project_tree_file::project_tree_file;
 use sqlbuild_rules::project_tree::main::tracked_text_suffixes::tracked_text_suffixes;
@@ -26,6 +26,7 @@ const RULE_USAGE_ERROR: &str = "RuleUsageError";
 const PROJECT_PATH_CLASS: &str = "ProjectPath";
 const BUILTINS_MODULE: &str = "builtins";
 const DEFAULT_POSITION: i64 = 1;
+#[cfg(unix)]
 const OS_MODULE: &str = "os";
 /// The error `os.lstat` raises for a path holding a NUL byte.
 const EMBEDDED_NUL_MESSAGE: &str = "lstat: embedded null character in path";
@@ -87,7 +88,7 @@ fn finding_position<'py>(
     node: &Bound<'py, PyAny>,
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let py: Python<'py> = path.py();
-    if posix_escapes_root(&path.str()?.to_string_lossy()) {
+    if escapes(path)? {
         return Err(usage_error_for(
             "finding path must be project-relative: ",
             path,
@@ -141,10 +142,44 @@ fn rule_option_toml_value(value: &Bound<'_, PyAny>) -> PyResult<String> {
 /// Reject a project path that is absolute or climbs out of the project.
 #[pyfunction]
 pub(crate) fn validate_project_relative(path: &Bound<'_, PyAny>) -> Result<(), PyErr> {
-    if posix_escapes_root(&path.str()?.to_string_lossy()) {
+    if escapes(path)? {
         return Err(usage_error_for("project path escapes the project: ", path));
     }
     Ok(())
+}
+
+/// Whether `str(path)` is absolute or climbs out of the project with `..`.
+fn escapes(path: &Bound<'_, PyAny>) -> PyResult<bool> {
+    Ok(project_path_escapes(Path::new(
+        &*path.str()?.to_string_lossy(),
+    )))
+}
+
+/// The `OSError` `Path.is_file()` raises for a stat failure it does not ignore.
+#[cfg(unix)]
+fn unreadable(py: Python<'_>, path: PathBuf, errno: i32) -> PyResult<PyErr> {
+    let message: String = imported(py, OS_MODULE, "strerror")?
+        .call1((errno,))?
+        .extract()?;
+    let Ok(path) = path.into_os_string().into_pyobject(py);
+    Ok(PyOSError::new_err((errno, message, path.unbind())))
+}
+
+/// The `OSError` `Path.is_file()` raises for a Windows stat failure it does not ignore.
+#[cfg(not(unix))]
+fn unreadable(py: Python<'_>, path: PathBuf, code: i32) -> PyResult<PyErr> {
+    let detail: String = std::io::Error::from_raw_os_error(code).to_string();
+    let detail: &str = detail
+        .strip_suffix(&format!(" (os error {code})"))
+        .unwrap_or(&detail)
+        .trim_end_matches(|character: char| character <= ' ' || character == '.');
+    let Ok(path) = path.into_os_string().into_pyobject(py);
+    Ok(PyOSError::new_err((
+        code,
+        detail.to_owned(),
+        path.unbind(),
+        code,
+    )))
 }
 
 /// Every supported path under the resolved project `root`, as sorted `ProjectPath`s.
@@ -206,11 +241,7 @@ fn project_tree_file_path<'py>(
         ),
         Err(ProjectTreeFileError::Symlink) => "project file must not be a symlink: ".to_owned(),
         Err(ProjectTreeFileError::Unreadable { path, errno }) => {
-            let message: String = imported(py, OS_MODULE, "strerror")?
-                .call1((errno,))?
-                .extract()?;
-            let Ok(path) = path.into_os_string().into_pyobject(py);
-            return Err(PyOSError::new_err((errno, message, path.unbind())));
+            return Err(unreadable(py, path, errno)?);
         }
     };
     Err(usage_error_for(&prefix, path))

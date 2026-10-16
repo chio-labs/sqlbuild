@@ -1,10 +1,13 @@
+#[cfg(unix)]
 use crate::project_tree::errors::{ProjectTreeFileError, RelativePartsError};
 
+#[cfg(unix)]
 pub(crate) struct ProjectTreeEntriesTestCase {
     pub(crate) description: &'static str,
     pub(crate) expected_entries: Vec<(&'static str, bool)>,
 }
 
+#[cfg(unix)]
 pub(crate) struct ProjectTreeFileTestCase {
     pub(crate) description: &'static str,
     pub(crate) path: &'static str,
@@ -20,6 +23,7 @@ pub(crate) struct PathSelectionTestCase {
     pub(crate) expected_glob: Vec<&'static str>,
 }
 
+#[cfg(unix)]
 pub(crate) struct RelativePartsTestCase {
     pub(crate) description: &'static str,
     pub(crate) path: &'static str,
@@ -32,4 +36,11 @@ pub(crate) struct TrackedTextTestCase {
     pub(crate) description: &'static str,
     pub(crate) path: &'static str,
     pub(crate) expected_tracked: bool,
+}
+
+#[cfg(unix)]
+pub(crate) struct EscapesTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) path: &'static str,
+    pub(crate) expected_escapes: bool,
 }

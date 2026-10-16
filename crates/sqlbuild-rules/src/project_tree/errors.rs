@@ -15,7 +15,7 @@ pub enum ProjectTreeFileError {
     Untracked,
     /// The path resolves through a symbolic link.
     Symlink,
-    /// Testing the resolved path failed with this `errno`.
+    /// Testing the resolved path failed with this `errno`, or Windows error code.
     Unreadable { path: PathBuf, errno: i32 },
 }
 
