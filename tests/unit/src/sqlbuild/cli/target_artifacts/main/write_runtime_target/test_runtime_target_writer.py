@@ -4,8 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import write_runtime_target
-from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild._native import PlanOutput, write_runtime_target
 from sqlbuild.executor.build.models import BuildExecutionResult
 from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
     build_runtime_target_execution_result,

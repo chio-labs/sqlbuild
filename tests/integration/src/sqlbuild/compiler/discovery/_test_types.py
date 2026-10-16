@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
+from sqlbuild._native import DiscoveredSqlModelFile
 
 
 @dataclass(frozen=True)

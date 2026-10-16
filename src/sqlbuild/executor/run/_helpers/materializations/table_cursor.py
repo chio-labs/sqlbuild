@@ -5,12 +5,13 @@ from __future__ import annotations
 from dataclasses import replace
 
 from sqlbuild._native import (
+    CursorBounds,
+    ModelPlanEntry,
     empty_cursor_window,
     future_cursor_cap_warning,
     replaces_incremental_relation,
 )
 from sqlbuild.adapter.relations.main.cached_relation_exists import cached_relation_exists
-from sqlbuild.compiler.planner.models import CursorBounds, ModelPlanEntry
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
     build_runtime_cursor_spec,

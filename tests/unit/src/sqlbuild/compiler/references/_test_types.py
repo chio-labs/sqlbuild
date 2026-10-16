@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild._native import SqlReferenceKind
 
 
 @dataclass(frozen=True)

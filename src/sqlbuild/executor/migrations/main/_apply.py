@@ -7,15 +7,15 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapter.contract.types import MigrationTransfer
-from sqlbuild.compiler.migrations.models import MigrationEvent
-from sqlbuild.compiler.planner.models import (
+from sqlbuild._native import (
+    MigrationEvent,
     ModelMigrationPlanEntry,
     OldNameViewPlanEntry,
     PlanOutput,
 )
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.types import MigrationTransfer
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.migrations._helpers.naming import resolve_artifact_names
 from sqlbuild.executor.migrations._helpers.promotion import (

@@ -1,11 +1,10 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from sqlbuild._native import FutureCursorsConfig, OnSchemaChange
 from sqlbuild.compiler.auditing.types import AuditRunScope
-from sqlbuild.compiler.planner.types import OnSchemaChange
 from sqlbuild.executor.run.types import ExecutionPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
-from sqlbuild.spec.contracts.models import FutureCursorsConfig
 
 
 @dataclass(frozen=True)

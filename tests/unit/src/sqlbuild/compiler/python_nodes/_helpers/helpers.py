@@ -11,18 +11,29 @@ from types import MappingProxyType, ModuleType
 from typing import Any, cast
 
 from sqlbuild._native import (
-    CompiledSource,
-    CompileModelConfig,
-    PythonSqlRunSelection,
-    build_python_node_graph,
-    compiled_graph_keys,
-    resolve_python_sql_run_selection,
-)
-from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledSource,
+    CompileModelConfig,
+    DiscoveredAssetFunction,
+    DiscoveredCheckFunction,
+    DiscoveredLoaderFunction,
+    DiscoveredProjectInputs,
+    DiscoveredSourceFile,
+    DiscoveredTaskFunction,
+    LoaderConnectionMode,
+    LocalConfig,
+    ProjectConfig,
+    ProjectGraph,
+    PythonNodeGraph,
+    PythonSqlRunSelection,
+    SourceColumnEntry,
+    SourceEntry,
+    build_python_node_graph,
+    compiled_graph_keys,
+    resolve_python_sql_run_selection,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
@@ -30,27 +41,10 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     CompiledSourceView,
 )
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredAssetFunction,
-    DiscoveredCheckFunction,
-    DiscoveredLoaderFunction,
-    DiscoveredProjectInputs,
-    DiscoveredSourceFile,
-    DiscoveredTaskFunction,
-)
-from sqlbuild.compiler.discovery.types import LoaderConnectionMode
-from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.providers import Provider
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.refs import model, source
-from sqlbuild.spec.contracts.models import (
-    LocalConfig,
-    ProjectConfig,
-    SourceColumnEntry,
-    SourceEntry,
-)
 from sqlbuild.tasks import task
 from tests.unit.src.sqlbuild.compiler.graph.helpers import project_graph_from_indexes
 

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild._native import ScenarioExecutionPlan
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.executor.scenario.classes.scenario_interrupts import ScenarioInterrupts
 from sqlbuild.executor.scenario.main._cleanup import execute_scenario_cleanup
 

@@ -7,10 +7,13 @@ use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::record_behaviours::lineage_facts::{
+    confidence_member, transform_kind_member,
+};
 
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const LINEAGE_NATIVE: &str = "native";
 
@@ -233,7 +236,6 @@ fn lineage_facts<'py>(rows: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let column_class: Bound<'py, PyAny> =
         shape_class(models.as_any(), "CompiledLineageColumnFact")?;
     let source_class: Bound<'py, PyAny> = models.getattr("CompiledLineageSourceFact")?;
-    let compact: Bound<'py, PyAny> = models.getattr("CompactLineageFacts")?;
     let mut facts: Vec<Bound<'py, PyAny>> = Vec::new();
     for row in rows.try_iter()? {
         let (output_column, transform_code, confidence_code, sources): (
@@ -265,11 +267,11 @@ fn lineage_facts<'py>(rows: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
                 ("upstream_columns", PyTuple::new(py, upstream)?.into_any()),
                 (
                     "transform_kind",
-                    compact.call_method1("transform_kind", (transform_code,))?,
+                    transform_kind_member(py, transform_code.extract()?)?.into_bound(py),
                 ),
                 (
                     "confidence",
-                    compact.call_method1("confidence", (confidence_code,))?,
+                    confidence_member(py, confidence_code.extract()?)?.into_bound(py),
                 ),
             ],
         )?);

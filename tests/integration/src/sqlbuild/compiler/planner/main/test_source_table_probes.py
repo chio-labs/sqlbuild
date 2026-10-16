@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild._native import CompilePipelineResult
 from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     SourceTableProbeBudgetTestCase,
 )

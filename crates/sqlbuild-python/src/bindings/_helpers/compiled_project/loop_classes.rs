@@ -8,19 +8,19 @@ use crate::bindings::_helpers::compile_driver::python_calls::imported;
 
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
+const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
 const AUDITING_TYPES_MODULE: &str = "sqlbuild.compiler.auditing.types";
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
+const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
-const PLANNER_TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
-const REFERENCE_TYPES_MODULE: &str = "sqlbuild.compiler.references.types";
+const PLANNER_TYPES_MODULE: &str = "sqlbuild._native";
+const REFERENCE_TYPES_MODULE: &str = "sqlbuild._native";
 const SCOPE_ERRORS_MODULE: &str = "sqlbuild._native";
-const SCOPE_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
-const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
-const CONTRACT_TYPES_MODULE: &str = "sqlbuild.spec.contracts.types";
+const SCOPE_MODELS_MODULE: &str = "sqlbuild._native";
+const SCOPE_TYPES_MODULE: &str = "sqlbuild._native";
+const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
+const CONTRACT_TYPES_MODULE: &str = "sqlbuild._native";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 /// The materializations a model's storage policies are inherited for, besides none.
 const TABLE_BACKED_MATERIALIZATIONS: [&str; 3] = ["TABLE", "INCREMENTAL", "SNAPSHOT"];

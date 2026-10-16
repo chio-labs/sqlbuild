@@ -10,13 +10,13 @@ use crate::bindings::_helpers::rules::catalogue::{
     references_custom_rules, resolved_ignore_selectors, rule_catalogue, select_rules,
     verify_custom_rules,
 };
+use crate::bindings::_helpers::rules::constants::TYPE_PROOF_RULE_CODES;
 use crate::bindings::_helpers::rules::rule_run::freed_memory_released;
 
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const CUSTOM_PAYLOADS_MODULE: &str = "sqlbuild.rule_engine._helpers.engine.custom_payloads";
-const RULES_CONSTANTS_MODULE: &str = "sqlbuild.rule_engine.constants";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const PATHLIB_MODULE: &str = "pathlib";
@@ -57,12 +57,10 @@ fn plan_rule_run<'py>(options: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'p
             .getattr("sql_analysis")?
             .is_truthy()?
     {
-        let type_proof: Bound<'py, PyAny> =
-            imported(py, RULES_CONSTANTS_MODULE, "TYPE_PROOF_RULE_CODES")?;
         let mut kept: Vec<Bound<'py, PyAny>> = Vec::with_capacity(selected.len());
         for rule in selected {
             let code: Bound<'py, PyAny> = rule.getattr("code")?;
-            if type_proof.contains(&code)? {
+            if TYPE_PROOF_RULE_CODES.contains(&code.extract::<String>()?.as_str()) {
                 skipped_type_proof_rules.push(code);
             } else {
                 kept.push(rule);

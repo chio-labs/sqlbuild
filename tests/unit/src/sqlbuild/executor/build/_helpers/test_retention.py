@@ -5,6 +5,18 @@ from unittest.mock import Mock, call
 
 import pytest
 
+from sqlbuild._native import (
+    CompiledRelationLocation,
+    IncrementalMode,
+    MaterializationType,
+    ModelPlanEntry,
+    PlanAction,
+    PlanOutput,
+    RetentionDirection,
+    RetentionPlanEntry,
+    RetentionPlanPhase,
+    TableTypePlanEntry,
+)
 from sqlbuild.adapter.contract.models import (
     RelationInfo,
     RenderedRetentionChange,
@@ -12,20 +24,6 @@ from sqlbuild.adapter.contract.models import (
     RetentionState,
 )
 from sqlbuild.adapter.contract.types import RetentionChangePhase, RetentionScope
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.planner.models import (
-    ModelPlanEntry,
-    PlanOutput,
-    RetentionPlanEntry,
-    TableTypePlanEntry,
-)
-from sqlbuild.compiler.planner.types import (
-    IncrementalMode,
-    MaterializationType,
-    PlanAction,
-    RetentionDirection,
-    RetentionPlanPhase,
-)
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.build._helpers.retention import (
     apply_retention_phase,

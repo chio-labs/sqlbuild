@@ -7,12 +7,32 @@ from pathlib import Path
 from typing import Any, cast
 
 from sqlbuild._native import (
+    AuditPlanEntry,
+    ChainStep,
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
     CompileModelConfig,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
+    DiscoveredSourceFile,
     DiscoveredSqlHookFile,
+    LoadedMacro,
+    MaterializationType,
+    ModelPlanEntry,
+    PlanAction,
+    PlanOutput,
+    PlanReason,
+    SchemaColumn,
+    SchemaModelEntry,
+    SchemaSeedEntry,
+    SeedPlanEntry,
+    SourceColumnEntry,
+    SourceEntry,
+    SqlTestPlanEntry,
     build_manifest,
 )
 from sqlbuild.compiler.auditing.types import (
@@ -20,40 +40,12 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
-    LoadedMacro,
-)
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
     CompiledSeedView,
     CompiledSourceView,
-)
-from sqlbuild.compiler.discovery.models import DiscoveredSourceFile
-from sqlbuild.compiler.planner.models import (
-    AuditPlanEntry,
-    ChainStep,
-    ModelPlanEntry,
-    PlanOutput,
-    SeedPlanEntry,
-    SqlTestPlanEntry,
-)
-from sqlbuild.compiler.planner.types import (
-    MaterializationType,
-    PlanAction,
-    PlanReason,
-)
-from sqlbuild.spec.contracts.models import (
-    SchemaColumn,
-    SchemaModelEntry,
-    SchemaSeedEntry,
-    SourceColumnEntry,
-    SourceEntry,
 )
 
 

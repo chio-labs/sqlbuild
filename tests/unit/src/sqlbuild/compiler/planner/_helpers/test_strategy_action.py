@@ -3,21 +3,17 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
+    BackfillAction,
     ChangeDetectionResult,
     ChangeKind,
+    PlanAction,
+    PlanReason,
     SchemaChangeKind,
     SchemaColumnSource,
+    SchemaFinding,
     resolve_model_plan_action,
 )
 from sqlbuild.compiler.compile.types import CompiledModelView
-from sqlbuild.compiler.planner.models import (
-    SchemaFinding,
-)
-from sqlbuild.compiler.planner.types import (
-    BackfillAction,
-    PlanAction,
-    PlanReason,
-)
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     IncrementalStrategyErrorTestCase,
     ResolveModelPlanActionTestCase,

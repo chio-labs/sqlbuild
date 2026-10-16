@@ -8,9 +8,8 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextvars import copy_context
 from typing import Any
 
-from sqlbuild._native import BuildPhaseTimingTracker
+from sqlbuild._native import BuildPhaseTimingTracker, PlanOutput
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.models import BuildCallbacks
 from sqlbuild.executor.pipeline._helpers.schema_preparation import prepare_build_schemas
 from sqlbuild.executor.pipeline.models import BuildConnectionPreparation

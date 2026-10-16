@@ -37,7 +37,7 @@ use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_colo
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const CONTRACT_TYPES_MODULE: &str = "sqlbuild.spec.contracts.types";
+const CONTRACT_TYPES_MODULE: &str = "sqlbuild._native";
 const DEBUG_OPTIONS: (&[&str], &[&str]) = (
     &[],
     &[

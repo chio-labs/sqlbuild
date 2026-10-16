@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild._native import PlanOutput
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult

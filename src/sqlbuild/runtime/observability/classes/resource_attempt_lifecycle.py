@@ -8,6 +8,7 @@ from contextlib import ExitStack
 from types import TracebackType
 from uuid import uuid4
 
+from sqlbuild._native import RESOURCE_SKIP_CODES, RESOURCE_SKIP_MODES
 from sqlbuild.runtime.observability._helpers.dispatcher import (
     current_event_dispatcher,
     dispatcher_scope,
@@ -20,11 +21,7 @@ from sqlbuild.runtime.observability._helpers.identity import (
     run_scope,
 )
 from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
-from sqlbuild.runtime.observability.constants import (
-    RESOURCE_ATTEMPT_SKIPPED_EVENT,
-    RESOURCE_SKIP_CODES,
-    RESOURCE_SKIP_MODES,
-)
+from sqlbuild.runtime.observability.constants import RESOURCE_ATTEMPT_SKIPPED_EVENT
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.models import ExecutionIdentity
 from sqlbuild.runtime.observability.types import JSONValue

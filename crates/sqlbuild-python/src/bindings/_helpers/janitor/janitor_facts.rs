@@ -27,8 +27,8 @@ const LOG_DEBUG_EVENT: (&str, &str) = (
 );
 const READ_LATEST_FINGERPRINTS: (&str, &str) = ("sqlbuild._native", "read_latest_fingerprints");
 const EXECUTION_LOGGER: &str = "sqlbuild.execution";
-const FINGERPRINT_TABLE_NAME: &str = "_sqlbuild_fingerprints";
-const SOURCE_FRESHNESS_TABLE_NAME: &str = "_sqlbuild_source_freshness";
+use sqlbuild_core::constants::FINGERPRINT_TABLE_NAME;
+use sqlbuild_core::constants::SOURCE_FRESHNESS_TABLE_NAME;
 
 /// The adapter and its open connection.
 pub(crate) struct Warehouse<'py> {

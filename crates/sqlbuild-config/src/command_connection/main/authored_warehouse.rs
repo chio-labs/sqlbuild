@@ -1,7 +1,8 @@
 //! The authored warehouse a target sets for a command group.
 
-use crate::command_connection::constants::{LOCAL_CONFIG_FILENAME, PROJECT_CONFIG_FILENAME};
+use crate::command_connection::constants::LOCAL_CONFIG_FILENAME;
 use crate::command_connection::models::AuthoredWarehouse;
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 
 /// The local target's group warehouse, else the project target's, with the file that sets it.
 #[must_use]

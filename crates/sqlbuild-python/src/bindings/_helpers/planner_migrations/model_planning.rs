@@ -254,7 +254,7 @@ fn finish<'py>(
         )?;
         let project_config = runtime.getattr("project_config")?;
         let snapshots_config = if project_config.is_none() {
-            imported(py, "sqlbuild.spec.contracts.models", "SnapshotsConfig")?.call0()?
+            imported(py, "sqlbuild._native", "SnapshotsConfig")?.call0()?
         } else {
             project_config.getattr("snapshots")?
         };

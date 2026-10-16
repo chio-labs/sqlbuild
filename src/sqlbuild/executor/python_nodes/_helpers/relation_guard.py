@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.references.types import HardCodedRelationOwnerKind
+from sqlbuild._native import HardCodedRelationOwnerKind
 from sqlbuild.executor.python_nodes.classes.runtime_relation_guard import RuntimeRelationGuard
 from sqlbuild.executor.python_nodes.models import PythonNodeRuntime
 

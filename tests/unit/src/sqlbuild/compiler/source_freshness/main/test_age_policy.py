@@ -4,8 +4,11 @@ from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
-from sqlbuild._native import SourceFreshnessAgeStatus, evaluate_source_freshness_age_policy
-from sqlbuild.spec.contracts.models import SourceFreshnessAgePolicy
+from sqlbuild._native import (
+    SourceFreshnessAgePolicy,
+    SourceFreshnessAgeStatus,
+    evaluate_source_freshness_age_policy,
+)
 from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
     SourceFreshnessAgeEvaluationTestCase,
     SourceFreshnessNaiveDatetimeTestCase,

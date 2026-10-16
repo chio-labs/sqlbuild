@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 
-from sqlbuild._native import PythonPlanEntry
-from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild._native import PlanOutput, PythonPlanEntry
 from sqlbuild.python_nodes.models import SqlResourceRef
 
 

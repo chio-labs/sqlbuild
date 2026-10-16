@@ -8,23 +8,23 @@ from typing import TYPE_CHECKING, cast
 import sqlbuild._native as _native
 from sqlbuild._native import (
     CompileModelConfig,
+    DefaultsConfig,
+    MaterializationDefaultsConfig,
     NativeModelConfigInputs,
     NativeModelConfigSession,
+    ProjectConfig,
+    ResolvedTableType,
+    ResolvedTimeTravelRetention,
+    SchemaColumn,
+    TableType,
+    TableTypeSource,
+    TargetConfig,
+    TimeTravelRetentionSource,
     build_compile_inputs,
     discover_project_inputs,
     native_model_config_session,
     record_template_reads,
 )
-from sqlbuild.spec.contracts.models import (
-    DefaultsConfig,
-    MaterializationDefaultsConfig,
-    ProjectConfig,
-    ResolvedTableType,
-    ResolvedTimeTravelRetention,
-    SchemaColumn,
-    TargetConfig,
-)
-from sqlbuild.spec.contracts.types import TableType, TableTypeSource, TimeTravelRetentionSource
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     DUCKDB_COMPILE_ADAPTER_CONTEXT,
 )

@@ -232,12 +232,7 @@ fn execution_limits<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = discovered.py();
     if target.is_none() {
-        return imported(
-            py,
-            "sqlbuild.spec.contracts.models",
-            "ExecutionLimitsConfig",
-        )?
-        .call0();
+        return imported(py, "sqlbuild._native", "ExecutionLimitsConfig")?.call0();
     }
     call_with(
         &imported(py, "sqlbuild._native", "resolve_target_config")?,

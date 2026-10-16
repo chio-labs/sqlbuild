@@ -11,6 +11,9 @@ use sqlbuild_analysis::lineage_graph::main::edge_index::edge_index;
 use sqlbuild_analysis::lineage_graph::models::{EdgeIndex, EdgeKey};
 
 use crate::bindings::_helpers::lineage::lineage_objects::LineageClasses;
+use crate::bindings::_helpers::record_behaviours::lineage_facts::{
+    confidence_member, transform_kind_member,
+};
 
 /// One compact model's facts and root-star flag.
 struct CompactModel {
@@ -470,7 +473,10 @@ impl RecordBuilder {
     }
 }
 
-/// `facts.transform_kind(code)` and `facts.confidence(code)`, looked up once per code.
+/// Looks up the enum member of one native code.
+type CodeLookup = fn(Python<'_>, usize) -> PyResult<Py<PyAny>>;
+
+/// The transform kind and confidence members of native codes, looked up once per code.
 #[derive(Default)]
 struct CodeMembers {
     members: HashMap<(&'static str, i64), Py<PyAny>>,
@@ -478,26 +484,24 @@ struct CodeMembers {
 
 impl CodeMembers {
     fn transform(&mut self, facts: &Bound<'_, PyAny>, code: i64) -> PyResult<Py<PyAny>> {
-        self.member(facts, "transform_kind", code)
+        self.member(facts.py(), ("transform_kind", transform_kind_member), code)
     }
 
     fn confidence(&mut self, facts: &Bound<'_, PyAny>, code: i64) -> PyResult<Py<PyAny>> {
-        self.member(facts, "confidence", code)
+        self.member(facts.py(), ("confidence", confidence_member), code)
     }
 
     fn member(
         &mut self,
-        facts: &Bound<'_, PyAny>,
-        method: &'static str,
+        py: Python<'_>,
+        (kind, lookup): (&'static str, CodeLookup),
         code: i64,
     ) -> PyResult<Py<PyAny>> {
-        if let Some(member) = self.members.get(&(method, code)) {
-            return Ok(member.clone_ref(facts.py()));
+        if let Some(member) = self.members.get(&(kind, code)) {
+            return Ok(member.clone_ref(py));
         }
-        let member: Py<PyAny> = facts.call_method1(method, (code,))?.unbind();
-        let _ = self
-            .members
-            .insert((method, code), member.clone_ref(facts.py()));
+        let member: Py<PyAny> = lookup(py, usize::try_from(code)?)?;
+        let _ = self.members.insert((kind, code), member.clone_ref(py));
         Ok(member)
     }
 }

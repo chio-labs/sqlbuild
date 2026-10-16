@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild._native import MaterializationType, ScenarioExecutionPlan
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
-from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.scenario._helpers.lifecycle.cleanup import (
     collect_scenario_cleanup_targets,

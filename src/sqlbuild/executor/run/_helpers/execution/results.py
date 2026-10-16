@@ -4,14 +4,17 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from sqlbuild._native import error_code, error_help, error_message, format_waiting_on_empty_inputs
-from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.compiler.planner.models import (
+from sqlbuild._native import (
     CursorBounds,
     FutureCursorSafetyEvidence,
     MaximumStartSafetyEvidence,
     ModelPlanEntry,
+    error_code,
+    error_help,
+    error_message,
+    format_waiting_on_empty_inputs,
 )
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.constants import (
     RUN_AUDIT_FAILED_CODE,

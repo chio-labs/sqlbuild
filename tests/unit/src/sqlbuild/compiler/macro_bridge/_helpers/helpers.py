@@ -14,14 +14,19 @@ from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile.models import DeclarationResolutionContext, LoadedMacro, MacroContext
-from sqlbuild.compiler.discovery.models import ConstantDeclaration
+from sqlbuild._native import (
+    ConstantDeclaration,
+    DeclarationResolutionContext,
+    LoadedMacro,
+    MacroContext,
+    SqlLogicalType,
+    SqlValue,
+    SqlValueKind,
+)
 from sqlbuild.compiler.macro_bridge._helpers.store_environment import (
     project_fingerprint,
     store_environment,
 )
-from sqlbuild.sql_values.models import SqlLogicalType, SqlValue
-from sqlbuild.sql_values.types import SqlValueKind
 
 BASE_CONTEXT: MacroContext = MacroContext(
     adapter_name="duckdb",

@@ -6,13 +6,11 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    DiscoveredEventExporter,
+    DiscoveredProvider,
     EventExporterDiscoveryError,
     discover_event_exporter_functions,
     discover_provider_classes,
-)
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredEventExporter,
-    DiscoveredProvider,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     EventExporterDiscoveryTestCase,

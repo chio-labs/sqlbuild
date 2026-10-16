@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
+from sqlbuild._native import PythonHookEntry, SqlHookEntry
 from tests.unit.src.sqlbuild.compiler.planner.main.identity._test_types import (
     HookIdentityPayloadTestCase,
     HookIdentityTestCase,

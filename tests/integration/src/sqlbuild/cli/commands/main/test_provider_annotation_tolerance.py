@@ -6,9 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import discover_provider_classes, discover_python_node_functions
+from sqlbuild._native import (
+    DiscoveredPythonNodeFunctions,
+    discover_provider_classes,
+    discover_python_node_functions,
+)
 from sqlbuild._native import run_cli as main
-from sqlbuild.compiler.discovery.models import DiscoveredPythonNodeFunctions
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     ProviderAnnotationToleranceTestCase,
 )

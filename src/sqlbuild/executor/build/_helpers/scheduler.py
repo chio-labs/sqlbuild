@@ -5,21 +5,21 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 
 from sqlbuild._native import (
+    MICROBATCH_END_SENTINEL,
+    MICROBATCH_START_SENTINEL,
+    CompiledObjectKey,
+    IncrementalMode,
+    MaterializationType,
+    ModelPlanEntry,
+    PlanAction,
+    PlanReason,
+    SnapshotsConfig,
     assert_no_unresolved_sql_markers,
     replaces_incremental_relation,
     resolve_cursor_intrinsics,
 )
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.adapter.contract.types import TablePromotionMode
-from sqlbuild.compiler.compile.models import CompiledObjectKey
-from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
-from sqlbuild.compiler.planner.models import ModelPlanEntry
-from sqlbuild.compiler.planner.types import (
-    IncrementalMode,
-    MaterializationType,
-    PlanAction,
-    PlanReason,
-)
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.build.constants import (
     BUILD_CUSTOM_MATERIALIZATION_MISSING_CODE,
@@ -47,7 +47,6 @@ from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializat
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
-from sqlbuild.spec.contracts.models import SnapshotsConfig
 
 type _BuildWorkerResult = (
     ModelExecutionResult

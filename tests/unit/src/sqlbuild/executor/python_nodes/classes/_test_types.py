@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 
-from sqlbuild.compiler.references.types import HardCodedRelationOwnerKind
+from sqlbuild._native import HardCodedRelationOwnerKind
 from sqlbuild.python_nodes.models import SqlResourceRef
 
 

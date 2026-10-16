@@ -18,12 +18,15 @@ from sqlbuild._native import (
     AnalysisCacheContext,
     CollectionRendering,
     ColumnLineageMode,
+    CompactLineageFacts,
     CompileAdapterContext,
     DynamicColumnContractProof,
+    InferredColumn,
     ModelSqlAnalysis,
     NativeModelAnalyses,
     NativeModelAnalysisRequest,
     NativePivotTables,
+    SchemaDynamicColumnFamily,
     analyze_native_model_sql,
     build_analysis_cache_context,
     build_compile_inputs,
@@ -40,10 +43,8 @@ from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.entry.main.entry import main
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompactLineageFacts, InferredColumn
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import (
     AdapterRuleCallbackTestCase,
 )

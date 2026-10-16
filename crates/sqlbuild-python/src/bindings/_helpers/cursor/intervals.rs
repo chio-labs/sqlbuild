@@ -46,7 +46,7 @@ fn python_intervals<'py>(
 /// Raise `CursorAlgebraError` unless the ends form a valid aligned interval.
 #[pyfunction(name = "validate_cursor_interval")]
 #[pyo3(signature = (*, start, end, grain))]
-fn interval_validation(
+pub(crate) fn interval_validation(
     start: &Bound<'_, PyAny>,
     end: &Bound<'_, PyAny>,
     grain: &Bound<'_, PyAny>,

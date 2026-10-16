@@ -29,7 +29,7 @@ use crate::bindings::_helpers::graph::algorithms::{closure, inverted};
 use crate::bindings::_helpers::graph::keys::KeyCache;
 use crate::bindings::_helpers::planner_identity::hashing::graph_key;
 
-const EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
+const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const TABLE_FN_TEST_MODE: &str = "table_fn";
 const INLINE_SQL_HOOK: &str = "inline SQL";
 

@@ -115,7 +115,7 @@ fn initialize(
     if let Some(fields) = fields {
         for key in fields.keys() {
             let key: String = key.extract()?;
-            if !spec.required.contains(&key.as_str()) {
+            if !spec.required.contains(&key.as_str()) && !spec.optional.contains(&key.as_str()) {
                 return Err(PyTypeError::new_err(format!(
                     "{name}.__init__() got an unexpected keyword argument '{key}'"
                 )));
@@ -147,6 +147,13 @@ fn initialize(
             )));
         };
         error.setattr(*required, value)?;
+    }
+    for optional in spec.optional {
+        let value = match fields {
+            Some(fields) => fields.get_item(optional)?,
+            None => None,
+        };
+        error.setattr(*optional, value.unwrap_or_else(|| py.None().into_bound(py)))?;
     }
     for (attribute, value) in spec.fixed {
         error.setattr(*attribute, class_value(py, *value)?)?;

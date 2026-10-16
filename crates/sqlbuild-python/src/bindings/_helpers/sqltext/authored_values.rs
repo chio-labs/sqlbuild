@@ -7,7 +7,7 @@ use sqlbuild_sqltext::compiler::main::header_word_value::header_word_value;
 use sqlbuild_sqltext::compiler::models::HeaderWord;
 
 const SQL_VALUES_MODULE: &str = "sqlbuild._native";
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
+const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
 
 fn word_to_python(py: Python<'_>, word: String) -> PyResult<Py<PyAny>> {
     match header_word_value(&word) {

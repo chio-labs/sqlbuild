@@ -6,8 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompilerDiagnostic
+from sqlbuild._native import CompileInputError, CompilerDiagnostic
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     MacroGeneratedReferenceCollectionTestCase,

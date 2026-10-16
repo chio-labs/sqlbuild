@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from sqlbuild.spec.contracts.types import SourceWriteStrategy
+from sqlbuild._native import SourceWriteStrategy
 
 
 def normalize_unique_key(value: str | Sequence[str] | None) -> tuple[str, ...]:

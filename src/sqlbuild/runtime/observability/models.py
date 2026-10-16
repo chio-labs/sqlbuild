@@ -6,8 +6,16 @@ import copy
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Literal, Self
+from typing import Literal
 
+from sqlbuild._native import (
+    freeze_lifecycle_json,
+    validate_diagnostic_log,
+    validate_lifecycle_event,
+    validate_lifecycle_invocation_sequence,
+    validate_lifecycle_optional_text,
+    validate_lifecycle_required_text,
+)
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.types import JSONValue
 
@@ -68,12 +76,8 @@ class ExecutionIdentity:
     log_stream_id: str | None = None
 
     def __post_init__(self) -> None:
-        from sqlbuild.runtime.observability._helpers.validation import (
-            validate_optional_text,
-            validate_required_text,
-        )
 
-        validate_required_text(value=self.invocation_id, field_name="invocation_id")
+        validate_lifecycle_required_text(value=self.invocation_id, field_name="invocation_id")
         for field_name in (
             "run_id",
             "resource_id",
@@ -82,30 +86,7 @@ class ExecutionIdentity:
             "statement_id",
             "log_stream_id",
         ):
-            validate_optional_text(value=getattr(self, field_name), field_name=field_name)
-
-
-@dataclass(frozen=True)
-class LifecycleEventDefinition:
-    """Validation contract for one known lifecycle event type."""
-
-    required_correlations: frozenset[str]
-    required_payload_fields: frozenset[str]
-    allowed_payload_fields: frozenset[str]
-    terminal: bool
-
-    @classmethod
-    def create(
-        cls,
-        *,
-        required_correlations: frozenset[str] = frozenset(),
-        required_payload: frozenset[str] = frozenset(),
-        allowed: frozenset[str] = frozenset(),
-        terminal: bool = False,
-    ) -> Self:
-        """Create one immutable catalog definition."""
-
-        return cls(required_correlations, required_payload, allowed, terminal)
+            validate_lifecycle_optional_text(value=getattr(self, field_name), field_name=field_name)
 
 
 @dataclass(frozen=True)
@@ -129,75 +110,12 @@ class LifecycleEvent:
     payload: Mapping[str, JSONValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        from sqlbuild.runtime.observability._helpers.validation import (
-            freeze_json,
-            validate_known_lifecycle_event,
-            validate_optional_text,
-            validate_required_text,
-            validate_schema_version,
-            validate_timestamp,
-        )
-        from sqlbuild.runtime.observability.constants import (
-            CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION,
-            LIFECYCLE_EVENT_CATALOGS,
-        )
-
-        for field_name in (
-            "event_id",
-            "event_type",
-            "producer",
-            "producer_version",
-            "invocation_id",
-        ):
-            validate_required_text(value=getattr(self, field_name), field_name=field_name)
-        validate_schema_version(value=self.schema_version)
-        if self.schema_version not in LIFECYCLE_EVENT_CATALOGS:
-            raise ObservabilityValidationError(
-                "LifecycleEvent only represents known schema versions through "
-                f"{CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION}; decode other versions as "
-                "OpaqueLifecycleEvent"
-            )
-        if self.schema_version == 1:
-            if self.invocation_sequence is not None or self.external_context:
-                raise ObservabilityValidationError(
-                    "schema version 1 lifecycle events cannot contain invocation metadata"
-                )
-        elif (
-            isinstance(self.invocation_sequence, bool)
-            or not isinstance(self.invocation_sequence, int)
-            or self.invocation_sequence < 0
-        ):
-            raise ObservabilityValidationError(
-                "invocation_sequence must be a non-negative integer excluding bool"
-            )
-        validate_timestamp(value=self.occurred_at)
-        for field_name in (
-            "run_id",
-            "resource_id",
-            "resource_attempt_id",
-            "operation_id",
-            "statement_id",
-        ):
-            validate_optional_text(value=getattr(self, field_name), field_name=field_name)
-        frozen_context: JSONValue = freeze_json(
-            value=self.external_context, path="external_context"
-        )
-        if not isinstance(frozen_context, Mapping):
-            raise ObservabilityValidationError("external_context must be a JSON object")
-        object.__setattr__(self, "external_context", frozen_context)
-        frozen_payload: JSONValue = freeze_json(value=self.payload, path="payload")
-        if not isinstance(frozen_payload, Mapping):
-            raise ObservabilityValidationError("payload must be a JSON object")
-        object.__setattr__(self, "payload", frozen_payload)
-        validate_known_lifecycle_event(event=self)
+        validate_lifecycle_event(event=self)
 
     def with_invocation_sequence(self, sequence: int) -> LifecycleEvent:
         """Return this validated event with a dispatcher-assigned invocation sequence."""
 
-        if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 0:
-            raise ObservabilityValidationError(
-                "invocation_sequence must be a non-negative integer excluding bool"
-            )
+        validate_lifecycle_invocation_sequence(value=sequence)
         sequenced: LifecycleEvent = copy.copy(self)
         object.__setattr__(sequenced, "invocation_sequence", sequence)
         return sequenced
@@ -210,9 +128,7 @@ class OpaqueLifecycleEvent:
     raw: Mapping[str, JSONValue]
 
     def __post_init__(self) -> None:
-        from sqlbuild.runtime.observability._helpers.validation import freeze_json
-
-        frozen_raw: JSONValue = freeze_json(value=self.raw, path="event")
+        frozen_raw: JSONValue = freeze_lifecycle_json(value=self.raw, path="event")
         if not isinstance(frozen_raw, Mapping):
             raise ObservabilityValidationError("event must be a JSON object")
         object.__setattr__(self, "raw", frozen_raw)
@@ -240,51 +156,7 @@ class DiagnosticLog:
     statement_id: str | None = None
 
     def __post_init__(self) -> None:
-        from sqlbuild.runtime.observability._helpers.validation import (
-            freeze_json,
-            validate_optional_text,
-            validate_required_text,
-            validate_schema_version,
-            validate_timestamp,
-        )
-        from sqlbuild.runtime.observability.constants import (
-            CURRENT_DIAGNOSTIC_LOG_SCHEMA_VERSION,
-            DIAGNOSTIC_SEVERITIES,
-        )
-
-        validate_schema_version(value=self.schema_version)
-        if self.schema_version != CURRENT_DIAGNOSTIC_LOG_SCHEMA_VERSION:
-            raise ObservabilityValidationError(
-                f"diagnostic schema_version must be {CURRENT_DIAGNOSTIC_LOG_SCHEMA_VERSION}"
-            )
-        for field_name in (
-            "producer",
-            "producer_version",
-            "severity",
-            "logger",
-            "source",
-            "message",
-        ):
-            validate_required_text(value=getattr(self, field_name), field_name=field_name)
-        if self.severity not in DIAGNOSTIC_SEVERITIES:
-            raise ObservabilityValidationError(
-                "severity must be one of trace, debug, info, warning, error, critical"
-            )
-        validate_timestamp(value=self.occurred_at)
-        for field_name in (
-            "log_stream_id",
-            "invocation_id",
-            "run_id",
-            "resource_id",
-            "resource_attempt_id",
-            "operation_id",
-            "statement_id",
-        ):
-            validate_optional_text(value=getattr(self, field_name), field_name=field_name)
-        frozen_fields: JSONValue = freeze_json(value=self.fields, path="fields")
-        if not isinstance(frozen_fields, Mapping):
-            raise ObservabilityValidationError("fields must be a JSON object")
-        object.__setattr__(self, "fields", frozen_fields)
+        validate_diagnostic_log(record=self)
 
 
 @dataclass(frozen=True)

@@ -9,6 +9,7 @@ import pytest
 
 import sqlbuild._native as native_module
 from sqlbuild._native import (
+    DiscoveredProjectInputs,
     LintBody,
     LintConfig,
     LintRunResult,
@@ -22,7 +23,6 @@ from sqlbuild._native import (
     prepare_lint_body,
     run_lint,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.unit.src.sqlbuild.lint._test_types import (
     ExpandedLintTestCase,
     ExpandedTypedConstantTestCase,

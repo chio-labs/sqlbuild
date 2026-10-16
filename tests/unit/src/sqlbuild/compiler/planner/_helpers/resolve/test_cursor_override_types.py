@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import type_cursor_overrides
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.models import CursorOverrides
+from sqlbuild._native import CursorOverrides, PlannerInputError, type_cursor_overrides
 from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types import (
     UntypedCursorOverrideErrorTestCase,
     UntypedCursorOverrideTestCase,

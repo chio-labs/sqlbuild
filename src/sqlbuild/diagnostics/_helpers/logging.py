@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
 import logging
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
 
-from sqlbuild.diagnostics.constants import SQL_TEXT_FIELD
+from sqlbuild._native import debug_event_record_fields, sql_log_record
 from sqlbuild.runtime.observability.main.current_execution_identity import (
     current_execution_identity,
 )
@@ -17,7 +16,6 @@ from sqlbuild.runtime.observability.main.execution_identity_to_dict import (
 )
 from sqlbuild.runtime.observability.models import ExecutionIdentity
 
-_LOGGER_ROOT_NAME: str = "sqlbuild"
 _EMPTY_CONTEXT: dict[str, object] = {}
 _DIAGNOSTICS_CONTEXT: ContextVar[dict[str, object] | None] = ContextVar(
     "sqlbuild_diagnostics_context", default=None
@@ -27,11 +25,11 @@ _SQL_DIAGNOSTIC_SINK: ContextVar[Callable[..., None] | None] = ContextVar(
 )
 
 
-def _current_identity_context() -> dict[str, object]:
+def _current_identity_fields() -> dict[str, str | None] | None:
     identity: ExecutionIdentity | None = current_execution_identity()
     if identity is None:
-        return {}
-    return {f"sqlbuild_{key}": value for key, value in execution_identity_to_dict(identity).items()}
+        return None
+    return execution_identity_to_dict(identity)
 
 
 def log_sql(
@@ -44,28 +42,15 @@ def log_sql(
 ) -> None:
     """Log SQL passed to an adapter or connection."""
 
-    contextual_fields: dict[str, object] = {
-        key: value
-        for key, value in (_DIAGNOSTICS_CONTEXT.get() or _EMPTY_CONTEXT).items()
-        if key != SQL_TEXT_FIELD
-    }
-    sql_fields: dict[str, object] = {
-        "sqlbuild_sql_action": action,
-        "sqlbuild_sql_digest": f"sha256:{hashlib.sha256(sql.encode('utf-8')).hexdigest()}",
-    }
-    if intent is not None:
-        sql_fields["sqlbuild_sql_intent"] = intent
-    if query_id is not None:
-        sql_fields["sqlbuild_sql_query_id"] = query_id
-    record_fields: dict[str, object] = {
-        **contextual_fields,
-        **sql_fields,
-        **_current_identity_context(),
-    }
-    logger.debug(
-        f"{action} SQL",
-        extra=record_fields,
+    message, record_fields = sql_log_record(
+        context=_DIAGNOSTICS_CONTEXT.get(),
+        identity=_current_identity_fields(),
+        sql=sql,
+        action=action,
+        intent=intent,
+        query_id=query_id,
     )
+    logger.debug(message, extra=record_fields)
     sql_sink: Callable[..., None] | None = _SQL_DIAGNOSTIC_SINK.get()
     if sql_sink is not None:
         sql_sink(logger=logger, sql=sql, fields=record_fields)
@@ -89,11 +74,11 @@ def log_debug_event(*, logger: logging.Logger, message: str, **context: object) 
 
     logger.debug(
         message,
-        extra={
-            **(_DIAGNOSTICS_CONTEXT.get() or _EMPTY_CONTEXT),
-            **context,
-            **_current_identity_context(),
-        },
+        extra=debug_event_record_fields(
+            context=_DIAGNOSTICS_CONTEXT.get(),
+            event_fields=context,
+            identity=_current_identity_fields(),
+        ),
     )
 
 

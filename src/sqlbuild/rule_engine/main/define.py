@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from sqlbuild._native import RuleOption
 from sqlbuild.rule_engine._helpers.engine.definition import define_rule
-from sqlbuild.rule_engine.models import RuleOption
 from sqlbuild.rule_engine.types import RuleCheck
 
 

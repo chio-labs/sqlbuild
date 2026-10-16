@@ -21,6 +21,36 @@ fn given_raw_check_name_when_normalizing_then_replaces_punctuation() {
             value: "--",
             expected_name: "check",
         },
+        CheckNameTestCase {
+            description: "combining vowel sign is not alphanumeric",
+            value: "\u{915}\u{93f}1",
+            expected_name: "\u{915}_1",
+        },
+        CheckNameTestCase {
+            description: "trailing combining mark is trimmed as a separator",
+            value: "\u{915}\u{93f}",
+            expected_name: "\u{915}",
+        },
+        CheckNameTestCase {
+            description: "combining acute accent becomes a separator",
+            value: "e\u{301}tat",
+            expected_name: "e_tat",
+        },
+        CheckNameTestCase {
+            description: "precomposed letters and Arabic-Indic digits are kept",
+            value: "\u{dc}n\u{ef}c\u{f6}d\u{e9}_\u{663}\u{664}",
+            expected_name: "\u{dc}n\u{ef}c\u{f6}d\u{e9}_\u{663}\u{664}",
+        },
+        CheckNameTestCase {
+            description: "superscript, fraction and roman numeral are numeric",
+            value: "x\u{b2}\u{bd}\u{216b}",
+            expected_name: "x\u{b2}\u{bd}\u{216b}",
+        },
+        CheckNameTestCase {
+            description: "ideographs and kana are kept around a separator",
+            value: "\u{65e5}\u{672c}\u{8a9e}-\u{30c1}\u{30a7}\u{30c3}\u{30af}",
+            expected_name: "\u{65e5}\u{672c}\u{8a9e}_\u{30c1}\u{30a7}\u{30c3}\u{30af}",
+        },
     ];
     for test_case in test_cases {
         assert_eq!(

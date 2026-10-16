@@ -9,29 +9,29 @@ import duckdb
 import pytest
 
 from sqlbuild._native import (
+    CompiledObjectKey,
+    CompiledRelationLocation,
+    CursorBounds,
+    CursorGrain,
+    CursorInputRelation,
+    CursorType,
     CursorWatermarkMode,
+    FutureCursorAction,
+    FutureCursorSafetyError,
+    FutureCursorsConfig,
+    MaterializationType,
+    ModelCursorSnapshot,
+    ModelPlanEntry,
+    PlanAction,
+    PlanReason,
+    StartCursorsConfig,
     normalize_cursor_snapshot_grain,
 )
 from sqlbuild._native import cursor_render as render
 from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.exceptions import FutureCursorSafetyError
-from sqlbuild.compiler.planner.models import (
-    CursorBounds,
-    CursorInputRelation,
-    ModelCursorSnapshot,
-    ModelPlanEntry,
-)
-from sqlbuild.compiler.planner.types import (
-    CursorGrain,
-    CursorType,
-    MaterializationType,
-    PlanAction,
-    PlanReason,
-)
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
     build_runtime_cursor_spec,
@@ -41,8 +41,6 @@ from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
 from sqlbuild.executor.run.exceptions import EmptyCursorInputsError
 from sqlbuild.executor.run.models import RuntimeCursorInputRelation, RuntimeCursorSpec
 from sqlbuild.executor.run.types import RuntimeCursorWatermarkMode
-from sqlbuild.spec.contracts.models import FutureCursorsConfig, StartCursorsConfig
-from sqlbuild.spec.contracts.types import FutureCursorAction
 from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
     AuthoritativeRuntimeCursorOverrideTestCase,
     CursorSentinelSubstitutionErrorTestCase,

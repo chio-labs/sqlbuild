@@ -6,17 +6,17 @@ use pyo3::types::{PyDict, PyDictMethods, PyString};
 
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const UNNEEDED_SQL_ANALYSIS_OPT_OUT_CODE: &str = "P009";
 const SQL_ANALYSIS_CONFIG_KEY: &str = "sql_analysis";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
+const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
 const PROJECT_WITH_MODULE: &str = "sqlbuild._native";
 const TYPE_RECOVERY_MODULE: &str = "sqlbuild._native";
 const BINDING_DIAGNOSTICS_MODULE: &str = "sqlbuild._native";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const NORMALIZE_TYPE_MODULE: &str = "sqlbuild.adapter.type_system.main.normalize_type";
 const DATACLASSES_MODULE: &str = "dataclasses";
-const REFERENCE_TYPES_MODULE: &str = "sqlbuild.compiler.references.types";
+const REFERENCE_TYPES_MODULE: &str = "sqlbuild._native";
 
 /// Imported once per stage run.
 pub(crate) struct StageClasses<'py> {

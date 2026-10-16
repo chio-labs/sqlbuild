@@ -7,9 +7,23 @@ from unittest.mock import Mock
 import pytest
 
 from sqlbuild._native import (
+    Fingerprint,
+    LocalConfig,
+    MaterializationType,
+    PlannerInputError,
     PlannerRuntime,
     PlannerScope,
     PlannerWarehouseState,
+    ProjectConfig,
+    ResolvedTableType,
+    RetentionDirection,
+    RetentionPlanEntry,
+    RetentionPlanPhase,
+    TableType,
+    TableTypeDowngradePolicy,
+    TableTypePlanEntry,
+    TableTypeSource,
+    TargetConfig,
     WarehouseFingerprints,
     plan_retention,
     plan_table_types,
@@ -25,21 +39,6 @@ from sqlbuild.adapter.contract.types import (
     RetentionScope,
 )
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
-from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.models import RetentionPlanEntry, TableTypePlanEntry
-from sqlbuild.compiler.planner.types import (
-    MaterializationType,
-    RetentionDirection,
-    RetentionPlanPhase,
-)
-from sqlbuild.spec.contracts.models import (
-    LocalConfig,
-    ProjectConfig,
-    ResolvedTableType,
-    TargetConfig,
-)
-from sqlbuild.spec.contracts.types import TableType, TableTypeDowngradePolicy, TableTypeSource
 from tests.unit.src.sqlbuild.compiler.planner._helpers.planning._test_types import (
     ForeignSnapshotRelationTestCase,
     RetentionPlanningErrorTestCase,

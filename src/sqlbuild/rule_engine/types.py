@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    from sqlbuild._native import Finding, Model, ProjectPath, RuleOption, SqlNode
     from sqlbuild.rule_engine.classes.audit_facts import AuditFacts
     from sqlbuild.rule_engine.classes.column_facts import ColumnFacts
     from sqlbuild.rule_engine.classes.contract_facts import ContractFacts
@@ -16,24 +16,10 @@ if TYPE_CHECKING:
     from sqlbuild.rule_engine.classes.model_test_facts import TestFacts
     from sqlbuild.rule_engine.classes.project_facts import ProjectFacts
     from sqlbuild.rule_engine.classes.sql_facts import SqlFacts
-    from sqlbuild.rule_engine.models import (
-        Finding,
-        Model,
-        ProjectPath,
-        RuleOption,
-        SqlNode,
-    )
 
 type RuleOptionValue = bool | int | str | tuple[str, ...] | tuple[int, ...]
 type FactKey = tuple[str, ...]
 type CustomRulePlan = dict[str, frozenset[str] | None]
-
-
-class RuleSubject(StrEnum):
-    """Compiler-owned unit used to invoke and cache one custom rule."""
-
-    MODEL = "model"
-    PROJECT = "project"
 
 
 class RuleContext(Protocol):

@@ -5,13 +5,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from sqlbuild._native import parse_query_diff_artifact_name
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.executor.diff._helpers.query_artifacts import (
     build_query_diff_artifact,
     cleanup_expired_query_diff_artifacts,
     cleanup_query_diff_artifact,
     inspect_query_diff_artifacts,
-    is_query_diff_artifact_name,
     materialize_query_diff_artifact,
 )
 from sqlbuild.executor.diff.models import (
@@ -102,4 +102,4 @@ class QueryDiffArtifactLifecycle:
 
     @staticmethod
     def is_artifact_name(name: str) -> bool:
-        return is_query_diff_artifact_name(name)
+        return parse_query_diff_artifact_name(name) is not None

@@ -4,3 +4,5 @@ mod helpers;
 mod load_toml;
 #[path = "tests/test_types.rs"]
 mod test_types;
+#[path = "tests/test_toml_literal.rs"]
+mod toml_literal;

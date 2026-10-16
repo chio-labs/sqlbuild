@@ -10,19 +10,22 @@ from typing import Any, cast
 
 import pytest
 
-from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.auditing.types import AuditRunScope
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, PythonHookEntry, SqlHookEntry
-from sqlbuild.compiler.planner.constants import (
+from sqlbuild._native import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
+    DiscoveredHookFunction,
+    FutureCursorAction,
+    FutureCursorsConfig,
+    MicrobatchLimitAction,
+    OnSchemaChange,
+    PythonHookEntry,
+    SqlHookEntry,
 )
-from sqlbuild.compiler.planner.types import OnSchemaChange
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.executor.run._helpers.materializations import microbatch as microbatch_module
 from sqlbuild.executor.run.models import BatchWindow, ModelExecutionResult
 from sqlbuild.executor.run.types import ExecutionPhase
-from sqlbuild.spec.contracts.models import FutureCursorsConfig
-from sqlbuild.spec.contracts.types import FutureCursorAction, MicrobatchLimitAction
 from tests.integration.src.sqlbuild.executor.run.microbatch._test_types import (
     MicrobatchFailureTestCase,
     MicrobatchSuccessTestCase,

@@ -6,9 +6,8 @@ import logging
 from dataclasses import replace
 from typing import Any, Final
 
-from sqlbuild._native import render_sql_test_difference_sample_sql
+from sqlbuild._native import ChainStep, SqlTestPlanEntry, render_sql_test_difference_sample_sql
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
 from sqlbuild.diagnostics.classes.diagnostic_record_redactor import DiagnosticRecordRedactor
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.executor.testing.models import (

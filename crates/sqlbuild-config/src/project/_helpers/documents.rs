@@ -24,13 +24,15 @@ use crate::project::_helpers::targets::{
 };
 use crate::project::_helpers::values::is_truthy;
 use crate::project::constants::{
-    LEGACY_EVENT_EXPORTERS_KEY, LOCAL_CONFIG_FILENAME, PROJECT_CONFIG_FILENAME,
-    QUERY_CHANGE_TRACKING_KEY, REQUIRE_SQL_ANALYSIS_KEY, SETTINGS_SECTION, SQL_ANALYSIS_KEY,
+    LEGACY_EVENT_EXPORTERS_KEY, LOCAL_CONFIG_FILENAME, QUERY_CHANGE_TRACKING_KEY,
+    REQUIRE_SQL_ANALYSIS_KEY, SQL_ANALYSIS_KEY,
 };
 use crate::project::errors::{ConfigFailure, FailureClass, LoadFailure, MessagePiece};
 use crate::project::models::{Built, ConfigFile, ConfigPaths};
 use crate::project::types::{Entries, Fields, Loaded};
 use crate::toml::main::load_toml::load_toml;
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
+use sqlbuild_core::constants::SETTINGS_SECTION;
 use std::path::Path;
 
 const PROJECT_FILE: ConfigFile = ConfigFile::Project;

@@ -13,10 +13,11 @@ use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_s
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::cache::native_store::current_code_identity;
 use crate::bindings::_helpers::compile_driver::analysis_cache::record_analysis_cache_metrics;
+use crate::bindings::_helpers::semantic_shapes::shapes::{VALID_FROM_DEFAULT, VALID_TO_DEFAULT};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
-const PLANNER_TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
+const PLANNER_TYPES_MODULE: &str = "sqlbuild._native";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const LOG_DEBUG_MODULE: &str = "sqlbuild.diagnostics.main.log_debug_event";
 const LOGGING_MODULE: &str = "logging";
@@ -308,8 +309,8 @@ fn model_rows<'py>(
             || (!entry.is_none() && entry.getattr("type_enforcement")?.is_truthy()?);
         let snapshot_columns: Option<(String, String)> = if get("materialized")?.eq(&snapshot)? {
             Some((
-                or_default(&get("valid_from_column")?, "valid_from")?,
-                or_default(&get("valid_to_column")?, "valid_to")?,
+                or_default(&get("valid_from_column")?, VALID_FROM_DEFAULT)?,
+                or_default(&get("valid_to_column")?, VALID_TO_DEFAULT)?,
             ))
         } else {
             None

@@ -161,11 +161,7 @@ fn raise_for_warnings(warnings: &Bound<'_, PyAny>) -> PyResult<()> {
     }
     if let Some(code) = code {
         return Err(PyErr::from_value(call_with(
-            &imported(
-                py,
-                "sqlbuild.compiler.planner.exceptions",
-                "PlannerInputError",
-            )?,
+            &imported(py, "sqlbuild._native", "PlannerInputError")?,
             &[
                 ("message", string(py, &messages.join("\n"))),
                 ("code", code),

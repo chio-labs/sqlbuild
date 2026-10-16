@@ -7,8 +7,8 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
+const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
+const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
 
 /// Models and model schemas, skipping files that cannot be read.
 #[pyfunction]

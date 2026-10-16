@@ -1,9 +1,11 @@
+use crate::constants::MIN_CUSTOM_RULE_TEST_CASES_KEY;
 use crate::models::RulesConfig;
 use fensu_policy::policy::types::RuleCodeGrammar;
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 use std::path::Path;
 
 pub(crate) fn load(project_dir: &Path) -> Result<RulesConfig, String> {
-    let path = project_dir.join("sqlbuild_project.toml");
+    let path = project_dir.join(PROJECT_CONFIG_FILENAME);
     let source = std::fs::read_to_string(&path).map_err(|error| {
         format!(
             "could not load rules config from {}: {error}",
@@ -100,7 +102,7 @@ pub(crate) fn validate(config: &RulesConfig) -> Result<(), String> {
         "max_ranking_order_by",
         "min_audits_per_model",
         "min_tests_per_model",
-        "min_custom_rule_test_cases",
+        MIN_CUSTOM_RULE_TEST_CASES_KEY,
         "max_subdomain_depth",
         "min_shared_owner_prefix_directories",
         "max_role_container_depth",

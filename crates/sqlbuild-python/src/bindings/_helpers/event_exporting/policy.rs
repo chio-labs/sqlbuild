@@ -1,32 +1,28 @@
 //! Lifecycle export policy, severity comparison and narrowing for Python callers.
 
 use pyo3::prelude::{
-    Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python, pyfunction,
-    wrap_pyfunction,
+    Bound, PyAny, PyModule, PyModuleMethods, PyResult, Python, pyfunction, wrap_pyfunction,
 };
 use pyo3::types::{PyDict, PyDictMethods};
 use sqlbuild_core::event_export::main::severity_at_least::severity_at_least;
 use sqlbuild_core::event_export::main::stricter_severity::stricter_severity;
 use sqlbuild_core::event_export::models::{ExportPolicy, ExportSeverity};
+use sqlbuild_core::lifecycle_events::constants::CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION;
+use sqlbuild_core::lifecycle_events::main::catalog::catalog;
 
 use crate::bindings::_helpers::event_exporting::values::{
     export_policy, severity_from, severity_object,
 };
 
-const CATALOG_MODULE: &str = "sqlbuild.runtime.observability.constants";
-
 /// `{event_type: (kind, severity, priority)}` for every catalogued lifecycle event, in catalogue order.
 #[pyfunction]
 fn lifecycle_export_policy_catalog(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
-    let catalog: Bound<'_, PyAny> = py
-        .import(CATALOG_MODULE)?
-        .getattr("LIFECYCLE_EVENT_CATALOG")?;
     let policies: Bound<'_, PyDict> = PyDict::new(py);
-    for event_type in catalog.try_iter()? {
-        let event_type: String = event_type?.extract()?;
-        let policy: ExportPolicy = export_policy(py, &event_type)?;
+    for definition in catalog(CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION).unwrap_or_default() {
+        let event_type: &str = definition.event_type;
+        let policy: ExportPolicy = export_policy(py, event_type)?;
         policies.set_item(
-            &event_type,
+            event_type,
             (
                 policy.kind,
                 severity_object(py, policy.severity)?,

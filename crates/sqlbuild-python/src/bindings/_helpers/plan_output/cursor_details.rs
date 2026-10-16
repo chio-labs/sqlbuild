@@ -3,20 +3,19 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::cursor::conversion::GRAIN_NAMES;
 use crate::bindings::_helpers::plan_output::display::{
     aligned_timestamp_bounds, resolve_effective_microbatch_batch_size,
 };
 use crate::bindings::_helpers::plan_output::values::{optional_text, text};
 
 const BOUND_TYPES_MODULE: &str = "sqlbuild.cursor_algebra.types";
-const CURSOR_MODELS_MODULE: &str = "sqlbuild.cursor_algebra.models";
+const CURSOR_MODELS_MODULE: &str = "sqlbuild._native";
 const MICROBATCH_MODE: &str = "microbatch";
 const TIMESTAMP_CURSOR: &str = "timestamp";
 const INTEGER_CURSOR: &str = "integer";
 const WATERMARK_STRATEGY: &str = "watermark";
 const SECOND_GRAIN: &str = "second";
-/// `GRAIN_ORDER`, finest first.
-const GRAIN_ORDER: [&str; 6] = ["second", "minute", "hour", "day", "month", "year"];
 
 /// `CursorBoundsOwner` and `CursorResolutionStatus` of one model, as their values.
 pub(crate) const RUNTIME_OWNER: &str = "runtime";
@@ -44,9 +43,9 @@ pub(crate) struct CursorDetails<'py> {
 }
 
 fn grain_rank(grain: &str) -> PyResult<usize> {
-    GRAIN_ORDER
+    GRAIN_NAMES
         .iter()
-        .position(|known| *known == grain)
+        .position(|(known, _)| *known == grain)
         .ok_or_else(|| {
             pyo3::exceptions::PyValueError::new_err(format!("'{grain}' is not a valid CursorGrain"))
         })

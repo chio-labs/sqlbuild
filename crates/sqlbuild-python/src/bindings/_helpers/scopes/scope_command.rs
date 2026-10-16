@@ -23,8 +23,8 @@ use crate::bindings::_helpers::scopes::scope_reports::{
 };
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
-const TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
+const MODELS_MODULE: &str = "sqlbuild._native";
+const TYPES_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild._native";
 const TARGET_ERROR_CODE: &str = "C960";
 const BARE_USAGE: &str = "bare names work for models, sources, seeds and functions; write macros, \

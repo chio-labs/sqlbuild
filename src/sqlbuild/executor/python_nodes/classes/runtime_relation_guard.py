@@ -6,6 +6,7 @@ import logging
 from collections.abc import Mapping
 
 from sqlbuild._native import (
+    HardCodedRelationOwnerKind,
     extract_relation_names,
     hard_coded_relation_remedy,
     match_project_relation,
@@ -16,7 +17,6 @@ from sqlbuild.compiler.references.models import (
     ProjectRelationIndex,
     RelationName,
 )
-from sqlbuild.compiler.references.types import HardCodedRelationOwnerKind
 from sqlbuild.python_nodes.models import SqlResourceRef
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)

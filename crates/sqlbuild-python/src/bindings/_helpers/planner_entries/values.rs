@@ -7,15 +7,15 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::PyString;
 
 pub(super) const NATIVE_MODULE: &str = "sqlbuild._native";
-pub(super) const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
-pub(super) const PLANNER_TYPES: &str = "sqlbuild.compiler.planner.types";
-pub(super) const PLANNER_EXCEPTIONS: &str = "sqlbuild.compiler.planner.exceptions";
+pub(super) const PLANNER_MODELS: &str = "sqlbuild._native";
+pub(super) const PLANNER_TYPES: &str = "sqlbuild._native";
+pub(super) const PLANNER_EXCEPTIONS: &str = "sqlbuild._native";
 pub(super) const MICROBATCH_CONCURRENCY_MESSAGE: &str =
     "batch_concurrency > 1 requires concurrent microbatches; selected model(s): ";
-pub(super) const COMPILE_EXCEPTIONS: &str = "sqlbuild.compiler.compile.exceptions";
+pub(super) const COMPILE_EXCEPTIONS: &str = "sqlbuild._native";
 pub(super) const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
-pub(super) const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
-pub(super) const DISCOVERY_MODELS: &str = "sqlbuild.compiler.discovery.models";
+pub(super) const COMPILE_MODELS: &str = "sqlbuild._native";
+pub(super) const DISCOVERY_MODELS: &str = "sqlbuild._native";
 
 /// `sqlbuild._native.name(**pairs)`.
 pub(super) fn native<'py>(
@@ -26,7 +26,7 @@ pub(super) fn native<'py>(
     call_with(&imported(py, NATIVE_MODULE, name)?, pairs)
 }
 
-/// `sqlbuild.compiler.planner.models.name(**pairs)`.
+/// The planner record `name(**pairs)`.
 pub(super) fn planner_model<'py>(
     py: Python<'py>,
     name: &str,

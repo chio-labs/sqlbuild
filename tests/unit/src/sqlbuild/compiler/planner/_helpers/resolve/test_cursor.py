@@ -8,23 +8,22 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from sqlbuild._native import (
+    MICROBATCH_END_SENTINEL,
+    MICROBATCH_START_SENTINEL,
+    AlignedInterval,
+    CursorBounds,
+    CursorGrain,
+    CursorType,
     CursorWatermarkMode,
+    DateValue,
+    ModelCursorSnapshot,
+    TimestampValue,
     apply_typed_cursor_replay_policy,
     compute_cursor_bounds,
 )
 from sqlbuild._native import cursor_observed_partition as observed_partition
 from sqlbuild._native import cursor_parse as parse
 from sqlbuild._native import cursor_render as render
-from sqlbuild.compiler.planner.constants import (
-    MICROBATCH_END_SENTINEL,
-    MICROBATCH_START_SENTINEL,
-)
-from sqlbuild.compiler.planner.models import CursorBounds, ModelCursorSnapshot
-from sqlbuild.compiler.planner.types import (
-    CursorGrain,
-    CursorType,
-)
-from sqlbuild.cursor_algebra.models import AlignedInterval, DateValue, TimestampValue
 from sqlbuild.cursor_algebra.types import CursorScalar
 from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types import (
     CursorBoundsTestCase,

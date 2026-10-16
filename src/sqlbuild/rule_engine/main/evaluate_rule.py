@@ -1,6 +1,6 @@
 """Public custom rule test harness."""
 
-from sqlbuild.rule_engine.models import Rule, RuleCase, RuleResult
+from sqlbuild._native import Rule, RuleCase, RuleResult
 from sqlbuild.rule_engine.types import RuleCheck
 
 

@@ -6,10 +6,10 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
+from sqlbuild._native import SeedCsvSettings
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo, FunctionDefinition
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
-from sqlbuild.spec.contracts.models import SeedCsvSettings
 
 
 class MaterializationMixin(ABC):

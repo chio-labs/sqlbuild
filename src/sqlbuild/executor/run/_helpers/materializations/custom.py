@@ -7,6 +7,13 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Any, cast
 
+from sqlbuild._native import (
+    AuditPlanEntry,
+    CompiledRelationLocation,
+    ModelPlanEntry,
+    PlanReason,
+    SourceEntry,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
@@ -14,9 +21,6 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.compiler.auditing.types import AuditRunScope
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
-from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.auditing.main._execute import execute_audit
@@ -46,7 +50,6 @@ from sqlbuild.executor.run.types import ExecutionPhase, HookPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import _empty_provider_container, invoke_with_providers
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def execute_custom_entry(

@@ -5,17 +5,17 @@ from __future__ import annotations
 import time
 from dataclasses import replace
 
-from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapter.contract.models import RelationLookup, RetentionRequest
-from sqlbuild.adapter.contract.types import RetentionScope
-from sqlbuild.compiler.compile.models import CompiledObjectKey
-from sqlbuild.compiler.planner.models import (
+from sqlbuild._native import (
     CloneSourcePlanEntry,
+    CompiledObjectKey,
     FunctionPlanEntry,
+    MaterializationType,
     ModelPlanEntry,
     SeedPlanEntry,
 )
-from sqlbuild.compiler.planner.types import MaterializationType
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import RelationLookup, RetentionRequest
+from sqlbuild.adapter.contract.types import RetentionScope
 from sqlbuild.executor.build.models import FunctionExecutionResult
 from sqlbuild.executor.clone._helpers.operations import clone_relation, recreate_view
 from sqlbuild.executor.clone._helpers.retention import apply_clone_retention

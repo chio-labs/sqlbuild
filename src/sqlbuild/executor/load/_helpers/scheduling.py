@@ -10,9 +10,8 @@ from contextvars import copy_context
 from functools import partial
 from typing import Any
 
+from sqlbuild._native import DiscoveredLoaderFunction, LoaderConnectionMode, SourceEntry
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.load._helpers.dag_runtime import (
@@ -38,7 +37,6 @@ from sqlbuild.executor.load.models import (
 from sqlbuild.executor.load.types import LoadProgressCallback
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def validate_external_loaders_are_preconnect_runnable(

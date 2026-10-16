@@ -18,7 +18,7 @@ use crate::bindings::_helpers::rules::early_sql_lint::{sql_lint_config, sql_rule
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const RULES_MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
+const RULES_MODELS_MODULE: &str = "sqlbuild._native";
 const LINT_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const JSON_MODULE: &str = "json";

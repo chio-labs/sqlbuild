@@ -8,7 +8,7 @@ use sqlbuild_analysis::graph::errors::SelectorError;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 
-const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
+const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const PRIVATE_USE: std::ops::Range<u32> = 0xF0000..0xFFFFE;
 
 /// `str.translate` tables to and from carrier characters; empty when no text holds a surrogate.

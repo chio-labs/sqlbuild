@@ -6,6 +6,16 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
+from sqlbuild._native import (
+    AuditPlanEntry,
+    CompiledObjectKey,
+    CompiledRelationLocation,
+    DiscoveredHookFunction,
+    MaterializationType,
+    ModelPlanEntry,
+    PlanAction,
+    PlanReason,
+)
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import (
@@ -13,14 +23,7 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledRelationLocation,
-)
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
-from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
-from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.custom.models import (
     MaterializationContext,
@@ -427,13 +430,13 @@ def run_scheduler_build(
 
     from sqlbuild._native import (
         CompilePipelineOptions,
+        CompilePipelineResult,
+        DiscoveredProjectInputs,
+        PlanOutput,
         discover_project_inputs,
         run_compile_pipeline,
     )
     from sqlbuild.adapter.contract.types import TablePromotionMode
-    from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-    from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-    from sqlbuild.compiler.planner.models import PlanOutput
     from sqlbuild.executor.build.main._execute import execute_build_plan
     from sqlbuild.executor.build.models import (
         BuildCustomizations,

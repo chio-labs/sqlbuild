@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlbuild.compiler.planner.types import CursorGrain
+from sqlbuild._native import CursorGrain
 
 
 @dataclass(frozen=True, kw_only=True)

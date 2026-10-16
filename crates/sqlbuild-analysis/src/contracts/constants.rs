@@ -9,14 +9,11 @@ pub(crate) const MISSING_DECLARATIONS_CODE: &str = "K006";
 pub(crate) const DYNAMIC_OUTPUT_NOT_PROVEN_CODE: &str = "K011";
 pub(crate) const PROMOTION_CONFLICT_CODE: &str = "K011";
 
-pub(crate) const CONTRACT_ENFORCED: &str = "enforced";
+pub const CONTRACT_ENFORCED: &str = "enforced";
 pub(crate) const CONTRACT_NONE: &str = "none";
 pub(crate) const STAGED_LIFECYCLE_MATERIALIZATIONS: [&str; 2] = ["table", "incremental"];
 pub(crate) const MICROBATCH_INCREMENTAL_MODE: &str = "microbatch";
 pub(crate) const IMMEDIATE_PROMOTION_MODE: &str = "immediate";
-pub(crate) const STAGED_PROMOTION_MODE: &str = "staged";
-pub(crate) const SETTINGS_SECTION: &str = "settings";
-pub(crate) const TABLE_PROMOTION_MODE_SETTING_KEY: &str = "table_promotion_mode";
 
 pub(crate) const NO_COMPILER_EVIDENCE: &str = "no compiler evidence";
 pub(crate) const DYNAMIC_OUTPUT_NOT_PROVEN_HELP: &str = "project one supported runtime-dynamic pivot through a wildcard output boundary and declare every generated family";

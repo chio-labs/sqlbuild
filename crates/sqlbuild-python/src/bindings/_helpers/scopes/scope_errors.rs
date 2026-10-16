@@ -4,7 +4,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 
 const COLLECTOR_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const ERROR_SEVERITY: &str = "error";
 
 /// `report_scope_index_errors`: each error-severity finding of `index`, keyed for the collector.

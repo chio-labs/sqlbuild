@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from sqlbuild._native import MicrobatchLimitAction
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.executor.run._helpers.materializations import microbatch as microbatch_module
 from sqlbuild.executor.run.models import BatchWindow
@@ -18,7 +19,6 @@ from sqlbuild.observability import (
     resource_attempt_scope,
     run_scope,
 )
-from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 from tests.integration.src.sqlbuild.executor.run.microbatch._test_types import (
     MicrobatchFailureTestCase,
     MicrobatchSuccessTestCase,

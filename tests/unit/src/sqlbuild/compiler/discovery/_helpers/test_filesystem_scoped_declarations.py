@@ -12,6 +12,8 @@ from sqlbuild._native import (
     DeclarationParseError,
     DiscoveredConstantFile,
     DiscoveredEnumFile,
+    DiscoveredMacroFile,
+    DiscoveredProjectInputs,
     discover_audit_files,
     discover_hook_functions,
     discover_macro_files,
@@ -22,10 +24,6 @@ from sqlbuild._native import (
     discover_sql_function_files,
     discover_sql_hook_files,
     discover_test_files,
-)
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredMacroFile,
-    DiscoveredProjectInputs,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DiscoverGlobalDeclarationTestCase,

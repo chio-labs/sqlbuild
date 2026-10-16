@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
-import fnmatch
-import os
-import stat
 from pathlib import Path
 
 import sqlbuild._native as _native
+from sqlbuild._native import (
+    Model,
+    ProjectPath,
+    RuleUsageError,
+    project_tree_child_nodes,
+    project_tree_descendant_nodes,
+    project_tree_file_path,
+    project_tree_glob_nodes,
+    project_tree_paths,
+    project_tree_relative_parts,
+)
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.rule_engine.constants import PARENT_DIRECTORY_TOKEN
-from sqlbuild.rule_engine.exceptions import RuleUsageError
-from sqlbuild.rule_engine.models import Model, ProjectPath
-
-_EXCLUDED_ROOTS: frozenset[str] = frozenset({".git", ".venv", "logs", "target", "venv"})
-_TRACKED_TEXT_SUFFIXES: frozenset[str] = frozenset({".py", ".sql", ".toml", ".yaml", ".yml"})
 
 
 class ProjectTree:
@@ -29,7 +31,6 @@ class ProjectTree:
     ) -> None:
         self._root: Path = project_dir.resolve()
         self._discovered: tuple[ProjectPath, ...] | None = None
-        self._directories: dict[Path, Path | None] = {}
         model_views: tuple[Model, ...] = (
             tuple(public_model(item) for item in project.models) if models is None else models
         )
@@ -40,37 +41,23 @@ class ProjectTree:
     @property
     def _nodes(self) -> tuple[ProjectPath, ...]:
         if self._discovered is None:
-            self._discovered = self._discover()
+            self._discovered = project_tree_paths(self._root)
         return self._discovered
 
     def paths(self) -> tuple[ProjectPath, ...]:
         return self._nodes
 
     def children(self, path: str = "") -> tuple[ProjectPath, ...]:
-        parent: Path = Path(path)
-        return tuple(node for node in self._nodes if Path(node.value).parent == parent)
+        return project_tree_child_nodes(self._nodes, path)
 
     def descendants(self, path: str = "") -> tuple[ProjectPath, ...]:
-        prefix: str = f"{Path(path).as_posix().rstrip('/')}/" if path else ""
-        return tuple(node for node in self._nodes if node.value.startswith(prefix))
+        return project_tree_descendant_nodes(self._nodes, path)
 
     def glob(self, pattern: str) -> tuple[ProjectPath, ...]:
-        self._validate_relative(pattern)
-        return tuple(node for node in self._nodes if fnmatch.fnmatchcase(node.value, pattern))
+        return project_tree_glob_nodes(self._nodes, pattern)
 
     def relative_parts(self, *, path: Path | str, under: str = "") -> tuple[str, ...]:
-        relative: Path = Path(path)
-        if relative.is_absolute():
-            try:
-                relative = relative.resolve().relative_to(self._root)
-            except ValueError as error:
-                raise RuleUsageError(f"project path escapes the project: {path}") from error
-        if under:
-            try:
-                relative = relative.relative_to(Path(under))
-            except ValueError as error:
-                raise RuleUsageError(f"project path {path} is not beneath {under}") from error
-        return relative.parts
+        return project_tree_relative_parts(root=self._root, path=path, under=under)
 
     def resources_under(self, path: str) -> tuple[Model, ...]:
         prefix: str = f"{Path(path).as_posix().rstrip('/')}/"
@@ -81,78 +68,15 @@ class ProjectTree:
         )
 
     def read_text(self, path: str) -> str:
-        self._validate_relative(path)
-        regular: Path | None = self._regular_file(path)
-        candidate: Path = (self._root / path).resolve() if regular is None else regular
-        if regular is None and (
-            not candidate.is_relative_to(self._root) or not candidate.is_file()
-        ):
-            raise RuleUsageError(f"project file does not exist: {path}")
-        if candidate.suffix.lower() not in _TRACKED_TEXT_SUFFIXES:
-            supported: str = ", ".join(sorted(_TRACKED_TEXT_SUFFIXES))
-            raise RuleUsageError(
-                f"compiler rules input must be a tracked file type ({supported}): {path}"
-            )
-        if regular is None and candidate.is_symlink():
-            raise RuleUsageError(f"project file must not be a symlink: {path}")
+        file: str = project_tree_file_path(self._root, path)
         try:
-            return candidate.read_text(encoding="utf-8")
+            return Path(file).read_text(encoding="utf-8")
         except (OSError, UnicodeError) as error:
             raise RuleUsageError(f"could not read project file {path}: {error}") from error
 
-    def _regular_file(self, path: str) -> Path | None:
-        """Resolve a regular, non-symlink file under the project through its cached directory."""
-
-        relative: Path = Path(path)
-        if not relative.name:
-            return None
-        directory: Path | None
-        if relative.parent in self._directories:
-            directory = self._directories[relative.parent]
-        else:
-            resolved: Path = (self._root / relative.parent).resolve()
-            directory = resolved if resolved.is_relative_to(self._root) else None
-            self._directories[relative.parent] = directory
-        if directory is None:
-            return None
-        candidate: Path = directory / relative.name
-        try:
-            regular: bool = stat.S_ISREG(os.lstat(candidate).st_mode)
-        except OSError:
-            return None
-        return candidate if regular else None
-
-    def _discover(self) -> tuple[ProjectPath, ...]:
-        nodes: list[ProjectPath] = []
-        for root, directories, filenames in os.walk(self._root, followlinks=False):
-            root_path: Path = Path(root)
-            directories[:] = sorted(
-                name
-                for name in directories
-                if not name.startswith(".")
-                and not (root_path == self._root and name in _EXCLUDED_ROOTS)
-                and not (root_path / name).is_symlink()
-            )
-            for name in directories:
-                relative: str = (root_path / name).relative_to(self._root).as_posix()
-                nodes.append(ProjectPath(value=relative, is_file=False, is_dir=True))
-            for name in sorted(filenames):
-                file_path: Path = root_path / name
-                if file_path.is_symlink():
-                    continue
-                relative = file_path.relative_to(self._root).as_posix()
-                nodes.append(ProjectPath(value=relative, is_file=True, is_dir=False))
-        return tuple(sorted(nodes))
-
-    @staticmethod
-    def _validate_relative(path: str) -> None:
-        candidate: Path = Path(path)
-        if candidate.is_absolute() or PARENT_DIRECTORY_TOKEN in candidate.parts:
-            raise RuleUsageError(f"project path escapes the project: {path}")
-
 
 def public_model(model: object) -> Model:
-    from sqlbuild.compiler.compile.models import CompiledModel
+    from sqlbuild._native import CompiledModel
 
     if not isinstance(model, (CompiledModel, _native.NativeCompiledModel)):
         raise RuleUsageError("model is not a compiled SQL model")

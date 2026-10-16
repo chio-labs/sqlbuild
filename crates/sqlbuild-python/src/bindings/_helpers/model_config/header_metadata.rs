@@ -21,7 +21,6 @@ pub(crate) struct ContractClasses<'py> {
     measurement_threshold_bound: Bound<'py, PyAny>,
     severities: Bound<'py, PyDict>,
     threshold_operators: Bound<'py, PyDict>,
-    allocate: Bound<'py, PyAny>,
 }
 
 pub(crate) fn column_tuple<'py>(
@@ -50,18 +49,16 @@ pub(crate) fn audit_tuple<'py>(
     PyTuple::new(py, audits)
 }
 
-/// Build a frozen contract dataclass the way `copy` does: allocate, then fill its `__dict__`.
+/// `class(**fields)`.
 fn contract_object<'py>(
-    allocate: &Bound<'py, PyAny>,
     class: &Bound<'py, PyAny>,
     fields: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    let object = allocate.call1((class,))?;
-    let attributes = object.getattr("__dict__")?.downcast_into::<PyDict>()?;
+    let keywords: Bound<'py, PyDict> = PyDict::new(class.py());
     for (name, value) in fields {
-        attributes.set_item(name, value)?;
+        keywords.set_item(name, value)?;
     }
-    Ok(object)
+    class.call((), Some(&keywords))
 }
 
 fn optional<'py>(py: Python<'py>, value: Option<&PyNode<'py>>) -> Bound<'py, PyAny> {
@@ -83,7 +80,6 @@ fn schema_column<'py>(
         .map(|audit| audit_instance(py, classes, audit, &location))
         .collect::<PyResult<Vec<_>>>()?;
     contract_object(
-        &classes.allocate,
         &classes.schema_column,
         &[
             ("name", column.name.0.clone()),
@@ -120,7 +116,6 @@ fn audit_instance<'py>(
         |node| node.0.clone(),
     );
     contract_object(
-        &classes.allocate,
         &classes.schema_audit_instance,
         &[
             ("definition_name", audit.definition_name.0.clone()),
@@ -157,7 +152,6 @@ pub(crate) fn thresholds<'py>(
         return Ok(py.None().into_bound(py));
     };
     contract_object(
-        &classes.allocate,
         &classes.measurement_thresholds,
         &[
             ("warn", threshold_bound(py, classes, parsed.warn)?),
@@ -184,7 +178,6 @@ fn threshold_bound<'py>(
         .get_item(operator)?
         .unwrap_or_else(|| py.None().into_bound(py));
     contract_object(
-        &classes.allocate,
         &classes.measurement_threshold_bound,
         &[
             ("operator", operator),

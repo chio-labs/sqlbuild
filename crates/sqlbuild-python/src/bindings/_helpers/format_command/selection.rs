@@ -18,8 +18,8 @@ use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const PLANNER_ERRORS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
+const PLANNER_ERRORS_MODULE: &str = "sqlbuild._native";
+const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
 const UNIT_TEST_SELECTORS_MODULE: &str = "sqlbuild._native";
 const GRAPH_SELECTION_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";

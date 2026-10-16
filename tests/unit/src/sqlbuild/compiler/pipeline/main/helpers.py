@@ -3,18 +3,21 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, ClassVar
 
-from sqlbuild._native import CompiledSource
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import (
+from sqlbuild._native import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledSource,
+    DiscoveredSourceFile,
+    MaterializationType,
+    ModelPlanEntry,
+    PlanAction,
+    PlanOutput,
+    PlanReason,
+    SourceEntry,
 )
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredSourceFile
-from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
-from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 class RelationTargetTestAdapter(BaseAdapter):

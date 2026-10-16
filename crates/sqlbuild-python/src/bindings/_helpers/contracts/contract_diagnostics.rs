@@ -16,10 +16,10 @@ use crate::bindings::_helpers::sqltext::model_headers::{ColumnLocation, location
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
-const SPEC_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
+const SPEC_MODELS_MODULE: &str = "sqlbuild._native";
 const PATHLIB_MODULE: &str = "pathlib";
 const IMPLICIT_COLUMN_CONTRACTS: &str = "implicit";
 const GENERIC_DIALECT: &str = "generic";

@@ -33,7 +33,7 @@ use crate::bindings::models::{NativeProjectTree, YamlDiscoveryRequest};
 
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
-const MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
+const MODELS_MODULE: &str = "sqlbuild._native";
 /// The most YAML bytes one native load reads before its files are built and released.
 const YAML_BATCH_BYTES: u64 = 4 * 1024 * 1024;
 const PATHLIB_MODULE: &str = "pathlib";

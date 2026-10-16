@@ -6,7 +6,7 @@ import threading
 from collections.abc import Callable
 from typing import cast
 
-from sqlbuild.adapter.relations._helpers.ddl_effects import (
+from sqlbuild._native import (
     qualified_relation_name_key,
     relation_name_key,
     statement_metadata_effect,

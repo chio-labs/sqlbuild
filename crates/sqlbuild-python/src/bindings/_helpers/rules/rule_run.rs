@@ -17,7 +17,7 @@ use crate::bindings::_helpers::rules::rows::finalize_rule_findings_rows;
 
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
-const MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
+const MODELS_MODULE: &str = "sqlbuild._native";
 const PATHLIB_MODULE: &str = "pathlib";
 const CTYPES_MODULE: &str = "ctypes";
 

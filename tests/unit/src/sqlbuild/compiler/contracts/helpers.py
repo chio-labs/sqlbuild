@@ -3,17 +3,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import cast
 
-from sqlbuild._native import CompileModelConfig, DynamicColumnContractProof
-from sqlbuild.compiler.compile.models import (
+from sqlbuild._native import (
+    ColumnContractMode,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompileModelConfig,
+    DynamicColumnContractProof,
     InferredColumn,
-)
-from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
-from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.spec.contracts.models import (
     SchemaAuditInstance,
     SchemaColumn,
     SchemaDynamicColumnFamily,
@@ -21,7 +19,8 @@ from sqlbuild.spec.contracts.models import (
     SettingsConfig,
     SourceLocation,
 )
-from sqlbuild.spec.contracts.types import ColumnContractMode
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
+from sqlbuild.compiler.lineage.types import InferredNullability
 
 
 def make_contract_project(

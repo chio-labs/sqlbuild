@@ -8,20 +8,19 @@ from typing import Any, cast
 
 import pytest
 
-from sqlbuild._native import build_scope_lookup, scope_metadata_projection
-from sqlbuild.compiler.scopes.models import (
+from sqlbuild._native import (
     DeclarationIdentity,
+    DeclarationKind,
     DeclarationRecord,
     OwnershipRoot,
     ResourceIdentity,
+    ResourceKind,
     ResourceRecord,
     ScopeIndex,
-    ScopeLookup,
-)
-from sqlbuild.compiler.scopes.types import (
-    DeclarationKind,
-    ResourceKind,
     ScopeKind,
+    ScopeLookup,
+    build_scope_lookup,
+    scope_metadata_projection,
 )
 from tests.unit.src.sqlbuild.compiler.scopes._test_types import (
     DeclarationContainerProjectionCase,
@@ -133,7 +132,7 @@ def test_given_frozen_scope_record_when_mutating_field_then_record_is_immutable(
     record: DeclarationRecord = scope_index().declarations[0]
 
     with pytest.raises(test_case.expected_error):
-        record.path = "changed.sql"  # ty: ignore[invalid-assignment]
+        record.path = "changed.sql"
 
 
 @pytest.mark.parametrize(

@@ -15,7 +15,7 @@ use sqlbuild_cursor::planner::main::raw_bounds::raw_bounds;
 use sqlbuild_cursor::planner::main::replay_start::replay_start;
 use sqlbuild_cursor::planner::models::{CursorKind, CursorSnapshot, ReplayPolicy};
 
-const MODELS: &str = "sqlbuild.compiler.planner.models";
+const MODELS: &str = "sqlbuild._native";
 const MAXIMUM_START: &str = "sqlbuild._native";
 
 pub(super) fn optional_scalar<'py>(

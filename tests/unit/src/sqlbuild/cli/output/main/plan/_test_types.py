@@ -4,11 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from sqlbuild._native import DisplayOptions, PythonPlanEntry
-from sqlbuild.compiler.planner.models import (
-    CursorInputRelation,
-    PlanOutput,
-)
+from sqlbuild._native import CursorInputRelation, DisplayOptions, PlanOutput, PythonPlanEntry
 
 
 @dataclass(frozen=True)

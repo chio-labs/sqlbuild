@@ -8,6 +8,8 @@ import pytest
 from sqlbuild._native import (
     AdapterSourceFreshnessBatch,
     DirectSourceFreshnessPlanningResult,
+    SourceFreshnessConfig,
+    SourceFreshnessStrategy,
     SourceFreshnessUnknownReason,
     build_direct_source_freshness_planning_result,
     observe_adapter_sources_freshness,
@@ -19,8 +21,6 @@ from sqlbuild.observability import (
     dispatcher_scope,
     invocation_scope,
 )
-from sqlbuild.spec.contracts.models import SourceFreshnessConfig
-from sqlbuild.spec.contracts.types import SourceFreshnessStrategy
 from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
     AdapterBatchIsolationTestCase,
 )

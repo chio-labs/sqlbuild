@@ -1,9 +1,9 @@
 from collections.abc import Callable, Sequence
 from typing import overload
 
+from sqlbuild._native import SourceColumnEntry
 from sqlbuild.python_nodes.models import LoaderDefinition as LoaderDefinition
 from sqlbuild.python_nodes.types import LoaderColumnSpec
-from sqlbuild.spec.contracts.models import SourceColumnEntry
 
 @overload
 def loader(function: Callable[..., object]) -> Callable[..., object]: ...

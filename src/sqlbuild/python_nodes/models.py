@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
-from sqlbuild.compiler.auditing.models import MeasurementThresholds
+from sqlbuild._native import (
+    MeasurementThresholds,
+    SourceColumnEntry,
+    SourceWriteStrategy,
+    retry_policy_exceptions,
+    validate_audit_case,
+)
 from sqlbuild.compiler.auditing.types import AuditSeverity
-from sqlbuild.errors.contracts.exceptions import SharedInputError
 from sqlbuild.python_nodes.constants import RELATION_RENDERER
 from sqlbuild.python_nodes.types import PythonCheckSeverity, SqlResourceRefKind
-from sqlbuild.spec.contracts.models import SourceColumnEntry
-from sqlbuild.spec.contracts.types import SourceWriteStrategy
 
 
 @dataclass(frozen=True)
@@ -64,27 +66,14 @@ class RetryPolicy:
         max_elapsed_seconds: float | None = None,
         jitter: bool = True,
     ) -> None:
-        if max_attempts < 1:
-            raise SharedInputError("RetryPolicy max_attempts must be at least 1")
-        if initial_delay_seconds < 0:
-            raise SharedInputError("RetryPolicy initial_delay_seconds must be non-negative")
-        if backoff_multiplier < 1:
-            raise SharedInputError("RetryPolicy backoff_multiplier must be at least 1")
-        if max_delay_seconds is not None and max_delay_seconds < 0:
-            raise SharedInputError("RetryPolicy max_delay_seconds must be non-negative")
-        if max_elapsed_seconds is not None and max_elapsed_seconds < 0:
-            raise SharedInputError("RetryPolicy max_elapsed_seconds must be non-negative")
-        normalized_retry_on: tuple[type[BaseException], ...]
-        if isinstance(retry_on, type) and issubclass(retry_on, BaseException):
-            normalized_retry_on = (retry_on,)
-        else:
-            normalized_retry_on = tuple(retry_on)
-            exception_type: type[BaseException]
-            for exception_type in normalized_retry_on:
-                if not isinstance(exception_type, type) or not issubclass(
-                    exception_type, BaseException
-                ):
-                    raise SharedInputError("RetryPolicy retry_on must contain exception classes")
+        normalized_retry_on: tuple[type[BaseException], ...] = retry_policy_exceptions(
+            max_attempts=max_attempts,
+            retry_on=retry_on,
+            initial_delay_seconds=initial_delay_seconds,
+            backoff_multiplier=backoff_multiplier,
+            max_delay_seconds=max_delay_seconds,
+            max_elapsed_seconds=max_elapsed_seconds,
+        )
         object.__setattr__(self, "max_attempts", max_attempts)
         object.__setattr__(self, "retry_on", normalized_retry_on)
         object.__setattr__(self, "initial_delay_seconds", initial_delay_seconds)
@@ -189,22 +178,9 @@ class AuditCase:
     evidence_limit: int | None = None
 
     def __post_init__(self) -> None:
-        if not re.fullmatch(r"^[a-z][a-z0-9_]*$", self.name):
-            raise SharedInputError(
-                "AuditCase name must be a non-empty lowercase identifier using letters, "
-                "numbers, and underscores"
-            )
-        if not self.definition.strip():
-            raise SharedInputError("AuditCase definition must be non-empty")
-        if self.minimum_samples is not None and (
-            not isinstance(self.minimum_samples, int)
-            or isinstance(self.minimum_samples, bool)
-            or self.minimum_samples < 0
-        ):
-            raise SharedInputError("AuditCase minimum_samples must be a non-negative integer")
-        if self.evidence_limit is not None and (
-            not isinstance(self.evidence_limit, int)
-            or isinstance(self.evidence_limit, bool)
-            or self.evidence_limit < 0
-        ):
-            raise SharedInputError("AuditCase evidence_limit must be a non-negative integer")
+        validate_audit_case(
+            name=self.name,
+            definition=self.definition,
+            minimum_samples=self.minimum_samples,
+            evidence_limit=self.evidence_limit,
+        )

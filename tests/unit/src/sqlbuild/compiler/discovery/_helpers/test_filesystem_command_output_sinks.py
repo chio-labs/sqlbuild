@@ -6,15 +6,13 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    DiscoveredCommandOutputSink,
+    DiscoveredProvider,
     EventExporterDiscoveryError,
     discover_provider_classes,
 )
 from sqlbuild.compiler.discovery._helpers.filesystem.command_output_sinks import (
     discover_command_output_sink_functions,
-)
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredCommandOutputSink,
-    DiscoveredProvider,
 )
 from sqlbuild.sinks import CommandOutputStream
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (

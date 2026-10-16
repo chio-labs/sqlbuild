@@ -14,7 +14,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cost_command::refusal::cost_error;
 
 const DATETIME_MODULE: &str = "datetime";
-const DURATION_MODELS: &str = "sqlbuild.cursor_algebra.models";
+const DURATION_MODELS: &str = "sqlbuild._native";
 const MINUTE_TO_DAY_DURATION_UNITS: [&str; 3] = ["m", "h", "d"];
 
 fn utc(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {

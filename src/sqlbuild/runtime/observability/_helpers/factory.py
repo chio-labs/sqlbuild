@@ -7,11 +7,11 @@ from importlib.metadata import version
 from types import MappingProxyType
 from uuid import uuid4
 
+from sqlbuild._native import CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION, validate_lifecycle_producer
 from sqlbuild.runtime.observability._helpers.identity import (
     current_execution_identity,
     current_invocation_external_context,
 )
-from sqlbuild.runtime.observability.constants import CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.models import ExecutionIdentity, LifecycleEvent
 from sqlbuild.runtime.observability.types import JSONValue
@@ -33,10 +33,7 @@ def create_lifecycle_event(
         raise ObservabilityValidationError(
             "cannot create a lifecycle event without an active invocation identity"
         )
-    if producer != _DEFAULT_PRODUCER and producer_version is None:
-        raise ObservabilityValidationError(
-            "producer_version is required when producer is not 'sqlbuild'"
-        )
+    validate_lifecycle_producer(producer=producer, producer_version=producer_version)
     return LifecycleEvent(
         event_id=uuid4().hex if event_id is None else event_id,
         event_type=event_type,

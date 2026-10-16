@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from sqlbuild.rule_engine.models import RulesResult
+from sqlbuild._native import RulesResult
 
 
 @dataclass(frozen=True)

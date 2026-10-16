@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import MaterializationType
 from sqlbuild.adapter.contract.types import TablePromotionMode
-from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.scenario.main._cleanup import execute_scenario_cleanup
 from sqlbuild.executor.scenario.main._run import execute_scenario_run
 from sqlbuild.executor.scenario.models import ScenarioCleanupExecutionResult, ScenarioRunOptions

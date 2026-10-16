@@ -2,7 +2,7 @@
 
 from enum import StrEnum
 
-from sqlbuild.cursor_algebra.models import DateValue, IntegerValue, TimestampValue
+from sqlbuild._native import DateValue, IntegerValue, TimestampValue
 
 type CursorScalar = TimestampValue | DateValue | IntegerValue
 

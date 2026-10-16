@@ -3,8 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import RuleExemption, RuleIgnore
-from sqlbuild.rule_engine.models import RulesResult
+from sqlbuild._native import RuleExemption, RuleIgnore, RulesResult
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (
     IncrementalCacheCountsTestCase,
     IncrementalRulesModeTestCase,

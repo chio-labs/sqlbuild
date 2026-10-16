@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from sqlbuild._native import build_audit_gate_identity
+from sqlbuild._native import AuditPlanEntry, build_audit_gate_identity
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope, AuditSeverity
-from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run._helpers.reuse.fingerprint_metadata import (
     reuse_from_audit_gate_reuse_decision,

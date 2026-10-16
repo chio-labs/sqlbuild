@@ -7,11 +7,13 @@ from typing import Any
 
 import pytest
 
+from sqlbuild._native import (
+    deterministic_microbatch_event_id,
+    project_microbatch_coverage,
+    project_replay_requirement,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.microbatches.classes.direct_store import DirectMicrobatchEventStore
-from sqlbuild.microbatches.main.deterministic_event_id import deterministic_microbatch_event_id
-from sqlbuild.microbatches.main.project_coverage import project_microbatch_coverage
-from sqlbuild.microbatches.main.project_replay import project_replay_requirement
 from sqlbuild.microbatches.models import (
     MicrobatchCoverageProjection,
     MicrobatchEvent,

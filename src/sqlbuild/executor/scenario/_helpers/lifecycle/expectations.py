@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.planner.models import (
+from sqlbuild._native import (
     ScenarioAssertionExpectationPlan,
     ScenarioExecutionPlan,
     ScenarioExpectedExpectationPlan,
 )
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.executor.scenario.main._assertion_expectations import (
     execute_scenario_assertion_expectation,
 )

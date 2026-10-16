@@ -591,7 +591,7 @@ fn source_freshness_record_from_observation<'py>(
 /// An aware freshness `datetime` in UTC; a naive value is an observation error.
 #[pyfunction]
 #[pyo3(signature = (*, value, field_name))]
-fn require_aware_utc_datetime<'py>(
+pub(crate) fn require_aware_utc_datetime<'py>(
     value: &Bound<'py, PyAny>,
     field_name: &str,
 ) -> PyResult<Bound<'py, PyAny>> {

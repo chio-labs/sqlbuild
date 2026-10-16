@@ -7,8 +7,7 @@ from collections.abc import Callable
 from types import ModuleType
 from typing import Any
 
-from sqlbuild.compiler.discovery.models import DiscoveredMaterializationFile
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild._native import DiscoveredMaterializationFile, PlannerInputError
 from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
 
 

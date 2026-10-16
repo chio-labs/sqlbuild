@@ -20,7 +20,7 @@ const UNIT_ROOT: &str = "tests/unit";
 const SCENARIO_ROOT: &str = "tests/scenarios";
 const EMPTY_INPUT_RULE_CODE: &str = "SQBRTEST203";
 const ALLOWED_TESTS_OPTION: &str = "allowed_tests";
-const PROJECT_CONFIG_PATH: &str = "sqlbuild_project.toml";
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME as PROJECT_CONFIG_PATH;
 
 pub(crate) fn evaluate_project(
     evaluation: ProjectEvaluationRequest<'_>,

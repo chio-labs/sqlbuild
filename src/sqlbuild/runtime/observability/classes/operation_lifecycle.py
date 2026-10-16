@@ -10,6 +10,17 @@ from contextlib import ExitStack
 from types import TracebackType
 from typing import Any
 
+from sqlbuild._native import (
+    OPERATION_ADAPTERS,
+    OPERATION_KINDS,
+    OPERATION_NAMES,
+    OPERATION_PHASES,
+    OPERATION_SCOPES,
+    OPERATION_STRATEGIES,
+    OPERATION_TARGET_KINDS,
+    validated_operation_hook_fields,
+    validated_operation_metadata,
+)
 from sqlbuild.runtime.observability._helpers.dispatcher import (
     current_event_dispatcher,
     dispatcher_scope,
@@ -21,25 +32,12 @@ from sqlbuild.runtime.observability._helpers.identity import (
     operation_scope,
 )
 from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
-from sqlbuild.runtime.observability.constants import (
-    HOOK_PHASES,
-    HOOK_TYPES,
-    OPERATION_ADAPTERS,
-    OPERATION_KINDS,
-    OPERATION_METADATA_FIELDS,
-    OPERATION_NAMES,
-    OPERATION_PHASES,
-    OPERATION_SCOPES,
-    OPERATION_STRATEGIES,
-    OPERATION_TARGET_KINDS,
-    RETRY_SCHEDULED_EVENT,
-)
+from sqlbuild.runtime.observability.constants import RETRY_SCHEDULED_EVENT
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.models import ExecutionIdentity, OperationAttributes
 from sqlbuild.runtime.observability.types import JSONValue
 
 _ERROR_TOKEN_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
-_HOOK_NAME_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 
 
 class OperationLifecycle:
@@ -78,9 +76,9 @@ class OperationLifecycle:
         )
         self._operation_kind: str = operation_kind
         self._operation_name: str = operation_name
-        self._metadata: dict[str, int] = _validated_metadata(metadata)
+        self._metadata: dict[str, int] = validated_operation_metadata(metadata=metadata)
         self._operation_id: str | None = operation_id
-        self._hook_fields: dict[str, JSONValue] = _validated_hook_fields(
+        self._hook_fields: dict[str, JSONValue] = validated_operation_hook_fields(
             hook_phase=hook_phase,
             hook_index=hook_index,
             hook_type=hook_type,
@@ -239,7 +237,7 @@ class OperationLifecycle:
     ) -> dict[str, JSONValue]:
         payload: dict[str, JSONValue] = self._base_payload()
         payload.update(_validated_attribute_fields(attributes))
-        terminal_metadata: dict[str, int] = _validated_metadata(metadata)
+        terminal_metadata: dict[str, int] = validated_operation_metadata(metadata=metadata)
         if terminal_metadata:
             payload["metadata"] = {**self._metadata, **terminal_metadata}
         started: float = self._started_monotonic if self._started_monotonic is not None else 0.0
@@ -307,50 +305,6 @@ def _validated_attribute_fields(
             _validate_catalog_value(value=value, allowed=allowed, field_name=field_name)
             fields[field_name] = value
     return fields
-
-
-def _validated_metadata(metadata: Mapping[str, int] | None) -> dict[str, int]:
-    if metadata is None:
-        return {}
-    unexpected: set[str] = set(metadata) - OPERATION_METADATA_FIELDS
-    if unexpected:
-        raise ObservabilityValidationError("operation metadata contains a non-allowlisted field")
-    result: dict[str, int] = {}
-    for key, value in metadata.items():
-        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-            raise ObservabilityValidationError(
-                "operation metadata values must be nonnegative integers excluding bool"
-            )
-        result[key] = value
-    return result
-
-
-def _validated_hook_fields(
-    *,
-    hook_phase: str | None,
-    hook_index: int | None,
-    hook_type: str | None,
-    hook_name: str | None,
-) -> dict[str, JSONValue]:
-    supplied: bool = any(
-        value is not None for value in (hook_phase, hook_index, hook_type, hook_name)
-    )
-    if not supplied:
-        return {}
-    if hook_phase not in HOOK_PHASES:
-        raise ObservabilityValidationError("hook_phase must be a catalogued value")
-    if hook_type not in HOOK_TYPES:
-        raise ObservabilityValidationError("hook_type must be a catalogued value")
-    if isinstance(hook_index, bool) or not isinstance(hook_index, int) or hook_index < 0:
-        raise ObservabilityValidationError("hook_index must be a nonnegative integer")
-    result: dict[str, JSONValue] = {
-        "hook_phase": hook_phase,
-        "hook_index": hook_index,
-        "hook_type": hook_type,
-    }
-    if hook_name is not None and _HOOK_NAME_PATTERN.fullmatch(hook_name) is not None:
-        result["hook_name"] = hook_name
-    return result
 
 
 def _safe_error_token(*, value: object, fallback: str) -> str:

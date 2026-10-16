@@ -8,7 +8,9 @@ import pytest
 
 from sqlbuild.assets import asset, get_asset_definition
 from sqlbuild.checks import check, get_check_definition
+from sqlbuild.errors.contracts.exceptions import SharedInputError
 from sqlbuild.factories import factory, get_factory_definition
+from sqlbuild.hooks import HookDefinition, get_hook_definition, hook
 from sqlbuild.python_nodes.models import (
     AssetDefinition,
     CheckDefinition,
@@ -18,12 +20,14 @@ from sqlbuild.python_nodes.models import (
     TaskDefinition,
 )
 from sqlbuild.python_nodes.types import PythonCheckSeverity
+from sqlbuild.refs import model, seed
 from sqlbuild.tasks import get_task_definition, task
 from tests.unit.src.sqlbuild.python_nodes.decorators._test_types import (
     AssetDecoratorMetadataTestCase,
     CheckDecoratorMetadataTestCase,
     FactoryDecoratorErrorTestCase,
     FactoryDecoratorMetadataTestCase,
+    HookReadsTestCase,
     TaskDecoratorMetadataTestCase,
 )
 from tests.unit.src.sqlbuild.python_nodes.decorators.helpers import upstream_asset, upstream_task
@@ -244,3 +248,63 @@ def test_given_factory_decorator_when_called_without_function_then_raises(
     factory_ref: Any = cast(Any, factory)
     with pytest.raises(TypeError, match=test_case.expected_error_fragment):
         factory_ref()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        HookReadsTestCase(
+            description="single reference becomes one read",
+            reads=model("orders"),
+            expected_reads=("orders",),
+        ),
+        HookReadsTestCase(
+            description="duplicate references keep first-seen order",
+            reads=[model("orders"), seed("customers"), model("orders")],
+            expected_reads=("orders", "customers"),
+        ),
+        HookReadsTestCase(
+            description="None as the first invalid item is dropped",
+            reads=[model("orders"), None, model("products")],
+            expected_reads=("orders", "products"),
+        ),
+        HookReadsTestCase(
+            description="items after a leading None are filtered, not rejected",
+            reads=[None, 5, model("orders")],
+            expected_reads=("orders",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_hook_reads_when_decorating_then_keeps_distinct_references(
+    test_case: HookReadsTestCase,
+) -> None:
+    def refresh_orders() -> None:
+        return None
+
+    decorated: Any = cast(Any, hook(reads=cast(Any, test_case.reads)))(refresh_orders)
+    definition: HookDefinition | None = get_hook_definition(decorated)
+
+    assert definition is not None
+    assert tuple(read.name for read in definition.reads) == test_case.expected_reads
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        HookReadsTestCase(
+            description="a non-reference item is rejected",
+            reads=[model("orders"), "customers"],
+            expected_error="got str",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_non_reference_hook_read_when_decorating_then_raises(
+    test_case: HookReadsTestCase,
+) -> None:
+    def refresh_orders() -> None:
+        return None
+
+    with pytest.raises(SharedInputError, match=test_case.expected_error):
+        cast(Any, hook(reads=cast(Any, test_case.reads)))(refresh_orders)

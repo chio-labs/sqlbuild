@@ -25,7 +25,7 @@ use crate::bindings::_helpers::semantic_shapes::coverage::semantic_coverage;
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const HOOK_IDENTITIES_MODULE: &str = "sqlbuild.compiler.python_nodes.main._hook_identities";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const METADATA_MODULE: &str = "importlib.metadata";
 const TARGET_DIRECTORY: &str = "target";
 const COMPILED_DIRECTORY: &str = "compiled";

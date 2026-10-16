@@ -6,10 +6,11 @@ use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
 use crate::bindings::_helpers::{
     analysis, analysis_session, attachments, auditing, authored_values, boundary, cache, cli,
     compile_attachment, compile_command, compile_driver, compile_outputs, compiled_project,
-    contracts, cursor, dag_artifact, diagnostics, discovery, fingerprints, frontier, graph,
-    lineage, macro_bridge, manifest, model_config, plan_output, planner_registration,
-    project_assembly, records, refactor, references, render, rules, scopes, semantic_checks,
-    semantic_shapes, sql_test_glue, sqltext, state_rows, type_system,
+    contracts, cursor, dag_artifact, diagnostics, discovery, exported_constants, fingerprints,
+    frontier, graph, lifecycle_events, lineage, macro_bridge, manifest, microbatches, model_config,
+    plan_output, planner_registration, project_assembly, records, refactor, references, render,
+    rules, scopes, semantic_checks, semantic_shapes, sql_test_glue, sqltext, state_rows,
+    type_system,
 };
 use crate::bindings::models;
 
@@ -52,9 +53,11 @@ fn register_project_stages(module: &Bound<'_, PyModule>) -> PyResult<()> {
     authored_values::registration::register(module)?;
     auditing::registration::register(module)?;
     cursor::registration::register(module)?;
+    exported_constants::registration::register(module)?;
     state_rows::registration::register(module)?;
-    diagnostics::redaction::register(module)?;
-    diagnostics::trackers::register(module)?;
+    microbatches::registration::register(module)?;
+    lifecycle_events::registration::register(module)?;
+    diagnostics::registration::register(module)?;
     analysis::sql_test_comparisons::register(module)?;
     Ok(())
 }

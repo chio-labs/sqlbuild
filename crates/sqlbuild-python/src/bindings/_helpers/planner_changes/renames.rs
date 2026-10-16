@@ -17,7 +17,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::planner_identity::hashing::model_query_hash;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const REFERENCE_TYPES_MODULE: &str = "sqlbuild.compiler.references.types";
+const REFERENCE_TYPES_MODULE: &str = "sqlbuild._native";
 const GENERIC_DIALECT: &str = "generic";
 const FINAL_NEWLINE: &str = "\n";
 

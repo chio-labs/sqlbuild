@@ -50,7 +50,7 @@ SUPPRESSED: str = (
     "            return native_project_graph(project)\n"
     "        return None\n"
 )
-STAYS: str = '[[stays]]\npath = "executor"\nreason = "executor"\nnote = "Runs plans."\n'
+STAYS: str = '[[stays]]\npath = "executor"\nrule = 1\nnote = "Rule 1: runs plans."\n'
 REVIEWED: str = (
     '[[handled_native_errors]]\nlocation = "compiler/keys.py::digest"\nnote = "No key."\n'
 )
@@ -149,9 +149,7 @@ def test_given_policy_matching_source_when_checking_then_passes(
         PythonBoundaryTestCase(
             description="a staying path escapes the source root",
             source_files={"compiler/plan.py": "a = 1\n"},
-            policy=(
-                'remaining_lines = 0\n[[stays]]\npath = ".."\nreason = "executor"\nnote = "No."\n'
-            ),
+            policy=('remaining_lines = 0\n[[stays]]\npath = ".."\nrule = 1\nnote = "No."\n'),
             expected_messages=("stays entry '..' must name a module under src/sqlbuild.",),
         ),
         PythonBoundaryTestCase(
@@ -161,16 +159,68 @@ def test_given_policy_matching_source_when_checking_then_passes(
             expected_messages=("'compiler/keys.py::digest' no longer matches any handler",),
         ),
         PythonBoundaryTestCase(
-            description="a staying module is missing, unexplained and has an unknown reason",
+            description="a staying module is missing and has no rule or note",
             source_files={"compiler/plan.py": "a = 1\n"},
-            policy=(
-                'remaining_lines = 1\n[[stays]]\npath = "planner"\nreason = "too hard"\nnote = ""\n'
-            ),
+            policy='remaining_lines = 1\n[[stays]]\npath = "planner"\nnote = ""\n',
             expected_messages=(
                 "stays entry 'planner' does not exist under src/sqlbuild.",
-                "stays entry 'planner' has reason 'too hard'",
-                "stays entry 'planner' needs a note explaining why it stays.",
+                "stays entry 'planner' needs a rule: one of 1 = executor or adapter runtime",
+                "stays entry 'planner' needs a note with the evidence for its rule.",
             ),
+        ),
+        PythonBoundaryTestCase(
+            description="a staying module has a rule outside 1 to 4",
+            source_files={"compiler/plan.py": "a = 1\n", "executor/run.py": "c = 3\n"},
+            policy=(
+                'remaining_lines = 1\n[[stays]]\npath = "executor"\nrule = 5\nnote = "Runs."\n'
+            ),
+            expected_messages=("stays entry 'executor' has rule 5; use one of 1 = ",),
+        ),
+        PythonBoundaryTestCase(
+            description="a staying module has a non-integer rule",
+            source_files={"compiler/plan.py": "a = 1\n", "executor/run.py": "c = 3\n"},
+            policy=(
+                'remaining_lines = 1\n[[stays]]\npath = "executor"\nrule = "1"\nnote = "Runs."\n'
+            ),
+            expected_messages=("stays entry 'executor' has rule '1'; use one of 1 = ",),
+        ),
+        PythonBoundaryTestCase(
+            description="a staying module has a boolean rule",
+            source_files={"compiler/plan.py": "a = 1\n", "executor/run.py": "c = 3\n"},
+            policy=(
+                'remaining_lines = 1\n[[stays]]\npath = "executor"\nrule = true\nnote = "Runs."\n'
+            ),
+            expected_messages=("stays entry 'executor' has rule True; use one of 1 = ",),
+        ),
+        PythonBoundaryTestCase(
+            description="a staying module has a whitespace-only note",
+            source_files={"compiler/plan.py": "a = 1\n", "executor/run.py": "c = 3\n"},
+            policy=('remaining_lines = 1\n[[stays]]\npath = "executor"\nrule = 1\nnote = "  "\n'),
+            expected_messages=(
+                "stays entry 'executor' needs a note with the evidence for its rule.",
+            ),
+        ),
+        PythonBoundaryTestCase(
+            description="a staying module still uses the replaced reason key",
+            source_files={"compiler/plan.py": "a = 1\n", "executor/run.py": "c = 3\n"},
+            policy=(
+                'remaining_lines = 1\n[[stays]]\npath = "executor"\nreason = "executor"\n'
+                'note = "Runs."\n'
+            ),
+            expected_messages=(
+                "stays entry 'executor' has unknown key(s) reason; "
+                "an entry has only path, rule and note.",
+                "stays entry 'executor' needs a rule: one of ",
+            ),
+        ),
+        PythonBoundaryTestCase(
+            description="a staying module's note cites a different rule",
+            source_files={"compiler/plan.py": "a = 1\n", "executor/run.py": "c = 3\n"},
+            policy=(
+                'remaining_lines = 1\n[[stays]]\npath = "executor"\nrule = 1\n'
+                'note = "Rule 4 glue around a library."\n'
+            ),
+            expected_messages=("stays entry 'executor' has rule 1 but its note cites rule 4.",),
         ),
     ],
     ids=lambda case: case.description,

@@ -7,15 +7,12 @@ from collections.abc import Callable
 from contextvars import Token
 from types import TracebackType
 
+from sqlbuild._native import SQL_PRIVATE_RECORD_FIELD, SQL_TEXT_FIELD
 from sqlbuild.diagnostics._helpers.logging import set_sql_diagnostic_sink
 from sqlbuild.diagnostics.classes.diagnostics_console_formatter import DiagnosticsConsoleFormatter
 from sqlbuild.diagnostics.classes.dynamic_stderr_handler import DynamicStderrHandler
 from sqlbuild.diagnostics.classes.log_record_route_filter import LogRecordRouteFilter
-from sqlbuild.diagnostics.constants import (
-    SQL_PRIVATE_RECORD_FIELD,
-    SQL_PRIVATE_RECORD_MARKER,
-    SQL_TEXT_FIELD,
-)
+from sqlbuild.diagnostics.constants import SQL_PRIVATE_RECORD_MARKER
 from sqlbuild.diagnostics.models import DiagnosticRoutingOptions
 from sqlbuild.runtime.compute_logs.classes.diagnostic_log_handler import (
     ComputeDiagnosticLogHandler,

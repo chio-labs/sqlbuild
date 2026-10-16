@@ -4,11 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild._native import AuditPlanEntry, CompiledRelationLocation, Fingerprint, SourceEntry
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.executor.auditing.main._execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run._helpers.reuse.audit import (
@@ -16,7 +14,6 @@ from sqlbuild.executor.run._helpers.reuse.audit import (
     reused_final_audit_results_by_binding_key,
 )
 from sqlbuild.executor.run.models import FinalAuditRun, ModelMaterializationContext
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def run_final_model_audits(

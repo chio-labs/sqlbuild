@@ -12,8 +12,7 @@ from types import TracebackType
 from typing import Any
 from uuid import uuid4
 
-from sqlbuild._native import CostContext, record_statement
-from sqlbuild.cost.constants import SQLBUILD_QUERY_TAG_APP
+from sqlbuild._native import SQLBUILD_QUERY_TAG_APP, CostContext, record_statement
 from sqlbuild.cost.models import CostResourceContext, StatementExecutionTelemetry
 from sqlbuild.runtime.execution_limits.main.current_execution_deadline import (
     current_execution_deadline,

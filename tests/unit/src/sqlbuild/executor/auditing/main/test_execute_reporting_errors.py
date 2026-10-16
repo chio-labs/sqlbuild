@@ -6,8 +6,8 @@ from dataclasses import replace
 
 import pytest
 
+from sqlbuild._native import AuditPlanEntry
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditSeverity
-from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from tests.unit.src.sqlbuild.executor.auditing.main._test_types import (
     AuditInterruptCase,

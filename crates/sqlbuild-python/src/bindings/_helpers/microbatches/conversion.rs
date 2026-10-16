@@ -1,0 +1,90 @@
+//! Microbatch events, scopes and intervals read from their Python shapes.
+
+use std::collections::HashMap;
+
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::types::PyString;
+use sqlbuild_cursor::algebra::main::cursor_sort_key::cursor_sort_key;
+use sqlbuild_cursor::algebra::models::{Scalar, SortKey};
+use sqlbuild_state::microbatches::models::{BoundInterval, CursorBound};
+
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::cursor::conversion::CursorSession;
+use crate::bindings::_helpers::cursor::scalars::as_scalar;
+
+pub(crate) const MODELS_MODULE: &str = "sqlbuild.microbatches.models";
+pub(crate) const TYPES_MODULE: &str = "sqlbuild.microbatches.types";
+pub(crate) const CONSTANTS_MODULE: &str = "sqlbuild.microbatches.constants";
+const EXCEPTIONS_MODULE: &str = "sqlbuild.microbatches.exceptions";
+
+/// `MicrobatchStateError(message)`.
+pub(crate) fn state_error(py: Python<'_>, message: &str) -> PyErr {
+    match imported(py, EXCEPTIONS_MODULE, "MicrobatchStateError")
+        .and_then(|class| class.call1((message,)))
+    {
+        Ok(error) => PyErr::from_value(error),
+        Err(error) => error,
+    }
+}
+
+/// `str(value)` of a string enum member or string.
+pub(crate) fn enum_text(value: &Bound<'_, PyAny>) -> PyResult<String> {
+    value.str()?.extract()
+}
+
+/// `None`, or the string an optional field holds.
+pub(crate) fn optional_text(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
+    if value.is_none() {
+        return Ok(None);
+    }
+    Ok(Some(value.extract()?))
+}
+
+/// `value.timestamp()` of a `datetime`.
+pub(crate) fn timestamp(value: &Bound<'_, PyAny>) -> PyResult<f64> {
+    value.call_method0("timestamp")?.extract()
+}
+
+/// Raw cursor bounds of one cursor type, parsed once per distinct text.
+pub(crate) struct BoundParser<'py> {
+    session: CursorSession<'py>,
+    cursor_type: Bound<'py, PyAny>,
+    keys: HashMap<String, SortKey>,
+}
+
+impl<'py> BoundParser<'py> {
+    pub(crate) fn new(cursor_type: &Bound<'py, PyAny>) -> PyResult<Self> {
+        Ok(Self {
+            session: CursorSession::new(cursor_type.py())?,
+            cursor_type: cursor_type.clone(),
+            keys: HashMap::new(),
+        })
+    }
+
+    /// One raw bound and its sort key.
+    pub(crate) fn bound(&mut self, raw: &Bound<'py, PyAny>) -> PyResult<CursorBound> {
+        let text: String = raw.extract()?;
+        if let Some(key) = self.keys.get(&text) {
+            return Ok(CursorBound { text, key: *key });
+        }
+        let py: Python<'py> = raw.py();
+        let scalar: Scalar = as_scalar(
+            &self.session,
+            &PyString::new(py, &text).into_any(),
+            &self.cursor_type,
+        )?;
+        let key: SortKey = self
+            .session
+            .checked(cursor_sort_key(&scalar, &self.session))?;
+        self.keys.insert(text.clone(), key);
+        Ok(CursorBound { text, key })
+    }
+
+    /// The bounds of an object with `start` and `end` attributes.
+    pub(crate) fn interval(&mut self, interval: &Bound<'py, PyAny>) -> PyResult<BoundInterval> {
+        Ok(BoundInterval {
+            start: self.bound(&interval.getattr("start")?)?,
+            end: self.bound(&interval.getattr("end")?)?,
+        })
+    }
+}

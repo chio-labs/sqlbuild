@@ -12,7 +12,7 @@ const SPEC_ERRORS_MODULE: &str = "sqlbuild._native";
 const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const SESSION_WAREHOUSE_MODULE: &str = "sqlbuild.adapter.discovery.main._session_warehouse_support";
-const PROJECT_CONFIG_FILENAME: &str = "sqlbuild_project.toml";
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 const LOCAL_CONFIG_FILENAME: &str = "sqlbuild_local.toml";
 const SQL_ANALYSIS_KEY: &str = "sql_analysis";
 /// `WarehouseGroup` members in declaration order.

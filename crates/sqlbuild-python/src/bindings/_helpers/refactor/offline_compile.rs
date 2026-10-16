@@ -12,11 +12,11 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS: &str = "sqlbuild._native";
 const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
-const COMPILE_ERRORS: &str = "sqlbuild.compiler.compile.exceptions";
-const PLANNER_ERRORS: &str = "sqlbuild.compiler.planner.exceptions";
-const RULES_ERRORS: &str = "sqlbuild.rule_engine.exceptions";
+const COMPILE_ERRORS: &str = "sqlbuild._native";
+const PLANNER_ERRORS: &str = "sqlbuild._native";
+const RULES_ERRORS: &str = "sqlbuild._native";
 const SPEC_ERRORS: &str = "sqlbuild._native";
 const ENTRY_MODELS: &str = "sqlbuild._native";
 const COMMAND_TYPES: &str = "sqlbuild._native";

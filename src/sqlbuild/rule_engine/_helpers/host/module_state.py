@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import enum
 import hashlib
 import os
@@ -16,8 +17,7 @@ from pathlib import Path, PurePath
 from types import BuiltinFunctionType, CellType, FunctionType, MethodType, ModuleType
 from typing import Any, cast
 
-from sqlbuild.rule_engine.exceptions import OpaqueModuleStateError
-from sqlbuild.rule_engine.models import ModuleStateFingerprint, ModuleStateTrace
+from sqlbuild._native import ModuleStateFingerprint, ModuleStateTrace, OpaqueModuleStateError
 
 _MAX_STATE_NODES: int = 50_000
 _ATOMIC_TYPES: tuple[type, ...] = (
@@ -557,6 +557,10 @@ def _instance_state(value: object) -> dict[str, object]:
         for slot in getattr(owner, "__slots__", ()):
             if isinstance(slot, str) and hasattr(value, slot):
                 state[slot] = getattr(value, slot)
+    if not state and dataclasses.is_dataclass(value) and not isinstance(value, type):
+        state.update(
+            (field.name, getattr(value, field.name)) for field in dataclasses.fields(value)
+        )
     return state
 
 

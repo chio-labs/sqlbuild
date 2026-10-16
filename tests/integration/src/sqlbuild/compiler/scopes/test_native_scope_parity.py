@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.scopes.models import ScopeIndex
+from sqlbuild._native import ScopeIndex
 from tests.integration.src.sqlbuild.compiler.scopes._test_types import (
     GeneratedScopeParityTestCase,
     ScopeCommandParityTestCase,

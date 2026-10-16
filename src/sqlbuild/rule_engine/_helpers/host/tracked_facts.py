@@ -6,9 +6,18 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.compiler.compile.models import CompiledSqlTest, InferredColumn
+from sqlbuild._native import (
+    CompiledSqlTest,
+    ConstantDeclaration,
+    EnumDeclaration,
+    FactDigestError,
+    InferredColumn,
+    Model,
+    ModelSql,
+    ProjectPath,
+    RuleFactViews,
+)
 from sqlbuild.compiler.compile.types import CompiledAuditView
-from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
 from sqlbuild.rule_engine._helpers.engine.fact_replay import fact_error_digest, fact_value_digest
 from sqlbuild.rule_engine.classes.fact_reads import FactReads
 from sqlbuild.rule_engine.constants import (
@@ -42,8 +51,6 @@ from sqlbuild.rule_engine.constants import (
     FACT_TREE_RELATIVE_PARTS,
     FACT_TREE_RESOURCES_UNDER,
 )
-from sqlbuild.rule_engine.exceptions import FactDigestError
-from sqlbuild.rule_engine.models import Model, ModelSql, ProjectPath, RuleFactViews
 
 
 class _TrackedView:

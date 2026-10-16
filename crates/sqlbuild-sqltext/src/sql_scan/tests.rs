@@ -2,6 +2,8 @@
 mod dialect_scan;
 #[path = "tests/helpers.rs"]
 mod helpers;
+#[path = "tests/test_lexical_rules.rs"]
+mod lexical_rules;
 #[path = "tests/test_sql_scan.rs"]
 mod sql_scan;
 #[path = "tests/test_types.rs"]

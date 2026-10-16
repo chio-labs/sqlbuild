@@ -113,8 +113,6 @@ sqlbuild_project.toml:\n            [settings]\n            microbatch_concurren
 pub const SETTING_SNIPPET_INDENT: &str = "            ";
 /// The duration-disabled cursor policy value.
 pub const CURSOR_POLICY_DISABLED: &str = "disabled";
-/// The zero-day cursor duration.
-pub const ZERO_DAY_DURATION: &str = "0d";
 /// The `batch_size` token that follows the cursor grain.
 pub const EFFECTIVE_BATCH_SIZE: &str = "effective";
 /// The SQL wildcard column.

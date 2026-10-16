@@ -6,11 +6,13 @@ from sqlbuild._native import (
     ClonePipelineConnection,
     ClonePipelineOptions,
     ClonePipelineResult,
+    DiscoveredProjectInputs,
+    LocalConfig,
+    ProjectConfig,
+    TargetConfig,
     run_clone_pipeline_with_options,
 )
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, TargetConfig
 from tests.unit.src.sqlbuild.compiler.pipeline._helpers._test_types import (
     CloneConnectionInjectionTestCase,
     CloneTargetSchemaTestCase,

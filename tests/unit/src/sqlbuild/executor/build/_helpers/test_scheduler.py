@@ -9,18 +9,23 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import NativeProgressProjector
-from sqlbuild.adapter.contract.types import TablePromotionMode
-from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import CompiledObjectKey
-from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.models import (
+from sqlbuild._native import (
+    CompiledObjectKey,
     DiscoveredHookFunction,
     DiscoveredLoaderFunction,
+    ModelPlanEntry,
+    NativeProgressProjector,
+    PlanAction,
+    PlanOutput,
+    PlanReason,
     PythonHookEntry,
+    SourceEntry,
+    SourceLoadPlanEntry,
+    SourceWriteStrategy,
 )
-from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput, SourceLoadPlanEntry
-from sqlbuild.compiler.planner.types import PlanAction, PlanReason
+from sqlbuild.adapter.contract.types import TablePromotionMode
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.build.main._execute import execute_build_plan
 from sqlbuild.executor.build.models import (
     BuildCallbacks,
@@ -38,8 +43,6 @@ from sqlbuild.observability import (
     invocation_scope,
 )
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
-from sqlbuild.spec.contracts.models import SourceEntry
-from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.executor.build._helpers._test_types import (
     BuildSchedulerModelHookTestCase,
     BuildSchedulerPlannedSkipTestCase,

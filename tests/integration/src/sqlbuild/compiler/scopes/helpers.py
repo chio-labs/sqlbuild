@@ -14,9 +14,26 @@ import pytest
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    ConstantDeclaration,
+    DeclarationIdentity,
+    DeclarationKind,
+    DeclarationRecord,
+    DeclarationResolutionContext,
     DeclarationScopeBuild,
     DeclarationScopeResolver,
+    DeclarationVisibility,
+    DiscoveredProjectInputs,
     DiscoveryError,
+    EnumDeclaration,
+    LoadedMacro,
+    ResourceIdentity,
+    ResourceKind,
+    ScopeIndex,
+    ScopeKind,
+    ScopeLookup,
+    SqlLexicalSyntax,
+    VisibilityReason,
+    VisibilityRecord,
     build_declaration_scope,
     discover_project_inputs,
     resolve_declaration_context,
@@ -26,28 +43,6 @@ from sqlbuild._native import (
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import DeclarationResolutionContext, LoadedMacro
-from sqlbuild.compiler.discovery.models import (
-    ConstantDeclaration,
-    DiscoveredProjectInputs,
-    EnumDeclaration,
-)
-from sqlbuild.compiler.scopes.models import (
-    DeclarationIdentity,
-    DeclarationRecord,
-    DeclarationVisibility,
-    ResourceIdentity,
-    ScopeIndex,
-    ScopeLookup,
-    VisibilityRecord,
-)
-from sqlbuild.compiler.scopes.types import (
-    DeclarationKind,
-    ResourceKind,
-    ScopeKind,
-    VisibilityReason,
-)
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.integration.src.sqlbuild.compiler.helpers import GoldenEntry, golden_entry
 
 CURRENT_PATH_COMPONENT: str = "."

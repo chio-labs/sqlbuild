@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild._native import CompiledObjectKey
 from sqlbuild.executor.build._helpers.blocking import downstream_blocked_keys
 from tests.unit.src.sqlbuild.executor.build._helpers._test_types import (
     DownstreamBlockedKeysTestCase,

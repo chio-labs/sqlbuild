@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, cast
 
+from sqlbuild._native import SourceColumnEntry
 from sqlbuild.python_nodes._helpers.attachment import attach_definition
 from sqlbuild.python_nodes._helpers.column_normalization import normalize_columns
 from sqlbuild.python_nodes._helpers.dependency_normalization import (
@@ -19,7 +20,6 @@ from sqlbuild.python_nodes.models import (
     SqlResourceRef,
 )
 from sqlbuild.python_nodes.types import ColumnLineageRefSpec, PythonNodeColumnSpec
-from sqlbuild.spec.contracts.models import SourceColumnEntry
 
 
 def apply_asset(

@@ -5,10 +5,11 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    CompiledModel,
+    CompiledProject,
     compiled_project_record,
     custom_host_payload,
 )
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine.classes.project_tree import public_model
 from sqlbuild.rule_engine.types import FactKey

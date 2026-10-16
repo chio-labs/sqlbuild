@@ -8,6 +8,11 @@ from typing import TYPE_CHECKING, cast
 import pytest
 
 from sqlbuild._native import (
+    CompilerDiagnostic,
+    DiscoveredProjectInputs,
+    SchemaAuditInstance,
+    SchemaModelEntry,
+    SourceLocation,
     assemble_project,
     build_compile_inputs,
     build_model_version_identity_metadata_json,
@@ -16,12 +21,7 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import (
-    CompilerDiagnostic,
-)
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.contracts.models import SchemaAuditInstance, SchemaModelEntry, SourceLocation
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     DynamicModelSchemaTestCase,
     ExpectedCountTestCase,

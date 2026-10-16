@@ -3,11 +3,12 @@ from pathlib import Path
 from threading import Event
 from typing import ClassVar
 
-from sqlbuild._native import BoundEventExporter, EventExporterDispatcher
-from sqlbuild.compiler.discovery.models import (
+from sqlbuild._native import (
+    BoundEventExporter,
     DiscoveredEventExporter,
     DiscoveredProvider,
     DiscoveredProviderUsage,
+    EventExporterDispatcher,
 )
 from sqlbuild.observability import LifecycleEvent
 from sqlbuild.providers import Provider

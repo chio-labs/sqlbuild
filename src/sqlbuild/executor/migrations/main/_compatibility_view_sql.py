@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild._native import CompiledRelationLocation, MigrationRelation, OldNameViewHistory
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.migrations.models import MigrationRelation, OldNameViewHistory
 from sqlbuild.executor.migrations._helpers.old_name_views import render_old_name_view_select
 from sqlbuild.executor.migrations.models import OldNameViewSource
 

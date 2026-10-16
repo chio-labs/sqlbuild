@@ -9,8 +9,8 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyString, PyTuple};
 use pyo3::{IntoPyObject, PyErr, pyfunction, wrap_pyfunction};
 
-const HOOK_MODULE: &str = "sqlbuild.compiler.discovery.models";
-const ERROR_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
+const HOOK_MODULE: &str = "sqlbuild._native";
+const ERROR_MODULE: &str = "sqlbuild._native";
 
 struct Resolution<'py> {
     adapter: Bound<'py, PyAny>,

@@ -4,11 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from sqlbuild._native import render_state_sql_literal
+from sqlbuild._native import render_state_sql_literal, render_state_table_create_sql
 from sqlbuild.adapter.contract.types import FrameworkType
-from sqlbuild.adapter.state_sql.main.render_state_table_create_sql import (
-    render_state_table_create_sql,
-)
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.janitor_events.constants import (
     COLUMN_ARCHIVE_NAME,

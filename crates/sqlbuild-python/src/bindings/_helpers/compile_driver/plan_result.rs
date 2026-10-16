@@ -17,7 +17,7 @@ const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const EXECUTION_PLAN_MODULE: &str = "sqlbuild._native";
 const MATERIALIZATIONS_MODULE: &str = "sqlbuild.compiler.pipeline._helpers.materializations";
-const PIPELINE_MODELS_MODULE: &str = "sqlbuild.compiler.pipeline.models";
+const PIPELINE_MODELS_MODULE: &str = "sqlbuild._native";
 const SINGLE_CONNECTION: i64 = 1;
 
 /// The deferred relation locations and the warehouse relations behind them, when deferring.

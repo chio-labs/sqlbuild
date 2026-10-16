@@ -3,8 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from sqlbuild._native import SourceFreshnessIdentity
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
+from sqlbuild._native import SourceFreshnessIdentity, SourceFreshnessRecord
 
 
 @dataclass(frozen=True)

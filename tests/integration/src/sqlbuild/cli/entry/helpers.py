@@ -7,9 +7,7 @@ import sys
 from pathlib import Path
 
 import sqlbuild
-from sqlbuild.compiler.frontier.constants import (
-    COMPILE_REUSE_DISABLE_ENV_VAR as REUSE_DISABLE_ENV_VAR,
-)
+from sqlbuild._native import COMPILE_REUSE_DISABLE_ENV_VAR as REUSE_DISABLE_ENV_VAR
 
 type LauncherRun = tuple[int, bytes, bytes]
 

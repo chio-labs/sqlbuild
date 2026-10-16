@@ -51,3 +51,9 @@ pub(crate) const BIGQUERY_METHOD_ERROR_SUFFIX: &str = "is not supported by SQLBu
 
 /// The dbt target path used when `dbt_project.yml` sets none.
 pub(crate) const DEFAULT_DBT_TARGET_PATH: &str = "target";
+/// Text dbt's `as_bool` reads as true, after stripping and lowercasing.
+pub(crate) const DBT_TRUE_VALUES: [&str; 5] = ["true", "1", "yes", "y", "on"];
+/// Text dbt's `as_bool` reads as false, after stripping and lowercasing.
+pub(crate) const DBT_FALSE_VALUES: [&str; 5] = ["false", "0", "no", "n", "off"];
+/// The separator that makes dbt's `as_number` read text as a float.
+pub(crate) const DBT_NUMBER_DECIMAL_SEPARATOR: char = '.';

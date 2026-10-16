@@ -77,12 +77,7 @@ pub(super) fn decide<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, P
     if key(&origin)? == key(&destination)? {
         let name: String = item.getattr("name")?.extract()?;
         return Err(pyo3::PyErr::from_value(
-            imported(
-                py,
-                "sqlbuild.compiler.planner.exceptions",
-                "PlannerInputError",
-            )?
-            .call1((format!(
+            imported(py, "sqlbuild._native", "PlannerInputError")?.call1((format!(
                 "model '{name}': migrate_from names the model's own relation"
             ),))?,
         ));

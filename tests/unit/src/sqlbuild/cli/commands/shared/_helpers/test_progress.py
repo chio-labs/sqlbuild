@@ -11,6 +11,7 @@ from sqlbuild._native import (
     BuildProgressCallbacks,
     NestedCommandProgressCallbacks,
     NestedProgressChildRow,
+    PlanOutput,
     build_test_expectation_rows,
     format_build_footer,
     resolve_test_name_width,
@@ -19,7 +20,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.compiler.auditing.types import AuditOutcome
-from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.cost.models import StatementExecutionTelemetry
 from sqlbuild.executor.build.models import (

@@ -91,7 +91,7 @@ fn graph_views<'py>(py: Python<'py>, graph: &ProjectGraph) -> PyResult<Bound<'py
 
 /// The graph's lineage edges and selector indexes as dicts, in project order.
 #[pyfunction]
-fn lineage_graph_views<'py>(
+pub(crate) fn lineage_graph_views<'py>(
     py: Python<'py>,
     graph: PyRef<'py, NativeProjectGraph>,
 ) -> PyResult<Bound<'py, PyAny>> {

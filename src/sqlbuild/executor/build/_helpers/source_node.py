@@ -7,12 +7,16 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from sqlbuild._native import CostContext
+from sqlbuild._native import (
+    CompiledObjectKey,
+    CostContext,
+    DiscoveredLoaderFunction,
+    PlanOutput,
+    SourceEntry,
+    SourceLoadPlanEntry,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.compiler.compile.models import CompiledObjectKey
-from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.compiler.planner.models import PlanOutput, SourceLoadPlanEntry
 from sqlbuild.executor.build.models import BuildCallbacks, BuildRuntimeParams
 from sqlbuild.executor.load.main._execute import execute_source_load
 from sqlbuild.executor.load.models import LoadExecutionResult, LoadRuntimeParams
@@ -20,7 +24,6 @@ from sqlbuild.executor.node_results.classes.direct_store import DirectNodeResult
 from sqlbuild.executor.node_results.main._direct_store import build_direct_node_result_store
 from sqlbuild.executor.node_results.models import NodeResultRecord
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def execute_build_source_node(

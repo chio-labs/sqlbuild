@@ -1,8 +1,7 @@
 from dataclasses import dataclass
 
+from sqlbuild._native import CompiledRelationLocation, LocalConfig, ProjectConfig
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
 
 @dataclass(frozen=True)

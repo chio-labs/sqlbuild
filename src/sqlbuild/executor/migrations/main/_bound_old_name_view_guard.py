@@ -6,9 +6,8 @@ from contextlib import AbstractContextManager, nullcontext
 from functools import partial
 from typing import Any
 
+from sqlbuild._native import CompiledRelationLocation, PlanOutput
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.migrations._helpers.old_name_views import views_reading
 from sqlbuild.executor.migrations.classes.bound_old_name_views import BoundOldNameViews
 from sqlbuild.executor.migrations.models import OldNameViewSource

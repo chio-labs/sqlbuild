@@ -5,11 +5,9 @@ from typing import Any, cast
 
 import pytest
 
-from sqlbuild._native import SourceParseError
+from sqlbuild._native import SourceEntry, SourceParseError, SourceWriteStrategy
 from sqlbuild.integrations.dlt.models import DltSourceConfig
 from sqlbuild.integrations.ingestr.models import IngestrSourceConfig
-from sqlbuild.spec.contracts.models import SourceEntry
-from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ParseSourcesYamlDltTestCase,
     ParseSourcesYamlErrorTestCase,

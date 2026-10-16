@@ -5,13 +5,12 @@ from __future__ import annotations
 from itertools import chain
 from pathlib import Path
 
+from sqlbuild._native import ModuleStateFingerprint, ModuleStateTrace, OpaqueModuleStateError
 from sqlbuild.rule_engine._helpers.host.module_state import (
     module_state_fingerprint,
     module_state_snapshot,
     rules_root_prefix,
 )
-from sqlbuild.rule_engine.exceptions import OpaqueModuleStateError
-from sqlbuild.rule_engine.models import ModuleStateFingerprint, ModuleStateTrace
 
 _EMPTY_TRACE: ModuleStateTrace = ModuleStateTrace(
     touched={}, descended_types=frozenset(), checked_instances=frozenset()

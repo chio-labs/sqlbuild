@@ -2,10 +2,9 @@
 
 from functools import cached_property
 
+from sqlbuild._native import Model, ModelSql, RuleUsageError
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.rule_engine.classes.sql_document import SqlDocument
-from sqlbuild.rule_engine.exceptions import RuleUsageError
-from sqlbuild.rule_engine.models import Model, ModelSql
 
 
 class SqlFacts:

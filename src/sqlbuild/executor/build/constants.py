@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.planner.types import PlanAction
+from sqlbuild._native import PlanAction
 
 INCREMENTAL_ACTIONS: frozenset[PlanAction] = frozenset(
     {

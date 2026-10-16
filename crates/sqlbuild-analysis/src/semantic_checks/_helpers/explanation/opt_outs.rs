@@ -6,10 +6,11 @@ use regex::Regex;
 
 use crate::semantic_checks::_helpers::explanation::messages::{compiled, pattern};
 use crate::semantic_checks::constants::{
-    ADDITIONAL_HELP_SEPARATOR, FINDING_KINDS, PROJECT_CONFIG_FILENAME, REQUIRE_SQL_ANALYSIS_KEY,
-    SETTING_SNIPPET_INDENT, SETTINGS_SECTION,
+    ADDITIONAL_HELP_SEPARATOR, FINDING_KINDS, REQUIRE_SQL_ANALYSIS_KEY, SETTING_SNIPPET_INDENT,
 };
 use crate::semantic_checks::models::{OptOutDiagnostic, SemanticFailure};
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
+use sqlbuild_core::constants::SETTINGS_SECTION;
 
 static FINDING_PATTERNS: LazyLock<Result<Regex, String>> = LazyLock::new(|| {
     let alternatives: Vec<String> = FINDING_KINDS

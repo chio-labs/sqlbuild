@@ -9,6 +9,7 @@ from pathlib import Path, PurePath
 
 import orjson
 
+from sqlbuild._native import FactDigestError, Model, RuleFactViews, tracked_text_file_values
 from sqlbuild.rule_engine.classes.shared_fact_encoder import SharedFactEncoder
 from sqlbuild.rule_engine.classes.sql_document import SqlDocument
 from sqlbuild.rule_engine.constants import (
@@ -42,11 +43,8 @@ from sqlbuild.rule_engine.constants import (
     FACT_TREE_RELATIVE_PARTS,
     FACT_TREE_RESOURCES_UNDER,
 )
-from sqlbuild.rule_engine.exceptions import FactDigestError
-from sqlbuild.rule_engine.models import Model, RuleFactViews
 from sqlbuild.rule_engine.types import FactKey
 
-_TRACKED_TEXT_SUFFIXES: frozenset[str] = frozenset({".py", ".sql", ".toml", ".yaml", ".yml"})
 _ORJSON_OPTIONS: int = orjson.OPT_SORT_KEYS | orjson.OPT_NON_STR_KEYS
 
 _GLOBAL_FACTS: dict[str, Callable[[RuleFactViews], object]] = {
@@ -118,9 +116,8 @@ def full_fact_keys(views: RuleFactViews) -> tuple[FactKey, ...]:
         keys.extend((fact, path) for fact in _MODEL_PATH_FACTS)
         keys.extend((fact, model.name) for fact in _MODEL_NAME_FACTS)
     keys.extend(
-        (FACT_TREE_READ_TEXT, node.value)
-        for node in views.project.tree.paths()
-        if node.is_file and Path(node.value).suffix.lower() in _TRACKED_TEXT_SUFFIXES
+        (FACT_TREE_READ_TEXT, value)
+        for value in tracked_text_file_values(views.project.tree.paths())
     )
     return tuple(keys)
 

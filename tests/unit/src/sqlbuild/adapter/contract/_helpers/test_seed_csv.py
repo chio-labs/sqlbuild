@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import SeedCsvSettings
 from sqlbuild.adapter.contract.main.normalize_seed_csv_value import normalize_seed_csv_value
-from sqlbuild.spec.contracts.models import SeedCsvSettings
 from tests.unit.src.sqlbuild.adapter.contract._helpers._test_types import (
     NormalizeSeedCsvValueTestCase,
 )

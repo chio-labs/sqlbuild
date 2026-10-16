@@ -5,7 +5,8 @@ use std::io::{self, ErrorKind};
 use std::path::Path;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
-use sqlbuild_core::init_command::constants::{GITKEEP_FILE, PROJECT_FILE, SCAFFOLD_DIRECTORIES};
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME as PROJECT_FILE;
+use sqlbuild_core::init_command::constants::{GITKEEP_FILE, SCAFFOLD_DIRECTORIES};
 
 /// `OSError(errno, strerror, filename)`, which Python narrows to its errno subclass.
 fn os_error(py: Python<'_>, error: &io::Error, path: &Path) -> PyErr {

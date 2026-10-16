@@ -29,7 +29,8 @@ pub(crate) const DECLARATION_DOMAIN_COMPONENTS: usize = 3;
 pub(crate) const RULE_CODE_NUMBER_LENGTH: usize = 3;
 pub(crate) const EMPTY_FIXTURE_QUERY_TOKEN_COUNT: usize = 6;
 pub(crate) const ENCLOSING_CTE_TOKEN_COUNT: usize = 3;
-pub(crate) const PROJECT_CONFIG_FILE: &str = "sqlbuild_project.toml";
 pub(crate) const SETTING_SNIPPET_INDENT: &str = "            ";
 pub(crate) const NATIVE_ROWS_MEMO_VERSION: &str = "native-rules-rows-response-v1";
 pub(crate) const SQL_RULE_PREFIX: &str = "SQBRSQL";
+/// Threshold key setting the fewest test cases a custom rule must ship.
+pub const MIN_CUSTOM_RULE_TEST_CASES_KEY: &str = "min_custom_rule_test_cases";

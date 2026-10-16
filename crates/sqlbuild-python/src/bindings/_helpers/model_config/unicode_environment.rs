@@ -8,7 +8,7 @@ use pyo3::{pyclass, pymethods};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
+const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
 
 /// `os.environ`, raising a clear error for a value holding undecodable bytes.
 #[pyclass(module = "sqlbuild._native", frozen, mapping)]

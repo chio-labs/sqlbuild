@@ -14,7 +14,7 @@ use sqlbuild_analysis::fingerprint_storage::main::latest_index::latest_index;
 use sqlbuild_analysis::fingerprint_storage::main::selected_positions::selected_positions;
 use sqlbuild_analysis::fingerprint_storage::models::{FingerprintIdentity, LatestIndex};
 
-const MODELS_MODULE: &str = "sqlbuild.compiler.fingerprints.models";
+const MODELS_MODULE: &str = "sqlbuild._native";
 const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const DATETIME_MODULE: &str = "datetime";
 const BINASCII_MODULE: &str = "binascii";

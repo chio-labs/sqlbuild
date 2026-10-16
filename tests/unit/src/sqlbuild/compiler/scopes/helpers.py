@@ -8,37 +8,32 @@ from pathlib import Path
 from typing import cast
 
 from sqlbuild._native import (
-    build_scope_lookup,
-    get_placement_validated_scope_index,
-)
-from sqlbuild.compiler.discovery.models import (
+    ConstantMetadata,
+    DeclarationIdentity,
+    DeclarationKind,
+    DeclarationRecord,
     DiscoveredProjectInputs,
     DiscoveredSqlModelFile,
     EnumDeclaration,
-)
-from sqlbuild.compiler.scopes.models import (
-    ConstantMetadata,
-    DeclarationIdentity,
-    DeclarationRecord,
     EnumMemberMetadata,
     EnumMetadata,
     GrantRecord,
+    LocalConfig,
     MacroMetadata,
     OwnershipRoot,
+    OwnershipRootKind,
+    ProjectConfig,
     ResourceIdentity,
+    ResourceKind,
     ResourceRecord,
     ScopeCompleteness,
     ScopeIndex,
+    ScopeKind,
     ScopeLookup,
     UsageRecord,
+    build_scope_lookup,
+    get_placement_validated_scope_index,
 )
-from sqlbuild.compiler.scopes.types import (
-    DeclarationKind,
-    OwnershipRootKind,
-    ResourceKind,
-    ScopeKind,
-)
-from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
 SCOPE_CACHE_PROJECT: str = 'name = "demo"\nadapter = "duckdb"\n'
 SCOPE_CACHE_MODEL: str = "MODEL(description 'Test model.');\nSELECT 1 AS id\n"

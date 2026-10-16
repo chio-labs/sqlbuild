@@ -6,16 +6,20 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import CompileModelConfig, build_display_only_sqlbuild_plan, format_plan
-from sqlbuild.compiler.compile.models import (
+from sqlbuild._native import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompileModelConfig,
+    ModelPlanEntry,
+    PlanAction,
+    PlanOutput,
+    PlanReason,
+    build_display_only_sqlbuild_plan,
+    format_plan,
 )
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
-from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
-from sqlbuild.compiler.planner.types import PlanAction, PlanReason
 from tests.unit.src.sqlbuild.compiler.planner.main.execution._test_types import (
     DisplayFullRefreshTestCase,
 )

@@ -10,12 +10,13 @@ from typing import Any, cast
 from sqlbuild._native import (
     CollectionRendering,
     CompileAdapterContext,
+    CompilerDiagnostic,
+    LiteralSqlRelation,
     assemble_project,
     build_compile_inputs,
     discover_project_inputs,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import CompilerDiagnostic, LiteralSqlRelation
 from sqlbuild.compiler.compile.types import CompiledProjectView
 
 _ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(

@@ -7,8 +7,14 @@ from typing import Any, ClassVar
 import pytest
 
 from sqlbuild._native import (
+    CompiledObjectKey,
+    CompiledProject,
+    CursorInputRelation,
+    PlannerInputError,
     PlannerRelationsContext,
     PlannerScope,
+    SourceEntry,
+    SqlReferenceKind,
     build_cursor_input_relations,
     build_planner_relations_context,
     gather_source_columns,
@@ -18,20 +24,12 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledProject,
-)
 from sqlbuild.compiler.compile.types import (
     CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.models import CursorInputRelation
-from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     CursorRuntimeOwnershipTestCase,
     KnownSourceColumnsReuseTestCase,

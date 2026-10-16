@@ -9,7 +9,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::model_config::config_values::config_value_type_error;
 use crate::bindings::_helpers::model_config::errors::NativeConfigError;
 
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
+const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
 const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
 const IDENTITY_ERRORS_MODULE: &str = "sqlbuild._native";
 const EXPECTED_STRING: &str = "a string";

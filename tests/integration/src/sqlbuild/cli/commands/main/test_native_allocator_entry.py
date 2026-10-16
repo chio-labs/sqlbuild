@@ -14,14 +14,18 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
 )
 
 _PURGE_DELAY_VARIABLE: str = "MIMALLOC_PURGE_DELAY"
+_ENTRY_MODULE: str = "sqlbuild.cli.entry.main.entry"
+_LAUNCHED_MODULE: str = "sqlbuild.cli.entry.main.launched"
 _SCRIPT: str = """
+import importlib
 import json
 import os
 import sys
-from sqlbuild.cli.entry.main.entry import main
 
+entry = importlib.import_module(sys.argv[1])
 loaded_at_import = "sqlbuild._native" in sys.modules
-exit_code = main(["--version"])
+sys.argv = ["sqlbuild-python", "--version"]
+exit_code = entry.main() if entry.__name__.endswith(".launched") else entry.main(["--version"])
 loaded_by_version = "sqlbuild._native" in sys.modules
 import sqlbuild._native
 print(json.dumps({
@@ -38,11 +42,25 @@ print(json.dumps({
     [
         NativeAllocatorEntryTestCase(
             description="unset purge delay defaults to ten milliseconds",
+            entry_module=_ENTRY_MODULE,
             inherited_environment=(),
             expected_purge_delay="10",
         ),
         NativeAllocatorEntryTestCase(
             description="user purge delay is preserved",
+            entry_module=_ENTRY_MODULE,
+            inherited_environment=((_PURGE_DELAY_VARIABLE, "250"),),
+            expected_purge_delay="250",
+        ),
+        NativeAllocatorEntryTestCase(
+            description="launched entry defaults the purge delay before native load",
+            entry_module=_LAUNCHED_MODULE,
+            inherited_environment=(),
+            expected_purge_delay="10",
+        ),
+        NativeAllocatorEntryTestCase(
+            description="launched entry preserves a user purge delay",
+            entry_module=_LAUNCHED_MODULE,
             inherited_environment=((_PURGE_DELAY_VARIABLE, "250"),),
             expected_purge_delay="250",
         ),
@@ -57,7 +75,7 @@ def test_given_fresh_process_when_running_cli_entry_then_purge_delay_is_set_befo
     environment.update(test_case.inherited_environment)
 
     result: subprocess.CompletedProcess[str] = subprocess.run(
-        [sys.executable, "-c", _SCRIPT],
+        [sys.executable, "-c", _SCRIPT, test_case.entry_module],
         check=True,
         capture_output=True,
         env=environment,

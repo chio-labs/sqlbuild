@@ -20,7 +20,7 @@ use crate::bindings::_helpers::model_config::config_templates::{
 };
 use crate::bindings::_helpers::model_config::unicode_environment::unicode_environment;
 
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
+const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
 const UUID_MODULE: &str = "uuid";
 const ENVIRONMENT_READ: &str = "env";
 const RUN_ID_KEY: &str = "run.id";

@@ -13,8 +13,10 @@ import pytest
 
 from sqlbuild._native import (
     ExecutionEventWriter,
+    FutureCursorAction,
     IntegrationAssetResult,
     IntegrationResultEnvelope,
+    MicrobatchLimitAction,
     TerminalEventClaim,
     TerminalEventIndex,
     current_terminal_event_index,
@@ -25,7 +27,6 @@ from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.models import LifecycleEvent
-from sqlbuild.spec.contracts.types import FutureCursorAction, MicrobatchLimitAction
 from tests.unit.src.sqlbuild.cli.output.classes._test_types import (
     CheckSeverityDecodingTestCase,
     EnvelopeFieldValidationTestCase,

@@ -9,7 +9,6 @@ pub const CONNECTION_SOURCE_KEY: &str = "source";
 pub const DBT_PROFILE_CONNECTION_SOURCE: &str = "dbt_profile";
 pub const DUCKDB_ADAPTER: &str = "duckdb";
 pub const DUCKDB_MEMORY_DATABASE: &str = ":memory:";
-pub const PROJECT_CONFIG_FILENAME: &str = "sqlbuild_project.toml";
 pub const LOCAL_CONFIG_FILENAME: &str = "sqlbuild_local.toml";
 /// Connection keys a dbt profile connection routes on rather than connects with.
 pub const DBT_PROFILE_ROUTING_KEYS: [&str; 5] =

@@ -5,9 +5,9 @@ from __future__ import annotations
 import threading
 from typing import Any
 
+from sqlbuild._native import ModelPlanEntry, ScenarioExecutionPlan
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.types import TablePromotionMode
-from sqlbuild.compiler.planner.models import ModelPlanEntry, ScenarioExecutionPlan
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario.exceptions import ScenarioStopRequested
 from sqlbuild.executor.scenario.main._execute import execute_scenario_model

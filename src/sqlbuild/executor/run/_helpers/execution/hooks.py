@@ -5,23 +5,25 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from sqlbuild._native import CostContext, render_source_relation
+from sqlbuild._native import (
+    CompiledRelationLocation,
+    CostContext,
+    DiscoveredHookFunction,
+    HardCodedRelationOwnerKind,
+    PythonHookEntry,
+    PythonNodeIdentity,
+    SourceEntry,
+    SqlHookEntry,
+    render_source_relation,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredHookFunction,
-    PythonHookEntry,
-    SqlHookEntry,
-)
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_HOOK
 from sqlbuild.compiler.python_nodes.main.identity import build_python_node_identity
-from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity
 from sqlbuild.compiler.python_nodes.types import SkipMode
-from sqlbuild.compiler.references.types import HardCodedRelationOwnerKind
 from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.python_nodes.classes.runtime_relation_guard import RuntimeRelationGuard
@@ -47,7 +49,6 @@ from sqlbuild.provider.main.runtime import (
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.python_nodes.types import SqlResourceRefKind
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def execute_hooks(

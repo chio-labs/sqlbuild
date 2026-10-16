@@ -15,7 +15,7 @@ use crate::bindings::_helpers::dbt_interop::profile::raised;
 use crate::bindings::_helpers::dbt_interop::profile_connection::profile_error;
 
 const PROFILE_LOAD_MODULE: &str = "sqlbuild.integrations.dbt._helpers.profile.load";
-const DBT_MODELS: &str = "sqlbuild.integrations.dbt.models";
+const DBT_MODELS: &str = "sqlbuild._native";
 const DBT_PROJECT_FILE: &str = "dbt_project.yml";
 const PROFILES_FILE: &str = "profiles.yml";
 const DEFAULT_PROFILES_DIR: &str = "~/.dbt";

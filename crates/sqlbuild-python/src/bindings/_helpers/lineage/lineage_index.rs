@@ -6,7 +6,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
 use sqlbuild_analysis::lineage_command::models::{LineageIndex, LineageKey, LineageNode};
 
-const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS: &str = "sqlbuild._native";
 const GRAPH_MODELS: &str = "sqlbuild._native";
 
 /// A Python `CompiledObjectKey` as a lineage key.

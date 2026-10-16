@@ -5,6 +5,15 @@ from pathlib import Path
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    DiscoveredCommandOutputSink,
+    DiscoveredCommandOutputSinkDeclaration,
+    DiscoveredEventExporter,
+    DiscoveredEventExporterDeclaration,
+    DiscoveredProvider,
+    DiscoveredRuntimeExtensions,
+    EventExportSeverity,
+    LifecycleEventSinkFilterConfig,
+    LifecycleEventSinksConfig,
     ProjectConfigError,
     bind_event_exporter_declarations,
     discover_event_exporter_declarations,
@@ -14,19 +23,6 @@ from sqlbuild.compiler.discovery._helpers.filesystem.command_output_sinks import
     bind_command_output_sink_declarations,
     discover_command_output_sink_declarations,
 )
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredCommandOutputSink,
-    DiscoveredCommandOutputSinkDeclaration,
-    DiscoveredEventExporter,
-    DiscoveredEventExporterDeclaration,
-    DiscoveredProvider,
-    DiscoveredRuntimeExtensions,
-)
-from sqlbuild.spec.contracts.models import (
-    LifecycleEventSinkFilterConfig,
-    LifecycleEventSinksConfig,
-)
-from sqlbuild.spec.contracts.types import EventExportSeverity
 
 
 def discover_runtime_extensions(*, project_dir: Path) -> DiscoveredRuntimeExtensions:

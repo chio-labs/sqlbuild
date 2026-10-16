@@ -1,6 +1,10 @@
+pub mod asset_description;
 pub mod asset_failure_text;
 pub mod caller_json_output_path;
+pub mod dagster_name_segment;
+pub mod dagster_tag_key;
 pub mod diagnostic_tail;
+pub mod fallback_asset_description;
 pub mod has_explicit_scenario_selector;
 pub mod json_output_requested;
 pub mod normalize_check_name;

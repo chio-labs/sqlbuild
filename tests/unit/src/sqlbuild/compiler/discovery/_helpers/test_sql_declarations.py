@@ -9,15 +9,16 @@ import pytest
 import sqlbuild._native as _native
 from sqlbuild._native import (
     AuthoredSqlValueCall,
+    ConstantDeclaration,
     DeclarationParseError,
     DiscoveredConstantFile,
     DiscoveredEnumFile,
     DiscoveredModelSchemaFile,
+    EnumDeclaration,
     ModelSchemaDeclaration,
     ResourceIdentityError,
+    SqlValue,
 )
-from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
-from sqlbuild.sql_values.models import SqlValue
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DeclarationResourceIdentityErrorTestCase,
     ParseDeclarationFileErrorTestCase,

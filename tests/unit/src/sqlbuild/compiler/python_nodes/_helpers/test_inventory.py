@@ -4,30 +4,31 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
+from dataclasses import asdict
 from pathlib import Path
 from typing import cast
 
 import pytest
 
-from sqlbuild._native import build_python_node_graph
-from sqlbuild.compiler.discovery.models import (
+from sqlbuild._native import (
     DiscoveredAssetFunction,
     DiscoveredCheckFunction,
     DiscoveredLoaderFunction,
     DiscoveredProjectInputs,
     DiscoveredProvider,
-    DiscoveredTaskFunction,
-)
-from sqlbuild.compiler.discovery.types import LoaderConnectionMode
-from sqlbuild.compiler.python_nodes.models import (
     DiscoveredPythonNode,
+    DiscoveredTaskFunction,
+    LoaderConnectionMode,
+    LocalConfig,
+    ProjectConfig,
     PythonNodeGraph,
     PythonNodeIdentity,
+    SourceColumnEntry,
+    build_python_node_graph,
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.python_nodes.models import RetryPolicy
 from sqlbuild.python_nodes.types import PythonCheckSeverity
-from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SourceColumnEntry
 from tests.unit.src.sqlbuild.compiler.python_nodes._helpers._test_types import (
     PythonNodeGraphInventoryTestCase,
     PythonNodeIdentityConfigTestCase,
@@ -213,7 +214,7 @@ def test_given_discovered_python_functions_when_building_graph_then_indexes_node
     assert tuple(usage.annotation_module for usage in notify_node.provider_usages) == (
         test_case.expected_provider_usage_annotation_modules
     )
-    assert tuple(vars(usage) for usage in notify_node.provider_usages) == (
+    assert tuple(asdict(usage) for usage in notify_node.provider_usages) == (
         {
             "provider_name": "slack_provider",
             "parameter_name": "slack_provider",

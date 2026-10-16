@@ -24,9 +24,9 @@ use crate::bindings::_helpers::cursor::scalars::{
 };
 use crate::bindings::_helpers::plan_output::values::{optional_text, text};
 
-const PLANNER_TYPES: &str = "sqlbuild.compiler.planner.types";
-const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
-const CURSOR_MODELS: &str = "sqlbuild.cursor_algebra.models";
+const PLANNER_TYPES: &str = "sqlbuild._native";
+const PLANNER_MODELS: &str = "sqlbuild._native";
+const CURSOR_MODELS: &str = "sqlbuild._native";
 const DATETIME_MODULE: &str = "datetime";
 
 fn label_facts(entry: &Bound<'_, PyAny>) -> PyResult<ModelLabelFacts> {

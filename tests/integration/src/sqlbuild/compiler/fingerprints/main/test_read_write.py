@@ -8,6 +8,9 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import (
+    FINGERPRINT_TABLE_NAME,
+    Fingerprint,
+    FingerprintSet,
     read_latest_fingerprints,
     select_latest_fingerprints,
     write_fingerprint,
@@ -15,8 +18,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
-from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from tests.integration.src.sqlbuild.compiler.fingerprints.main._test_types import (
     BatchWriteTestCase,
     InvalidDefinitionStorageTestCase,

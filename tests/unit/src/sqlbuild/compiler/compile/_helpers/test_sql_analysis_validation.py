@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild._native import CompileInputError
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ValidateHookSqlSyntaxTestCase,
     ValidateSqlSyntaxTestCase,

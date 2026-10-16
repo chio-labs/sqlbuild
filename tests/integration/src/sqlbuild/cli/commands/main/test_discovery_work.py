@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import STAGE_CAPTURE_DIR_ENV_VAR
 from sqlbuild._native import run_cli as main
-from sqlbuild.compiler.frontier.constants import STAGE_CAPTURE_DIR_ENV_VAR
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import DiscoveryWorkTestCase
 from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
     eager_output_column_scans,

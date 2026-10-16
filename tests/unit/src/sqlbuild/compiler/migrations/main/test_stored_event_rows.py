@@ -7,10 +7,14 @@ from datetime import UTC, datetime
 import duckdb
 import pytest
 
-from sqlbuild._native import read_migration_state_events, stored_old_name_view_columns
+from sqlbuild._native import (
+    ColumnMigrationEvent,
+    OldNameViewDropReason,
+    OldNameViewEvent,
+    read_migration_state_events,
+    stored_old_name_view_columns,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.migrations.models import ColumnMigrationEvent, OldNameViewEvent
-from sqlbuild.compiler.migrations.types import OldNameViewDropReason
 from tests.unit.src.sqlbuild.compiler.migrations.main._test_types import (
     StoredColumnRowTestCase,
     StoredOldNameRowTestCase,

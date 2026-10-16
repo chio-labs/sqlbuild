@@ -8,11 +8,12 @@ from sqlbuild._native import (
     ContractValidationResult,
     DynamicColumnContractProof,
     DynamicColumnFamilyProof,
+    SchemaDynamicColumnFamily,
+    SourceLocation,
     evaluate_model_contracts,
 )
 from sqlbuild.adapter.contract.types import TypeDialect
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily, SourceLocation
 from tests.unit.src.sqlbuild.compiler.contracts._test_types import (
     ContractLocationTestCase,
     ContractMissingDeclarationsTestCase,

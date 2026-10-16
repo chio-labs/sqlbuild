@@ -7,30 +7,26 @@ import json
 import pytest
 
 from sqlbuild._native import (
+    BackfillAction,
     ColumnRenameHint,
+    CursorBounds,
+    CursorInputRelation,
     DisplayOptions,
     GraphResourceKind,
+    MaterializationType,
+    PlanAction,
+    PlanOutput,
+    PlanReason,
     PythonIdentityStatus,
     PythonPlanEntry,
     PythonRunPhase,
     SchemaChangeKind,
+    SourceWriteStrategy,
     WarningSeverity,
     format_plan,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.planner.models import (
-    CursorBounds,
-    CursorInputRelation,
-    PlanOutput,
-)
-from sqlbuild.compiler.planner.types import (
-    BackfillAction,
-    MaterializationType,
-    PlanAction,
-    PlanReason,
-)
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
-from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.cli.output.main.plan._test_types import (
     FormatPlanColorTestCase,
     FormatPlanTestCase,

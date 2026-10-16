@@ -5,10 +5,10 @@ from __future__ import annotations
 import time
 from types import TracebackType
 
+from sqlbuild._native import validate_run_bounds
 from sqlbuild.runtime.observability._helpers.dispatcher import current_event_dispatcher
 from sqlbuild.runtime.observability._helpers.factory import create_lifecycle_event
 from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
-from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.types import JSONValue
 
 
@@ -23,7 +23,7 @@ class RunLifecycle:
         configured_concurrency: int,
         worker_count: int,
     ) -> None:
-        _validate_run_bounds(
+        validate_run_bounds(
             selected_count=selected_count,
             configured_concurrency=configured_concurrency,
             worker_count=worker_count,
@@ -108,25 +108,3 @@ class RunLifecycle:
             self._dispatcher.publish_lifecycle(
                 create_lifecycle_event(event_type=event_type, payload=payload)
             )
-
-
-def _validate_run_bounds(
-    *, selected_count: int, configured_concurrency: int, worker_count: int
-) -> None:
-    values: tuple[tuple[str, int], ...] = (
-        ("selected_count", selected_count),
-        ("configured_concurrency", configured_concurrency),
-        ("worker_count", worker_count),
-    )
-    for field_name, value in values:
-        if isinstance(value, bool) or not isinstance(value, int):
-            raise ObservabilityValidationError(f"{field_name} must be an integer excluding bool")
-    if selected_count < 0:
-        raise ObservabilityValidationError("selected_count must be nonnegative")
-    if configured_concurrency < 1:
-        raise ObservabilityValidationError("configured_concurrency must be positive")
-    expected_worker_count: int = min(configured_concurrency, selected_count)
-    if worker_count != expected_worker_count:
-        raise ObservabilityValidationError(
-            "worker_count must equal min(configured_concurrency, selected_count)"
-        )

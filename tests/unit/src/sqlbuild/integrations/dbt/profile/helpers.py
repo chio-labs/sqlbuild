@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.spec.contracts.models import DbtConfig, ProjectConfig
+from sqlbuild._native import DbtConfig, ProjectConfig
 
 
 def write_duckdb_dbt_workspace(root: Path) -> None:

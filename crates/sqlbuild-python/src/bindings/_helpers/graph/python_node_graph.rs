@@ -16,7 +16,7 @@ use crate::bindings::_helpers::graph::views::compiled_graph_keys;
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const USER_INVENTORY_MODULE: &str = "sqlbuild.compiler.python_nodes._helpers.user_inventory";
-const NODE_MODELS_MODULE: &str = "sqlbuild.compiler.python_nodes.models";
+const NODE_MODELS_MODULE: &str = "sqlbuild._native";
 const NODE_TYPES_MODULE: &str = "sqlbuild.compiler.python_nodes.types";
 const SQL_REF_MODULE: &str = "sqlbuild.python_nodes.models";
 const NAME_KEY: &str = "name";

@@ -1213,6 +1213,7 @@ name = "sqlbuild-core"
 version = "0.156.1"
 dependencies = [
  "regex",
+ "sha2",
 ]
 
 [[package]]

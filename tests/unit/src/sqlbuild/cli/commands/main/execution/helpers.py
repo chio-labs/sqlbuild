@@ -10,13 +10,18 @@ from unittest.mock import Mock
 import pytest
 
 from sqlbuild import _native as native
+from sqlbuild._native import (
+    CompiledObjectKey,
+    CompiledSqlScenario,
+    DiscoveredProjectInputs,
+    DiscoveredSqlScenarioFile,
+    LocalConfig,
+    ProjectConfig,
+)
 from sqlbuild.adapter.discovery.main import resolve_adapter as adapters_module
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledSqlScenario
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlScenarioFile
 from sqlbuild.diagnostics.main import process_resource_reporting as resource_reporting_module
 from sqlbuild.executor.pipeline.main import run as executor_run_module
-from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 from tests.unit.src.sqlbuild.presentation.helpers import use_plain_terminal
 
 

@@ -39,7 +39,7 @@ _SLOW_TEST_PLANNING: str = dedent(
 _FAILED_BUILD: str = dedent(
     """
     from sqlbuild.cli.entry.main.entry import main
-    from sqlbuild.compiler.planner.exceptions import PlannerInputError
+    from sqlbuild._native import PlannerInputError
 
 
     def failing_reconciliation(**arguments):

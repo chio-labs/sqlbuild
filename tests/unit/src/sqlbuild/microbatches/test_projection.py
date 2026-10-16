@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.microbatches.main.project_coverage import project_microbatch_coverage
-from sqlbuild.microbatches.main.project_replay import project_replay_requirement
+from sqlbuild._native import project_microbatch_coverage, project_replay_requirement
 from sqlbuild.microbatches.models import (
     MicrobatchCoverageProjection,
     MicrobatchInterval,

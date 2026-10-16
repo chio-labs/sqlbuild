@@ -1,14 +1,24 @@
 //! The layouts of every native record class.
 
 use crate::bindings::_helpers::compile_records::constants::COMPILE_VALUE_RECORDS;
-use crate::bindings::_helpers::compiler_records::constants::{
-    COMPILER_ENUMS, COMPILER_ERRORS, COMPILER_RECORDS,
-};
+use crate::bindings::_helpers::compiler_enums::constants::COMPILER_ENUMS;
+use crate::bindings::_helpers::compiler_errors::constants::COMPILER_ERRORS;
+use crate::bindings::_helpers::compiler_records::constants::COMPILER_RECORDS;
+use crate::bindings::_helpers::contract_records::constants::CONTRACT_RECORDS;
 use crate::bindings::_helpers::freshness::observation::normalize_observation;
+use crate::bindings::_helpers::planner_records::constants::{
+    PLANNER_ENUMS, PLANNER_RECORDS, PLANNER_VALUE_RECORDS,
+};
+use crate::bindings::_helpers::record_behaviours::constants::{
+    BEHAVIOUR_CACHED_PROPERTIES, BEHAVIOUR_FINISHERS, BEHAVIOUR_METHODS, BEHAVIOUR_ORDERED,
+    BEHAVIOUR_PROPERTIES, BEHAVIOUR_SEQUENCES,
+};
 use crate::bindings::_helpers::records::models::{
     ClassValue, EnumSpec, ErrorSpec, FieldDefault, FieldSpec, RecordSpec,
 };
-use crate::bindings::_helpers::records::types::RecordFinish;
+use crate::bindings::_helpers::records::types::{ClassMethod, ClassProperty, RecordFinish};
+use crate::bindings::_helpers::rule_records::constants::RULE_RECORDS;
+use crate::bindings::_helpers::scope_records::constants::SCOPE_RECORDS;
 
 pub(crate) const NATIVE_MODULE: &str = "sqlbuild._native";
 /// The class attribute holding a record class's index into `RECORDS`.
@@ -43,6 +53,7 @@ const CLI_ERRORS: &[ErrorSpec] = &[
         doc: "Expected CLI-facing error that should be rendered without a traceback.",
         class_attributes: &[("code", ClassValue::Text("C000"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -51,6 +62,7 @@ const CLI_ERRORS: &[ErrorSpec] = &[
         doc: "Staged compile artifacts changed before publication, so nothing stale is deleted.",
         class_attributes: &[],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -62,6 +74,7 @@ const CLI_ERRORS: &[ErrorSpec] = &[
             ("exit_code", ClassValue::Int(2)),
         ],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -70,6 +83,7 @@ const CLI_ERRORS: &[ErrorSpec] = &[
         doc: "Expected query-diff failure with an explicit outcome and exit code.",
         class_attributes: &[],
         required: &["status", "exit_code"],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -78,6 +92,7 @@ const CLI_ERRORS: &[ErrorSpec] = &[
         doc: "Safety or preflight prevented complete value evidence.",
         class_attributes: &[],
         required: &[],
+        optional: &[],
         fixed: &[
             ("status", ClassValue::Text("incomplete")),
             ("exit_code", ClassValue::Int(2)),
@@ -89,6 +104,7 @@ const CLI_ERRORS: &[ErrorSpec] = &[
         doc: "Setup, execution, ownership publication, or cleanup failed.",
         class_attributes: &[],
         required: &[],
+        optional: &[],
         fixed: &[
             ("status", ClassValue::Text("execution_failed")),
             ("exit_code", ClassValue::Int(3)),
@@ -103,6 +119,7 @@ const CLI_ERRORS: &[ErrorSpec] = &[
             ("exit_code", ClassValue::Int(2)),
         ],
         required: &["details"],
+        optional: &[],
         fixed: &[],
     },
     ErrorSpec {
@@ -111,6 +128,7 @@ const CLI_ERRORS: &[ErrorSpec] = &[
         doc: "Raised when model migration state inputs or rows are invalid.",
         class_attributes: &[("code", ClassValue::Text("M000"))],
         required: &[],
+        optional: &[],
         fixed: &[],
     },
 ];
@@ -122,6 +140,7 @@ pub(crate) const ENUMS: &[&[EnumSpec]] = &[
     DBT_ENUMS,
     PRESENTATION_ENUMS,
     COMPILER_ENUMS,
+    PLANNER_ENUMS,
 ];
 
 /// Every native record group, in registration order.
@@ -137,11 +156,29 @@ pub(crate) const RECORDS: &[&[RecordSpec]] = &[
     DIAGNOSTIC_RECORDS,
     COMPILER_RECORDS,
     COMPILE_VALUE_RECORDS,
+    SCOPE_RECORDS,
+    PLANNER_RECORDS,
+    PLANNER_VALUE_RECORDS,
+    RULE_RECORDS,
+    CONTRACT_RECORDS,
 ];
 
-/// Records whose bound values are normalized before the record is created.
-pub(crate) const RECORD_FINISHERS: &[(&str, RecordFinish)] =
-    &[("SourceFreshnessObservation", normalize_observation)];
+/// Records whose bound values are normalized or validated before the record is created.
+pub(crate) const RECORD_FINISHERS: &[&[(&str, RecordFinish)]] = &[
+    &[("SourceFreshnessObservation", normalize_observation)],
+    BEHAVIOUR_FINISHERS,
+];
+/// `(class, attribute, getter)` computed attributes set on native classes after registration.
+pub(crate) const CLASS_PROPERTIES: &[&[(&str, &str, ClassProperty)]] = &[BEHAVIOUR_PROPERTIES];
+/// `(class, attribute, getter)` computed attributes a record computes once and keeps.
+pub(crate) const CACHED_PROPERTIES: &[&[(&str, &str, ClassProperty)]] =
+    &[BEHAVIOUR_CACHED_PROPERTIES];
+/// `(class, attribute, method)` methods set on native classes after registration.
+pub(crate) const CLASS_METHODS: &[&[(&str, &str, ClassMethod)]] = &[BEHAVIOUR_METHODS];
+/// Records ordered by their compared fields, as `order=True` dataclasses are.
+pub(crate) const ORDERED_RECORDS: &[&[&str]] = &[BEHAVIOUR_ORDERED];
+/// Native records registered as `collections.abc.Sequence` virtual subclasses.
+pub(crate) const SEQUENCE_RECORDS: &[&[&str]] = &[BEHAVIOUR_SEQUENCES];
 /// `SourceFreshnessObservation` field positions.
 pub(crate) const DATA_VERSION_FIELD: usize = 2;
 pub(crate) const OBSERVED_AT_FIELD: usize = 4;
@@ -246,7 +283,7 @@ const BUILD_INVOCATION: RecordSpec = RecordSpec {
         FieldSpec::new("effective_target_name", FieldDefault::None),
         FieldSpec::new(
             "execution_limits",
-            FieldDefault::Call("sqlbuild.spec.contracts.models", "ExecutionLimitsConfig"),
+            FieldDefault::Call("sqlbuild._native", "ExecutionLimitsConfig"),
         ),
     ],
 };

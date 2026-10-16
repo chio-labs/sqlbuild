@@ -5,14 +5,17 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import build_compiled_project, discover_project_inputs
+from sqlbuild._native import (
+    CompileInputError,
+    CompilePipelineResult,
+    DiscoveredProjectInputs,
+    build_compiled_project,
+    discover_project_inputs,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
-from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     GroupedDeclarationCompileTestCase,
     MacroDeclarationContextErrorTestCase,

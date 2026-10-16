@@ -9,13 +9,12 @@ from importlib.machinery import ModuleSpec
 from pathlib import Path
 from types import ModuleType
 
+from sqlbuild._native import PYTHON_INIT_MODULE_STEM, Rule, RulesError
 from sqlbuild.rule_engine._helpers.engine.definition import (
     resolve_rule_signature,
     rule_from_value,
 )
-from sqlbuild.rule_engine.constants import INIT_MODULE_NAME, RULE_DECORATOR_TOKEN
-from sqlbuild.rule_engine.exceptions import RulesError
-from sqlbuild.rule_engine.models import Rule
+from sqlbuild.rule_engine.constants import RULE_DECORATOR_TOKEN
 
 
 def load_custom_rules(*, project_dir: Path) -> tuple[Rule, ...]:
@@ -51,7 +50,7 @@ def load_custom_rules(*, project_dir: Path) -> tuple[Rule, ...]:
 def _rule_module_name(*, file_path: Path, project_dir: Path) -> str:
     relative: Path = file_path.relative_to(project_dir.resolve()).with_suffix("")
     parts: tuple[str, ...] = relative.parts
-    if parts[-1] == INIT_MODULE_NAME:
+    if parts[-1] == PYTHON_INIT_MODULE_STEM:
         parts = parts[:-1]
     return ".".join(parts)
 

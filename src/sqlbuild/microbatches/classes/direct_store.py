@@ -6,14 +6,14 @@ import time
 from dataclasses import replace
 from typing import Any
 
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.planner.models import ModelPlanEntry
-from sqlbuild.microbatches._helpers.sql import (
-    build_existing_event_ids_sql,
-    build_insert_many_sql,
-    build_read_scope_sql,
+from sqlbuild._native import (
+    CompiledRelationLocation,
+    ModelPlanEntry,
+    build_microbatch_existing_event_ids_sql,
+    build_microbatch_insert_many_sql,
+    build_microbatch_read_scope_sql,
 )
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.microbatches.classes.event_codec import MicrobatchEventCodec
 from sqlbuild.microbatches.constants import (
     DIRECT_MICROBATCH_SCOPE_KIND,
@@ -55,7 +55,7 @@ class DirectMicrobatchEventStore:
                     ]
                     cursor: Any = self._adapter.execute(
                         connection=self._connection,
-                        sql=build_existing_event_ids_sql(
+                        sql=build_microbatch_existing_event_ids_sql(
                             events=chunk,
                             render_qualified_name=self._adapter.render_qualified_name,
                         ),
@@ -69,7 +69,7 @@ class DirectMicrobatchEventStore:
                     if missing:
                         self._adapter.execute(
                             connection=self._connection,
-                            sql=build_insert_many_sql(
+                            sql=build_microbatch_insert_many_sql(
                                 events=missing,
                                 render_qualified_name=self._adapter.render_qualified_name,
                             ),
@@ -109,7 +109,7 @@ class DirectMicrobatchEventStore:
         self._initialize(database=scope.target_database, schema=schema)
         cursor: Any = self._adapter.execute(
             connection=self._connection,
-            sql=build_read_scope_sql(
+            sql=build_microbatch_read_scope_sql(
                 scope=scope, render_qualified_name=self._adapter.render_qualified_name
             ),
         )

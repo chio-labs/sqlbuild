@@ -6,6 +6,13 @@ from dataclasses import replace
 
 import pytest
 
+from sqlbuild._native import (
+    CursorType,
+    build_microbatch_create_table_sql,
+    build_microbatch_insert_many_sql,
+    build_microbatch_read_scope_sql,
+    deterministic_microbatch_event_id,
+)
 from sqlbuild._native import cursor_parse as parse
 from sqlbuild._native import cursor_render as render
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -15,17 +22,7 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
-from sqlbuild.compiler.planner.types import CursorType
-from sqlbuild.microbatches._helpers.sql import (
-    build_create_table_sql,
-    build_insert_many_sql,
-    build_insert_sql,
-    build_read_scope_sql,
-)
 from sqlbuild.microbatches.constants import MICROBATCH_COLUMNS, MICROBATCH_TABLE_NAME
-from sqlbuild.microbatches.main.deterministic_event_id import (
-    deterministic_microbatch_event_id,
-)
 from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
 from sqlbuild.microbatches.types import MicrobatchRecordType
 from tests.unit.src.sqlbuild.microbatches._test_types import (
@@ -115,7 +112,7 @@ def test_given_builtin_adapter_when_building_state_ddl_then_all_columns_are_decl
     test_case: MicrobatchDdlAdapterTestCase,
 ) -> None:
     adapter: BaseAdapter = test_case.adapter
-    sql: str = build_create_table_sql(
+    sql: str = build_microbatch_create_table_sql(
         database="warehouse",
         schema="analytics",
         render_qualified_name=adapter.render_qualified_name,
@@ -177,8 +174,8 @@ def test_given_completion_when_building_insert_then_provenance_and_numeric_rows_
 ) -> None:
     event: MicrobatchEvent = completion_for_sql()
 
-    sql: str = build_insert_sql(
-        event=event, render_qualified_name=DuckDbAdapter().render_qualified_name
+    sql: str = build_microbatch_insert_many_sql(
+        events=(event,), render_qualified_name=DuckDbAdapter().render_qualified_name
     )
 
     assert "INSERT INTO analytics._sqlbuild_microbatches" in sql
@@ -190,22 +187,39 @@ def test_given_completion_when_building_insert_then_provenance_and_numeric_rows_
     assert sql == (
         "INSERT INTO analytics._sqlbuild_microbatches (event_id, record_type, scope_kind, "
         "scope_key, model_name, target_database, target_schema, target_name, "
-        "physical_generation_id, "
-        "origin_run_id, origin_run_started_at, execution_run_id, execution_run_started_at, "
-        "run_type, completion_type, run_start, run_end, partition_start, partition_end, "
-        "batch_size, cursor_column, cursor_type, cursor_grain, model_version_hash, "
-        "definition_hash, fingerprint_status, replay_requirement_id, "
-        "required_model_version_hash, previous_model_version_hash, replay_policy, "
-        "rows_affected, completed_at, coverage_source, observed_row_count, observed_at, "
-        "synthetic_reason, unaccounted_policy, created_at) SELECT 'event-1', "
-        "'partition_completion', 'direct_logical', 'duckdb:analytics.orders', 'orders', NULL, "
-        "'analytics', 'orders', '*', 'origin-run', CAST(NULL AS TIMESTAMP), "
-        "'execution-run', CAST(NULL AS TIMESTAMP), 'replay_on_change', 'recovery', '0', '1', "
-        "'0', '1', '1', 'batch_id', 'integer', NULL, 'F2', 'fingerprint''definition', "
-        "'known', NULL, NULL, NULL, NULL, CAST(0 AS BIGINT), CAST(NULL AS TIMESTAMP), NULL, "
-        "CAST(NULL AS BIGINT), CAST(NULL AS TIMESTAMP), NULL, NULL, "
-        "CAST('2026-01-01T00:00:00+00:00' AS TIMESTAMP) WHERE NOT EXISTS (SELECT 1 FROM "
-        "analytics._sqlbuild_microbatches WHERE event_id = 'event-1')"
+        "physical_generation_id, origin_run_id, origin_run_started_at, execution_run_id, "
+        "execution_run_started_at, run_type, completion_type, run_start, run_end, "
+        "partition_start, partition_end, batch_size, cursor_column, cursor_type, "
+        "cursor_grain, model_version_hash, definition_hash, fingerprint_status, "
+        "replay_requirement_id, required_model_version_hash, previous_model_version_hash, "
+        "replay_policy, rows_affected, completed_at, coverage_source, observed_row_count, "
+        "observed_at, synthetic_reason, unaccounted_policy, created_at) SELECT event_id, "
+        "record_type, scope_kind, scope_key, model_name, target_database, target_schema, "
+        "target_name, physical_generation_id, origin_run_id, origin_run_started_at, "
+        "execution_run_id, execution_run_started_at, run_type, completion_type, run_start, "
+        "run_end, partition_start, partition_end, batch_size, cursor_column, cursor_type, "
+        "cursor_grain, model_version_hash, definition_hash, fingerprint_status, "
+        "replay_requirement_id, required_model_version_hash, previous_model_version_hash, "
+        "replay_policy, rows_affected, completed_at, coverage_source, observed_row_count, "
+        "observed_at, synthetic_reason, unaccounted_policy, created_at FROM (SELECT 'event-1'"
+        " AS event_id, 'partition_completion' AS record_type, 'direct_logical' AS scope_kind,"
+        " 'duckdb:analytics.orders' AS scope_key, 'orders' AS model_name, NULL AS "
+        "target_database, 'analytics' AS target_schema, 'orders' AS target_name, '*' AS "
+        "physical_generation_id, 'origin-run' AS origin_run_id, CAST(NULL AS TIMESTAMP) AS "
+        "origin_run_started_at, 'execution-run' AS execution_run_id, CAST(NULL AS TIMESTAMP) "
+        "AS execution_run_started_at, 'replay_on_change' AS run_type, 'recovery' AS "
+        "completion_type, '0' AS run_start, '1' AS run_end, '0' AS partition_start, '1' AS "
+        "partition_end, '1' AS batch_size, 'batch_id' AS cursor_column, 'integer' AS "
+        "cursor_type, NULL AS cursor_grain, 'F2' AS model_version_hash, "
+        "'fingerprint''definition' AS definition_hash, 'known' AS fingerprint_status, NULL AS"
+        " replay_requirement_id, NULL AS required_model_version_hash, NULL AS "
+        "previous_model_version_hash, NULL AS replay_policy, CAST(0 AS BIGINT) AS "
+        "rows_affected, CAST(NULL AS TIMESTAMP) AS completed_at, NULL AS coverage_source, "
+        "CAST(NULL AS BIGINT) AS observed_row_count, CAST(NULL AS TIMESTAMP) AS observed_at, "
+        "NULL AS synthetic_reason, NULL AS unaccounted_policy, "
+        "CAST('2026-01-01T00:00:00+00:00' AS TIMESTAMP) AS created_at) AS incoming WHERE NOT "
+        "EXISTS (SELECT 1 FROM analytics._sqlbuild_microbatches AS existing WHERE "
+        "existing.event_id = incoming.event_id)"
     )
     assert len((sql,)) == test_case.expected_statement_count
 
@@ -249,10 +263,10 @@ def test_given_builtin_adapter_when_rendering_direct_event_inserts_then_typed_co
 ) -> None:
     event: MicrobatchEvent = completion_for_sql()
 
-    single_sql: str = build_insert_sql(
-        event=event, render_qualified_name=test_case.adapter.render_qualified_name
+    single_sql: str = build_microbatch_insert_many_sql(
+        events=(event,), render_qualified_name=test_case.adapter.render_qualified_name
     )
-    bulk_sql: str = build_insert_many_sql(
+    bulk_sql: str = build_microbatch_insert_many_sql(
         events=(event, replace(event, event_id="second-event")),
         render_qualified_name=test_case.adapter.render_qualified_name,
     )
@@ -275,10 +289,10 @@ def test_given_wildcard_and_concrete_generations_when_reading_then_filter_is_opt
 ) -> None:
     scope: MicrobatchScope = completion_for_sql().scope
 
-    wildcard_sql: str = build_read_scope_sql(
+    wildcard_sql: str = build_microbatch_read_scope_sql(
         scope=scope, render_qualified_name=DuckDbAdapter().render_qualified_name
     )
-    concrete_sql: str = build_read_scope_sql(
+    concrete_sql: str = build_microbatch_read_scope_sql(
         scope=MicrobatchScope(
             scope_kind=scope.scope_kind,
             scope_key=scope.scope_key,

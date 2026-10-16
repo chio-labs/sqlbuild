@@ -50,6 +50,13 @@ pub(super) struct ArtifactNameTestCase {
     pub expected_parts: Option<(&'static str, &'static str)>,
 }
 
+pub(super) struct ArtifactNameBuildTestCase {
+    pub description: &'static str,
+    pub run_id: &'static str,
+    pub side: &'static str,
+    pub expected_parts: Option<(&'static str, &'static str)>,
+}
+
 pub(super) struct RetentionTestCase {
     pub description: &'static str,
     pub override_days: Option<i64>,

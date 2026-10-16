@@ -7,7 +7,7 @@ from enum import StrEnum
 from types import TracebackType
 from typing import TYPE_CHECKING, Protocol, Self
 
-from sqlbuild.runtime.execution_history.constants import DEFAULT_PAGE_LIMIT
+from sqlbuild._native import DEFAULT_PAGE_LIMIT
 
 if TYPE_CHECKING:
     from sqlbuild.runtime.execution_history.models import (

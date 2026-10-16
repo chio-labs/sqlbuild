@@ -4,9 +4,12 @@ from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
-from sqlbuild._native import SourceFreshnessObservation
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
-from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
+from sqlbuild._native import (
+    SourceFreshnessObservation,
+    SourceFreshnessRecord,
+    SourceFreshnessStrategy,
+    SourceFreshnessValueKind,
+)
 from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
     SourceFreshnessDatetimeNormalizationTestCase,
     SourceFreshnessNaiveDatetimeTestCase,

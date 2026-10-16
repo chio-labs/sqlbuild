@@ -7,10 +7,12 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledSqlScenario
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
+from sqlbuild._native import (
+    CompiledSqlScenario,
+    CompilePipelineResult,
+    ScenarioExecutionPlan,
+    SqlLexicalSyntax,
+)
 from sqlbuild.executor.pipeline._helpers import scenario as scenario_pipeline
 from sqlbuild.executor.scenario._helpers.local import execution as local_scenario
 from sqlbuild.executor.scenario.constants import (

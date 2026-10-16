@@ -14,12 +14,33 @@ from sqlbuild._native import (
     CompileAdapterContext,
     CompiledDirectLogicSqlTestPayload,
     CompiledLineageColumnFact,
+    CompiledLineageSourceFact,
     CompiledModelSqlTestPayload,
+    CompiledObjectKey,
+    CompiledRelationLocation,
+    CompiledSqlTest,
+    CompilerDiagnostic,
+    CompileSqlReference,
     DeclarationExpansionContext,
+    DeclarationIdentity,
+    DeclarationKind,
+    DeclarationRecord,
+    DeclarationResolutionContext,
     DeclarationRuntimeProjection,
     DeclarationScopeResolver,
+    DiscoveredMacroFile,
+    DiscoveredProjectInputs,
+    LoadedMacro,
+    MacroMetadata,
     NativeColumnQuery,
     NativeQueryColumns,
+    OwnershipRoot,
+    ResourceIdentity,
+    ResourceKind,
+    ResourceRecord,
+    ScopeIndex,
+    ScopeKind,
+    ScopeLookup,
     assemble_project,
     build_compile_inputs,
     build_execution_upstream_deps,
@@ -41,38 +62,13 @@ from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
-from sqlbuild.compiler.compile.models import (
-    CompiledLineageSourceFact,
-    CompiledObjectKey,
-    CompiledRelationLocation,
-    CompiledSqlTest,
-    CompilerDiagnostic,
-    CompileSqlReference,
-    DeclarationResolutionContext,
-    LoadedMacro,
-    MacroContext,
-)
+from sqlbuild.compiler.compile.models import MacroContext
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredMacroFile,
-    DiscoveredProjectInputs,
-)
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.compiler.scopes.models import (
-    DeclarationIdentity,
-    DeclarationRecord,
-    MacroMetadata,
-    OwnershipRoot,
-    ResourceIdentity,
-    ResourceRecord,
-    ScopeIndex,
-    ScopeLookup,
-)
-from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, ScopeKind
 
 if TYPE_CHECKING:
     from sqlbuild._native import CompileInputsView, ModelInput

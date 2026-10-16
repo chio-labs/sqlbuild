@@ -5,13 +5,11 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
-from sqlbuild._native import aggregate_build_result
+from sqlbuild._native import PlanOutput, RetentionPlanPhase, aggregate_build_result
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.relations.main.relation_metadata_cache_scope import (
     relation_metadata_cache_scope,
 )
-from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.compiler.planner.types import RetentionPlanPhase
 from sqlbuild.executor.auditing.main._project_results import (
     AuditResultProjection,
     project_audit_result_batch,

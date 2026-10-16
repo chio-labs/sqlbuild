@@ -15,8 +15,12 @@ from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
 )
 from tests.unit.src.sqlbuild.integrations.rivers._test_types import (
     RiversPythonArtifactCompatibilityTestCase,
+    RiversTranslatorArgumentTestCase,
 )
-from tests.unit.src.sqlbuild.integrations.rivers.helpers import FakeRiversModule
+from tests.unit.src.sqlbuild.integrations.rivers.helpers import (
+    FakeRiversModule,
+    RecordingRiversTranslator,
+)
 
 
 @pytest.mark.parametrize(
@@ -77,3 +81,35 @@ def test_given_python_augmented_dag_when_building_asset_defs_then_maps_python_no
     assert task_def.group == test_case.expected_task_group
     assert python_asset_def.group == test_case.expected_asset_group
     assert all(key in python_asset_def.metadata for key in test_case.expected_asset_metadata_keys)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RiversTranslatorArgumentTestCase(
+            description="dependencies are the artifact's own nodes without the project name",
+            node_id="model:orders",
+            expected_dependency_name_count=1,
+            expected_owned_node_keys_end=("materialization_type", "project_name"),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_python_augmented_dag_when_building_asset_defs_then_translator_sees_artifact_nodes(
+    test_case: RiversTranslatorArgumentTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dag: Mapping[str, Any] = build_python_augmented_dagster_test_dag()
+    monkeypatch.setattr(rivers_assets, "load_rivers", lambda: FakeRiversModule())
+    translator: RecordingRiversTranslator = RecordingRiversTranslator()
+
+    _ = build_asset_defs(dag=dag, translator=translator)
+    artifact_node: Mapping[str, Any] = {str(node["id"]): node for node in dag["nodes"]}[
+        test_case.node_id
+    ]
+    dependencies: list[Mapping[str, Any]] = translator.named_nodes[(test_case.node_id, False)]
+    owned_nodes: list[Mapping[str, Any]] = translator.named_nodes[(test_case.node_id, True)]
+
+    assert len(dependencies) == test_case.expected_dependency_name_count
+    assert all(dependency is artifact_node for dependency in dependencies)
+    assert [tuple(node)[-2:] for node in owned_nodes] == [test_case.expected_owned_node_keys_end]

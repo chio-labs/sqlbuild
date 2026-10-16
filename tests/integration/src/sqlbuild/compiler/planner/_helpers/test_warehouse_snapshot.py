@@ -7,7 +7,16 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import (
+    CompiledObjectKey,
+    CompiledRelationLocation,
+    CursorOverrides,
     CursorSnapshotScope,
+    Fingerprint,
+    ModelCursorSnapshot,
+    PlannerInputError,
+    SchemaColumn,
+    SchemaModelEntry,
+    TimestampValue,
     WarehouseSnapshot,
     compiled_model_record,
     gather_source_columns,
@@ -17,23 +26,11 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledRelationLocation,
-)
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.models import (
-    CursorOverrides,
-    ModelCursorSnapshot,
-)
-from sqlbuild.cursor_algebra.models import TimestampValue
-from sqlbuild.spec.contracts.models import SchemaColumn, SchemaModelEntry
 from tests.integration.src.sqlbuild.compiler.planner._helpers._test_types import (
     GatherCursorSnapshotTestCase,
     GatherEmptySnapshotTestCase,

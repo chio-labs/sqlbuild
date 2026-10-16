@@ -5,7 +5,7 @@ from typing import ClassVar
 
 import pytest
 
-from sqlbuild.compiler.discovery.models import DiscoveredProvider
+from sqlbuild._native import DiscoveredProvider
 from sqlbuild.provider._helpers.session import build_provider_session
 from sqlbuild.provider.classes.session import ProviderSession
 from sqlbuild.providers import Provider

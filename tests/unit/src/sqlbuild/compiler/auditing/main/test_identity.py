@@ -6,12 +6,13 @@ from dataclasses import replace
 
 import pytest
 
-from sqlbuild._native import build_audit_gate_identity
-from sqlbuild.compiler.auditing.models import (
+from sqlbuild._native import (
     AuditGateIdentity,
     AuditIdentity,
+    AuditPlanEntry,
     MeasurementThresholdBound,
     MeasurementThresholds,
+    build_audit_gate_identity,
 )
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
@@ -20,7 +21,6 @@ from sqlbuild.compiler.auditing.types import (
     AuditSeverity,
     ThresholdOperator,
 )
-from sqlbuild.compiler.planner.models import AuditPlanEntry
 from tests.unit.src.sqlbuild.compiler.auditing.main._test_types import (
     AuditGateAggregateIdentityTestCase,
     AuditGateIdentityTestCase,

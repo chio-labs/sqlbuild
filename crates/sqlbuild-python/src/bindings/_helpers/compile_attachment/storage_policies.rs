@@ -5,8 +5,8 @@ use pyo3::types::{PyBool, PyString, PyTuple};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
-const CONTRACT_TYPES_MODULE: &str = "sqlbuild.spec.contracts.types";
+const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
+const CONTRACT_TYPES_MODULE: &str = "sqlbuild._native";
 
 /// `value`, unless it is `None`.
 fn present(value: Bound<'_, PyAny>) -> Option<Bound<'_, PyAny>> {

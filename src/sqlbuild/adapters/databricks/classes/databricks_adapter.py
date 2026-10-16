@@ -13,6 +13,13 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar
 
+from sqlbuild._native import (
+    SeedCsvSettings,
+    SourceFreshnessRecord,
+    SqlLexicalSyntax,
+    SqlValue,
+    render_insert_source_freshness_records_sql,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import (
     BaseAdapter,
     _encode_typed_json,
@@ -96,9 +103,6 @@ from sqlbuild.adapter.relations.main.get_columns_for_relations import (
     get_columns_for_relations_bulk,
 )
 from sqlbuild.adapter.relations.main.relation_age_timestamp import relation_age_timestamp_utc
-from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql import (
-    render_insert_source_freshness_records_sql,
-)
 from sqlbuild.adapter.type_system.main.conditional_result_nullability import (
     conditional_result_nullability,
 )
@@ -126,12 +130,8 @@ from sqlbuild.adapters.databricks.constants import (
     UNDEFINED_TABLE_SQLSTATE,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.diagnostics.main.log_sql import log_sql
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
-from sqlbuild.spec.contracts.models import SeedCsvSettings
-from sqlbuild.sql_values.models import SqlValue
 
 
 class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
@@ -498,7 +498,7 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         schema: str,
         retain_versions: int,
     ) -> str:
-        from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+        from sqlbuild._native import FINGERPRINT_TABLE_NAME
 
         table_name: str | None = self.render_qualified_name(
             database=database,
@@ -530,7 +530,7 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         schema: str,
         retain_versions: int,
     ) -> str:
-        from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
+        from sqlbuild._native import SOURCE_FRESHNESS_TABLE_NAME
 
         table_name: str | None = self.render_qualified_name(
             database=database,

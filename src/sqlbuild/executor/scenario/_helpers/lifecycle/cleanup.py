@@ -7,6 +7,15 @@ from collections import defaultdict
 from dataclasses import replace
 from typing import Any
 
+from sqlbuild._native import (
+    CompiledRelationLocation,
+    MaterializationType,
+    ModelPlanEntry,
+    ScenarioArtifactKind,
+    ScenarioExecutionPlan,
+    ScenarioFixturePlan,
+    SeedPlanEntry,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup
 from sqlbuild.adapter.contract.types import RelationType
@@ -17,14 +26,6 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.adapter.type_system.main.normalize_relation_type import normalize_relation_type
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.planner.models import (
-    ModelPlanEntry,
-    ScenarioExecutionPlan,
-    ScenarioFixturePlan,
-    SeedPlanEntry,
-)
-from sqlbuild.compiler.planner.types import MaterializationType, ScenarioArtifactKind
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.executor.run.main._table_targets import resolve_table_targets
 from sqlbuild.executor.run.main._type_enforcement_relation_name import (

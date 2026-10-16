@@ -4,14 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import build_deferred_locations
+from sqlbuild._native import CompiledRelationLocation, TargetConfig, build_deferred_locations
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import (
-    CompiledRelationLocation,
-)
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.spec.contracts.models import TargetConfig
 from tests.unit.src.sqlbuild.compiler.pipeline._helpers._test_types import (
     DeferredTargetTestCase,
 )

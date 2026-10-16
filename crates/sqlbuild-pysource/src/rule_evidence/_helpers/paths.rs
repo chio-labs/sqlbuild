@@ -7,8 +7,9 @@ use ruff_python_ast::Stmt;
 
 use crate::cpython_tree::models::CpythonNode;
 use crate::rule_evidence::constants::{
-    INIT_FILE_NAME, INIT_MODULE_NAME, PYTHON_SUFFIX, RULES_DIRECTORY_NAME, STAR_IMPORT_NAME,
+    INIT_FILE_NAME, PYTHON_SUFFIX, RULES_DIRECTORY_NAME, STAR_IMPORT_NAME,
 };
+use sqlbuild_core::constants::PYTHON_INIT_MODULE_STEM as INIT_MODULE_NAME;
 
 /// `Path.resolve()`: symlinks resolved through the existing prefix, the rest kept lexically.
 pub(crate) fn resolve(path: &Path) -> PathBuf {

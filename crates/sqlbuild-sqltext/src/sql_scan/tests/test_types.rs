@@ -1,5 +1,5 @@
-use crate::sql_scan::models::QuotePolicy;
 use crate::sql_scan::models::Unclosed;
+use crate::sql_scan::models::{LexicalSyntax, QuotePolicy};
 
 pub(crate) struct MatchingParenPolicyTestCase {
     pub(crate) description: &'static str,
@@ -27,4 +27,18 @@ pub(crate) struct DialectNonCodeRangesTestCase {
     pub(crate) sql: &'static str,
     pub(crate) syntax: crate::sql_scan::models::LexicalSyntax,
     pub(crate) expected_marker_protected: bool,
+}
+
+pub(crate) struct LexicalRulesTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) syntax: LexicalSyntax,
+    pub(crate) sql: &'static str,
+    pub(crate) expected_key: &'static str,
+    pub(crate) expected_reads_differently: bool,
+}
+
+pub(crate) struct PrefixCheckTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) declared: &'static [&'static str],
+    pub(crate) expected_unsupported: &'static [&'static str],
 }

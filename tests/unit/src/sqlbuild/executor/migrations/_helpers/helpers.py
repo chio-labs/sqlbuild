@@ -9,16 +9,18 @@ from typing import Any
 import duckdb
 
 from sqlbuild._native import (
+    ColumnMigrationDecision,
+    ColumnMigrationEvent,
+    ColumnMigrationPlanEntry,
+    CompiledRelationLocation,
     MigrationDiscovery,
+    MigrationRelation,
     OldNameViewAction,
+    OldNameViewPlanEntry,
     deterministic_column_migration_event_id,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.migrations.models import ColumnMigrationEvent, MigrationRelation
-from sqlbuild.compiler.migrations.types import ColumnMigrationDecision
-from sqlbuild.compiler.planner.models import ColumnMigrationPlanEntry, OldNameViewPlanEntry
 
 RELATION: str = "main.fct_orders"
 

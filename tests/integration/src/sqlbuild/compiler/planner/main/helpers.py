@@ -14,17 +14,31 @@ from typing import Any, cast
 
 from sqlbuild._native import (
     CompiledFunction,
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
     CompileModelConfig,
     CompilePipelineOptions,
+    CompilePipelineResult,
+    CompileSqlReference,
     DeferralInputs,
+    DiscoveredProjectInputs,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
+    DiscoveredSourceFile,
+    Fingerprint,
     FunctionArgument,
     PlannerOverrides,
     PlannerPolicies,
     PlannerSelection,
+    PlanOutput,
+    SchemaSeedEntry,
+    SettingsConfig,
+    SourceEntry,
+    SqlReferenceKind,
     build_compiled_function_fingerprint_sql,
     build_execution_plan,
     compiled_model_record,
@@ -36,13 +50,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.models import RelationInfo, RelationReadProbe
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
-    CompileSqlReference,
-)
 from sqlbuild.compiler.compile.types import (
     CompiledFunctionView,
     CompiledModelView,
@@ -52,17 +59,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledSourceView,
     FunctionLanguage,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile
-from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.runtime.contracts.models import ConnectionHooks
-from sqlbuild.spec.contracts.models import (
-    SchemaSeedEntry,
-    SettingsConfig,
-    SourceEntry,
-)
 from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     BuildExecutionPlanTestCase,
     FormatPlanIntegrationTestCase,

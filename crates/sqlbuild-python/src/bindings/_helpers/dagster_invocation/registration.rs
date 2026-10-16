@@ -3,7 +3,7 @@
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult};
 use pyo3::wrap_pyfunction;
 
-use crate::bindings::_helpers::dagster_invocation::{arguments, failures, results};
+use crate::bindings::_helpers::dagster_invocation::{arguments, failures, results, translator};
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(arguments::dagster_cli_arguments, module)?)?;
@@ -25,5 +25,30 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module
     )?)?;
     module.add_function(wrap_pyfunction!(failures::dagster_failure, module)?)?;
-    module.add_function(wrap_pyfunction!(failures::dagster_live_failure, module)?)
+    module.add_function(wrap_pyfunction!(failures::dagster_live_failure, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        translator::dagster_default_asset_key_path,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        translator::dagster_default_group_name,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(translator::dagster_default_tags, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        translator::dagster_default_metadata,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        translator::dagster_default_description,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        translator::dagster_default_check_name,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        translator::dagster_default_check_metadata,
+        module
+    )?)
 }

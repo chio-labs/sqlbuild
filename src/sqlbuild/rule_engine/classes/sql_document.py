@@ -2,10 +2,8 @@
 
 from typing import Any
 
+from sqlbuild._native import AST_CTE_KIND, RuleUsageError, SqlNode
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
-from sqlbuild.rule_engine.constants import AST_CTE_KIND
-from sqlbuild.rule_engine.exceptions import RuleUsageError
-from sqlbuild.rule_engine.models import SqlNode
 
 
 class SqlDocument:

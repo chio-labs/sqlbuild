@@ -12,8 +12,13 @@ from unittest.mock import Mock
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild._native import IntegrationResultEnvelope, serialize_maximum_start_safety
-from sqlbuild.compiler.planner.models import MaximumStartSafetyEvidence
+from sqlbuild._native import (
+    FutureCursorAction,
+    IntegrationResultEnvelope,
+    MaximumStartSafetyEvidence,
+    MicrobatchLimitAction,
+    serialize_maximum_start_safety,
+)
 from sqlbuild.integrations.dagster import (
     SqlBuildCliResource,
     SqlBuildDagsterTranslator,
@@ -23,9 +28,10 @@ from sqlbuild.integrations.dagster._helpers.invocation import (
     _build_results_from_integration_result,
 )
 from sqlbuild.integrations.dagster.classes.sqlbuild_cli_invocation import SqlBuildCliInvocation
-from sqlbuild.spec.contracts.types import FutureCursorAction, MicrobatchLimitAction
 from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterAuditIdentityTestCase,
+    DagsterCliArgumentErrorTestCase,
+    DagsterCliArgumentTypeTestCase,
     DagsterCliCloneFailureTestCase,
     DagsterCliCloneStreamTestCase,
     DagsterCliFailureTestCase,
@@ -803,6 +809,62 @@ def test_given_sqlbuild_cli_resource_when_waiting_invocation_then_captures_proce
     assert invocation.is_successful() is test_case.expected_success
     assert invocation.stdout == test_case.expected_stdout
     assert invocation.stderr == test_case.expected_stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterCliArgumentTypeTestCase(
+            description="path-like arguments reach the subprocess as paths",
+            args=("build", "--select-file", Path("selectors/orders.txt")),
+            expected_args=("build", "--select-file", "selectors/orders.txt"),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_path_like_cli_arguments_when_starting_without_context_then_paths_pass_through(
+    test_case: DagsterCliArgumentTypeTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    resource: SqlBuildCliResource = SqlBuildCliResource(
+        project_dir=str(project_dir),
+        sqb_command=write_fake_sqb_command(root=tmp_path, expected_args=test_case.expected_args),
+    )
+
+    invocation: SqlBuildCliInvocation = resource.cli(
+        cast(list[str], list(test_case.args)), raise_on_error=False
+    ).wait()
+
+    assert invocation.is_successful(), invocation.stderr
+    assert invocation.command[-len(test_case.args) :] == test_case.expected_args
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterCliArgumentErrorTestCase(
+            description="integer argument fails as string methods would",
+            args=("build", 3),
+            expected_error="'int' object has no attribute 'startswith'",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_other_non_string_cli_arguments_when_starting_then_attribute_error_is_raised(
+    test_case: DagsterCliArgumentErrorTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    resource: SqlBuildCliResource = SqlBuildCliResource(
+        project_dir=str(project_dir),
+        sqb_command=write_fake_sqb_command(root=tmp_path),
+    )
+
+    with pytest.raises(AttributeError) as raised:
+        resource.cli(cast(list[str], list(test_case.args)))
+
+    assert str(raised.value) == test_case.expected_error
 
 
 @pytest.mark.parametrize(

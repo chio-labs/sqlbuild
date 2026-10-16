@@ -2,7 +2,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild._native import DiscoveredProjectInputs
 
 
 def build_selector_discovered_inputs(

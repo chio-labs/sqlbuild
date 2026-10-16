@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import CursorGrain, CursorType
 from sqlbuild._native import cursor_exclusive_to_inclusive as exclusive_to_inclusive
 from sqlbuild._native import cursor_inclusive_to_exclusive as inclusive_to_exclusive
 from sqlbuild._native import cursor_parse as parse
 from sqlbuild._native import cursor_render as render
-from sqlbuild.compiler.planner.types import CursorGrain, CursorType
 from sqlbuild.cursor_algebra.types import CursorScalar
 from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
     AdvanceCursorEndTestCase,

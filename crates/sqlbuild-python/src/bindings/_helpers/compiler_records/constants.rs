@@ -1,9 +1,6 @@
-//! Layouts of the compiler, rule, lint and config value records hosted natively.
+//! Layouts of the compiler, lint and config value records hosted natively.
 
-use crate::bindings::_helpers::records::constants::{EXCEPTION_PARENT, VALUE_ERROR_PARENT};
-use crate::bindings::_helpers::records::models::{
-    ClassValue, EnumSpec, ErrorSpec, FieldDefault, FieldSpec, RecordSpec,
-};
+use crate::bindings::_helpers::records::models::{FieldDefault, FieldSpec, RecordSpec};
 
 const R_NATIVE_MODEL_ANALYSIS_REQUEST: RecordSpec = RecordSpec {
     name: "NativeModelAnalysisRequest",
@@ -422,6 +419,7 @@ const R_LINT_CONFIG: RecordSpec = RecordSpec {
             name: "relation_keys",
             default: FieldDefault::EmptyDict,
             compared: false,
+            shown: false,
         },
     ],
 };
@@ -436,6 +434,7 @@ const R_LINT_RUN_RESULT: RecordSpec = RecordSpec {
             name: "source_texts",
             default: FieldDefault::EmptyDict,
             compared: false,
+            shown: false,
         },
         FieldSpec::new("unexpandable", FieldDefault::EmptyDict),
     ],
@@ -575,124 +574,6 @@ const R_CLONE_PIPELINE_RESULT: RecordSpec = RecordSpec {
         FieldSpec::new("origin_source_entries", FieldDefault::EmptyTuple),
     ],
 };
-const R_PARSED_SELECTOR: RecordSpec = RecordSpec {
-    name: "ParsedSelector",
-    doc: "One parsed selector token before graph resolution.",
-    fields: &[
-        FieldSpec::required("kind"),
-        FieldSpec::required("value"),
-        FieldSpec::new("upstream", FieldDefault::False),
-        FieldSpec::new("downstream", FieldDefault::False),
-    ],
-};
-const R_PATH_SELECTOR: RecordSpec = RecordSpec {
-    name: "PathSelector",
-    doc: "A directed path selector between two model names with optional endpoint expansion.",
-    fields: &[
-        FieldSpec::required("start_name"),
-        FieldSpec::required("end_name"),
-        FieldSpec::new("upstream", FieldDefault::False),
-        FieldSpec::new("downstream", FieldDefault::False),
-    ],
-};
-const R_SQL_TEST_SELECTION: RecordSpec = RecordSpec {
-    name: "SqlTestSelection",
-    doc: "Unit tests selected or excluded by name, beside the tests of the selected resources.",
-    fields: &[
-        FieldSpec::new("names", FieldDefault::EmptyFrozenset),
-        FieldSpec::new("excluded_names", FieldDefault::EmptyFrozenset),
-        FieldSpec::new("models_selected", FieldDefault::True),
-    ],
-};
-const R_PLANNER_SCOPE: RecordSpec = RecordSpec {
-    name: "PlannerScope",
-    doc: "Resolved graph scope for one planner invocation.",
-    fields: &[
-        FieldSpec::required("upstream_deps"),
-        FieldSpec::required("downstream_deps"),
-        FieldSpec::required("all_keys"),
-        FieldSpec::required("models_by_name"),
-        FieldSpec::required("selected_keys"),
-        FieldSpec::required("execution_order"),
-        FieldSpec::new("user_selected_keys", FieldDefault::EmptyFrozenset),
-        FieldSpec::new("python_read_source_names", FieldDefault::EmptyFrozenset),
-        FieldSpec::new(
-            "sql_test_selection",
-            FieldDefault::Call("sqlbuild._native", "SqlTestSelection"),
-        ),
-    ],
-};
-const R_PLANNER_RELATIONS_CONTEXT: RecordSpec = RecordSpec {
-    name: "PlannerRelationsContext",
-    doc: "Resolved relation and source inputs for plan entry construction.",
-    fields: &[
-        FieldSpec::required("model_locations"),
-        FieldSpec::required("seed_locations"),
-        FieldSpec::required("function_locations"),
-        FieldSpec::required("source_map"),
-        FieldSpec::required("source_read_map"),
-        FieldSpec::required("python_source_read_map"),
-        FieldSpec::required("source_warehouse_columns"),
-        FieldSpec::required("star_exclude_keyword"),
-        FieldSpec::new("listed_source_names", FieldDefault::EmptyFrozenset),
-    ],
-};
-const R_SQL_TEST_ASSERTION_STEP: RecordSpec = RecordSpec {
-    name: "SqlTestAssertionStep",
-    doc: "One zero-row assertion step in a SQL-native unit test.",
-    fields: &[
-        FieldSpec::required("name"),
-        FieldSpec::required("resolved_sql"),
-        FieldSpec::new("lifted_ctes", FieldDefault::EmptyTuple),
-        FieldSpec::new("comparison_body_sql", FieldDefault::None),
-    ],
-};
-const R_PLANNER_SELECTION: RecordSpec = RecordSpec {
-    name: "PlannerSelection",
-    doc: "User-facing selection inputs for one planner invocation.",
-    fields: &[
-        FieldSpec::new("select", FieldDefault::EmptyTuple),
-        FieldSpec::new("exclude", FieldDefault::EmptyTuple),
-        FieldSpec::new("selected_keys", FieldDefault::None),
-        FieldSpec::new("python_read_source_names", FieldDefault::EmptyFrozenset),
-        FieldSpec::new(
-            "sql_test_selection",
-            FieldDefault::Call("sqlbuild._native", "SqlTestSelection"),
-        ),
-    ],
-};
-const R_PLANNER_OVERRIDES: RecordSpec = RecordSpec {
-    name: "PlannerOverrides",
-    doc: "Explicit user overrides that force or bound planner decisions.",
-    fields: &[
-        FieldSpec::new("cursor_overrides", FieldDefault::None),
-        FieldSpec::new("full_refresh", FieldDefault::False),
-        FieldSpec::new("reload_sources", FieldDefault::False),
-        FieldSpec::new("forced_stale_model_names", FieldDefault::EmptyTuple),
-        FieldSpec::new("external_blocked_model_names", FieldDefault::EmptyTuple),
-        FieldSpec::new("max_microbatches", FieldDefault::None),
-    ],
-};
-const R_DEFERRAL_INPUTS: RecordSpec = RecordSpec {
-    name: "DeferralInputs",
-    doc: "Deferred relation and source-deferral inputs for planning.",
-    fields: &[
-        FieldSpec::new("deferred_locations", FieldDefault::None),
-        FieldSpec::new("deferred_relations", FieldDefault::None),
-        FieldSpec::new("defer_sources_to", FieldDefault::None),
-        FieldSpec::new("source_deferral_enabled", FieldDefault::True),
-    ],
-};
-const R_PLANNER_POLICIES: RecordSpec = RecordSpec {
-    name: "PlannerPolicies",
-    doc: "Behavior policies selected by the caller for one planner invocation.",
-    fields: &[
-        FieldSpec::new("auto_load_sources", FieldDefault::False),
-        FieldSpec::new("selection_diagnostics", FieldDefault::False),
-        FieldSpec::new("plan_sql_tests", FieldDefault::True),
-        FieldSpec::new("record_migration_fingerprints", FieldDefault::True),
-    ],
-};
 const R_DISCOVERED_PYTHON_LOADER_METADATA: RecordSpec = RecordSpec {
     name: "DiscoveredPythonLoaderMetadata",
     doc: "Loader-specific metadata carried by an internal Python loader node.",
@@ -705,11 +586,7 @@ const R_DISCOVERED_PYTHON_LOADER_METADATA: RecordSpec = RecordSpec {
         FieldSpec::new("contract", FieldDefault::None),
         FieldSpec::new(
             "connection_mode",
-            FieldDefault::Member(
-                "sqlbuild.compiler.discovery.types",
-                "LoaderConnectionMode",
-                "SQLBUILD",
-            ),
+            FieldDefault::Member("sqlbuild._native", "LoaderConnectionMode", "SQLBUILD"),
         ),
     ],
 };
@@ -767,20 +644,6 @@ const R_LITERAL_SQL_RELATION: RecordSpec = RecordSpec {
         FieldSpec::required("relation"),
     ],
 };
-const R_DIRECT_SOURCE_FRESHNESS_PLANNING_RESULT: RecordSpec = RecordSpec {
-    name: "DirectSourceFreshnessPlanningResult",
-    doc: "Direct planning-time source freshness observations and comparisons.",
-    fields: &[
-        FieldSpec::new("observed_records", FieldDefault::EmptyTuple),
-        FieldSpec::new("previous_records", FieldDefault::EmptyTuple),
-        FieldSpec::new("changed_identities", FieldDefault::EmptyFrozenset),
-        FieldSpec::new("unchanged_identities", FieldDefault::EmptyFrozenset),
-        FieldSpec::new("unknown_source_names", FieldDefault::EmptyTuple),
-        FieldSpec::new("unknown_sources", FieldDefault::EmptyDict),
-        FieldSpec::new("age_statuses", FieldDefault::EmptyDict),
-        FieldSpec::new("propagation", FieldDefault::None),
-    ],
-};
 const R_SQL_BINDING_DIAGNOSTIC: RecordSpec = RecordSpec {
     name: "SqlBindingDiagnostic",
     doc: "One native binding error or non-blocking runtime-conversion warning.",
@@ -813,6 +676,7 @@ const R_SQL_SCHEMA_VALIDATION_REQUEST: RecordSpec = RecordSpec {
             name: "catalog",
             default: FieldDefault::None,
             compared: false,
+            shown: false,
         },
     ],
 };
@@ -916,346 +780,210 @@ const R_DBT_LS_RESULT: RecordSpec = RecordSpec {
     doc: "Parsed result from one dbt ls invocation.",
     fields: &[FieldSpec::required("nodes"), FieldSpec::required("command")],
 };
-const R_RULE_GUIDANCE: RecordSpec = RecordSpec {
-    name: "RuleGuidance",
-    doc: "Structured authoring guidance shared by diagnostics and generated documentation.",
+const R_MEASUREMENT_THRESHOLD_BOUND: RecordSpec = RecordSpec {
+    name: "MeasurementThresholdBound",
+    doc: "One directional threshold bound for a measurement audit.",
     fields: &[
-        FieldSpec::required("good_example"),
-        FieldSpec::required("anti_tautology"),
-        FieldSpec::required("mutation_check"),
+        FieldSpec::required("operator"),
+        FieldSpec::new("limit", FieldDefault::None),
+        FieldSpec::new("lower", FieldDefault::None),
+        FieldSpec::new("upper", FieldDefault::None),
     ],
 };
-const R_RULE_EXEMPTION: RecordSpec = RecordSpec {
-    name: "RuleExemption",
-    doc: "",
+const R_MEASUREMENT_THRESHOLDS: RecordSpec = RecordSpec {
+    name: "MeasurementThresholds",
+    doc: "Warning and error policy for a measurement audit.",
     fields: &[
-        FieldSpec::required("rule"),
-        FieldSpec::required("path"),
-        FieldSpec::required("reason"),
+        FieldSpec::new("warn", FieldDefault::None),
+        FieldSpec::new("error", FieldDefault::None),
     ],
 };
-const R_GRAPH_EDGE_EXCLUSION: RecordSpec = RecordSpec {
-    name: "GraphEdgeExclusion",
-    doc: "One exact, temporary internal-layer dependency exception.",
+const R_MEASUREMENT_CONTRACT: RecordSpec = RecordSpec {
+    name: "MeasurementContract",
+    doc: "Columns and sample unit returned by a measurement query.",
     fields: &[
-        FieldSpec::required("consumer"),
-        FieldSpec::required("dependency"),
-        FieldSpec::required("reason"),
+        FieldSpec::required("value_column"),
+        FieldSpec::new("sample_count_column", FieldDefault::None),
+        FieldSpec::new("sample_unit", FieldDefault::None),
     ],
 };
-const R_RULE_IGNORE: RecordSpec = RecordSpec {
-    name: "RuleIgnore",
-    doc: "",
+const R_AUDIT_IDENTITY: RecordSpec = RecordSpec {
+    name: "AuditIdentity",
+    doc: "Stable identity values for one planned audit binding.",
     fields: &[
-        FieldSpec::required("rules"),
-        FieldSpec::required("paths"),
-        FieldSpec::required("reason"),
-        FieldSpec::new("selectors", FieldDefault::EmptyTuple),
+        FieldSpec::required("binding_key"),
+        FieldSpec::required("audit_name"),
+        FieldSpec::required("definition_fingerprint"),
+        FieldSpec::required("execution_fingerprint"),
+        FieldSpec::required("severity"),
+        FieldSpec::required("run_scope_phase"),
+        FieldSpec::required("attachment_kind"),
+        FieldSpec::new("attached_target_name", FieldDefault::None),
+        FieldSpec::new("attached_column_name", FieldDefault::None),
+        FieldSpec::new("always_run", FieldDefault::False),
     ],
 };
-const R_SELECT_STAR_ALLOW: RecordSpec = RecordSpec {
-    name: "SelectStarAllow",
-    doc: "",
-    fields: &[FieldSpec::required("paths"), FieldSpec::required("reason")],
-};
-const R_THRESHOLD_OVERRIDE: RecordSpec = RecordSpec {
-    name: "ThresholdOverride",
-    doc: "",
+const R_AUDIT_GATE_IDENTITY: RecordSpec = RecordSpec {
+    name: "AuditGateIdentity",
+    doc: "Aggregate identity for a model's runtime audit gate.",
     fields: &[
-        FieldSpec::required("paths"),
-        FieldSpec::required("thresholds"),
-        FieldSpec::required("reason"),
+        FieldSpec::required("binding_set_hash"),
+        FieldSpec::required("blocking_set_hash"),
+        FieldSpec::required("audits"),
     ],
 };
-const R_RULES_CACHE_CONFIG: RecordSpec = RecordSpec {
-    name: "RulesCacheConfig",
-    doc: "",
-    fields: &[FieldSpec::new("enabled", FieldDefault::True)],
-};
-const R_SQL_TEST_RULES_CONFIG: RecordSpec = RecordSpec {
-    name: "SqlTestRulesConfig",
-    doc: "",
-    fields: &[FieldSpec::new(
-        "pipeline_directory",
-        FieldDefault::Text("pipelines"),
-    )],
-};
-const R_PREPARED_SQL_LINT_RESULT: RecordSpec = RecordSpec {
-    name: "PreparedSqlLintResult",
-    doc: "Reusable expansion context and completed preliminary SQL checks.",
+const R_SQL_LOGICAL_TYPE: RecordSpec = RecordSpec {
+    name: "SqlLogicalType",
+    doc: "Logical type inferred for a normalized SQL value.",
     fields: &[
-        FieldSpec::required("result"),
-        FieldSpec::required("context"),
+        FieldSpec::required("kind"),
+        FieldSpec::new("element_type", FieldDefault::None),
     ],
 };
-const R_SQL_EXPANSION_REUSE: RecordSpec = RecordSpec {
-    name: "SqlExpansionReuse",
-    doc: "Compiler declaration scope for post-assembly SQL checks; assembly still runs its macros.",
+const R_SQL_VALUE: RecordSpec = RecordSpec {
+    name: "SqlValue",
+    doc: "One validated, canonical SQL value.",
     fields: &[
-        FieldSpec::required("discovered_inputs"),
-        FieldSpec::required("declaration_scope"),
+        FieldSpec::required("logical_type"),
+        FieldSpec::required("value"),
     ],
 };
-const R_PREPARED_SQL_LINT: RecordSpec = RecordSpec {
-    name: "PreparedSqlLint",
-    doc: "Process-local SQL checks started after compiler expansion has completed.",
+const R_SELECTED_DBT_PROFILE_OUTPUT: RecordSpec = RecordSpec {
+    name: "SelectedDbtProfileOutput",
+    doc: "Selected dbt profile target output before rendering.",
     fields: &[
-        FieldSpec::required("codes"),
-        FieldSpec::required("future"),
-        FieldSpec::new("project_dir", FieldDefault::None),
+        FieldSpec::required("profile_name"),
+        FieldSpec::required("target_name"),
+        FieldSpec::required("output"),
     ],
 };
-const R_SQL_RULES_EVALUATION: RecordSpec = RecordSpec {
-    name: "SqlRulesEvaluation",
-    doc: "SQL rule findings of one run, their cache accounting and elapsed time.",
+const R_RESOLVED_DBT_PROFILE_OUTPUT: RecordSpec = RecordSpec {
+    name: "ResolvedDbtProfileOutput",
+    doc: "Rendered dbt profile target output.",
     fields: &[
-        FieldSpec::required("findings"),
-        FieldSpec::required("cache_hits"),
-        FieldSpec::required("cache_misses"),
-        FieldSpec::new("sql_ms", FieldDefault::Int(0)),
-    ],
-};
-const R_RULE_RUN_PLAN: RecordSpec = RecordSpec {
-    name: "RuleRunPlan",
-    doc: "The catalogue, selected rules, project slice and settings one rules run evaluates.",
-    fields: &[
-        FieldSpec::required("effective_config"),
         FieldSpec::required("project_dir"),
-        FieldSpec::required("catalogue"),
-        FieldSpec::required("custom_payloads"),
-        FieldSpec::required("selected"),
-        FieldSpec::required("skipped_type_proof_rules"),
-        FieldSpec::required("model_paths"),
+        FieldSpec::required("profiles_dir"),
+        FieldSpec::required("profile_name"),
+        FieldSpec::required("target_name"),
+        FieldSpec::required("output"),
+    ],
+};
+const R_DISCOVERED_PYTHON_NODE: RecordSpec = RecordSpec {
+    name: "DiscoveredPythonNode",
+    doc: "Shared internal view of a discovered Python DAG node.",
+    fields: &[
+        FieldSpec::required("kind"),
+        FieldSpec::required("file_path"),
+        FieldSpec::required("relative_path"),
+        FieldSpec::required("name"),
+        FieldSpec::required("function"),
+        FieldSpec::new("depends_on", FieldDefault::EmptyTuple),
+        FieldSpec::new("sql_deps", FieldDefault::EmptyTuple),
+        FieldSpec::new("tags", FieldDefault::EmptyTuple),
+        FieldSpec::new("group", FieldDefault::None),
+        FieldSpec::new("description", FieldDefault::None),
+        FieldSpec::new("meta", FieldDefault::None),
+        FieldSpec::new("provider_usages", FieldDefault::EmptyTuple),
+        FieldSpec::new("loader", FieldDefault::None),
+        FieldSpec::new("task", FieldDefault::None),
+        FieldSpec::new("asset", FieldDefault::None),
+        FieldSpec::new("check", FieldDefault::None),
+        FieldSpec::new("identity", FieldDefault::None),
+    ],
+};
+const R_PYTHON_NODE_GRAPH: RecordSpec = RecordSpec {
+    name: "PythonNodeGraph",
+    doc: "Internal graph inventory for discovered executable Python nodes.",
+    fields: &[
+        FieldSpec::required("nodes"),
+        FieldSpec::required("dependency_edges"),
+        FieldSpec::required("upstream_deps"),
+        FieldSpec::required("downstream_deps"),
+        FieldSpec::required("tag_index"),
+        FieldSpec::required("path_index"),
+        FieldSpec::required("nodes_by_name"),
+        FieldSpec::required("nodes_by_typed_selector"),
+    ],
+};
+const R_PYTHON_SQL_RUN_LIFECYCLE_PLAN: RecordSpec = RecordSpec {
+    name: "PythonSqlRunLifecyclePlan",
+    doc: "Lifecycle-aware run classification for SQL resources and Python nodes.",
+    fields: &[
+        FieldSpec::required("ingress_python_node_names"),
+        FieldSpec::required("ingress_loader_names"),
+        FieldSpec::required("read_side_python_node_names"),
+    ],
+};
+const R_PYTHON_IDENTITY_DEPENDENCY: RecordSpec = RecordSpec {
+    name: "PythonIdentityDependency",
+    doc: "One first-party Python source object included in a Python node identity.",
+    fields: &[
+        FieldSpec::required("kind"),
+        FieldSpec::required("module"),
+        FieldSpec::required("qualname"),
+        FieldSpec::required("source_path"),
+        FieldSpec::required("source_hash"),
+        FieldSpec::required("source_text"),
+    ],
+};
+const R_PYTHON_NODE_IDENTITY: RecordSpec = RecordSpec {
+    name: "PythonNodeIdentity",
+    doc: "Read-only identity metadata for a SQLBuild Python node.",
+    fields: &[
+        FieldSpec::required("node_type"),
+        FieldSpec::required("node_name"),
+        FieldSpec::required("source_path"),
+        FieldSpec::required("source_hash"),
+        FieldSpec::required("definition_hash"),
+        FieldSpec::required("version_hash"),
+        FieldSpec::new("dependencies", FieldDefault::EmptyTuple),
+        FieldSpec::new("definition_json", FieldDefault::Text("{}")),
+        FieldSpec::new("metadata_json", FieldDefault::Text("{}")),
+    ],
+};
+const R_SQL_LEXICAL_SYNTAX: RecordSpec = RecordSpec {
+    name: "SqlLexicalSyntax",
+    doc: "Dialect rules for where SQL quoted text and comments end.",
+    fields: &[
+        FieldSpec::new("backslash_escape_quotes", FieldDefault::EmptyFrozenset),
+        FieldSpec::new("escape_string_prefix", FieldDefault::False),
+        FieldSpec::new("raw_string_prefix", FieldDefault::False),
+        FieldSpec::new("triple_quoted_strings", FieldDefault::False),
+        FieldSpec::new("nested_block_comments", FieldDefault::False),
+        FieldSpec::new(
+            "line_comment_prefixes",
+            FieldDefault::TextFrozenset(&["--"]),
+        ),
+    ],
+};
+const R_PROJECT_GRAPH: RecordSpec = RecordSpec {
+    name: "ProjectGraph",
+    doc: "Static compiled project graph held natively; dict views are built only when read.",
+    fields: &[
         FieldSpec::required("project"),
-        FieldSpec::required("config"),
+        FieldSpec {
+            name: "native",
+            default: FieldDefault::Required,
+            compared: false,
+            shown: false,
+        },
     ],
 };
-const R_RULES_RUN_RESULT: RecordSpec = RecordSpec {
-    name: "RulesRunResult",
-    doc: "Unified findings and phase measurements for configured rules.",
+const R_COMPILE_PIPELINE_RESULT: RecordSpec = RecordSpec {
+    name: "CompilePipelineResult",
+    doc: "Complete output from the compile-and-plan pipeline.",
     fields: &[
-        FieldSpec::required("findings"),
-        FieldSpec::required("evaluated_models"),
-        FieldSpec::required("built_in_ms"),
-        FieldSpec::required("custom_ms"),
-        FieldSpec::new("custom_cpu_ms", FieldDefault::Int(0)),
-        FieldSpec::new("unevaluated_resources", FieldDefault::Int(0)),
-        FieldSpec::new("cache_hits", FieldDefault::Int(0)),
-        FieldSpec::new("cache_misses", FieldDefault::Int(0)),
-        FieldSpec::new("skipped_type_proof_rules", FieldDefault::EmptyTuple),
+        FieldSpec::required("project"),
+        FieldSpec::required("plan_output"),
+        FieldSpec::new("custom_materializations", FieldDefault::EmptyDict),
+        FieldSpec::new("python_node_names", FieldDefault::EmptyFrozenset),
+        FieldSpec::new("python_plan_entries", FieldDefault::EmptyTuple),
+        FieldSpec::new("compile_seconds", FieldDefault::None),
+        FieldSpec::new("planning_seconds", FieldDefault::None),
     ],
-};
-const R_NATIVE_RULES_EVALUATION: RecordSpec = RecordSpec {
-    name: "NativeRulesEvaluation",
-    doc: "The built-in rules response, decoded natively.",
-    fields: &[
-        FieldSpec::required("findings"),
-        FieldSpec::required("selected_codes"),
-        FieldSpec::required("evaluated_models"),
-        FieldSpec::required("cache_hits"),
-        FieldSpec::required("cache_misses"),
-        FieldSpec::required("built_in_ms"),
-        FieldSpec::required("reused"),
-    ],
-};
-const R_CUSTOM_RULES_OUTCOME: RecordSpec = RecordSpec {
-    name: "CustomRulesOutcome",
-    doc: "Custom-rule findings in canonical order and their cache accounting.",
-    fields: &[
-        FieldSpec::required("findings"),
-        FieldSpec::required("cache_hits"),
-        FieldSpec::required("cache_misses"),
-        FieldSpec::required("custom_ms"),
-        FieldSpec::new("custom_cpu_ms", FieldDefault::Int(0)),
-    ],
-};
-const E_CONTRACT_FINDING_KIND: EnumSpec = EnumSpec {
-    name: "ContractFindingKind",
-    doc: "Stable physical-to-authored contract difference categories.",
-    members: &[
-        ("MISSING_DECLARATION", "missing_declaration"),
-        ("MISSING_PHYSICAL_COLUMN", "missing_physical_column"),
-        ("TYPE_MISMATCH", "type_mismatch"),
-        ("RELATION_MISSING", "relation_missing"),
-        ("INSPECTION_UNAVAILABLE", "inspection_unavailable"),
-        ("OWNERSHIP_CONFLICT", "ownership_conflict"),
-    ],
-};
-const E_COMPILER_STAGE: EnumSpec = EnumSpec {
-    name: "CompilerStage",
-    doc: "Frontier objects handed from one compiler stage to the next, in pipeline order.",
-    members: &[
-        ("DISCOVERED_PROJECT_INPUTS", "discovered_project_inputs"),
-        ("COMPILE_PROJECT_INPUTS", "compile_project_inputs"),
-        ("COMPILED_PROJECT", "compiled_project"),
-    ],
-};
-const E_HOOK_READ_TYPE: EnumSpec = EnumSpec {
-    name: "HookReadType",
-    doc: "Kind of model hook that declares or writes a read.",
-    members: &[
-        ("PYTHON", "Python"),
-        ("SQL", "SQL"),
-        ("INLINE_SQL", "inline SQL"),
-    ],
-};
-const E_LINT_SEVERITY: EnumSpec = EnumSpec {
-    name: "LintSeverity",
-    doc: "Severity assigned to one lint violation.",
-    members: &[("FAULT", "fault"), ("WARNING", "warning")],
-};
-const E_DIAGNOSTIC_PHASE: EnumSpec = EnumSpec {
-    name: "DiagnosticPhase",
-    doc: "Phase that produced a compiler diagnostic.",
-    members: &[
-        ("COMPILE", "compile"),
-        ("CONTRACT", "contract"),
-        ("RULE", "rule"),
-        ("PLAN", "plan"),
-        ("BUILD", "build"),
-        ("AUDIT", "audit"),
-        ("TEST", "test"),
-        ("CONNECTION", "connection"),
-    ],
-};
-const E_DIAGNOSTIC_SEVERITY: EnumSpec = EnumSpec {
-    name: "DiagnosticSeverity",
-    doc: "Severity for a compiler diagnostic.",
-    members: &[("ERROR", "error"), ("WARNING", "warning"), ("INFO", "info")],
-};
-const E_COLUMN_TRANSFORM_KIND: EnumSpec = EnumSpec {
-    name: "ColumnTransformKind",
-    doc: "High-level transform classification for one output column.",
-    members: &[
-        ("DIRECT", "direct"),
-        ("CAST", "cast"),
-        ("EXPRESSION", "expression"),
-        ("AGGREGATION", "aggregation"),
-        ("STAR", "star"),
-        ("CONSTANT", "constant"),
-        ("UNKNOWN", "unknown"),
-    ],
-};
-const E_COLUMN_LINEAGE_CONFIDENCE: EnumSpec = EnumSpec {
-    name: "ColumnLineageConfidence",
-    doc: "Coarse confidence that a lineage edge is fully understood.",
-    members: &[
-        ("HIGH", "high"),
-        ("MEDIUM", "medium"),
-        ("LOW", "low"),
-        ("UNKNOWN", "unknown"),
-    ],
-};
-const E_COLUMN_LINEAGE_MODE: EnumSpec = EnumSpec {
-    name: "ColumnLineageMode",
-    doc: "Column lineage analyzer mode.",
-    members: &[("RICH", "rich"), ("FAST", "fast")],
-};
-const E_POLYGLOT_ANALYSIS_DIALECT: EnumSpec = EnumSpec {
-    name: "PolyglotAnalysisDialect",
-    doc: "Dialect names accepted by Polyglot analyze_query.",
-    members: &[
-        ("GENERIC", "generic"),
-        ("POSTGRESQL", "postgresql"),
-        ("MYSQL", "mysql"),
-        ("BIGQUERY", "bigquery"),
-        ("SNOWFLAKE", "snowflake"),
-        ("DUCKDB", "duckdb"),
-        ("SQLITE", "sqlite"),
-        ("HIVE", "hive"),
-        ("SPARK", "spark"),
-        ("TRINO", "trino"),
-        ("PRESTO", "presto"),
-        ("REDSHIFT", "redshift"),
-        ("TSQL", "tsql"),
-        ("ORACLE", "oracle"),
-        ("CLICKHOUSE", "clickhouse"),
-        ("DATABRICKS", "databricks"),
-        ("ATHENA", "athena"),
-        ("TERADATA", "teradata"),
-        ("DORIS", "doris"),
-        ("STARROCKS", "starrocks"),
-        ("MATERIALIZE", "materialize"),
-        ("RISINGWAVE", "risingwave"),
-        ("SINGLESTORE", "singlestore"),
-        ("COCKROACHDB", "cockroachdb"),
-        ("TIDB", "tidb"),
-        ("DRUID", "druid"),
-        ("SOLR", "solr"),
-        ("TABLEAU", "tableau"),
-        ("DUNE", "dune"),
-        ("FABRIC", "fabric"),
-        ("DRILL", "drill"),
-        ("DREMIO", "dremio"),
-        ("EXASOL", "exasol"),
-        ("DATAFUSION", "datafusion"),
-    ],
-};
-const E_MIGRATION_DISCOVERY: EnumSpec = EnumSpec {
-    name: "MigrationDiscovery",
-    doc: "How a migration was requested.",
-    members: &[("MANUAL", "manual"), ("AUTOMATIC", "automatic")],
-};
-const E_MIGRATION_COMPATIBILITY: EnumSpec = EnumSpec {
-    name: "MigrationCompatibility",
-    doc: "Outcome of checking the origin relation against the destination model.",
-    members: &[
-        ("COMPATIBLE", "compatible"),
-        ("INCOMPATIBLE", "incompatible"),
-        ("NOT_CHECKED", "not_checked"),
-    ],
-};
-const E_OLD_NAME_VIEW_ACTION: EnumSpec = EnumSpec {
-    name: "OldNameViewAction",
-    doc: "What a build does at a migrated model's old name.",
-    members: &[
-        ("ARCHIVE_AND_VIEW", "archive_and_view"),
-        ("VIEW_ONLY", "view_only"),
-        ("LIVE", "live"),
-        ("NONE", "none"),
-    ],
-};
-const E_SELECTOR_KIND: EnumSpec = EnumSpec {
-    name: "SelectorKind",
-    doc: "",
-    members: &[
-        ("NAME", "name"),
-        ("SEED", "seed"),
-        ("SOURCE", "source"),
-        ("TASK", "task"),
-        ("ASSET", "asset"),
-        ("LOADER", "loader"),
-        ("CHECK", "check"),
-        ("TAG", "tag"),
-        ("PATH", "path"),
-        ("TEST", "test"),
-    ],
-};
-const E_PYTHON_RUN_PHASE: EnumSpec = EnumSpec {
-    name: "PythonRunPhase",
-    doc: "Lifecycle-aware Python execution phase.",
-    members: &[
-        ("PRE_SQL_INGRESS", "pre_sql_ingress"),
-        ("READ_SIDE", "read_side"),
-    ],
-};
-const E_PYTHON_IDENTITY_STATUS: EnumSpec = EnumSpec {
-    name: "PythonIdentityStatus",
-    doc: "Read-only identity diff status for Python plan display.",
-    members: &[
-        ("NEW", "new"),
-        ("CHANGED", "changed"),
-        ("UNCHANGED", "unchanged"),
-        ("UNKNOWN", "unknown"),
-    ],
-};
-const E_COLLECTION_RENDERING: EnumSpec = EnumSpec {
-    name: "CollectionRendering",
-    doc: "Physical rendering choices for homogeneous SQL collections.",
-    members: &[("VALUE_LIST", "value_list"), ("ARRAY", "array")],
 };
 
-/// Compiler, rule, lint and config value records.
+/// The compiler, lint and config value records.
 pub(crate) const COMPILER_RECORDS: &[RecordSpec] = &[
     R_NATIVE_MODEL_ANALYSIS_REQUEST,
     R_NATIVE_MODEL_ANALYSES,
@@ -1304,16 +1032,6 @@ pub(crate) const COMPILER_RECORDS: &[RecordSpec] = &[
     R_CLONE_PIPELINE_OPTIONS,
     R_CLONE_PIPELINE_CONNECTION,
     R_CLONE_PIPELINE_RESULT,
-    R_PARSED_SELECTOR,
-    R_PATH_SELECTOR,
-    R_SQL_TEST_SELECTION,
-    R_PLANNER_SCOPE,
-    R_PLANNER_RELATIONS_CONTEXT,
-    R_SQL_TEST_ASSERTION_STEP,
-    R_PLANNER_SELECTION,
-    R_PLANNER_OVERRIDES,
-    R_DEFERRAL_INPUTS,
-    R_PLANNER_POLICIES,
     R_DISCOVERED_PYTHON_LOADER_METADATA,
     R_DISCOVERED_PYTHON_TASK_METADATA,
     R_DISCOVERED_PYTHON_ASSET_METADATA,
@@ -1321,7 +1039,6 @@ pub(crate) const COMPILER_RECORDS: &[RecordSpec] = &[
     R_PYTHON_NODE_DEPENDENCY_EDGE,
     R_PYTHON_SQL_RUN_SELECTION,
     R_LITERAL_SQL_RELATION,
-    R_DIRECT_SOURCE_FRESHNESS_PLANNING_RESULT,
     R_SQL_BINDING_DIAGNOSTIC,
     R_SQL_BINDING_RESULT,
     R_SQL_SCHEMA_VALIDATION_REQUEST,
@@ -1333,379 +1050,21 @@ pub(crate) const COMPILER_RECORDS: &[RecordSpec] = &[
     R_DBT_COMMAND_RESULT,
     R_DBT_NODE_EXECUTION_RESULT,
     R_DBT_LS_RESULT,
-    R_RULE_GUIDANCE,
-    R_RULE_EXEMPTION,
-    R_GRAPH_EDGE_EXCLUSION,
-    R_RULE_IGNORE,
-    R_SELECT_STAR_ALLOW,
-    R_THRESHOLD_OVERRIDE,
-    R_RULES_CACHE_CONFIG,
-    R_SQL_TEST_RULES_CONFIG,
-    R_PREPARED_SQL_LINT_RESULT,
-    R_SQL_EXPANSION_REUSE,
-    R_PREPARED_SQL_LINT,
-    R_SQL_RULES_EVALUATION,
-    R_RULE_RUN_PLAN,
-    R_RULES_RUN_RESULT,
-    R_NATIVE_RULES_EVALUATION,
-    R_CUSTOM_RULES_OUTCOME,
-];
-/// Compiler, rule, lint and config string enums.
-pub(crate) const COMPILER_ENUMS: &[EnumSpec] = &[
-    E_CONTRACT_FINDING_KIND,
-    E_COMPILER_STAGE,
-    E_HOOK_READ_TYPE,
-    E_LINT_SEVERITY,
-    E_DIAGNOSTIC_PHASE,
-    E_DIAGNOSTIC_SEVERITY,
-    E_COLUMN_TRANSFORM_KIND,
-    E_COLUMN_LINEAGE_CONFIDENCE,
-    E_COLUMN_LINEAGE_MODE,
-    E_POLYGLOT_ANALYSIS_DIALECT,
-    E_MIGRATION_DISCOVERY,
-    E_MIGRATION_COMPATIBILITY,
-    E_OLD_NAME_VIEW_ACTION,
-    E_SELECTOR_KIND,
-    E_PYTHON_RUN_PHASE,
-    E_PYTHON_IDENTITY_STATUS,
-    E_COLLECTION_RENDERING,
-];
-/// Compiler, rule, lint and config expected-error classes, each after its parent.
-pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
-    ErrorSpec {
-        name: "DiscoveryError",
-        parent: VALUE_ERROR_PARENT,
-        doc: "Base error for expected discovery failures.",
-        class_attributes: &[("code", ClassValue::Text("D000"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "ProjectConfigError",
-        parent: "DiscoveryError",
-        doc: "Raised when shared or local project config files are invalid.",
-        class_attributes: &[("code", ClassValue::Text("D001"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "ModelSqlParseError",
-        parent: "DiscoveryError",
-        doc: "Raised when an authored SQL model file has an invalid shape.",
-        class_attributes: &[("code", ClassValue::Text("D002"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "SqlTestParseError",
-        parent: "DiscoveryError",
-        doc: "Raised when an authored SQL-native test file has an invalid shape.",
-        class_attributes: &[("code", ClassValue::Text("D003"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "SqlAuditParseError",
-        parent: "DiscoveryError",
-        doc: "Raised when an authored SQL audit file has an invalid shape.",
-        class_attributes: &[("code", ClassValue::Text("D004"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "SchemaParseError",
-        parent: "DiscoveryError",
-        doc: "Raised when a schema.yml file has an invalid shape.",
-        class_attributes: &[("code", ClassValue::Text("D005"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "SourceParseError",
-        parent: "DiscoveryError",
-        doc: "Raised when a sources/*.yml file has an invalid shape.",
-        class_attributes: &[("code", ClassValue::Text("D006"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "DiscoveryConflictError",
-        parent: "DiscoveryError",
-        doc: "Raised when discovered project inputs conflict across files.",
-        class_attributes: &[("code", ClassValue::Text("D007"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "SeedDiscoveryError",
-        parent: "DiscoveryError",
-        doc: "Raised when declared seed metadata does not match local seed files.",
-        class_attributes: &[("code", ClassValue::Text("D008"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "SqlScenarioParseError",
-        parent: "DiscoveryError",
-        doc: "Raised when an authored SQL scenario file has an invalid shape.",
-        class_attributes: &[("code", ClassValue::Text("D009"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "PythonNodeDiscoveryError",
-        parent: "DiscoveryError",
-        doc: "Raised when project Python nodes cannot be discovered.",
-        class_attributes: &[("code", ClassValue::Text("D011"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "ProviderDiscoveryError",
-        parent: "DiscoveryError",
-        doc: "Raised when project providers cannot be discovered.",
-        class_attributes: &[("code", ClassValue::Text("D012"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "DeclarationParseError",
-        parent: "DiscoveryError",
-        doc: "Raised when an authored public SQL declaration is invalid.",
-        class_attributes: &[("code", ClassValue::Text("D013"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "SqlHookParseError",
-        parent: "DiscoveryError",
-        doc: "Raised when an authored SQL hook resource has an invalid shape.",
-        class_attributes: &[("code", ClassValue::Text("D014"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "EventExporterDiscoveryError",
-        parent: "DiscoveryError",
-        doc: "Raised when project lifecycle event exporters are invalid.",
-        class_attributes: &[("code", ClassValue::Text("D015"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "ProjectPythonPathError",
-        parent: "DiscoveryError",
-        doc: "Raised when project-owned Python lives outside a supported extension root.",
-        class_attributes: &[("code", ClassValue::Text("D016"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "ProjectPathError",
-        parent: "DiscoveryError",
-        doc: "Raised when an authored project path cannot be read as valid UTF-8.",
-        class_attributes: &[("code", ClassValue::Text("D016"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "ResourceIdentityError",
-        parent: "DiscoveryError",
-        doc: "Raised when an authored resource identity is not canonical snake_case.",
-        class_attributes: &[("code", ClassValue::Text("D016"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "MeasurementAuditError",
-        parent: "builtins.ValueError",
-        doc: "Raised when a measurement audit contract or value is invalid.",
-        class_attributes: &[],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "ContractAdoptionError",
-        parent: "builtins.RuntimeError",
-        doc: "Raised when safe contract source editing cannot continue.",
-        class_attributes: &[],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "FingerprintInputError",
-        parent: VALUE_ERROR_PARENT,
-        doc: "Raised when fingerprint storage inputs or rows are invalid.",
-        class_attributes: &[("code", ClassValue::Text("F000"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "QueryFingerprintError",
-        parent: "builtins.ValueError",
-        doc: "Raised when SQL cannot be tokenized into a change fingerprint.",
-        class_attributes: &[],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "NativeStageMismatchError",
-        parent: "builtins.RuntimeError",
-        doc: "Raised when native state the compiler replays is inconsistent with its inputs.",
-        class_attributes: &[],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "UnknownLineageDialectError",
-        parent: "builtins.ValueError",
-        doc: "Raised, as Python's parser raised `ValueError`, for a dialect Polyglot does not know.",
-        class_attributes: &[],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "RefactorValueError",
-        parent: "builtins.ValueError",
-        doc: "An unhandled value failure the Python planner also leaves to the caller.",
-        class_attributes: &[],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "RefactorIOError",
-        parent: "builtins.OSError",
-        doc: "A file read or write failure the Python planner also leaves to the caller.",
-        class_attributes: &[],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "ScopeError",
-        parent: VALUE_ERROR_PARENT,
-        doc: "Base error for invalid scope-domain input.",
-        class_attributes: &[("code", ClassValue::Text("S000"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "InvalidScopePathError",
-        parent: "ScopeError",
-        doc: "Raised when a project-relative scope path is invalid.",
-        class_attributes: &[("code", ClassValue::Text("S011"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "InvalidQualifiedIdentityError",
-        parent: "ScopeError",
-        doc: "Raised when a qualified scope identity cannot be parsed.",
-        class_attributes: &[("code", ClassValue::Text("S002"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "UnindexableScopeError",
-        parent: "ScopeError",
-        doc: "Raised when the native scope index cannot place a discovered path or resource kind.",
-        class_attributes: &[],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "ScopeValidationError",
-        parent: "ScopeError",
-        doc: "Aggregate error raised only when strict scope validation is requested.",
-        class_attributes: &[],
-        required: &["diagnostics"],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "UnsupportedLexicalSyntaxError",
-        parent: "builtins.ValueError",
-        doc: "Raised when an adapter declares lexical rules the native SQL scanners do not support.",
-        class_attributes: &[],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "LintError",
-        parent: EXCEPTION_PARENT,
-        doc: "A lint or format run could not proceed.",
-        class_attributes: &[("code", ClassValue::Text("L001"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "NativeLintError",
-        parent: "LintError",
-        doc: "The SQLBuild-owned native lint engine rejected a request or response.",
-        class_attributes: &[("code", ClassValue::Text("L003"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "ProjectCompileError",
-        parent: "LintError",
-        doc: "The project could not be compiled, so its SQL cannot be linted.",
-        class_attributes: &[("code", ClassValue::Text("L005"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "LintStoppedError",
-        parent: "builtins.Exception",
-        doc: "A speculative lint run was stopped because its result is no longer needed.",
-        class_attributes: &[],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "SpecConfigError",
-        parent: "builtins.RuntimeError",
-        doc: "Raised when project specification configuration is invalid.",
-        class_attributes: &[],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "ConfigValueTypeError",
-        parent: VALUE_ERROR_PARENT,
-        doc: "Raised when an authored config value has the wrong runtime type.",
-        class_attributes: &[],
-        required: &["key", "expected", "actual_type"],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "DbtInteropError",
-        parent: VALUE_ERROR_PARENT,
-        doc: "Base class for expected dbt interop errors.",
-        class_attributes: &[("code", ClassValue::Text("C240"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "DbtInteropConfigError",
-        parent: "DbtInteropError",
-        doc: "Raised when dbt project configuration is missing or invalid.",
-        class_attributes: &[("code", ClassValue::Text("C240"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "DbtInteropRuntimeError",
-        parent: "DbtInteropError",
-        doc: "Raised when dbt command execution fails.",
-        class_attributes: &[("code", ClassValue::Text("C241"))],
-        required: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
-        name: "DbtInteropArgumentError",
-        parent: "DbtInteropError",
-        doc: "Raised when `sqb dbt` arguments cannot be routed safely.",
-        class_attributes: &[("code", ClassValue::Text("C230"))],
-        required: &[],
-        fixed: &[],
-    },
+    R_MEASUREMENT_THRESHOLD_BOUND,
+    R_MEASUREMENT_THRESHOLDS,
+    R_MEASUREMENT_CONTRACT,
+    R_AUDIT_IDENTITY,
+    R_AUDIT_GATE_IDENTITY,
+    R_SQL_LOGICAL_TYPE,
+    R_SQL_VALUE,
+    R_SELECTED_DBT_PROFILE_OUTPUT,
+    R_RESOLVED_DBT_PROFILE_OUTPUT,
+    R_DISCOVERED_PYTHON_NODE,
+    R_PYTHON_NODE_GRAPH,
+    R_PYTHON_SQL_RUN_LIFECYCLE_PLAN,
+    R_PYTHON_IDENTITY_DEPENDENCY,
+    R_PYTHON_NODE_IDENTITY,
+    R_SQL_LEXICAL_SYNTAX,
+    R_PROJECT_GRAPH,
+    R_COMPILE_PIPELINE_RESULT,
 ];

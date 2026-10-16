@@ -6,10 +6,11 @@ use crate::models::ConfigValue;
 use crate::toml::main::load_toml::load_toml;
 use crate::workspace::_helpers::files::read_text;
 use crate::workspace::constants::{
-    CLAUDE_TARGET, DEFAULT_SKILL_TARGETS, GIT_MARKER, OPENCODE_TARGET, PROJECT_CONFIG_FILENAME,
-    SKILL_ENTRY_FILE, SKILL_NAME, UTF8_BYTE_ORDER_MARK, VALID_SKILL_TARGETS,
+    CLAUDE_TARGET, DEFAULT_SKILL_TARGETS, GIT_MARKER, OPENCODE_TARGET, SKILL_ENTRY_FILE,
+    SKILL_NAME, UTF8_BYTE_ORDER_MARK, VALID_SKILL_TARGETS,
 };
 use crate::workspace::errors::WorkspaceError;
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 
 /// Project skill installation preferences (`SkillSettings`).
 pub(crate) struct SkillSettings {

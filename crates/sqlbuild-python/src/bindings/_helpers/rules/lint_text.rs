@@ -28,7 +28,7 @@ use crate::bindings::types::CompilerDetach;
 
 const LINT_MODELS_MODULE: &str = "sqlbuild._native";
 const LINT_TYPES_MODULE: &str = "sqlbuild._native";
-const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
+const SCOPE_TYPES_MODULE: &str = "sqlbuild._native";
 const NATIVE_ENGINE: &str = "native";
 const FORMAT_UNSAFE_CODE: &str = "format-unsafe";
 const FORMAT_UNSAFE_REMEDIATION: &str = "Rewrite the unsupported SQL shape or report a minimal formatter reproduction. No header, SQL body, or fixture changes were written to this file.";

@@ -5,20 +5,19 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.contract.models import ColumnInfo
-from sqlbuild.adapter.contract.types import TablePromotionMode
-from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import (
+from sqlbuild._native import (
     CompiledObjectKey,
     CompiledRelationLocation,
-)
-from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, PythonHookEntry
-from sqlbuild.compiler.planner.models import (
+    DiscoveredHookFunction,
+    PythonHookEntry,
     ScenarioExecutionPlan,
     ScenarioFixturePlan,
     SeedPlanEntry,
 )
+from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.adapter.contract.types import TablePromotionMode
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario._helpers.execution.model_execution import execute_scenario_models

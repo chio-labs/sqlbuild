@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from sqlbuild._native import SettingsConfig
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.executor.build.models import (
@@ -13,7 +14,6 @@ from sqlbuild.executor.build.models import (
     BuildRuntimeParams,
 )
 from sqlbuild.executor.pipeline.models import ResolvedBuildInputs
-from sqlbuild.spec.contracts.models import SettingsConfig
 
 
 def resolve_promotion_mode(

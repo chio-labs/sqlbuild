@@ -7,7 +7,7 @@ use sqlbuild_analysis::lineage::models::{LineageColumn, LineageSource};
 
 const LINEAGE_MODELS_MODULE: &str = "sqlbuild._native";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const LOGGING_MODULE: &str = "logging";
 const DEBUG_EVENT_MODULE: &str = "sqlbuild.diagnostics.main.log_debug_event";

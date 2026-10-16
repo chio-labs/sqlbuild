@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sqlbuild.spec.contracts.models import SeedCsvSettings
+from sqlbuild._native import SeedCsvSettings
 
 
 @dataclass(frozen=True)

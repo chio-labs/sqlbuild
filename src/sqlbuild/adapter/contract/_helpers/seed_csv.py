@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.spec.contracts.models import SeedCsvSettings
+from sqlbuild._native import SeedCsvSettings
 
 _DEFAULT_NULL_VALUE: str = ""
 

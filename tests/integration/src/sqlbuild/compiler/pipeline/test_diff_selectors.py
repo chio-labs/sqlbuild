@@ -6,13 +6,13 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    DiscoveredProjectInputs,
     build_compiled_project,
     discover_project_inputs,
     resolve_diff_model_names,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     DiffSelectorIntegrationTestCase,
 )

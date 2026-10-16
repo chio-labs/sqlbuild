@@ -7,10 +7,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from sqlbuild._native import SchemaFinding
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
-from sqlbuild.compiler.planner.models import SchemaFinding
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.custom.main._execute_sql import execute_sql_with_recording
 from sqlbuild.executor.custom.main._qualify_relation import qualify_custom_relation

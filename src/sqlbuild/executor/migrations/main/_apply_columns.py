@@ -6,8 +6,8 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from sqlbuild._native import ColumnMigrationPlanEntry, PlanOutput
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.planner.models import ColumnMigrationPlanEntry, PlanOutput
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.migrations._helpers.columns import apply_model_column_renames
 

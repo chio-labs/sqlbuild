@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
+from sqlbuild._native import DiscoveredLoaderFunction, SourceEntry
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.load.models import LoadExecutionIndexes, LoadExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def build_load_execution_indexes(

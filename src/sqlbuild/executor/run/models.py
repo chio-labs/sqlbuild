@@ -8,25 +8,33 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, cast
 
+from sqlbuild._native import (
+    AuditPlanEntry,
+    CompiledRelationLocation,
+    CursorBounds,
+    CursorGrain,
+    CursorType,
+    DateValue,
+    DiscoveredHookFunction,
+    Duration,
+    FutureCursorSafetyEvidence,
+    FutureCursorsConfig,
+    IntegerValue,
+    MaximumStartSafetyEvidence,
+    MicrobatchLimitAction,
+    ModelPlanEntry,
+    PythonHookEntry,
+    SourceEntry,
+    StartCursorsConfig,
+    TimestampValue,
+)
 from sqlbuild._native import cursor_compare as compare
 from sqlbuild._native import cursor_parse as parse
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import LifeCycleEvent, QueryResult
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, PythonHookEntry
-from sqlbuild.compiler.planner.models import (
-    AuditPlanEntry,
-    CursorBounds,
-    Duration,
-    FutureCursorSafetyEvidence,
-    MaximumStartSafetyEvidence,
-    ModelPlanEntry,
-)
-from sqlbuild.compiler.planner.types import CursorGrain, CursorType
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError
-from sqlbuild.cursor_algebra.models import DateValue, IntegerValue, TimestampValue
 from sqlbuild.cursor_algebra.types import BoundSentinel, CursorScalar
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.auditing.models import AuditExecutionResult
@@ -47,8 +55,6 @@ from sqlbuild.microbatches.models import MicrobatchScope
 from sqlbuild.microbatches.types import MicrobatchEventStore
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
 from sqlbuild.python_nodes.models import SqlResourceRef
-from sqlbuild.spec.contracts.models import FutureCursorsConfig, SourceEntry, StartCursorsConfig
-from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 
 
 @dataclass(frozen=True, kw_only=True, init=False)

@@ -5,8 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.planner.models import ScenarioExecutionPlan, SeedPlanEntry
-from sqlbuild.compiler.planner.types import ScenarioArtifactKind
+from sqlbuild._native import ScenarioArtifactKind, ScenarioExecutionPlan, SeedPlanEntry
 from sqlbuild.executor.scenario._helpers.capture import core as capture_core
 from sqlbuild.executor.scenario._helpers.capture.core import execute_scenario_snapshot_capture_steps
 from sqlbuild.executor.scenario.models import (

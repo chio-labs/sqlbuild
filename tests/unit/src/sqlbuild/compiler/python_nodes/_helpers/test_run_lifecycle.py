@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild._native import PythonSqlRunSelection, build_python_sql_run_lifecycle
-from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild._native import (
+    CompiledObjectKey,
+    PythonNodeGraph,
+    PythonSqlRunLifecyclePlan,
+    PythonSqlRunSelection,
+    build_python_sql_run_lifecycle,
+)
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunLifecyclePlan
 from tests.unit.src.sqlbuild.compiler.python_nodes._helpers._test_types import (
     PythonSqlRunLifecycleTestCase,
 )

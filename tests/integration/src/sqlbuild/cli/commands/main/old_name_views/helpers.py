@@ -9,8 +9,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.compiler.migrations.models import OldNameViewEvent
-from sqlbuild.compiler.migrations.types import OldNameViewEventType
+from sqlbuild._native import OldNameViewEvent, OldNameViewEventType
 from sqlbuild.executor.migrations._helpers import old_name_views as old_name_steps
 from tests.integration.src.sqlbuild.cli.commands.main.model_migrations.helpers import (
     CliRun,

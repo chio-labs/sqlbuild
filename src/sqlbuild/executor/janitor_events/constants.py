@@ -1,6 +1,6 @@
 """Janitor audit event warehouse storage constants."""
 
-from sqlbuild.sql_values.types import StateSqlValueType
+from sqlbuild._native import StateSqlValueType
 
 JANITOR_EVENTS_TABLE_NAME: str = "_sqlbuild_janitor_events"
 JANITOR_EVENT_SCHEMA_VERSION: int = 1

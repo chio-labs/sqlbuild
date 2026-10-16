@@ -1,8 +1,7 @@
 //! Python modules, thread names and wait limits of native lifecycle-event export.
 
 pub(crate) const EXCEPTIONS_MODULE: &str = "sqlbuild.runtime.event_exporting.exceptions";
-pub(crate) const SEVERITY_MODULE: &str = "sqlbuild.spec.contracts.types";
-pub(crate) const CATALOG_MODULE: &str = "sqlbuild.runtime.observability.constants";
+pub(crate) const SEVERITY_MODULE: &str = "sqlbuild._native";
 pub(crate) const INVOKE_LIFECYCLE_MODULE: &str =
     "sqlbuild.runtime.event_exporting.main._invoke_lifecycle_event_sink";
 pub(crate) const RUN_OUTPUT_SINKS_MODULE: &str =

@@ -1,4 +1,4 @@
-//! One call's cursor values read from and built as `sqlbuild.cursor_algebra.models` objects.
+//! One call's cursor values read from and built as the native cursor value records.
 
 use std::cell::RefCell;
 
@@ -19,10 +19,11 @@ use crate::bindings::_helpers::cursor::values::{
     timedelta_micros,
 };
 
-pub(crate) const MODELS_MODULE: &str = "sqlbuild.cursor_algebra.models";
+pub(crate) const MODELS_MODULE: &str = "sqlbuild._native";
 const EXCEPTIONS_MODULE: &str = "sqlbuild.cursor_algebra.exceptions";
-const PLANNER_TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
-const GRAIN_NAMES: [(&str, Grain); 6] = [
+const PLANNER_TYPES_MODULE: &str = "sqlbuild._native";
+/// Cursor grain names, finest first.
+pub(crate) const GRAIN_NAMES: [(&str, Grain); 6] = [
     ("second", Grain::Second),
     ("minute", Grain::Minute),
     ("hour", Grain::Hour),

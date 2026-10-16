@@ -21,3 +21,11 @@ class RiversPythonArtifactCompatibilityTestCase:
     expected_task_group: str
     expected_asset_group: str
     expected_asset_metadata_keys: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RiversTranslatorArgumentTestCase:
+    description: str
+    node_id: str
+    expected_dependency_name_count: int
+    expected_owned_node_keys_end: tuple[str, ...]

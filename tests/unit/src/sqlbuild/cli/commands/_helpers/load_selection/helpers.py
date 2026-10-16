@@ -4,12 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.compiler.discovery.models import (
+from sqlbuild._native import (
     DiscoveredLoaderFunction,
     DiscoveredProjectInputs,
     DiscoveredSourceFile,
-)
-from sqlbuild.spec.contracts.models import (
     IntegrationLoaderConfig,
     LocalConfig,
     ProjectConfig,

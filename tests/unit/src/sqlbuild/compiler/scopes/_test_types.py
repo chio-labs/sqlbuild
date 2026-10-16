@@ -5,16 +5,17 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from sqlbuild.compiler.scopes.models import DeclarationIdentity, ResourceIdentity
-from sqlbuild.compiler.scopes.types import (
+from sqlbuild._native import (
+    DeclarationIdentity,
     DeclarationKind,
-    DiagnosticSeverity,
     InaccessibleReason,
+    ResourceIdentity,
     ResourceKind,
     ScopeDiagnosticCode,
     ScopeKind,
     VisibilityReason,
 )
+from sqlbuild._native import ScopeDiagnosticSeverity as DiagnosticSeverity
 
 
 @dataclass(frozen=True)

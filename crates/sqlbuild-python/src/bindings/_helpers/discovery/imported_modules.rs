@@ -10,7 +10,7 @@ use crate::bindings::_helpers::event_exporting::scope::current_scope;
 pub(crate) const NATIVE_MODULE: &str = "sqlbuild._native";
 pub(crate) const SHIM_MODULE: &str =
     "sqlbuild.compiler.discovery._helpers.filesystem.project_modules";
-pub(crate) const MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
+pub(crate) const MODELS_MODULE: &str = "sqlbuild._native";
 pub(crate) const ERRORS_MODULE: &str = "sqlbuild._native";
 
 /// One project directory under discovery.
@@ -115,7 +115,7 @@ pub(crate) fn module_functions<'py>(
         .collect()
 }
 
-/// `sqlbuild.compiler.discovery.models.<class_name>(**pairs)`.
+/// `sqlbuild._native.<class_name>(**pairs)`.
 pub(crate) fn discovered<'py>(
     py: Python<'py>,
     class_name: &str,

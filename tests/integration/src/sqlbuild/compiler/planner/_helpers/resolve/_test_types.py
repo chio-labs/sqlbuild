@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from sqlbuild._native import SourceEntry
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, field
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 @dataclass(frozen=True)

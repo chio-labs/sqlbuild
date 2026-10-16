@@ -7,13 +7,13 @@ import pytest
 from sqlbuild._native import (
     SourceFreshnessIdentity,
     SourceFreshnessInputError,
+    SourceFreshnessRecord,
     SourceFreshnessRenderers,
     SourceFreshnessSet,
     read_latest_source_freshness,
     write_source_freshness_records,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
     ReadLatestSourceFreshnessErrorTestCase,
     ReadLatestSourceFreshnessRendererTestCase,

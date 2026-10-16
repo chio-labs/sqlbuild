@@ -19,7 +19,7 @@ const MONTHS_PER_YEAR: i64 = 12;
 /// `(years, months, days, hours, minutes, seconds)` of a duration like `1y6mo` or `30d`.
 #[pyfunction]
 #[pyo3(signature = (value))]
-fn parse_cursor_duration<'py>(
+pub(crate) fn parse_cursor_duration<'py>(
     py: Python<'py>,
     value: &str,
 ) -> PyResult<Option<Bound<'py, PyTuple>>> {
@@ -86,7 +86,7 @@ pub(crate) fn shifted_moment<'py>(
 /// `moment` moved forward (`direction` 1) or back (`direction` -1) by `duration`.
 #[pyfunction]
 #[pyo3(signature = (*, moment, duration, direction))]
-fn shift_by_cursor_duration<'py>(
+pub(crate) fn shift_by_cursor_duration<'py>(
     moment: &Bound<'py, PyAny>,
     duration: &Bound<'py, PyAny>,
     direction: i64,

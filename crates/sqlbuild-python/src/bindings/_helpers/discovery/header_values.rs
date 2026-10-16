@@ -9,7 +9,7 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
+const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
 const HEADER_CACHE_SIZE: usize = 4096;
 
 /// `(name, line, column, end line, end column)`.

@@ -3,18 +3,16 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
+    BackfillAction,
     BackfillResult,
     CursorOverridePair,
+    ModelCursorSnapshot,
+    PlannerInputError,
     WarehouseSnapshot,
     resolve_model_sql,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledModelView
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.models import (
-    ModelCursorSnapshot,
-)
-from sqlbuild.compiler.planner.types import BackfillAction
 from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types import (
     CursorIntrinsicResolutionTestCase,
 )

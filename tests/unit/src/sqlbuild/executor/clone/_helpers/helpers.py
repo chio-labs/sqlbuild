@@ -3,24 +3,27 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, ClassVar
 
-from sqlbuild._native import CompileModelConfig
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.models import RelationInfo
-from sqlbuild.compiler.compile.models import (
+from sqlbuild._native import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompileModelConfig,
+    FunctionPlanEntry,
+    MaterializationType,
+    ModelPlanEntry,
+    PlanAction,
+    PlanReason,
+    ResolvedTimeTravelRetention,
+    TimeTravelRetentionSource,
 )
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.planner.models import FunctionPlanEntry, ModelPlanEntry
-from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
-from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention
-from sqlbuild.spec.contracts.types import TimeTravelRetentionSource
 
 
 class FakeCloneAdapter(BaseAdapter):

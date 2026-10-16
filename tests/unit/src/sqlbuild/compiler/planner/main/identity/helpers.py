@@ -5,28 +5,27 @@ from types import SimpleNamespace
 
 from sqlbuild._native import (
     CompiledFunction,
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledRelationLocation,
     CompileModelConfig,
     DirectModelVersionIdentities,
     FunctionArgument,
     FunctionReturnColumn,
     PlannerScope,
+    SchemaColumn,
+    SeedCsvSettings,
     build_direct_model_version_identities,
     build_downstream_deps,
     build_model_version_identity_metadata_json,
     build_version_identity_metadata_json,
     compiled_model_record,
 )
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledRelationLocation,
-)
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledResourceType,
     FunctionLanguage,
 )
-from sqlbuild.spec.contracts.models import SchemaColumn, SeedCsvSettings
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import build_compiled_function
 
 

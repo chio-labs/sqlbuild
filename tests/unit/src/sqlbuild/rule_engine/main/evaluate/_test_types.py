@@ -2,8 +2,7 @@
 
 from dataclasses import dataclass, field
 
-from sqlbuild.compiler.compile.models import CompileSqlReference
-from sqlbuild.rule_engine.models import RulesConfig
+from sqlbuild._native import CompileSqlReference, RulesConfig
 
 
 @dataclass(frozen=True)

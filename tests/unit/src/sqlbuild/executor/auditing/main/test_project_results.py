@@ -9,9 +9,8 @@ from unittest.mock import Mock
 import pytest
 
 import sqlbuild.executor.auditing._helpers.result_projection as projection_module
+from sqlbuild._native import CompiledRelationLocation, PlanOutput
 from sqlbuild.compiler.auditing.types import AuditOutcome
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.audit_results.exceptions import AuditResultStorageError
 from sqlbuild.executor.audit_results.models import AuditResultRecord
 from sqlbuild.executor.auditing.main._project_results import project_audit_result_batch

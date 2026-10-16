@@ -5,8 +5,8 @@ use sqlbuild_core::cli_text::main::format_count_noun::format_count_noun;
 
 use crate::configuration::errors::ConfigPolicyError;
 use crate::configuration::main::setting_help::setting_help;
-use crate::constants::PROJECT_CONFIG_FILE;
 use crate::models::RulesConfig;
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME as PROJECT_CONFIG_FILE;
 
 /// The policy error when `allow_exceptions = false` and exception or ignore entries exist.
 #[must_use]

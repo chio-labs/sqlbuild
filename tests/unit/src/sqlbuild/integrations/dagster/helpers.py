@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild._native import IntegrationResultEnvelope
+from sqlbuild.integrations.dagster.classes.sqlbuild_dagster_translator import (
+    SqlBuildDagsterTranslator,
+)
 
 
 def assert_exhaustive_enum_partition[EnumT: StrEnum](
@@ -621,3 +624,19 @@ def build_dagster_selection_graph_dag() -> Mapping[str, Any]:
         ],
         "checks": [],
     }
+
+
+class RecordingDagsterTranslator(SqlBuildDagsterTranslator):
+    """Default Dagster translator that records the checks and nodes it is asked about."""
+
+    def __init__(self) -> None:
+        self.asset_checks: list[Mapping[str, Any]] = []
+        self.asset_nodes: list[Mapping[str, Any]] = []
+
+    def is_asset_node(self, node: Mapping[str, Any]) -> bool:
+        self.asset_nodes.append(node)
+        return super().is_asset_node(node)
+
+    def is_asset_check(self, check: Mapping[str, Any]) -> bool:
+        self.asset_checks.append(check)
+        return super().is_asset_check(check)

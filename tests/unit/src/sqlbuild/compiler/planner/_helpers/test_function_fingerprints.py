@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import PlanReason
 from sqlbuild.compiler.compile.types import CompiledFunctionView
-from sqlbuild.compiler.planner.types import PlanReason
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     DetectFunctionChangeTestCase,
 )

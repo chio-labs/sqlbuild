@@ -68,12 +68,12 @@ fn type_cursor_overrides<'py>(
         }
     }
     let kind = override_kind(&models, integer_literals).map_err(|message| {
-        match imported(py, "sqlbuild.compiler.planner.exceptions", "PlannerInputError").and_then(|class| call_with(&class, &[
+        match imported(py, "sqlbuild._native", "PlannerInputError").and_then(|class| call_with(&class, &[
             ("message", string(py, &message)), ("code", string(py, "S303")),
             ("help", string(py, "select models with one cursor type, or set each type explicitly with --start-cursor-ts/--end-cursor-ts and --start-cursor-int/--end-cursor-int")),
         ])) { Ok(error) => PyErr::from_value(error), Err(error) => error }
     })?;
-    let kind = imported(py, "sqlbuild.compiler.planner.types", "CursorType")?.call1((kind,))?;
+    let kind = imported(py, "sqlbuild._native", "CursorType")?.call1((kind,))?;
     method(&overrides, "typed_as", &[("cursor_type", kind)])
 }
 

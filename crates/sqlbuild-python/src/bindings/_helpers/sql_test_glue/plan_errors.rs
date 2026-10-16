@@ -7,7 +7,7 @@ use pyo3::types::{PyDict, PyDictMethods};
 use sqlbuild_analysis::sql_test_attachment::main::sql_test_cte_location::sql_test_cte_location;
 use sqlbuild_analysis::sql_test_attachment::models::CteLocation;
 
-const SOURCE_LOCATION_MODULE: &str = "sqlbuild.spec.contracts.models";
+const SOURCE_LOCATION_MODULE: &str = "sqlbuild._native";
 
 /// The location of `call` inside one CTE of a SQL test block, else the CTE header, else the block.
 fn cte_call_location<'py>(
@@ -79,25 +79,16 @@ pub(super) fn planning_error(
             "CompileInputError"
         };
         return Ok(PyErr::from_value(
-            imported(py, "sqlbuild.compiler.compile.exceptions", class)?
-                .call((message,), Some(&kwargs))?,
+            imported(py, "sqlbuild._native", class)?.call((message,), Some(&kwargs))?,
         ));
     }
     let (module, class, message) = if let Some(message) = message.strip_prefix("compile_input:") {
-        (
-            "sqlbuild.compiler.compile.exceptions",
-            "CompileInputError",
-            message.to_owned(),
-        )
+        ("sqlbuild._native", "CompileInputError", message.to_owned())
     } else if let Some(message) = message.strip_prefix("planner_input:") {
-        (
-            "sqlbuild.compiler.planner.exceptions",
-            "PlannerInputError",
-            message.to_owned(),
-        )
+        ("sqlbuild._native", "PlannerInputError", message.to_owned())
     } else {
         (
-            "sqlbuild.compiler.planner.exceptions",
+            "sqlbuild._native",
             "NativeSqlTestPlanningError",
             format!("native SQL-test planning failed: {message}"),
         )

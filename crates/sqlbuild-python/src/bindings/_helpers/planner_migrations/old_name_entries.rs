@@ -23,7 +23,7 @@ impl<'py> OldNamePlanner<'py> {
         let py = runtime.py();
         let project_config = runtime.getattr("project_config")?;
         let config = if project_config.is_none() {
-            imported(py, "sqlbuild.spec.contracts.models", "MigrationsConfig")?.call0()?
+            imported(py, "sqlbuild._native", "MigrationsConfig")?.call0()?
         } else {
             project_config.getattr("migrations")?
         };
@@ -282,7 +282,7 @@ impl<'py> OldNamePlanner<'py> {
             }
         }
         let retention = history.getattr("required")?.getattr("view_retention")?;
-        let duration = imported(py, "sqlbuild.cursor_algebra.models", "Duration")?.call_method1(
+        let duration = imported(py, "sqlbuild._native", "Duration")?.call_method1(
             "parse",
             (if retention.is_truthy()? {
                 retention.clone()

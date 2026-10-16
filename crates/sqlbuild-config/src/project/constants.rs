@@ -1,8 +1,6 @@
 //! Project configuration file names, keys and the vocabularies their values come from.
 
-pub(crate) const PROJECT_CONFIG_FILENAME: &str = "sqlbuild_project.toml";
 pub(crate) const LOCAL_CONFIG_FILENAME: &str = "sqlbuild_local.toml";
-pub(crate) const SETTINGS_SECTION: &str = "settings";
 pub(crate) const SQL_ANALYSIS_KEY: &str = "sql_analysis";
 pub(crate) const LEGACY_SQL_VALIDATION_KEY: &str = "sql_validation";
 pub(crate) const REQUIRE_SQL_ANALYSIS_KEY: &str = "require_sql_analysis";
@@ -27,7 +25,6 @@ pub(crate) const CHANGE_POLICY_KEYS: [&str; 2] = [ON_SCHEMA_CHANGE_KEY, REPLAY_O
 pub(crate) const TEMPLATE_OPEN_TOKEN: &str = "${";
 pub(crate) const MODELS_DIRECTORY_NAME: &str = "models";
 pub(crate) const UNLIMITED_DIFF_FULL_ROWS: &str = "unlimited";
-pub(crate) const ZERO_DAY_DURATION: &str = "0d";
 pub(crate) const ZERO_FIXED_DURATION: &str = "0s";
 pub(crate) const DEFAULT_QUERY_ARTIFACT_TTL: &str = "24h";
 pub(crate) const BOUNDED_REPLAY_PREFIX: &str = "bounded-";

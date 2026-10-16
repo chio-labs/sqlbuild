@@ -8,6 +8,8 @@ import pytest
 
 import sqlbuild._native as sql_analysis_models
 from sqlbuild._native import (
+    CompiledObjectKey,
+    CompilerDiagnostic,
     build_compiled_project,
     discover_project_inputs,
     source_binding_diagnostics,
@@ -15,7 +17,6 @@ from sqlbuild._native import (
 from sqlbuild._native import run_cli as main
 from sqlbuild.adapter.contract.models import ColumnInfo, ExpressionInferenceProfile
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompilerDiagnostic
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     NativeCatalogCase,

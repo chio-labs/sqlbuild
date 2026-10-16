@@ -1,3 +1,0 @@
-"""CLI execution output constants."""
-
-INTEGRATION_RESULT_PATH_ENV: str = "SQLBUILD_INTEGRATION_RESULT_PATH"

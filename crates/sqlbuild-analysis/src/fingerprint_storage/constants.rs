@@ -31,3 +31,5 @@ pub const FINGERPRINT_COLUMNS: [&str; 12] = [
 
 /// The node type that wins a node-name collision between latest rows.
 pub const NODE_TYPE_MODEL: &str = "model";
+/// The node type of seed fingerprints.
+pub const NODE_TYPE_SEED: &str = "seed";

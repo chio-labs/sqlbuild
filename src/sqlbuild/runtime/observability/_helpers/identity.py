@@ -10,7 +10,7 @@ from types import MappingProxyType
 from typing import cast
 from uuid import uuid4
 
-from sqlbuild.runtime.observability._helpers.validation import freeze_json
+from sqlbuild._native import freeze_lifecycle_json
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.models import ExecutionIdentity
 from sqlbuild.runtime.observability.types import JSONValue
@@ -73,7 +73,7 @@ def invocation_external_context_scope(
 ) -> Iterator[Mapping[str, JSONValue]]:
     """Install validated integration context for lifecycle facts in one command."""
 
-    frozen: JSONValue = freeze_json(value=external_context, path="external_context")
+    frozen: JSONValue = freeze_lifecycle_json(value=external_context, path="external_context")
     if not isinstance(frozen, Mapping):
         raise ObservabilityValidationError("external_context must be a JSON object")
     context: Mapping[str, JSONValue] = cast(Mapping[str, JSONValue], frozen)

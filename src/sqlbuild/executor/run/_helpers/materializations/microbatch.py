@@ -12,16 +12,35 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from sqlbuild._native import (
+    AlignedInterval,
+    BackfillAction,
+    CursorBounds,
+    CursorGrain,
+    CursorType,
+    DateValue,
+    Duration,
+    IncrementalStrategy,
+    IntegerValue,
+    MicrobatchLimitAction,
+    MicrobatchStrategy,
+    ModelPlanEntry,
+    OnSchemaChange,
+    TableType,
+    TimestampValue,
     aligned_timestamp_bounds,
     compute_query_hash,
     cursor_bound_display,
+    deterministic_microbatch_event_id,
     empty_cursor_window,
     fit_auxiliary_relation_name,
     future_cursor_cap_warning,
     inclusive_cursor_end,
+    latest_active_replay_requirement,
     maximum_start_cap_warning,
     merge_microbatch_intervals,
     microbatch_limit_warning,
+    project_microbatch_coverage,
+    project_replay_requirement,
     resolve_effective_microbatch_batch_size,
 )
 from sqlbuild._native import cursor_cap_from_end as cap_from_end
@@ -46,20 +65,6 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
-from sqlbuild.compiler.planner.models import (
-    CursorBounds,
-    Duration,
-    ModelPlanEntry,
-)
-from sqlbuild.compiler.planner.types import (
-    BackfillAction,
-    CursorGrain,
-    CursorType,
-    IncrementalStrategy,
-    MicrobatchStrategy,
-    OnSchemaChange,
-)
-from sqlbuild.cursor_algebra.models import AlignedInterval, DateValue, IntegerValue, TimestampValue
 from sqlbuild.cursor_algebra.types import Bound, BoundSentinel, CursorScalar
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
@@ -125,14 +130,6 @@ from sqlbuild.microbatches.constants import (
     MICROBATCH_REPLAY_GENERATION_PREFIX,
 )
 from sqlbuild.microbatches.exceptions import MicrobatchStateError
-from sqlbuild.microbatches.main.deterministic_event_id import (
-    deterministic_microbatch_event_id,
-)
-from sqlbuild.microbatches.main.latest_replay_requirement import (
-    latest_active_replay_requirement,
-)
-from sqlbuild.microbatches.main.project_coverage import project_microbatch_coverage
-from sqlbuild.microbatches.main.project_replay import project_replay_requirement
 from sqlbuild.microbatches.models import (
     MicrobatchCoverageProjection,
     MicrobatchEvent,
@@ -162,7 +159,6 @@ from sqlbuild.runtime.observability.main.canonicalize_operation_adapter import (
     canonicalize_operation_adapter,
 )
 from sqlbuild.runtime.observability.models import MicrobatchLifecycleContext
-from sqlbuild.spec.contracts.types import MicrobatchLimitAction, TableType
 
 _DEFAULT_ON_SCHEMA_CHANGE: OnSchemaChange = OnSchemaChange.APPEND_NEW_COLUMNS
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")

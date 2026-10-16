@@ -19,11 +19,7 @@ pub(super) fn location<'py>(
     let mut fields = fields.to_vec();
     fields.push(("qualified_name", qualified));
     call_with(
-        &imported(
-            runtime.py(),
-            "sqlbuild.compiler.compile.models",
-            "CompiledRelationLocation",
-        )?,
+        &imported(runtime.py(), "sqlbuild._native", "CompiledRelationLocation")?,
         &fields,
     )
 }
@@ -65,12 +61,7 @@ fn named<'py>(
 
 fn input_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
-        imported(
-            py,
-            "sqlbuild.compiler.planner.exceptions",
-            "PlannerInputError",
-        )?
-        .call1((message,))?,
+        imported(py, "sqlbuild._native", "PlannerInputError")?.call1((message,))?,
     ))
 }
 

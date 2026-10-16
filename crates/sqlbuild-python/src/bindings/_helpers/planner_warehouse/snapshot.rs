@@ -7,10 +7,8 @@ use crate::bindings::_helpers::planner_phases::objects::{
     by_name, frozenset, model_key, native, text, tuple,
 };
 use crate::bindings::_helpers::planner_warehouse::constants::{
-    ACTIVE_CATALOG, FINGERPRINT_TABLE_NAME, FUNCTION_NODE_TYPES, METADATA_NAME_FILTER_LIMIT,
-    MIGRATE_FROM_CONFIG_KEY, MIGRATION_TABLE_NAME, NODE_TYPE_MODEL, NODE_TYPE_SEED,
-    OLD_NAME_VIEW_TABLE_NAME, RELATIONS_MAIN_COLUMNS, RELATIONS_MAIN_LIST,
-    SOURCE_FRESHNESS_TABLE_NAME,
+    ACTIVE_CATALOG, FUNCTION_NODE_TYPES, METADATA_NAME_FILTER_LIMIT, MIGRATE_FROM_CONFIG_KEY,
+    RELATIONS_MAIN_COLUMNS, RELATIONS_MAIN_LIST,
 };
 use crate::bindings::_helpers::planner_warehouse::cursors::{CursorInputs, cursor_snapshots};
 use pyo3::IntoPyObject;
@@ -18,6 +16,12 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::PyDict as KeywordDict;
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
+use sqlbuild_analysis::fingerprint_storage::constants::NODE_TYPE_MODEL;
+use sqlbuild_analysis::fingerprint_storage::constants::NODE_TYPE_SEED;
+use sqlbuild_core::constants::FINGERPRINT_TABLE_NAME;
+use sqlbuild_core::constants::MIGRATION_TABLE_NAME;
+use sqlbuild_core::constants::OLD_NAME_VIEW_TABLE_NAME;
+use sqlbuild_core::constants::SOURCE_FRESHNESS_TABLE_NAME;
 use std::collections::{BTreeSet, HashSet};
 
 /// Everything one snapshot gather needs.

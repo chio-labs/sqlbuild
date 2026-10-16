@@ -16,11 +16,12 @@ use crate::model_validation::constants::{
     ENFORCED_CONTRACT, FUTURE_CURSOR_ACTIONS, INCREMENTAL_MATERIALIZATION, INCREMENTAL_STRATEGIES,
     MERGE_STRATEGY, ON_SCHEMA_CHANGE_EXAMPLE, ON_SCHEMA_CHANGE_POLICIES, REPLAY_ON_CHANGE_ACTIONS,
     REPLAY_ON_CHANGE_EXAMPLE, REPLAY_ON_CHANGE_VALID_VALUES, TABLE_MATERIALIZATION,
-    TIMESTAMP_CURSOR, VIEW_MATERIALIZATION, ZERO_DAY_DURATION,
+    TIMESTAMP_CURSOR, VIEW_MATERIALIZATION,
 };
 use crate::model_validation::models::{ModelValidationFacts, ValidationStop};
 use crate::model_validation::types::Check;
 use crate::types::{AuthoredNode, NodeKind};
+use sqlbuild_core::constants::ZERO_DAY_DURATION;
 
 const ON_SCHEMA_CHANGE_KEY: &str = "on_schema_change";
 const REPLAY_ON_CHANGE_KEY: &str = "replay_on_change";

@@ -12,7 +12,15 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
-from sqlbuild._native import collect_snowflake_cost
+from sqlbuild._native import (
+    SeedCsvSettings,
+    SourceFreshnessRecord,
+    SqlLexicalSyntax,
+    SqlValue,
+    TableType,
+    collect_snowflake_cost,
+    render_insert_source_freshness_records_sql,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import (
     BaseAdapter,
     _encode_typed_json,
@@ -103,9 +111,6 @@ from sqlbuild.adapter.relations.models import (
     SchemaColumnListing,
     SchemaRelationListing,
 )
-from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql import (
-    render_insert_source_freshness_records_sql,
-)
 from sqlbuild.adapter.type_system.main.conditional_result_nullability import (
     conditional_result_nullability,
 )
@@ -151,16 +156,11 @@ from sqlbuild.adapters.snowflake.constants import (
     VIEW_RELATION_TYPE_TOKEN,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.cost.models import RunCostSummary
 from sqlbuild.cost.types import CostCapability, CostStatus
 from sqlbuild.diagnostics.main.log_sql import log_sql
 from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
-from sqlbuild.spec.contracts.models import SeedCsvSettings
-from sqlbuild.spec.contracts.types import TableType
-from sqlbuild.sql_values.models import SqlValue
 
 _EXACT_COLUMN_INSPECTION_LIMIT: int = 32
 _STATE_TABLE_RETENTION_ATTRIBUTE: str = "_state_table_retention_fallbacks_state"
@@ -730,7 +730,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         schema: str,
         retain_versions: int,
     ) -> str:
-        from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+        from sqlbuild._native import FINGERPRINT_TABLE_NAME
 
         table_name: str | None = self.render_qualified_name(
             database=database,
@@ -762,7 +762,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         schema: str,
         retain_versions: int,
     ) -> str:
-        from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
+        from sqlbuild._native import SOURCE_FRESHNESS_TABLE_NAME
 
         table_name: str | None = self.render_qualified_name(
             database=database,

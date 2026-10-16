@@ -7,8 +7,8 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use sqlbuild_cursor::algebra::models::{DurationSpan, Grain, Scalar};
 use sqlbuild_cursor::planner::main::safety_horizon::safety_horizon;
 
-pub(super) const MODELS: &str = "sqlbuild.compiler.planner.models";
-pub(super) const EXCEPTIONS: &str = "sqlbuild.compiler.planner.exceptions";
+pub(super) const MODELS: &str = "sqlbuild._native";
+pub(super) const EXCEPTIONS: &str = "sqlbuild._native";
 
 pub(super) fn safety_error(py: Python<'_>, class: &str, message: &str) -> PyErr {
     match imported(py, EXCEPTIONS, class).and_then(|class| class.call1((message,))) {
@@ -44,15 +44,10 @@ pub(super) fn safety_duration(value: &Bound<'_, PyAny>, future: bool) -> PyResul
 
 pub(super) fn timestamp_bound(value: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = value.py();
-    Ok(value.is_instance(&imported(
-        py,
-        "sqlbuild.cursor_algebra.models",
-        "DateValue",
-    )?)? || value.is_instance(&imported(
-        py,
-        "sqlbuild.cursor_algebra.models",
-        "TimestampValue",
-    )?)?)
+    Ok(
+        value.is_instance(&imported(py, "sqlbuild._native", "DateValue")?)?
+            || value.is_instance(&imported(py, "sqlbuild._native", "TimestampValue")?)?,
+    )
 }
 
 pub(super) fn utc_clock<'py>(clock: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -68,11 +63,7 @@ pub(super) fn horizon<'py>(
     let py = session.py();
     let (clock, grain) = clock_and_grain;
     let mut clock = utc_clock(clock)?;
-    let date_only = discovered.is_instance(&imported(
-        py,
-        "sqlbuild.cursor_algebra.models",
-        "DateValue",
-    )?)?;
+    let date_only = discovered.is_instance(&imported(py, "sqlbuild._native", "DateValue")?)?;
     if date_only || discovered.getattr("value")?.getattr("tzinfo")?.is_none() {
         clock = call_with(
             &clock.getattr("replace")?,
@@ -80,7 +71,7 @@ pub(super) fn horizon<'py>(
         )?;
     }
     let clock = call_with(
-        &imported(py, "sqlbuild.cursor_algebra.models", "TimestampValue")?,
+        &imported(py, "sqlbuild._native", "TimestampValue")?,
         &[("value", clock)],
     )?;
     let grain = if grain.is_truthy()? {

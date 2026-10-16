@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.compiler.planner.models import (
+from sqlbuild._native import (
     CloneSourcePlanEntry,
     FunctionPlanEntry,
     ModelPlanEntry,
+    RetentionPlanPhase,
     SeedPlanEntry,
 )
-from sqlbuild.compiler.planner.types import RetentionPlanPhase
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.executor.clone._helpers.retention import apply_clone_namespace_retention_phase
 from sqlbuild.executor.clone.models import (
     CloneExecutionInput,

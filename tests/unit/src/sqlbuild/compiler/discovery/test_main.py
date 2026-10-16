@@ -7,12 +7,12 @@ from unittest.mock import call, patch
 import pytest
 
 from sqlbuild._native import (
+    DiscoveredProjectInputs,
     DiscoveredSqlTestBlock,
     ProjectConfigError,
     ProjectPythonPathError,
     discover_project_inputs,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.observability import EventDispatcher, LifecycleEvent, dispatcher_scope
 from tests.unit.src.sqlbuild.compiler.discovery._test_helpers import (
     base_repo_files,

@@ -6,6 +6,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild._native import (
+    OldNameViewDropReason,
+    OldNameViewEvent,
+    OldNameViewEventType,
     deterministic_old_name_view_event_id,
     write_migration_state_event,
 )
@@ -17,11 +20,6 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
 from sqlbuild.adapter.type_system.main.normalize_relation_type import normalize_relation_type
-from sqlbuild.compiler.migrations.models import OldNameViewEvent
-from sqlbuild.compiler.migrations.types import (
-    OldNameViewDropReason,
-    OldNameViewEventType,
-)
 from sqlbuild.executor.janitor.models import (
     JanitorOldNameView,
     JanitorOldNameViewPlanning,

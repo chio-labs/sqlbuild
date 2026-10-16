@@ -6,7 +6,11 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import (
+    SourceEntry,
+    SourceFreshnessConfig,
     SourceFreshnessObservation,
+    SourceFreshnessStrategy,
+    SourceFreshnessValueKind,
     observe_configured_source_freshness,
 )
 from sqlbuild.adapter.contract.models import QueryResult, TableFreshnessMetadata
@@ -17,8 +21,6 @@ from sqlbuild.observability import (
     dispatcher_scope,
     invocation_scope,
 )
-from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
-from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
     SharedSourceFreshnessColumnSqlTestCase,
     SharedSourceFreshnessExpressionSubqueryTestCase,

@@ -15,15 +15,15 @@ use crate::bindings::_helpers::janitor::janitor_keys::{
     Folded, Key, SchemaKey, optional, record, sorted_schemas, text, tuple,
 };
 
-const MIGRATION_TYPES: &str = "sqlbuild.compiler.migrations.types";
+const MIGRATION_TYPES: &str = "sqlbuild._native";
 const IS_COMPATIBILITY_VIEW: (&str, &str) = (
     "sqlbuild.executor.old_name_views._helpers.janitor",
     "is_compatibility_view",
 );
 const READ_HISTORIES: (&str, &str) = ("sqlbuild._native", "read_old_name_view_histories");
 const STORED_COLUMNS: (&str, &str) = ("sqlbuild._native", "stored_old_name_view_columns");
-const OLD_NAME_VIEW_TABLE_NAME: &str = "_sqlbuild_old_name_views";
-const MIGRATION_TABLE_NAME: &str = "_sqlbuild_migrations";
+use sqlbuild_core::constants::MIGRATION_TABLE_NAME;
+use sqlbuild_core::constants::OLD_NAME_VIEW_TABLE_NAME;
 const MIGRATE_FROM_CONFIG_KEY: &str = "migrate_from";
 
 /// Old-name view planning and the old names it owns.

@@ -6,6 +6,22 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
 
+from sqlbuild._native import (
+    CompiledObjectKey,
+    CompiledRelationLocation,
+    DiscoveredLoaderFunction,
+    MaterializationType,
+    ModelPlanEntry,
+    PlanAction,
+    PlanOutput,
+    PlanReason,
+    SeedCsvSettings,
+    SeedPlanEntry,
+    SourceColumnEntry,
+    SourceEntry,
+    SourceLoadPlanEntry,
+    SourceWriteStrategy,
+)
 from sqlbuild.adapter.contract.classes.retention_adapter import RetentionAdapterMixin
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
@@ -13,26 +29,8 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledRelationLocation,
-)
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.compiler.planner.models import (
-    ModelPlanEntry,
-    PlanOutput,
-    SeedPlanEntry,
-    SourceLoadPlanEntry,
-)
-from sqlbuild.compiler.planner.types import (
-    MaterializationType,
-    PlanAction,
-    PlanReason,
-)
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.spec.contracts.models import SeedCsvSettings, SourceColumnEntry, SourceEntry
-from sqlbuild.spec.contracts.types import SourceWriteStrategy
 
 
 def build_audit_result(

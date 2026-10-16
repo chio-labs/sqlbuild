@@ -10,10 +10,10 @@ use crate::bindings::_helpers::sql_test_glue::assembly::{
     AssemblyRequest, AssemblyRow, DiagnosticRow, FactsRow, assemble_compiled_sql_tests,
 };
 
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const GLUE_MODELS_MODULE: &str = "sqlbuild._native";
-const SPEC_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
+const SPEC_MODELS_MODULE: &str = "sqlbuild._native";
 /// Fields a direct-logic compiled payload copies from its input payload, in order.
 const DIRECT_PAYLOAD_FIELDS: [&str; 5] = [
     "mode",

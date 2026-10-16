@@ -16,7 +16,7 @@ const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE: &str = "sqlbuild._native";
 const MODELS: &str = "sqlbuild._native";
-const COMPILE_ERRORS: &str = "sqlbuild.compiler.compile.exceptions";
+const COMPILE_ERRORS: &str = "sqlbuild._native";
 const LINT_ERRORS: &str = "sqlbuild._native";
 
 /// Expand a single body and finish its native SQL preparation.

@@ -1,7 +1,11 @@
 from pathlib import Path
 
-from sqlbuild._native import DiscoveredAuditBlock, DiscoveredAuditFile
-from sqlbuild.compiler.compile.models import CompiledAudit, CompiledObjectKey
+from sqlbuild._native import (
+    CompiledAudit,
+    CompiledObjectKey,
+    DiscoveredAuditBlock,
+    DiscoveredAuditFile,
+)
 from sqlbuild.compiler.compile.types import CompiledAuditView, CompiledResourceType
 
 

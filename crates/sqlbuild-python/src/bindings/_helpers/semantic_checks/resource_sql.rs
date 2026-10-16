@@ -17,9 +17,9 @@ use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::models::ProjectCatalog;
 use crate::bindings::types::CompilerDetach;
 
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
+const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
+const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
 const SQL_ANALYSIS_CONFIG_KEY: &str = "sql_analysis";
 const MODEL_HOOK_KEYS: [&str; 2] = ["pre_hooks", "post_hooks"];
 const BUILT_IN_AUDIT_ROOT: &str = "<built-in>";

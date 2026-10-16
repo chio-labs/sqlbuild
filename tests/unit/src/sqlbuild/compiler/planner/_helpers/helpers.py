@@ -13,24 +13,52 @@ from unittest.mock import Mock
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    BackfillAction,
     BackfillResult,
     ChangeDetectionResult,
+    CompiledAudit,
     CompiledDirectLogicSqlTestPayload,
     CompiledFunction,
+    CompiledModel,
     CompiledModelSqlTestPayload,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
+    CompiledSqlScenario,
+    CompiledSqlTest,
     CompileModelConfig,
+    CompilePipelineResult,
+    CompileSqlReference,
     CompileSqlScenarioCte,
     CompileSqlTestCte,
+    DefaultsConfig,
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
+    DiscoveredLoaderFunction,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
+    DiscoveredSourceFile,
+    DiscoveredSqlScenarioFile,
     DiscoveredSqlTestBlock,
+    DiscoveredSqlTestFile,
+    Fingerprint,
     FunctionArgument,
     PlannerChangeResults,
+    PlanOutput,
+    PlanReason,
     ScenarioArtifactIdentity,
+    ScenarioRelationMap,
+    SchemaColumn,
+    SchemaModelEntry,
+    SchemaSeedEntry,
+    SeedCsvSettings,
+    SourceColumnEntry,
+    SourceEntry,
+    SourceWriteStrategy,
+    SqlLexicalSyntax,
+    SqlReferenceKind,
     WarehouseSnapshot,
     build_downstream_deps,
     build_scenario_relation_map,
@@ -43,16 +71,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.auditing.types import AuditSeverity
-from sqlbuild.compiler.compile.models import (
-    CompiledAudit,
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
-    CompiledSqlScenario,
-    CompiledSqlTest,
-    CompileSqlReference,
-)
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledAuditView,
@@ -63,36 +81,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledSeedView,
     CompiledSourceView,
     SqlTestMode,
-)
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredLoaderFunction,
-    DiscoveredSourceFile,
-    DiscoveredSqlScenarioFile,
-    DiscoveredSqlTestFile,
-)
-from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.planner.models import (
-    PlanOutput,
-    ScenarioRelationMap,
-)
-from sqlbuild.compiler.planner.types import (
-    BackfillAction,
-    PlanReason,
-)
-from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.spec.contracts.models import (
-    DefaultsConfig,
-    SchemaColumn,
-    SchemaModelEntry,
-    SchemaSeedEntry,
-    SeedCsvSettings,
-    SourceColumnEntry,
-    SourceEntry,
-)
-from sqlbuild.spec.contracts.types import (
-    SourceWriteStrategy,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     BuildModelWarningsTestCase,

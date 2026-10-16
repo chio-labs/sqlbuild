@@ -20,7 +20,7 @@ const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const CLONE_MODELS: &str = "sqlbuild.executor.clone.models";
 const CLONE_TYPES: &str = "sqlbuild.executor.clone.types";
-const SPEC_TYPES: &str = "sqlbuild.spec.contracts.types";
+const SPEC_TYPES: &str = "sqlbuild._native";
 const TRANSIENT_MODELS_MODULE: &str =
     "sqlbuild.executor.clone.main._build_destination_transient_models";
 const RETENTION_REQUESTS_MODULE: &str = "sqlbuild.executor.clone.main._build_retention_requests";

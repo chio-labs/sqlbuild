@@ -8,7 +8,7 @@ from sqlbuild._native import (
     build_compile_reference_resolver,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
+from sqlbuild.compiler.compile.types import ExternalSqlReferenceResolver
 
 DUCKDB_COMPILE_ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(
     value_renderer=DuckDbAdapter(),

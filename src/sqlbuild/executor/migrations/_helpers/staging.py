@@ -5,10 +5,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from sqlbuild._native import ModelMigrationPlanEntry
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, MigrationStagePlan, RelationInfo
 from sqlbuild.adapter.contract.types import MigrationTransfer
-from sqlbuild.compiler.planner.models import ModelMigrationPlanEntry
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.migrations.models import MigrationArtifactNames
 

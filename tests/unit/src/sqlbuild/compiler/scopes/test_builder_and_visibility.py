@@ -7,15 +7,38 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    ConstantDeclaration,
+    DeclarationIdentity,
+    DeclarationKind,
+    DeclarationRecord,
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
     DiscoveredConstantFile,
     DiscoveredEnumFile,
+    DiscoveredMacroFile,
+    DiscoveredSourceFile,
     DiscoveredSqlFunctionFile,
     DiscoveredSqlHookFile,
+    DiscoveredSqlScenarioFile,
     DiscoveredSqlTestBlock,
+    DiscoveredSqlTestFile,
+    EnumDeclaration,
     EnumMember,
+    InaccessibleReason,
+    LoadedMacro,
+    OwnershipRoot,
+    ResourceIdentity,
+    ResourceKind,
+    ResourceRecord,
+    ScopeDiagnosticCode,
+    ScopeIndex,
+    ScopeKind,
+    ScopeLookup,
+    ScopeTargetQuery,
     ScopeValidationError,
+    SourceEntry,
+    VisibilityReason,
+    VisibilityResolution,
     build_scope_index,
     build_scope_lookup,
     normalize_sql_value,
@@ -23,35 +46,6 @@ from sqlbuild._native import (
     resolve_scope_visibility,
     validate_scope_index,
 )
-from sqlbuild.compiler.compile.models import LoadedMacro
-from sqlbuild.compiler.discovery.models import (
-    ConstantDeclaration,
-    DiscoveredMacroFile,
-    DiscoveredSourceFile,
-    DiscoveredSqlScenarioFile,
-    DiscoveredSqlTestFile,
-    EnumDeclaration,
-)
-from sqlbuild.compiler.scopes.models import (
-    DeclarationIdentity,
-    DeclarationRecord,
-    OwnershipRoot,
-    ResourceIdentity,
-    ResourceRecord,
-    ScopeIndex,
-    ScopeLookup,
-    ScopeTargetQuery,
-    VisibilityResolution,
-)
-from sqlbuild.compiler.scopes.types import (
-    DeclarationKind,
-    InaccessibleReason,
-    ResourceKind,
-    ScopeDiagnosticCode,
-    ScopeKind,
-    VisibilityReason,
-)
-from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.scopes._test_types import (
     ExpectedBooleanCase,
     ResourceExpectation,

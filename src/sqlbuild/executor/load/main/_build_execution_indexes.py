@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
+from sqlbuild._native import DiscoveredLoaderFunction, SourceEntry
 from sqlbuild.executor.load._helpers.execution import (
     build_load_execution_indexes as _build_load_execution_indexes,
 )
 from sqlbuild.executor.load.models import LoadExecutionIndexes
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def build_load_execution_indexes(

@@ -1,5 +1,7 @@
 //! Threshold defaults, guidance wording and the rule codes guidance sections depend on.
 
+use crate::constants::MIN_CUSTOM_RULE_TEST_CASES_KEY;
+
 /// Effective threshold defaults, sorted by name as guidance renders them.
 pub(crate) const THRESHOLD_DEFAULTS: [(&str, u32); 10] = [
     ("max_constant_container_files", 10),
@@ -8,7 +10,7 @@ pub(crate) const THRESHOLD_DEFAULTS: [(&str, u32); 10] = [
     ("max_role_container_depth", 1),
     ("max_subdomain_depth", 1),
     ("min_audits_per_model", 1),
-    ("min_custom_rule_test_cases", 1),
+    (MIN_CUSTOM_RULE_TEST_CASES_KEY, 1),
     ("min_shared_container_prefix_files", 2),
     ("min_shared_owner_prefix_directories", 2),
     ("min_tests_per_model", 1),

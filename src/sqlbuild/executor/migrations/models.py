@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild._native import CompiledRelationLocation
 from sqlbuild.adapter.contract.models import RelationGrant
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
 
 
 @dataclass(frozen=True)

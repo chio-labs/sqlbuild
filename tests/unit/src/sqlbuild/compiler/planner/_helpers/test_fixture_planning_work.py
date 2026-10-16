@@ -8,29 +8,27 @@ import pytest
 import sqlbuild._native as sql_test_assembly
 from sqlbuild import _native as fixture_completion
 from sqlbuild._native import (
+    CompiledObjectKey,
+    CompiledSqlTest,
+    CompileSqlReference,
     FixtureColumnMetadata,
     FixtureRelationMetadata,
     PlanWarning,
     RelationFixtureCompletion,
     RelationFixturePlanningContext,
+    SettingsConfig,
+    SqlReferenceKind,
+    SqlTestPlanEntry,
     SqlTestSelection,
     build_selected_test_entries,
     compiled_model_record,
     project_with,
-)
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledSqlTest,
-    CompileSqlReference,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.planner.models import SqlTestPlanEntry
-from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.spec.contracts.models import SettingsConfig
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     CompleteFixturePlanningTestCase,
     FixturePlanningWorkTestCase,

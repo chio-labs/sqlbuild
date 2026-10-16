@@ -10,7 +10,7 @@ use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicModel;
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
+const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
 const INCREMENTAL_MATERIALIZATION: &str = "incremental";
 const CURSOR_START: &str = "__cursor_start";
 const CURSOR_START_CALL: &str = "__cursor_start()";
@@ -20,7 +20,11 @@ const INTEGER_ANALYSIS_BOUND: &str = "CAST(0 AS BIGINT)";
 const TIMESTAMP_ANALYSIS_BOUND: &str = "CAST('2000-01-01 00:00:00' AS TIMESTAMP)";
 const MODEL_SQL_CONTEXT: &str = "Model SQL";
 const SQL_CONTEXT: &str = "SQL";
-const RESERVED_CURSOR_MARKERS: [&str; 2] = ["__SQB_CURSOR_START__", "__SQB_CURSOR_END__"];
+/// Executor placeholder replaced with a microbatch's start bound.
+pub(crate) const MICROBATCH_START_SENTINEL: &str = "__SQB_CURSOR_START__";
+/// Executor placeholder replaced with a microbatch's end bound.
+pub(crate) const MICROBATCH_END_SENTINEL: &str = "__SQB_CURSOR_END__";
+const RESERVED_CURSOR_MARKERS: [&str; 2] = [MICROBATCH_START_SENTINEL, MICROBATCH_END_SENTINEL];
 
 /// The reserved executor bound markers no authored SQL may contain.
 pub(crate) fn reserved_cursor_markers() -> Vec<String> {

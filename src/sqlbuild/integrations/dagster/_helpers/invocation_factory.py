@@ -7,10 +7,13 @@ import os
 import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from sqlbuild._native import dagster_cli_arguments
-from sqlbuild.cli.output.constants import INTEGRATION_RESULT_PATH_ENV
+from sqlbuild._native import (
+    INTEGRATION_RESULT_PATH_ENV,
+    INVOCATION_CONTEXT_ENV,
+    dagster_cli_arguments,
+)
 from sqlbuild.integrations.dagster._helpers.invocation import (
     _selected_asset_check_keys,
     _selected_asset_paths,
@@ -19,7 +22,6 @@ from sqlbuild.integrations.dagster._helpers.invocation_context import (
     dagster_invocation_context,
 )
 from sqlbuild.integrations.dagster.classes.sqlbuild_cli_invocation import SqlBuildCliInvocation
-from sqlbuild.runtime.output_capture.constants import INVOCATION_CONTEXT_ENV
 
 
 def start_sqlbuild_cli_invocation(
@@ -34,7 +36,7 @@ def start_sqlbuild_cli_invocation(
     """Start a SQLBuild CLI subprocess and return its invocation wrapper."""
 
     planned: dict[str, Any] = dagster_cli_arguments(
-        args=list(args),
+        args=_cli_arguments(args),
         dag=dag,
         has_context=context is not None,
         read_selection=lambda: (
@@ -83,3 +85,19 @@ def start_sqlbuild_cli_invocation(
     )
     invocation.execution_json_owned = execution_json_owned
     return invocation
+
+
+def _cli_arguments(args: Sequence[object]) -> list[str]:
+    """Arguments as strings: path-like values pass through, others fail as `str` methods would."""
+
+    arguments: list[str] = []
+    for argument in args:
+        if isinstance(argument, os.PathLike):
+            arguments.append(os.fsdecode(cast("os.PathLike[str]", argument)))
+        elif isinstance(argument, str):
+            arguments.append(argument)
+        else:
+            raise AttributeError(
+                f"{type(argument).__name__!r} object has no attribute 'startswith'"
+            )
+    return arguments

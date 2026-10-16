@@ -14,11 +14,11 @@ import pytest
 from _pytest.capture import CaptureResult
 
 import sqlbuild._native as fingerprint_cache_module
+from sqlbuild._native import FINGERPRINT_TABLE_NAME
 from sqlbuild._native import run_cli as main
 from sqlbuild.adapter.contract.models import MigrationStagePlan
 from sqlbuild.adapter.contract.types import MigrationTransfer
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.executor.build._helpers import scheduler as scheduler_module
 
 DATABASE_FILE: str = "orders.duckdb"

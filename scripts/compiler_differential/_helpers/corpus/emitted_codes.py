@@ -39,10 +39,8 @@ from scripts.compiler_differential.models import (
     FailureCase,
     ProjectRun,
 )
-from sqlbuild._native import DiscoveryError, ResourceIdentityError
-from sqlbuild.compiler.compile import constants as compile_constants
+from sqlbuild._native import DiscoveryError, ResourceIdentityError, ScopeDiagnosticCode
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.scopes.types import ScopeDiagnosticCode
 
 _SOURCE_DIRECTORY: str = "source"
 _CODE_KEYWORD: str = "code"
@@ -96,18 +94,10 @@ def discovery_error_codes() -> frozenset[str]:
 def render_error_codes() -> frozenset[str]:
     """Return every code render, scope, and attachment can report, from compiler constants."""
 
-    compile_codes: set[str] = {
-        value
-        for name, value in vars(compile_constants).items()
-        if name.endswith("_CODE")
-        and isinstance(value, str)
-        and DIAGNOSTIC_CODE_PATTERN.fullmatch(value)
-    }
     return frozenset(
         {
             CompileInputError.code,
             BUILT_IN_AUDIT_SHADOW_CODE,
-            *compile_codes,
             *(code.value for code in ScopeDiagnosticCode),
             *RENDER_RAISED_CODES,
         }

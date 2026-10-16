@@ -9,6 +9,14 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
+from sqlbuild._native import (
+    SeedCsvSettings,
+    SourceFreshnessRecord,
+    SqlLexicalSyntax,
+    SqlValue,
+    SqlValueKind,
+    render_insert_source_freshness_records_sql,
+)
 from sqlbuild.adapter.contract.classes.historical_check_snapshot_sql import (
     HistoricalCheckSnapshotSql,
 )
@@ -73,17 +81,9 @@ from sqlbuild.adapter.contract.types import (
 from sqlbuild.adapter.relations.main.get_columns_for_relations import (
     get_columns_for_relations_bulk,
 )
-from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql import (
-    render_insert_source_freshness_records_sql,
-)
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
-from sqlbuild.spec.contracts.models import SeedCsvSettings
 from sqlbuild.sql_values.exceptions import SqlValueRenderingError
-from sqlbuild.sql_values.models import SqlValue
-from sqlbuild.sql_values.types import SqlValueKind
 
 _SCALAR_SQL_VALUE_KINDS: frozenset[SqlValueKind] = frozenset(
     {
@@ -2124,9 +2124,9 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     def render_create_microbatch_state_table_sql(self, *, database: str | None, schema: str) -> str:
         """Render DDL that creates the direct microbatch state table when missing."""
 
-        from sqlbuild.microbatches.main.create_table_sql import build_create_table_sql
+        from sqlbuild._native import build_microbatch_create_table_sql
 
-        return build_create_table_sql(
+        return build_microbatch_create_table_sql(
             database=database,
             schema=schema,
             render_qualified_name=self.render_qualified_name,

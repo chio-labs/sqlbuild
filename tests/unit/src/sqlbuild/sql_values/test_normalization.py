@@ -7,11 +7,11 @@ import pytest
 
 from sqlbuild._native import (
     AuthoredSqlSet,
+    SqlValue,
     SqlValueLimits,
     SqlValueValidationError,
     normalize_sql_value,
 )
-from sqlbuild.sql_values.models import SqlValue
 from tests.unit.src.sqlbuild.sql_values._test_types import (
     NormalizeSqlValueErrorTestCase,
     NormalizeSqlValueTestCase,

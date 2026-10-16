@@ -11,6 +11,7 @@ import duckdb
 import pytest
 
 from sqlbuild._native import (
+    SourceEntry,
     build_compiled_project,
     discover_project_inputs,
     get_semantic_source_columns,
@@ -20,7 +21,6 @@ from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapter.relations.main.open_inspection_catalog import open_inspection_catalog
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.adapters.snowflake.inspection.helpers import (
     FakeRelation,
     build_offline_snowflake,

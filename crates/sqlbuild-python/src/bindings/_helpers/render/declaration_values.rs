@@ -11,14 +11,13 @@ use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
 
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
-const SCOPE_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
-const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
+const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
+const SCOPE_MODELS_MODULE: &str = "sqlbuild._native";
+const SCOPE_TYPES_MODULE: &str = "sqlbuild._native";
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
+const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
 const SCOPE_ERRORS_MODULE: &str = "sqlbuild._native";
-const BUILTINS_MODULE: &str = "builtins";
 const NO_DECLARATION_KIND: u8 = 255;
 /// Declaration kinds by their native code: enum 0, constant 1, macro 2.
 const DECLARATION_KINDS: [&str; 3] = ["ENUM", "CONSTANT", "MACRO"];
@@ -255,10 +254,6 @@ pub(crate) fn native_declaration_contexts<'py>(
         "resolution_context",
         imported(py, COMPILE_MODELS_MODULE, "DeclarationResolutionContext")?,
     )?;
-    classes.set_item(
-        "allocate",
-        imported(py, BUILTINS_MODULE, "object")?.getattr("__new__")?,
-    )?;
     classes.set_item("reasons", reasons)?;
     let keys: Bound<'py, PyDict> = PyDict::new(py);
     keys.set_item("identity_keys", identity_keys)?;
@@ -442,7 +437,7 @@ fn render_constant_declaration<'py>(
 /// One enum member value as a SQL scalar literal.
 #[pyfunction]
 #[pyo3(signature = (*, value))]
-fn render_enum_member_value(value: &Bound<'_, PyAny>) -> PyResult<String> {
+pub(crate) fn render_enum_member_value(value: &Bound<'_, PyAny>) -> PyResult<String> {
     if value.is_instance_of::<PyInt>() {
         return value.str()?.extract();
     }

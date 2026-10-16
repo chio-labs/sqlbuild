@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild._native import CompiledRelationLocation, PlanOutput
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.migrations._helpers.old_name_views import (
     rebind_old_name_views_atomically,
     run_planned_old_name_steps,

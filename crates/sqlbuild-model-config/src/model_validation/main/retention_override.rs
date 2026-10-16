@@ -4,12 +4,11 @@ use crate::errors::ConfigError;
 use crate::model_validation::_helpers::config::model_header_help;
 use crate::model_validation::_helpers::config::text_if_string;
 use crate::model_validation::_helpers::durations::parse_duration;
-use crate::model_validation::constants::{
-    DISABLED_RETENTION, INHERIT_POLICY, RETENTION_KEY, ZERO_DAY_DURATION,
-};
+use crate::model_validation::constants::{DISABLED_RETENTION, INHERIT_POLICY, RETENTION_KEY};
 use crate::model_validation::errors::DurationNumberError;
 use crate::model_validation::models::RetentionOverride;
 use crate::types::{AuthoredNode, NodeKind};
+use sqlbuild_core::constants::ZERO_DAY_DURATION;
 
 /// Return the header retention override, or the error it raises.
 pub fn retention_override<N: AuthoredNode>(

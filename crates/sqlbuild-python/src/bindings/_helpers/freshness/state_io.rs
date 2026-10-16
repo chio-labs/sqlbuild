@@ -1,9 +1,10 @@
 //! Source freshness state table DDL, latest-row reads and appends through adapter callbacks.
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet};
+use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
-use sqlbuild_state::freshness::constants::{REQUIRED_STATE_COLUMNS, SOURCE_FRESHNESS_TABLE_NAME};
+use sqlbuild_core::constants::SOURCE_FRESHNESS_TABLE_NAME;
+use sqlbuild_state::freshness::constants::{REQUIRED_STATE_COLUMNS, SOURCE_FRESHNESS_COLUMN_TYPES};
 use sqlbuild_state::freshness::main::read_latest_sql::read_latest_sql;
 use sqlbuild_state::freshness::main::relevant_sources_sql::relevant_sources_sql;
 
@@ -12,9 +13,10 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
 use crate::bindings::_helpers::freshness::support::{
-    FRESHNESS_CONSTANTS, FRESHNESS_MODELS, INPUT_ERROR, STATE_TABLE_DDL_MODULE, exception_text,
-    freshness_error, optional_str, presumed_utc_datetime, text,
+    FRESHNESS_MODELS, INPUT_ERROR, exception_text, freshness_error, optional_str,
+    presumed_utc_datetime, text,
 };
+use crate::bindings::_helpers::state_rows::state_tables::state_table_create_sql;
 use crate::bindings::_helpers::state_rows::timestamps::date_time_typed;
 
 const NATIVE_RECORDS: &str = "sqlbuild._native";
@@ -81,23 +83,20 @@ fn create_table_sql<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = database.py();
     let qualified_name: String = qualified_table_name(render_qualified_name, (database, schema))?;
-    let constants: Bound<'py, PyModule> = py.import(FRESHNESS_CONSTANTS)?;
-    call_with(
-        &imported(py, STATE_TABLE_DDL_MODULE, "render_state_table_create_sql")?,
-        &[
-            ("qualified_name", text(py, &qualified_name)),
-            ("columns", constants.getattr("SOURCE_FRESHNESS_COLUMNS")?),
-            (
-                "column_types",
-                constants.getattr("SOURCE_FRESHNESS_COLUMN_TYPES")?,
-            ),
-            (
-                "required_columns",
-                PyFrozenSet::new(py, REQUIRED_STATE_COLUMNS)?.into_any(),
-            ),
-            ("render_framework_type", render_framework_type.clone()),
-        ],
-    )
+    let columns: Bound<'py, PyAny> =
+        PyTuple::new(py, SOURCE_FRESHNESS_COLUMN_TYPES.map(|(column, _)| column))?.into_any();
+    let column_types: Bound<'py, PyDict> = PyDict::new(py);
+    for (column, declared) in SOURCE_FRESHNESS_COLUMN_TYPES {
+        column_types.set_item(column, declared)?;
+    }
+    let column_types: Bound<'py, PyAny> = column_types.into_any();
+    let required: Bound<'py, PyAny> = PyFrozenSet::new(py, REQUIRED_STATE_COLUMNS)?.into_any();
+    let sql: String = state_table_create_sql(
+        &qualified_name,
+        (&columns, &column_types, &required),
+        render_framework_type,
+    )?;
+    Ok(text(py, &sql))
 }
 
 /// The callbacks and location one latest-state read uses.

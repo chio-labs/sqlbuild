@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import SeedCsvSettings
 from sqlbuild.adapter.contract._helpers.seed_csv import normalize_seed_csv_value as _normalize
-from sqlbuild.spec.contracts.models import SeedCsvSettings
 
 
 def normalize_seed_csv_value(

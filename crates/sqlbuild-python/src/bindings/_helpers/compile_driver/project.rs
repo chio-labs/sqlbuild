@@ -26,7 +26,8 @@ const BUILD_INPUTS_MODULE: &str = "sqlbuild._native";
 const ASSEMBLE_MODULE: &str = "sqlbuild._native";
 const PROJECT_WITH_MODULE: &str = "sqlbuild._native";
 const PROMOTION_MODULE: &str = "sqlbuild._native";
-const DISCOVERY_CONSTANTS_MODULE: &str = "sqlbuild.compiler.discovery.constants";
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
+use sqlbuild_core::constants::TABLE_PROMOTION_MODE_SETTING_KEY;
 const LOCAL_CONFIG_FILENAME: &str = "sqlbuild_local.toml";
 const ANALYSIS_SELECTION_MODULE: &str = "sqlbuild._native";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
@@ -231,18 +232,15 @@ fn targeted_project<'py>(
         ],
     )?;
     project_targets(&adapter_name, &project)?;
-    let promotion_key: Bound<'py, PyAny> = imported(
-        py,
-        DISCOVERY_CONSTANTS_MODULE,
-        "TABLE_PROMOTION_MODE_SETTING_KEY",
-    )?;
+    let promotion_key: Bound<'py, PyAny> =
+        pyo3::types::PyString::new(py, TABLE_PROMOTION_MODE_SETTING_KEY).into_any();
     let settings_file: Bound<'py, PyAny> = if local_config
         .getattr("setting_overrides")?
         .contains(promotion_key)?
     {
         pyo3::types::PyString::new(py, LOCAL_CONFIG_FILENAME).into_any()
     } else {
-        imported(py, DISCOVERY_CONSTANTS_MODULE, "PROJECT_CONFIG_FILENAME")?
+        pyo3::types::PyString::new(py, PROJECT_CONFIG_FILENAME).into_any()
     };
     let conflicts: Bound<'py, PyAny> = call_with(
         &imported(py, PROMOTION_MODULE, "promotion_conflict_diagnostics")?,

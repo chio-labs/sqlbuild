@@ -10,6 +10,17 @@ from typing import cast
 import pytest
 
 from sqlbuild._native import (
+    DeclarationKind,
+    OwnershipRoot,
+    ResourceKind,
+    ResourceRecord,
+    ScopeBrowseResult,
+    ScopeDiagnosticCode,
+    ScopeIndex,
+    ScopeListResult,
+    ScopeLookup,
+    ScopeReport,
+    ScopeReportFilters,
     browse_scope_folders,
     build_scope_lookup,
     explain_scope_declaration,
@@ -17,21 +28,6 @@ from sqlbuild._native import (
     preview_scope_move,
     query_scope_report,
     serialize_scope_report,
-)
-from sqlbuild.compiler.scopes.models import (
-    OwnershipRoot,
-    ResourceRecord,
-    ScopeBrowseResult,
-    ScopeIndex,
-    ScopeListResult,
-    ScopeLookup,
-    ScopeReport,
-    ScopeReportFilters,
-)
-from sqlbuild.compiler.scopes.types import (
-    DeclarationKind,
-    ResourceKind,
-    ScopeDiagnosticCode,
 )
 from tests.unit.src.sqlbuild.compiler.scopes._test_types import (
     ExpectedBooleanCase,

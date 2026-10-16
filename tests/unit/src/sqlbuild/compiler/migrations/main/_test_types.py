@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.compiler.migrations.models import MigrationRelation
-from sqlbuild.compiler.migrations.types import OldNameViewDropReason, OldNameViewEventType
+from sqlbuild._native import MigrationRelation, OldNameViewDropReason, OldNameViewEventType
 
 
 @dataclass(frozen=True)

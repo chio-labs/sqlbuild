@@ -4,20 +4,24 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlbuild._native import compute_query_hash, read_latest_fingerprints, write_fingerprint
+from sqlbuild._native import (
+    FINGERPRINT_TABLE_NAME,
+    Fingerprint,
+    FingerprintSet,
+    build_query_diff_artifact_name,
+    compute_query_hash,
+    parse_query_diff_artifact_name,
+    read_latest_fingerprints,
+    write_fingerprint,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, RelationLookup
 from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
-from sqlbuild.compiler.fingerprints.constants import (
-    FINGERPRINT_TABLE_NAME,
-    NODE_TYPE_QUERY_DIFF_ARTIFACT,
-)
-from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
+from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_QUERY_DIFF_ARTIFACT
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.diff.models import (
     QueryDiffArtifact,
@@ -25,10 +29,6 @@ from sqlbuild.executor.diff.models import (
     QueryDiffArtifactInspection,
 )
 
-_ARTIFACT_PATTERN: re.Pattern[str] = re.compile(
-    r"^__sqlbuild_query_diff_(?P<run_id>\d{8}T\d{6}Z_[0-9a-f]{12})_(?P<side>left|right)$",
-    flags=re.IGNORECASE,
-)
 _ARTIFACT_VERSION: int = 1
 
 
@@ -42,7 +42,7 @@ def build_query_diff_artifact(
 ) -> QueryDiffArtifact:
     """Build one collision-resistant artifact identity in the active target schema."""
 
-    name: str = f"__sqlbuild_query_diff_{run_id}_{side}"
+    name: str = build_query_diff_artifact_name(run_id=run_id, side=side)
     relation: str | None = adapter.render_qualified_name(
         database=database,
         schema=schema,
@@ -59,12 +59,6 @@ def build_query_diff_artifact(
         relation=relation,
         node_name=f"{run_id}:{side}",
     )
-
-
-def is_query_diff_artifact_name(name: str) -> bool:
-    """Return whether a relation uses the strict reserved query-diff name format."""
-
-    return _ARTIFACT_PATTERN.fullmatch(name) is not None
 
 
 def materialize_query_diff_artifact(
@@ -196,7 +190,9 @@ def inspect_query_diff_artifacts(
         schemas=(schema,),
     )
     candidates: tuple[RelationInfo, ...] = tuple(
-        relation for relation in relations if _ARTIFACT_PATTERN.fullmatch(relation.name)
+        relation
+        for relation in relations
+        if parse_query_diff_artifact_name(relation.name) is not None
     )
     if not candidates:
         return QueryDiffArtifactInspection()
@@ -227,13 +223,13 @@ def inspect_query_diff_artifacts(
     untracked: list[RelationInfo] = []
     for relation in candidates:
         fingerprint: Fingerprint | None = owned.get(relation.name.lower())
-        match: re.Match[str] | None = _ARTIFACT_PATTERN.fullmatch(relation.name)
-        if match is None:
+        parts: tuple[str, str] | None = parse_query_diff_artifact_name(relation.name)
+        if parts is None:
             continue
         artifact: QueryDiffArtifact = build_query_diff_artifact(
             adapter=adapter,
-            run_id=match.group("run_id"),
-            side=match.group("side").lower(),
+            run_id=parts[0],
+            side=parts[1],
             database=database,
             schema=schema,
         )

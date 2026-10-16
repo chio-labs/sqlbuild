@@ -1,6 +1,6 @@
 """Stable constants for microbatch state storage and retries."""
 
-from sqlbuild.sql_values.types import StateSqlValueType
+from sqlbuild._native import StateSqlValueType
 
 MICROBATCH_TABLE_NAME: str = "_sqlbuild_microbatches"
 DIRECT_MICROBATCH_SCOPE_KIND: str = "direct_logical"

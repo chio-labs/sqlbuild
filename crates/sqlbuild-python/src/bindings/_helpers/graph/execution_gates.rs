@@ -11,9 +11,9 @@ use crate::bindings::_helpers::graph::keys::KeyCache;
 
 const GRAPH_MODELS_MODULE: &str = "sqlbuild._native";
 const GRAPH_TYPES_MODULE: &str = "sqlbuild._native";
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
+const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const PATHLIB_MODULE: &str = "pathlib";
 /// The model config keys whose entries are hooks, in lifecycle order.
 const MODEL_HOOK_KEYS: [&str; 2] = ["pre_hooks", "post_hooks"];

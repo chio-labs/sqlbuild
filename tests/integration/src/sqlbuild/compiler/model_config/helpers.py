@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 import re
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeGuard, cast
 
@@ -14,17 +14,21 @@ import pytest
 import sqlbuild._native as _native
 from sqlbuild._native import (
     CompileAdapterContext,
+    CompileInputError,
+    DiscoveredProjectInputs,
+    DiscoveredSqlModelFile,
+    SchemaModelEntry,
+    SourceLocation,
     build_compile_inputs,
     discover_project_inputs,
     parse_audit_instances,
     resolve_effective_collection_rendering,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
-from sqlbuild.spec.contracts.models import SchemaModelEntry, SourceLocation
 
 if TYPE_CHECKING:
+    from _typeshed import DataclassInstance
+
     from sqlbuild._native import CompileInputsView
 
 _TEXTS: tuple[object, ...] = (
@@ -361,9 +365,17 @@ def _attribute_orders(value: object) -> object:
     return _item_orders(_flattened(value))
 
 
+def _field_names(item: object) -> tuple[str, ...]:
+    return tuple(field.name for field in fields(cast("DataclassInstance", item)))
+
+
 def _item_orders(items: tuple[object, ...]) -> object:
     return tuple(
-        (type(item).__name__, tuple(vars(item)), _item_orders(getattr(item, "audits", ())))
+        (
+            type(item).__name__,
+            _field_names(item),
+            _item_orders(getattr(item, "audits", ())),
+        )
         for item in items
     )
 

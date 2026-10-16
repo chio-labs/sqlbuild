@@ -9,9 +9,8 @@ from typing import Any
 
 import pytest
 
-from sqlbuild._native import render_sql_test_comparison_sql
+from sqlbuild._native import SqlTestPlanEntry, render_sql_test_comparison_sql
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.planner.models import SqlTestPlanEntry
 from tests.integration.src.sqlbuild.executor.testing._test_types import (
     ExpectedBooleanTestCase,
     SqlTestBuildParityTestCase,

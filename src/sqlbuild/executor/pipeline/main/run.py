@@ -6,9 +6,8 @@ import time
 from dataclasses import replace
 from typing import Any
 
-from sqlbuild._native import BuildPhaseTimingTracker, CostContext
+from sqlbuild._native import BuildPhaseTimingTracker, CostContext, PlanOutput, SettingsConfig
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.build.main._execute import execute_build_plan
 from sqlbuild.executor.build.main._external_source_loads import (
@@ -65,7 +64,6 @@ from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatc
 from sqlbuild.runtime.observability.main.create_lifecycle_event import create_lifecycle_event
 from sqlbuild.runtime.observability.main.current_event_dispatcher import current_event_dispatcher
 from sqlbuild.runtime.observability.main.run_scope import run_scope
-from sqlbuild.spec.contracts.models import SettingsConfig
 
 
 def run_build_pipeline(

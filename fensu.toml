@@ -25,13 +25,23 @@ max_positional_args = 1
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
+path = "src/sqlbuild/cost/models.py"
+reason = "Native bindings own run-cost allocation, Snowflake cost collection, the statement ledger and the cost context; this package only declares the cost models and types they use."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
 path = "src/sqlbuild/lint/__init__.py"
 reason = "Native bindings own lint entry points, expansion preparation and compiler-verified fix planning; this package retains boundary models, custom-rule and macro callbacks."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
 path = "src/sqlbuild/cli/compile_reuse/__init__.py"
-reason = "Native bindings own the compile reuse check, replay and launch records; this package declares the reuse models and constants and keeps the provider settings, runtime identity and startup inputs the native code reads from the interpreter."
+reason = "Native bindings own the compile reuse check, runtime identity, replay and launch records; this package declares the reuse models and keeps the provider settings and startup inputs the native code reads from the interpreter."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/microbatches/__init__.py"
+reason = "Native bindings own microbatch coverage and replay projection, event IDs and state SQL; this package keeps the executor's direct event store, the event row codec and the event, scope and projection models it consumes."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
@@ -62,21 +72,6 @@ reason = "Native bindings own planning, plan entries, plan output, command plans
 rule = "FFR309"
 path = "src/sqlbuild/compiler/migrations/__init__.py"
 reason = "Native bindings own migration planning and state rows; this package only declares the migration models, decisions and table names the executor imports."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
-path = "src/sqlbuild/compiler/source_freshness/__init__.py"
-reason = "Native bindings own source freshness observation, planning, propagation and state reads and writes; this package only declares the models, types and constants they build."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
-path = "src/sqlbuild/cost/constants.py"
-reason = "Native bindings own run-cost allocation, Snowflake cost collection, the statement ledger and the cost context; this package only declares the cost models, types and constants they use."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
-path = "src/sqlbuild/compiler/contract_adoption/__init__.py"
-reason = "Native bindings own contract comparison, edits and repository writes; this package only declares the adoption models, types and errors the native command builds and raises."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
@@ -145,11 +140,6 @@ reason = "The SQL Server backend intentionally owns behavior through its adapter
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
-path = "src/sqlbuild/compiler/contracts/__init__.py"
-reason = "Model contracts are evaluated natively; the package keeps only the validation result model its callers read."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
 path = "src/sqlbuild/compiler/fingerprints/__init__.py"
 reason = "Fingerprint hashing and storage run natively; the package keeps the stored-row models, column and node-type vocabulary adapters and the executor share."
 
@@ -165,48 +155,13 @@ reason = "SQL references are scanned natively; the package keeps the reference m
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
-path = "src/sqlbuild/compiler/resource_names/__init__.py"
-reason = "Resource identities are validated natively; the package keeps the error class the native check raises."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
-path = "src/sqlbuild/compiler/refactoring/__init__.py"
-reason = "Refactorings run natively; the package keeps the compiled-project input, manual-location model and error classes the native command reads and raises."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
-path = "src/sqlbuild/compiler/scopes/__init__.py"
-reason = "Declaration scopes are built, queried and validated natively; the package keeps the index, lookup and report models and the errors the native bindings raise."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
-path = "src/sqlbuild/compiler/sql_test_glue/__init__.py"
-reason = "SQL test assembly and planning run natively; the package keeps the request, result and row shapes the planner and compile stage read."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
-path = "src/sqlbuild/compiler/graph/__init__.py"
-reason = "Graph algorithms and views run natively; the package keeps only the edge and view models their callers read."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
 path = "src/sqlbuild/sql_values/exceptions.py"
 reason = "Typed SQL values are normalized and state literals rendered natively; the namespace package keeps the value models, types and the rendering error adapters raise."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
-path = "src/sqlbuild/cli/output/__init__.py"
-reason = "Execution-result output is rendered natively; the package keeps only the integration-result constants its callers and readers share."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
 path = "src/sqlbuild/compiler/lineage/__init__.py"
 reason = "Column lineage is built natively; the package keeps only the lineage models, enums and errors the native graph and its callers share."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
-path = "src/sqlbuild/compiler/analysis_session/__init__.py"
-reason = "Model analysis runs natively; the package keeps only the request and result models, row types and constants the native session and its callers share."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR601"
@@ -350,6 +305,16 @@ reason = "sqlbuild.rules.testing is the documented public custom-rule harness mo
 rule = "FFR403"
 path = "src/sqlbuild/rules/testing.py"
 reason = "This deliberate public shim keeps test-harness internals outside the stable authoring API."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR403"
+path = "src/sqlbuild/compiler/compile/models.py"
+reason = "Project macro modules import MacroContext from this path for their ctx annotation; the class is hosted natively and this module keeps that import path working."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR001"
+path = "src/sqlbuild/compiler/compile/models.py"
+reason = "The only model here is the natively hosted MacroContext, re-exported for project macro imports."
 
 [[targets.python.rule_exceptions]]
 rule = "FFS120"

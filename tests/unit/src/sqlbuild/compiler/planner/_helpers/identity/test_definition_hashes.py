@@ -6,8 +6,7 @@ from dataclasses import replace
 
 import pytest
 
-from sqlbuild._native import build_function_local_hashes, model_definition_hash
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild._native import PlannerInputError, build_function_local_hashes, model_definition_hash
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import build_compiled_function
 from tests.unit.src.sqlbuild.compiler.planner._helpers.identity._test_types import (
     DefinitionHashFailureTestCase,

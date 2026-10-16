@@ -4,6 +4,7 @@ from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
 
+from sqlbuild._native import AlignedInterval, CursorGrain, CursorType, IntegerValue, TimestampValue
 from sqlbuild._native import cursor_cap_from_end as cap_from_end
 from sqlbuild._native import cursor_cap_from_start as cap_from_start
 from sqlbuild._native import cursor_clamp as clamp
@@ -24,8 +25,6 @@ from sqlbuild._native import cursor_render as render
 from sqlbuild._native import cursor_sentinel_from_token as sentinel_from_token
 from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
 from sqlbuild._native import cursor_split_into_batches as split_into_batches
-from sqlbuild.compiler.planner.types import CursorGrain, CursorType
-from sqlbuild.cursor_algebra.models import AlignedInterval, IntegerValue, TimestampValue
 from sqlbuild.cursor_algebra.types import BoundSentinel, CursorScalar
 from tests.unit.src.sqlbuild.cursor_algebra.main._test_types import (
     CursorAlgebraMatrixCase,

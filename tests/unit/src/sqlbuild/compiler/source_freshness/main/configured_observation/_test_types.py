@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sqlbuild.spec.contracts.types import SourceFreshnessValueKind
+from sqlbuild._native import SourceFreshnessValueKind
 
 
 @dataclass(frozen=True)

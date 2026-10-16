@@ -10,8 +10,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
-const PIPELINE_MODELS_MODULE: &str = "sqlbuild.compiler.pipeline.models";
-const PLANNER_MODELS_MODULE: &str = "sqlbuild.compiler.planner.models";
+const PIPELINE_MODELS_MODULE: &str = "sqlbuild._native";
+const PLANNER_MODELS_MODULE: &str = "sqlbuild._native";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 /// Discovered Python node functions whose selectors need the Python graph.
 const PYTHON_NODE_FUNCTIONS: [&str; 4] = [

@@ -16,6 +16,11 @@ from typing import Any, Self, cast
 
 import pytest
 
+from sqlbuild._native import (
+    CURRENT_EVENT_LOG_SCHEMA_VERSION,
+    CURRENT_RUN_STORAGE_SCHEMA_VERSION,
+    DEFAULT_PAGE_LIMIT,
+)
 from sqlbuild.execution_history import (
     CanonicalLifecycleEvent,
     EventFilter,
@@ -34,11 +39,6 @@ from sqlbuild.execution_history import (
     canonical_event_id,
     project_runs,
     validate_page_limit,
-)
-from sqlbuild.runtime.execution_history.constants import (
-    CURRENT_EVENT_LOG_SCHEMA_VERSION,
-    CURRENT_RUN_STORAGE_SCHEMA_VERSION,
-    DEFAULT_PAGE_LIMIT,
 )
 from sqlbuild.runtime.observability.models import LifecycleEvent, OpaqueLifecycleEvent
 from sqlbuild.runtime.observability.types import JSONValue

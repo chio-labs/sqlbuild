@@ -8,26 +8,23 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    MICROBATCH_END_SENTINEL,
+    MICROBATCH_START_SENTINEL,
+    BackfillAction,
     BackfillResult,
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledRelationLocation,
     CompileModelConfig,
+    CursorBounds,
+    CursorInputRelation,
+    ModelCursorSnapshot,
     WarehouseSnapshot,
     compute_microbatch_range,
     compute_plan_cursor_bounds,
 )
 from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledRelationLocation,
-)
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
-from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
-from sqlbuild.compiler.planner.models import (
-    CursorBounds,
-    CursorInputRelation,
-    ModelCursorSnapshot,
-)
-from sqlbuild.compiler.planner.types import BackfillAction
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     AuthoritativeCursorOverrideTestCase,
     MicrobatchCursorEndPlanTestCase,

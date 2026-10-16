@@ -12,6 +12,7 @@ from sqlbuild._native import (
     DbtCommandResult,
     DbtManifestIndex,
     DbtRunner,
+    DiscoveredProjectInputs,
     assemble_project,
     build_compile_inputs,
     build_dbt_combined_graph,
@@ -19,7 +20,6 @@ from sqlbuild._native import (
     discover_project_inputs,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.integration.src.sqlbuild.integrations.dbt._test_types import (
     RealDbtCombinedGraphTestCase,
 )

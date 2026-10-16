@@ -1,11 +1,11 @@
 from dataclasses import dataclass, field
 
-from sqlbuild.spec.contracts.models import (
+from sqlbuild._native import (
     DefaultsConfig,
     MaterializationDefaultsConfig,
     TargetConfig,
+    TimeTravelRetentionSource,
 )
-from sqlbuild.spec.contracts.types import TimeTravelRetentionSource
 
 
 @dataclass(frozen=True)

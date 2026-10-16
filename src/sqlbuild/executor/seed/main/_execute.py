@@ -5,12 +5,12 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from sqlbuild._native import SeedPlanEntry
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
-from sqlbuild.compiler.planner.models import SeedPlanEntry
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.seed._helpers.fingerprinting import try_write_seed_fingerprint

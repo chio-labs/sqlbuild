@@ -9,8 +9,12 @@ from types import MappingProxyType
 from typing import cast
 
 from sqlbuild._native import (
+    BackfillAction,
     BackfillResult,
+    CompiledObjectKey,
+    CompiledRelationLocation,
     CompileModelConfig,
+    CompileModelInput,
     CompileProjectInputs,
     DbtCliConfigOverrides,
     DbtCliOptions,
@@ -19,6 +23,15 @@ from sqlbuild._native import (
     DbtEventStream,
     DbtEventStreamUpdate,
     DbtRunner,
+    DiscoveredProjectInputs,
+    DiscoveredSqlModelFile,
+    LocalConfig,
+    MaterializationType,
+    ModelPlanEntry,
+    PlanAction,
+    PlanReason,
+    ProjectConfig,
+    SqlLexicalSyntax,
     assemble_project,
     build_dbt_combined_graph,
     build_dbt_ls_argv,
@@ -26,22 +39,7 @@ from sqlbuild._native import (
     extract_sql_references,
     transitive_closure,
 )
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledRelationLocation,
-    CompileModelInput,
-)
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
-from sqlbuild.compiler.planner.models import ModelPlanEntry
-from sqlbuild.compiler.planner.types import (
-    BackfillAction,
-    MaterializationType,
-    PlanAction,
-    PlanReason,
-)
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
 _GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
 

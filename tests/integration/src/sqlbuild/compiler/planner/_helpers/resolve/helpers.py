@@ -7,12 +7,20 @@ from pathlib import Path
 from typing import Any, cast
 
 from sqlbuild._native import (
+    BackfillAction,
     BackfillResult,
     CollectionRendering,
     CompileAdapterContext,
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledRelationLocation,
     CompileModelConfig,
+    CompileSqlReference,
     CursorOverridePair,
+    ModelCursorSnapshot,
     ModelPlanContext,
+    SourceEntry,
+    SqlReferenceKind,
     WarehouseSnapshot,
     assemble_project,
     build_compile_inputs,
@@ -21,23 +29,11 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledRelationLocation,
-    CompileSqlReference,
-)
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.planner.models import (
-    ModelCursorSnapshot,
-)
-from sqlbuild.compiler.planner.types import BackfillAction
-from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 class OrchestrationOverrideAdapter(DuckDbAdapter):

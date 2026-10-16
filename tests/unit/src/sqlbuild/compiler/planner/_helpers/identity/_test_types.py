@@ -3,10 +3,8 @@
 from dataclasses import dataclass
 
 from sqlbuild._native import (
-    ChangeKind,
-)
-from sqlbuild.compiler.planner.types import (
     BackfillAction,
+    ChangeKind,
 )
 
 

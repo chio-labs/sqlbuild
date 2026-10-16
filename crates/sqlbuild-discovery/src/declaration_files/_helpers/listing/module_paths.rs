@@ -1,6 +1,7 @@
 //! Which `*.py` paths below a root Python module discovery keeps.
 
-use crate::declaration_files::constants::{INIT_MODULE_STEM, PRIVATE_PREFIX};
+use crate::declaration_files::constants::PRIVATE_PREFIX;
+use sqlbuild_core::constants::PYTHON_INIT_MODULE_STEM as INIT_MODULE_STEM;
 
 /// Whether `relative_path` below `root` is a listed module: never `__init__`, and public if asked.
 pub(crate) fn is_listed_module(relative_path: &str, root: &str, public_only: bool) -> bool {

@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.contract.models import RelationLookup
-from sqlbuild.compiler.compile.models import CompiledObjectKey
-from sqlbuild.compiler.planner.models import (
+from sqlbuild._native import (
     CloneSourcePlanEntry,
+    CompiledObjectKey,
     FunctionPlanEntry,
     ModelPlanEntry,
     SeedPlanEntry,
 )
+from sqlbuild.adapter.contract.models import RelationLookup
 from sqlbuild.executor.clone._helpers.canonical_progress import clone_item_enrichment
 from sqlbuild.executor.clone._helpers.execution_items import (
     execute_clone_destination_item,

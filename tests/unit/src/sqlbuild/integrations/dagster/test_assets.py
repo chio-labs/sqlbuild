@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild._native import PlannerInputError
 from sqlbuild.integrations.dagster import (
     SqlBuildDagsterTranslator,
     build_sqlbuild_asset_selection,
@@ -25,6 +25,7 @@ from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterAssetSelectionErrorTestCase,
     DagsterAssetSelectionTestCase,
     DagsterAssetSpecTestCase,
+    DagsterCheckTranslatorCallTestCase,
     DagsterConflictingInputTestCase,
     DagsterDecoratorTestCase,
     DagsterDescriptionTestCase,
@@ -35,6 +36,7 @@ from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterUnitTestSelectorTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
+    RecordingDagsterTranslator,
     build_dagster_selection_graph_dag,
     build_dagster_test_dag,
     build_python_augmented_dagster_test_dag,
@@ -689,3 +691,40 @@ def test_given_unit_test_selector_when_building_asset_selection_then_raises_s013
 
     assert raised.value.code == test_case.expected_code
     assert raised.value.message == test_case.expected_message
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterCheckTranslatorCallTestCase(
+            description="excluded scenario checks are still offered to the translator",
+            include_scenarios=False,
+            expected_is_asset_check_ids=(
+                "audit:not_null:model:orders:order_id",
+                "audit:freshness:source:raw_orders:loaded_at",
+                "sql_scenario:orders_minimal",
+                "sql_scenario:customers_minimal",
+            ),
+            expected_checked_node_last_key="project_name",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_check_filter_when_building_check_specs_then_translator_sees_every_check(
+    test_case: DagsterCheckTranslatorCallTestCase,
+) -> None:
+    translator: RecordingDagsterTranslator = RecordingDagsterTranslator()
+
+    _ = build_check_specs(
+        dag=build_dagster_test_dag(),
+        translator=translator,
+        include_scenarios=test_case.include_scenarios,
+    )
+    checks: list[Mapping[str, Any]] = translator.asset_checks
+    checked_nodes: list[Mapping[str, Any]] = translator.asset_nodes
+
+    assert tuple(str(check["id"]) for check in checks) == test_case.expected_is_asset_check_ids
+    assert checked_nodes
+    assert all(
+        tuple(node)[-1] == test_case.expected_checked_node_last_key for node in checked_nodes
+    )

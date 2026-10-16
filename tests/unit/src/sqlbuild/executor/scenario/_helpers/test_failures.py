@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.planner.types import ScenarioArtifactKind
+from sqlbuild._native import ScenarioArtifactKind
 from sqlbuild.executor.scenario._helpers.lifecycle.failures import first_failure_details
 from sqlbuild.executor.scenario.models import (
     ScenarioFailureDetails,

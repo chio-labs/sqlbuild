@@ -9,7 +9,21 @@ from typing import Any, ClassVar
 from unittest.mock import MagicMock
 
 from sqlbuild._native import (
+    AuditPlanEntry,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
+    CompiledSqlScenario,
+    CompilePipelineResult,
+    DiscoveredSqlScenarioFile,
+    PlanOutput,
+    ScenarioExecutionPlan,
     ScenarioGraphPlan,
+    ScenarioRelationMap,
+    ScenarioRelationPlan,
+    SeedCsvSettings,
+    SeedPlanEntry,
+    SqlLexicalSyntax,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
@@ -20,24 +34,7 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
-    CompiledSqlScenario,
-)
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredSqlScenarioFile
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.planner.models import (
-    AuditPlanEntry,
-    PlanOutput,
-    ScenarioExecutionPlan,
-    ScenarioRelationMap,
-    ScenarioRelationPlan,
-    SeedPlanEntry,
-)
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.scenario.constants import SCENARIO_LOCAL_JSONL_INVALID
@@ -47,7 +44,6 @@ from sqlbuild.executor.scenario.models import (
 )
 from sqlbuild.observability import LifecycleEvent
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
-from sqlbuild.spec.contracts.models import SeedCsvSettings
 from tests.unit.src.sqlbuild.executor.pipeline._helpers._test_types import (
     ScenarioLocalPipelineTestCase,
 )

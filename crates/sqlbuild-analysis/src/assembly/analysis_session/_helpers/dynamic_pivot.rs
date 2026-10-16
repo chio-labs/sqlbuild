@@ -13,15 +13,15 @@ use crate::assembly::analysis_session::_helpers::dict_walk::{
     parse_one_or_error, payload, relation_name, render_type, to_dict, truthy, upper,
 };
 use crate::assembly::analysis_session::constants::{
-    ALIAS_AST_KIND, CAST_AST_KIND, CTE_AST_KIND, DUCKDB_DIALECT, DYNAMIC_VALUE_SOURCE_KINDS,
-    MOTHERDUCK_DIALECT, PIVOT_AST_KIND, QUERY_AST_KINDS, SELECT_AST_KIND,
-    SIMPLIFIED_PIVOT_DIALECTS, SUPPORTED_PIVOT_DIALECTS, TYPE_PRESERVING_AGGREGATES,
-    UNKNOWN_NULLABILITY, UNKNOWN_TYPE,
+    ALIAS_AST_KIND, CAST_AST_KIND, DUCKDB_DIALECT, DYNAMIC_VALUE_SOURCE_KINDS, MOTHERDUCK_DIALECT,
+    PIVOT_AST_KIND, QUERY_AST_KINDS, SELECT_AST_KIND, SIMPLIFIED_PIVOT_DIALECTS,
+    SUPPORTED_PIVOT_DIALECTS, TYPE_PRESERVING_AGGREGATES, UNKNOWN_NULLABILITY, UNKNOWN_TYPE,
 };
 use crate::assembly::analysis_session::models::{
     ColumnFact, ContractProof, DynamicFamily, PivotModel, PivotOutcome, PivotTables,
 };
 use crate::assembly::analysis_session::types::Shapes;
+use sqlbuild_core::constants::CTE_AST_KIND;
 
 /// What an internal native failure of a pivot proof names.
 const PIVOT_CONTEXT: &str = "native dynamic pivot proof";

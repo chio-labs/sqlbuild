@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from sqlbuild.adapter.relations._helpers.ddl_effects import statement_metadata_effect
+from sqlbuild._native import statement_metadata_effect
 from sqlbuild.adapters.snowflake._helpers.session_context import may_switch_session_database
 from tests.unit.src.sqlbuild.adapter.relations._helpers.ddl_effects._test_types import (
     AdversarialStatementTestCase,

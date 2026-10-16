@@ -7,8 +7,8 @@ use sqlbuild_discovery::yaml_entries::main::integration_loader_name::integration
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
-const DISCOVERY_TYPES_MODULE: &str = "sqlbuild.compiler.discovery.types";
+const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
+const DISCOVERY_TYPES_MODULE: &str = "sqlbuild._native";
 
 /// One integration: its kind constant and the runtime module building its loader functions.
 struct Integration {

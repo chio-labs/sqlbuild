@@ -1,5 +1,7 @@
 //! Cache schema and fingerprint versions, keys and the scope-relevant source facts.
 
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
+
 pub(crate) const CACHE_SCHEMA_VERSION: i64 = 3;
 pub(crate) const FINGERPRINT_ALGORITHM_VERSION: i64 = 2;
 /// The largest cache file read; bigger files are misses.
@@ -38,7 +40,7 @@ pub(crate) const COMPLETENESS_KEYS: [&str; 6] = [
 ];
 /// Config files the project fingerprint hashes when present.
 pub(crate) const FINGERPRINT_CONFIG_FILES: [&str; 4] = [
-    "sqlbuild_project.toml",
+    PROJECT_CONFIG_FILENAME,
     "sqlbuild_local.toml",
     ".sqlbuildignore",
     ".gitignore",

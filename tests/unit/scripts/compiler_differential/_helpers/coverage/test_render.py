@@ -15,10 +15,14 @@ from scripts.compiler_differential._helpers.coverage.render import (
     required_render_kinds,
 )
 from scripts.compiler_differential.constants import RENDER_NON_COLLECTION_FIELDS
-from sqlbuild._native import CompileProjectInputs, render_stage_capture
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
+from sqlbuild._native import (
+    CompileProjectInputs,
+    DiscoveredProjectInputs,
+    LocalConfig,
+    ProjectConfig,
+    SqlLexicalSyntax,
+    render_stage_capture,
+)
 from tests.unit.scripts.compiler_differential._helpers.coverage._test_types import (
     CaptureProblemsTestCase,
     RenderCaptureKindsTestCase,

@@ -9,12 +9,22 @@ from typing import Any
 
 from sqlbuild._native import (
     CompiledFunction,
+    CompiledModel,
     CompiledModelSqlTestPayload,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
+    CompiledSqlTest,
     CompileModelConfig,
     CompileSqlTestCte,
     DiscoveredSqlTestBlock,
+    DiscoveredSqlTestFile,
+    LoadedMacro,
     NativeSqlTestPlan,
     PlanWarning,
+    SqlLexicalSyntax,
+    SqlReferenceKind,
+    SqlTestPlanEntry,
     SqlTestPlanResult,
     expand_sql_macros,
     extract_sql_references,
@@ -27,28 +37,14 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
-    CompiledSqlTest,
-    LoadedMacro,
-    MacroContext,
-)
+from sqlbuild.compiler.compile.models import MacroContext
 from sqlbuild.compiler.compile.types import (
     CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredSqlTestFile
-from sqlbuild.compiler.planner.models import (
-    SqlTestPlanEntry,
-)
-from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     PlanTestChainTestCase,
 )

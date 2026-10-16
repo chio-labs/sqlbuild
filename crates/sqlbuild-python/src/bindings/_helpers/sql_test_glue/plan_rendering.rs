@@ -160,12 +160,8 @@ pub(super) fn functions<'py>(
                 .filter(|(_, suffix)| !suffix.contains(SENTINEL))
             else {
                 return Err(PyErr::from_value(
-                    imported(
-                        py,
-                        "sqlbuild.compiler.planner.exceptions",
-                        "NativeSqlTestPlanningError",
-                    )?
-                    .call1(("adapter SQL function call template is not deterministic",))?,
+                    imported(py, "sqlbuild._native", "NativeSqlTestPlanningError")?
+                        .call1(("adapter SQL function call template is not deterministic",))?,
                 ));
             };
             fields.push(string(py, prefix));

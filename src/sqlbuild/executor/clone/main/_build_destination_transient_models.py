@@ -1,7 +1,7 @@
 """Collect destination models whose resolved table type is transient."""
 
+from sqlbuild._native import TableType
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.spec.contracts.types import TableType
 
 
 def build_destination_transient_models(*, project: CompiledProjectView) -> frozenset[str]:

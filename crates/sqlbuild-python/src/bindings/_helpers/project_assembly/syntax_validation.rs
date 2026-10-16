@@ -12,10 +12,10 @@ use sqlbuild_analysis::assembly::project::models::{SyntaxCheck, SyntaxMode};
 
 use crate::bindings::_helpers::project_assembly::resources::syntax_error_message;
 
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
+const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
 const SQL_HOOK_ENTRY: &str = "SqlHookEntry";
 const PYTHON_HOOK_ENTRY: &str = "PythonHookEntry";
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
+const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
 const COMPILE_INPUT_ERROR: &str = "CompileInputError";
 const GENERIC_DIALECT: &str = "generic";
 

@@ -18,7 +18,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::graph::views::project_lineage_views;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
+const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 
 /// Indexes of the `CompiledObjectKey`s a diff graph names, assigned on first sight.

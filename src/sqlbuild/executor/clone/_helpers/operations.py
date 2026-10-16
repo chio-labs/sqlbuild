@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild._native import CloneSourcePlanEntry, ModelPlanEntry, SeedPlanEntry
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationLookup
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
-from sqlbuild.compiler.planner.models import CloneSourcePlanEntry, ModelPlanEntry, SeedPlanEntry
 from sqlbuild.executor.clone.main._clone_relation_operation import clone_relation_by_names
 from sqlbuild.executor.clone.main._recreate_view_operation import recreate_view_by_names
 from sqlbuild.executor.clone.models import CloneItemResult

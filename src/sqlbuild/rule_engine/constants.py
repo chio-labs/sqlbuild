@@ -1,20 +1,13 @@
 """Rules engine constants."""
 
-CUSTOM_HOST_PROTOCOL_VERSION: int = 1
-CUSTOM_HOST_RUNTIME_VERSION: str = "sqlbuild-rules-custom-v2"
 CUSTOM_HOST_MAX_TRACKED_READS: int = 100_000
-CUSTOM_RULE_PROJECT_SUBJECT: str = ""
-CUSTOM_RULES_CACHE_FILE: str = "custom-rules.json"
 CUSTOM_HOST_INPUT_TUPLE_SIZE: int = 2
 SHARED_FACT_DATACLASS_TAG: str = "\0dataclass"
-CUSTOM_HOST_ABANDONED_SUFFIX: str = ".abandoned"
 CUSTOM_HOST_INPUT_POLL_SECONDS: float = 0.002
 CUSTOM_HOST_INPUT_WAIT_SECONDS: float = 120.0
 CUSTOM_HOST_MODULE: str = "sqlbuild.rule_engine._helpers.host.custom_host"
-CUSTOM_HOST_CANCELLED_MARKER: str = "cancelled"
 CUSTOM_HOST_CANCELLED_EXIT_CODE: int = 75
 CUSTOM_HOST_CANCELLED_MESSAGE: str = "custom host cancelled after another host failed"
-CUSTOM_HOST_LAUNCH_MODULE: str = "sqlbuild.rule_engine._helpers.host.custom_host_launch"
 CUSTOM_HOST_HASH_SEED: str = "0"
 CUSTOM_HOST_EXEC_OS_NAME: str = "posix"
 CUSTOM_HOST_STARTUP_ENVIRONMENT: tuple[str, ...] = (
@@ -26,50 +19,8 @@ CUSTOM_HOST_STARTUP_ENVIRONMENT: tuple[str, ...] = (
     "PYTHONUSERBASE",
     "SYSTEMROOT",
 )
-CUSTOM_RULE_IMPORT_ROOTS: frozenset[str] = frozenset(
-    {
-        "__future__",
-        "abc",
-        "bisect",
-        "collections",
-        "copy",
-        "dataclasses",
-        "decimal",
-        "difflib",
-        "enum",
-        "fnmatch",
-        "fractions",
-        "functools",
-        "graphlib",
-        "hashlib",
-        "heapq",
-        "itertools",
-        "json",
-        "math",
-        "operator",
-        "pathlib",
-        "re",
-        "rules",
-        "sqlbuild.rules",
-        "statistics",
-        "string",
-        "textwrap",
-        "types",
-        "typing",
-        "unicodedata",
-    }
-)
-
-AST_CTE_KIND: str = "cte"
-CONTRACT_ENFORCED: str = "enforced"
-TYPE_PROOF_RULE_CODES: frozenset[str] = frozenset({"SQBRCONTRACT105"})
-
-
 RULE_DECORATOR_TOKEN: str = "@rule"
-INIT_MODULE_NAME: str = "__init__"
-PARENT_DIRECTORY_TOKEN: str = ".."
 
-MIN_CUSTOM_RULE_TEST_CASES: str = "min_custom_rule_test_cases"
 FACT_PROJECT_MODELS: str = "project.models"
 FACT_PROJECT_SOURCES: str = "project.sources"
 FACT_PROJECT_SEEDS: str = "project.seeds"

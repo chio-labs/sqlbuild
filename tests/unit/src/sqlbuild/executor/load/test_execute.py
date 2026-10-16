@@ -9,10 +9,14 @@ from typing import cast
 
 import pytest
 
-from sqlbuild._native import CostContext
+from sqlbuild._native import (
+    CostContext,
+    DiscoveredLoaderFunction,
+    LoaderConnectionMode,
+    SourceEntry,
+    SourceWriteStrategy,
+)
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.executor.load.main._execute import execute_source_load
 from sqlbuild.executor.load.models import (
@@ -31,8 +35,6 @@ from sqlbuild.observability import (
 from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.provider.classes.session import ProviderSession
 from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
-from sqlbuild.spec.contracts.models import SourceEntry
-from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.executor.load._test_types import (
     ExternalLoaderContractTestCase,
     LoaderOperationLifecycleTestCase,

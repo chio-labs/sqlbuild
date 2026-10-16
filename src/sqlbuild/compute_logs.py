@@ -2,11 +2,11 @@
 
 from pathlib import Path
 
-from sqlbuild._native import LocalFilesystemComputeLogStorage
-from sqlbuild.runtime.compute_logs.constants import (
+from sqlbuild._native import (
     COMPUTE_LOG_FORMAT_VERSION,
     DEFAULT_RETENTION_COUNT,
     MAX_READ_BYTES,
+    LocalFilesystemComputeLogStorage,
 )
 from sqlbuild.runtime.compute_logs.exceptions import (
     CaptureAlreadyExistsError,

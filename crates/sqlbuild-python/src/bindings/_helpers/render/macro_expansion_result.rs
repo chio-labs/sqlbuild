@@ -19,11 +19,11 @@ use crate::bindings::_helpers::sqltext::sql_references::extract_references;
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
-const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
+const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const FRONTIER_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
-const SCOPES_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
-const SCOPES_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
+const SCOPES_MODELS_MODULE: &str = "sqlbuild._native";
+const SCOPES_TYPES_MODULE: &str = "sqlbuild._native";
 const REF_MODELS_MODULE: &str = "sqlbuild.python_nodes.models";
 const REF_TYPES_MODULE: &str = "sqlbuild.python_nodes.types";
 const TYPED_REFERENCE_FUNCTIONS: [(&str, &str); 3] = [
@@ -43,8 +43,8 @@ const GENERATED_REFERENCE_MARKERS: [&str; 6] = [
     "__table_fn(",
 ];
 const DIAGNOSTICS_MODULE: &str = "sqlbuild._native";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
-const SQL_ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.sql_analysis.models";
+const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
+const SQL_ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
 const BUILTINS_MODULE: &str = "builtins";
 const MACRO_TOKEN: &str = "@";
 const GENERATED_ALLOWED: &str = "macro-generated references";

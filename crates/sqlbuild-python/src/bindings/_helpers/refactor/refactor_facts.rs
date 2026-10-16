@@ -17,8 +17,8 @@ use crate::bindings::_helpers::scopes::scope_validation::scope_relocated_declara
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const CONFIG_MODULE: &str = "sqlbuild._native";
-const SCOPE_MODELS: &str = "sqlbuild.compiler.scopes.models";
-const SCOPE_TYPES: &str = "sqlbuild.compiler.scopes.types";
+const SCOPE_MODELS: &str = "sqlbuild._native";
+const SCOPE_TYPES: &str = "sqlbuild._native";
 const GENERIC_DIALECT: &str = "generic";
 const MATERIALIZED_KEY: &str = "materialized";
 const MIGRATE_FROM_KEY: &str = "migrate_from";

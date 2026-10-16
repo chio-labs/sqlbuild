@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import RuleUsageError
 from sqlbuild.rule_engine.classes.project_tree import ProjectTree
-from sqlbuild.rule_engine.exceptions import RuleUsageError
 from tests.unit.src.sqlbuild.rule_engine.classes.project_tree._test_types import ReadTextTestCase
 from tests.unit.src.sqlbuild.rule_engine.classes.project_tree.helpers import (
     LIMITS_YAML,

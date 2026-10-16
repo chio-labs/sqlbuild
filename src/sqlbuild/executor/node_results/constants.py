@@ -1,6 +1,6 @@
 """Runtime node result storage constants."""
 
-from sqlbuild.sql_values.types import StateSqlValueType
+from sqlbuild._native import StateSqlValueType
 
 NODE_RESULTS_TABLE_NAME: str = "_sqlbuild_node_results"
 NODE_RESULT_MATERIALIZED_TRUE_VALUE: str = "true"

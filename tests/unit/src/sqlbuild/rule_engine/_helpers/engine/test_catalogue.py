@@ -5,7 +5,10 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    Rule,
     RulesCacheConfig,
+    RulesConfig,
+    RulesResult,
     SqlTestRulesConfig,
     ThresholdOverride,
     build_rule_catalogue,
@@ -14,7 +17,6 @@ from sqlbuild._native import (
     select_catalogue_rules,
 )
 from sqlbuild._native import evaluate_project_rules as evaluate
-from sqlbuild.rule_engine.models import Rule, RulesConfig, RulesResult
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (
     PolicyGuidanceTestCase,
     PolicySelectionTestCase,

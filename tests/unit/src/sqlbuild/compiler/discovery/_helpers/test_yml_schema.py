@@ -4,12 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.spec.contracts.models import (
-    SchemaColumn,
-    SchemaModelEntry,
-    SchemaSeedEntry,
-    SeedCsvSettings,
-)
+from sqlbuild._native import SchemaColumn, SchemaModelEntry, SchemaSeedEntry, SeedCsvSettings
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ParseSchemaYamlErrorTestCase,
     ParseSchemaYamlTestCase,

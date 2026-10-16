@@ -10,12 +10,10 @@ from sqlbuild._native import (
     CostContext,
     DirectSourceFreshnessPlanningResult,
     DirectSourceFreshnessPropagationResult,
-)
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands._helpers.freshness.source_freshness import (
+    PlanOutput,
     append_eligible_direct_source_freshness_records,
 )
-from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus

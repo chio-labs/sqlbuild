@@ -1,9 +1,9 @@
 //! The note and help shown when SQL analysis is turned off.
 
 use crate::project::_helpers::help::{Setting, SettingValue, setting_help, setting_note};
-use crate::project::constants::{
-    LOCAL_CONFIG_FILENAME, PROJECT_CONFIG_FILENAME, SETTINGS_SECTION, SQL_ANALYSIS_KEY,
-};
+use crate::project::constants::{LOCAL_CONFIG_FILENAME, SQL_ANALYSIS_KEY};
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
+use sqlbuild_core::constants::SETTINGS_SECTION;
 
 /// The note naming the file that turns SQL analysis off and the help that turns it on for `purpose`.
 #[must_use]

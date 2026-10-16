@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild._native import CompileInputError
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledSourceView, SourceInput
 from tests.integration.src.sqlbuild.compiler.compiled_project._test_types import (
     NativeSourceAttachmentTestCase,

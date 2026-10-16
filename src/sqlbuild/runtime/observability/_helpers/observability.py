@@ -7,19 +7,21 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, cast
 
-from sqlbuild.runtime.observability._helpers.validation import validate_schema_version
-from sqlbuild.runtime.observability.constants import (
+from sqlbuild._native import (
     CURRENT_DIAGNOSTIC_LOG_SCHEMA_VERSION,
+    lifecycle_event_catalogued,
+    lifecycle_event_terminal,
+    validate_lifecycle_schema_version,
+)
+from sqlbuild.runtime.observability.constants import (
     DIAGNOSTIC_ENVELOPE_FIELDS,
     LIFECYCLE_ENVELOPE_FIELDS_BY_VERSION,
-    LIFECYCLE_EVENT_CATALOGS,
     LIFECYCLE_INVOCATION_METADATA_SCHEMA_VERSION,
 )
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.models import (
     DiagnosticLog,
     LifecycleEvent,
-    LifecycleEventDefinition,
     OpaqueLifecycleEvent,
 )
 
@@ -96,16 +98,9 @@ def lifecycle_event_from_json(raw_json: str) -> LifecycleEvent | OpaqueLifecycle
     data: dict[str, Any] = _loads_object(raw_json=raw_json, envelope_name="lifecycle event")
     event_type: object = data.get("event_type")
     schema_version_raw: Any = data.get("schema_version")
-    validate_schema_version(value=schema_version_raw)
+    validate_lifecycle_schema_version(value=schema_version_raw)
     schema_version: int = cast(int, schema_version_raw)
-    version_catalog: Mapping[str, LifecycleEventDefinition] | None = LIFECYCLE_EVENT_CATALOGS.get(
-        schema_version
-    )
-    if (
-        version_catalog is None
-        or not isinstance(event_type, str)
-        or event_type not in version_catalog
-    ):
+    if not lifecycle_event_catalogued(schema_version=schema_version, event_type=event_type):
         return OpaqueLifecycleEvent(raw=data)
     _reject_unknown_fields(
         data=data,
@@ -119,7 +114,7 @@ def lifecycle_event_from_json(raw_json: str) -> LifecycleEvent | OpaqueLifecycle
         occurred_at: datetime = datetime.fromisoformat(occurred_at_raw.replace("Z", "+00:00"))
         return LifecycleEvent(
             event_id=data["event_id"],
-            event_type=event_type,
+            event_type=cast(str, event_type),
             schema_version=schema_version,
             producer=data["producer"],
             producer_version=data["producer_version"],
@@ -176,7 +171,7 @@ def diagnostic_log_from_json(raw_json: str) -> DiagnosticLog:
 
     data: dict[str, Any] = _loads_object(raw_json=raw_json, envelope_name="diagnostic log")
     schema_version_raw: Any = data.get("schema_version")
-    validate_schema_version(value=schema_version_raw)
+    validate_lifecycle_schema_version(value=schema_version_raw)
     schema_version: int = cast(int, schema_version_raw)
     if schema_version == CURRENT_DIAGNOSTIC_LOG_SCHEMA_VERSION:
         _reject_unknown_fields(
@@ -219,7 +214,9 @@ def diagnostic_log_from_json(raw_json: str) -> DiagnosticLog:
 def is_terminal_event(event: LifecycleEvent) -> bool:
     """Return whether the fact closes its correlated lifecycle scope."""
 
-    return LIFECYCLE_EVENT_CATALOGS[event.schema_version][event.event_type].terminal
+    return lifecycle_event_terminal(
+        schema_version=event.schema_version, event_type=event.event_type
+    )
 
 
 def validate_idempotent_duplicate(*, original: LifecycleEvent, duplicate: LifecycleEvent) -> None:

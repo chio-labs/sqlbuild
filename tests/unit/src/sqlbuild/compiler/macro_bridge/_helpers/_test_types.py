@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models import DeclarationResolutionContext, MacroContext
+from sqlbuild._native import DeclarationResolutionContext, MacroContext
 
 
 @dataclass(frozen=True)

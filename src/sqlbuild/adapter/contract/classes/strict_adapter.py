@@ -6,6 +6,7 @@ from abc import abstractmethod
 from decimal import Decimal
 from typing import Any, ClassVar
 
+from sqlbuild._native import SourceFreshnessRecord, SqlValue
 from sqlbuild.adapter.contract.classes.connection import ConnectionMixin
 from sqlbuild.adapter.contract.classes.diff import DiffMixin
 from sqlbuild.adapter.contract.classes.materialization import MaterializationMixin
@@ -32,8 +33,6 @@ from sqlbuild.adapter.contract.types import (
     TablePromotionMode,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
-from sqlbuild.sql_values.models import SqlValue
 
 
 class StrictAdapter(

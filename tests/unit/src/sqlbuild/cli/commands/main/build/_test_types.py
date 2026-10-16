@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild._native import CompiledObjectKey
 
 
 @dataclass(frozen=True)

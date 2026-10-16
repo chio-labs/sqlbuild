@@ -49,6 +49,18 @@ _ISOLATED_RULE: tuple[str, str] = (
             expected_stateful=_STATELESS,
         ),
         ModuleStateCase(
+            description="module-level rule option record",
+            files=state_case_files(
+                header=(
+                    "from sqlbuild.rules import RuleOption\n"
+                    "LIMIT = RuleOption.integer(name='limit', default=3, description='Limit.')\n"
+                ),
+                body="_ = LIMIT.default",
+            ),
+            model_count=4,
+            expected_stateful=_STATELESS,
+        ),
+        ModuleStateCase(
             description="dict mutation",
             files=state_case_files(
                 header="SEEN: dict[str, bool] = {}\n", body="SEEN[model.name] = True"

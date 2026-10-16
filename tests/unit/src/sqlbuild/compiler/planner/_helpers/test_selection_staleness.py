@@ -6,10 +6,14 @@ from datetime import UTC, datetime
 import pytest
 
 from sqlbuild._native import (
+    NODE_TYPE_SEED,
     ChangeDetectionResult,
     ChangeKind,
+    CompiledObjectKey,
+    CompiledProject,
     DirectModelVersionIdentities,
     DirectSourceFreshnessPlanningResult,
+    Fingerprint,
     PlannerChangeResults,
     PlannerPolicies,
     PlannerScope,
@@ -23,14 +27,11 @@ from sqlbuild._native import (
     compiled_model_record,
     resolve_planner_scopes,
 )
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_SEED
-from sqlbuild.compiler.fingerprints.models import Fingerprint
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     CompleteModelChangesWorkTestCase,
     PlannerStaleWarningScopeTestCase,

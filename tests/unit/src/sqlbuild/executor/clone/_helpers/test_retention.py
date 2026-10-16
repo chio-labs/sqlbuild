@@ -4,13 +4,13 @@ from unittest.mock import Mock, call
 
 import pytest
 
+from sqlbuild._native import RetentionPlanPhase
 from sqlbuild.adapter.contract.models import (
     RenderedRetentionChange,
     RetentionRequest,
     RetentionState,
 )
 from sqlbuild.adapter.contract.types import BuiltinAdapter, RetentionChangePhase, RetentionScope
-from sqlbuild.compiler.planner.types import RetentionPlanPhase
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.clone._helpers.retention import (
     apply_clone_namespace_retention_phase,

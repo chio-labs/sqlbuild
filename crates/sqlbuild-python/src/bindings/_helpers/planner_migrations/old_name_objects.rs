@@ -31,11 +31,7 @@ pub(super) fn location<'py>(
     )?;
     fields.push(("qualified_name", qualified));
     call_with(
-        &imported(
-            runtime.py(),
-            "sqlbuild.compiler.compile.models",
-            "CompiledRelationLocation",
-        )?,
+        &imported(runtime.py(), "sqlbuild._native", "CompiledRelationLocation")?,
         &fields,
     )
 }
@@ -56,8 +52,8 @@ pub(super) fn expires<'py>(
     retention: &Bound<'py, PyAny>,
     now: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let duration = imported(now.py(), "sqlbuild.cursor_algebra.models", "Duration")?
-        .call_method1("parse", (retention,))?;
+    let duration =
+        imported(now.py(), "sqlbuild._native", "Duration")?.call_method1("parse", (retention,))?;
     if duration.is_none() {
         Ok(now.py().None().into_bound(now.py()))
     } else {

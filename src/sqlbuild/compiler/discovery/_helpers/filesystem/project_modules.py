@@ -13,16 +13,15 @@ from types import ModuleType
 from typing import get_type_hints
 
 from sqlbuild._native import (
+    PYTHON_INIT_MODULE_STEM,
+    PYTHON_NODE_ROOT,
+    DiscoveredProvider,
+    DiscoveredProviderUsage,
     EventExporterDiscoveryError,
     ProviderDiscoveryError,
     PythonNodeDiscoveryError,
     project_relative_path,
 )
-from sqlbuild.compiler.discovery.constants import (
-    PYTHON_INIT_MODULE_STEM,
-    PYTHON_NODE_ROOT,
-)
-from sqlbuild.compiler.discovery.models import DiscoveredProvider, DiscoveredProviderUsage
 from sqlbuild.runtime.event_exporting.constants import EVENT_EXPORTER_EVENT_PARAMETER_NAME
 from sqlbuild.runtime.observability.models import LifecycleEvent
 

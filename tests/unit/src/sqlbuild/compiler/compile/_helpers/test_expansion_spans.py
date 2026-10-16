@@ -8,11 +8,12 @@ import pytest
 
 from sqlbuild._native import (
     ExpansionSpan,
+    LoadedMacro,
     MappedOffset,
     expand_authored_sql_with_spans,
     map_expanded_offset,
 )
-from sqlbuild.compiler.compile.models import LoadedMacro, MacroContext
+from sqlbuild.compiler.compile.models import MacroContext
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import ExpandWithSpansTestCase
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     DUCKDB_COMPILE_ADAPTER_CONTEXT,

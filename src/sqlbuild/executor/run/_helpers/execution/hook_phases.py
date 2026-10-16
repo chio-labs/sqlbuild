@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from sqlbuild._native import ModelPlanEntry
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run._helpers.execution.hooks import execute_hooks, render_hooks

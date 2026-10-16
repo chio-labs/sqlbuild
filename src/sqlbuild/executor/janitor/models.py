@@ -5,9 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from sqlbuild._native import OldNameViewDropReason, OldNameViewHistory
 from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup
-from sqlbuild.compiler.migrations.models import OldNameViewHistory
-from sqlbuild.compiler.migrations.types import OldNameViewDropReason
 
 
 @dataclass(frozen=True, eq=False)

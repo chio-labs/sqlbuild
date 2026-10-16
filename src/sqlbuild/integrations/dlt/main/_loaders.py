@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from sqlbuild._native import SourceEntry
 from sqlbuild.executor.load.models import LoaderContext
 from sqlbuild.integrations.dlt._helpers.runner import run_dlt_source
 from sqlbuild.integrations.dlt.models import DltSourceConfig
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def dlt_loader_function(*, source_entry: SourceEntry, name: str) -> Callable[[LoaderContext], None]:

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild._native import SourceEntry
+
 
 @dataclass(frozen=True)
 class IngestrCommandTestCase:
@@ -11,6 +13,15 @@ class IngestrCommandTestCase:
     adapter_name: str
     connection_config: dict[str, object]
     expected_command: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class IngestrCommandErrorTestCase:
+    description: str
+    source_entry: SourceEntry
+    adapter_name: str
+    connection_config: dict[str, object]
+    expected_message: str
 
 
 @dataclass(frozen=True)

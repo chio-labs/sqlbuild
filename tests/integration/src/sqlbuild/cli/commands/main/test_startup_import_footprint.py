@@ -11,9 +11,7 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.compiler.frontier.constants import (
-    COMPILE_REUSE_DISABLE_ENV_VAR as REUSE_DISABLE_ENV_VAR,
-)
+from sqlbuild._native import COMPILE_REUSE_DISABLE_ENV_VAR as REUSE_DISABLE_ENV_VAR
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     ReusedCompileImportFootprintTestCase,
     StartupImportFootprintTestCase,
@@ -41,9 +39,6 @@ COMPILE_ONLY_MODULES: tuple[str, ...] = (
     "pydantic",
     "yaml",
     "sqlbuild.adapter.contract.classes.base_adapter",
-    "sqlbuild.compiler.compile.models",
-    "sqlbuild.compiler.discovery.models",
-    "sqlbuild.compiler.planner.models",
     "sqlbuild.lint",
     "sqlbuild.rule_engine",
     "sqlbuild.runtime.compute_logs",
@@ -65,9 +60,7 @@ FULL_COMPILE_MODULES: tuple[str, ...] = (
     "polyglot_sql",
     "pydantic",
     "sqlbuild.adapter.contract.classes.base_adapter",
-    "sqlbuild.compiler.compile.models",
     "sqlbuild.compiler.pipeline",
-    "sqlbuild.compiler.planner.models",
 )
 REUSED_COMPILE_FORBIDDEN: tuple[str, ...] = (
     *WAREHOUSE_AND_INTEGRATION_MODULES,

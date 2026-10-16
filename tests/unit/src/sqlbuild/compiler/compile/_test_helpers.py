@@ -9,7 +9,7 @@ from sqlbuild._native import (
     CompileSqlTestInput,
     build_compile_reference_resolver,
 )
-from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
+from sqlbuild.compiler.compile.types import ExternalSqlReferenceResolver
 
 
 def base_repo_files() -> dict[str, str]:

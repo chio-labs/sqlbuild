@@ -5,11 +5,16 @@ from typing import Any, cast
 
 import pytest
 
+from sqlbuild._native import (
+    NODE_TYPE_MODEL,
+    NODE_TYPE_SEED,
+    Fingerprint,
+    FingerprintSet,
+    MaterializationType,
+    ModelPlanEntry,
+    SeedPlanEntry,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_MODEL, NODE_TYPE_SEED
-from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
-from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
-from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.clone._helpers.fingerprinting import copy_clone_fingerprints
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus

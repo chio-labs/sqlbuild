@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild._native import fit_auxiliary_relation_name
+from sqlbuild._native import ContractPolicy, SourceEntry, fit_auxiliary_relation_name
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.types import LoaderLogicalType
 from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
-from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.executor.load._helpers.rows import (
     build_rows_sql,
     iter_loader_row_batches,
@@ -19,7 +18,6 @@ from sqlbuild.executor.load._helpers.rows import (
 )
 from sqlbuild.executor.load.models import LoaderRowsSchema
 from sqlbuild.executor.run.constants import STAGING_RELATION_SUFFIX
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def write_loader_rows_to_staging(

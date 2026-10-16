@@ -15,7 +15,7 @@ use crate::bindings::_helpers::clone::clone_progress::{
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS: &str = "sqlbuild._native";
 const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
 const CLONE_MODELS: &str = "sqlbuild.executor.clone.models";
 const RETENTION_REQUESTS_MODULE: &str = "sqlbuild.executor.clone.main._build_retention_requests";
@@ -24,7 +24,7 @@ const TRANSIENT_MODELS_MODULE: &str =
 const FINGERPRINTING_MODULE: &str = "sqlbuild.executor.clone.main._fingerprinting";
 const EXECUTE_MODULE: &str = "sqlbuild.executor.clone.main.execute";
 const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
-const CONTRACT_TYPES: &str = "sqlbuild.spec.contracts.types";
+const CONTRACT_TYPES: &str = "sqlbuild._native";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const DESTINATION_ENTRY_GROUPS: [&str; 4] = [
     "destination_source_entries",

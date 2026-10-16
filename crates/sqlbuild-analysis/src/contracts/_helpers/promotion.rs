@@ -5,10 +5,12 @@ use crate::contracts::_helpers::setting_help::{
 };
 use crate::contracts::constants::{
     CONTRACT_ENFORCED, IMMEDIATE_PROMOTION_MODE, MICROBATCH_INCREMENTAL_MODE,
-    PROMOTION_CONFLICT_CODE, PROMOTION_REMOVE_CONTRACT_HELP, SETTINGS_SECTION,
-    STAGED_LIFECYCLE_MATERIALIZATIONS, STAGED_PROMOTION_MODE, TABLE_PROMOTION_MODE_SETTING_KEY,
+    PROMOTION_CONFLICT_CODE, PROMOTION_REMOVE_CONTRACT_HELP, STAGED_LIFECYCLE_MATERIALIZATIONS,
 };
 use crate::contracts::models::{PromotionConflict, PromotionModel, PromotionRequest};
+use sqlbuild_core::constants::SETTINGS_SECTION;
+use sqlbuild_core::constants::STAGED_PROMOTION_MODE;
+use sqlbuild_core::constants::TABLE_PROMOTION_MODE_SETTING_KEY;
 
 /// One conflict per enforced-contract table model when the effective promotion is immediate.
 pub(crate) fn promotion_conflicts(request: &PromotionRequest) -> Vec<PromotionConflict> {

@@ -96,3 +96,42 @@ pub(crate) fn team_meta(value: DagValue) -> DagValue {
         (text_key("team"), value),
     ])
 }
+
+/// Nodes `seed.a`, `model.b`, `check.c`, `model.b` again (the later one wins) and edges into them.
+pub(crate) fn projection_graph() -> crate::dag_artifact::models::DagProjectionGraph {
+    use crate::dag_artifact::models::{DagProjectionCheck, DagProjectionGraph, DagProjectionNode};
+    let node = |id: &str, kind: &str| DagProjectionNode {
+        id: id.to_owned(),
+        kind: kind.to_owned(),
+    };
+    let edge = |from: &str, to: &str| (from.to_owned(), to.to_owned());
+    DagProjectionGraph {
+        nodes: vec![
+            node("seed.a", "seed"),
+            node("model.b", "model"),
+            node("check.c", "check"),
+            node("model.b", "model"),
+        ],
+        edges: vec![
+            edge("missing", "model.b"),
+            edge("check.c", "model.b"),
+            edge("seed.a", "model.b"),
+            edge("model.b", "check.c"),
+        ],
+        checks: vec![
+            DagProjectionCheck {
+                kind: "scenario".to_owned(),
+                checked_asset_ids: vec!["model.b".to_owned(), "missing".to_owned()],
+            },
+            DagProjectionCheck {
+                kind: "audit".to_owned(),
+                checked_asset_ids: vec!["seed.a".to_owned()],
+            },
+        ],
+    }
+}
+
+/// The Dagster and Rivers asset node kinds of the projection graph.
+pub(crate) fn asset_kinds() -> std::collections::BTreeSet<String> {
+    ["seed", "model"].map(str::to_owned).into()
+}

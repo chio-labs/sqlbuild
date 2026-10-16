@@ -7,12 +7,16 @@ from typing import Any
 
 import pytest
 
-from sqlbuild._native import CostContext
+from sqlbuild._native import (
+    CompiledRelationLocation,
+    CostContext,
+    DiscoveredHookFunction,
+    ModelPlanEntry,
+    PythonHookEntry,
+    SqlHookEntry,
+)
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, PythonHookEntry, SqlHookEntry
-from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run._helpers.execution.hooks import execute_hooks, render_hooks

@@ -151,12 +151,8 @@ fn planned<'py>(args: &KeywordArguments<'py>, artifact: bool) -> PyResult<Bound<
             let sql = plan.getattr("sql")?;
             if sql.is_none() {
                 return Err(PyErr::from_value(
-                    imported(
-                        py,
-                        "sqlbuild.compiler.planner.exceptions",
-                        "NativeSqlTestPlanningError",
-                    )?
-                    .call1(("native SQL-test planning omitted rendered SQL",))?,
+                    imported(py, "sqlbuild._native", "NativeSqlTestPlanningError")?
+                        .call1(("native SQL-test planning omitted rendered SQL",))?,
                 ));
             }
             plans.push(call_with(

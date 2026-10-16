@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, cast
 
+from sqlbuild._native import normalize_hook_reads
 from sqlbuild.python_nodes._helpers.attachment import attach_definition
-from sqlbuild.python_nodes._helpers.dependency_normalization import normalize_hook_reads
 from sqlbuild.python_nodes._helpers.description_resolution import resolve_description
 from sqlbuild.python_nodes.models import HookDefinition, SqlResourceRef
 

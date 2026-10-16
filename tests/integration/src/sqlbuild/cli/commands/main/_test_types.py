@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild.compiler.planner.models import CursorOverrides
+from sqlbuild._native import CursorOverrides
 
 
 @dataclass(frozen=True)
@@ -928,6 +928,7 @@ class DiscoveryWorkTestCase:
 @dataclass(frozen=True)
 class NativeAllocatorEntryTestCase:
     description: str
+    entry_module: str
     inherited_environment: tuple[tuple[str, str], ...]
     expected_purge_delay: str
 

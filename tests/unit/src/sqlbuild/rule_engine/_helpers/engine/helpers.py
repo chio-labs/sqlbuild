@@ -11,29 +11,33 @@ import pytest
 
 import sqlbuild._native as native
 from sqlbuild._native import (
+    MIN_CUSTOM_RULE_TEST_CASES,
     CompiledDirectLogicSqlTestPayload,
     CompiledModelSqlTestPayload,
+    CompiledObjectKey,
+    CompiledSqlTest,
     CompiledSqlTestResource,
     CompileSqlTestCte,
     CustomRulesOutcome,
     DiscoveredSqlTestBlock,
+    DiscoveredSqlTestFile,
+    Finding,
     NativeRulesEvaluation,
     NativeRulesRequest,
+    Rule,
     RuleExemption,
     RuleIgnore,
     RulesCacheConfig,
+    RulesConfig,
+    RulesResult,
+    ScopeIndex,
     build_rule_catalogue,
     install_rules_skills,
     project_with,
 )
 from sqlbuild._native import evaluate_custom_rules as evaluate_custom_rules_cached
 from sqlbuild._native import evaluate_project_rules as evaluate
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledSqlTest
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType, SqlTestMode
-from sqlbuild.compiler.discovery.models import DiscoveredSqlTestFile
-from sqlbuild.compiler.scopes.models import ScopeIndex
-from sqlbuild.rule_engine.constants import MIN_CUSTOM_RULE_TEST_CASES
-from sqlbuild.rule_engine.models import Finding, Rule, RulesConfig, RulesResult
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import CustomRuleTestCase
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_project
 

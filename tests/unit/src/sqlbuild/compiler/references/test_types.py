@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild._native import SqlReferenceKind
 from tests.unit.src.sqlbuild.compiler.references._test_types import (
     SqlReferenceKindExampleCallTestCase,
 )

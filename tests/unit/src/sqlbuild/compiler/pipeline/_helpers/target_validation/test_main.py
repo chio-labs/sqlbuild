@@ -5,6 +5,14 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    CompiledRelationLocation,
+    DiscoveredProjectInputs,
+    DiscoveredSourceFile,
+    LocalConfig,
+    LocalTargetConfig,
+    ProjectConfig,
+    SourceEntry,
+    TargetConfig,
     validate_managed_loader_target_isolation,
     validate_managed_write_schemas,
     validate_named_target_schema_strategy,
@@ -18,18 +26,7 @@ from sqlbuild.adapters.motherduck.classes.motherduck_adapter import MotherDuckAd
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
-from sqlbuild.compiler.compile.models import (
-    CompiledRelationLocation,
-)
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile
-from sqlbuild.spec.contracts.models import (
-    LocalConfig,
-    LocalTargetConfig,
-    ProjectConfig,
-    SourceEntry,
-    TargetConfig,
-)
 from tests.unit.src.sqlbuild.compiler.pipeline._helpers.target_validation._test_types import (
     ValidateManagedLoaderConnectionTestCase,
     ValidateManagedWriteSchemaTestCase,

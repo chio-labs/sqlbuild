@@ -11,9 +11,9 @@ use sqlbuild_analysis::planner_changes::models::{
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
-pub(crate) const MODELS_MODULE: &str = "sqlbuild.compiler.planner.models";
-pub(crate) const TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
-const EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
+pub(crate) const MODELS_MODULE: &str = "sqlbuild._native";
+pub(crate) const TYPES_MODULE: &str = "sqlbuild._native";
+const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 
 /// `PlannerInputError(message)` for an unknown replay policy.
 pub(crate) fn replay_policy_error(py: Python<'_>, error: UnknownReplayPolicy) -> PyErr {

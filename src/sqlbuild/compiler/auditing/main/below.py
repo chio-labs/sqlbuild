@@ -1,6 +1,6 @@
 """Build a below-threshold audit bound."""
 
-from sqlbuild.compiler.auditing.models import MeasurementThresholdBound
+from sqlbuild._native import MeasurementThresholdBound
 from sqlbuild.compiler.auditing.types import ThresholdOperator
 
 

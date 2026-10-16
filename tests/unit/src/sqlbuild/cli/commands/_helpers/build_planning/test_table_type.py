@@ -4,9 +4,13 @@ from io import StringIO
 
 import pytest
 
-from sqlbuild._native import CliUserError, enforce_plan_safety_policies
-from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.spec.contracts.models import ExecutionLimitsConfig, SnapshotsConfig
+from sqlbuild._native import (
+    CliUserError,
+    ExecutionLimitsConfig,
+    PlanOutput,
+    SnapshotsConfig,
+    enforce_plan_safety_policies,
+)
 from tests.unit.src.sqlbuild.cli.commands._helpers.build_planning._test_types import (
     TableTypeDowngradePolicyTestCase,
 )

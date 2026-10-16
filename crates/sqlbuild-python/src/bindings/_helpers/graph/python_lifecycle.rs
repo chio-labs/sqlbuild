@@ -8,7 +8,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::python_plan::main::run_lifecycle::run_lifecycle;
 use sqlbuild_analysis::python_plan::models::{LifecycleNode, RunLifecycle};
 
-const PYTHON_NODE_MODELS_MODULE: &str = "sqlbuild.compiler.python_nodes.models";
+const PYTHON_NODE_MODELS_MODULE: &str = "sqlbuild._native";
 const EXTERNAL_CONNECTION_MODE: &str = "external";
 
 /// `build_python_sql_run_lifecycle(*, selection, python_graph)`: a `PythonSqlRunLifecyclePlan`.

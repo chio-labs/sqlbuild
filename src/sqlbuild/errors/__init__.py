@@ -1,1 +1,0 @@
-"""Cross-domain error contracts."""

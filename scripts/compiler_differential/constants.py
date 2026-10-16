@@ -661,7 +661,6 @@ ANALYSIS_INDIRECT_KINDS: dict[str, str] = {
 }
 ANALYSIS_CODE_SCAN_ROOTS: tuple[str, ...] = (
     "compile/_helpers/diagnostics",
-    "contracts",
     "sql_analysis",
 )
 ANALYSIS_NATIVE_CODE_SCAN_ROOTS: tuple[str, ...] = (

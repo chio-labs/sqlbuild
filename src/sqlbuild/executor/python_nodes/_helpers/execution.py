@@ -8,9 +8,8 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
 
-from sqlbuild._native import CostContext
+from sqlbuild._native import CostContext, DiscoveredAssetFunction
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.compiler.discovery.models import DiscoveredAssetFunction
 from sqlbuild.compiler.python_nodes.types import (
     PythonNodeFanInAction,
     PythonNodeKind,

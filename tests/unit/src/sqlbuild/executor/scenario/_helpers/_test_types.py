@@ -1,8 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
-from sqlbuild.compiler.planner.types import ScenarioArtifactKind
+from sqlbuild._native import ScenarioArtifactKind, ScenarioExecutionPlan
 from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCapturePlan,
     ScenarioSnapshotFileStats,

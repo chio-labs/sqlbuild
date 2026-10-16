@@ -5,14 +5,16 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    Rule,
+    RulesConfig,
+    RulesError,
+    RulesResult,
     build_rule_catalogue,
     custom_rule_implementation_fingerprint,
     custom_rule_test_evidence,
 )
 from sqlbuild._native import evaluate_project_rules as evaluate
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.rule_engine.exceptions import RulesError
-from sqlbuild.rule_engine.models import Rule, RulesConfig, RulesResult
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (
     CustomRuleEvidenceTestCase,
     CustomRuleTestCase,

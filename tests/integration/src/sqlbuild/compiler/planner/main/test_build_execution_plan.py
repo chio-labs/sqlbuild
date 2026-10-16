@@ -9,7 +9,23 @@ import pytest
 
 import sqlbuild._native as identity_planning
 from sqlbuild._native import (
+    BackfillAction,
+    CursorBounds,
+    CursorsConfig,
+    FutureCursorAction,
+    FutureCursorsConfig,
+    LocalConfig,
+    ModelPlanEntry,
+    PlanAction,
+    PlannerInputError,
+    PlanOutput,
+    PlanReason,
     PlanWarning,
+    ProjectConfig,
+    ResolvedTableType,
+    TableType,
+    TableTypeSource,
+    TargetConfig,
     WarningSeverity,
     compiled_model_record,
     format_plan,
@@ -18,26 +34,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.models import (
-    CursorBounds,
-    ModelPlanEntry,
-    PlanOutput,
-)
-from sqlbuild.compiler.planner.types import (
-    BackfillAction,
-    PlanAction,
-    PlanReason,
-)
-from sqlbuild.spec.contracts.models import (
-    CursorsConfig,
-    FutureCursorsConfig,
-    LocalConfig,
-    ProjectConfig,
-    ResolvedTableType,
-    TargetConfig,
-)
-from sqlbuild.spec.contracts.types import FutureCursorAction, TableType, TableTypeSource
 from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     BuildExecutionPlanTestCase,
     FormatPlanIntegrationTestCase,

@@ -3,46 +3,40 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild._native import (
-    CompiledFunction,
-    CompiledSeed,
-    CompiledSource,
-    CompileModelConfig,
-    DiscoveredAuditBlock,
-    DiscoveredAuditFile,
-    DiscoveredSchemaFile,
-    DiscoveredSeedFile,
-    DiscoveredSqlTestBlock,
-    FunctionArgument,
-)
-from sqlbuild.compiler.auditing.types import AuditSeverity
-from sqlbuild.compiler.compile.models import (
     CompiledAudit,
+    CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledSeed,
+    CompiledSource,
     CompiledSqlScenario,
     CompiledSqlTest,
-)
-from sqlbuild.compiler.compile.types import (
-    AttachedAuditTargetKind,
-    CompiledProjectView,
-    CompiledResourceType,
-    FunctionLanguage,
-)
-from sqlbuild.compiler.discovery.models import (
+    CompileModelConfig,
+    DiscoveredAuditBlock,
+    DiscoveredAuditFile,
     DiscoveredLoaderFunction,
+    DiscoveredSchemaFile,
+    DiscoveredSeedFile,
     DiscoveredSourceFile,
     DiscoveredSqlScenarioFile,
+    DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
-)
-from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.spec.contracts.models import (
+    FunctionArgument,
+    ProjectGraph,
     SchemaColumn,
     SchemaModelEntry,
     SchemaSeedEntry,
     SourceColumnEntry,
     SourceEntry,
+)
+from sqlbuild.compiler.auditing.types import AuditSeverity
+from sqlbuild.compiler.compile.types import (
+    AttachedAuditTargetKind,
+    CompiledProjectView,
+    CompiledResourceType,
+    FunctionLanguage,
 )
 from tests.unit.src.sqlbuild.compiler.graph.helpers import project_graph_from_indexes
 

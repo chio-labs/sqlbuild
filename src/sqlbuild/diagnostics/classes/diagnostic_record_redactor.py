@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import logging
 
-from sqlbuild._native import redact_diagnostic_text, redact_diagnostic_value
-from sqlbuild.diagnostics._helpers.redaction import safe_extra_fields
+from sqlbuild._native import (
+    redact_diagnostic_text,
+    redact_diagnostic_value,
+    safe_diagnostic_extra_fields,
+)
 
 
 class DiagnosticRecordRedactor:
@@ -27,4 +30,4 @@ class DiagnosticRecordRedactor:
     def extras(record: logging.LogRecord) -> dict[str, object]:
         """Collect redacted non-standard record fields."""
 
-        return safe_extra_fields(record)
+        return safe_diagnostic_extra_fields(record)

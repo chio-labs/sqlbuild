@@ -8,11 +8,12 @@ import inspect
 import json
 import textwrap
 from collections.abc import Callable, Iterable, Mapping
+from dataclasses import asdict
 from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
 
-from sqlbuild.compiler.python_nodes.models import PythonIdentityDependency, PythonNodeIdentity
+from sqlbuild._native import PythonIdentityDependency, PythonNodeIdentity
 
 _IGNORED_PATH_PARTS: frozenset[str] = frozenset(
     {
@@ -66,13 +67,13 @@ def build_python_identity(
         "source_text": source,
     }
     metadata_payload: dict[str, object] = {
-        "dependencies": tuple(vars(dependency) for dependency in dependencies)
+        "dependencies": tuple(asdict(dependency) for dependency in dependencies)
     }
     version_hash: str = _hash_text(
         _stable_json(
             {
                 "definition_hash": definition_hash,
-                "dependencies": tuple(vars(dependency) for dependency in dependencies),
+                "dependencies": tuple(asdict(dependency) for dependency in dependencies),
             }
         )
     )

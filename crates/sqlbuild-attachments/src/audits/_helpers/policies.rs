@@ -5,7 +5,7 @@ use crate::audits::models::PolicySource;
 const SEVERITIES: [&str; 2] = ["warn", "error"];
 /// Python lists run scopes sorted.
 const RUN_SCOPES: [&str; 2] = ["delta_and_final", "final"];
-const SETTINGS_FILE: &str = "sqlbuild_project.toml";
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME as SETTINGS_FILE;
 
 /// The severity text, or Python's error naming the unknown value.
 pub(crate) fn resolve_severity(

@@ -7,9 +7,9 @@ from typing import Any
 
 import pytest
 
+from sqlbuild._native import FINGERPRINT_TABLE_NAME
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.seed.main._execute import execute_seed

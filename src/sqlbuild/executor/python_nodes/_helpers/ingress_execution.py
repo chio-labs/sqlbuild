@@ -8,18 +8,17 @@ from dataclasses import replace
 from functools import partial
 from typing import Any
 
-from sqlbuild._native import CostContext
-from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.compiler.discovery.models import (
+from sqlbuild._native import (
+    CostContext,
     DiscoveredAssetFunction,
     DiscoveredLoaderFunction,
-    DiscoveredTaskFunction,
-)
-from sqlbuild.compiler.python_nodes.models import (
     DiscoveredPythonNode,
+    DiscoveredTaskFunction,
     PythonNodeGraph,
     PythonSqlRunLifecyclePlan,
+    SourceEntry,
 )
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus, SkipMode
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.load.main._execute import execute_source_load
@@ -57,7 +56,6 @@ from sqlbuild.runtime.observability.main.current_execution_identity import (
     current_execution_identity,
 )
 from sqlbuild.runtime.observability.models import ExecutionIdentity
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def execute_ingress_python_loader_nodes(

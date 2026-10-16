@@ -7,9 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import CompilePipelineResult, SourceEntry
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.spec.contracts.models import SourceEntry
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     PythonSourceReadPlanTestCase,
 )

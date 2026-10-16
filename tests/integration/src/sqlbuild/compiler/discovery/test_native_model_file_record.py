@@ -7,7 +7,7 @@ import pickle
 
 import pytest
 
-from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
+from sqlbuild._native import DiscoveredSqlModelFile
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import RecordCopyTestCase
 from tests.integration.src.sqlbuild.compiler.discovery.helpers import model_file_record
 

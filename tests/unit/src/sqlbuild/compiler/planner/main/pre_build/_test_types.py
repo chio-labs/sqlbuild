@@ -1,7 +1,11 @@
 from dataclasses import dataclass
 
-from sqlbuild._native import MigrationCompatibility, MigrationDiscovery
-from sqlbuild.compiler.migrations.types import ColumnMigrationDecision, MigrationDecision
+from sqlbuild._native import (
+    ColumnMigrationDecision,
+    MigrationCompatibility,
+    MigrationDecision,
+    MigrationDiscovery,
+)
 
 
 @dataclass(frozen=True)

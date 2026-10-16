@@ -4,8 +4,8 @@ from dataclasses import replace
 
 import pytest
 
+from sqlbuild._native import project_microbatch_coverage
 from sqlbuild.microbatches.classes.event_codec import MicrobatchEventCodec
-from sqlbuild.microbatches.main.project_coverage import project_microbatch_coverage
 from sqlbuild.microbatches.models import (
     MicrobatchCoverageProjection,
     MicrobatchEvent,

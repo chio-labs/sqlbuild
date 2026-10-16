@@ -54,3 +54,11 @@ class FactoryDecoratorMetadataTestCase:
 class FactoryDecoratorErrorTestCase:
     description: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class HookReadsTestCase:
+    description: str
+    reads: object
+    expected_reads: tuple[str, ...] = ()
+    expected_error: str = ""

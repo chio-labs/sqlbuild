@@ -26,9 +26,9 @@ use crate::bindings::_helpers::discovery::yaml_records::discover_source_files;
 
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
-const MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
-const PROJECT_CONFIG_FILENAME: &str = "sqlbuild_project.toml";
+const MODELS_MODULE: &str = "sqlbuild._native";
+const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 const LOCAL_CONFIG_FILENAME: &str = "sqlbuild_local.toml";
 const FALLBACK_PROJECT_NAME: &str = "project";
 const FALLBACK_ADAPTER: &str = "duckdb";

@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
 
+from sqlbuild._native import SourceEntry
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.python_nodes.types import SkipMode
@@ -39,7 +40,6 @@ from sqlbuild.runtime.observability.main.current_execution_identity import (
     current_execution_identity,
 )
 from sqlbuild.runtime.observability.models import ExecutionIdentity
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def build_load_dag_state(

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild._native import DiscoveredProjectInputs
 
 if TYPE_CHECKING:
     from sqlbuild._native import CompileInputsView

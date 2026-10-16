@@ -19,7 +19,7 @@ use crate::bindings::types::CompilerDetach;
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const PROJECTION_FACTS_CONTEXT: &str = "native fixture projection facts";
 const LEGACY_MODE: &str = "legacy";

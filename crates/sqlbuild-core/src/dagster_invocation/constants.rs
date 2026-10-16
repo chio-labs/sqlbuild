@@ -21,3 +21,15 @@ pub const DEFAULT_CHECK_NAME: &str = "check";
 pub const MAX_DIAGNOSTIC_CHARS: usize = 4_000;
 /// Indentation of SQL in failure text.
 pub const SQL_INDENT: &str = "    ";
+/// Separator replacing characters a Dagster tag key or name segment cannot hold.
+pub const NAME_SEPARATOR: char = '_';
+/// ASCII punctuation a Dagster tag key keeps besides letters, digits and `_`.
+pub const TAG_KEY_PUNCTUATION: [char; 3] = ['.', '-', '/'];
+/// The Markdown code-span delimiter.
+pub const CODE_SPAN_MARK: char = '`';
+/// Edge characters that need padding inside a Markdown code span.
+pub(crate) const CODE_SPAN_PADDED_EDGES: [char; 2] = [CODE_SPAN_MARK, ' '];
+/// The default translator's description kind of a node without one.
+pub const DEFAULT_ASSET_KIND: &str = "asset";
+/// The default translator's description name of a node without one.
+pub const DEFAULT_ASSET_NAME: &str = "unknown";

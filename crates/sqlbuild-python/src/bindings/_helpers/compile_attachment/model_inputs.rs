@@ -19,16 +19,16 @@ use crate::bindings::_helpers::render::macro_expansion_result::macro_expansion_c
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
-const DISCOVERY_CONSTANTS_MODULE: &str = "sqlbuild.compiler.discovery.constants";
-const SCOPE_MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
-const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
+const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
+const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
+const SCOPE_MODELS_MODULE: &str = "sqlbuild._native";
+const SCOPE_TYPES_MODULE: &str = "sqlbuild._native";
 const COLLECTOR_MODULE: &str = "sqlbuild._native";
 const PROJECT_VARS_MODULE: &str = "sqlbuild._native";
 const MACRO_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.main.active_macro_bridge";
-const SQL_ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.sql_analysis.models";
+const SQL_ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
 const PYTHON_NODE_MODELS_MODULE: &str = "sqlbuild.python_nodes.models";
 const PYTHON_NODE_TYPES_MODULE: &str = "sqlbuild.python_nodes.types";
 /// The explicit reference call kinds and the `SqlResourceRefKind` member each resolves to.
@@ -211,11 +211,7 @@ pub(crate) fn build_model_inputs<'py>(
     } else {
         imported(py, "pathlib", "Path")?.call0()?
     };
-    let project_config_path: Bound<'py, PyAny> = root.div(imported(
-        py,
-        DISCOVERY_CONSTANTS_MODULE,
-        "PROJECT_CONFIG_FILENAME",
-    )?)?;
+    let project_config_path: Bound<'py, PyAny> = root.div(PROJECT_CONFIG_FILENAME)?;
     let config_inputs: Bound<'py, PyAny> = call_with(
         &imported(py, NATIVE_RECORDS_MODULE, "NativeModelConfigInputs")?,
         &[

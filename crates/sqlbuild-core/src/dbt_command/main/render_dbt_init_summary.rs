@@ -1,6 +1,7 @@
 //! The summary written after `sqb dbt init` creates a twin project.
 
 use crate::cli_text::models::{CliDocument, CliStyle};
+use crate::constants::PROJECT_CONFIG_FILENAME;
 use crate::dbt_command::constants::FIELD_LABEL_WIDTH;
 use crate::dbt_command::models::DbtInitSummary;
 
@@ -27,7 +28,7 @@ pub fn render_dbt_init_summary(summary: &DbtInitSummary, style: CliStyle) -> Str
     document.lines.push(format!(
         "  1. {} ({})",
         style.value("SQLBuild twin config"),
-        style.object_name("sqlbuild_project.toml")
+        style.object_name(PROJECT_CONFIG_FILENAME)
     ));
     document.lines.push(
         "     This points SQLBuild at your dbt project and profile. Edit it if dbt paths"

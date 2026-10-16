@@ -8,13 +8,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+from sqlbuild._native import (
+    ResolvedDbtProfileOutput,
+    SelectedDbtProfileOutput,
+    coerce_dbt_profile_bool,
+    coerce_dbt_profile_number,
+)
 from sqlbuild.integrations.dbt.exceptions import DbtProfileError
-from sqlbuild.integrations.dbt.models import ResolvedDbtProfileOutput, SelectedDbtProfileOutput
 
-_DBT_FALSE_VALUES: frozenset[str] = frozenset({"false", "0", "no", "n", "off"})
 _DBT_JINJA_MARKERS: tuple[str, ...] = ("{{", "{%", "{#")
-_DBT_NUMBER_DECIMAL_SEPARATOR: str = "."
-_DBT_TRUE_VALUES: frozenset[str] = frozenset({"true", "1", "yes", "y", "on"})
 
 
 class _Missing:
@@ -137,8 +139,8 @@ def _render_string(
     globals_map["target"] = target
     environment.filters.update(
         {
-            "as_bool": _as_bool,
-            "as_number": _as_number,
+            "as_bool": coerce_dbt_profile_bool,
+            "as_number": coerce_dbt_profile_number,
             "as_native": _as_native,
         }
     )
@@ -150,34 +152,6 @@ def _render_string(
         raise DbtProfileError(
             f"Could not render dbt profile field '{field_path}': {error}"
         ) from error
-
-
-def _as_bool(value: object) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        normalized: str = value.strip().lower()
-        if normalized in _DBT_TRUE_VALUES:
-            return True
-        if normalized in _DBT_FALSE_VALUES:
-            return False
-    raise DbtProfileError(f"Cannot coerce {value!r} to bool")
-
-
-def _as_number(value: object) -> int | float:
-    if isinstance(value, bool):
-        raise DbtProfileError(f"Cannot coerce {value!r} to number")
-    if isinstance(value, int | float):
-        return value
-    if isinstance(value, str):
-        stripped: str = value.strip()
-        try:
-            if _DBT_NUMBER_DECIMAL_SEPARATOR in stripped:
-                return float(stripped)
-            return int(stripped)
-        except ValueError as error:
-            raise DbtProfileError(f"Cannot coerce {value!r} to number") from error
-    raise DbtProfileError(f"Cannot coerce {value!r} to number")
 
 
 def _as_native(value: object) -> object:

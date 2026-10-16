@@ -8,7 +8,15 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
     CompileModelConfig,
+    DiscoveredLoaderFunction,
+    SourceEntry,
+    SourceLoadPlanEntry,
+    SourceWriteStrategy,
     build_intermediate_source_map,
     build_source_load_entries,
     build_source_load_map,
@@ -17,22 +25,12 @@ from sqlbuild._native import (
     project_with,
     upstream_loader_dependency_names,
 )
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledRelationLocation,
-)
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.compiler.planner.models import SourceLoadPlanEntry
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
-from sqlbuild.spec.contracts.models import SourceEntry
-from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     LoaderDagExpansionTestCase,
     LoaderDependencyNamesTestCase,

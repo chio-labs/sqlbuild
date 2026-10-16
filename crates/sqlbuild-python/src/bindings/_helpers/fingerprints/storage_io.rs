@@ -20,8 +20,8 @@ use crate::bindings::_helpers::fingerprints::storage_sql::{
     fingerprint_insert_batches, fingerprint_insert_sql,
 };
 
-const FINGERPRINT_TABLE_NAME: &str = "_sqlbuild_fingerprints";
-const MODELS_MODULE: &str = "sqlbuild.compiler.fingerprints.models";
+use sqlbuild_core::constants::FINGERPRINT_TABLE_NAME;
+const MODELS_MODULE: &str = "sqlbuild._native";
 const ADAPTER_TYPES_MODULE: &str = "sqlbuild.adapter.contract.types";
 const TIME_MODULE: &str = "time";
 const LOGGING_MODULE: &str = "logging";

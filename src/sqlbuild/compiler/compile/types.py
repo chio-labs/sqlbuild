@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Protocol
 
-from sqlbuild.sql_values.models import SqlValue
+from sqlbuild._native import SqlValue
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -14,51 +14,46 @@ if TYPE_CHECKING:
     import sqlbuild._native as _native
     from sqlbuild._native import (
         CompiledLineageColumnFact,
+        CompiledObjectKey,
+        CompiledRelationLocation,
         CompiledSeed,
         CompiledSource,
         CompiledSqlExpansion,
-        CompileModelConfig,
-        DiscoveredAuditBlock,
-        DiscoveredAuditFile,
-        DiscoveredSchemaFile,
-        DiscoveredSeedFile,
-        DiscoveredSqlHookFile,
-        DynamicColumnContractProof,
-        FunctionArgument,
-        FunctionReturnColumn,
-        LiteralSqlRelation,
-    )
-    from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
-    from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
-    from sqlbuild.compiler.compile.models import (
-        CompiledObjectKey,
-        CompiledRelationLocation,
         CompiledSqlScenario,
         CompiledSqlTest,
+        CompileModelConfig,
         CompilerDiagnostic,
         CompileSqlReference,
-        InferredColumn,
-        LoadedMacro,
-    )
-    from sqlbuild.compiler.discovery.models import (
         ConstantDeclaration,
+        DiscoveredAuditBlock,
+        DiscoveredAuditFile,
         DiscoveredHookFunction,
         DiscoveredLoaderFunction,
         DiscoveredMaterializationFile,
+        DiscoveredSchemaFile,
+        DiscoveredSeedFile,
         DiscoveredSourceFile,
+        DiscoveredSqlHookFile,
+        DynamicColumnContractProof,
         EnumDeclaration,
-    )
-    from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
-    from sqlbuild.compiler.scopes.models import ScopeIndex, UsageRecord
-    from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-    from sqlbuild.spec.contracts.models import (
+        FunctionArgument,
+        FunctionReturnColumn,
+        InferredColumn,
+        LiteralSqlRelation,
+        LoadedMacro,
+        MeasurementContract,
+        MeasurementThresholds,
         ScenarioConfig,
         SchemaModelEntry,
         SchemaSeedEntry,
+        ScopeIndex,
         SettingsConfig,
         SourceEntry,
         SourceLocation,
+        SqlLexicalSyntax,
+        UsageRecord,
     )
+    from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
 
 
 type RelationKeyRow = tuple[
@@ -458,3 +453,38 @@ class AuditInput(Protocol):
     def assembly_row(
         self,
     ) -> tuple[list[tuple[str, str, str | None]], tuple[str, str] | None]: ...
+
+
+class ExternalSqlReferenceResolver(Protocol):
+    """Resolve first-class SQLBuild references backed by external metadata."""
+
+    def validate_model_names(self, *, known_model_names: set[str]) -> None:
+        """Validate SQLBuild model names against external integration resources."""
+
+    def extend_sql_test_model_names(self, *, known_model_names: set[str]) -> set[str]:
+        """Return extra model names valid for SQL-native test targets."""
+
+    def extend_sql_test_source_names(self, *, known_source_names: set[str]) -> set[str]:
+        """Return extra source names valid for SQL-native test mocks."""
+
+    def extend_sql_test_seed_names(self, *, known_seed_names: set[str]) -> set[str]:
+        """Return extra seed names valid for SQL-native test mocks."""
+
+    def validate_reference(
+        self,
+        *,
+        ref_kind: str,
+        ref_name: str,
+        ref_package: str | None,
+        owner_relative_sql_path: Path,
+    ) -> None:
+        """Validate one external SQL reference from a SQLBuild-owned file."""
+
+    def resolve_reference(
+        self,
+        *,
+        ref_kind: str,
+        ref_name: str,
+        ref_package: str | None,
+    ) -> str | None:
+        """Return the physical relation for an external reference, if resolvable."""

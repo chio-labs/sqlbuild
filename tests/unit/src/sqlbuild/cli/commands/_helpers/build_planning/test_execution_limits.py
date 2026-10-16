@@ -1,7 +1,6 @@
 import pytest
 
-from sqlbuild._native import CliUserError, enforce_model_execution_limit
-from sqlbuild.spec.contracts.models import ExecutionLimitsConfig
+from sqlbuild._native import CliUserError, ExecutionLimitsConfig, enforce_model_execution_limit
 from tests.unit.src.sqlbuild.cli.commands._helpers.build_planning._test_types import (
     ModelExecutionLimitTestCase,
 )

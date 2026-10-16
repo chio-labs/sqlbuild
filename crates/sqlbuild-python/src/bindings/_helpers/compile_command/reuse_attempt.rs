@@ -9,6 +9,7 @@ use pyo3::prelude::{
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyList, PyString};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_cli::replay::main::write_launch_record::write_launch_record as write_record_file;
+use sqlbuild_core::command_output::constants::INVOCATION_CONTEXT_ENV;
 
 use sqlbuild_cli::replay::constants::{LAUNCH_RECORD_DIRECTORY, LAUNCH_RECORD_FORMAT};
 
@@ -26,6 +27,9 @@ use crate::bindings::_helpers::compile_command::constants::{
     TOTAL_TIMING, TRACKED_ENVIRONMENT_PREFIXES, UNTRACKED_ENVIRONMENT_NAMES,
 };
 use crate::bindings::_helpers::compile_command::models::CompileReuseAttempt;
+use crate::bindings::_helpers::compile_command::runtime_identity::{
+    invocation_identity, redirected_output_files, runtime_identity,
+};
 use crate::bindings::_helpers::compile_driver::phases::{elapsed_ms, monotonic};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::compile_outputs::json_report::plain_json;
@@ -34,10 +38,8 @@ use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_colo
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const REUSE_REQUEST: (&str, &str) = ("sqlbuild.cli.compile_reuse.models", "CompileReuseRequest");
-const RUNTIME_IDENTITY_MODULE: &str = "sqlbuild.cli.compile_reuse._helpers.runtime_identity";
 const STARTUP_INPUTS_MODULE: &str = "sqlbuild.cli.compile_reuse._helpers.startup_inputs";
 const COMPUTE_LOG_TEE_MODULE: &str = "sqlbuild.runtime.compute_logs.classes.text_tee";
-const OUTPUT_CAPTURE_CONSTANTS: &str = "sqlbuild.runtime.output_capture.constants";
 const HIT: &str = "hit";
 const CHECKED_HIT: &str = "hit";
 const CHECKED_BYPASS: &str = "bypass";
@@ -68,8 +70,7 @@ pub(crate) fn reuse_rules(py: Python<'_>, with_output_files: bool) -> PyResult<B
         "presence_suffixes",
         PyList::new(py, PRESENCE_ONLY_FILE_SUFFIXES)?,
     )?;
-    let output_files: Bound<'_, PyAny> =
-        imported(py, RUNTIME_IDENTITY_MODULE, "redirected_output_files")?.call0()?;
+    let output_files: Bound<'_, PyList> = redirected_output_files(py)?;
     if with_output_files {
         rules.set_item("output_files", output_files)?;
     }
@@ -210,11 +211,7 @@ pub(crate) fn write_launch_record(attempt: &Bound<'_, PyAny>) -> PyResult<()> {
         return Ok(());
     }
     let environment: Bound<'_, PyAny> = imported(py, "os", "environ")?;
-    if environment.contains(imported(
-        py,
-        OUTPUT_CAPTURE_CONSTANTS,
-        "INVOCATION_CONTEXT_ENV",
-    )?)? {
+    if environment.contains(INVOCATION_CONTEXT_ENV)? {
         return Ok(());
     }
     let mut directory: Bound<'_, PyAny> = attempt.getattr("project_dir")?;
@@ -274,19 +271,9 @@ fn reuse_check<'py>(
     check.set_item("selected_target", request.getattr("selected_target")?)?;
     check.set_item(
         "invocation",
-        call_with(
-            &imported(py, RUNTIME_IDENTITY_MODULE, "invocation_identity")?,
-            &[
-                ("request", request.clone()),
-                ("project_dir", project_dir.clone()),
-                ("use_color", use_color.into_bound_py_any(py)?),
-            ],
-        )?,
+        invocation_identity(request, project_dir, use_color)?,
     )?;
-    check.set_item(
-        "runtime",
-        imported(py, RUNTIME_IDENTITY_MODULE, "runtime_identity")?.call0()?,
-    )?;
+    check.set_item("runtime", runtime_identity(py)?)?;
     check.set_item("search_path", listed(py.import("sys")?.getattr("path")?)?)?;
     check.set_item(
         "bypass_requested",

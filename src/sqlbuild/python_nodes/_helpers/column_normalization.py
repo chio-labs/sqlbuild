@@ -2,8 +2,8 @@
 
 from collections.abc import Sequence
 
+from sqlbuild._native import SourceColumnEntry
 from sqlbuild.python_nodes.types import LoaderColumnSpec, PythonNodeColumnSpec
-from sqlbuild.spec.contracts.models import SourceColumnEntry
 
 
 def normalize_columns(

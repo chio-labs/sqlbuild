@@ -10,12 +10,12 @@ import pytest
 from _pytest.capture import CaptureResult
 
 from sqlbuild._native import (
+    INTEGRATION_RESULT_PATH_ENV,
     CliNamespace,
     NativeProgressProjector,
     cli_observability_scope,
     current_native_progress_projector,
 )
-from sqlbuild.cli.output.constants import INTEGRATION_RESULT_PATH_ENV
 from sqlbuild.observability import OperationLifecycle
 from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
     MachineProgressRoutingCase,

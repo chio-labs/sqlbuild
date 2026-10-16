@@ -14,31 +14,27 @@ from types import MappingProxyType, ModuleType
 from typing import cast
 
 import sqlbuild._native as _native
-from sqlbuild._native import validate_resource_identity
+from sqlbuild._native import (
+    ConstantDeclaration,
+    DeclarationIdentity,
+    DeclarationKind,
+    DeclarationRecord,
+    DeclarationResolutionContext,
+    DiscoveredMacroFile,
+    EnumDeclaration,
+    LoadedMacro,
+    SqlValue,
+    SqlValueKind,
+    StaticMacroExport,
+    StaticMacroFault,
+    StaticMacroInventory,
+    validate_resource_identity,
+)
 from sqlbuild.compiler.compile.exceptions import (
     CompileInputError,
     MacroDeclarationLookupError,
 )
-from sqlbuild.compiler.compile.models import (
-    DeclarationResolutionContext,
-    LoadedMacro,
-    MacroContext,
-    StaticMacroExport,
-    StaticMacroFault,
-    StaticMacroInventory,
-)
-from sqlbuild.compiler.discovery.models import (
-    ConstantDeclaration,
-    DiscoveredMacroFile,
-    EnumDeclaration,
-)
-from sqlbuild.compiler.scopes.models import (
-    DeclarationIdentity,
-    DeclarationRecord,
-)
-from sqlbuild.compiler.scopes.types import DeclarationKind
-from sqlbuild.sql_values.models import SqlValue
-from sqlbuild.sql_values.types import SqlValueKind
+from sqlbuild.compiler.compile.models import MacroContext
 
 _OBJECT_ENTRY_LENGTH: int = 2
 _MACRO_MODULE_LOAD_LOCK: threading.RLock = threading.RLock()

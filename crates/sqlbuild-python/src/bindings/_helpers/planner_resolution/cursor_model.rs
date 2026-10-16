@@ -12,7 +12,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::PyDict;
 use pyo3::{IntoPyObject, PyErr, pyfunction, wrap_pyfunction};
 
-const MODELS: &str = "sqlbuild.compiler.planner.models";
+const MODELS: &str = "sqlbuild._native";
 const CURSOR: &str = "sqlbuild._native";
 
 fn config<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
@@ -163,11 +163,7 @@ fn compute_model_cursor_bounds<'py>(
                 ],
             )?;
             return Err(PyErr::from_value(call_with(
-                &imported(
-                    py,
-                    "sqlbuild.compiler.planner.exceptions",
-                    "PlannerInputError",
-                )?,
+                &imported(py, "sqlbuild._native", "PlannerInputError")?,
                 &[
                     ("message", refusal.get_item(0)?),
                     ("code", string(py, "S302")),

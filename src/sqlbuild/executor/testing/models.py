@@ -5,9 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild.compiler.discovery.models import SqlTestParameterDeclaration
+from sqlbuild._native import SqlTestParameterDeclaration, SqlValue
 from sqlbuild.executor.testing.types import SqlTestOutcome
-from sqlbuild.sql_values.models import SqlValue
 
 
 @dataclass(frozen=True)

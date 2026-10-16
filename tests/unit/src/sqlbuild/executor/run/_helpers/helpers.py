@@ -2,6 +2,19 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from sqlbuild._native import (
+    AuditPlanEntry,
+    CompiledObjectKey,
+    CompiledRelationLocation,
+    DiscoveredHookFunction,
+    MaterializationType,
+    ModelPlanEntry,
+    PlanAction,
+    PlanReason,
+    PythonHookEntry,
+    SchemaDynamicColumnFamily,
+    SourceEntry,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
@@ -15,20 +28,12 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledRelationLocation,
-)
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, PythonHookEntry
-from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
-from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run._helpers.execution.hooks import execute_hooks
 from sqlbuild.executor.run.models import HookContext, HookRelationLookup, HookRunContext
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.python_nodes.models import SqlResourceRef
-from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily, SourceEntry
 
 
 def insert_snapshot_hook_log(ctx: HookContext, phase: str) -> None:

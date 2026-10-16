@@ -3,22 +3,25 @@ from __future__ import annotations
 from pathlib import Path
 from typing import ClassVar
 
+from sqlbuild._native import (
+    CompiledObjectKey,
+    CompiledRelationLocation,
+    FunctionPlanEntry,
+    MaterializationType,
+    ModelPlanEntry,
+    PlanAction,
+    PlanOutput,
+    PlanReason,
+    SeedPlanEntry,
+    SourceEntry,
+    SourceLoadPlanEntry,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
-from sqlbuild.compiler.planner.models import (
-    FunctionPlanEntry,
-    ModelPlanEntry,
-    PlanOutput,
-    SeedPlanEntry,
-    SourceLoadPlanEntry,
-)
-from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 class BuildSchemaPreflightAdapter(BaseAdapter):

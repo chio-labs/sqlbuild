@@ -5,29 +5,23 @@ from pathlib import Path
 from typing import cast
 
 from sqlbuild._native import (
-    ScenarioGraphPlan,
-)
-from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
-)
-from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.models import (
+    MaterializationType,
     ModelPlanEntry,
+    PlanAction,
+    PlanReason,
+    ScenarioArtifactKind,
     ScenarioAssertionExpectationPlan,
     ScenarioExecutionPlan,
     ScenarioExpectedExpectationPlan,
     ScenarioFixturePlan,
+    ScenarioGraphPlan,
     ScenarioRelationMap,
     ScenarioRelationPlan,
     SeedPlanEntry,
 )
-from sqlbuild.compiler.planner.types import (
-    MaterializationType,
-    PlanAction,
-    PlanReason,
-    ScenarioArtifactKind,
-)
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCaptureRunResult,
     ScenarioSnapshotColumn,

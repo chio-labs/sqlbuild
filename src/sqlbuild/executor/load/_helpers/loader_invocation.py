@@ -7,10 +7,14 @@ import time
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from sqlbuild._native import (
+    DiscoveredLoaderFunction,
+    HardCodedRelationOwnerKind,
+    SourceEntry,
+    SourceWriteStrategy,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.compiler.references.types import HardCodedRelationOwnerKind
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.load._helpers.execution import (
     is_untargeted_self_managed_intermediate,
@@ -35,8 +39,6 @@ from sqlbuild.provider.main.runtime import _empty_provider_container
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.python_nodes.types import SqlResourceRefKind
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
-from sqlbuild.spec.contracts.models import SourceEntry
-from sqlbuild.spec.contracts.types import SourceWriteStrategy
 
 _SUPPORTED_WRITE_STRATEGIES: frozenset[SourceWriteStrategy] = frozenset(
     {

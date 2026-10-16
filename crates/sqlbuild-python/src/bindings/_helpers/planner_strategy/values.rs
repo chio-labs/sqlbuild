@@ -15,8 +15,8 @@ use sqlbuild_analysis::planner_strategy::models::{
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
-pub(crate) const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
-pub(crate) const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
+pub(crate) const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
+pub(crate) const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const YML_SOURCE: &str = "yml";
 const FULL_BACKFILL: &str = "full";
 const FORWARD_ONLY_BACKFILL: &str = "forward";

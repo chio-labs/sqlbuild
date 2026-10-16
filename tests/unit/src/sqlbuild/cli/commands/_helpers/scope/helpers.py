@@ -4,17 +4,19 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from sqlbuild._native import build_scope_lookup, preview_scope_move, query_scope_report
-from sqlbuild.compiler.scopes.models import (
+from sqlbuild._native import (
     OwnershipRoot,
     ResourceIdentity,
+    ResourceKind,
     ResourceRecord,
     ScopeIndex,
     ScopeLookup,
     ScopeReport,
     ScopeReportFilters,
+    build_scope_lookup,
+    preview_scope_move,
+    query_scope_report,
 )
-from sqlbuild.compiler.scopes.types import ResourceKind
 from tests.unit.src.sqlbuild.compiler.scopes.helpers import report_scope_lookup
 
 

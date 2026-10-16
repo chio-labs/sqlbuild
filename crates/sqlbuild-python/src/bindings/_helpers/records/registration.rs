@@ -5,22 +5,27 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 
 use crate::bindings::_helpers::records::constants::{
-    BUILTIN_PARENT_PREFIX, BUILTINS_MODULE, DATACLASS_FIELD_KIND, DATACLASS_FIELDS_ATTRIBUTE,
-    DATACLASSES_MODULE, ENUM_MODULE, ENUMS, ERROR_SPEC_ATTRIBUTE, ERRORS, EXCEPTION_PARENT,
-    NATIVE_MODULE, RECORD_SPEC_ATTRIBUTE, STR_ENUM, VALUE_ERROR_PARENT,
+    BUILTIN_PARENT_PREFIX, BUILTINS_MODULE, CACHED_PROPERTIES, CLASS_METHODS, CLASS_PROPERTIES,
+    DATACLASS_FIELD_KIND, DATACLASS_FIELDS_ATTRIBUTE, DATACLASSES_MODULE, ENUM_MODULE, ENUMS,
+    ERROR_SPEC_ATTRIBUTE, ERRORS, EXCEPTION_PARENT, NATIVE_MODULE, RECORD_SPEC_ATTRIBUTE,
+    SEQUENCE_RECORDS, STR_ENUM, VALUE_ERROR_PARENT,
 };
 use crate::bindings::_helpers::records::error_classes::{
     BoundErrorInitializer, ErrorInitializer, class_value,
 };
 use crate::bindings::_helpers::records::fields::all_specs;
 use crate::bindings::_helpers::records::models::{
-    EnumSpec, ErrorSpec, NativeRecord, RecordAttribute, RecordSpec,
+    BoundNativeMethod, EnumSpec, ErrorSpec, NativeMethod, NativeProperty, NativeRecord,
+    RecordAttribute, RecordSpec,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     let py: Python<'_> = module.py();
     module.add_class::<NativeRecord>()?;
     module.add_class::<RecordAttribute>()?;
+    module.add_class::<NativeProperty>()?;
+    module.add_class::<NativeMethod>()?;
+    module.add_class::<BoundNativeMethod>()?;
     let base: Bound<'_, PyAny> = py.get_type::<NativeRecord>().into_any();
     let metaclass: Bound<'_, PyAny> = base.get_type().into_any();
     let str_enum: Bound<'_, PyAny> = py.import(ENUM_MODULE)?.getattr(STR_ENUM)?;
@@ -48,6 +53,36 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
             dataclass_fields(&dataclasses, spec)?,
         )?;
         module.add(spec.name, class)?;
+    }
+    for (class, name, property) in CLASS_PROPERTIES.iter().flat_map(|group| group.iter()) {
+        let descriptor: Py<NativeProperty> = Py::new(
+            py,
+            NativeProperty {
+                property: *property,
+                name,
+                cached: false,
+            },
+        )?;
+        module.getattr(*class)?.setattr(*name, descriptor)?;
+    }
+    for (class, name, property) in CACHED_PROPERTIES.iter().flat_map(|group| group.iter()) {
+        let descriptor: Py<NativeProperty> = Py::new(
+            py,
+            NativeProperty {
+                property: *property,
+                name,
+                cached: true,
+            },
+        )?;
+        module.getattr(*class)?.setattr(*name, descriptor)?;
+    }
+    for (class, name, method) in CLASS_METHODS.iter().flat_map(|group| group.iter()) {
+        let descriptor: Py<NativeMethod> = Py::new(py, NativeMethod { method: *method })?;
+        module.getattr(*class)?.setattr(*name, descriptor)?;
+    }
+    let sequence: Bound<'_, PyAny> = py.import("collections.abc")?.getattr("Sequence")?;
+    for class in SEQUENCE_RECORDS.iter().flat_map(|group| group.iter()) {
+        sequence.call_method1("register", (module.getattr(*class)?,))?;
     }
     Ok(())
 }
@@ -97,7 +132,7 @@ fn dataclass_fields<'py>(
     for field in spec.fields {
         let options: Bound<'py, PyDict> = PyDict::new(py);
         options.set_item("compare", field.compared)?;
-        options.set_item("repr", field.compared)?;
+        options.set_item("repr", field.shown)?;
         let declared: Bound<'py, PyAny> = dataclasses.getattr("field")?.call((), Some(&options))?;
         declared.setattr("name", field.name)?;
         declared.setattr("type", "object")?;

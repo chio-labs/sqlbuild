@@ -8,8 +8,8 @@ from types import ModuleType
 
 import pytest
 
+from sqlbuild._native import PythonNodeIdentity
 from sqlbuild.compiler.python_nodes.main.identity import build_python_node_identity
-from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity
 from tests.unit.src.sqlbuild.compiler.python_nodes._helpers._test_types import (
     PythonNodeIdentityChangeTestCase,
     PythonNodeIdentityTestCase,

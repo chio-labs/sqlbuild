@@ -25,7 +25,7 @@ const FAIL_STATUS: &str = "FAIL";
 const RUN_DIR: &str = "run";
 const SCENARIOS_DIR: &str = "scenarios";
 const LOCAL_DIR: &str = "local";
-const PLANNER_TYPES: &str = "sqlbuild.compiler.planner.types";
+const PLANNER_TYPES: &str = "sqlbuild._native";
 const QUALIFIED_NAME_MODULE: &str =
     "sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name";
 

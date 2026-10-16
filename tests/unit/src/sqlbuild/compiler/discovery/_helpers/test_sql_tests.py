@@ -9,13 +9,14 @@ import pytest
 from sqlbuild._native import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestCase,
+    DiscoveredSqlTestFile,
     DiscoveryFileFault,
+    SqlLexicalSyntax,
+    SqlTestParameterDeclaration,
     SqlTestParseError,
     discover_test_files,
     omitted_ceremonial_select,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredSqlTestFile, SqlTestParameterDeclaration
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ExpectedCountTestCase,
     OmittedSelectPerformanceTestCase,

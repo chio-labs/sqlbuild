@@ -5,32 +5,26 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from sqlbuild._native import (
+    CompiledObjectKey,
+    CompiledRelationLocation,
+    MaterializationType,
+    ModelPlanEntry,
+    PlanAction,
+    PlanReason,
+    ScenarioArtifactKind,
+    ScenarioExecutionPlan,
+    ScenarioFixturePlan,
     ScenarioGraphPlan,
+    ScenarioRelationMap,
+    ScenarioRelationPlan,
+    SeedCsvSettings,
+    SeedPlanEntry,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo, QueryResult, RelationInfo
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledRelationLocation,
-)
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.models import (
-    ModelPlanEntry,
-    ScenarioExecutionPlan,
-    ScenarioFixturePlan,
-    ScenarioRelationMap,
-    ScenarioRelationPlan,
-    SeedPlanEntry,
-)
-from sqlbuild.compiler.planner.types import (
-    MaterializationType,
-    PlanAction,
-    PlanReason,
-    ScenarioArtifactKind,
-)
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
-from sqlbuild.spec.contracts.models import SeedCsvSettings
 
 
 class ScenarioFixtureTestAdapter(BaseAdapter):

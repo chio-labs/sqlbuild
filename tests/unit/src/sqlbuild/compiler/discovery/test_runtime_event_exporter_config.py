@@ -2,12 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import ProjectConfigError
-from sqlbuild.compiler.discovery.main.runtime_extensions import discover_runtime_extensions
-from sqlbuild.compiler.discovery.models import (
+from sqlbuild._native import (
     DiscoveredEventExporter,
     DiscoveredRuntimeExtensions,
+    ProjectConfigError,
 )
+from sqlbuild.compiler.discovery.main.runtime_extensions import discover_runtime_extensions
 from tests.unit.src.sqlbuild.compiler.discovery._test_types import (
     EventExporterConfigTestCase,
     InvalidEventExporterConfigTestCase,

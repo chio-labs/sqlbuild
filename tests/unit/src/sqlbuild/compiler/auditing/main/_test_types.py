@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from sqlbuild.compiler.auditing.models import MeasurementThresholds
+from sqlbuild._native import MeasurementThresholds
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditOutcome,
