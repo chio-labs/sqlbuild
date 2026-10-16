@@ -13,17 +13,16 @@ use sqlbuild_core::query_command::main::render_query_long::render_query_long;
 use sqlbuild_core::query_command::main::render_query_table::render_query_table;
 use sqlbuild_core::query_command::models::QueryDisplay;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::query_command::project::{ProjectAdapter, project_adapter};
 use crate::bindings::_helpers::query_command::query_values::{
     csv_text, display_text, json_cell, python_json_rows, strict_width,
 };
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const ERRORS_MODULE: &str = "sqlbuild._native";
-const ADAPTER_ERRORS_MODULE: &str = "sqlbuild.adapter.contract.exceptions";
 const LONG_FORMAT: &str = "long";
 const TABLE_FORMAT: &str = "table";
 const JSON_FORMAT: &str = "json";
@@ -41,7 +40,7 @@ fn user_error(py: Python<'_>, message: &str, code: Option<&str>, help: Option<&s
         if let Some(help) = help {
             options.set_item("help", help)?;
         }
-        imported(py, ERRORS_MODULE, "CliUserError")?.call((message,), Some(&options))
+        registry::error(py, ErrorId::CliUser)?.call((message,), Some(&options))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),
@@ -147,7 +146,7 @@ fn run_sql<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = sql.py();
     let connection_config: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "resolve_project_connection_config")?,
+        &registry::native(py, NativeAttr::ResolveProjectConnectionConfig)?,
         &[
             ("discovered_inputs", project.discovered.clone()),
             ("project_dir", project.project_dir.clone()),
@@ -173,7 +172,7 @@ fn run_sql<'py>(
         ],
     );
     let queried: PyResult<Bound<'py, PyAny>> = queried.map_err(|error| {
-        let adapter_error: bool = imported(py, ADAPTER_ERRORS_MODULE, "AdapterUserError")
+        let adapter_error: bool = host::entry(py, AdapterHost::AdapterUserError)
             .is_ok_and(|class| error.value(py).is_instance(&class).unwrap_or(false));
         if adapter_error || !error.is_instance_of::<PyException>(py) {
             return error;
@@ -183,9 +182,9 @@ fn run_sql<'py>(
             Ok(message) => message.str().map(Bound::into_any),
             Err(_) => value.str().map(Bound::into_any),
         };
-        let wrapped: PyErr = match message.and_then(|message| {
-            imported(py, ERRORS_MODULE, "QueryExecutionError")?.call1((message,))
-        }) {
+        let wrapped: PyErr = match message
+            .and_then(|message| registry::error(py, ErrorId::QueryExecution)?.call1((message,)))
+        {
             Ok(raised) => PyErr::from_value(raised),
             Err(failure) => failure,
         };

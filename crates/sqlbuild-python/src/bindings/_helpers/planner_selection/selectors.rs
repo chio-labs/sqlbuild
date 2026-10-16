@@ -14,16 +14,14 @@ use sqlbuild_analysis::graph::main::resolve_selectors::resolve_selectors;
 use sqlbuild_analysis::graph::models::{ParsedSelector, ProjectGraph};
 use sqlbuild_analysis::planner_selection::main::unit_test_selector_rejection::unit_test_selector_rejection;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::graph::algorithms::closure;
 use crate::bindings::_helpers::graph::keys::KeyCache;
 use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
 use crate::bindings::_helpers::graph::views::{GraphViewMappings, graph_from_view_mappings};
 use crate::bindings::_helpers::planner_selection::carrier::{Carrier, py_strings};
-
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
 const VIEW_OPTIONS: &[&str] = &[
     "all_keys",
@@ -46,11 +44,11 @@ pub(crate) fn parsed_selector<'py>(
             upstream,
             downstream,
         } => call_with(
-            &imported(py, NATIVE_RECORDS_MODULE, "ParsedSelector")?,
+            &registry::class(py, RecordId::ParsedSelector)?,
             &[
                 (
                     "kind",
-                    imported(py, NATIVE_RECORDS_MODULE, "SelectorKind")?.call1((kind,))?,
+                    registry::class(py, RecordId::SelectorKind)?.call1((kind,))?,
                 ),
                 ("value", carrier.back(&value)?.into_any()),
                 ("upstream", PyBool::new(py, upstream).to_owned().into_any()),
@@ -66,7 +64,7 @@ pub(crate) fn parsed_selector<'py>(
             upstream,
             downstream,
         } => call_with(
-            &imported(py, NATIVE_RECORDS_MODULE, "PathSelector")?,
+            &registry::class(py, RecordId::PathSelector)?,
             &[
                 ("start_name", carrier.back(&start)?.into_any()),
                 ("end_name", carrier.back(&end)?.into_any()),

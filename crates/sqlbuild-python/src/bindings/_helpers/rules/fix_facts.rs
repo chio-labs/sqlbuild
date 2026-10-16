@@ -4,9 +4,9 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-
-const LINT_MODELS: &str = "sqlbuild._native";
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
 /// Index a compilation by model key and diagnostic owner without changing its fact views.
 #[pyfunction]
@@ -54,7 +54,7 @@ pub(crate) fn compile_facts<'py>(
         counts.set_item(identity, count + 1)?;
     }
     call_with(
-        &imported(py, LINT_MODELS, "CompileFacts")?,
+        &registry::class(py, RecordId::CompileFacts)?,
         &[
             ("models", models.into_any()),
             ("model_paths", model_paths.into_any()),

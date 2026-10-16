@@ -1,9 +1,9 @@
 //! Assemble migration policy and redirected live cursor inspection requests.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::planner_migrations::column_objects::native;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::PyDict;
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -14,7 +14,7 @@ fn migration_missing_origin_policy<'py>(
     runtime: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(runtime.py(), "sqlbuild._native", "effective_target_config")?,
+        &registry::native(runtime.py(), NativeAttr::EffectiveTargetConfig)?,
         &[("runtime", runtime.clone())],
     )?
     .getattr("missing_migration_origin")
@@ -54,7 +54,7 @@ fn migration_redirected_cursor_snapshots<'py>(
     };
     let cursor_scope = native(
         py,
-        "CursorSnapshotScope",
+        RecordId::CursorSnapshotScope,
         &[
             ("model_keys", scope.getattr("selected_keys")?),
             ("runtime_producer_keys", scope.getattr("selected_keys")?),
@@ -64,18 +64,14 @@ fn migration_redirected_cursor_snapshots<'py>(
         ],
     )?;
     let full_refresh = call_with(
-        &imported(
-            py,
-            "sqlbuild._native",
-            "effectively_full_refreshed_model_names",
-        )?,
+        &registry::native(py, NativeAttr::EffectivelyFullRefreshedModelNames)?,
         &[
             ("project", project.clone()),
             ("cli_full_refresh", overrides.getattr("full_refresh")?),
         ],
     )?;
     call_with(
-        &imported(py, "sqlbuild._native", "gather_redirected_cursor_snapshots")?,
+        &registry::native(py, NativeAttr::GatherRedirectedCursorSnapshots)?,
         &[
             ("project", project),
             ("adapter", runtime.getattr("adapter")?),

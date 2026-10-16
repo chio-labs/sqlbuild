@@ -32,12 +32,12 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::compute_logs::conversion::{
-    MODELS_MODULE, capture_id, document, inventory_item, is_exact_int, metadata_model, rejection,
-    storage_error, stream_index,
+    capture_id, document, inventory_item, is_exact_int, metadata_model, rejection, storage_error,
+    stream_index,
 };
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 
-const DIAGNOSTIC_MODEL_MODULE: &str = "sqlbuild.runtime.observability.models";
-const DIAGNOSTIC_JSON_MODULE: &str = "sqlbuild.runtime.observability.main.diagnostic_log_to_json";
 const DIAGNOSTICS_STREAM: usize = 2;
 
 /// Open stream files of the captures this instance started, and whether it is closed.
@@ -221,7 +221,7 @@ impl LocalFilesystemComputeLogStorage {
         invocation_id: &Bound<'_, PyAny>,
         record: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
-        if !record.is_instance(&imported(py, DIAGNOSTIC_MODEL_MODULE, "DiagnosticLog")?)? {
+        if !record.is_instance(&host::entry(py, ExecutorHost::DiagnosticLog)?)? {
             return Err(rejection(
                 py,
                 ComputeLogErrorKind::State,
@@ -229,7 +229,7 @@ impl LocalFilesystemComputeLogStorage {
             ));
         }
         let encoded: Bound<'_, PyAny> =
-            imported(py, DIAGNOSTIC_JSON_MODULE, "diagnostic_log_to_json")?.call1((record,))?;
+            host::entry(py, ExecutorHost::DiagnosticLogToJson)?.call1((record,))?;
         let mut line: Vec<u8> = encoded
             .downcast::<PyString>()?
             .to_str()?
@@ -276,7 +276,7 @@ impl LocalFilesystemComputeLogStorage {
             ),
         )?;
         call_with(
-            &imported(py, MODELS_MODULE, "ComputeLogReadChunk")?,
+            &host::entry(py, ExecutorHost::ComputeLogReadChunk)?,
             &[
                 ("data", PyBytes::new(py, &chunk.data).into_any()),
                 ("next_cursor", chunk.next_cursor.into_bound_py_any(py)?),
@@ -319,7 +319,7 @@ impl LocalFilesystemComputeLogStorage {
         let [stdout_bytes, stderr_bytes, diagnostics_bytes] =
             self.byte_counts(py, invocation_id)?;
         call_with(
-            &imported(py, MODELS_MODULE, "CaptureByteCounts")?,
+            &host::entry(py, ExecutorHost::CaptureByteCounts)?,
             &[
                 ("stdout_bytes", stdout_bytes.into_bound_py_any(py)?),
                 ("stderr_bytes", stderr_bytes.into_bound_py_any(py)?),
@@ -396,7 +396,7 @@ impl LocalFilesystemComputeLogStorage {
             py.detach(|| prune_captures(&root, retain, &|id: &str| active.contains(id))),
         )?;
         call_with(
-            &imported(py, MODELS_MODULE, "PruneResult")?,
+            &host::entry(py, ExecutorHost::PruneResult)?,
             &[
                 (
                     "deleted_invocation_ids",
@@ -423,7 +423,7 @@ impl LocalFilesystemComputeLogStorage {
         }
         let complete_count = entries.iter().filter(|entry| entry.is_complete).count();
         call_with(
-            &imported(py, MODELS_MODULE, "CaptureInventory")?,
+            &host::entry(py, ExecutorHost::CaptureInventory)?,
             &[
                 ("captures", PyTuple::new(py, items)?.into_any()),
                 ("complete_count", complete_count.into_bound_py_any(py)?),

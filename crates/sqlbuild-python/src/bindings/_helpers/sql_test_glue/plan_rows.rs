@@ -1,8 +1,8 @@
 //! Materialize native plan rows as the existing executor-facing dataclasses.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::compiler_records::shape_classes::shape_class_at;
-use crate::bindings::_helpers::sql_test_glue::constants::PLAN_MODELS;
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::plan_values::tuple;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
@@ -36,13 +36,12 @@ fn step<'py>(row: &Bound<'py, PyAny>, chain: bool) -> PyResult<Bound<'py, PyAny>
             },
         )?;
     }
-    shape_class_at(
+    registry::class(
         py,
-        PLAN_MODELS,
         if chain {
-            "ChainStep"
+            RecordId::ChainStep
         } else {
-            "SqlTestAssertionStep"
+            RecordId::SqlTestAssertionStep
         },
     )?
     .call((), Some(&kwargs))
@@ -59,11 +58,11 @@ pub(super) fn plan<'py>(row: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> 
         assertions.push(step(&value?, false)?);
     }
     let mut warnings: Vec<Bound<'py, PyAny>> = Vec::new();
-    let severity = imported(py, "sqlbuild._native", "WarningSeverity")?;
+    let severity = registry::class(py, RecordId::WarningSeverity)?;
     for value in row.get_item(4)?.try_iter()? {
         let value = value?;
         warnings.push(call_with(
-            &imported(py, "sqlbuild._native", "PlanWarning")?,
+            &registry::class(py, RecordId::PlanWarning)?,
             &[
                 ("model_name", value.get_item(0)?),
                 ("severity", severity.call1((value.get_item(1)?,))?),
@@ -72,7 +71,7 @@ pub(super) fn plan<'py>(row: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> 
         )?);
     }
     call_with(
-        &imported(py, "sqlbuild._native", "NativeSqlTestPlan")?,
+        &registry::class(py, RecordId::NativeSqlTestPlan)?,
         &[
             ("chain", PyTuple::new(py, chain)?.into_any()),
             ("assertions", PyTuple::new(py, assertions)?.into_any()),

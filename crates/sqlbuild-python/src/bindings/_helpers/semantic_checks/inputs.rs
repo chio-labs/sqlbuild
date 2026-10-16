@@ -7,12 +7,11 @@ use crate::bindings::_helpers::analysis::binding_catalog::ignores_quoted_case;
 use crate::bindings::_helpers::analysis::schema_request::{
     SchemaRequestParts, schema_validation_request,
 };
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::semantic_checks::resource_sql::resource_sql_diagnostics_of;
 use crate::bindings::_helpers::semantic_shapes::declarations::{declared_types, function_names};
 use crate::bindings::models::ProjectCatalog;
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
 
 /// The column names a metadata config value lists: a name, or the names of a list or tuple.
 pub(crate) fn column_names(value: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
@@ -57,9 +56,7 @@ pub(crate) fn sql_test_columns<'py>(
     if bodies.is_empty() {
         return Ok(columns);
     }
-    let query_class: Bound<'py, PyAny> = py
-        .import(ANALYSIS_MODELS_MODULE)?
-        .getattr("NativeColumnQuery")?;
+    let query_class: Bound<'py, PyAny> = registry::class(py, RecordId::NativeColumnQuery)?;
     let mut queries: Vec<Bound<'py, PyAny>> = Vec::with_capacity(bodies.len());
     for sql in bodies.keys() {
         let arguments: Bound<'py, PyDict> = PyDict::new(py);
@@ -71,10 +68,8 @@ pub(crate) fn sql_test_columns<'py>(
     let arguments: Bound<'py, PyDict> = PyDict::new(py);
     arguments.set_item("queries", PyTuple::new(py, queries)?)?;
     arguments.set_item("profile", profile)?;
-    let analyses: Bound<'py, PyAny> = py
-        .import(NATIVE_MODULE)?
-        .getattr("infer_native_query_columns")?
-        .call((), Some(&arguments))?;
+    let analyses: Bound<'py, PyAny> =
+        registry::native(py, NativeAttr::InferNativeQueryColumns)?.call((), Some(&arguments))?;
     for (sql, analysis) in bodies.keys().iter().zip(analyses.try_iter()?) {
         let analysis: Bound<'py, PyAny> = analysis?;
         let mut names: Vec<Bound<'py, PyAny>> = Vec::new();

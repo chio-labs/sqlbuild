@@ -9,11 +9,9 @@ use sqlbuild_core::migration_values::main::migration_decision_traits::migration_
 use sqlbuild_core::migration_values::main::plan_label::plan_label;
 use sqlbuild_core::migration_values::models::{ColumnDecisionTraits, DecisionTraits};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::record_behaviours::call_arguments::call_argument;
-use crate::bindings::_helpers::records::constants::NATIVE_MODULE;
-
-const VIEW_STATUS: &str = "OldNameViewStatus";
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
 fn value(member: &Bound<'_, PyAny>) -> PyResult<String> {
     member.str()?.extract()
@@ -194,7 +192,7 @@ pub(crate) fn history_status(
     } else {
         "PENDING_ARCHIVE"
     };
-    Ok(imported(py, NATIVE_MODULE, VIEW_STATUS)?
+    Ok(registry::class(py, RecordId::OldNameViewStatus)?
         .getattr(status)?
         .unbind())
 }

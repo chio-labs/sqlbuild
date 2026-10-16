@@ -1,23 +1,18 @@
 //! Plan a compiled project over an open warehouse connection, and open that connection.
 
-use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::phases::monotonic;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::graph::python_node_graph::run_selection_from_inputs;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const EXECUTION_PLAN_MODULE: &str = "sqlbuild._native";
-const MATERIALIZATIONS_MODULE: &str = "sqlbuild.compiler.pipeline._helpers.materializations";
-const PIPELINE_MODELS_MODULE: &str = "sqlbuild._native";
 const SINGLE_CONNECTION: i64 = 1;
 
 /// The deferred relation locations and the warehouse relations behind them, when deferring.
@@ -38,7 +33,6 @@ pub(crate) fn pipeline_result<'py>(
     on_progress: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project.py();
-    let native = py.import(NATIVE_MODULE)?;
     let discovered: &Bound<'py, PyAny> = inputs.discovered_inputs;
     let select: Bound<'py, PyAny> = options.getattr("select")?;
     let exclude: Bound<'py, PyAny> = options.getattr("exclude")?;
@@ -57,7 +51,7 @@ pub(crate) fn pipeline_result<'py>(
         .is_truthy()?
     {
         let graph: Bound<'py, PyAny> = call_with(
-            &native.getattr("build_project_graph_from_compiled_project")?,
+            &registry::native(py, NativeAttr::BuildProjectGraphFromCompiledProject)?,
             &[("project", project.clone())],
         )?;
         run_selection =
@@ -65,16 +59,15 @@ pub(crate) fn pipeline_result<'py>(
         selected_sql_keys = run_selection.getattr("sql_keys")?;
         selected_python_node_names = run_selection.getattr("python_node_names")?;
         python_read_source_names = call_with(
-            &native.getattr("python_read_source_names_for")?,
+            &registry::native(py, NativeAttr::PythonReadSourceNamesFor)?,
             &[
                 ("discovered_inputs", discovered.clone()),
                 ("python_node_names", selected_python_node_names.clone()),
             ],
         )?;
     }
-    let planner_models = py.import(NATIVE_RECORDS_MODULE)?;
     let selection: Bound<'py, PyAny> = call_with(
-        &planner_models.getattr("PlannerSelection")?,
+        &registry::class(py, RecordId::PlannerSelection)?,
         &[
             ("select", select),
             ("exclude", exclude),
@@ -84,7 +77,7 @@ pub(crate) fn pipeline_result<'py>(
         ],
     )?;
     let overrides: Bound<'py, PyAny> = call_with(
-        &shape_class(planner_models.as_any(), "PlannerOverrides")?,
+        &registry::class(py, RecordId::PlannerOverrides)?,
         &option_fields(
             options,
             &[
@@ -104,11 +97,11 @@ pub(crate) fn pipeline_result<'py>(
         &["defer_sources_to", "source_deferral_enabled"],
     )?);
     let deferral: Bound<'py, PyAny> = call_with(
-        &shape_class(planner_models.as_any(), "DeferralInputs")?,
+        &registry::class(py, RecordId::DeferralInputs)?,
         &deferral_fields,
     )?;
     let policies: Bound<'py, PyAny> = call_with(
-        &shape_class(planner_models.as_any(), "PlannerPolicies")?,
+        &registry::class(py, RecordId::PlannerPolicies)?,
         &option_fields(
             options,
             &[
@@ -120,7 +113,7 @@ pub(crate) fn pipeline_result<'py>(
         )?,
     )?;
     let plan_output: Bound<'py, PyAny> = call_with(
-        &imported(py, EXECUTION_PLAN_MODULE, "build_execution_plan")?,
+        &registry::native(py, NativeAttr::BuildExecutionPlan)?,
         &[
             ("project", project.clone()),
             ("adapter", inputs.adapter.clone()),
@@ -135,10 +128,10 @@ pub(crate) fn pipeline_result<'py>(
         ],
     )?;
     let custom_materializations: Bound<'py, PyAny> =
-        imported(py, MATERIALIZATIONS_MODULE, "load_custom_materializations")?
+        host::entry(py, UserCodeHost::LoadCustomMaterializations)?
             .call1((discovered.getattr("materialization_files")?,))?;
     let python_outputs: Bound<'py, PyAny> = call_with(
-        &native.getattr("build_python_run_plan_outputs")?,
+        &registry::native(py, NativeAttr::BuildPythonRunPlanOutputs)?,
         &[
             ("discovered_inputs", discovered.clone()),
             ("plan_output", plan_output),
@@ -147,7 +140,7 @@ pub(crate) fn pipeline_result<'py>(
         ],
     )?;
     call_with(
-        &imported(py, PIPELINE_MODELS_MODULE, "CompilePipelineResult")?,
+        &registry::class(py, RecordId::CompilePipelineResult)?,
         &[
             ("project", project.clone()),
             ("plan_output", python_outputs.getattr("plan_output")?),
@@ -185,10 +178,9 @@ fn deferral<'py>(
     if defer_to.is_none() {
         return Ok((py.None().into_bound(py), py.None().into_bound(py)));
     }
-    let native = py.import(NATIVE_MODULE)?;
     let adapter: &Bound<'py, PyAny> = inputs.adapter;
     let target_config: Bound<'py, PyAny> = call_with(
-        &native.getattr("resolve_deferred_target_config")?,
+        &registry::native(py, NativeAttr::ResolveDeferredTargetConfig)?,
         &[
             ("discovered_inputs", inputs.discovered_inputs.clone()),
             ("defer_to", defer_to.clone()),
@@ -199,7 +191,7 @@ fn deferral<'py>(
         ],
     )?;
     let locations: Bound<'py, PyAny> = call_with(
-        &native.getattr("build_deferred_locations")?,
+        &registry::native(py, NativeAttr::BuildDeferredLocations)?,
         &[
             ("project", project.clone()),
             ("deferred_target_config", target_config),
@@ -216,7 +208,7 @@ fn deferral<'py>(
         ],
     )?;
     let relations: Bound<'py, PyAny> = call_with(
-        &native.getattr("gather_deferred_relations")?,
+        &registry::native(py, NativeAttr::GatherDeferredRelations)?,
         &[
             ("adapter", adapter.clone()),
             ("connection", inputs.connection.clone()),

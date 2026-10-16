@@ -1,6 +1,5 @@
 //! Logical SQL references extracted natively under one adapter's lexical rules.
 
-use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
@@ -13,16 +12,12 @@ use sqlbuild_sqltext::sql_references::models::{
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
-const REFERENCE_TYPES_MODULE: &str = "sqlbuild._native";
-const COLLECTOR_MODULE: &str = "sqlbuild._native";
 const REFERENCE_CALL_SYNTAX_CODE: &str = "P012";
 
 /// `(kind, name, package, call_argument_count)` for one reference.
@@ -110,16 +105,13 @@ fn scanned<'py>(
         ReferenceExtraction::Extracted(scan) => scan,
         ReferenceExtraction::Failed(failure) => {
             let error: Bound<'py, PyAny> =
-                imported(py, COMPILE_ERRORS_MODULE, "CompileInputError")?
-                    .call1((failure.message,))?;
+                registry::error(py, ErrorId::CompileInput)?.call1((failure.message,))?;
             return Err(PyErr::from_value(error));
         }
     };
-    let kind_type: Bound<'py, PyAny> = imported(py, REFERENCE_TYPES_MODULE, "SqlReferenceKind")?;
-    let reference_type: Bound<'py, PyAny> =
-        imported(py, COMPILE_MODELS_MODULE, "CompileSqlReference")?;
-    let invalid_type: Bound<'py, PyAny> =
-        imported(py, NATIVE_RECORDS_MODULE, "InvalidSqlReferenceCall")?;
+    let kind_type: Bound<'py, PyAny> = registry::class(py, RecordId::SqlReferenceKind)?;
+    let reference_type: Bound<'py, PyAny> = registry::class(py, RecordId::CompileSqlReference)?;
+    let invalid_type: Bound<'py, PyAny> = registry::class(py, RecordId::InvalidSqlReferenceCall)?;
     let references: Vec<Bound<'py, PyAny>> = scan
         .references
         .into_iter()
@@ -168,7 +160,7 @@ fn scan_sql_reference_calls<'py>(
     let py: Python<'py> = syntax.py();
     let (references, invalid_calls) = scanned(py, sql, syntax)?;
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "SqlReferenceScan")?,
+        &registry::class(py, RecordId::SqlReferenceScan)?,
         &[
             ("references", PyTuple::new(py, references)?.into_any()),
             ("invalid_calls", PyTuple::new(py, invalid_calls)?.into_any()),
@@ -185,9 +177,8 @@ pub(crate) fn extract_references<'py>(
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = syntax.py();
     let (references, invalid_calls) = scanned(py, sql, syntax)?;
-    let report: Bound<'py, PyAny> = imported(py, COLLECTOR_MODULE, "report_compile_diagnostic")?;
-    let diagnostic_type: Bound<'py, PyAny> =
-        imported(py, COMPILE_MODELS_MODULE, "CompilerDiagnostic")?;
+    let report: Bound<'py, PyAny> = registry::native(py, NativeAttr::ReportCompileDiagnostic)?;
+    let diagnostic_type: Bound<'py, PyAny> = registry::class(py, RecordId::CompilerDiagnostic)?;
     let types = py.import(COMPILE_TYPES_MODULE)?;
     for call in invalid_calls {
         let diagnostic: Bound<'py, PyAny> = call_with(
@@ -195,11 +186,11 @@ pub(crate) fn extract_references<'py>(
             &[
                 (
                     "phase",
-                    shape_class(types.as_any(), "DiagnosticPhase")?.getattr("COMPILE")?,
+                    registry::class(types.py(), RecordId::DiagnosticPhase)?.getattr("COMPILE")?,
                 ),
                 (
                     "severity",
-                    shape_class(types.as_any(), "DiagnosticSeverity")?.getattr("ERROR")?,
+                    registry::class(types.py(), RecordId::DiagnosticSeverity)?.getattr("ERROR")?,
                 ),
                 ("code", text(py, REFERENCE_CALL_SYNTAX_CODE)?),
                 ("message", call.getattr("message")?),

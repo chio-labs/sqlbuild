@@ -1,11 +1,12 @@
 //! The warehouse inspection phase: snapshot, migrations and inspection relations in one pass.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::planner_phases::constants::NATIVE_MODULE;
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::planner_phases::full_refresh::effectively_full_refreshed_model_names;
 use crate::bindings::_helpers::planner_phases::objects::native;
 use crate::bindings::_helpers::planner_warehouse::fingerprint_cache::MigrationFingerprintCache;
 use crate::bindings::_helpers::planner_warehouse::snapshot::{SnapshotRequest, warehouse_snapshot};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
@@ -42,7 +43,7 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
     let config = runtime.getattr("project_config")?;
     let cursor_scope = native(
         py,
-        "CursorSnapshotScope",
+        RecordId::CursorSnapshotScope,
         &[
             ("model_keys", selected_scope.getattr("selected_keys")?),
             (
@@ -86,7 +87,7 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
     })?;
     let migrations = native(
         py,
-        "plan_model_migrations",
+        NativeAttr::PlanModelMigrations,
         &[
             ("runtime", runtime.clone()),
             ("scope", selected_scope.clone()),
@@ -98,7 +99,7 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
     )?;
     fingerprints.call_method0("persist")?;
     let inspection_relations = call_with(
-        &imported(py, NATIVE_MODULE, "build_planner_relations_context")?,
+        &registry::native(py, NativeAttr::BuildPlannerRelationsContext)?,
         &[
             ("project", project.clone()),
             ("adapter", adapter.clone()),
@@ -131,7 +132,7 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
     }
     let columns = native(
         py,
-        "plan_column_migrations",
+        NativeAttr::PlanColumnMigrations,
         &[
             ("runtime", runtime.clone()),
             ("scope", selected_scope.clone()),
@@ -151,7 +152,7 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
     )?;
     let old_names = native(
         py,
-        "plan_old_name_views",
+        NativeAttr::PlanOldNameViews,
         &[
             ("runtime", runtime.clone()),
             ("scope", selected_scope),
@@ -178,7 +179,7 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
     }
     native(
         py,
-        "PlannerWarehouseState",
+        RecordId::PlannerWarehouseState,
         &[
             ("snapshot", columns.getattr("snapshot")?),
             ("inspection_relations", inspection_relations),

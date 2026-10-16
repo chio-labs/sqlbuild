@@ -6,8 +6,8 @@ use pyo3::types::PyBool;
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 /// The project directory, discovered inputs, adapter context, colour and progress stream.
 type InvocationContext<'py> = (
@@ -31,7 +31,7 @@ pub(crate) fn resolve_adapter_connection_context<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = discovered.py();
     let adapter_name: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "resolve_effective_adapter_name")?,
+        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
             ("project_config", discovered.getattr("project_config")?),
             ("local_config", discovered.getattr("local_config")?),
@@ -39,7 +39,7 @@ pub(crate) fn resolve_adapter_connection_context<'py>(
     )?;
     let adapter: Bound<'py, PyAny> = resolve_cli_adapter(&adapter_name, project_dir)?;
     let connection_config: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "resolve_project_connection_config")?,
+        &registry::native(py, NativeAttr::ResolveProjectConnectionConfig)?,
         &[
             ("discovered_inputs", discovered.clone()),
             ("project_dir", project_dir.clone()),
@@ -49,7 +49,7 @@ pub(crate) fn resolve_adapter_connection_context<'py>(
         ],
     )?;
     call_with(
-        &imported(py, NATIVE_MODULE, "AdapterConnectionContext")?,
+        &registry::class(py, RecordId::AdapterConnectionContext)?,
         &[
             ("adapter_name", adapter_name),
             ("adapter", adapter),
@@ -70,7 +70,7 @@ fn invocation_context<'py>(
         requested
     };
     let discovered: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "discover_project_inputs")?,
+        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
         &[("project_dir", project_dir.clone())],
     )?;
     let adapter_context: Bound<'py, PyAny> = resolve_adapter_connection_context(
@@ -132,7 +132,7 @@ pub(crate) fn resolve_reported_command_invocation<'py>(
     fields.push((
         "connection_progress",
         call_with(
-            &imported(py, NATIVE_MODULE, "ConnectionProgressReporter")?,
+            &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
             &[
                 ("adapter_name", adapter_context.getattr("adapter_name")?),
                 ("stream", stream.clone()),
@@ -143,7 +143,7 @@ pub(crate) fn resolve_reported_command_invocation<'py>(
     fields.push((
         "planning_progress",
         call_with(
-            &imported(py, NATIVE_MODULE, "PlanningProgressReporter")?,
+            &registry::native(py, NativeAttr::PlanningProgressReporter)?,
             &[
                 ("stream", stream.clone()),
                 ("use_color", boolean(py, *use_color)),

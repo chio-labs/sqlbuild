@@ -11,9 +11,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
 use crate::bindings::_helpers::state_rows::timestamps::offset_aware;
 
-pub(crate) const COST_MODELS: &str = "sqlbuild.cost.models";
-pub(crate) const COST_TYPES: &str = "sqlbuild.cost.types";
-pub(crate) const COST_EXCEPTIONS: &str = "sqlbuild._native";
 const DECIMAL_MODULE: &str = "decimal";
 /// The methods an adapter with warehouse cost telemetry implements.
 const COST_AWARE_METHODS: [&str; 2] = ["cost_capability", "collect_run_cost"];

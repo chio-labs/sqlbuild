@@ -16,16 +16,12 @@ use crate::bindings::_helpers::build_command::support::{
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const LOADER_DAG_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS: &str = "sqlbuild._native";
 const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
-const INGRESS_MODULE: &str = "sqlbuild.executor.python_nodes.main._ingress";
-const READ_SIDE_MODULE: &str = "sqlbuild.executor.python_nodes.main.read_side";
-const EXECUTOR_PYTHON_MODELS: &str = "sqlbuild.executor.python_nodes.models";
 const SUCCESS_STATUS: &str = "success";
 
 /// The cursor window and output settings the Python lifecycle runs with.
@@ -265,7 +261,7 @@ fn node_runtime<'py>(
     let py: Python<'py> = connection.py();
     let [start_ts, end_ts, start_int, end_int] = &parts.inputs.cursors;
     call_with(
-        &imported(py, EXECUTOR_PYTHON_MODELS, "PythonNodeRuntime")?,
+        &host::entry(py, ExecutorHost::PythonNodeRuntime)?,
         &[
             ("adapter", parts.adapter.clone()),
             ("connection_config", parts.connection_config.clone()),
@@ -302,7 +298,7 @@ fn lifecycle_plan<'py>(
     let plan_output: Bound<'py, PyAny> = pipeline.getattr("plan_output")?;
     let graph: Bound<'py, PyAny> = python_node_graph(discovered)?;
     let selection: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "PythonSqlRunSelection")?,
+        &registry::class(py, RecordId::PythonSqlRunSelection)?,
         &[
             (
                 "sql_keys",
@@ -313,12 +309,12 @@ fn lifecycle_plan<'py>(
         ],
     )?;
     let plan: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "build_python_sql_run_lifecycle")?,
+        &registry::native(py, NativeAttr::BuildPythonSqlRunLifecycle)?,
         &[("selection", selection), ("python_graph", graph.clone())],
     )?;
     let source_type: Bound<'py, PyAny> =
         imported(py, COMPILE_TYPES, "CompiledResourceType")?.getattr("SOURCE")?;
-    let key_class: Bound<'py, PyAny> = imported(py, COMPILE_MODELS, "CompiledObjectKey")?;
+    let key_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledObjectKey)?;
     let mut keys: Vec<Bound<'py, PyAny>> = Vec::new();
     for name in plan.getattr("ingress_loader_names")?.try_iter()? {
         keys.push(call_with(
@@ -331,7 +327,7 @@ fn lifecycle_plan<'py>(
     source_map.call_method1(
         "update",
         (call_with(
-            &imported(py, LOADER_DAG_MODULE, "build_intermediate_source_map")?,
+            &registry::native(py, NativeAttr::BuildIntermediateSourceMap)?,
             &[
                 ("project", pipeline.getattr("project")?),
                 ("selected_keys", frozenset(py, &keys)?),
@@ -395,7 +391,7 @@ pub(crate) fn prepare_direct_python_lifecycle<'py>(
         )],
     )?;
     let relation_targets: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "build_python_relation_targets")?,
+        &registry::native(py, NativeAttr::BuildPythonRelationTargets)?,
         &[
             ("adapter", adapter.clone()),
             ("project", project.clone()),
@@ -404,7 +400,7 @@ pub(crate) fn prepare_direct_python_lifecycle<'py>(
         ],
     )?;
     let project_relations: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "build_project_relation_targets")?,
+        &registry::native(py, NativeAttr::BuildProjectRelationTargets)?,
         &[
             ("adapter", adapter.clone()),
             ("plan_output", plan_output.clone()),
@@ -433,7 +429,7 @@ pub(crate) fn prepare_direct_python_lifecycle<'py>(
             adapter.call_method1("connect", (connection_config.clone(),))?;
         let executed: PyResult<Bound<'py, PyAny>> = (|| {
             let callbacks: Bound<'py, PyAny> = call_with(
-                &imported(py, EXECUTOR_PYTHON_MODELS, "IngressCallbacks")?,
+                &host::entry(py, ExecutorHost::IngressCallbacks)?,
                 &[
                     ("use_color", boolean(py, context.use_color)),
                     ("on_node_start", inputs.on_node_start.clone()),
@@ -441,7 +437,7 @@ pub(crate) fn prepare_direct_python_lifecycle<'py>(
                 ],
             )?;
             call_with(
-                &imported(py, INGRESS_MODULE, "run_ingress_python_loader_nodes")?,
+                &host::entry(py, ExecutorHost::RunIngressPythonLoaderNodes)?,
                 &[
                     ("python_graph", lifecycle.graph.clone()),
                     ("selected_python_names", ingress_names.clone()),
@@ -480,11 +476,7 @@ pub(crate) fn prepare_direct_python_lifecycle<'py>(
         }
         let scheduled: Vec<String> = scheduled.into_iter().collect();
         let tracker: Bound<'py, PyAny> = call_with(
-            &imported(
-                py,
-                READ_SIDE_MODULE,
-                "create_read_side_python_execution_tracker",
-            )?,
+            &host::entry(py, ExecutorHost::CreateReadSidePythonExecutionTracker)?,
             &[
                 ("python_graph", lifecycle.graph.clone()),
                 ("selected_python_names", names_set(py, &read_side)?),

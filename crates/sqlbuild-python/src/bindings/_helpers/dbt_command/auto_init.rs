@@ -11,14 +11,12 @@ use sqlbuild_core::dbt_command::main::forwarded_dbt_args::forwarded_dbt_args;
 use sqlbuild_core::dbt_command::main::render_dbt_auto_init::render_dbt_auto_init;
 use sqlbuild_core::dbt_command::models::ForwardedArg;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, flag, path, stream};
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
-const PROGRESS_REPORTER_MODULE: &str = "sqlbuild._native";
 
 fn project_config_found(directory: &Bound<'_, PyAny>) -> PyResult<bool> {
     let name: Bound<'_, PyAny> =
@@ -82,14 +80,14 @@ pub(crate) fn ensure_twin_project<'py>(
         !no_color && !args.iter().any(|arg| arg == JSON_OPTION) && color_enabled(py)?;
     let progress_stream: Bound<'py, PyAny> = stream(py, "stderr")?;
     let progress: Bound<'py, PyAny> = call_with(
-        &imported(py, PROGRESS_REPORTER_MODULE, "DbtInitProgressReporter")?,
+        &registry::native(py, NativeAttr::DbtInitProgressReporter)?,
         &[
             ("stream", progress_stream.clone()),
             ("use_color", flag(py, use_color)),
         ],
     )?;
     let callbacks: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "DbtInitProgressCallbacks")?,
+        &registry::class(py, RecordId::DbtInitProgressCallbacks)?,
         &[
             ("start", progress.getattr("start")?),
             ("complete", progress.getattr("complete")?),
@@ -105,7 +103,7 @@ pub(crate) fn ensure_twin_project<'py>(
         None => none.clone(),
     };
     let request: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "DbtInitRequest")?,
+        &registry::class(py, RecordId::DbtInitRequest)?,
         &[
             ("cwd", effective_dir),
             ("dbt_project_dir", dbt_project_dir),
@@ -120,7 +118,7 @@ pub(crate) fn ensure_twin_project<'py>(
         ],
     )?;
     let result: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "build_dbt_init_project")?,
+        &registry::native(py, NativeAttr::BuildDbtInitProject)?,
         &[("request", request)],
     )?;
     let project_file: String = result.getattr("project_file")?.str()?.to_string();

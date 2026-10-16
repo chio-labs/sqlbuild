@@ -15,30 +15,22 @@ use sqlbuild_model_config::declarations::models::{
 use sqlbuild_model_config::sql_values::errors::SqlValueFailure;
 use sqlbuild_model_config::sql_values::models::RawSqlValue;
 
-use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
 use crate::bindings::_helpers::contracts::sql_values::{
     SqlValueClasses, raw_value, sql_value, sql_value_error,
 };
-
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const MODELS_MODULE: &str = "sqlbuild._native";
-const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
-const IDENTITY_ERRORS_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 fn declaration_error(py: Python<'_>, failure: DeclarationFailure) -> PyResult<PyErr> {
     Ok(match failure {
-        DeclarationFailure::Parse(message) => PyErr::from_value(
-            py.import(DISCOVERY_ERRORS_MODULE)?
-                .getattr("DeclarationParseError")?
-                .call1((message,))?,
-        ),
+        DeclarationFailure::Parse(message) => {
+            PyErr::from_value(registry::error(py, ErrorId::DeclarationParse)?.call1((message,))?)
+        }
         DeclarationFailure::Identity(message, help) => {
             let keywords = PyDict::new(py);
             keywords.set_item("help", help)?;
             PyErr::from_value(
-                py.import(IDENTITY_ERRORS_MODULE)?
-                    .getattr("ResourceIdentityError")?
+                registry::error(py, ErrorId::ResourceIdentity)?
                     .call((message,), Some(&keywords))?,
             )
         }
@@ -59,8 +51,7 @@ fn enum_record<'py>(
     facts: EnumFacts,
     owner: &Owner<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let models = py.import(MODELS_MODULE)?;
-    let member_class = shape_class(models.as_any(), "EnumMember")?;
+    let member_class = registry::class(py, RecordId::EnumMember)?;
     let int_class = py.import("builtins")?.getattr("int")?;
     let members = facts
         .members
@@ -73,7 +64,7 @@ fn enum_record<'py>(
             member_class.call1((name, value))
         })
         .collect::<PyResult<Vec<_>>>()?;
-    models.getattr("EnumDeclaration")?.call1((
+    registry::class(py, RecordId::EnumDeclaration)?.call1((
         facts.name,
         PyTuple::new(py, members)?,
         facts.scalar_type,
@@ -89,21 +80,18 @@ fn constant_record<'py>(
     classes: &SqlValueClasses<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let render_as = match facts.render_as {
-        Some(rendering) => py
-            .import(NATIVE_RECORDS_MODULE)?
-            .getattr("CollectionRendering")?
-            .call1((rendering,))?,
+        Some(rendering) => {
+            registry::class(py, RecordId::CollectionRendering)?.call1((rendering,))?
+        }
         None => py.None().into_bound(py),
     };
-    py.import(MODELS_MODULE)?
-        .getattr("ConstantDeclaration")?
-        .call1((
-            facts.name,
-            sql_value(&facts.value, classes)?,
-            &owner.relative_path,
-            owner.model_name.as_deref(),
-            render_as,
-        ))
+    registry::class(py, RecordId::ConstantDeclaration)?.call1((
+        facts.name,
+        sql_value(&facts.value, classes)?,
+        &owner.relative_path,
+        owner.model_name.as_deref(),
+        render_as,
+    ))
 }
 
 fn optional_raw(

@@ -27,11 +27,9 @@ use crate::bindings::_helpers::janitor::janitor_phases::{
 };
 use crate::bindings::_helpers::janitor::janitor_plan::{janitor_plan_text, janitor_result_counts};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const ERRORS_MODULE: &str = "sqlbuild._native";
-const PREVIEW_TARGET_MODULE: &str = "sqlbuild._native";
-const TARGET_NAME_MODULE: &str = "sqlbuild._native";
 const COMMAND_NAME: &str = "janitor";
 
 fn imported<'py>(py: Python<'py>, module: &str, name: &str) -> PyResult<Bound<'py, PyAny>> {
@@ -53,7 +51,7 @@ fn settings_error(py: Python<'_>, error: JanitorSettingsError) -> PyErr {
     let raised = (|| {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", error.code)?;
-        imported(py, ERRORS_MODULE, "CliUserError")?.call((error.message,), Some(&options))
+        registry::error(py, ErrorId::CliUser)?.call((error.message,), Some(&options))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),
@@ -79,7 +77,7 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Bou
         directory if !directory.is_none() => directory,
         _ => py.import("pathlib")?.getattr("Path")?.call_method0("cwd")?,
     };
-    let discovered: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "discover_project_inputs")?
+    let discovered: Bound<'py, PyAny> = registry::native(py, NativeAttr::DiscoverProjectInputs)?
         .call((), Some(&keywords(py, &[("project_dir", &project_dir)])?))?;
     let as_target: Bound<'py, PyAny> = request.getattr("as_target")?;
     let preview: Bound<'py, PyDict> = keywords(
@@ -90,9 +88,9 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Bou
         ],
     )?;
     preview.set_item("command_name", COMMAND_NAME)?;
-    imported(py, PREVIEW_TARGET_MODULE, "validate_preview_target")?.call((), Some(&preview))?;
+    registry::native(py, NativeAttr::ValidatePreviewTarget)?.call((), Some(&preview))?;
     let selected_target: Bound<'py, PyAny> = request.getattr("selected_target")?;
-    let active_target: Bound<'py, PyAny> = imported(py, TARGET_NAME_MODULE, "resolve_target_name")?
+    let active_target: Bound<'py, PyAny> = registry::native(py, NativeAttr::ResolveTargetName)?
         .call(
             (),
             Some(&keywords(
@@ -117,7 +115,7 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Bou
         ],
     )?;
     options.set_item("use_color", use_color)?;
-    imported(py, NATIVE_MODULE, "JanitorInvocation")?.call((), Some(&options))
+    registry::class(py, RecordId::JanitorInvocation)?.call((), Some(&options))
 }
 
 /// Effective retention settings, validated.
@@ -156,7 +154,7 @@ fn settings<'py>(
             ),
         ],
     )?;
-    imported(py, NATIVE_MODULE, "JanitorSettings")?.call((), Some(&options))
+    registry::class(py, RecordId::JanitorSettings)?.call((), Some(&options))
 }
 
 /// Ask for the exact confirmation phrase; an interrupt cancels.

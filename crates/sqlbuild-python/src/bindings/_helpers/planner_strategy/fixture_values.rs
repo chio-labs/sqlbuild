@@ -1,10 +1,10 @@
 //! Fixture boundary records and adapter callbacks.
 
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use sqlbuild_analysis::planner_fixtures::models::FixtureColumn;
-
-pub(crate) const MODELS: &str = "sqlbuild._native";
 
 pub(crate) fn folded(value: &Bound<'_, PyAny>) -> PyResult<String> {
     value.call_method0("casefold")?.extract()
@@ -36,10 +36,10 @@ pub(crate) fn columns(values: &Bound<'_, PyAny>, inferred: bool) -> PyResult<Vec
 
 pub(crate) fn record<'py>(
     py: Python<'py>,
-    name: &str,
+    name: RecordId,
     kwargs: &Bound<'py, PyDict>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    py.import(MODELS)?.getattr(name)?.call((), Some(kwargs))
+    registry::class(py, name)?.call((), Some(kwargs))
 }
 
 pub(crate) fn metadata<'py>(
@@ -54,13 +54,13 @@ pub(crate) fn metadata<'py>(
             kwargs.set_item("name", &column.name)?;
             kwargs.set_item("type", &column.sql_type)?;
             kwargs.set_item("nullable", column.nullable)?;
-            record(py, "FixtureColumnMetadata", &kwargs)
+            record(py, RecordId::FixtureColumnMetadata, &kwargs)
         })
         .collect::<PyResult<Vec<_>>>()?;
     let kwargs = PyDict::new(py);
     kwargs.set_item("columns", PyTuple::new(py, values)?)?;
     kwargs.set_item("authoritative_names", authoritative)?;
-    record(py, "FixtureRelationMetadata", &kwargs)
+    record(py, RecordId::FixtureRelationMetadata, &kwargs)
 }
 
 pub(crate) fn label(key: &Bound<'_, PyAny>) -> PyResult<String> {
@@ -78,5 +78,5 @@ pub(crate) fn diagnostic<'py>(
     let kwargs = PyDict::new(key.py());
     kwargs.set_item("key", key)?;
     kwargs.set_item("message", message)?;
-    record(key.py(), "RelationFixtureDiagnostic", &kwargs)
+    record(key.py(), RecordId::RelationFixtureDiagnostic, &kwargs)
 }

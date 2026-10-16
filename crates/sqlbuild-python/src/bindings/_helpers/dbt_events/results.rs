@@ -5,11 +5,9 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyString, PyTuple};
 use sqlbuild_core::dbt_events::models::{DbtNodeMessage, DbtNodeResult};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_RECORDS: &str = "sqlbuild._native";
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
 fn optional<'py, T: pyo3::IntoPyObject<'py>>(
     py: Python<'py>,
@@ -34,7 +32,7 @@ pub(crate) fn python_result<'py>(
     py: Python<'py>,
     result: &DbtNodeResult,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let message_class: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS, "DbtNodeMessage")?;
+    let message_class: Bound<'py, PyAny> = registry::class(py, RecordId::DbtNodeMessage)?;
     let messages: Vec<Bound<'py, PyAny>> = result
         .messages
         .iter()
@@ -49,7 +47,7 @@ pub(crate) fn python_result<'py>(
         })
         .collect::<PyResult<_>>()?;
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "DbtNodeExecutionResult")?,
+        &registry::class(py, RecordId::DbtNodeExecutionResult)?,
         &[
             ("unique_id", text(py, &result.unique_id)),
             ("resource_type", text(py, &result.resource_type)),

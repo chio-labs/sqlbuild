@@ -2,7 +2,8 @@
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_resolution::values::{cursor_wrap, method, string};
-use crate::bindings::_helpers::planner_strategy::values::{PLANNER_EXCEPTIONS_MODULE, input_error};
+use crate::bindings::_helpers::planner_strategy::values::input_error;
+use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 use crate::bindings::_helpers::type_system::equality::types_equal;
 use pyo3::IntoPyObject;
@@ -16,12 +17,7 @@ use sqlbuild_sqltext::resolution::main::{
 };
 
 fn source_error(py: Python<'_>, message: &str, code: &str) -> PyErr {
-    input_error(
-        py,
-        (PLANNER_EXCEPTIONS_MODULE, "PlannerInputError"),
-        message,
-        Some(code),
-    )
+    input_error(py, ErrorId::PlannerInput, message, Some(code))
 }
 
 fn rows(value: &Bound<'_, PyAny>) -> PyResult<Vec<(String, Option<String>)>> {

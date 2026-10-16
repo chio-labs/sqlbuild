@@ -10,6 +10,8 @@ use sqlbuild_analysis::planner_fixtures::models::{
 };
 
 use crate::bindings::_helpers::planner_strategy::fixture_values::folded;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
 #[pyfunction]
 #[pyo3(signature = (*, base_expected_types, ordered_model_names, model_map))]
@@ -80,11 +82,7 @@ fn projections(model: &Bound<'_, PyAny>) -> PyResult<Vec<FixtureTypeProjection>>
     if lineage.is_none() {
         return Ok(projections);
     }
-    let direct = model
-        .py()
-        .import("sqlbuild._native")?
-        .getattr("ColumnTransformKind")?
-        .getattr("DIRECT")?;
+    let direct = registry::class(model.py(), RecordId::ColumnTransformKind)?.getattr("DIRECT")?;
     for column in lineage.try_iter()? {
         let column = column?;
         if !column.getattr("transform_kind")?.eq(&direct)? {

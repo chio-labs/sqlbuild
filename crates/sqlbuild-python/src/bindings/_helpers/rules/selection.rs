@@ -9,9 +9,10 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_rules::rules::main::selected_codes::selected_codes_json;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::constants::RULES_NATIVE_API_VERSION;
 
-const RULES_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const JSON_MODULE: &str = "json";
 const BUILTINS_MODULE: &str = "builtins";
@@ -81,10 +82,7 @@ fn rule_selected(config: &Bound<'_, PyAny>, code: &str) -> PyResult<bool> {
 /// `RulesError(message)`, caused by `cause` when given.
 pub(crate) fn rules_error(py: Python<'_>, message: &str, cause: Option<PyErr>) -> PyErr {
     let raised = || -> PyResult<PyErr> {
-        let error: Bound<'_, PyAny> = py
-            .import(RULES_EXCEPTIONS_MODULE)?
-            .getattr("RulesError")?
-            .call1((message,))?;
+        let error: Bound<'_, PyAny> = registry::error(py, ErrorId::Rules)?.call1((message,))?;
         Ok(PyErr::from_value(error))
     };
     let error: PyErr = raised().unwrap_or_else(|error| error);

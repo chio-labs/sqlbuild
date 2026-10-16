@@ -10,15 +10,13 @@ use sqlbuild_model_config::header_metadata::main::parse_schema_columns::parse_sc
 use sqlbuild_model_config::header_metadata::models::ColumnRequest;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::config_errors::config_exception;
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
 use crate::bindings::_helpers::model_config::contract_classes::contract_classes;
 use crate::bindings::_helpers::model_config::header_metadata::{ContractClasses, column_tuple};
-
-const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
-const DECLARATION_ERROR_CLASS: &str = "DeclarationParseError";
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 
 /// `(file_path, label)`: the path and label every message names.
 pub(crate) type ColumnSite<'a> = (&'a str, &'a str);
@@ -62,8 +60,7 @@ fn parse_schema_columns<'py>(
 fn raised(py: Python<'_>, error: ConfigError, declaration_errors: bool) -> PyErr {
     let built = (|| {
         if declaration_errors && error.class == ErrorClass::CompileInput {
-            return imported(py, DISCOVERY_ERRORS_MODULE, DECLARATION_ERROR_CLASS)?
-                .call1((error.message,));
+            return registry::error(py, ErrorId::DeclarationParse)?.call1((error.message,));
         }
         let native = native_config_error(py, error)?.into_bound(py).into_any();
         config_exception(&native, None)

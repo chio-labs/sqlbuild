@@ -17,17 +17,15 @@ use sqlbuild_pysource::udf_functions::main::udf_function::udf_function;
 use sqlbuild_pysource::udf_functions::models::{UdfFunction, UdfShape};
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::discovery::declaration_records::path_class;
 use crate::bindings::_helpers::discovery::project_files::path_object;
 use crate::bindings::_helpers::discovery::raised::{failure_error, read_error, stage_error};
 use crate::bindings::_helpers::discovery::snapshot::{in_snapshot, project_root, project_tree};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::models::NativeProjectTree;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
-const PARSE_ERROR_CLASS: &str = "ModelSqlParseError";
 const AST_MODULE: &str = "ast";
 const DESCRIPTION_KEY: &str = "description";
 const ENTRY_POINT_KEY: &str = "entry_point";
@@ -45,7 +43,7 @@ fn parse_error(source: &FunctionSource<'_>, detail: &str, cause: Option<PyErr>) 
     let py: Python<'_> = source.file_path.py();
     let raised = (|| {
         let message: String = format!("Python function '{}' {detail}", source.file_path.str()?);
-        imported(py, DISCOVERY_ERRORS_MODULE, PARSE_ERROR_CLASS)?.call1((message,))
+        registry::error(py, ErrorId::ModelSqlParse)?.call1((message,))
     })();
     match raised {
         Ok(instance) => {
@@ -128,8 +126,8 @@ fn unsupported_keys(source: &FunctionSource<'_>, function: &UdfFunction) -> PyRe
     let help: String = unsupported_keys_help(&keys, &supported);
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
     keywords.set_item("help", help)?;
-    let error: Bound<'_, PyAny> = imported(py, DISCOVERY_ERRORS_MODULE, PARSE_ERROR_CLASS)?
-        .call((message,), Some(&keywords))?;
+    let error: Bound<'_, PyAny> =
+        registry::error(py, ErrorId::ModelSqlParse)?.call((message,), Some(&keywords))?;
     Err(PyErr::from_value(error))
 }
 
@@ -250,7 +248,7 @@ fn function_record<'py>(
     };
     let (header_values, entry_point, body_python) = parsed_function(&source)?;
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "DiscoveredPythonFunctionFile")?,
+        &registry::class(py, RecordId::DiscoveredPythonFunctionFile)?,
         &[
             ("file_path", source.file_path.clone()),
             ("relative_path", source.relative_path.clone()),

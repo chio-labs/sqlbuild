@@ -5,13 +5,11 @@ use pyo3::types::{PyDict, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const CLONE_PLANNING_MODULE: &str = "sqlbuild._native";
 /// The `ClonePipelineResult` fields after the two projects, in `run_clone_planning` order.
 const PLANNED_FIELDS: [&str; 8] = [
     "clone_plan",
@@ -41,7 +39,7 @@ fn compiled_environment<'py>(
     let py: Python<'py> = target_name.py();
     let options: &Bound<'py, PyAny> = &pipeline.options;
     call_with(
-        &imported(py, NATIVE_MODULE, "build_compiled_project")?,
+        &registry::native(py, NativeAttr::BuildCompiledProject)?,
         &[
             ("discovered_inputs", pipeline.discovered.clone()),
             ("adapter", pipeline.adapter.clone()),
@@ -54,7 +52,7 @@ fn compiled_environment<'py>(
             (
                 "analysis_selection",
                 call_with(
-                    &imported(py, NATIVE_RECORDS_MODULE, "CompileAnalysisSelection")?,
+                    &registry::class(py, RecordId::CompileAnalysisSelection)?,
                     &[("no_cache", options.getattr("no_cache")?)],
                 )?,
             ),
@@ -110,7 +108,7 @@ pub(crate) fn prepared_clone_pipeline<'py>(
     let destination_source_project: Bound<'py, PyAny> =
         source_project(pipeline, &destination_project, destination_target)?;
     let planned: Bound<'py, PyTuple> = call_with(
-        &imported(py, CLONE_PLANNING_MODULE, "run_clone_planning")?,
+        &registry::native(py, NativeAttr::RunClonePlanning)?,
         &[
             ("project", destination_project.clone()),
             ("select", pipeline.options.getattr("select")?),
@@ -131,7 +129,7 @@ pub(crate) fn prepared_clone_pipeline<'py>(
         fields.push((*name, planned.get_item(index)?));
     }
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "ClonePipelineResult")?,
+        &registry::class(py, RecordId::ClonePipelineResult)?,
         &fields,
     )
 }

@@ -2,23 +2,19 @@
 
 use std::collections::HashMap;
 
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
-const COMPILE_INPUT_ERROR: &str = "CompileInputError";
 const DATACLASSES_MODULE: &str = "dataclasses";
 
 /// `CompileInputError(message)`.
 fn compile_input_error(py: Python<'_>, message: String) -> PyErr {
-    match py
-        .import(COMPILE_ERRORS_MODULE)
-        .and_then(|module| module.getattr(COMPILE_INPUT_ERROR))
-        .and_then(|class| class.call1((message,)))
-    {
+    match registry::error(py, ErrorId::CompileInput).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }

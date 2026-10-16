@@ -8,6 +8,7 @@ use crate::bindings::_helpers::planner_entries::relations::planner_relations_con
 use crate::bindings::_helpers::planner_entries::values::{
     boolean, native, none, planner_model, planner_type,
 };
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyList, PyListMethods, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -67,7 +68,7 @@ fn base_plan_output<'py>(
             project.getattr("enforce_explicit_references")?,
         ),
     ]);
-    planner_model(py, "PlanOutput", &fields)
+    planner_model(py, RecordId::PlanOutput, &fields)
 }
 
 /// Resolve command selection through the canonical build selector phase.
@@ -81,7 +82,7 @@ fn resolve_static_command_scope<'py>(
     let py = project.py();
     native(
         py,
-        "resolve_planner_scopes",
+        NativeAttr::ResolvePlannerScopes,
         &[
             ("project", project.clone()),
             ("selection", selection.clone()),
@@ -89,7 +90,7 @@ fn resolve_static_command_scope<'py>(
                 "policies",
                 planner_model(
                     py,
-                    "PlannerPolicies",
+                    RecordId::PlannerPolicies,
                     &[("auto_load_sources", boolean(py, auto_load_sources)?)],
                 )?,
             ),
@@ -155,13 +156,17 @@ fn build_audit_command_plan<'py>(
         let model = model?;
         materializations.set_item(
             model.getattr("name")?,
-            native(py, "get_materialization_type", &[("model", model.clone())])?
-                .getattr("value")?,
+            native(
+                py,
+                NativeAttr::GetMaterializationType,
+                &[("model", model.clone())],
+            )?
+            .getattr("value")?,
         )?;
     }
     let audits = native(
         py,
-        "build_selected_audit_entries",
+        NativeAttr::BuildSelectedAuditEntries,
         &[
             ("project", project.clone()),
             ("adapter", adapter.clone()),
@@ -238,7 +243,7 @@ fn build_test_command_plan<'py>(
         }
         let fingerprint_sql = native(
             py,
-            "build_compiled_function_fingerprint_sql",
+            NativeAttr::BuildCompiledFunctionFingerprintSql,
             &[("function", function.clone())],
         )?;
         functions.push(function_entry(
@@ -248,7 +253,7 @@ fn build_test_command_plan<'py>(
             (
                 fingerprint_sql,
                 none(py),
-                planner_type(py, "PlanReason", "NO_CHANGE")?,
+                planner_type(py, RecordId::PlanReason, "NO_CHANGE")?,
             ),
         )?);
     }
@@ -300,7 +305,7 @@ fn build_seed_command_plan<'py>(
         if !selected_keys.contains(seed.getattr("key")?)? {
             continue;
         }
-        let identity = native(py, "build_seed_identity", &[("seed", seed.clone())])?;
+        let identity = native(py, NativeAttr::BuildSeedIdentity, &[("seed", seed.clone())])?;
         let (version_hash, metadata_json) = (identity.get_item(0)?, identity.get_item(1)?);
         let previous = existing.call_method1("get", (seed.getattr("name")?,))?;
         let reason = if previous.is_none() {
@@ -312,7 +317,7 @@ fn build_seed_command_plan<'py>(
         };
         entries.push(planner_model(
             py,
-            "SeedPlanEntry",
+            RecordId::SeedPlanEntry,
             &[
                 ("key", seed.getattr("key")?),
                 ("name", seed.getattr("name")?),
@@ -323,7 +328,11 @@ fn build_seed_command_plan<'py>(
                 ),
                 (
                     "columns",
-                    native(py, "extract_seed_columns", &[("seed", seed.clone())])?,
+                    native(
+                        py,
+                        NativeAttr::ExtractSeedColumns,
+                        &[("seed", seed.clone())],
+                    )?,
                 ),
                 (
                     "csv_settings",
@@ -332,7 +341,7 @@ fn build_seed_command_plan<'py>(
                 ("fingerprint_definition", metadata_json.clone()),
                 ("fingerprint_version_hash", version_hash),
                 ("fingerprint_metadata_json", metadata_json),
-                ("reason", planner_type(py, "PlanReason", reason)?),
+                ("reason", planner_type(py, RecordId::PlanReason, reason)?),
             ],
         )?);
     }
@@ -414,7 +423,7 @@ fn read_selected_seed_fingerprints<'py>(
         let node_names = PyTuple::new(py, names.iter())?;
         let latest = native(
             py,
-            "read_latest_fingerprints",
+            NativeAttr::ReadLatestFingerprints,
             &[
                 ("connection", connection.clone()),
                 ("execute", adapter.getattr("execute")?),

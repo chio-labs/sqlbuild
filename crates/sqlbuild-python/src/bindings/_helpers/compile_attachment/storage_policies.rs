@@ -3,18 +3,17 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyString, PyTuple};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
-const CONTRACT_TYPES_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
 /// `value`, unless it is `None`.
 fn present(value: Bound<'_, PyAny>) -> Option<Bound<'_, PyAny>> {
     Some(value).filter(|value| !value.is_none())
 }
 
-fn source<'py>(py: Python<'py>, class: &str, member: &str) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, CONTRACT_TYPES_MODULE, class)?.getattr(member)
+fn source<'py>(py: Python<'py>, class: RecordId, member: &str) -> PyResult<Bound<'py, PyAny>> {
+    registry::member(py, class, member)
 }
 
 /// The `materialized` defaults entry, or `None` for a model without a table-backed materialization.
@@ -35,9 +34,8 @@ fn retention<'py>(
     target: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = materialized.py();
-    let resolved: Bound<'py, PyAny> =
-        imported(py, CONTRACT_MODELS_MODULE, "ResolvedTimeTravelRetention")?;
-    let class = "TimeTravelRetentionSource";
+    let resolved: Bound<'py, PyAny> = registry::class(py, RecordId::ResolvedTimeTravelRetention)?;
+    let class = RecordId::TimeTravelRetentionSource;
     let mut policy: Option<(Bound<'py, PyAny>, &str)> = None;
     if let Some(entry) = entry {
         if !target.is_none() {
@@ -74,8 +72,8 @@ fn table_type<'py>(
     target: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = target.py();
-    let resolved: Bound<'py, PyAny> = imported(py, CONTRACT_MODELS_MODULE, "ResolvedTableType")?;
-    let class = "TableTypeSource";
+    let resolved: Bound<'py, PyAny> = registry::class(py, RecordId::ResolvedTableType)?;
+    let class = RecordId::TableTypeSource;
     let mut declared: Option<(Bound<'py, PyAny>, &str)> = None;
     if let Some(entry) = entry {
         if !target.is_none() {

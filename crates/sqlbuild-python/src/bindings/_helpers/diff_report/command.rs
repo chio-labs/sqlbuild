@@ -24,29 +24,23 @@ use crate::bindings::_helpers::diff_report::query::{
 };
 use crate::bindings::_helpers::diff_report::registration::publish_diff_output;
 use crate::bindings::_helpers::diff_report::support::{
-    EXCEPTIONS_MODULE, call, caused, cli_error, error_text, is_exception, matches_class, none,
-    object, request_facts, user_error_parts,
+    call, caused, cli_error, error_text, is_exception, matches_class, matches_native, none, object,
+    request_facts, user_error_parts,
 };
 use crate::bindings::_helpers::discovery::configuration::discover_project_configuration;
 use crate::bindings::_helpers::frontier::encoder::emit_error;
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
-const TARGET_NAME_MODULE: &str = "sqlbuild._native";
-const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
 const DEFAULT_DIFF_MAX_FULL_ROWS: i64 = 10_000_000;
-const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
-const EXECUTE_MODULE: &str = "sqlbuild.executor.diff.main.execute";
-const DIFF_MODELS_MODULE: &str = "sqlbuild.executor.diff.models";
-const ADAPTER_ERRORS: (&str, &str) = ("sqlbuild.adapter.contract.exceptions", "AdapterUserError");
-const EXECUTOR_INPUT_ERRORS: (&str, &str) =
-    ("sqlbuild.errors.contracts.exceptions", "ExecutorInputError");
-const SIZE_GUARD_ERRORS: (&str, &str) = (
-    "sqlbuild.executor.diff.exceptions",
-    "FullDiffSizeGuardError",
-);
-const OUTCOME_ERRORS: (&str, &str) = (EXCEPTIONS_MODULE, "QueryDiffOutcomeError");
-const USER_ERRORS: (&str, &str) = (EXCEPTIONS_MODULE, "CliUserError");
+const ADAPTER_ERRORS: AdapterHost = AdapterHost::AdapterUserError;
+const EXECUTOR_INPUT_ERRORS: ExecutorHost = ExecutorHost::ExecutorInputError;
+const SIZE_GUARD_ERRORS: ExecutorHost = ExecutorHost::FullDiffSizeGuardError;
+const OUTCOME_ERRORS: ErrorId = ErrorId::QueryDiffOutcome;
+const USER_ERRORS: ErrorId = ErrorId::CliUser;
 const ROW_DIFF_KEY_ERROR_PREFIX: &str = "row diff ";
 const ROW_DIFF_KEY_ERROR_FRAGMENT: &str = " unique_key values";
 
@@ -60,7 +54,7 @@ fn user(message: &str, code: &str, help: Option<&str>) -> DiffUserError {
 
 /// `CliUserError` from a pure rejection.
 fn rejected(py: Python<'_>, error: &DiffUserError) -> PyErr {
-    cli_error(py, "CliUserError", error)
+    cli_error(py, ErrorId::CliUser, error)
 }
 
 /// The project directory and discovered inputs, after the request's flags validate.
@@ -74,9 +68,9 @@ fn resolve_invocation<'py>(
         return Err(cli_error(
             py,
             if query_mode {
-                "QueryDiffIncompleteError"
+                ErrorId::QueryDiffIncomplete
             } else {
-                "CliUserError"
+                ErrorId::CliUser
             },
             &error,
         ));
@@ -89,12 +83,12 @@ fn resolve_invocation<'py>(
         discover_project_configuration(py, &project_dir)?
     } else {
         call(
-            &imported(py, NATIVE_MODULE, "discover_project_inputs")?,
+            &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
             &[("project_dir", &project_dir)],
         )?
     };
     call(
-        &imported(py, REJECT_UNIT_TESTS_MODULE, "reject_unit_test_selectors")?,
+        &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
         &[
             ("select", &request.getattr("select")?),
             ("exclude", &request.getattr("exclude")?),
@@ -117,10 +111,10 @@ fn query_outcome_error(
     parts: &DiffUserError,
     cause: PyErr,
 ) -> PyErr {
-    let class: &str = if incomplete {
-        "QueryDiffIncompleteError"
+    let class: ErrorId = if incomplete {
+        ErrorId::QueryDiffIncomplete
     } else {
-        "QueryDiffExecutionError"
+        ErrorId::QueryDiffExecution
     };
     caused(py, cli_error(py, class, parts), cause)
 }
@@ -132,7 +126,7 @@ fn execution_failure(py: Python<'_>, code: &str, cause: PyErr) -> PyResult<PyErr
 
 /// Map a raw-query execution failure to its incomplete or execution-failure outcome.
 fn query_execution_error(py: Python<'_>, error: PyErr) -> PyResult<PyErr> {
-    if matches_class(py, &error, OUTCOME_ERRORS)? || !is_exception(py, &error) {
+    if matches_native(py, &error, OUTCOME_ERRORS)? || !is_exception(py, &error) {
         return Ok(error);
     }
     let value: Bound<'_, PyAny> = error.value(py).clone().into_any();
@@ -152,7 +146,7 @@ fn query_execution_error(py: Python<'_>, error: PyErr) -> PyResult<PyErr> {
         };
         return Ok(query_outcome_error(py, true, &parts, error));
     }
-    if matches_class(py, &error, USER_ERRORS)? {
+    if matches_native(py, &error, USER_ERRORS)? {
         let parts: DiffUserError = user_error_parts(&value)?;
         let incomplete: bool = is_incomplete_query_failure(QueryDiffPhase::Execution, &parts.code);
         return Ok(query_outcome_error(py, incomplete, &parts, error));
@@ -173,7 +167,7 @@ fn run_query_diff(
     let py: Python<'_> = request.py();
     let preparation: Bound<'_, PyAny> = match prepare_query_diff(request, invocation) {
         Ok(preparation) => preparation,
-        Err(error) if matches_class(py, &error, USER_ERRORS)? => {
+        Err(error) if matches_native(py, &error, USER_ERRORS)? => {
             let parts: DiffUserError = user_error_parts(&error.value(py).clone().into_any())?;
             let incomplete: bool =
                 is_incomplete_query_failure(QueryDiffPhase::Preparation, &parts.code);
@@ -230,7 +224,7 @@ fn target_max_full_rows<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = discovered.py();
     let configured: Bound<'py, PyAny> = call(
-        &imported(py, TARGET_CONFIG_MODULE, "resolve_target_config")?,
+        &registry::native(py, NativeAttr::ResolveTargetConfig)?,
         &[
             ("project_config", &discovered.getattr("project_config")?),
             ("local_config", &discovered.getattr("local_config")?),
@@ -260,7 +254,7 @@ fn diff_to_target<'py>(
         return Ok(to_name);
     }
     let active: Bound<'py, PyAny> = call(
-        &imported(py, TARGET_NAME_MODULE, "resolve_target_name")?,
+        &registry::native(py, NativeAttr::ResolveTargetName)?,
         &[
             ("project_config", &discovered.getattr("project_config")?),
             ("local_config", &discovered.getattr("local_config")?),
@@ -338,7 +332,7 @@ fn size_guard_error(
     keywords.set_item("details", details)?;
     keywords.set_item("code", "C270")?;
     keywords.set_item("help", report.help)?;
-    let replacement: Bound<'_, PyAny> = imported(py, EXCEPTIONS_MODULE, "DiffSizeGuardError")?
+    let replacement: Bound<'_, PyAny> = registry::error(py, ErrorId::DiffSizeGuard)?
         .call((report.message.as_str(),), Some(&keywords))?;
     Ok(caused(py, PyErr::from_value(replacement), error))
 }
@@ -378,7 +372,7 @@ fn run_model_diff(
     let (_, adapter) = project_adapter(discovered, project_dir)?;
     let cli_vars: Bound<'_, PyAny> = request.getattr("cli_vars")?;
     let connection_config: Bound<'_, PyAny> = call(
-        &imported(py, NATIVE_MODULE, "resolve_target_connection_config")?,
+        &registry::native(py, NativeAttr::ResolveTargetConnectionConfig)?,
         &[
             ("discovered_inputs", discovered),
             ("project_dir", project_dir),
@@ -387,18 +381,14 @@ fn run_model_diff(
         ],
     )?;
     let resolver: Bound<'_, PyAny> = call(
-        &imported(
-            py,
-            EXTERNAL_REFS_MODULE,
-            "resolve_external_sql_reference_resolver",
-        )?,
+        &registry::native(py, NativeAttr::ResolveExternalSqlReferenceResolver)?,
         &[
             ("project_dir", project_dir),
             ("discovered_inputs", discovered),
         ],
     )?;
     let pipeline: Bound<'_, PyTuple> = call(
-        &imported(py, NATIVE_MODULE, "run_diff_pipeline")?,
+        &registry::native(py, NativeAttr::RunDiffPipeline)?,
         &[
             ("discovered_inputs", discovered),
             ("adapter", &adapter),
@@ -431,7 +421,7 @@ fn run_model_diff(
         none(py)
     } else {
         call(
-            &imported(py, DIFF_MODELS_MODULE, "FullDiffSizeLimits")?,
+            &host::entry(py, ExecutorHost::FullDiffSizeLimits)?,
             &[
                 ("left_target", &from_target),
                 ("right_target", &to_target),
@@ -459,7 +449,7 @@ fn run_model_diff(
     let executed: PyResult<Bound<'_, PyAny>> =
         execution_options(request, &extra).and_then(|options| {
             call(
-                &imported(py, EXECUTE_MODULE, "execute_diff")?,
+                &host::entry(py, ExecutorHost::ExecuteDiff)?,
                 &[
                     ("adapter", &adapter),
                     ("connection", &connection),
@@ -498,7 +488,7 @@ pub(crate) fn run_diff_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> Py
         Ok(invocation) => invocation,
         Err(error)
             if query_mode
-                && !matches_class(py, &error, OUTCOME_ERRORS)?
+                && !matches_native(py, &error, OUTCOME_ERRORS)?
                 && is_exception(py, &error) =>
         {
             return Err(execution_failure(py, "C252", error)?);

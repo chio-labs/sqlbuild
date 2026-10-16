@@ -3,10 +3,9 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
-use crate::bindings::_helpers::sql_test_glue::constants::NATIVE_PLANNING;
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 #[pyfunction(name = "plan_sql_tests")]
 #[pyo3(signature = (**kwargs))]
@@ -36,7 +35,7 @@ pub(crate) fn assemble_sql_test_plans<'py>(
             context = args.value("fixture_planning_context")?;
             if !context.is_truthy()? {
                 context = call_with(
-                    &imported(py, "sqlbuild._native", "build_relation_fixture_context")?,
+                    &registry::native(py, NativeAttr::BuildRelationFixtureContext)?,
                     &[("project", project.clone())],
                 )?;
             }
@@ -50,7 +49,7 @@ pub(crate) fn assemble_sql_test_plans<'py>(
         .filter_map(|(index, test)| (!diagnostics.contains_key(&index)).then_some(test))
         .collect();
     let plans = call_with(
-        &imported(py, NATIVE_PLANNING, "plan_sql_tests_natively")?,
+        &registry::native(py, NativeAttr::PlanSqlTestsNatively)?,
         &[
             ("project", project.clone()),
             ("tests", PyTuple::new(py, plannable)?.into_any()),
@@ -77,7 +76,7 @@ pub(crate) fn assemble_sql_test_plans<'py>(
         let model = model?;
         models.set_item(model.getattr("name")?, model)?;
     }
-    let result_class = imported(py, "sqlbuild._native", "SqlTestPlanResult")?;
+    let result_class = registry::class(py, RecordId::SqlTestPlanResult)?;
     let mut results: Vec<Bound<'py, PyAny>> = Vec::new();
     for (index, test) in tests.iter().enumerate() {
         if let Some(diagnostic) = diagnostics.get(&index) {

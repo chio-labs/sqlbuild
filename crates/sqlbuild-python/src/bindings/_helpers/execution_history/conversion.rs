@@ -14,37 +14,30 @@ use sqlbuild_state::execution_history::types::UtcTime;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::cursor::values::{DATETIME_MODULE, local_date_time};
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 
-pub(crate) const EXCEPTIONS_MODULE: &str = "sqlbuild.runtime.execution_history.exceptions";
-pub(crate) const MODELS_MODULE: &str = "sqlbuild.runtime.execution_history.models";
-const TYPES_MODULE: &str = "sqlbuild.runtime.execution_history.types";
-const EVENT_MODELS_MODULE: &str = "sqlbuild.runtime.observability.models";
-const EVENT_TO_JSON_MODULE: &str = "sqlbuild.runtime.observability.main.lifecycle_event_to_json";
-const EVENT_FROM_JSON_MODULE: &str =
-    "sqlbuild.runtime.observability.main.lifecycle_event_from_json";
 const UTC_SUFFIX: &str = "Z";
 const UTC_OFFSET: &str = "+00:00";
 const DEFAULT_SCHEMA_VERSION: i64 = 1;
 const UTC_OFFSET_SECONDS: f64 = 0.0;
 
-fn exception_name(kind: HistoryErrorKind) -> &'static str {
+fn exception_class(kind: HistoryErrorKind) -> ExecutorHost {
     match kind {
-        HistoryErrorKind::Storage => "ExecutionHistoryStorageError",
-        HistoryErrorKind::IntegrityConflict => "IntegrityConflictError",
-        HistoryErrorKind::InvalidEvent => "InvalidEventError",
-        HistoryErrorKind::InvalidCursor => "InvalidCursorError",
-        HistoryErrorKind::InvalidFilter => "InvalidFilterError",
-        HistoryErrorKind::InvalidLimit => "InvalidLimitError",
-        HistoryErrorKind::UnsupportedSchemaVersion => "UnsupportedSchemaVersionError",
-        HistoryErrorKind::ProjectionConsistency => "ProjectionConsistencyError",
+        HistoryErrorKind::Storage => ExecutorHost::ExecutionHistoryStorageError,
+        HistoryErrorKind::IntegrityConflict => ExecutorHost::IntegrityConflictError,
+        HistoryErrorKind::InvalidEvent => ExecutorHost::InvalidEventError,
+        HistoryErrorKind::InvalidCursor => ExecutorHost::InvalidCursorError,
+        HistoryErrorKind::InvalidFilter => ExecutorHost::InvalidFilterError,
+        HistoryErrorKind::InvalidLimit => ExecutorHost::InvalidLimitError,
+        HistoryErrorKind::UnsupportedSchemaVersion => ExecutorHost::UnsupportedSchemaVersionError,
+        HistoryErrorKind::ProjectionConsistency => ExecutorHost::ProjectionConsistencyError,
     }
 }
 
 /// The execution history exception for a rejection of `kind`.
 pub(crate) fn rejection(py: Python<'_>, kind: HistoryErrorKind, message: &str) -> PyErr {
-    match imported(py, EXCEPTIONS_MODULE, exception_name(kind))
-        .and_then(|class| class.call1((message,)))
-    {
+    match host::entry(py, exception_class(kind)).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }
@@ -68,8 +61,12 @@ pub(crate) fn checked<T>(py: Python<'_>, result: Result<T, HistoryError>) -> PyR
 }
 
 /// Whether `error` is an instance of the execution history exception named `name`.
-pub(crate) fn history_error_of_kind(py: Python<'_>, error: &PyErr, name: &str) -> PyResult<bool> {
-    Ok(error.is_instance(py, &imported(py, EXCEPTIONS_MODULE, name)?))
+pub(crate) fn history_error_of_kind(
+    py: Python<'_>,
+    error: &PyErr,
+    name: ExecutorHost,
+) -> PyResult<bool> {
+    Ok(error.is_instance(py, &host::entry(py, name)?))
 }
 
 /// `value` when it is an `int` other than `bool` that fits, as `isinstance(value, int)` checks.
@@ -190,7 +187,7 @@ pub(crate) fn parsed_status(py: Python<'_>, text: &str) -> PyResult<RunStatus> {
     if let Some(status) = known {
         return Ok(status);
     }
-    imported(py, TYPES_MODULE, "RunStatus")?.call1((text,))?;
+    host::entry(py, ExecutorHost::RunStatus)?.call1((text,))?;
     Ok(RunStatus::Unknown)
 }
 
@@ -211,11 +208,7 @@ pub(crate) fn run_filter_spec(value: &Bound<'_, PyAny>) -> PyResult<RunFilterSpe
 
 /// Whether `event` is a known-schema `LifecycleEvent`.
 pub(crate) fn known_event(event: &Bound<'_, PyAny>) -> PyResult<bool> {
-    event.is_instance(&imported(
-        event.py(),
-        EVENT_MODELS_MODULE,
-        "LifecycleEvent",
-    )?)
+    event.is_instance(&host::entry(event.py(), ExecutorHost::LifecycleEvent)?)
 }
 
 /// The `event_id` a known event carries or an opaque envelope holds as a string.
@@ -232,19 +225,14 @@ fn raw_field<'py>(event: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, 
 
 /// `lifecycle_event_to_json(event)`.
 pub(crate) fn event_json(event: &Bound<'_, PyAny>) -> PyResult<String> {
-    imported(event.py(), EVENT_TO_JSON_MODULE, "lifecycle_event_to_json")?
+    host::entry(event.py(), ExecutorHost::LifecycleEventToJson)?
         .call1((event,))?
         .extract()
 }
 
 /// `lifecycle_event_from_json(payload)`.
 pub(crate) fn event_from_json<'py>(payload: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    imported(
-        payload.py(),
-        EVENT_FROM_JSON_MODULE,
-        "lifecycle_event_from_json",
-    )?
-    .call1((payload,))
+    host::entry(payload.py(), ExecutorHost::LifecycleEventFromJson)?.call1((payload,))
 }
 
 /// An opaque envelope's `occurred_at` when it is ISO text with a zero UTC offset.
@@ -345,9 +333,9 @@ fn optional_python_time<'py>(
 
 /// The `RunRecord` of a projected run.
 pub(crate) fn run_record<'py>(py: Python<'py>, run: &RunRow) -> PyResult<Bound<'py, PyAny>> {
-    let status = imported(py, TYPES_MODULE, "RunStatus")?.call1((run.status.value(),))?;
+    let status = host::entry(py, ExecutorHost::RunStatus)?.call1((run.status.value(),))?;
     call_with(
-        &imported(py, MODELS_MODULE, "RunRecord")?,
+        &host::entry(py, ExecutorHost::RunRecord)?,
         &[
             ("run_id", run.run_id.clone().into_bound_py_any(py)?),
             (
@@ -413,7 +401,7 @@ pub(crate) fn stored_event<'py>(
     payload: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(py, MODELS_MODULE, "StoredEvent")?,
+        &host::entry(py, ExecutorHost::StoredEvent)?,
         &[
             ("storage_order", storage_order.into_bound_py_any(py)?),
             ("cursor", cursor.into_bound_py_any(py)?),

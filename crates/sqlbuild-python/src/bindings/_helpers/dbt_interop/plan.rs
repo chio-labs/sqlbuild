@@ -8,13 +8,10 @@ use sqlbuild_core::cli_text::main::format_dbt_interop_plan::format_dbt_interop_p
 use sqlbuild_core::cli_text::main::format_dbt_interop_plan_json::format_dbt_interop_plan_json;
 use sqlbuild_core::cli_text::models::{DbtInteropPlanText, DbtLsNodeText, DisplayLimit};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const DBT_TYPES: &str = "sqlbuild._native";
-const PRESENTATION_MODELS: &str = "sqlbuild._native";
 const BUILD_OPTIONS: (&[&str], &[&str]) = (
     &[
         "command",
@@ -123,7 +120,7 @@ fn skip_reason<'py>(py: Python<'py>, has_work: bool, member: &str) -> PyResult<B
     if has_work {
         return Ok(py.None().into_bound(py));
     }
-    imported(py, DBT_TYPES, "DbtInteropSkipReason")?.getattr(member)
+    registry::class(py, RecordId::DbtInteropSkipReason)?.getattr(member)
 }
 
 /// Build a display-ready selection plan without dbt model state.
@@ -136,7 +133,7 @@ pub(crate) fn build_dbt_interop_plan<'py>(
     let arguments: KeywordArguments<'py> =
         KeywordArguments::read(py, "build_dbt_interop_plan", options, BUILD_OPTIONS)?;
     let command: Bound<'py, PyAny> =
-        imported(py, DBT_TYPES, "DbtInteropCommand")?.call1((arguments.value("command")?,))?;
+        registry::class(py, RecordId::DbtInteropCommand)?.call1((arguments.value("command")?,))?;
     let nodes: Bound<'py, PyAny> = tuple_of(arguments.value("dbt_ls_nodes")?)?;
     let mut selected: Vec<String> = Vec::new();
     for node in nodes.try_iter()? {
@@ -152,7 +149,7 @@ pub(crate) fn build_dbt_interop_plan<'py>(
         dbt_has_work || sqlbuild_has_work,
     );
     call_with(
-        &imported(py, NATIVE_MODULE, "DbtInteropPlan")?,
+        &registry::class(py, RecordId::DbtInteropPlan)?,
         &[
             ("command", command),
             (
@@ -214,7 +211,7 @@ fn render_dbt_interop_plan(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -
     }
     let mut display: Bound<'_, PyAny> = arguments.value("display_options")?;
     if !display.is_truthy()? {
-        display = imported(py, PRESENTATION_MODELS, "DisplayOptions")?.call0()?;
+        display = registry::class(py, RecordId::DisplayOptions)?.call0()?;
     }
     let use_color: bool = arguments.flag("use_color")?;
     let plan_output: Bound<'_, PyAny> = plan.getattr("sqlbuild_plan_output")?;
@@ -224,7 +221,7 @@ fn render_dbt_interop_plan(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -
         } else {
             Some(
                 call_with(
-                    &imported(py, NATIVE_MODULE, "format_plan")?,
+                    &registry::native(py, NativeAttr::FormatPlan)?,
                     &[
                         ("plan", plan_output),
                         (

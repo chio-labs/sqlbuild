@@ -1,6 +1,9 @@
 //! One diff selector token resolved to the resources it names.
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::HashSet;
+use std::convert::Infallible;
+
+use sqlbuild_core::graph_walk::main::breadth_first_reach::breadth_first_reach;
 
 use crate::diff_selection::constants::{
     EMPTY_SELECTOR_CODE, GRAPH_OPERATOR, INTERSECTION_SEPARATOR, MODEL_PATH_PREFIX,
@@ -13,14 +16,9 @@ use crate::diff_selection::models::DiffGraph;
 /// Resources reachable from `starts` along `edges`, without the starts unless reached.
 fn reachable(starts: &HashSet<usize>, edges: &[Vec<usize>]) -> HashSet<usize> {
     let mut visited: HashSet<usize> = HashSet::new();
-    let mut frontier: VecDeque<usize> = starts.iter().copied().collect();
-    while let Some(current) = frontier.pop_front() {
-        for neighbor in edges.get(current).into_iter().flatten() {
-            if visited.insert(*neighbor) {
-                frontier.push_back(*neighbor);
-            }
-        }
-    }
+    let Ok(()) = breadth_first_reach(starts.iter().copied(), None, &mut visited, |current| {
+        Ok::<_, Infallible>(edges.get(*current).into_iter().flatten().copied())
+    });
     visited
 }
 

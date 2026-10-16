@@ -1,6 +1,9 @@
 //! Python node dependency checks: known targets, no SQL inputs on loaders, no cycles.
 
 use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
+
+use sqlbuild_core::graph_walk::main::find_cycle::find_cycle as find_dependency_cycle;
 
 use crate::project_validation::_helpers::conflicts::conflict;
 use crate::project_validation::models::{DependencyFact, NodeFact, NodeKind, ValidationFailure};
@@ -172,46 +175,39 @@ fn find_cycle(
     next: impl Fn(usize) -> Vec<usize>,
     label: &str,
 ) -> Result<(), ValidationFailure> {
-    let mut search: CycleSearch<'_, _> = CycleSearch {
-        nodes,
-        next,
-        label,
-        path: Vec::new(),
-        visited: HashSet::new(),
+    let named = |index: usize| NamedNode {
+        name: &nodes[index].name,
+        index,
     };
-    for root in roots {
-        search.path.clear();
-        search.visit(*root)?;
+    let Some(cycle) = find_dependency_cycle(roots.iter().map(|root| named(*root)), |node| {
+        next(node.index)
+            .into_iter()
+            .map(named)
+            .collect::<Vec<NamedNode<'_>>>()
+    }) else {
+        return Ok(());
+    };
+    let names: Vec<&str> = cycle.iter().map(|node| node.name).collect();
+    Err(conflict(format!("{label}: {}", names.join(" -> "))))
+}
+
+/// A node position whose identity in a cycle search is its name.
+#[derive(Clone, Copy)]
+struct NamedNode<'a> {
+    name: &'a str,
+    index: usize,
+}
+
+impl PartialEq for NamedNode<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
     }
-    Ok(())
 }
 
-/// One depth-first cycle search: the nodes on the current path and those already cleared.
-struct CycleSearch<'a, F> {
-    nodes: &'a [NodeFact],
-    next: F,
-    label: &'a str,
-    path: Vec<&'a str>,
-    visited: HashSet<&'a str>,
-}
+impl Eq for NamedNode<'_> {}
 
-impl<'a, F: Fn(usize) -> Vec<usize>> CycleSearch<'a, F> {
-    fn visit(&mut self, index: usize) -> Result<(), ValidationFailure> {
-        let name: &'a str = &self.nodes[index].name;
-        if self.visited.contains(name) {
-            return Ok(());
-        }
-        if self.path.contains(&name) {
-            let mut cycle: Vec<&str> = self.path.clone();
-            cycle.push(name);
-            return Err(conflict(format!("{}: {}", self.label, cycle.join(" -> "))));
-        }
-        self.path.push(name);
-        for dependency in (self.next)(index) {
-            self.visit(dependency)?;
-        }
-        self.path.pop();
-        self.visited.insert(name);
-        Ok(())
+impl Hash for NamedNode<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
     }
 }

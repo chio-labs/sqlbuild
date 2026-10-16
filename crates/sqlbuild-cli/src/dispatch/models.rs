@@ -1,9 +1,8 @@
 //! How one parsed `sqb` invocation becomes a call of its Python command handler.
 
-/// A Python class by module path and name.
+/// A class `sqlbuild._native` registers, by name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ClassRef {
-    pub module: &'static str,
     pub name: &'static str,
 }
 
@@ -74,8 +73,8 @@ pub struct CallShape {
 pub struct Route {
     /// The `CliEntrypointHandlers` attribute tests may inject.
     pub slot: &'static str,
-    /// The command implementation: module path and function name.
-    pub implementation: (&'static str, &'static str),
+    /// The name of the native function implementing the command.
+    pub implementation: &'static str,
     pub arguments: &'static [Field],
     pub shape: CallShape,
     /// A keyword the implementation alone receives, such as the dbt command.

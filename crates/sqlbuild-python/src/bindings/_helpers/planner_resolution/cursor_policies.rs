@@ -1,31 +1,31 @@
 //! Model-level cursor safety policy overrides over project configuration.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
 use pyo3::types::PyString;
 use pyo3::{pyfunction, wrap_pyfunction};
 
-const SPEC_MODELS: &str = "sqlbuild._native";
-const SPEC_TYPES: &str = "sqlbuild._native";
 const POLICY_DISABLED: &str = "disabled";
 
 /// The policy class, its distance field, and the model keys overriding distance and action.
 struct PolicyFields {
-    class: &'static str,
+    class: RecordId,
     distance: &'static str,
     distance_key: &'static str,
     action_key: &'static str,
 }
 
 const FUTURE_POLICY: PolicyFields = PolicyFields {
-    class: "FutureCursorsConfig",
+    class: RecordId::FutureCursorsConfig,
     distance: "max_distance",
     distance_key: "cursor_future_max_distance",
     action_key: "cursor_future_action",
 };
 
 const START_POLICY: PolicyFields = PolicyFields {
-    class: "StartCursorsConfig",
+    class: RecordId::StartCursorsConfig,
     distance: "max_ahead",
     distance_key: "cursor_start_max_ahead",
     action_key: "cursor_start_max_action",
@@ -37,7 +37,7 @@ fn resolve_policy<'py>(
     fields: &PolicyFields,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = model.py();
-    let class = imported(py, SPEC_MODELS, fields.class)?;
+    let class = registry::class(py, fields.class)?;
     let configured = if project_config.is_truthy()? {
         project_config.clone()
     } else {
@@ -56,7 +56,7 @@ fn resolve_policy<'py>(
     }
     let mut action = configured.getattr("action")?;
     if raw_action.is_instance_of::<PyString>() {
-        action = imported(py, SPEC_TYPES, "FutureCursorAction")?.call1((raw_action,))?;
+        action = registry::class(py, RecordId::FutureCursorAction)?.call1((raw_action,))?;
     }
     if distance.is_none() {
         return Ok(py.None().into_bound(py));

@@ -20,9 +20,11 @@ use crate::bindings::_helpers::fingerprints::storage_sql::{
     fingerprint_insert_batches, fingerprint_insert_sql,
 };
 
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::FINGERPRINT_TABLE_NAME;
-const MODELS_MODULE: &str = "sqlbuild._native";
-const ADAPTER_TYPES_MODULE: &str = "sqlbuild.adapter.contract.types";
 const TIME_MODULE: &str = "time";
 const LOGGING_MODULE: &str = "logging";
 const LOGGER_NAME: &str = "sqlbuild.fingerprints";
@@ -79,7 +81,7 @@ fn create_sql(
     render_framework_type: &Bound<'_, PyAny>,
 ) -> PyResult<String> {
     let py: Python<'_> = render_framework_type.py();
-    let framework: Bound<'_, PyAny> = py.import(ADAPTER_TYPES_MODULE)?.getattr("FrameworkType")?;
+    let framework: Bound<'_, PyAny> = host::entry(py, AdapterHost::FrameworkType)?;
     let string_type: String = render_framework_type
         .call1((framework.getattr("STRING")?,))?
         .extract()?;
@@ -269,9 +271,7 @@ fn empty_set<'py>(py: Python<'py>, schema: &str) -> PyResult<Bound<'py, PyAny>> 
     let keywords: Bound<'py, PyDict> = PyDict::new(py);
     keywords.set_item("schema", schema)?;
     keywords.set_item("fingerprints", PyDict::new(py))?;
-    py.import(MODELS_MODULE)?
-        .getattr("FingerprintSet")?
-        .call((), Some(&keywords))
+    registry::class(py, RecordId::FingerprintSet)?.call((), Some(&keywords))
 }
 
 /// `FingerprintInputError` for an unreadable table, caused by the warehouse error.

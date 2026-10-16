@@ -19,27 +19,22 @@ use crate::bindings::_helpers::diff_report::support::{
     call, cli_error, error_text, none, object, progress_line,
 };
 use crate::bindings::_helpers::diff_report::tolerances::cli_tolerance_overrides;
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 use sqlbuild_analysis::diff_selection::main::raw_query_shape::raw_query_shape;
 use sqlbuild_analysis::diff_selection::models::RawQueryShape;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const NAMESPACE_MODULE: &str = "sqlbuild._native";
-const RUNTIME_MODULE: &str = "sqlbuild._native";
 const GENERIC_DIALECT: &str = "generic";
-const COMMAND_MODELS_MODULE: &str = "sqlbuild._native";
-const LIFECYCLE_MODULE: &str = "sqlbuild.executor.diff.classes.query_artifact_lifecycle";
-const RELATION_LOOKUP_MODULE: &str = "sqlbuild.adapter.relations.main.relation_lookup";
-const CURSOR_MODELS_MODULE: &str = "sqlbuild._native";
-const EXECUTE_QUERY_MODULE: &str = "sqlbuild.executor.diff.main._execute_query";
-const DIFF_MODELS_MODULE: &str = "sqlbuild.executor.diff.models";
 const NAMESPACELESS_ADAPTERS: [&str; 2] = ["duckdb", "motherduck"];
 
 fn failure(py: Python<'_>, message: String, code: &str, help: Option<&str>) -> PyErr {
     cli_error(
         py,
-        "CliUserError",
+        ErrorId::CliUser,
         &DiffUserError {
             message,
             code: code.to_owned(),
@@ -49,7 +44,7 @@ fn failure(py: Python<'_>, message: String, code: &str, help: Option<&str>) -> P
 }
 
 fn user_failure(py: Python<'_>, error: DiffUserError) -> PyErr {
-    cli_error(py, "CliUserError", &error)
+    cli_error(py, ErrorId::CliUser, &error)
 }
 
 /// The adapter of the effective adapter name, resolved for the project directory.
@@ -59,7 +54,7 @@ pub(crate) fn project_adapter<'py>(
 ) -> PyResult<(String, Bound<'py, PyAny>)> {
     let py: Python<'py> = discovered.py();
     let name: Bound<'py, PyAny> = call(
-        &imported(py, ADAPTER_NAME_MODULE, "resolve_effective_adapter_name")?,
+        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
             ("project_config", &discovered.getattr("project_config")?),
             ("local_config", &discovered.getattr("local_config")?),
@@ -175,7 +170,7 @@ pub(crate) fn prepare_query_diff<'py>(
     let selected_target: Bound<'py, PyAny> = request.getattr("selected_target")?;
     let cli_vars: Bound<'py, PyAny> = request.getattr("cli_vars")?;
     let config: Bound<'py, PyAny> = call(
-        &imported(py, NATIVE_MODULE, "resolve_project_connection_config")?,
+        &registry::native(py, NativeAttr::ResolveProjectConnectionConfig)?,
         &[
             ("discovered_inputs", discovered),
             ("project_dir", project_dir),
@@ -189,7 +184,7 @@ pub(crate) fn prepare_query_diff<'py>(
         config.call_method1("get", ("database",))?
     };
     let namespace: Bound<'py, PyAny> = call(
-        &imported(py, NAMESPACE_MODULE, "build_effective_target_namespace")?,
+        &registry::native(py, NativeAttr::BuildEffectiveTargetNamespace)?,
         &[
             ("discovered_inputs", discovered),
             ("selected_target", &selected_target),
@@ -234,7 +229,7 @@ pub(crate) fn prepare_query_diff<'py>(
     let left_sql: String = read_only_query(py, &left_sql, "left", &adapter)?;
     let right_sql: String = read_only_query(py, &right_sql, "right", &adapter)?;
     let runtime: Bound<'py, PyTuple> = call(
-        &imported(py, RUNTIME_MODULE, "build_effective_runtime_config")?,
+        &registry::native(py, NativeAttr::BuildEffectiveRuntimeConfig)?,
         &[
             ("discovered_inputs", discovered),
             ("selected_target", &selected_target),
@@ -259,7 +254,7 @@ pub(crate) fn prepare_query_diff<'py>(
         )
     };
     call(
-        &imported(py, COMMAND_MODELS_MODULE, "QueryDiffPreparation")?,
+        &registry::class(py, RecordId::QueryDiffPreparation)?,
         &[
             ("adapter", &adapter),
             ("connection_config", &config),
@@ -308,7 +303,7 @@ pub(crate) fn execution_options<'py>(
     let py: Python<'py> = request.py();
     let attribute = |name: &str| request.getattr(name);
     let sampling: Bound<'py, PyAny> = call(
-        &imported(py, DIFF_MODELS_MODULE, "RowDiffSamplingOverride")?,
+        &host::entry(py, ExecutorHost::RowDiffSamplingOverride)?,
         &[
             ("row_limit", &attribute("sample_rows")?),
             ("seed", &attribute("sample_seed")?),
@@ -337,7 +332,7 @@ pub(crate) fn execution_options<'py>(
     ]);
     pairs.extend_from_slice(extra);
     call(
-        &imported(py, DIFF_MODELS_MODULE, "DiffExecutionOptions")?,
+        &host::entry(py, ExecutorHost::DiffExecutionOptions)?,
         &pairs,
     )
 }
@@ -376,8 +371,7 @@ pub(crate) fn execute_query_diff<'py>(
         py,
         &format!("Query diff connection  OK  ({:.2}s)", phases[0].1),
     )?;
-    let lifecycle: Bound<'py, PyAny> =
-        imported(py, LIFECYCLE_MODULE, "QueryDiffArtifactLifecycle")?;
+    let lifecycle: Bound<'py, PyAny> = host::entry(py, ExecutorHost::QueryDiffArtifactLifecycle)?;
     let artifact = |side: &str| -> PyResult<Bound<'py, PyAny>> {
         call(
             &lifecycle.getattr("build")?,
@@ -451,7 +445,7 @@ pub(crate) fn execute_query_diff<'py>(
     if model.is_none() {
         return Err(cli_error(
             py,
-            "QueryDiffExecutionError",
+            ErrorId::QueryDiffExecution,
             &DiffUserError {
                 message: "query diff comparison completed without a result".to_owned(),
                 code: "C256".to_owned(),
@@ -460,7 +454,7 @@ pub(crate) fn execute_query_diff<'py>(
         ));
     }
     let result: Bound<'py, PyAny> = call(
-        &imported(py, DIFF_MODELS_MODULE, "DiffExecutionResult")?,
+        &host::entry(py, ExecutorHost::DiffExecutionResult)?,
         &[("model_results", &PyTuple::new(py, [model])?.into_any())],
     )?;
     Ok((result, phases))
@@ -538,7 +532,7 @@ fn compare_artifacts<'py>(
     let compared: PyResult<Bound<'py, PyAny>> =
         execution_options(request, &extra).and_then(|options| {
             call(
-                &imported(py, EXECUTE_QUERY_MODULE, "execute_query_diff")?,
+                &host::entry(py, ExecutorHost::ExecuteQueryDiff)?,
                 &[
                     ("adapter", &adapter),
                     ("connection", connection),
@@ -670,7 +664,7 @@ fn inspect_inputs<'py>(
     };
     let locations: Bound<'py, PyTuple> = PyTuple::new(py, [location(left)?, location(right)?])?;
     let lookup: Bound<'py, PyAny> = call(
-        &imported(py, RELATION_LOOKUP_MODULE, "build_relation_lookup")?,
+        &host::entry(py, AdapterHost::BuildRelationLookup)?,
         &[
             ("adapter", &adapter),
             ("connection", connection),
@@ -698,7 +692,7 @@ fn inspect_inputs<'py>(
             ));
         }
     }
-    let ttl: Bound<'py, PyAny> = imported(py, CURSOR_MODELS_MODULE, "Duration")?
+    let ttl: Bound<'py, PyAny> = registry::class(py, RecordId::Duration)?
         .call_method1("parse", (preparation.getattr("artifact_ttl")?,))?;
     if ttl.is_none() {
         return Err(failure(

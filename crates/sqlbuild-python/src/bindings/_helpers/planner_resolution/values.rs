@@ -1,14 +1,12 @@
 //! Boundary calls shared by reference and source resolution.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyString;
 use sqlbuild_sqltext::resolution::main::cursor_subquery::cursor_subquery;
 use sqlbuild_sqltext::resolution::models::CursorFilter;
-
-pub(super) const NATIVE_MODULE: &str = "sqlbuild._native";
 
 pub(super) fn string<'py>(py: Python<'py>, text: &str) -> Bound<'py, PyAny> {
     PyString::new(py, text).into_any()
@@ -44,7 +42,7 @@ pub(super) fn cursor_wrap(
     let cursor_type = arguments.value("cursor_type")?;
     let literal = |bound: &str| -> PyResult<String> {
         let token = call_with(
-            &imported(py, NATIVE_MODULE, "cursor_sentinel_to_token")?,
+            &registry::native(py, NativeAttr::CursorSentinelToToken)?,
             &[("sentinel", bounds.getattr(bound)?)],
         )?;
         method(

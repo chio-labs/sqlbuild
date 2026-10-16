@@ -7,7 +7,7 @@ use pyo3::prelude::{
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::contracts::project_config::{
     load_local_config_file, load_project_config_file,
 };
@@ -24,10 +24,8 @@ use crate::bindings::_helpers::discovery::sql_test_records::{
 };
 use crate::bindings::_helpers::discovery::yaml_records::discover_source_files;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const MODELS_MODULE: &str = "sqlbuild._native";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 const LOCAL_CONFIG_FILENAME: &str = "sqlbuild_local.toml";
 const FALLBACK_PROJECT_NAME: &str = "project";
@@ -68,7 +66,7 @@ impl<'py> Faults<'py> {
             None => py.None().into_bound(py),
         };
         call_with(
-            &imported(py, NATIVE_RECORDS_MODULE, "DiscoveryFileFault")?,
+            &registry::class(py, RecordId::DiscoveryFileFault)?,
             &[
                 ("path", path),
                 ("message", PyString::new(py, &message).into_any()),
@@ -122,7 +120,7 @@ fn configs<'py>(
                 PyString::new(py, FALLBACK_PROJECT_NAME).into_any()
             };
             call_with(
-                &imported(py, CONTRACT_MODELS_MODULE, "ProjectConfig")?,
+                &registry::class(py, RecordId::ProjectConfig)?,
                 &[
                     ("name", name),
                     ("adapter", PyString::new(py, FALLBACK_ADAPTER).into_any()),
@@ -134,7 +132,7 @@ fn configs<'py>(
         faults,
         (&list, Some(LOCAL_CONFIG_FILENAME)),
         load_local_config_file(py, project_dir).map(|config| config.into_bound(py)),
-        || imported(py, CONTRACT_MODELS_MODULE, "LocalConfig")?.call0(),
+        || registry::class(py, RecordId::LocalConfig)?.call0(),
     )?;
     Ok((project_config, local_config, list))
 }
@@ -229,9 +227,9 @@ fn tolerant_discovery<'py>(project_dir: &Bound<'py, PyAny>) -> PyResult<Bound<'p
         inputs.set_item(field, value)?;
     }
     let discovered_inputs: Bound<'py, PyAny> =
-        imported(py, MODELS_MODULE, "DiscoveredProjectInputs")?.call((), Some(&inputs))?;
+        registry::class(py, RecordId::DiscoveredProjectInputs)?.call((), Some(&inputs))?;
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "TolerantScopeDiscovery")?,
+        &registry::class(py, RecordId::TolerantScopeDiscovery)?,
         &[
             ("discovered_inputs", discovered_inputs),
             (

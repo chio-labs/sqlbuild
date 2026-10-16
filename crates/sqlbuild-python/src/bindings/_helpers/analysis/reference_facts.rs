@@ -1,5 +1,7 @@
 //! The explicit-reference facts of a compiled project, read from its Python views.
 
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyList, PyTuple};
 use sqlbuild_analysis::explicit_references::models::{
@@ -8,9 +10,6 @@ use sqlbuild_analysis::explicit_references::models::{
 };
 use sqlbuild_analysis::explicit_references::types::ResourceKey;
 
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
-const PYTHON_HOOK_ENTRY: &str = "PythonHookEntry";
-const SQL_HOOK_ENTRY: &str = "SqlHookEntry";
 const MODEL_HOOK_KEYS: [&str; 2] = ["pre_hooks", "post_hooks"];
 const MIGRATE_FROM_KEY: &str = "migrate_from";
 const OLD_NAME_VIEW_KEY: &str = "old_name_view";
@@ -107,10 +106,9 @@ struct HookEntries<'py> {
 
 impl<'py> HookEntries<'py> {
     fn imported(py: Python<'py>) -> PyResult<Self> {
-        let module = py.import(DISCOVERY_MODELS_MODULE)?;
         Ok(Self {
-            python: module.getattr(PYTHON_HOOK_ENTRY)?,
-            sql: module.getattr(SQL_HOOK_ENTRY)?,
+            python: registry::class(py, RecordId::PythonHookEntry)?,
+            sql: registry::class(py, RecordId::SqlHookEntry)?,
         })
     }
 }

@@ -1,6 +1,7 @@
 pub(crate) mod algorithms;
 mod execution_gates;
 pub(crate) mod keys;
+pub(crate) mod node_set;
 pub(crate) mod project_graph;
 mod python_lifecycle;
 pub(crate) mod python_node_graph;

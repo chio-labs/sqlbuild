@@ -3,19 +3,20 @@
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, within,
 };
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_threads::exit_signal::signal_interpreter_exit;
 use crate::bindings::_helpers::planner_entries::values::{
     COMPILE_TYPES, boolean, native, replaced, string,
 };
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 use std::time::Instant;
 
-const INSPECTION_CATALOG: (&str, &str) = (
-    "sqlbuild.adapter.relations.main.open_inspection_catalog",
-    "open_inspection_catalog",
-);
+const INSPECTION_CATALOG: AdapterHost = AdapterHost::OpenInspectionCatalog;
 const TEST_PLANNING_THREAD: &str = "sqlbuild-test-planning";
 /// How long interpreter exit waits for each SQL test planning thread still running native code.
 const PLANNING_EXIT_JOIN_SECONDS: f64 = 5.0;
@@ -62,7 +63,7 @@ fn sql_test_planning<'py>(
             "set_result",
             (native(
                 py,
-                "PlannedSqlTests",
+                RecordId::PlannedSqlTests,
                 &[
                     ("selected_keys", selected_keys.clone()),
                     ("sql_test_selection", sql_test_selection.clone()),
@@ -82,7 +83,7 @@ fn sql_test_planning<'py>(
         &[
             (
                 "target",
-                imported(py, "sqlbuild._native", "plan_selected_sql_tests_into")?,
+                registry::native(py, NativeAttr::PlanSelectedSqlTestsInto)?,
             ),
             ("kwargs", kwargs.into_any()),
             ("name", string(py, TEST_PLANNING_THREAD)),
@@ -101,7 +102,7 @@ fn scopes_and_cursor_overrides<'py>(
     let py = project.py();
     let scopes = native(
         py,
-        "resolve_planner_scopes",
+        NativeAttr::ResolvePlannerScopes,
         &[
             ("project", project.clone()),
             ("selection", args.value("selection")?),
@@ -122,7 +123,7 @@ fn scopes_and_cursor_overrides<'py>(
     let overrides = args.value("overrides")?;
     let typed = native(
         py,
-        "type_cursor_overrides",
+        NativeAttr::TypeCursorOverrides,
         &[
             ("cursor_overrides", overrides.getattr("cursor_overrides")?),
             ("selected_models", PyTuple::new(py, models)?.into_any()),
@@ -145,7 +146,7 @@ fn change_results<'py>(
     let versions = identities.getattr("version_identities")?;
     let changes = native(
         py,
-        "detect_changes",
+        NativeAttr::DetectChanges,
         &[
             ("project", project.clone()),
             ("scope", scopes.getattr("inspection_scope")?),
@@ -164,7 +165,7 @@ fn change_results<'py>(
     if !policies.getattr("selection_diagnostics")?.is_truthy()? {
         let empty = native(
             py,
-            "PlannerChangeResults",
+            RecordId::PlannerChangeResults,
             &[
                 ("models", PyDict::new(py).into_any()),
                 ("functions", PyDict::new(py).into_any()),
@@ -174,7 +175,7 @@ fn change_results<'py>(
     }
     let stale = native(
         py,
-        "detect_stale_warning_changes",
+        NativeAttr::DetectStaleWarningChanges,
         &[
             ("project", project.clone()),
             ("scopes", scopes.clone()),
@@ -199,7 +200,7 @@ fn planned_output<'py>(
     let policies = args.value("policies")?;
     let warehouse = native(
         py,
-        "gather_planner_warehouse_state",
+        NativeAttr::GatherPlannerWarehouseState,
         &[
             ("runtime", runtime.clone()),
             ("scopes", scopes.clone()),
@@ -210,7 +211,7 @@ fn planned_output<'py>(
     let started = Instant::now();
     let identities = native(
         py,
-        "build_planner_identity_context",
+        NativeAttr::BuildPlannerIdentityContext,
         &[
             ("project", project.clone()),
             ("scopes", scopes.clone()),
@@ -222,7 +223,7 @@ fn planned_output<'py>(
     )?;
     native(
         py,
-        "check_selected_scope_buildability",
+        NativeAttr::CheckSelectedScopeBuildability,
         &[
             ("runtime", runtime.clone()),
             ("scopes", scopes.clone()),
@@ -240,7 +241,7 @@ fn planned_output<'py>(
     let inspection_scope = scopes.getattr("inspection_scope")?;
     let resolved_actions = native(
         py,
-        "resolve_model_actions",
+        NativeAttr::ResolveModelActions,
         &[
             ("scope", inspection_scope.clone()),
             ("changes", changes.clone()),
@@ -248,7 +249,7 @@ fn planned_output<'py>(
     )?;
     let source_freshness = native(
         py,
-        "build_planner_source_freshness_result",
+        NativeAttr::BuildPlannerSourceFreshnessResult,
         &[
             ("project", project.clone()),
             ("adapter", args.value("adapter")?),
@@ -263,7 +264,7 @@ fn planned_output<'py>(
     )?;
     let pruning = native(
         py,
-        "prune_planner_execution_scope",
+        NativeAttr::PrunePlannerExecutionScope,
         &[
             ("scopes", scopes.clone()),
             ("resolved_actions", resolved_actions),
@@ -271,7 +272,7 @@ fn planned_output<'py>(
     )?;
     let reconciliation = native(
         py,
-        "reconcile_execution_changes",
+        NativeAttr::ReconcileExecutionChanges,
         &[
             ("warehouse", warehouse.clone()),
             ("identities", identities.clone()),
@@ -281,7 +282,7 @@ fn planned_output<'py>(
     )?;
     let entries = native(
         py,
-        "build_planner_entry_results",
+        NativeAttr::BuildPlannerEntryResults,
         &[
             ("runtime", runtime.clone()),
             ("warehouse", warehouse.clone()),
@@ -297,7 +298,7 @@ fn planned_output<'py>(
     let planned_sql_tests = test_planning.call_method0("result")?;
     let mut plan_output = native(
         py,
-        "assemble_base_plan_output",
+        NativeAttr::AssembleBasePlanOutput,
         &[
             ("runtime", runtime.clone()),
             ("warehouse", warehouse.clone()),
@@ -312,7 +313,7 @@ fn planned_output<'py>(
     )?;
     plan_output = native(
         py,
-        "with_storage_policies",
+        NativeAttr::WithStoragePolicies,
         &[
             ("plan_output", plan_output),
             ("runtime", runtime.clone()),
@@ -323,7 +324,7 @@ fn planned_output<'py>(
     )?;
     plan_output = native(
         py,
-        "with_plan_warnings",
+        NativeAttr::WithPlanWarnings,
         &[
             ("runtime", runtime.clone()),
             ("scopes", scopes.clone()),
@@ -338,7 +339,7 @@ fn planned_output<'py>(
     )?;
     plan_output = native(
         py,
-        "with_plan_metadata",
+        NativeAttr::WithPlanMetadata,
         &[
             ("plan_output", plan_output),
             ("pruning", pruning),
@@ -385,7 +386,7 @@ fn build_execution_plan<'py>(
     let connection = args.value("connection")?;
     let runtime = native(
         py,
-        "PlannerRuntime",
+        RecordId::PlannerRuntime,
         &[
             ("project", project.clone()),
             ("adapter", adapter.clone()),
@@ -409,7 +410,7 @@ fn build_execution_plan<'py>(
     )?;
     let planned = (|| {
         let catalog = call_with(
-            &imported(py, INSPECTION_CATALOG.0, INSPECTION_CATALOG.1)?,
+            &host::entry(py, INSPECTION_CATALOG)?,
             &[("adapter", adapter), ("connection", connection)],
         )?;
         within(&catalog, |_| {

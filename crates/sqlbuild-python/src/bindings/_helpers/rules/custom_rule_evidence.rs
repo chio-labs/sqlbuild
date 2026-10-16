@@ -17,14 +17,15 @@ use sqlbuild_pysource::rule_evidence::models::{
 };
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 
 const PATHLIB_MODULE: &str = "pathlib";
 const INSPECT_MODULE: &str = "inspect";
 const HASHLIB_MODULE: &str = "hashlib";
 const AST_MODULE: &str = "ast";
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const RULES_ERROR: &str = "RulesError";
-const NON_HERMETIC_RULE_ERROR: &str = "NonHermeticRuleError";
+const RULES_ERROR: ErrorId = ErrorId::Rules;
+const NON_HERMETIC_RULE_ERROR: ErrorId = ErrorId::NonHermeticRule;
 
 fn python_version(py: Python<'_>) -> (u8, u8) {
     let version = py.version_info();
@@ -131,8 +132,8 @@ fn custom_rule_test_evidence<'py>(
 }
 
 /// `error_class(message)` from the native module.
-fn rules_error(py: Python<'_>, error_class: &str, message: String) -> PyErr {
-    match imported(py, NATIVE_MODULE, error_class).and_then(|class| class.call1((message,))) {
+fn rules_error(py: Python<'_>, error_class: ErrorId, message: String) -> PyErr {
+    match registry::error(py, error_class).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }

@@ -7,13 +7,13 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::text::main::python_casefold::python_casefold;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::type_system::equality::types_equal as native_types_equal;
 
-const ADOPTION_MODELS_MODULE: &str = "sqlbuild._native";
-const ADOPTION_TYPES_MODULE: &str = "sqlbuild._native";
-const ADAPTER_MODELS_MODULE: &str = "sqlbuild.adapter.contract.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const DYNAMIC_FAMILIES_MODULE: &str = "sqlbuild._native";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const MODEL_RESOURCE: &str = "model";
 const SOURCE_RESOURCE: &str = "source";
@@ -28,12 +28,8 @@ struct Vocabulary<'py> {
 impl<'py> Vocabulary<'py> {
     fn new(py: Python<'py>) -> PyResult<Self> {
         Ok(Self {
-            finding: py
-                .import(ADOPTION_MODELS_MODULE)?
-                .getattr("ContractFinding")?,
-            kinds: py
-                .import(ADOPTION_TYPES_MODULE)?
-                .getattr("ContractFindingKind")?,
+            finding: registry::class(py, RecordId::ContractFinding)?,
+            kinds: registry::class(py, RecordId::ContractFindingKind)?,
             replace: py.import(DATACLASSES_MODULE)?.getattr("replace")?,
         })
     }
@@ -104,7 +100,7 @@ fn column_infos<'py>(
     py: Python<'py>,
     columns: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
-    let column_type: Bound<'py, PyAny> = py.import(ADAPTER_MODELS_MODULE)?.getattr("ColumnInfo")?;
+    let column_type: Bound<'py, PyAny> = host::entry(py, AdapterHost::ColumnInfo)?;
     let mut infos: Vec<Bound<'py, PyAny>> = Vec::new();
     for column in columns.try_iter()? {
         let column: Bound<'py, PyAny> = column?;
@@ -140,8 +136,7 @@ fn model_evidence<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
         )
     };
     keyword_call(
-        &py.import(ADOPTION_MODELS_MODULE)?
-            .getattr("ContractEvidence")?,
+        &registry::class(py, RecordId::ContractEvidence)?,
         vec![
             ("resource_type", resource_type(py, MODEL_RESOURCE)?),
             ("resource_name", model.getattr("name")?),
@@ -189,8 +184,7 @@ fn source_evidence<'py>(
         text(py, &relation)
     };
     keyword_call(
-        &py.import(ADOPTION_MODELS_MODULE)?
-            .getattr("ContractEvidence")?,
+        &registry::class(py, RecordId::ContractEvidence)?,
         vec![
             ("resource_type", resource),
             ("resource_name", name),
@@ -258,8 +252,7 @@ fn undeclared_finding<'py>(
     let name: String = physical.getattr("name")?.extract()?;
     let physical_type: Bound<'py, PyAny> = physical.getattr("type")?;
     let matching: Bound<'py, PyAny> = keyword_call(
-        &py.import(DYNAMIC_FAMILIES_MODULE)?
-            .getattr("matching_dynamic_families")?,
+        &registry::native(py, NativeAttr::MatchingDynamicFamilies)?,
         vec![
             ("families", item.getattr("dynamic_columns")?),
             ("column_name", text(py, &name)),
@@ -462,7 +455,7 @@ fn compare_contract_evidence<'py>(
 fn relation_info<'py>(item: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = item.py();
     keyword_call(
-        &py.import(ADAPTER_MODELS_MODULE)?.getattr("RelationInfo")?,
+        &host::entry(py, AdapterHost::RelationInfo)?,
         vec![
             ("database", item.getattr("database")?),
             ("schema", item.getattr("schema")?),

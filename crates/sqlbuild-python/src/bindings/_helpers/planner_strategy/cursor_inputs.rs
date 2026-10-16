@@ -9,18 +9,18 @@ use sqlbuild_analysis::planner_strategy::models::{CursorInputColumnCheck, Cursor
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_attachment::cursor_roles::resolve_cursor_input_roles;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::cursor::scalars::parse_value;
 use crate::bindings::_helpers::model_config::config_values::{config_cursor_bound, config_str};
 use crate::bindings::_helpers::planner_identity::metadata::or_empty;
 use crate::bindings::_helpers::planner_strategy::constants::{
-    ENFORCED_CONTRACT, INCREMENTAL_MATERIALIZATION, MODEL_REFERENCE, PLAN_MODELS_MODULE,
-    SEED_REFERENCE, SOURCE_REFERENCE, TIMESTAMP_CURSOR,
+    ENFORCED_CONTRACT, INCREMENTAL_MATERIALIZATION, MODEL_REFERENCE, SEED_REFERENCE,
+    SOURCE_REFERENCE, TIMESTAMP_CURSOR,
 };
 use crate::bindings::_helpers::planner_strategy::lineage::resolve_lineage_reference;
-use crate::bindings::_helpers::planner_strategy::values::{
-    PLANNER_EXCEPTIONS_MODULE, input_error, text,
-};
+use crate::bindings::_helpers::planner_strategy::values::{input_error, text};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 
 /// A model's authored config values.
@@ -52,12 +52,7 @@ fn names(items: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
 /// Raise the planner error of a cursor input column its input does not expose.
 fn check_column(check: CursorInputColumnCheck, py: Python<'_>) -> PyResult<()> {
     match cursor_input_column_failure(&check) {
-        Some((message, code)) => Err(input_error(
-            py,
-            (PLANNER_EXCEPTIONS_MODULE, "PlannerInputError"),
-            &message,
-            Some(code),
-        )),
+        Some((message, code)) => Err(input_error(py, ErrorId::PlannerInput, &message, Some(code))),
         None => Ok(()),
     }
 }
@@ -188,7 +183,7 @@ fn input_kind<'py>(
         SOURCE_REFERENCE => "source",
         _ => return Ok(py.None().into_bound(py)),
     };
-    imported(py, "sqlbuild._native", "GraphResourceKind")?.call1((value,))
+    registry::class(py, RecordId::GraphResourceKind)?.call1((value,))
 }
 
 /// A producer model's terminal cursor bound parsed with the consumer's cursor type.
@@ -226,7 +221,7 @@ pub(crate) fn build_cursor_input_relations<'py>(
         Some(cursor_type) if cursor_type.is_truthy()? => cursor_type,
         _ => PyString::new(py, TIMESTAMP_CURSOR).into_any(),
     };
-    let class: Bound<'py, PyAny> = imported(py, PLAN_MODELS_MODULE, "CursorInputRelation")?;
+    let class: Bound<'py, PyAny> = registry::class(py, RecordId::CursorInputRelation)?;
     let mut relations: Vec<Bound<'py, PyAny>> = Vec::new();
     let watermarks: Bound<'py, PyAny> =
         resolve_cursor_input_roles(&model)?.getattr("watermark_inputs")?;

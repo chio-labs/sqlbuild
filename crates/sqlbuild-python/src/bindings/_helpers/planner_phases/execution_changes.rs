@@ -1,9 +1,10 @@
 //! Execution-scope pruning, write-hash reconciliation and plan entry construction.
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::planner_phases::constants::NATIVE_MODULE;
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::planner_phases::objects::native;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
@@ -20,7 +21,7 @@ pub(crate) fn prune_planner_execution_scope<'py>(
     let inspection = scopes.getattr("inspection_scope")?;
     native(
         py,
-        "PlannerScopePruningResult",
+        RecordId::PlannerScopePruningResult,
         &[
             ("inspection_scope", inspection.clone()),
             ("execution_scope", inspection),
@@ -45,7 +46,7 @@ pub(crate) fn reconcile_execution_changes<'py>(
     let py = warehouse.py();
     let honest = native(
         py,
-        "with_honest_model_write_hashes",
+        NativeAttr::WithHonestModelWriteHashes,
         &[
             ("scope", pruning.getattr("execution_scope")?),
             ("snapshot", warehouse.getattr("snapshot")?),
@@ -58,7 +59,7 @@ pub(crate) fn reconcile_execution_changes<'py>(
     )?;
     let resolved = native(
         py,
-        "merge_recomputed_model_changes",
+        NativeAttr::MergeRecomputedModelChanges,
         &[
             ("resolved_actions", pruning.getattr("resolved_actions")?),
             ("changes", honest.clone()),
@@ -66,7 +67,7 @@ pub(crate) fn reconcile_execution_changes<'py>(
     )?;
     native(
         py,
-        "PlannerChangeReconciliation",
+        RecordId::PlannerChangeReconciliation,
         &[("changes", honest), ("resolved_actions", resolved)],
     )
 }
@@ -127,7 +128,7 @@ pub(crate) fn build_planner_entry_results<'py>(
     let config = runtime.getattr("project_config")?;
     let execution_scope = pruning.getattr("execution_scope")?;
     let relations = call_with(
-        &imported(py, NATIVE_MODULE, "build_planner_relations_context")?,
+        &registry::native(py, NativeAttr::BuildPlannerRelationsContext)?,
         &[
             ("project", project.clone()),
             ("adapter", runtime.getattr("adapter")?),
@@ -158,7 +159,7 @@ pub(crate) fn build_planner_entry_results<'py>(
         max_override.clone()
     };
     let limit_action = if config.is_none() {
-        native(py, "PlanEntryBuildInputs", &[])?.getattr("microbatch_limit_action")?
+        native(py, RecordId::PlanEntryBuildInputs, &[])?.getattr("microbatch_limit_action")?
     } else {
         config
             .getattr("microbatches")?
@@ -167,7 +168,7 @@ pub(crate) fn build_planner_entry_results<'py>(
     };
     let build_inputs = native(
         py,
-        "PlanEntryBuildInputs",
+        RecordId::PlanEntryBuildInputs,
         &[
             ("source_freshness_blocked_model_names", blocked),
             (
@@ -202,7 +203,7 @@ pub(crate) fn build_planner_entry_results<'py>(
         ],
     )?;
     let entries = call_with(
-        &imported(py, NATIVE_MODULE, "build_plan_entries")?,
+        &registry::native(py, NativeAttr::BuildPlanEntries)?,
         &[
             ("project", project),
             ("adapter", runtime.getattr("adapter")?),
@@ -220,7 +221,7 @@ pub(crate) fn build_planner_entry_results<'py>(
     )?;
     native(
         py,
-        "PlannerEntryResults",
+        RecordId::PlannerEntryResults,
         &[("model_entry_results", entries)],
     )
 }

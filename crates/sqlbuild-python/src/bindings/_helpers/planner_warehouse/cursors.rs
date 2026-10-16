@@ -1,20 +1,22 @@
 //! Cursor MIN/MAX inspection of selected incremental models and their watermark inputs.
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
-use crate::bindings::_helpers::planner_phases::constants::PLANNER_TYPES;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_phases::objects::{
-    by_name, config_str, member, model_key, native, optional_text, planner_error, planner_model,
-    text, tuple,
+    by_name, config_str, model_key, native, native_member, optional_text, planner_error,
+    planner_model, text, tuple,
 };
 use crate::bindings::_helpers::planner_warehouse::constants::{
-    CURSOR_ALGEBRA_ERROR, CURSOR_POLICIES, CURSOR_RESOLVE_MODULE, CURSOR_TYPE_INTEGER,
-    CURSOR_TYPE_TIMESTAMP, DATE_VALUE, LOG_DEBUG_EVENT, MAXIMUM_START, PLANNER_LOGGER,
-    QUERY_RECORD, RECORD_QUERY, RUN_BOUNDED, RUN_RECORDED_QUERY,
+    CURSOR_ALGEBRA_ERROR, CURSOR_POLICIES, CURSOR_TYPE_INTEGER, CURSOR_TYPE_TIMESTAMP, DATE_VALUE,
+    LOG_DEBUG_EVENT, MAXIMUM_START, PLANNER_LOGGER, QUERY_RECORD, RECORD_QUERY, RUN_BOUNDED,
+    RUN_RECORDED_QUERY,
 };
 use crate::bindings::_helpers::planner_warehouse::snapshot::{
     SnapshotRequest, inspection_concurrency,
 };
 use crate::bindings::_helpers::planner_warehouse::watermarks::validate_watermark_column;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObject;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
@@ -95,17 +97,21 @@ fn parse<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     native(
         py,
-        "cursor_parse",
+        NativeAttr::CursorParse,
         &[("raw", raw.clone()), ("cursor_type", text(py, cursor_type))],
     )
 }
 
 fn render<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    native(value.py(), "cursor_render", &[("value", value.clone())])
+    native(
+        value.py(),
+        NativeAttr::CursorRender,
+        &[("value", value.clone())],
+    )
 }
 
 fn grain<'py>(py: Python<'py>, value: &str) -> PyResult<Bound<'py, PyAny>> {
-    member(py, (PLANNER_TYPES, "CursorGrain"), value)
+    native_member(py, RecordId::CursorGrain, value)
 }
 
 fn parse_warehouse_cursor<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -132,10 +138,7 @@ fn log_debug<'py>(
     let logger = imported(py, "logging", "getLogger")?.call1((PLANNER_LOGGER,))?;
     let mut fields = vec![("logger", logger), ("message", text(py, message))];
     fields.extend(context.iter().cloned());
-    call_with(
-        &imported(py, LOG_DEBUG_EVENT.0, LOG_DEBUG_EVENT.1)?,
-        &fields,
-    )?;
+    call_with(&host::entry(py, LOG_DEBUG_EVENT)?, &fields)?;
     Ok(())
 }
 
@@ -236,7 +239,7 @@ fn upstream_relation<'py>(
     {
         return native(
             py,
-            "render_source_relation",
+            NativeAttr::RenderSourceRelation,
             &[
                 ("entry", source.getattr("source_entry")?),
                 ("adapter", adapter.clone()),
@@ -253,7 +256,7 @@ fn lineage_reference<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     native(
         model.py(),
-        "resolve_lineage_reference",
+        NativeAttr::ResolveLineageReference,
         &[
             ("model", model.clone()),
             ("input_name", input_name.clone()),
@@ -277,7 +280,7 @@ fn terminal_bound<'py>(
     };
     let value = native(
         py,
-        "get_config_cursor_bound",
+        NativeAttr::GetConfigCursorBound,
         &[
             ("values", upstream.getattr("config")?.getattr("values")?),
             ("key", text(py, key)),
@@ -359,7 +362,7 @@ fn collect_models<'py>(
         };
         let watermark_inputs = native(
             py,
-            "resolve_cursor_input_roles",
+            NativeAttr::ResolveCursorInputRoles,
             &[("model", model.clone())],
         )?
         .getattr("watermark_inputs")?;
@@ -457,11 +460,7 @@ fn collect_models<'py>(
             });
         }
         let effective_grain = call_with(
-            &imported(
-                py,
-                CURSOR_RESOLVE_MODULE,
-                "resolve_effective_timestamp_grain",
-            )?,
+            &registry::native(py, NativeAttr::ResolveEffectiveTimestampGrain)?,
             &[
                 ("cursor_type", optional_text(py, cursor_type.as_deref())),
                 (
@@ -478,7 +477,7 @@ fn collect_models<'py>(
         let mode = config_str(&model, "cursor_watermark_mode")?
             .filter(|value| !value.is_empty())
             .unwrap_or_else(|| "all".to_owned());
-        let watermark_mode = member(py, ("sqlbuild._native", "CursorWatermarkMode"), &mode)?;
+        let watermark_mode = native_member(py, RecordId::CursorWatermarkMode, &mode)?;
         models.push(CursorModel {
             target_tag,
             target_relation,
@@ -493,7 +492,7 @@ fn collect_models<'py>(
             upstreams,
             effective_grain,
             start_cursor_config: call_with(
-                &imported(py, CURSOR_POLICIES.0, CURSOR_POLICIES.1)?,
+                &registry::native(py, CURSOR_POLICIES)?,
                 &[
                     ("model", model.clone()),
                     ("project_config", inputs.start_cursor_config.clone()),
@@ -584,7 +583,7 @@ fn read_cursor_query<'py>(
         error.str()?.into_any()
     };
     let record = call_with(
-        &imported(py, QUERY_RECORD.0, QUERY_RECORD.1)?,
+        &host::entry(py, QUERY_RECORD)?,
         &[
             ("sql", text(py, sql)),
             ("elapsed_seconds", PyFloat::new(py, elapsed).into_any()),
@@ -592,10 +591,7 @@ fn read_cursor_query<'py>(
             ("error", error_text),
         ],
     )?;
-    call_with(
-        &imported(py, RECORD_QUERY.0, RECORD_QUERY.1)?,
-        &[("record", record)],
-    )?;
+    call_with(&host::entry(py, RECORD_QUERY)?, &[("record", record)])?;
     Ok(PyTuple::new(py, [row, PyFloat::new(py, elapsed).into_any(), error])?.into_any())
 }
 
@@ -746,7 +742,7 @@ fn execute_queries<'py>(
             tasks.push(bound_task(py, cursor_query_sql(query), handles)?);
         }
         call_with(
-            &imported(py, RUN_BOUNDED.0, RUN_BOUNDED.1)?,
+            &host::entry(py, RUN_BOUNDED)?,
             &[
                 ("tasks", tuple(py, tasks)?),
                 ("concurrency", concurrency.into_pyobject(py)?.into_any()),
@@ -805,7 +801,7 @@ fn eligible_task<'py>(
                 },
             )?;
             let rows = call_with(
-                &imported(py, RUN_RECORDED_QUERY.0, RUN_RECORDED_QUERY.1)?,
+                &host::entry(py, RUN_RECORDED_QUERY)?,
                 &[("sql", text(py, &sql)), ("run", run.into_any())],
             );
             match rows {
@@ -855,7 +851,7 @@ fn eligible_target_maxes<'py>(
             continue;
         }
         let allowed = call_with(
-            &imported(py, MAXIMUM_START.0, MAXIMUM_START.1)?,
+            &registry::native(py, MAXIMUM_START)?,
             &[
                 ("discovered_value", render(target_max)?),
                 ("cursor_grain", info.effective_grain.clone()),
@@ -866,7 +862,7 @@ fn eligible_target_maxes<'py>(
         let horizon = parse(py, &allowed, CURSOR_TYPE_TIMESTAMP)?;
         let order: i64 = native(
             py,
-            "cursor_compare",
+            NativeAttr::CursorCompare,
             &[("left", target_max.clone()), ("right", horizon.clone())],
         )?
         .extract()?;
@@ -889,7 +885,7 @@ fn eligible_target_maxes<'py>(
                 (
                     "is_date",
                     horizon
-                        .is_instance(&imported(py, DATE_VALUE.0, DATE_VALUE.1)?)?
+                        .is_instance(&registry::class(py, DATE_VALUE)?)?
                         .into_pyobject(py)?
                         .to_owned()
                         .into_any(),
@@ -912,7 +908,7 @@ fn eligible_target_maxes<'py>(
         )?);
     }
     let rows_by_request = call_with(
-        &imported(py, RUN_BOUNDED.0, RUN_BOUNDED.1)?,
+        &host::entry(py, RUN_BOUNDED)?,
         &[
             ("tasks", tuple(py, tasks)?),
             (
@@ -939,13 +935,13 @@ fn eligible_target_maxes<'py>(
             .unwrap_or(CURSOR_TYPE_TIMESTAMP);
         let value = parse(py, &first, cursor_type)?;
         let normalized = call_with(
-            &imported(py, CURSOR_RESOLVE_MODULE, "normalize_cursor_snapshot_grain")?,
+            &registry::native(py, NativeAttr::NormalizeCursorSnapshotGrain)?,
             &[
                 (
                     "cursor_snapshot",
                     planner_model(
                         py,
-                        "ModelCursorSnapshot",
+                        RecordId::ModelCursorSnapshot,
                         &[
                             ("target_max", py.None().into_bound(py)),
                             ("upstream_mins", PyTuple::empty(py).into_any()),
@@ -1035,7 +1031,7 @@ fn assemble<'py>(
             let effective_max = match &upstream.terminal_end {
                 Some(end) => Some(native(
                     py,
-                    "cursor_exclusive_to_inclusive",
+                    NativeAttr::CursorExclusiveToInclusive,
                     &[
                         ("value", end.clone()),
                         ("grain", cursor_grain(py, info, upstream)?),
@@ -1060,7 +1056,7 @@ fn assemble<'py>(
                 };
                 evidence.push(planner_model(
                     py,
-                    "CursorInputEvidence",
+                    RecordId::CursorInputEvidence,
                     &[
                         ("relation", text(py, &upstream.relation)),
                         ("cursor_column", text(py, &upstream.cursor_column)),
@@ -1095,7 +1091,7 @@ fn assemble<'py>(
                     available = Some(
                         native(
                             py,
-                            "cursor_observed_partition",
+                            NativeAttr::CursorObservedPartition,
                             &[
                                 ("value", max_value.clone()),
                                 ("grain", cursor_grain(py, info, upstream)?),
@@ -1118,7 +1114,7 @@ fn assemble<'py>(
             &info.model_name,
             planner_model(
                 py,
-                "ModelCursorSnapshot",
+                RecordId::ModelCursorSnapshot,
                 &[
                     ("target_max", optional(py, target_max)),
                     ("upstream_mins", tuple(py, mins)?),

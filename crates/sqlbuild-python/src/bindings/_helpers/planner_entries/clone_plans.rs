@@ -1,9 +1,11 @@
 //! Clone planning: destination and origin entries, and deferred-clone graph traversal.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_entries::values::{
-    COMPILE_MODELS, native, planner_model, planner_type, string,
+    native, planner_model, planner_type, string,
 };
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PySet, PySetMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -45,12 +47,11 @@ fn clone_plan_output<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = project.py();
     let upstream =
-        imported(py, "sqlbuild._native", "build_execution_upstream_deps")?.call1((project,))?;
-    let downstream =
-        imported(py, "sqlbuild._native", "build_downstream_deps")?.call1((&upstream,))?;
+        registry::native(py, NativeAttr::BuildExecutionUpstreamDeps)?.call1((project,))?;
+    let downstream = registry::native(py, NativeAttr::BuildDownstreamDeps)?.call1((&upstream,))?;
     let selected = native(
         py,
-        "resolve_graph_selection",
+        NativeAttr::ResolveGraphSelection,
         &[
             ("graph", project.getattr("lineage_graph")?),
             ("select", select.clone()),
@@ -59,13 +60,13 @@ fn clone_plan_output<'py>(
     )?;
     planner_model(
         py,
-        "PlanOutput",
+        RecordId::PlanOutput,
         &[
             (
                 "execution_order",
                 native(
                     py,
-                    "topologically_order_keys",
+                    NativeAttr::TopologicallyOrderKeys,
                     &[("upstream", upstream.clone())],
                 )?,
             ),
@@ -93,17 +94,17 @@ fn clone_resolution<'py>(
     let py = project.py();
     let model_locations = native(
         py,
-        "build_model_locations",
+        NativeAttr::BuildModelLocations,
         &[("models", project.getattr("models")?)],
     )?;
     let seed_locations = native(
         py,
-        "build_seed_locations",
+        NativeAttr::BuildSeedLocations,
         &[("seeds", project.getattr("seeds")?)],
     )?;
     let function_locations = native(
         py,
-        "build_function_locations",
+        NativeAttr::BuildFunctionLocations,
         &[("functions", project.getattr("functions")?)],
     )?;
     let source_map = PyDict::new(py);
@@ -113,7 +114,7 @@ fn clone_resolution<'py>(
     }
     let source_warehouse_columns = native(
         py,
-        "gather_source_columns",
+        NativeAttr::GatherSourceColumns,
         &[
             ("project", source_project.clone()),
             ("adapter", adapter.clone()),
@@ -142,14 +143,17 @@ fn model_entry<'py>(
     };
     planner_model(
         py,
-        "ModelPlanEntry",
+        RecordId::ModelPlanEntry,
         &[
             ("key", model.getattr("key")?),
             ("name", model.getattr("name")?),
             ("relative_path", model.getattr("relative_path")?),
             ("materialization_type", materialization_type),
-            ("action", planner_type(py, "PlanAction", action)?),
-            ("reason", planner_type(py, "PlanReason", "NO_CHANGE")?),
+            ("action", planner_type(py, RecordId::PlanAction, action)?),
+            (
+                "reason",
+                planner_type(py, RecordId::PlanReason, "NO_CHANGE")?,
+            ),
             ("destination", model.getattr("destination")?),
             ("fingerprint_query_sql", string(py, "")),
             ("resolved_sql", resolved_sql),
@@ -172,8 +176,11 @@ fn clone_model_entries<'py>(
         if !selected.contains(model.getattr("key")?)? || disabled_model(&model)? {
             continue;
         }
-        let materialization_type =
-            native(py, "get_materialization_type", &[("model", model.clone())])?;
+        let materialization_type = native(
+            py,
+            NativeAttr::GetMaterializationType,
+            &[("model", model.clone())],
+        )?;
         let resolved_sql = if materialization_type.eq(VIEW_MATERIALIZATION)? {
             let functions = PyDict::new(py);
             for function in project.getattr("functions")?.try_iter()? {
@@ -182,7 +189,7 @@ fn clone_model_entries<'py>(
             }
             let context = native(
                 py,
-                "ModelPlanContext",
+                RecordId::ModelPlanContext,
                 &[
                     ("model_locations", resolution.model_locations.clone()),
                     ("models_by_name", PyDict::new(py).into_any()),
@@ -202,25 +209,28 @@ fn clone_model_entries<'py>(
             )?;
             native(
                 py,
-                "resolve_model_sql",
+                NativeAttr::ResolveModelSql,
                 &[
                     ("adapter", adapter.clone()),
                     ("model", model.clone()),
-                    ("snapshot", native(py, "WarehouseSnapshot", &[])?),
+                    ("snapshot", native(py, RecordId::WarehouseSnapshot, &[])?),
                     ("context", context),
                     (
                         "backfill",
                         native(
                             py,
-                            "BackfillResult",
+                            RecordId::BackfillResult,
                             &[(
                                 "action",
-                                planner_type(py, "BackfillAction", "FORWARD_ONLY")?,
+                                planner_type(py, RecordId::BackfillAction, "FORWARD_ONLY")?,
                             )],
                         )?,
                     ),
                     ("full_refresh", PyBool::new(py, false).to_owned().into_any()),
-                    ("cursor_overrides", native(py, "CursorOverridePair", &[])?),
+                    (
+                        "cursor_overrides",
+                        native(py, RecordId::CursorOverridePair, &[])?,
+                    ),
                 ],
             )?
         } else {
@@ -264,7 +274,7 @@ fn clone_source_entries<'py>(
         let qualified = adapter
             .getattr("render_qualified_name")?
             .call((), Some(&kwargs))?;
-        let destination = imported(py, COMPILE_MODELS, "CompiledRelationLocation")?.call(
+        let destination = registry::class(py, RecordId::CompiledRelationLocation)?.call(
             (),
             Some(&{
                 let location = PyDict::new(py);
@@ -279,7 +289,7 @@ fn clone_source_entries<'py>(
             source.getattr("key")?,
             planner_model(
                 py,
-                "CloneSourcePlanEntry",
+                RecordId::CloneSourcePlanEntry,
                 &[
                     ("key", source.getattr("key")?),
                     ("name", source.getattr("name")?),
@@ -307,7 +317,7 @@ fn clone_function_entries<'py>(
         }
         let body_sql = native(
             py,
-            "resolve_function_sql",
+            NativeAttr::ResolveFunctionSql,
             &[
                 ("adapter", adapter.clone()),
                 ("function", function.clone()),
@@ -328,7 +338,7 @@ fn clone_function_entries<'py>(
         let field = |name: &str| function.getattr(name);
         let entry = planner_model(
             py,
-            "FunctionPlanEntry",
+            RecordId::FunctionPlanEntry,
             &[
                 ("key", field("key")?),
                 ("name", field("name")?),
@@ -341,7 +351,7 @@ fn clone_function_entries<'py>(
                     "fingerprint_query_sql",
                     native(
                         py,
-                        "build_compiled_function_fingerprint_sql",
+                        NativeAttr::BuildCompiledFunctionFingerprintSql,
                         &[("function", function.clone())],
                     )?,
                 ),
@@ -363,7 +373,7 @@ fn seed_entry<'py>(seed: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py = seed.py();
     planner_model(
         py,
-        "SeedPlanEntry",
+        RecordId::SeedPlanEntry,
         &[
             ("key", seed.getattr("key")?),
             ("name", seed.getattr("name")?),
@@ -408,8 +418,11 @@ fn origin_model_entries<'py>(
         if !selected_names.contains(model.getattr("name")?)? || disabled_model(&model)? {
             continue;
         }
-        let materialization_type =
-            native(py, "get_materialization_type", &[("model", model.clone())])?;
+        let materialization_type = native(
+            py,
+            NativeAttr::GetMaterializationType,
+            &[("model", model.clone())],
+        )?;
         entries.push(model_entry(&model, materialization_type, string(py, ""))?);
     }
     tuple_of(py, entries)

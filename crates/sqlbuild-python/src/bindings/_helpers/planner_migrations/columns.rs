@@ -11,9 +11,9 @@ use sqlbuild_analysis::planner_migrations::main::{
 };
 use sqlbuild_analysis::planner_migrations::models::Projection;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
 fn projections(shape: &Bound<'_, PyAny>) -> PyResult<Vec<Projection>> {
     let mut result: Vec<Projection> = Vec::new();
@@ -119,7 +119,7 @@ fn rename_hints<'py>(
     let mut result: Vec<Bound<'py, PyAny>> = Vec::new();
     for hint in hints {
         result.push(call_with(
-            &imported(py, "sqlbuild._native", "ColumnRenameHint")?,
+            &registry::class(py, RecordId::ColumnRenameHint)?,
             &[
                 ("model_name", arguments.value("model_name")?),
                 (

@@ -16,8 +16,9 @@ use sqlbuild_core::text::main::python_isspace::python_isspace;
 
 use crate::bindings::_helpers::analysis::sql_test_comparisons::single_comparison_sql;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
 
-const LIFECYCLE_TYPES: &str = "sqlbuild.adapter.contract.types";
 const RUN_DIR: &str = "run";
 const TESTS_DIR: &str = "tests";
 const CHECKS_DIR: &str = "checks";
@@ -97,7 +98,7 @@ fn write_text(path: &Bound<'_, PyAny>, text: &str) -> PyResult<()> {
 
 fn sql_statements(result: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     let sql_kind: Bound<'_, PyAny> =
-        imported(result.py(), LIFECYCLE_TYPES, "LifeCycleEventKind")?.getattr("SQL")?;
+        host::entry(result.py(), AdapterHost::LifeCycleEventKind)?.getattr("SQL")?;
     let mut statements: Vec<String> = Vec::new();
     for event in result.getattr("lifecycle_events")?.try_iter()? {
         let event: Bound<'_, PyAny> = event?;

@@ -20,10 +20,9 @@ use sqlbuild_rules::project_tree::main::tracked_text_suffixes::tracked_text_suff
 use sqlbuild_rules::project_tree::models::ProjectTreeEntry;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const RULE_USAGE_ERROR: &str = "RuleUsageError";
-const PROJECT_PATH_CLASS: &str = "ProjectPath";
 const BUILTINS_MODULE: &str = "builtins";
 const DEFAULT_POSITION: i64 = 1;
 #[cfg(unix)]
@@ -33,7 +32,7 @@ const EMBEDDED_NUL_MESSAGE: &str = "lstat: embedded null character in path";
 
 /// `RuleUsageError(message)`.
 fn usage_error(py: Python<'_>, message: String) -> PyErr {
-    match imported(py, NATIVE_MODULE, RULE_USAGE_ERROR).and_then(|class| class.call1((message,))) {
+    match registry::error(py, ErrorId::RuleUsage).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }
@@ -46,7 +45,7 @@ pub(crate) fn usage_error_for(prefix: &str, value: &Bound<'_, PyAny>) -> PyErr {
         .str()
         .and_then(|text| PyString::new(py, prefix).as_any().add(text));
     match message.and_then(|message| {
-        imported(py, NATIVE_MODULE, RULE_USAGE_ERROR).and_then(|class| class.call1((message,)))
+        registry::error(py, ErrorId::RuleUsage).and_then(|class| class.call1((message,)))
     }) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
@@ -187,7 +186,7 @@ fn unreadable(py: Python<'_>, path: PathBuf, code: i32) -> PyResult<PyErr> {
 fn project_tree_paths<'py>(root: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = root.py();
     let root: PathBuf = root.extract()?;
-    let class: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, PROJECT_PATH_CLASS)?;
+    let class: Bound<'py, PyAny> = registry::class(py, RecordId::ProjectPath)?;
     let mut paths: Vec<(Bound<'py, PyAny>, bool)> = project_tree_entries(&root)
         .into_iter()
         .map(|ProjectTreeEntry { relative, is_file }| {

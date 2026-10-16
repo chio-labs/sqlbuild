@@ -1,7 +1,9 @@
 //! Python's `resolve_python_node_selectors`: selector resolution over Python node names.
 
-use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::convert::Infallible;
 
+use sqlbuild_core::graph_walk::main::breadth_first_reach::breadth_first_reach;
 use sqlbuild_core::text::main::glob_match::glob_match;
 
 use crate::assembly::project::types::ObjectKey;
@@ -89,19 +91,14 @@ impl<'graph> NodeIndex<'graph> {
         starts: impl IntoIterator<Item = &'name str>,
         direction: EdgeDirection,
     ) -> Names {
-        let mut visited: HashSet<&str> = HashSet::new();
-        let mut frontier: VecDeque<&str> = VecDeque::new();
-        for start in starts {
-            frontier.push_back(start);
-        }
-        while let Some(current) = frontier.pop_front() {
-            for neighbor in self.edges(current, direction) {
-                if visited.insert(neighbor) {
-                    frontier.push_back(neighbor);
-                }
-            }
-        }
-        visited.into_iter().map(str::to_owned).collect()
+        let mut visited: HashSet<String> = HashSet::new();
+        let Ok(()) = breadth_first_reach(
+            starts.into_iter().map(str::to_owned),
+            None,
+            &mut visited,
+            |current| Ok::<_, Infallible>(self.edges(current, direction).iter().cloned()),
+        );
+        visited.into_iter().collect()
     }
 
     /// Whether `name` is a node of `kind`.

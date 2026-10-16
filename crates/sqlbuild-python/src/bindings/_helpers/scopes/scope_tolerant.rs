@@ -8,6 +8,7 @@ use sqlbuild_scopes::scope_index::models::{
     OwnershipRoot, OwnershipRootKind, ResourceIdentity, ResourceKind, ResourceRecord,
 };
 
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::scopes::scope_objects::{
     ScopeClasses, enum_text, field, optional_item, read_resource, root_object, tuple_attribute,
 };
@@ -47,9 +48,9 @@ impl<'py> Diagnostics<'py> {
         let keywords: Bound<'py, PyDict> = PyDict::new(self.classes.py());
         keywords.set_item("path", path.as_deref())?;
         self.objects
-            .push(self.classes.model("ScopeDiagnostic")?.call(
+            .push(self.classes.model(RecordId::ScopeDiagnostic)?.call(
                 (
-                    self.classes.member("ScopeDiagnosticCode", code)?,
+                    self.classes.member(RecordId::ScopeDiagnosticCode, code)?,
                     message.as_str(),
                 ),
                 Some(&keywords),
@@ -112,9 +113,9 @@ fn resource_object<'py>(
     classes: &ScopeClasses<'py>,
     record: &ResourceRecord,
 ) -> PyResult<Bound<'py, PyAny>> {
-    classes.model("ResourceRecord")?.call1((
-        classes.model("ResourceIdentity")?.call1((
-            classes.member("ResourceKind", record.identity.kind.as_str())?,
+    classes.model(RecordId::ResourceRecord)?.call1((
+        classes.model(RecordId::ResourceIdentity)?.call1((
+            classes.member(RecordId::ResourceKind, record.identity.kind.as_str())?,
             record.identity.name.as_str(),
         ))?,
         record.path.as_str(),
@@ -212,7 +213,7 @@ pub(crate) fn scope_tolerant_index(
         declaration_faults.is_empty() && config_faults.is_empty() && macro_faults.is_empty();
     let relationships: bool =
         snapshot_relationship_faults.is_empty() && relationship_faults.is_empty();
-    let completeness: Bound<'_, PyAny> = classes.model("ScopeCompleteness")?.call1((
+    let completeness: Bound<'_, PyAny> = classes.model(RecordId::ScopeCompleteness)?.call1((
         false,
         static_visibility,
         false,

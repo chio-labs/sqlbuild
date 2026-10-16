@@ -12,17 +12,12 @@ use sqlbuild_core::audit_command::models::AuditCounts;
 use sqlbuild_core::cli_text::models::CliStyle;
 
 use crate::bindings::_helpers::command_runtime::invocation::resolve_reported_command_invocation;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
-const STATIC_COMMAND_MODULE: &str = "sqlbuild._native";
-const AUDIT_PLAN_MODULE: &str = "sqlbuild._native";
-const COST_CONTEXT_MODULE: &str = "sqlbuild._native";
-const EXECUTOR_RUN_MODULE: &str = "sqlbuild.executor.pipeline.main.run";
-const PROJECTION_MODULE: &str = "sqlbuild.executor.auditing.main._current_audit_result_projection";
 const EXECUTION_COMMAND: &str = "sqb audit";
 const PASS_OUTCOME: &str = "pass";
 const WARN_OUTCOME: &str = "warn";
@@ -109,18 +104,14 @@ fn compile_audits<'py>(
     let discovered: Bound<'py, PyAny> = invocation.getattr("discovered_inputs")?;
     let adapter: Bound<'py, PyAny> = invocation.getattr("adapter")?;
     let resolver: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            EXTERNAL_REFS_MODULE,
-            "resolve_external_sql_reference_resolver",
-        )?,
+        &registry::native(py, NativeAttr::ResolveExternalSqlReferenceResolver)?,
         &[
             ("project_dir", invocation.getattr("effective_project_dir")?),
             ("discovered_inputs", discovered.clone()),
         ],
     )?;
     let options: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "CompilePipelineOptions")?,
+        &registry::class(py, RecordId::CompilePipelineOptions)?,
         &[
             ("selected_target", request.getattr("selected_target")?),
             ("no_sql_validation", request.getattr("no_sql_validation")?),
@@ -136,7 +127,7 @@ fn compile_audits<'py>(
         ],
     )?;
     let context: Bound<'py, PyAny> = call_with(
-        &imported(py, STATIC_COMMAND_MODULE, "compile_static_command_context")?,
+        &registry::native(py, NativeAttr::CompileStaticCommandContext)?,
         &[
             ("discovered_inputs", discovered),
             ("adapter", adapter.clone()),
@@ -150,7 +141,7 @@ fn compile_audits<'py>(
         ],
     )?;
     let plan_output: Bound<'py, PyAny> = call_with(
-        &imported(py, AUDIT_PLAN_MODULE, "build_audit_command_plan")?,
+        &registry::native(py, NativeAttr::BuildAuditCommandPlan)?,
         &[
             ("project", context.getattr("project")?),
             ("adapter", adapter),
@@ -159,7 +150,7 @@ fn compile_audits<'py>(
         ],
     )?;
     call_with(
-        &imported(py, NATIVE_MODULE, "build_static_pipeline_result")?,
+        &registry::native(py, NativeAttr::BuildStaticPipelineResult)?,
         &[("context", context), ("plan_output", plan_output)],
     )
 }
@@ -195,7 +186,7 @@ fn prepare_run<'py>(
     let stream: Bound<'py, PyAny> = invocation.getattr("progress_stream")?;
     let use_color: Bound<'py, PyAny> = invocation.getattr("use_color")?;
     let progress: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "AuditProgressReporter")?,
+        &registry::native(py, NativeAttr::AuditProgressReporter)?,
         &[
             ("entries", entries.clone()),
             ("worker_limit", PyInt::new(py, worker_count).into_any()),
@@ -204,7 +195,7 @@ fn prepare_run<'py>(
         ],
     )?;
     let projector: Bound<'py, PyAny> =
-        imported(py, NATIVE_MODULE, "current_native_progress_projector")?.call0()?;
+        registry::native(py, NativeAttr::CurrentNativeProgressProjector)?.call0()?;
     if !projector.is_none() {
         for entry in entries.try_iter()? {
             call_with(
@@ -214,7 +205,7 @@ fn prepare_run<'py>(
         }
     }
     let connection: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "ConnectionProgressReporter")?,
+        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
         &[
             ("adapter_name", invocation.getattr("adapter_name")?),
             ("stream", stream),
@@ -245,7 +236,7 @@ fn write_headers(
     header.set_item("target", py.None())?;
     header.set_item("concurrency", concurrency)?;
     header.set_item("use_color", &use_color)?;
-    imported(py, NATIVE_MODULE, "write_execution_header")?.call((), Some(&header))?;
+    registry::native(py, NativeAttr::WriteExecutionHeader)?.call((), Some(&header))?;
     let entries: Bound<'_, PyAny> = pipeline.getattr("plan_output")?.getattr("audit_entries")?;
     let mut models: BTreeSet<String> = BTreeSet::new();
     for entry in entries.try_iter()? {
@@ -275,7 +266,7 @@ fn execute<'py>(
     let plan: Bound<'py, PyAny> = pipeline.getattr("plan_output")?;
     let project: Bound<'py, PyAny> = pipeline.getattr("project")?;
     let event_writer: Bound<'py, PyAny> =
-        imported(py, NATIVE_MODULE, "ExecutionEventWriter")?.call0()?;
+        registry::native(py, NativeAttr::ExecutionEventWriter)?.call0()?;
     let relay: Bound<'py, AuditCallbackRelay> = Bound::new(
         py,
         AuditCallbackRelay {
@@ -288,7 +279,7 @@ fn execute<'py>(
         run.progress
             .call_method1("set_result_callback", (relay.getattr("on_result")?,))?;
         let projector: Bound<'py, PyAny> =
-            imported(py, NATIVE_MODULE, "current_native_progress_projector")?.call0()?;
+            registry::native(py, NativeAttr::CurrentNativeProgressProjector)?.call0()?;
         if !projector.is_none() {
             let ordinals: Bound<'py, PyDict> = PyDict::new(py);
             let mut total: usize = 0;
@@ -312,7 +303,7 @@ fn execute<'py>(
             .call_method1("__truediv__", (&run_id,))?
             .call_method1("__truediv__", ("statements.jsonl",))?;
         let scope: Bound<'py, PyAny> = call_with(
-            &imported(py, COST_CONTEXT_MODULE, "CostContext")?.getattr("scope")?,
+            &registry::native(py, NativeAttr::CostContext)?.getattr("scope")?,
             &[
                 ("run_id", run_id.clone()),
                 ("resource_type", text(py, "run")),
@@ -323,7 +314,7 @@ fn execute<'py>(
         )?;
         within(&scope, |_| {
             let callbacks: Bound<'py, PyAny> = call_with(
-                &imported(py, EXECUTOR_RUN_MODULE, "AuditPipelineCallbacks")?,
+                &host::entry(py, ExecutorHost::AuditPipelineCallbacks)?,
                 &[
                     (
                         "on_connection_start",
@@ -347,7 +338,7 @@ fn execute<'py>(
                 ],
             )?;
             call_with(
-                &imported(py, EXECUTOR_RUN_MODULE, "run_audit_pipeline_with_callbacks")?,
+                &host::entry(py, ExecutorHost::RunAuditPipelineWithCallbacks)?,
                 &[
                     ("plan", plan.clone()),
                     (
@@ -390,7 +381,7 @@ fn audit_payload<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = results.py();
     let payload: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "format_audit_execution_json")?,
+        &registry::native(py, NativeAttr::FormatAuditExecutionJson)?,
         &[
             ("results", results.clone()),
             (
@@ -401,7 +392,7 @@ fn audit_payload<'py>(
         ],
     )?;
     let projection: Bound<'py, PyAny> =
-        imported(py, PROJECTION_MODULE, "current_audit_result_projection")?.call0()?;
+        host::entry(py, ExecutorHost::CurrentAuditResultProjection)?.call0()?;
     if projection.is_none() {
         return Ok(payload);
     }
@@ -468,7 +459,7 @@ fn complete(
         (run.concurrency, run.worker_count),
     )?;
     call_with(
-        &imported(py, NATIVE_MODULE, "write_execution_json_output")?,
+        &registry::native(py, NativeAttr::WriteExecutionJsonOutput)?,
         &[
             ("payload", payload),
             ("json_output", request.getattr("json_output")?),
@@ -484,7 +475,7 @@ fn complete(
 fn run_audit_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let invocation: Bound<'_, PyAny> = resolve_reported_command_invocation(
         request,
-        &imported(py, NATIVE_MODULE, "AuditInvocation")?,
+        &registry::class(py, RecordId::AuditInvocation)?,
         true,
     )?;
     let pipeline: Bound<'_, PyAny> = compile_audits(request, &invocation)?;

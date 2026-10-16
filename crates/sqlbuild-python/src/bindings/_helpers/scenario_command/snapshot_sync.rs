@@ -7,18 +7,20 @@ use sqlbuild_core::cli_text::models::SummaryCount;
 use sqlbuild_core::scenario_command::main::snapshot_capture_warning::snapshot_capture_warning;
 use sqlbuild_core::scenario_command::models::ScenarioNamespace;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scenario_command::conversions::succeeded;
 use crate::bindings::_helpers::scenario_command::presentation::{
     CompletionKind, SectionStatus, begin_section, connection_hooks, progress_relay,
 };
 use crate::bindings::_helpers::scenario_command::setup::{
-    CompileInputs, NATIVE_MODULE, boolean, capture_limits, capture_settings, compile, flush,
-    optional_text, project_connection_config, selected_scenarios, text, write,
+    CompileInputs, boolean, capture_limits, capture_settings, compile, flush, optional_text,
+    project_connection_config, selected_scenarios, text, write,
 };
 use crate::bindings::_helpers::scenario_command::test_command::TestRun;
-
-const EXECUTOR_RUN_MODULE: &str = "sqlbuild.executor.pipeline.main.run";
 
 /// The outcome of syncing local snapshots: its exit code and capture results.
 pub(crate) struct LocalSync<'py> {
@@ -36,7 +38,7 @@ impl LocalSync<'_> {
     ) -> PyResult<i32> {
         let py: Python<'_> = request.py();
         let payload: Bound<'_, PyAny> = call_with(
-            &imported(py, NATIVE_MODULE, "format_scenario_snapshot_execution_json")?,
+            &registry::native(py, NativeAttr::FormatScenarioSnapshotExecutionJson)?,
             &[
                 (
                     "run_namespace",
@@ -48,7 +50,7 @@ impl LocalSync<'_> {
             ],
         )?;
         call_with(
-            &imported(py, NATIVE_MODULE, "write_execution_json_output")?,
+            &registry::native(py, NativeAttr::WriteExecutionJsonOutput)?,
             &[
                 ("payload", payload),
                 ("json_output", request.getattr("json_output")?),
@@ -81,11 +83,7 @@ pub(crate) fn sync_local_snapshots<'py>(
         .getattr("project_config")?
         .getattr("name")?;
     let names: Vec<String> = call_with(
-        &imported(
-            py,
-            EXECUTOR_RUN_MODULE,
-            "select_scenario_snapshot_capture_candidates",
-        )?,
+        &host::entry(py, ExecutorHost::SelectScenarioSnapshotCaptureCandidates)?,
         &[
             ("project_dir", run.project.project_dir.clone()),
             ("pipeline_result", local_pipeline.clone()),
@@ -112,7 +110,7 @@ pub(crate) fn sync_local_snapshots<'py>(
         });
     }
     let planning: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "PlanningProgressReporter")?,
+        &registry::native(py, NativeAttr::PlanningProgressReporter)?,
         &[
             ("stream", run.stream.clone()),
             ("use_color", boolean(py, run.style.use_color)),
@@ -172,7 +170,7 @@ pub(crate) fn sync_local_snapshots<'py>(
     let results: Bound<'py, PyTuple> = PyTuple::new(
         py,
         call_with(
-            &imported(py, EXECUTOR_RUN_MODULE, "run_scenario_capture_pipeline")?,
+            &host::entry(py, ExecutorHost::RunScenarioCapturePipeline)?,
             &[
                 ("project_dir", run.project.project_dir.clone()),
                 ("pipeline_result", pipeline),

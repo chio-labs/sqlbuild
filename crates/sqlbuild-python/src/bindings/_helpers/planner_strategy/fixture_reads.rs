@@ -16,6 +16,8 @@ use std::collections::{HashMap, HashSet};
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::planner_strategy::fixture_values::columns;
 use crate::bindings::_helpers::planner_strategy::models::FixtureReadCacheHost;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 
 #[pyfunction]
@@ -83,10 +85,8 @@ pub(crate) fn required_fixture_columns<'py>(
             stars: model_stars(&model, &schema, adapter)?,
         });
     }
-    let owner = py
-        .import("sqlbuild._native")?
-        .getattr("_fixture_read_cache")?
-        .cast_into::<FixtureReadCacheHost>()?;
+    let owner =
+        registry::native(py, NativeAttr::FixtureReadCache)?.cast_into::<FixtureReadCacheHost>()?;
     let mut owner = owner.borrow_mut();
     let cache = std::mem::take(&mut owner.cache);
     let fixture_keys: HashSet<(String, String)> = keys.keys().cloned().collect();
@@ -124,11 +124,11 @@ fn lineage_reads(model: &Bound<'_, PyAny>) -> PyResult<Vec<ColumnRead>> {
     }
     for fact in facts.try_iter()? {
         let fact = fact?;
-        if !fact.getattr("confidence")?.eq(model
-            .py()
-            .import("sqlbuild._native")?
-            .getattr("ColumnLineageConfidence")?
-            .getattr("HIGH")?)?
+        if !fact.getattr("confidence")?.eq(registry::class(
+            model.py(),
+            RecordId::ColumnLineageConfidence,
+        )?
+        .getattr("HIGH")?)?
         {
             continue;
         }
@@ -218,10 +218,8 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
 #[pyfunction]
 #[pyo3(signature = (*, reset = false))]
 fn fixture_read_cache_info(py: pyo3::Python<'_>, reset: bool) -> PyResult<(u64, usize)> {
-    let owner = py
-        .import("sqlbuild._native")?
-        .getattr("_fixture_read_cache")?
-        .cast_into::<FixtureReadCacheHost>()?;
+    let owner =
+        registry::native(py, NativeAttr::FixtureReadCache)?.cast_into::<FixtureReadCacheHost>()?;
     let mut owner = owner.borrow_mut();
     if reset {
         owner.cache = Default::default();

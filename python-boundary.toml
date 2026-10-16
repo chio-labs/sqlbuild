@@ -553,6 +553,11 @@ rule = 4
 note = "Wraps the Polyglot Python package with complexity guards."
 
 [[stays]]
+path = "_native_host.py"
+rule = 1
+note = "The one module native code imports by path: a lazy name table of the executor, adapter, user-code, third-party and facade entry points the native host table (crates/sqlbuild-python native_host) reaches."
+
+[[stays]]
 path = "assets.py"
 rule = 3
 note = "Public facade: re-exports plus one-line delegating wrappers (asset, get_asset_definition)."

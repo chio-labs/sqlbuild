@@ -18,10 +18,10 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
 use crate::bindings::_helpers::compile_outputs::reuse::artifact_digest;
+use crate::bindings::_helpers::native_host::facade::FacadeHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 
-const PROVIDER_SETTINGS_MODULE: &str = "sqlbuild.cli.compile_reuse._helpers.provider_settings";
-const MACRO_STORE_PATHS_MODULE: &str =
-    "sqlbuild.compiler.macro_bridge.main._macro_store_module_paths";
 const MISS_OUTCOME: &str = "miss";
 const HIT_OUTCOME: &str = "hit";
 const BYPASS_OUTCOME: &str = "bypass";
@@ -292,12 +292,10 @@ fn module_paths(py: Python<'_>) -> PyResult<Bound<'_, PyList>> {
             paths.append(path)?;
         }
     }
-    let extra: Bound<'_, PyAny> = py.import("builtins")?.getattr("sorted")?.call1((imported(
-        py,
-        MACRO_STORE_PATHS_MODULE,
-        "macro_store_module_paths",
-    )?
-    .call0()?,))?;
+    let extra: Bound<'_, PyAny> = py
+        .import("builtins")?
+        .getattr("sorted")?
+        .call1((host::entry(py, UserCodeHost::MacroStoreModulePaths)?.call0()?,))?;
     for path in extra.try_iter()? {
         let path: Bound<'_, PyAny> = path?;
         if path.is_instance_of::<pyo3::types::PyString>() {
@@ -351,7 +349,7 @@ struct CompileFacts<'py> {
 fn record<'py>(facts: &CompileFacts<'py>) -> PyResult<bool> {
     let py: Python<'py> = facts.native.py();
     let settings: Bound<'_, PyAny> = call_with(
-        &imported(py, PROVIDER_SETTINGS_MODULE, "provider_settings_inputs")?,
+        &host::entry(py, FacadeHost::ProviderSettingsInputs)?,
         &[(
             "settings_classes",
             facts.input_reads.getattr("settings_classes")?,

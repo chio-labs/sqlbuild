@@ -1,6 +1,5 @@
 //! Create, read and append SQL of migration state tables, and stored rows decoded to events.
 
-use crate::bindings::_helpers::compiler_records::shape_classes::shape_class_at;
 use pyo3::exceptions::{PyKeyError, PyValueError};
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
@@ -19,9 +18,8 @@ use sqlbuild_state::events::main::readable_columns::readable_columns;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
-use crate::bindings::_helpers::state_rows::constants::{
-    MIGRATION_MODELS, MIGRATION_TYPES, SQL_VALUE_TYPES,
-};
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::events::typed_insert_sql;
 use crate::bindings::_helpers::state_rows::migration_objects::{
     layout, qualified_table, state_error,
@@ -42,7 +40,7 @@ fn create_sql<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py, 
         &request.get("render_qualified_name")?,
         (request.get("database")?, request.get("schema")?),
     )?;
-    let value_types: Bound<'py, PyAny> = imported(py, SQL_VALUE_TYPES, "StateSqlValueType")?;
+    let value_types: Bound<'py, PyAny> = registry::class(py, RecordId::StateSqlValueType)?;
     let column_types: Bound<'py, PyDict> = PyDict::new(py);
     for column in layout.columns {
         let member: &str = if TIMESTAMP_COLUMNS.contains(column) {
@@ -224,7 +222,7 @@ impl<'py> StoredRow<'_, 'py> {
 
     fn relation(&self, py: Python<'py>, prefix: &str) -> PyResult<Bound<'py, PyAny>> {
         call_with(
-            &imported(py, MIGRATION_MODELS, "MigrationRelation")?,
+            &registry::class(py, RecordId::MigrationRelation)?,
             &[
                 (
                     "database",
@@ -255,15 +253,15 @@ fn timestamp<'py>(raw: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
 
 fn enumerated<'py>(
     py: Python<'py>,
-    class: &str,
+    class: RecordId,
     value: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    shape_class_at(py, MIGRATION_TYPES, class)?.call1((value,))
+    registry::class(py, class)?.call1((value,))
 }
 
 fn known_member<'py>(
     py: Python<'py>,
-    class: &str,
+    class: RecordId,
     value: Bound<'py, PyAny>,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
     match enumerated(py, class, value) {
@@ -282,7 +280,7 @@ fn model_event<'py>(py: Python<'py>, row: &StoredRow<'_, 'py>) -> PyResult<Bound
         PyString::new(py, "").into_any()
     };
     call_with(
-        &imported(py, MIGRATION_MODELS, "MigrationEvent")?,
+        &registry::class(py, RecordId::MigrationEvent)?,
         &[
             ("event_id", row.text("event_id")?),
             ("target_name", row.nullable(py, "target_name")?),
@@ -293,11 +291,11 @@ fn model_event<'py>(py: Python<'py>, row: &StoredRow<'_, 'py>) -> PyResult<Bound
             ("origin_version_hash", version_hash),
             (
                 "discovery",
-                enumerated(py, "MigrationDiscovery", row.text("discovery")?)?,
+                enumerated(py, RecordId::MigrationDiscovery, row.text("discovery")?)?,
             ),
             (
                 "decision",
-                enumerated(py, "MigrationDecision", row.text("decision")?)?,
+                enumerated(py, RecordId::MigrationDecision, row.text("decision")?)?,
             ),
             ("run_id", row.text("run_id")?),
             ("created_at", created_at),
@@ -307,7 +305,7 @@ fn model_event<'py>(py: Python<'py>, row: &StoredRow<'_, 'py>) -> PyResult<Bound
 
 fn column_event<'py>(py: Python<'py>, row: &StoredRow<'_, 'py>) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(py, MIGRATION_MODELS, "ColumnMigrationEvent")?,
+        &registry::class(py, RecordId::ColumnMigrationEvent)?,
         &[
             ("event_id", row.text("event_id")?),
             ("target_name", row.nullable(py, "target_name")?),
@@ -317,11 +315,11 @@ fn column_event<'py>(py: Python<'py>, row: &StoredRow<'_, 'py>) -> PyResult<Boun
             ("destination_column", row.text("destination_column")?),
             (
                 "discovery",
-                enumerated(py, "MigrationDiscovery", row.text("discovery")?)?,
+                enumerated(py, RecordId::MigrationDiscovery, row.text("discovery")?)?,
             ),
             (
                 "decision",
-                enumerated(py, "ColumnMigrationDecision", row.text("decision")?)?,
+                enumerated(py, RecordId::ColumnMigrationDecision, row.text("decision")?)?,
             ),
             ("run_id", row.text("run_id")?),
             ("created_at", timestamp(&row.required("created_at")?)?),
@@ -343,11 +341,11 @@ fn old_name_event<'py>(
         Some(value) => value.str()?.into_any(),
         None => PyString::new(py, "None").into_any(),
     };
-    let Some(event_type) = known_member(py, "OldNameViewEventType", raw_type)? else {
+    let Some(event_type) = known_member(py, RecordId::OldNameViewEventType, raw_type)? else {
         return Ok(None);
     };
     let drop_reason: Option<Bound<'py, PyAny>> = match row.optional_text("drop_reason")? {
-        Some(raw) => known_member(py, "OldNameViewDropReason", raw)?,
+        Some(raw) => known_member(py, RecordId::OldNameViewDropReason, raw)?,
         None => None,
     };
     let none = || py.None().into_bound(py);
@@ -380,11 +378,7 @@ fn old_name_event<'py>(
         ("grants_copied", grants),
         ("view_sql", row.nullable(py, "view_sql")?),
     ];
-    call_with(
-        &imported(py, MIGRATION_MODELS, "OldNameViewEvent")?,
-        &fields,
-    )
-    .map(Some)
+    call_with(&registry::class(py, RecordId::OldNameViewEvent)?, &fields).map(Some)
 }
 
 /// Stored rows of the selected `columns` as events; rows this version cannot read are skipped.

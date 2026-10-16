@@ -13,15 +13,14 @@ use sqlbuild_state::state_tables::main::create_table_sql::create_table_sql;
 use sqlbuild_state::state_tables::models::TableColumn;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::contracts::state_literals::render_state_sql_literal;
 use crate::bindings::_helpers::frontier::encoder::emit_error;
-use crate::bindings::_helpers::microbatches::conversion::{
-    CONSTANTS_MODULE, optional_text, state_error,
-};
+use crate::bindings::_helpers::microbatches::conversion::{optional_text, state_error};
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 
-const CODEC_MODULE: &str = "sqlbuild.microbatches.classes.event_codec";
-const ADAPTER_TYPES: &str = "sqlbuild.adapter.contract.types";
 const MISSING_SCHEMA: &str = "microbatch history requires a target schema";
 const EMPTY_INSERT: &str = "bulk microbatch event insert requires at least one event";
 const EMPTY_LOOKUP: &str = "microbatch event lookup requires at least one event";
@@ -36,9 +35,8 @@ struct Layout {
 
 impl Layout {
     fn new(py: Python<'_>) -> PyResult<Self> {
-        let constants: Bound<'_, PyModule> = py.import(CONSTANTS_MODULE)?;
-        let columns: Vec<String> = constants.getattr("MICROBATCH_COLUMNS")?.extract()?;
-        let types: Bound<'_, PyAny> = constants.getattr("MICROBATCH_COLUMN_TYPES")?;
+        let columns: Vec<String> = host::entry(py, ExecutorHost::MicrobatchColumns)?.extract()?;
+        let types: Bound<'_, PyAny> = host::entry(py, ExecutorHost::MicrobatchColumnTypes)?;
         let declared: Vec<String> = columns
             .iter()
             .map(|column| types.get_item(column)?.str()?.extract())
@@ -56,8 +54,8 @@ impl Layout {
     /// One event's column literals in column order.
     fn literals(&self, event: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
         let py: Python<'_> = event.py();
-        let values: Bound<'_, PyAny> =
-            imported(py, CODEC_MODULE, "MicrobatchEventCodec")?.call_method1("values", (event,))?;
+        let values: Bound<'_, PyAny> = host::entry(py, ExecutorHost::MicrobatchEventCodec)?
+            .call_method1("values", (event,))?;
         values
             .try_iter()?
             .zip(&self.declared)
@@ -76,7 +74,7 @@ fn qualified_table<'py>(
     (database, schema): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<Option<String>> {
     let py: Python<'py> = render_qualified_name.py();
-    let table_name: Bound<'py, PyAny> = imported(py, CONSTANTS_MODULE, "MICROBATCH_TABLE_NAME")?;
+    let table_name: Bound<'py, PyAny> = host::entry(py, ExecutorHost::MicrobatchTableName)?;
     optional_text(&call_with(
         render_qualified_name,
         &[
@@ -161,7 +159,7 @@ fn read_scope(
     let table: String = scope_table(render_qualified_name, scope)?;
     let layout: Layout = Layout::new(py)?;
     let wildcard: String =
-        imported(py, CONSTANTS_MODULE, "MICROBATCH_GENERATION_WILDCARD")?.extract()?;
+        host::entry(py, ExecutorHost::MicrobatchGenerationWildcard)?.extract()?;
     let generation: Bound<'_, PyAny> = scope.getattr("physical_generation_id")?;
     let generation: Option<String> = if generation.extract::<String>()? == wildcard {
         None
@@ -193,7 +191,7 @@ fn create_table(request: Option<&Bound<'_, PyDict>>) -> PyResult<String> {
     )?
     .ok_or_else(|| state_error(py, MISSING_SCHEMA))?;
     let render_framework_type: Bound<'_, PyAny> = request.get("render_framework_type")?;
-    let framework: Bound<'_, PyAny> = imported(py, ADAPTER_TYPES, "FrameworkType")?;
+    let framework: Bound<'_, PyAny> = host::entry(py, AdapterHost::FrameworkType)?;
     let text_type: String = render_framework_type
         .call1((framework.getattr("STRING")?,))?
         .extract()?;
@@ -230,16 +228,13 @@ fn create_indexes<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'
         &[
             ("database", request.get("database")?),
             ("schema", schema.clone()),
-            (
-                "name",
-                imported(py, CONSTANTS_MODULE, "MICROBATCH_TABLE_NAME")?,
-            ),
+            ("name", host::entry(py, ExecutorHost::MicrobatchTableName)?),
         ],
     )?;
     let table: String = if rendered.is_truthy()? {
         rendered.extract()?
     } else {
-        let name: String = imported(py, CONSTANTS_MODULE, "MICROBATCH_TABLE_NAME")?.extract()?;
+        let name: String = host::entry(py, ExecutorHost::MicrobatchTableName)?.extract()?;
         format!("{}.{name}", schema.str()?)
     };
     let render_identifier: Bound<'_, PyAny> = request.get("render_identifier")?;
@@ -247,8 +242,7 @@ fn create_indexes<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'
         render_identifier.call1((name,))?.extract()
     };
     let mut indexes: Vec<(String, Vec<String>)> = Vec::new();
-    let definitions: Bound<'_, PyAny> =
-        imported(py, CONSTANTS_MODULE, "MICROBATCH_DIRECT_INDEXES")?;
+    let definitions: Bound<'_, PyAny> = host::entry(py, ExecutorHost::MicrobatchDirectIndexes)?;
     for item in definitions.call_method0("items")?.try_iter()? {
         let (name, columns): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;
         let columns: Vec<String> = columns

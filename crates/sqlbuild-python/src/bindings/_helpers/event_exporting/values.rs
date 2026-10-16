@@ -12,8 +12,10 @@ use sqlbuild_core::event_export::models::{ExportPolicy, ExportSeverity, Exporter
 use sqlbuild_core::lifecycle_events::constants::CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION;
 use sqlbuild_core::lifecycle_events::main::catalog::catalog;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
-use crate::bindings::_helpers::event_exporting::constants::{EXCEPTIONS_MODULE, SEVERITY_MODULE};
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
 /// `BoundEventExporter` parameters, in positional order.
 const BOUND_EXPORTER_PARAMETERS: [&str; 5] = [
@@ -28,8 +30,8 @@ const REQUIRED_BOUND_EXPORTER_PARAMETERS: usize = 3;
 static POLICIES: PyOnceLock<HashMap<String, ExportPolicy>> = PyOnceLock::new();
 
 /// The exception class `name` of the event exporter exceptions module, raised with `message`.
-pub(crate) fn exporter_error(py: Python<'_>, name: &str, message: &str) -> PyErr {
-    match imported(py, EXCEPTIONS_MODULE, name).and_then(|class| class.call1((message,))) {
+pub(crate) fn exporter_error(py: Python<'_>, name: UserCodeHost, message: &str) -> PyErr {
+    match host::entry(py, name).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }
@@ -37,12 +39,12 @@ pub(crate) fn exporter_error(py: Python<'_>, name: &str, message: &str) -> PyErr
 
 /// `EventExporterStateError(message)`.
 pub(crate) fn state_error(py: Python<'_>, message: &str) -> PyErr {
-    exporter_error(py, "EventExporterStateError", message)
+    exporter_error(py, UserCodeHost::EventExporterStateError, message)
 }
 
 /// `EventExporterInputError(message)`.
 pub(crate) fn input_error(py: Python<'_>, message: &str) -> PyErr {
-    exporter_error(py, "EventExporterInputError", message)
+    exporter_error(py, UserCodeHost::EventExporterInputError, message)
 }
 
 /// The Python `EventExportSeverity` member of `severity`.
@@ -50,7 +52,7 @@ pub(crate) fn severity_object(
     py: Python<'_>,
     severity: ExportSeverity,
 ) -> PyResult<Bound<'_, PyAny>> {
-    imported(py, SEVERITY_MODULE, "EventExportSeverity")?.call1((severity.value(),))
+    registry::class(py, RecordId::EventExportSeverity)?.call1((severity.value(),))
 }
 
 /// An `EventExportSeverity` or its string value, as `EventExportSeverity(value)` accepts it.

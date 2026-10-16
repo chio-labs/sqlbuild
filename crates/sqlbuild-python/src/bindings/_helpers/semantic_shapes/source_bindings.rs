@@ -2,7 +2,6 @@
 
 use std::collections::HashSet;
 
-use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -15,6 +14,8 @@ use crate::bindings::_helpers::analysis::schema_request::{
 };
 use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_sql;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::semantic_shapes::declarations::{declared_types, function_names};
 use crate::bindings::_helpers::semantic_shapes::shapes::{
     model_inputs, project_shapes, published_shape,
@@ -22,9 +23,6 @@ use crate::bindings::_helpers::semantic_shapes::shapes::{
 
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const BINDING_UNKNOWN_TABLE_INTERNAL_CODE: &str = "B000";
 const DATACLASSES_MODULE: &str = "dataclasses";
@@ -157,16 +155,12 @@ fn rebound_models<'py>(
         .getattr("TopologicalSorter")?
         .call1((graph,))?
         .call_method0("static_order")?;
-    let query_class: Object<'py> = py
-        .import(ANALYSIS_MODELS_MODULE)?
-        .getattr("NativeColumnQuery")?;
+    let query_class: Object<'py> = registry::class(py, RecordId::NativeColumnQuery)?;
     let unknown: Object<'py> = py
         .import(LINEAGE_TYPES_MODULE)?
         .getattr("InferredNullability")?
         .getattr("UNKNOWN")?;
-    let infer: Object<'py> = py
-        .import(NATIVE_MODULE)?
-        .getattr("infer_native_query_columns")?;
+    let infer: Object<'py> = registry::native(py, NativeAttr::InferNativeQueryColumns)?;
     let mut affected: HashSet<String> = HashSet::new();
     let mut models: Vec<Object<'py>> = Vec::new();
     for name in order.try_iter()? {
@@ -307,11 +301,11 @@ fn validated_diagnostics<'py>(
         expansions.set_item(path.getattr("stem")?, expansion)?;
     }
     let skipped: Object<'py> = PyString::new(py, BINDING_UNKNOWN_TABLE_INTERNAL_CODE).into_any();
-    let models_module = py.import(COMPILE_MODELS_MODULE)?;
     let types = py.import(COMPILE_TYPES_MODULE)?;
-    let diagnostic_class: Object<'py> = models_module.getattr("CompilerDiagnostic")?;
-    let severity_class: Object<'py> = shape_class(types.as_any(), "DiagnosticSeverity")?;
-    let phase: Object<'py> = shape_class(types.as_any(), "DiagnosticPhase")?.getattr("COMPILE")?;
+    let diagnostic_class: Object<'py> = registry::class(py, RecordId::CompilerDiagnostic)?;
+    let severity_class: Object<'py> = registry::class(types.py(), RecordId::DiagnosticSeverity)?;
+    let phase: Object<'py> =
+        registry::class(types.py(), RecordId::DiagnosticPhase)?.getattr("COMPILE")?;
     let model_type: Object<'py> = types.getattr("CompiledResourceType")?.getattr("MODEL")?;
     let mut diagnostics: Vec<Object<'py>> = Vec::new();
     for ((model, request), result) in models.iter().zip(&requests).zip(results.try_iter()?) {
@@ -395,9 +389,7 @@ fn positions<'py>(
     request.set_item("expanded", expanded)?;
     request.set_item("cleaned", cleaned)?;
     request.set_item("passes", passes)?;
-    py.import(NATIVE_MODULE)?
-        .getattr("BindingPositions")?
-        .call1((request,))
+    registry::native(py, NativeAttr::BindingPositions)?.call1((request,))
 }
 
 /// Whether inspected columns differ from the known shape; untyped names match any type.

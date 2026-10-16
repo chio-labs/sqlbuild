@@ -1,20 +1,15 @@
 //! The native config builder, validator and inherited storage policies of one compile.
 
-use crate::bindings::_helpers::compiler_records::shape_classes::shape_class_at;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
 use crate::bindings::_helpers::compile_attachment::storage_policies::inherited_storage;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::compiled_project::loop_classes::table_backed;
 use crate::bindings::_helpers::model_config::unicode_environment::unicode_environment;
-
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 /// Capture the project inputs every model's native config build and validation read.
 #[pyfunction]
@@ -30,21 +25,25 @@ pub(crate) fn native_model_config_session<'py>(
     let materialization_defaults: Bound<'py, PyAny> = if declared.is_truthy()? {
         declared
     } else {
-        imported(py, CONTRACT_MODELS_MODULE, "MaterializationDefaultsConfig")?.call0()?
+        registry::class(py, RecordId::MaterializationDefaultsConfig)?.call0()?
     };
     let hook_entries: Bound<'py, PyTuple> = PyTuple::new(
         py,
-        ["SqlHookEntry", "NamedSqlHookEntry", "PythonHookEntry"]
-            .iter()
-            .map(|name| shape_class_at(py, DISCOVERY_MODELS_MODULE, name))
-            .collect::<PyResult<Vec<_>>>()?,
+        [
+            RecordId::SqlHookEntry,
+            RecordId::NamedSqlHookEntry,
+            RecordId::PythonHookEntry,
+        ]
+        .iter()
+        .map(|class| registry::class(py, *class))
+        .collect::<PyResult<Vec<_>>>()?,
     )?;
     let target_namespace: Bound<'py, PyAny> = if target.is_none() {
         target.clone()
     } else {
         PyTuple::new(py, [target.getattr("database")?, target.getattr("schema")?])?.into_any()
     };
-    let builder: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "NativeModelConfigBuilder")?
+    let builder: Bound<'py, PyAny> = registry::native(py, NativeAttr::NativeModelConfigBuilder)?
         .call1((
             (
                 project_config.getattr("defaults")?,
@@ -69,7 +68,7 @@ pub(crate) fn native_model_config_session<'py>(
         inherited.set_item(&materialized, storage)?;
     }
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "NativeModelConfigSession")?,
+        &registry::class(py, RecordId::NativeModelConfigSession)?,
         &[
             ("path_defaults", project_config.getattr("path_defaults")?),
             ("builder", builder),

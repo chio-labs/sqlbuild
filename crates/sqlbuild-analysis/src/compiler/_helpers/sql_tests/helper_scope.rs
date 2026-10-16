@@ -2,6 +2,8 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+use sqlbuild_core::graph_walk::main::depth_first_postorder::depth_first_postorder;
+
 use polyglot_sql::Dialect;
 
 use crate::compiler::_helpers::sql_tests::cte_rename::defined_cte_keys;
@@ -101,36 +103,6 @@ pub(crate) struct ScopeGraph {
     mock_indexes: HashMap<String, usize>,
     mocks_by_generated_name: HashMap<String, usize>,
     rewritten: HashMap<String, String>,
-}
-
-/// Graph nodes in dependency-first order, built by depth-first traversal.
-struct ScopeOrder<'a> {
-    graph: &'a ScopeGraph,
-    visited: HashSet<ScopeNode>,
-    ordered: Vec<ScopeNode>,
-    through_mocks: bool,
-}
-
-impl ScopeOrder<'_> {
-    fn visit_tokens(&mut self, tokens: &[String]) {
-        for token in tokens {
-            if let Some(node) = self.graph.node(token) {
-                if !self.through_mocks && matches!(node, ScopeNode::Mock(_)) {
-                    continue;
-                }
-                self.visit(node);
-            }
-        }
-    }
-
-    fn visit(&mut self, node: ScopeNode) {
-        if !self.visited.insert(node) {
-            return;
-        }
-        let graph = self.graph;
-        self.visit_tokens(graph.tokens(node));
-        self.ordered.push(node);
-    }
 }
 
 impl ScopeGraph {
@@ -294,14 +266,14 @@ impl ScopeGraph {
     }
 
     fn closure(&self, tokens: &[String], through_mocks: bool) -> Vec<ScopeNode> {
-        let mut order = ScopeOrder {
-            graph: self,
-            visited: HashSet::new(),
-            ordered: Vec::new(),
-            through_mocks,
+        let entered = |tokens: &[String]| -> Vec<ScopeNode> {
+            tokens
+                .iter()
+                .filter_map(|token| self.node(token))
+                .filter(|node| through_mocks || !matches!(node, ScopeNode::Mock(_)))
+                .collect()
         };
-        order.visit_tokens(tokens);
-        order.ordered
+        depth_first_postorder(entered(tokens), |node| entered(self.tokens(*node)))
     }
 
     /// Indexes of the helpers the compiler found the test's expected rows and assertions read.

@@ -1,6 +1,7 @@
 //! Warehouse source relation listing and column gathering for planning.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_phases::objects::{frozenset, text, tuple};
 use crate::bindings::_helpers::planner_warehouse::constants::{
     COLUMN_INFO, METADATA_NAME_FILTER_LIMIT, RELATION_LOOKUP,
@@ -84,7 +85,7 @@ pub(crate) fn source_inspection<'py>(
     let mut listed: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut listed_names: HashSet<String> = HashSet::new();
     let mut groups: Vec<(String, BTreeSet<String>)> = Vec::new();
-    let column_info = imported(py, COLUMN_INFO.0, COLUMN_INFO.1)?;
+    let column_info = host::entry(py, COLUMN_INFO)?;
     for entry in &entries {
         let expression = entry.getattr("expression")?;
         if !expression.is_none() {
@@ -120,7 +121,7 @@ pub(crate) fn source_inspection<'py>(
             None => groups.push((key, BTreeSet::from([schema]))),
         }
     }
-    let lookup = imported(py, RELATION_LOOKUP.0, RELATION_LOOKUP.1)?.getattr("key")?;
+    let lookup = host::entry(py, RELATION_LOOKUP)?.getattr("key")?;
     for (key, schemas) in groups {
         let database = (!key.is_empty()).then_some(key.as_str());
         let database_value = match database {

@@ -5,11 +5,14 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::freshness::planning::{
     build_direct_source_freshness_planning_result, build_direct_source_freshness_propagation_result,
 };
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_phases::objects::{
     model_key_names, native, replace, text, tuple,
 };
 use crate::bindings::_helpers::planner_warehouse::constants::RUN_SCOPE;
 use crate::bindings::_helpers::planner_warehouse::snapshot::{destination_nodes, lower};
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::PyDict as KeywordDict;
 use pyo3::types::{PyBool, PyDict, PyDictMethods};
@@ -47,12 +50,12 @@ pub(crate) fn source_freshness_unknown_warnings<'py>(
         if let Some(message) = freshness_unknown_message(&reason, &names) {
             warnings.push(native(
                 py,
-                "PlanWarning",
+                RecordId::PlanWarning,
                 &[
                     ("model_name", py.None().into_bound(py)),
                     (
                         "severity",
-                        imported(py, "sqlbuild._native", "WarningSeverity")?.getattr("WARNING")?,
+                        registry::class(py, RecordId::WarningSeverity)?.getattr("WARNING")?,
                     ),
                     ("message", text(py, &message)),
                 ],
@@ -148,7 +151,7 @@ pub(crate) fn build_planner_source_freshness_result<'py>(
     let observed_at = imported(py, "datetime", "datetime")?
         .call_method1("now", (imported(py, "datetime", "UTC")?,))?;
     let result = within(
-        &imported(py, RUN_SCOPE.0, RUN_SCOPE.1)?.call1((project.getattr("run_id")?,))?,
+        &host::entry(py, RUN_SCOPE)?.call1((project.getattr("run_id")?,))?,
         |_| {
             call_with(
                 wrap_pyfunction!(build_direct_source_freshness_planning_result, py)?.as_any(),

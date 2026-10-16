@@ -17,13 +17,12 @@ use sqlbuild_core::progress::models::{
 use sqlbuild_core::terminal_events::models::TerminalRequest;
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 
 /// The module attribute holding the `ContextVar` of the installed projector.
 const CONTEXT_ATTRIBUTE: &str = "_native_progress_projector_context";
 const CONTEXT_NAME: &str = "sqlbuild_native_progress_projector";
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const COORDINATOR_MODULE: &str = "sqlbuild._native";
-const COORDINATOR_FUNCTION: &str = "shared_transient_line_coordinator";
 const CLAIM_OPTIONS: (&[&str], &[&str]) = (
     &["resource_name"],
     &["resource_id", "resource_attempt_id", "attempt_number"],
@@ -134,9 +133,7 @@ fn progress_event(event: &Bound<'_, PyAny>) -> PyResult<ProgressEvent> {
 
 /// The coordinator shared by every terminal writer in this process.
 pub(crate) fn shared_coordinator(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    py.import(COORDINATOR_MODULE)?
-        .getattr(COORDINATOR_FUNCTION)?
-        .call0()
+    registry::native(py, NativeAttr::SharedTransientLineCoordinator)?.call0()
 }
 
 fn persist(coordinator: &Bound<'_, PyAny>, stream: &Bound<'_, PyAny>, text: &str) -> PyResult<()> {
@@ -312,7 +309,7 @@ impl NativeProgressProjector {
 }
 
 fn context_variable(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    py.import(NATIVE_MODULE)?.getattr(CONTEXT_ATTRIBUTE)
+    registry::native(py, NativeAttr::NativeProgressProjectorContext)
 }
 
 /// Return the projector installed for the current CLI invocation.

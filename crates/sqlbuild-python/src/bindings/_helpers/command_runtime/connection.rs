@@ -18,13 +18,11 @@ use crate::bindings::_helpers::command_runtime::warehouses::{WarehouseInputs, ap
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 
-const DBT_PROFILE_MODULE: &str = "sqlbuild._native";
-const DBT_ERRORS_MODULE: &str = "sqlbuild.integrations.dbt.exceptions";
-const EFFECTIVE_CONFIG_MODULE: &str = "sqlbuild._native";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const TARGET_NAME_MODULE: &str = "sqlbuild._native";
-const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
 const CONNECTION_OPTIONS: (&[&str], &[&str]) = (
     &["raw_config", "project_dir", "adapter_name"],
     &["discovered_inputs", "cli_vars", "selected_target"],
@@ -52,7 +50,7 @@ fn warn(py: Python<'_>, message: &str) -> PyResult<()> {
 }
 
 fn dbt_profile_error(py: Python<'_>) -> PyErr {
-    match imported(py, DBT_ERRORS_MODULE, "DbtProfileError")
+    match host::entry(py, ThirdPartyHost::DbtProfileError)
         .and_then(|class| class.call1((DBT_PROFILE_REQUIRES_PROJECT,)))
     {
         Ok(instance) => PyErr::from_value(instance),
@@ -69,7 +67,7 @@ pub(crate) fn with_dbt_profile<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = raw_config.py();
     let profile: Bound<'py, PyAny> = call_with(
-        &imported(py, DBT_PROFILE_MODULE, "resolve_raw_dbt_profile_connection")?,
+        &registry::native(py, NativeAttr::ResolveRawDbtProfileConnection)?,
         &[
             ("raw_config", config.clone().into_any()),
             ("project_dir", project_dir.clone()),
@@ -208,7 +206,7 @@ fn require_configured_connection(
         return Ok(());
     }
     let target_name: Bound<'_, PyAny> = call_with(
-        &imported(py, TARGET_NAME_MODULE, "resolve_target_name")?,
+        &registry::native(py, NativeAttr::ResolveTargetName)?,
         &[
             ("project_config", project_config.clone()),
             ("local_config", local_config.clone()),
@@ -223,7 +221,7 @@ fn require_configured_connection(
         return Err(raised(py, missing_connection_error(&project_file, None)));
     }
     let target_config: Bound<'_, PyAny> = call_with(
-        &imported(py, TARGET_CONFIG_MODULE, "resolve_target_config")?,
+        &registry::native(py, NativeAttr::ResolveTargetConfig)?,
         &[
             ("project_config", project_config),
             ("local_config", local_config),
@@ -252,11 +250,7 @@ pub(crate) fn project_connection_config<'py>(
         require_configured_connection(discovered_inputs, project_dir, selected_target)?;
     }
     let raw_config: Bound<'py, PyDict> = call_with(
-        &imported(
-            py,
-            EFFECTIVE_CONFIG_MODULE,
-            "build_effective_connection_config",
-        )?,
+        &registry::native(py, NativeAttr::BuildEffectiveConnectionConfig)?,
         &[
             ("discovered_inputs", discovered_inputs.clone()),
             ("selected_target", selected_target.clone()),
@@ -265,7 +259,7 @@ pub(crate) fn project_connection_config<'py>(
     )?
     .cast_into()?;
     let adapter_name: Bound<'py, PyAny> = call_with(
-        &imported(py, ADAPTER_NAME_MODULE, "resolve_effective_adapter_name")?,
+        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
             (
                 "project_config",

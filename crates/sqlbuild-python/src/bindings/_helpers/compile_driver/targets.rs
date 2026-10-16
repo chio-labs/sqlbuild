@@ -21,16 +21,10 @@ use sqlbuild_core::text::main::python_strip::python_strip;
 use sqlbuild_model_config::templates::models::TemplateOptions;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, keywords,
+    KeywordArguments, call_with, keywords,
 };
 use crate::bindings::_helpers::model_config::template_data::expanded_template_data;
 
-const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
-const TARGET_NAME_MODULE: &str = "sqlbuild._native";
-const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
-const EFFECTIVE_RUNTIME_MODULE: &str = "sqlbuild._native";
-const EFFECTIVE_CONFIG_MODULE: &str = "sqlbuild._native";
-const SETTING_HELP_MODULE: &str = "sqlbuild._native";
 /// Connection settings that identify the warehouse two targets write to.
 const CONNECTION_IDENTITY_KEYS: [&str; 7] = [
     "account",
@@ -45,6 +39,8 @@ const CONNECTION_IDENTITY_KEYS: [&str; 7] = [
 const EXPLICIT_TARGET_ADAPTERS: [&str; 3] = ["snowflake", "bigquery", "databricks"];
 const LOADER_NAMESPACE_LABEL: &str = "managed loader target namespace";
 const DEFAULTS_HELP_PURPOSE: &str = "to set project-wide defaults";
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
+use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 const DEFAULTS_SECTION: &str = "defaults";
 
@@ -56,7 +52,7 @@ type TargetNamespaces = (Vec<(String, String)>, Vec<Namespace>);
 /// A `PlannerInputError` with `message`, `code` and optional `help`.
 fn planner_error(py: Python<'_>, message: String, code: &str, help: Option<String>) -> PyErr {
     let raised: PyResult<Bound<'_, PyAny>> = (|| {
-        imported(py, PLANNER_EXCEPTIONS_MODULE, "PlannerInputError")?.call(
+        registry::error(py, ErrorId::PlannerInput)?.call(
             (message,),
             Some(&keywords(
                 py,
@@ -131,7 +127,7 @@ pub(crate) fn named_target_schema_strategy(
     let project_config: Bound<'_, PyAny> = discovered.getattr("project_config")?;
     let local_config: Bound<'_, PyAny> = discovered.getattr("local_config")?;
     let target_name: Bound<'_, PyAny> = call_with(
-        &imported(py, TARGET_NAME_MODULE, "resolve_target_name")?,
+        &registry::native(py, NativeAttr::ResolveTargetName)?,
         &[
             ("project_config", project_config.clone()),
             ("local_config", local_config.clone()),
@@ -142,7 +138,7 @@ pub(crate) fn named_target_schema_strategy(
         return Ok(());
     }
     let target_config: Bound<'_, PyAny> = call_with(
-        &imported(py, TARGET_CONFIG_MODULE, "resolve_target_config")?,
+        &registry::native(py, NativeAttr::ResolveTargetConfig)?,
         &[
             ("project_config", project_config),
             ("local_config", local_config),
@@ -266,7 +262,7 @@ fn target_namespaces(
     let py: Python<'_> = discovered.py();
     let name: Bound<'_, PyAny> = PyString::new(py, target_name).into_any();
     let target_config: Bound<'_, PyAny> = call_with(
-        &imported(py, TARGET_CONFIG_MODULE, "resolve_target_config")?,
+        &registry::native(py, NativeAttr::ResolveTargetConfig)?,
         &[
             ("project_config", discovered.getattr("project_config")?),
             ("local_config", discovered.getattr("local_config")?),
@@ -274,11 +270,7 @@ fn target_namespaces(
         ],
     )?;
     let runtime: Bound<'_, PyAny> = call_with(
-        &imported(
-            py,
-            EFFECTIVE_RUNTIME_MODULE,
-            "build_effective_runtime_config",
-        )?,
+        &registry::native(py, NativeAttr::BuildEffectiveRuntimeConfig)?,
         &[
             ("discovered_inputs", discovered.clone()),
             ("selected_target", name.clone()),
@@ -288,11 +280,7 @@ fn target_namespaces(
         runtime.extract()?;
     let connection: Bound<'_, PyAny> = if resolved_connection.is_none() {
         call_with(
-            &imported(
-                py,
-                EFFECTIVE_CONFIG_MODULE,
-                "build_effective_connection_config",
-            )?,
+            &registry::native(py, NativeAttr::BuildEffectiveConnectionConfig)?,
             &[
                 ("discovered_inputs", discovered.clone()),
                 ("selected_target", name),
@@ -460,7 +448,7 @@ fn required_target_parts(
         return Ok(());
     };
     let help: String = call_with(
-        &imported(py, SETTING_HELP_MODULE, "setting_help")?,
+        &registry::native(py, NativeAttr::SettingHelp)?,
         &[
             (
                 "purpose",

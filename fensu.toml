@@ -298,6 +298,11 @@ reason = "These imports provide the documented sqlbuild.rules package-root autho
 
 [[targets.python.rule_exceptions]]
 rule = "FFR307"
+path = "src/sqlbuild/_native_host.py"
+reason = "The native host boundary: the one module native code imports by path, naming every staying-Python entry point native code may call."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR307"
 path = "src/sqlbuild/rules/testing.py"
 reason = "sqlbuild.rules.testing is the documented public custom-rule harness module."
 

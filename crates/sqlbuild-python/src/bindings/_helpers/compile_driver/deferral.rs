@@ -9,15 +9,10 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_model_config::templates::main::deferred_target_segments::deferred_target_segments;
 use sqlbuild_model_config::templates::models::DeferredSegment;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
-const PROJECT_VARS_MODULE: &str = "sqlbuild._native";
 const PRESERVE_TARGET_VALUE: &str = "preserve";
 /// `sorted(DEFERRED_TARGET_CONTEXT_KEYS)`.
 const DEFERRED_TARGET_CONTEXT_KEYS: [&str; 2] = ["database", "schema"];
@@ -117,7 +112,7 @@ fn deferred_location<'py>(
         ],
     )?;
     call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "CompiledRelationLocation")?,
+        &registry::class(py, RecordId::CompiledRelationLocation)?,
         &[
             ("database", database),
             ("schema", schema),
@@ -155,7 +150,7 @@ fn target_field<'py>(
         .iter()
         .map(|key| (*key).to_owned())
         .collect();
-    let render: Bound<'py, PyAny> = imported(py, PROJECT_VARS_MODULE, "render_project_var_text")?;
+    let render: Bound<'py, PyAny> = registry::native(py, NativeAttr::RenderProjectVarText)?;
     let mut resolved: String = String::new();
     for segment in deferred_target_segments(&template, &logical, &context_keys, &variables) {
         match segment {
@@ -182,9 +177,7 @@ fn target_field<'py>(
 
 /// A `PlannerInputError` with `message` and the default code.
 fn planner_error(py: Python<'_>, message: String) -> PyErr {
-    match imported(py, PLANNER_EXCEPTIONS_MODULE, "PlannerInputError")
-        .and_then(|class| class.call1((message,)))
-    {
+    match registry::error(py, ErrorId::PlannerInput).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }
@@ -322,7 +315,7 @@ fn resolve_model_deferral_inputs<'py>(
             &[],
         ),
     )?;
-    let inputs: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS_MODULE, "DeferralInputs")?;
+    let inputs: Bound<'py, PyAny> = registry::class(py, RecordId::DeferralInputs)?;
     let defer_to: Bound<'py, PyAny> = arguments.value("defer_to")?;
     if defer_to.is_none() {
         return inputs.call0();

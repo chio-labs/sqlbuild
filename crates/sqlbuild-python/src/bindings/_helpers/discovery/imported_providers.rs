@@ -8,18 +8,19 @@ use pyo3::types::{PyDict, PyDictMethods, PyString};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::discovery::imported_modules::{
-    NATIVE_MODULE, ProjectDir, discovered, discovery_error, discovery_error_from, module_functions,
+    ProjectDir, discovered, discovery_error, discovery_error_from, module_functions,
     provider_by_name, provider_usages, shim, tuple_of,
 };
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const PROVIDER_ERROR: &str = "ProviderDiscoveryError";
-const SINK_ERROR: &str = "EventExporterDiscoveryError";
-const PROVIDER_INPUT_ERROR: (&str, &str) = ("sqlbuild.provider.exceptions", "ProviderInputError");
+const PROVIDER_ERROR: ErrorId = ErrorId::ProviderDiscovery;
+const SINK_ERROR: ErrorId = ErrorId::EventExporterDiscovery;
+const PROVIDER_INPUT_ERROR: UserCodeHost = UserCodeHost::ProviderInputError;
 const VALIDATION_ERROR: (&str, &str) = ("pydantic", "ValidationError");
-const SINK_DEFINITION: (&str, &str) = (
-    "sqlbuild.runtime.event_exporting.main.get_lifecycle_event_sink_definition",
-    "get_lifecycle_event_sink_definition",
-);
+const SINK_DEFINITION: UserCodeHost = UserCodeHost::GetLifecycleEventSinkDefinition;
 const ROOT_LOCATION: &str = "<root>";
 const DEFAULT_MESSAGE: &str = "invalid value";
 const DEFAULT_ERROR_TYPE: &str = "validation_error";
@@ -31,7 +32,7 @@ fn reject_invalid_identity(
 ) -> PyResult<()> {
     let py: Python<'_> = name.py();
     call_with(
-        &imported(py, NATIVE_MODULE, "validate_resource_identity")?,
+        &registry::native(py, NativeAttr::ValidateResourceIdentity)?,
         &[
             ("name", name.clone()),
             ("kind", PyString::new(py, "provider").into_any()),
@@ -54,8 +55,7 @@ fn provider_name<'py>(
     let name: Bound<'py, PyAny> = match provider_class.call_method0("name") {
         Ok(name) => name,
         Err(error) => {
-            let input_error: Bound<'py, PyAny> =
-                imported(py, PROVIDER_INPUT_ERROR.0, PROVIDER_INPUT_ERROR.1)?;
+            let input_error: Bound<'py, PyAny> = host::entry(py, PROVIDER_INPUT_ERROR)?;
             if !error.value(py).is_instance(&input_error)? {
                 return Err(error);
             }
@@ -138,7 +138,7 @@ pub(crate) fn discover_provider_classes<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project_dir.py();
     let project = ProjectDir { path: project_dir };
-    let record_read: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "record_settings_class_read")?;
+    let record_read: Bound<'py, PyAny> = registry::native(py, NativeAttr::RecordSettingsClassRead)?;
     if let Some(cached) = project.cached_extensions()? {
         let providers: Bound<'py, PyAny> = cached.get_item(0)?;
         for provider in providers.try_iter()? {
@@ -156,8 +156,10 @@ pub(crate) fn discover_provider_classes<'py>(
     let mut providers: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut seen: Vec<(String, Bound<'py, PyAny>)> = Vec::new();
     for file_path in project.module_files("providers", true)? {
-        let module: Bound<'py, PyAny> = project.load("load_provider_module", &file_path)?;
-        let classes: Bound<'py, PyAny> = shim(py, "module_provider_classes")?.call1((&module,))?;
+        let module: Bound<'py, PyAny> =
+            project.load(UserCodeHost::LoadProviderModule, &file_path)?;
+        let classes: Bound<'py, PyAny> =
+            shim(py, UserCodeHost::ModuleProviderClasses)?.call1((&module,))?;
         for provider_class in classes.try_iter()? {
             let provider_class: Bound<'py, PyAny> = provider_class?;
             let relative_path: Bound<'py, PyAny> = project.relative(&file_path)?;
@@ -180,7 +182,7 @@ pub(crate) fn discover_provider_classes<'py>(
                 provider_instance(&provider_class, (&name, &relative_path))?;
             providers.push(discovered(
                 py,
-                "DiscoveredProvider",
+                RecordId::DiscoveredProvider,
                 &[
                     ("file_path", file_path.clone()),
                     ("relative_path", relative_path),
@@ -220,11 +222,11 @@ pub(crate) fn discover_event_exporter_declarations<'py>(
     {
         return tuple_of(py, Vec::new());
     }
-    let read_definition: Bound<'py, PyAny> = imported(py, SINK_DEFINITION.0, SINK_DEFINITION.1)?;
+    let read_definition: Bound<'py, PyAny> = host::entry(py, SINK_DEFINITION)?;
     let mut declarations: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut seen: Vec<(String, Bound<'py, PyAny>)> = Vec::new();
     for file_path in project.module_files("sinks", true)? {
-        let module: Bound<'py, PyAny> = project.load("load_sink_module", &file_path)?;
+        let module: Bound<'py, PyAny> = project.load(UserCodeHost::LoadSinkModule, &file_path)?;
         let mut seen_functions: HashSet<usize> = HashSet::new();
         for function in module_functions(&module)? {
             if !seen_functions.insert(function.as_ptr() as usize) {
@@ -248,7 +250,7 @@ pub(crate) fn discover_event_exporter_declarations<'py>(
             }
             let relative_path: Bound<'py, PyAny> = project.relative(&file_path)?;
             call_with(
-                &shim(py, "validate_event_exporter_signature")?,
+                &shim(py, UserCodeHost::ValidateEventExporterSignature)?,
                 &[
                     ("function", function.clone()),
                     ("exporter_name", read.getattr("name")?),
@@ -258,7 +260,7 @@ pub(crate) fn discover_event_exporter_declarations<'py>(
             seen.push((name, file_path.clone()));
             declarations.push(discovered(
                 py,
-                "DiscoveredEventExporterDeclaration",
+                RecordId::DiscoveredEventExporterDeclaration,
                 &[
                     ("file_path", file_path.clone()),
                     ("relative_path", relative_path),
@@ -286,7 +288,8 @@ fn exporter_provider_usages<'py>(
         .str()?
         .extract()?;
     let empty: Bound<'py, PyAny> = imported(py, "inspect", "Parameter")?.getattr("empty")?;
-    let annotations: Bound<'py, PyAny> = shim(py, "parameter_annotations")?.call1((&function,))?;
+    let annotations: Bound<'py, PyAny> =
+        shim(py, UserCodeHost::ParameterAnnotations)?.call1((&function,))?;
     for (index, pair) in annotations.try_iter()?.enumerate() {
         if index == 0 {
             continue;
@@ -344,7 +347,7 @@ pub(crate) fn bind_event_exporter_declarations<'py>(
             pairs.push((field, declaration.getattr(field)?));
         }
         pairs.push(("provider_usages", usages));
-        bound.push(discovered(py, "DiscoveredEventExporter", &pairs)?);
+        bound.push(discovered(py, RecordId::DiscoveredEventExporter, &pairs)?);
     }
     tuple_of(py, bound)
 }

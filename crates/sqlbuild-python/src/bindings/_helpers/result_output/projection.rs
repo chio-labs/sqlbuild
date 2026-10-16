@@ -3,18 +3,11 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyRef, PyResult, Python};
 use pyo3::types::{PyFloat, PyInt};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::plan_output::values::text;
 use crate::bindings::_helpers::result_output::resource_ids::{audit_identity, sql_test_identity};
 use crate::bindings::_helpers::result_output::terminal_index::{TerminalEventIndex, current_index};
-
-const RUN_MODELS: &str = "sqlbuild.executor.run.models";
-const BUILD_MODELS: &str = "sqlbuild.executor.build.models";
-const LOAD_MODELS: &str = "sqlbuild.executor.load.models";
-const PYTHON_NODE_MODELS: &str = "sqlbuild.executor.python_nodes.models";
-const TESTING_MODELS: &str = "sqlbuild.executor.testing.models";
-const AUDITING_MODELS: &str = "sqlbuild.executor.auditing.models";
-const CLONE_MODELS: &str = "sqlbuild.executor.clone.models";
 
 /// The executor result types that result output distinguishes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -34,35 +27,25 @@ pub(crate) enum ResultKind {
 /// The kind of one executor result, by its Python class.
 pub(crate) fn result_kind(result: &Bound<'_, PyAny>) -> PyResult<ResultKind> {
     let py: Python<'_> = result.py();
-    let kinds: [(&str, &str, ResultKind); 9] = [
-        (RUN_MODELS, "ModelExecutionResult", ResultKind::Model),
-        (BUILD_MODELS, "SeedExecutionResult", ResultKind::Seed),
+    let kinds: [(ExecutorHost, ResultKind); 9] = [
+        (ExecutorHost::ModelExecutionResult, ResultKind::Model),
+        (ExecutorHost::SeedExecutionResult, ResultKind::Seed),
+        (ExecutorHost::FunctionExecutionResult, ResultKind::Function),
+        (ExecutorHost::LoadExecutionResult, ResultKind::Load),
         (
-            BUILD_MODELS,
-            "FunctionExecutionResult",
-            ResultKind::Function,
-        ),
-        (LOAD_MODELS, "LoadExecutionResult", ResultKind::Load),
-        (
-            PYTHON_NODE_MODELS,
-            "PythonNodeExecutionResult",
+            ExecutorHost::PythonNodeExecutionResult,
             ResultKind::PythonNode,
         ),
         (
-            PYTHON_NODE_MODELS,
-            "PythonCheckExecutionResult",
+            ExecutorHost::PythonCheckExecutionResult,
             ResultKind::PythonCheck,
         ),
-        (
-            TESTING_MODELS,
-            "SqlTestExecutionResult",
-            ResultKind::SqlTest,
-        ),
-        (AUDITING_MODELS, "AuditExecutionResult", ResultKind::Audit),
-        (CLONE_MODELS, "CloneItemResult", ResultKind::CloneItem),
+        (ExecutorHost::SqlTestExecutionResult, ResultKind::SqlTest),
+        (ExecutorHost::AuditExecutionResult, ResultKind::Audit),
+        (ExecutorHost::CloneItemResult, ResultKind::CloneItem),
     ];
-    for (module, class_name, kind) in kinds {
-        if result.is_instance(&imported(py, module, class_name)?)? {
+    for (class, kind) in kinds {
+        if result.is_instance(&host::entry(py, class)?)? {
             return Ok(kind);
         }
     }

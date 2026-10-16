@@ -4,15 +4,11 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::{PyBool, PyDict, PyDictMethods};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
-
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const USER_MACROS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.user_macros";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 /// Build the declaration scope of `discovered`; a static scope lends only its index to macros.
 fn declaration_scope<'py>(
@@ -21,11 +17,11 @@ fn declaration_scope<'py>(
     sql_lexical_syntax: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = discovered.py();
-    let loaded_macros: Bound<'py, PyAny> = imported(py, USER_MACROS_MODULE, "load_project_macros")?
+    let loaded_macros: Bound<'py, PyAny> = host::entry(py, UserCodeHost::LoadProjectMacros)?
         .call1((discovered.getattr("macro_files")?,))?;
     if !static_scope.is_none() {
         let rebound: Bound<'py, PyAny> = call_with(
-            &imported(py, NATIVE_MODULE, "rebind_declaration_scope")?,
+            &registry::native(py, NativeAttr::RebindDeclarationScope)?,
             &[
                 ("scope", static_scope),
                 ("discovered_inputs", discovered.clone()),
@@ -37,7 +33,7 @@ fn declaration_scope<'py>(
         }
     }
     call_with(
-        &imported(py, NATIVE_MODULE, "build_declaration_scope")?,
+        &registry::native(py, NativeAttr::BuildDeclarationScope)?,
         &[
             ("discovered_inputs", discovered.clone()),
             ("loaded_macros", loaded_macros),
@@ -49,8 +45,7 @@ fn declaration_scope<'py>(
 /// Each model file's own enum and constant declarations, by file path.
 fn local_declarations<'py>(discovered: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = discovered.py();
-    let context: Bound<'py, PyAny> =
-        imported(py, COMPILE_MODELS_MODULE, "DeclarationResolutionContext")?;
+    let context: Bound<'py, PyAny> = registry::class(py, RecordId::DeclarationResolutionContext)?;
     let by_name = |declarations: Bound<'py, PyAny>| -> PyResult<Bound<'py, PyAny>> {
         let named: Bound<'py, PyDict> = PyDict::new(py);
         for declaration in declarations.try_iter()? {
@@ -104,7 +99,7 @@ pub(crate) fn build_sql_expansion_context<'py>(
     let mut discovered: Bound<'py, PyAny> = arguments.value("discovered_inputs")?;
     if discovered.is_none() {
         discovered = call_with(
-            &imported(py, NATIVE_MODULE, "discover_project_inputs")?,
+            &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
             &[
                 ("project_dir", arguments.value("project_dir")?),
                 (
@@ -121,7 +116,7 @@ pub(crate) fn build_sql_expansion_context<'py>(
         cli_vars = PyDict::new(py).into_any();
     }
     let effective_vars: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "build_effective_vars")?,
+        &registry::native(py, NativeAttr::BuildEffectiveVars)?,
         &[
             ("project_config", project_config.clone()),
             ("local_config", local_config.clone()),
@@ -138,23 +133,23 @@ pub(crate) fn build_sql_expansion_context<'py>(
         )?;
     }
     let (enums, constants): (Bound<'py, PyAny>, Bound<'py, PyAny>) =
-        imported(py, NATIVE_MODULE, "public_declaration_indexes")?
+        registry::native(py, NativeAttr::PublicDeclarationIndexes)?
             .call1((&discovered,))?
             .extract()?;
     let collection_rendering: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "resolve_effective_collection_rendering")?,
+        &registry::native(py, NativeAttr::ResolveEffectiveCollectionRendering)?,
         &[
             ("project_config", project_config.clone()),
             ("declaration_override", py.None().into_bound(py)),
         ],
     )?;
     let macro_context: Bound<'py, PyAny> = call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "MacroContext")?,
+        &registry::class(py, RecordId::MacroContext)?,
         &[
             (
                 "adapter_name",
                 call_with(
-                    &imported(py, NATIVE_MODULE, "resolve_effective_adapter_name")?,
+                    &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
                     &[
                         ("project_config", project_config.clone()),
                         ("local_config", local_config),
@@ -178,7 +173,7 @@ pub(crate) fn build_sql_expansion_context<'py>(
         ],
     )?;
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "SqlExpansionContext")?,
+        &registry::class(py, RecordId::SqlExpansionContext)?,
         &[
             ("effective_vars", effective_vars),
             ("loaded_macros", scope.getattr("loaded_macros")?),

@@ -12,8 +12,8 @@ use sqlbuild_cache::digest::main::sha256_hex::sha256_hex;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::compile_outputs::json_report::{compact_sorted_json, orjson_sorted};
-
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
 const CACHE_VERSION: i64 = 4;
 const ALGORITHM_FINGERPRINT: &str = "sql-test-artifact-v4-orjson-identity";
@@ -216,11 +216,7 @@ fn test_payload<'py>(test: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
         ],
     )?;
     let test_payload: Bound<'py, PyAny> = test.getattr("payload")?;
-    if test_payload.is_instance(&imported(
-        py,
-        NATIVE_RECORDS_MODULE,
-        "CompiledModelSqlTestPayload",
-    )?)? {
+    if test_payload.is_instance(&registry::class(py, RecordId::CompiledModelSqlTestPayload)?)? {
         let block: Bound<'py, PyAny> = test.getattr("test_block")?;
         payload.set_item(
             "model",
@@ -255,10 +251,9 @@ fn test_payload<'py>(test: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
                 ],
             )?,
         )?;
-    } else if test_payload.is_instance(&imported(
+    } else if test_payload.is_instance(&registry::class(
         py,
-        NATIVE_RECORDS_MODULE,
-        "CompiledDirectLogicSqlTestPayload",
+        RecordId::CompiledDirectLogicSqlTestPayload,
     )?)? {
         payload.set_item(
             "direct",

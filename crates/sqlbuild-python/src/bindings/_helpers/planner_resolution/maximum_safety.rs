@@ -1,16 +1,16 @@
 //! Maximum automatic-start recovery and evidence boundary.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::planner_resolution::cursor_bounds::{
     optional_scalar, required_scalar, scalars,
 };
 use crate::bindings::_helpers::planner_resolution::cursor_safety::{
-    EXCEPTIONS, MODELS, horizon, replace, safety_duration, safety_error, timestamp_bound, utc_clock,
+    horizon, replace, safety_duration, safety_error, timestamp_bound, utc_clock,
 };
 use crate::bindings::_helpers::planner_resolution::values::string;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
@@ -114,7 +114,7 @@ fn apply_maximum_start_policy<'py>(
     if !timestamp_bound(&physical)? {
         return Err(safety_error(
             py,
-            "MaximumAutomaticStartError",
+            ErrorId::MaximumAutomaticStart,
             "automatic start requires a timestamp cursor",
         ));
     }
@@ -172,7 +172,7 @@ fn apply_maximum_start_policy<'py>(
             replay.push((key, args.value(key)?));
         }
         call_with(
-            &imported(py, "sqlbuild._native", "apply_typed_cursor_replay_policy")?,
+            &registry::native(py, NativeAttr::ApplyTypedCursorReplayPolicy)?,
             &replay,
         )?
     } else {
@@ -181,14 +181,14 @@ fn apply_maximum_start_policy<'py>(
     let relation = snapshot.getattr("target_relation")?;
     let column = snapshot.getattr("destination_cursor_column")?;
     let evidence = call_with(
-        &imported(py, MODELS, "MaximumStartSafetyEvidence")?,
+        &registry::class(py, RecordId::MaximumStartSafetyEvidence)?,
         &[
             ("action", config.getattr("action")?),
             ("max_ahead", config.getattr("max_ahead")?),
             (
                 "invocation_time",
                 call_with(
-                    &imported(py, "sqlbuild._native", "TimestampValue")?,
+                    &registry::class(py, RecordId::TimestampValue)?,
                     &[("value", utc_clock(&clock)?)],
                 )?,
             ),
@@ -219,7 +219,7 @@ fn apply_maximum_start_policy<'py>(
     )?;
     let error = |non_idempotent: bool| -> PyResult<Bound<'py, PyAny>> {
         Err(PyErr::from_value(call_with(
-            &imported(py, EXCEPTIONS, "MaximumAutomaticStartError")?,
+            &registry::error(py, ErrorId::MaximumAutomaticStart)?,
             &[
                 (
                     "message",
@@ -248,7 +248,7 @@ fn apply_maximum_start_policy<'py>(
 
 fn rendered(value: &Bound<'_, PyAny>) -> PyResult<String> {
     call_with(
-        &imported(value.py(), "sqlbuild._native", "cursor_render")?,
+        &registry::native(value.py(), NativeAttr::CursorRender)?,
         &[("value", value.clone())],
     )?
     .extract()

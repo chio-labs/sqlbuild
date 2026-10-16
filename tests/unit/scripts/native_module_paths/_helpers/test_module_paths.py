@@ -47,6 +47,18 @@ EXCEPTIONS_MODULE: str = "sqlbuild._native"
             expected_errors=(),
         ),
         NativeSourceModulePathTestCase(
+            description="host table entry resolves through the host module",
+            source='const ENTRIES: &[HostEntry] = &[\n    HostEntry {\n        name: "BaseAdapter",\n    },\n];\n',
+            expected_errors=(),
+        ),
+        NativeSourceModulePathTestCase(
+            description="host table entry the host module does not define",
+            source='const ENTRIES: &[HostEntry] = &[\n    HostEntry {\n        name: "no_such_entry",\n    },\n];\n',
+            expected_errors=(
+                "lib.rs:2: 'sqlbuild._native_host' has no attribute 'no_such_entry'.",
+            ),
+        ),
+        NativeSourceModulePathTestCase(
             description="unknown module literal",
             source='const MISSING_MODULE: &str = "sqlbuild.cli.no_such_module";\n',
             expected_errors=(

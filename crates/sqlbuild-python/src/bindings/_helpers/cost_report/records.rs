@@ -6,15 +6,14 @@ use sqlbuild_core::cost_report::errors::CostArtifactError;
 use sqlbuild_core::cost_report::models::{CostResource, CostRun, CostSummary};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
-
-const NATIVE_RECORDS: &str = "sqlbuild._native";
-const COST_MODELS: &str = "sqlbuild.cost.models";
-const COST_TYPES: &str = "sqlbuild.cost.types";
-const COST_EXCEPTIONS: &str = "sqlbuild._native";
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 /// The `CostArtifactError` Python raised for the same artifact.
 pub(crate) fn artifact_error(py: Python<'_>, error: &CostArtifactError) -> PyErr {
-    match imported(py, COST_EXCEPTIONS, "CostArtifactError")
+    match registry::native(py, NativeAttr::CostArtifactError)
         .and_then(|class| class.call1((error.message.as_str(),)))
     {
         Ok(instance) => PyErr::from_value(instance),
@@ -155,7 +154,7 @@ fn resource_object<'py>(
         builders.decimal(&resource.estimated_compute_credits)?,
     )?;
     fields.set_item("estimated_usd", builders.decimal(&resource.estimated_usd)?)?;
-    imported(py, NATIVE_RECORDS, "ResourceCost")?.call((), Some(&fields))
+    registry::class(py, RecordId::ResourceCost)?.call((), Some(&fields))
 }
 
 fn summary_object<'py>(
@@ -170,7 +169,7 @@ fn summary_object<'py>(
     let fields: Bound<'py, PyDict> = PyDict::new(py);
     fields.set_item(
         "status",
-        imported(py, COST_TYPES, "CostStatus")?.call1((cost.status.as_str(),))?,
+        host::entry(py, ExecutorHost::CostStatus)?.call1((cost.status.as_str(),))?,
     )?;
     fields.set_item("usd_per_credit", builders.decimal(&cost.usd_per_credit)?)?;
     fields.set_item("rate_source", &cost.rate_source)?;
@@ -194,7 +193,7 @@ fn summary_object<'py>(
     fields.set_item("method", &cost.method)?;
     fields.set_item("limitations", PyTuple::new(py, &cost.limitations)?)?;
     fields.set_item("message", &cost.message)?;
-    imported(py, COST_MODELS, "RunCostSummary")?.call((), Some(&fields))
+    host::entry(py, ExecutorHost::RunCostSummary)?.call((), Some(&fields))
 }
 
 /// A plain run as the `CostRunRecord` it was read from.
@@ -216,7 +215,7 @@ pub(crate) fn record_object<'py>(py: Python<'py>, run: &CostRun) -> PyResult<Bou
     )?;
     fields.set_item("cost", summary_object(&builders, &run.cost)?)?;
     fields.set_item("had_executable_work", run.had_executable_work)?;
-    imported(py, NATIVE_RECORDS, "CostRunRecord")?.call((), Some(&fields))
+    registry::class(py, RecordId::CostRunRecord)?.call((), Some(&fields))
 }
 
 /// Records of several plain runs, as a tuple.

@@ -2,12 +2,11 @@
 
 use std::collections::HashMap;
 
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
 use sqlbuild_analysis::lineage_command::models::{LineageIndex, LineageKey, LineageNode};
-
-const COMPILE_MODELS: &str = "sqlbuild._native";
-const GRAPH_MODELS: &str = "sqlbuild._native";
 
 /// A Python `CompiledObjectKey` as a lineage key.
 pub(crate) fn lineage_key(key: &Bound<'_, PyAny>) -> PyResult<LineageKey> {
@@ -31,7 +30,7 @@ pub(crate) struct PythonKeys<'py> {
 impl<'py> PythonKeys<'py> {
     pub(crate) fn new(py: Python<'py>) -> PyResult<Self> {
         Ok(Self {
-            class: py.import(COMPILE_MODELS)?.getattr("CompiledObjectKey")?,
+            class: registry::class(py, RecordId::CompiledObjectKey)?,
             made: HashMap::new(),
         })
     }
@@ -212,7 +211,5 @@ pub(crate) fn index_views<'py>(
     options.set_item("tag_index", tags)?;
     options.set_item("path_index", paths)?;
     options.set_item("all_keys", names)?;
-    py.import(GRAPH_MODELS)?
-        .getattr("LineageGraphViews")?
-        .call((), Some(&options))
+    registry::class(py, RecordId::LineageGraphViews)?.call((), Some(&options))
 }

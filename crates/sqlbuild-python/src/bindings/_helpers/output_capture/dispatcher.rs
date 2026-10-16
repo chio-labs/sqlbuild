@@ -23,9 +23,10 @@ use sqlbuild_core::command_output::models::{
 };
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_threads::constants::OUTPUT_SUPPRESSED_ATTRIBUTE;
 use crate::bindings::_helpers::native_threads::exit_signal::signal_interpreter_exit;
-use crate::bindings::_helpers::output_capture::records::{MODELS_MODULE, TYPES_MODULE};
 use crate::bindings::_helpers::output_capture::values::{
     freeze, object, output_error, pass_text, python_text, unencodable,
 };
@@ -188,7 +189,7 @@ impl Shared {
             ("occurred_at", self.occurred_at(py)?),
             (
                 "stream",
-                imported(py, TYPES_MODULE, "CommandOutputStream")?
+                host::entry(py, ExecutorHost::CommandOutputStream)?
                     .call1((stream_value(draft.stream),))?,
             ),
             ("message", python_text(py, &draft.message)?),
@@ -197,7 +198,7 @@ impl Shared {
             ("chunk_count", object(py, draft.chunk_count)?),
             (
                 "priority",
-                imported(py, TYPES_MODULE, "OutputRecordPriority")?
+                host::entry(py, ExecutorHost::OutputRecordPriority)?
                     .call1((priority_value(draft.priority),))?,
             ),
         ];
@@ -206,7 +207,7 @@ impl Shared {
             fields.push(("dropped_records", object(py, draft.dropped_records)?));
         }
         call_with(
-            &imported(py, MODELS_MODULE, "CommandOutputRecord")?,
+            &host::entry(py, ExecutorHost::CommandOutputRecord)?,
             &fields,
         )
     }
@@ -337,7 +338,7 @@ impl Shared {
 }
 
 fn input_error(py: Python<'_>, message: &str) -> PyErr {
-    output_error(py, "OutputCaptureInputError", message)
+    output_error(py, ExecutorHost::OutputCaptureInputError, message)
 }
 
 #[pymethods]
@@ -547,7 +548,7 @@ impl OutputCaptureDispatcher {
         }
         let (accepted, delivered, failed, dropped, depth, capacity, flush_complete) = counts;
         call_with(
-            &imported(py, MODELS_MODULE, "CommandOutputCaptureSummary")?,
+            &host::entry(py, ExecutorHost::CommandOutputCaptureSummary)?,
             &[
                 ("accepted", object(py, accepted)?),
                 ("delivered", object(py, delivered)?),

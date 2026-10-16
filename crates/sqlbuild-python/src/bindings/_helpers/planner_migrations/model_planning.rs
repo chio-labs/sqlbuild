@@ -1,16 +1,14 @@
 //! Model migration orchestration over Python-owned live inspection.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::planner_migrations::column_objects::{config, native, replace};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{
     PyBool, PyDict, PyDictMethods, PyFrozenSet, PySet, PySetMethods, PyString, PyTuple,
 };
 use pyo3::{pyfunction, wrap_pyfunction};
-
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 fn declared<'py>(item: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>> {
     let py = item.py();
@@ -22,12 +20,12 @@ fn declared<'py>(item: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>
     let materialization = config(item, "materialized")?;
     Ok(Some(native(
         py,
-        "ModelMigrationRequest",
+        RecordId::ModelMigrationRequest,
         &[
             ("model", item.clone()),
             (
                 "discovery",
-                imported(py, NATIVE_RECORDS_MODULE, "MigrationDiscovery")?.getattr("MANUAL")?,
+                registry::class(py, RecordId::MigrationDiscovery)?.getattr("MANUAL")?,
             ),
             ("raw_origin", origin.call_method0("strip")?),
             (
@@ -127,18 +125,18 @@ fn plan_model_migrations<'py>(
     let runtime = args.value("runtime")?;
     let snapshot = args.value("snapshot")?;
     let schemas = call_with(
-        &imported(py, "sqlbuild._native", "migration_project_schemas")?,
+        &registry::native(py, NativeAttr::MigrationProjectSchemas)?,
         &[("runtime", runtime.clone())],
     )?;
     let state = call_with(
-        &imported(py, "sqlbuild._native", "MigrationStateInspection")?,
+        &registry::native(py, NativeAttr::MigrationStateInspection)?,
         &[
             ("adapter", runtime.getattr("adapter")?),
             ("connection", runtime.getattr("connection")?),
             (
                 "database",
                 call_with(
-                    &imported(py, "sqlbuild._native", "migration_planning_database")?,
+                    &registry::native(py, NativeAttr::MigrationPlanningDatabase)?,
                     &[("runtime", runtime.clone())],
                 )?,
             ),
@@ -173,7 +171,7 @@ fn discover<'py>(
     let mut declarations: Vec<Bound<'py, PyAny>> = Vec::new();
     for request in declared_requests {
         let resolved = call_with(
-            &imported(py, "sqlbuild._native", "migration_resolve_origin")?,
+            &registry::native(py, NativeAttr::MigrationResolveOrigin)?,
             &[
                 ("request", request.clone()),
                 ("runtime", runtime.clone()),
@@ -182,7 +180,7 @@ fn discover<'py>(
         )?;
         declarations.push(native(
             py,
-            "ModelMigrationDeclaration",
+            RecordId::ModelMigrationDeclaration,
             &[
                 ("model_name", request.getattr("model")?.getattr("name")?),
                 ("origin_location", resolved.get_item(0)?),
@@ -191,7 +189,7 @@ fn discover<'py>(
         )?);
     }
     call_with(
-        &imported(py, "sqlbuild._native", "discover_model_migrations")?,
+        &registry::native(py, NativeAttr::DiscoverModelMigrations)?,
         &[
             ("runtime", runtime.clone()),
             ("scope", scope.clone()),
@@ -219,7 +217,7 @@ fn finish<'py>(
     for request in discovery.getattr("requests")?.try_iter()? {
         let request = request?;
         let origin = call_with(
-            &imported(py, "sqlbuild._native", "migration_resolve_origin")?,
+            &registry::native(py, NativeAttr::MigrationResolveOrigin)?,
             &[
                 ("request", request.clone()),
                 ("runtime", runtime.clone()),
@@ -235,7 +233,7 @@ fn finish<'py>(
         let mut origins: Vec<Bound<'py, PyAny>> = Vec::new();
         for (_, origin, _) in &resolved {
             call_with(
-                &imported(py, "sqlbuild._native", "migration_require_same_database")?,
+                &registry::native(py, NativeAttr::MigrationRequireSameDatabase)?,
                 &[("state", state.clone()), ("location", origin.clone())],
             )?;
             let schema = origin.getattr("schema")?;
@@ -254,12 +252,12 @@ fn finish<'py>(
         )?;
         let project_config = runtime.getattr("project_config")?;
         let snapshots_config = if project_config.is_none() {
-            imported(py, "sqlbuild._native", "SnapshotsConfig")?.call0()?
+            registry::class(py, RecordId::SnapshotsConfig)?.call0()?
         } else {
             project_config.getattr("snapshots")?
         };
         let policy = call_with(
-            &imported(py, "sqlbuild._native", "migration_missing_origin_policy")?,
+            &registry::native(py, NativeAttr::MigrationMissingOriginPolicy)?,
             &[("runtime", runtime.clone())],
         )?;
         for (request, origin, origin_model) in resolved {
@@ -267,7 +265,7 @@ fn finish<'py>(
             let name = item.getattr("name")?;
             let decided = native(
                 py,
-                "decide_model_migration",
+                NativeAttr::DecideModelMigration,
                 &[
                     ("runtime", runtime.clone()),
                     ("request", request),
@@ -326,7 +324,7 @@ fn finish<'py>(
     };
     let reference_renames = native(
         py,
-        "plan_reference_renames",
+        NativeAttr::PlanReferenceRenames,
         &[
             ("runtime", runtime),
             ("scope", scope),
@@ -342,7 +340,7 @@ fn finish<'py>(
     }
     native(
         py,
-        "ModelMigrationPlanning",
+        RecordId::ModelMigrationPlanning,
         &[
             ("snapshot", replace(&overlaid, &fields)?),
             ("entries", PyTuple::new(py, entries)?.into_any()),

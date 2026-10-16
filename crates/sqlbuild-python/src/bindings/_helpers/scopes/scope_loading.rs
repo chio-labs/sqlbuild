@@ -9,9 +9,14 @@ use pyo3::prelude::{
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::discovery::scope_snapshot::discover_scope_snapshot;
 use crate::bindings::_helpers::frontier::cache_directory::cache_directory;
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_cache::{
     project_fingerprint, read_scope_index_cache, write_scope_index_cache,
 };
@@ -20,17 +25,8 @@ use crate::bindings::_helpers::scopes::scope_tolerant::scope_tolerant_index;
 use crate::bindings::_helpers::scopes::scope_validation::scope_index_with_compile_usages;
 use crate::bindings::_helpers::sql_test_glue::constants::SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
 const SCOPE_CACHE_DIRECTORY_NAME: &str = "declaration-scopes-v2";
 const SCOPE_CACHE_FILENAME: &str = "scope-index.json";
-const SQL_ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const COLLECTION_RENDERING_MODULE: &str = "sqlbuild._native";
-const RESOLVE_ADAPTER_MODULE: &str = "sqlbuild.adapter.discovery.main.resolve_adapter";
-const FRONTIER_TYPES_MODULE: &str = "sqlbuild._native";
-const MACRO_INVENTORY_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.user_macros";
 
 /// Where the scope index cache file of a project lives: `(directory, file name)`.
 fn cache_location(project_dir: &Bound<'_, PyAny>) -> PyResult<(PathBuf, String)> {
@@ -55,17 +51,17 @@ fn project_adapter<'py>(
     let discover_keywords: Bound<'py, PyDict> = PyDict::new(py);
     discover_keywords.set_item("project_dir", project_dir)?;
     discover_keywords.set_item("extract_output_column_locations", false)?;
-    let discovered: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "discover_project_inputs")?
+    let discovered: Bound<'py, PyAny> = registry::native(py, NativeAttr::DiscoverProjectInputs)?
         .call((), Some(&discover_keywords))?;
     let adapter_name: Bound<'py, PyAny> = call_with(
-        &imported(py, ADAPTER_NAME_MODULE, "resolve_effective_adapter_name")?,
+        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
             ("project_config", discovered.getattr("project_config")?),
             ("local_config", discovered.getattr("local_config")?),
         ],
     )?;
     let adapter: Bound<'py, PyAny> = call_with(
-        &imported(py, RESOLVE_ADAPTER_MODULE, "resolve_adapter")?,
+        &host::entry(py, AdapterHost::ResolveAdapter)?,
         &[("adapter_name", adapter_name)],
     )?;
     Ok((discovered, adapter))
@@ -80,18 +76,14 @@ fn compiled_index<'py>(
     let py: Python<'py> = discovered.py();
     let project_config: Bound<'py, PyAny> = discovered.getattr("project_config")?;
     let collection_rendering: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            COLLECTION_RENDERING_MODULE,
-            "resolve_effective_collection_rendering",
-        )?,
+        &registry::native(py, NativeAttr::ResolveEffectiveCollectionRendering)?,
         &[
             ("project_config", project_config),
             ("declaration_override", py.None().into_bound(py)),
         ],
     )?;
     let adapter_context: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "CompileAdapterContext")?,
+        &registry::class(py, RecordId::CompileAdapterContext)?,
         &[
             ("value_renderer", adapter.clone()),
             ("collection_rendering", collection_rendering),
@@ -110,16 +102,15 @@ fn compiled_index<'py>(
     stage_keywords.set_item("defer_model_sql_validation", true)?;
     stage_keywords.set_item("no_cache", true)?;
     let python_stage: Bound<'py, PyAny> = py.import("functools")?.getattr("partial")?.call(
-        (imported(py, NATIVE_MODULE, "build_compile_inputs")?,),
+        (registry::native(py, NativeAttr::BuildCompileInputs)?,),
         Some(&stage_keywords),
     )?;
     let compile_inputs: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "compile_frontier")?,
+        &registry::native(py, NativeAttr::CompileFrontier)?,
         &[
             (
                 "until",
-                imported(py, FRONTIER_TYPES_MODULE, "CompilerStage")?
-                    .getattr("COMPILE_PROJECT_INPUTS")?,
+                registry::class(py, RecordId::CompilerStage)?.getattr("COMPILE_PROJECT_INPUTS")?,
             ),
             ("python_stage", python_stage),
         ],
@@ -136,7 +127,7 @@ fn tolerant_index<'py>(
     let snapshot: Bound<'py, PyAny> = discover_scope_snapshot(project_dir)?;
     let discovered: Bound<'py, PyAny> = snapshot.getattr("discovered_inputs")?;
     let inventory: Bound<'py, PyAny> = call_with(
-        &imported(py, MACRO_INVENTORY_MODULE, "inventory_project_macros")?,
+        &host::entry(py, UserCodeHost::InventoryProjectMacros)?,
         &[("macro_files", discovered.getattr("macro_files")?)],
     )?;
     let native: Bound<'py, PyAny> = Bound::new(
@@ -192,8 +183,7 @@ fn load_or_build_scope_index<'py>(
             return Ok(cached.into_bound(py));
         }
     }
-    let mut syntax: Bound<'py, PyAny> =
-        imported(py, SQL_ANALYSIS_MODELS_MODULE, "SqlLexicalSyntax")?.call0()?;
+    let mut syntax: Bound<'py, PyAny> = registry::class(py, RecordId::SqlLexicalSyntax)?.call0()?;
     let compiled: PyResult<Bound<'py, PyAny>> = match project_adapter(&resolved) {
         Ok((discovered, adapter)) => {
             syntax = adapter.getattr("sql_lexical_syntax")?;

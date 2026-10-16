@@ -22,10 +22,11 @@ use crate::bindings::_helpers::lineage::lineage_objects::{LineageClasses, log_li
 use crate::bindings::_helpers::lineage::project_schema::{
     fast_schema, inferred_names, rich_schema,
 };
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::models::ProjectCatalog;
 use crate::bindings::types::CompilerDetach;
 
-const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const FAST_MODE: &str = "fast";
 const RICH_MODE: &str = "rich";
 const GENERIC_DIALECT: &str = "generic";
@@ -266,9 +267,7 @@ fn output_columns(classes: &LineageClasses<'_>, facts: &Bound<'_, PyAny>) -> PyR
 }
 
 fn unknown_dialect_error(py: Python<'_>, dialect: &str) -> PyErr {
-    match py
-        .import(EXCEPTIONS_MODULE)
-        .and_then(|module| module.getattr("UnknownLineageDialectError"))
+    match registry::error(py, ErrorId::UnknownLineageDialect)
         .and_then(|class| class.call1((format!("Unknown dialect: {dialect}"),)))
     {
         Ok(error) => PyErr::from_value(error),

@@ -1,5 +1,7 @@
 //! Audit gate identities of planned audits, built as `AuditGateIdentity` objects.
 
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
@@ -8,7 +10,6 @@ use sqlbuild_analysis::auditing::models::{
     GateIdentity, MeasurementFacts, PlannedAudit, ThresholdBound, Thresholds,
 };
 
-const AUDITING_MODELS_MODULE: &str = "sqlbuild._native";
 const MEASUREMENT_MODE: &str = "measurement";
 
 fn enum_value(value: &Bound<'_, PyAny>) -> PyResult<String> {
@@ -92,8 +93,7 @@ fn build_audit_gate_identity<'py>(
     let entries: Vec<Bound<'py, PyAny>> = audits.try_iter()?.collect::<PyResult<_>>()?;
     let planned: Vec<PlannedAudit> = entries.iter().map(planned_audit).collect::<PyResult<_>>()?;
     let gate: GateIdentity = audit_gate_identity(&planned);
-    let models: Bound<'py, PyModule> = py.import(AUDITING_MODELS_MODULE)?;
-    let identity_type: Bound<'py, PyAny> = models.getattr("AuditIdentity")?;
+    let identity_type: Bound<'py, PyAny> = registry::class(py, RecordId::AuditIdentity)?;
     let mut identities: Vec<Bound<'py, PyAny>> = Vec::with_capacity(gate.audits.len());
     for identity in gate.audits {
         let entry: &Bound<'py, PyAny> = &entries[identity.index];
@@ -138,7 +138,7 @@ fn build_audit_gate_identity<'py>(
         )?);
     }
     keyword_call(
-        &models.getattr("AuditGateIdentity")?,
+        &registry::class(py, RecordId::AuditGateIdentity)?,
         vec![
             (
                 "binding_set_hash",

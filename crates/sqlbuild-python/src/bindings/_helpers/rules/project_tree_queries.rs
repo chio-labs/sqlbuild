@@ -17,11 +17,11 @@ use sqlbuild_rules::project_tree::main::project_tree_glob::project_tree_glob;
 use sqlbuild_rules::project_tree::main::tracked_text_path::tracked_text_path;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::rule_api::{usage_error_for, validate_project_relative};
 
 const PATHLIB_MODULE: &str = "pathlib";
-const RULE_USAGE_ERROR: &str = "RuleUsageError";
-const NATIVE_MODULE: &str = "sqlbuild._native";
 
 /// `pathlib.Path(value)`, raising exactly as `Path` does for an unsupported value.
 fn python_path<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -126,7 +126,7 @@ fn not_beneath(path: &Bound<'_, PyAny>, under: &Bound<'_, PyAny>) -> PyErr {
             .add(under_text)
     });
     match message.and_then(|message| {
-        imported(py, NATIVE_MODULE, RULE_USAGE_ERROR).and_then(|class| class.call1((message,)))
+        registry::error(py, ErrorId::RuleUsage).and_then(|class| class.call1((message,)))
     }) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,

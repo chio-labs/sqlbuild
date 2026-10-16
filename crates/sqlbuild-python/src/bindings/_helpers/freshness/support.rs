@@ -6,32 +6,23 @@ use pyo3::types::{PyDict, PyString};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::timestamps::{date_time_typed, in_utc, offset_aware};
 
-pub(crate) const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
-pub(crate) const FRESHNESS_MODELS: &str = "sqlbuild._native";
-pub(crate) const CONTRACT_MODELS: &str = "sqlbuild._native";
-pub(crate) const CONTRACT_TYPES: &str = "sqlbuild._native";
-pub(crate) const ADAPTER_MODELS: &str = "sqlbuild.adapter.contract.models";
-pub(crate) const ADAPTER_TYPES: &str = "sqlbuild.adapter.contract.types";
-pub(crate) const ADAPTER_EXCEPTIONS: &str = "sqlbuild.adapter.contract.exceptions";
-pub(crate) const LIFECYCLE_MODULE: &str =
-    "sqlbuild.runtime.observability.classes.operation_lifecycle";
-pub(crate) const OBSERVABILITY_MODELS: &str = "sqlbuild.runtime.observability.models";
-pub(crate) const OBSERVATION_ERROR: &str = "SourceFreshnessObservationError";
-pub(crate) const INPUT_ERROR: &str = "SourceFreshnessInputError";
+pub(crate) const OBSERVATION_ERROR: NativeAttr = NativeAttr::SourceFreshnessObservationError;
+pub(crate) const INPUT_ERROR: NativeAttr = NativeAttr::SourceFreshnessInputError;
 
-/// `exceptions.<class>(message)` as a raisable error, with an optional `__cause__`.
+/// The native error `class(message)` as a raisable error, with an optional `__cause__`.
 pub(crate) fn freshness_error(
     py: Python<'_>,
-    (class, message): (&str, &str),
+    (class, message): (NativeAttr, &str),
     cause: Option<PyErr>,
 ) -> PyErr {
-    let error: PyErr =
-        match imported(py, EXCEPTIONS_MODULE, class).and_then(|class| class.call1((message,))) {
-            Ok(error) => PyErr::from_value(error),
-            Err(error) => return error,
-        };
+    let error: PyErr = match registry::native(py, class).and_then(|class| class.call1((message,))) {
+        Ok(error) => PyErr::from_value(error),
+        Err(error) => return error,
+    };
     if let Some(cause) = cause {
         error.set_cause(py, Some(cause));
     }

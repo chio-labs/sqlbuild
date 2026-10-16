@@ -1,11 +1,12 @@
 //! `PlanOutput` assembly from planned model entries, seeds, sources, functions, audits and tests.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_entries::model_entries::scope_overlaps;
 use crate::bindings::_helpers::planner_entries::values::{
-    DISCOVERY_MODELS, PLANNER_EXCEPTIONS, error_of, native, none, planner_model, planner_type,
-    string,
+    error_of, native, none, planner_model, planner_type, string,
 };
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyList, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -66,23 +67,23 @@ fn seed_plan_reason<'py>(
         .getattr("existing_relations")?
         .contains(seed_name)?
     {
-        return planner_type(py, "PlanReason", "FIRST_RUN");
+        return planner_type(py, RecordId::PlanReason, "FIRST_RUN");
     }
     let fingerprint = snapshot
         .getattr("fingerprints")?
         .getattr("seeds")?
         .call_method1("get", (seed_name,))?;
     if fingerprint.is_none() {
-        return planner_type(py, "PlanReason", "FIRST_RUN");
+        return planner_type(py, RecordId::PlanReason, "FIRST_RUN");
     }
     if !expected_version_hash.is_none()
         && fingerprint
             .getattr("version_hash")?
             .ne(expected_version_hash)?
     {
-        return planner_type(py, "PlanReason", "CONFIG_CHANGED");
+        return planner_type(py, RecordId::PlanReason, "CONFIG_CHANGED");
     }
-    planner_type(py, "PlanReason", "NO_CHANGE")
+    planner_type(py, RecordId::PlanReason, "NO_CHANGE")
 }
 
 fn seed_entries<'py>(
@@ -104,7 +105,7 @@ fn seed_entries<'py>(
         let name = seed.getattr("name")?;
         entries.push(planner_model(
             py,
-            "SeedPlanEntry",
+            RecordId::SeedPlanEntry,
             &[
                 ("key", seed.getattr("key")?),
                 ("name", name.clone()),
@@ -115,7 +116,11 @@ fn seed_entries<'py>(
                 ),
                 (
                     "columns",
-                    native(py, "extract_seed_columns", &[("seed", seed.clone())])?,
+                    native(
+                        py,
+                        NativeAttr::ExtractSeedColumns,
+                        &[("seed", seed.clone())],
+                    )?,
                 ),
                 (
                     "csv_settings",
@@ -159,7 +164,7 @@ fn provider_usages<'py>(
         let usage = usage?;
         usages.push(native(
             py,
-            "PlanProviderUsage",
+            RecordId::PlanProviderUsage,
             &[
                 ("provider_name", usage.getattr("provider_name")?),
                 ("consumer_kind", string(py, consumer_kind)),
@@ -182,7 +187,7 @@ fn hook_provider_usages<'py>(
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py = entry.py();
     let mut usages: Vec<Bound<'py, PyAny>> = Vec::new();
-    let python_hook = imported(py, DISCOVERY_MODELS, "PythonHookEntry")?;
+    let python_hook = registry::class(py, RecordId::PythonHookEntry)?;
     let mut hooks: Vec<Bound<'py, PyAny>> = Vec::new();
     for field in ["pre_hooks", "post_hooks"] {
         let hook_entry = entry.getattr(field)?;
@@ -282,7 +287,7 @@ fn require_intermediate_loader_targets<'py>(
         };
         let dependencies = native(
             py,
-            "upstream_loader_dependency_names",
+            NativeAttr::UpstreamLoaderDependencyNames,
             &[
                 ("loader_function", loader_function),
                 ("loader_functions", loader_functions.clone()),
@@ -306,7 +311,7 @@ fn require_intermediate_loader_targets<'py>(
             let source_name = source_entry.getattr("name")?.str()?;
             return Err(error_of(
                 py,
-                (PLANNER_EXCEPTIONS, "PlannerInputError"),
+                ErrorId::PlannerInput,
                 &format!(
                     "Source '{source_name}' requires intermediate loader '{}', but its target \
                      relation '{}' does not exist; use +source:{source_name} to refresh upstream \
@@ -335,7 +340,7 @@ pub(super) fn function_entry<'py>(
     let py = function.py();
     let body_sql = native(
         py,
-        "resolve_function_sql",
+        NativeAttr::ResolveFunctionSql,
         &[
             ("adapter", adapter.clone()),
             ("function", function.clone()),
@@ -359,7 +364,7 @@ pub(super) fn function_entry<'py>(
     let field = |name: &str| function.getattr(name);
     planner_model(
         py,
-        "FunctionPlanEntry",
+        RecordId::FunctionPlanEntry,
         &[
             ("key", field("key")?),
             ("name", field("name")?),
@@ -471,7 +476,7 @@ pub(super) fn selected_test_entries<'py>(
     let fixture_context = if analysis.is_truthy()? {
         native(
             py,
-            "build_relation_fixture_context",
+            NativeAttr::BuildRelationFixtureContext,
             &[("project", project.clone())],
         )?
     } else {
@@ -479,7 +484,7 @@ pub(super) fn selected_test_entries<'py>(
     };
     let results = native(
         py,
-        "plan_sql_tests",
+        NativeAttr::PlanSqlTests,
         &[
             ("tests", tuple_of(py, selected)?),
             ("project", project.clone()),
@@ -510,7 +515,7 @@ pub(super) fn selected_test_entries<'py>(
     if !diagnostics.is_empty() {
         return Err(error_of(
             py,
-            (PLANNER_EXCEPTIONS, "PlannerInputError"),
+            ErrorId::PlannerInput,
             &format!("Invalid SQL test fixtures:\n- {}", diagnostics.join("\n- ")),
             &[],
         ));
@@ -529,7 +534,7 @@ fn planned_sql_tests<'py>(
     let selected = selected_test_entries((project, adapter), selected_keys, selection, &none(py))?;
     native(
         py,
-        "PlannedSqlTests",
+        RecordId::PlannedSqlTests,
         &[
             ("selected_keys", selected_keys.clone()),
             ("sql_test_selection", selection.clone()),
@@ -549,7 +554,7 @@ fn plan_output<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>>
     let model_entry_results = args.value("model_entry_results")?;
     let extras = args.value("extras")?;
     let extras = if extras.is_none() {
-        native(py, "PlanOutputExtras", &[])?
+        native(py, RecordId::PlanOutputExtras, &[])?
     } else {
         extras
     };
@@ -559,7 +564,7 @@ fn plan_output<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>>
     let seeds = seed_entries(&project, &snapshot, &selected_keys, &extras)?;
     let source_load_entries = native(
         py,
-        "build_source_load_entries",
+        NativeAttr::BuildSourceLoadEntries,
         &[
             ("execution_order", execution_order.clone()),
             ("selected_keys", selected_keys.clone()),
@@ -585,7 +590,7 @@ fn plan_output<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>>
     }
     let audit_entries = native(
         py,
-        "build_selected_audit_entries",
+        NativeAttr::BuildSelectedAuditEntries,
         &[
             ("project", project.clone()),
             ("adapter", adapter.clone()),
@@ -624,7 +629,7 @@ fn plan_output<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>>
     }
     planner_model(
         py,
-        "PlanOutput",
+        RecordId::PlanOutput,
         &[
             ("execution_order", tuple_of(py, scoped_order)?),
             ("model_entries", model_entries.clone()),
@@ -730,7 +735,7 @@ fn plan_function<'py>(
     let reason = if args.passed("reason")? {
         args.value("reason")?
     } else {
-        planner_type(py, "PlanReason", "NO_CHANGE")?
+        planner_type(py, RecordId::PlanReason, "NO_CHANGE")?
     };
     function_entry(
         &args.value("function")?,
@@ -781,7 +786,7 @@ fn plan_selected_sql_tests_into<'py>(
     let future = args.value("future")?;
     match native(
         py,
-        "plan_selected_sql_tests",
+        NativeAttr::PlanSelectedSqlTests,
         &[
             ("project", args.value("project")?),
             ("adapter", args.value("adapter")?),
@@ -805,7 +810,7 @@ fn sql_test_model_chain_names_by_key<'py>(
     let py = project.py();
     let chains = native(
         py,
-        "resolve_sql_test_model_chains",
+        NativeAttr::ResolveSqlTestModelChains,
         &[("project", project.clone()), ("tests", tests.clone())],
     )?;
     let by_key = PyDict::new(py);

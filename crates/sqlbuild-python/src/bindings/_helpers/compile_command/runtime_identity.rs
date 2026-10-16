@@ -6,8 +6,9 @@ use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_cli::replay::main::output_file_identities::output_file_identities;
 
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
 /// The version of the runtime identity a stored compile records.
 const REUSE_FORMAT_VERSION: &str = "1";
 /// Each `CompileReuseRequest` field the invocation identity records unchanged.
@@ -54,7 +55,7 @@ pub(crate) fn runtime_identity(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     identity.set_item("cache_tag", cache_tag)?;
     identity.set_item(
         "native_build",
-        py.import(NATIVE_MODULE)?.getattr("BUILD_IDENTITY")?.str()?,
+        registry::native(py, NativeAttr::BuildIdentity)?.str()?,
     )?;
     Ok(identity)
 }

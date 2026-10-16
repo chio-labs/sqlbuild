@@ -15,27 +15,28 @@ use crate::bindings::_helpers::freshness::observation::{
     strategy, unknown,
 };
 use crate::bindings::_helpers::freshness::state_io::{StateRead, read_latest};
-use crate::bindings::_helpers::freshness::support::{
-    ADAPTER_EXCEPTIONS, EXCEPTIONS_MODULE, OBSERVATION_ERROR, text,
-};
+use crate::bindings::_helpers::freshness::support::text;
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_identity::graph::build_downstream_model_name_closure;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::freshness::{age_policy, equivalent};
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_RECORDS: &str = "sqlbuild._native";
 const ADAPTER_STRATEGY: &str = "adapter";
-const COMPILE_MODELS: &str = "sqlbuild._native";
 const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
 const NO_CONFIG_MESSAGE: &str = "no freshness config and adapter metadata unavailable";
 
 /// The message of an `AdapterUserError` or a source freshness observation error, if it is one.
 fn handled_message<'py>(py: Python<'py>, error: &PyErr) -> PyResult<Option<Bound<'py, PyAny>>> {
     let value: Bound<'py, PyAny> = error.value(py).clone().into_any();
-    if value.is_instance(&imported(py, ADAPTER_EXCEPTIONS, "AdapterUserError")?)? {
+    if value.is_instance(&host::entry(py, AdapterHost::AdapterUserError)?)? {
         return value.getattr("message").map(Some);
     }
-    if value.is_instance(&imported(py, EXCEPTIONS_MODULE, OBSERVATION_ERROR)?)? {
+    if value.is_instance(&registry::native(
+        py,
+        NativeAttr::SourceFreshnessObservationError,
+    )?)? {
         return Ok(Some(value.str()?.into_any()));
     }
     Ok(None)
@@ -126,7 +127,7 @@ fn adapter_batch<'py>(
         unknown_sources.set_item(&name, unknown(&name, ("ERROR", message.clone()))?)?;
     }
     call_with(
-        &imported(py, NATIVE_RECORDS, "AdapterSourceFreshnessBatch")?,
+        &registry::class(py, RecordId::AdapterSourceFreshnessBatch)?,
         &[("unknown", unknown_sources.into_any())],
     )
 }
@@ -224,11 +225,9 @@ pub(crate) fn build_direct_source_freshness_planning_result<'py>(
                     let Some(message) = handled_message(py, &error)? else {
                         return Err(error);
                     };
-                    let is_observation_error: bool = !error.value(py).is_instance(&imported(
-                        py,
-                        ADAPTER_EXCEPTIONS,
-                        "AdapterUserError",
-                    )?)?;
+                    let is_observation_error: bool = !error
+                        .value(py)
+                        .is_instance(&host::entry(py, AdapterHost::AdapterUserError)?)?;
                     if is_observation_error && configuration_error(&message.extract::<String>()?) {
                         return Err(error);
                     }
@@ -271,11 +270,7 @@ pub(crate) fn build_direct_source_freshness_planning_result<'py>(
     }
     let unknown_names: Bound<'py, PyDict> = sorted_dict(py, &unknown_sources)?;
     call_with(
-        &imported(
-            py,
-            NATIVE_RECORDS_MODULE,
-            "DirectSourceFreshnessPlanningResult",
-        )?,
+        &registry::class(py, RecordId::DirectSourceFreshnessPlanningResult)?,
         &[
             (
                 "observed_records",
@@ -308,7 +303,7 @@ fn downstream_models<'py>(
 ) -> PyResult<Bound<'py, PyFrozenSet>> {
     let py: Python<'py> = source_name.py();
     let key: Bound<'py, PyAny> = call_with(
-        &imported(py, COMPILE_MODELS, "CompiledObjectKey")?,
+        &registry::class(py, RecordId::CompiledObjectKey)?,
         &[
             (
                 "resource_type",
@@ -351,7 +346,7 @@ pub(crate) fn build_direct_source_freshness_propagation_result<'py>(
         unknown_sources.set_item(name, models)?;
     }
     let error_status: Bound<'py, PyAny> =
-        imported(py, NATIVE_RECORDS, "SourceFreshnessAgeStatus")?.getattr("ERROR")?;
+        registry::class(py, RecordId::SourceFreshnessAgeStatus)?.getattr("ERROR")?;
     for (identity, status) in source_freshness
         .getattr("age_statuses")?
         .downcast::<PyDict>()?
@@ -366,7 +361,7 @@ pub(crate) fn build_direct_source_freshness_propagation_result<'py>(
         errors.set_item(identity, models)?;
     }
     call_with(
-        &imported(py, NATIVE_RECORDS, "DirectSourceFreshnessPropagationResult")?,
+        &registry::class(py, RecordId::DirectSourceFreshnessPropagationResult)?,
         &[
             ("changed_source_model_names", changed.into_any()),
             ("unknown_source_model_names", unknown_sources.into_any()),

@@ -3,6 +3,8 @@
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
 
+use sqlbuild_core::graph_walk::main::kahn_order::kahn_order;
+
 use crate::planner_identity::_helpers::cycle_message::cycle_message;
 use crate::planner_identity::_helpers::dependency_counts::{DependencyCounts, dependency_counts};
 use crate::planner_identity::models::GraphKey;
@@ -14,26 +16,17 @@ pub fn topological_order(
 ) -> Result<Vec<GraphKey>, String> {
     let DependencyCounts {
         node_keys,
-        mut indegree,
+        indegree,
         downstream,
     } = dependency_counts(upstream);
-    let mut ready: BinaryHeap<Reverse<&GraphKey>> = indegree
-        .iter()
-        .filter(|(_, count)| **count == 0)
-        .map(|(key, _)| Reverse(*key))
-        .collect();
-    let mut ordered: Vec<GraphKey> = Vec::with_capacity(node_keys.len());
-    while let Some(Reverse(current)) = ready.pop() {
-        ordered.push(current.clone());
-        for downstream_key in downstream.get(current).into_iter().flatten() {
-            if let Some(count) = indegree.get_mut(downstream_key) {
-                *count = count.saturating_sub(1);
-                if *count == 0 {
-                    ready.push(Reverse(downstream_key));
-                }
-            }
-        }
-    }
+    let ordered: Vec<GraphKey> = kahn_order(
+        (node_keys.iter().copied(), indegree),
+        BinaryHeap::<Reverse<&GraphKey>>::new(),
+        |current| downstream.get(*current).cloned().unwrap_or_default(),
+    )
+    .into_iter()
+    .cloned()
+    .collect();
     if ordered.len() == node_keys.len() {
         return Ok(ordered);
     }

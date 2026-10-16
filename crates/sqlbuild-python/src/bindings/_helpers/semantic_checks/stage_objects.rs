@@ -1,22 +1,17 @@
 //! The Python models, enums and compile helpers the semantic completion stage reads and builds.
 
-use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString};
 
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const UNNEEDED_SQL_ANALYSIS_OPT_OUT_CODE: &str = "P009";
 const SQL_ANALYSIS_CONFIG_KEY: &str = "sql_analysis";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
-const PROJECT_WITH_MODULE: &str = "sqlbuild._native";
-const TYPE_RECOVERY_MODULE: &str = "sqlbuild._native";
-const BINDING_DIAGNOSTICS_MODULE: &str = "sqlbuild._native";
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const NORMALIZE_TYPE_MODULE: &str = "sqlbuild.adapter.type_system.main.normalize_type";
 const DATACLASSES_MODULE: &str = "dataclasses";
-const REFERENCE_TYPES_MODULE: &str = "sqlbuild._native";
 
 /// Imported once per stage run.
 pub(crate) struct StageClasses<'py> {
@@ -43,20 +38,16 @@ pub(crate) struct StageClasses<'py> {
 
 impl<'py> StageClasses<'py> {
     pub(crate) fn new(py: Python<'py>) -> PyResult<Self> {
-        let models = py.import(COMPILE_MODELS_MODULE)?;
         let types = py.import(COMPILE_TYPES_MODULE)?;
-        let severity = shape_class(types.as_any(), "DiagnosticSeverity")?;
+        let severity = registry::class(types.py(), RecordId::DiagnosticSeverity)?;
         let resource = types.getattr("CompiledResourceType")?;
-        let kinds = py
-            .import(REFERENCE_TYPES_MODULE)?
-            .getattr("SqlReferenceKind")?;
+        let kinds = registry::class(py, RecordId::SqlReferenceKind)?;
         Ok(Self {
-            diagnostic: models.getattr("CompilerDiagnostic")?,
-            location: py
-                .import(CONTRACT_MODELS_MODULE)?
-                .getattr("SourceLocation")?,
-            model_test_payload: shape_class(models.as_any(), "CompiledModelSqlTestPayload")?,
-            compile_phase: shape_class(types.as_any(), "DiagnosticPhase")?.getattr("COMPILE")?,
+            diagnostic: registry::class(py, RecordId::CompilerDiagnostic)?,
+            location: registry::class(py, RecordId::SourceLocation)?,
+            model_test_payload: registry::class(py, RecordId::CompiledModelSqlTestPayload)?,
+            compile_phase: registry::class(types.py(), RecordId::DiagnosticPhase)?
+                .getattr("COMPILE")?,
             error: severity.getattr("ERROR")?,
             warning: severity.getattr("WARNING")?,
             model_resource: resource.getattr("MODEL")?,
@@ -64,17 +55,11 @@ impl<'py> StageClasses<'py> {
             sql_test_resource: resource.getattr("SQL_TEST")?,
             opt_out_code: PyString::new(py, UNNEEDED_SQL_ANALYSIS_OPT_OUT_CODE).into_any(),
             replace: py.import(DATACLASSES_MODULE)?.getattr("replace")?,
-            project_with: py.import(PROJECT_WITH_MODULE)?.getattr("project_with")?,
-            with_type_recovery: py
-                .import(TYPE_RECOVERY_MODULE)?
-                .getattr("with_type_recovery")?,
-            with_binding_diagnostics: py
-                .import(BINDING_DIAGNOSTICS_MODULE)?
-                .getattr("with_binding_diagnostics")?,
-            schema_validations: py.import(NATIVE_MODULE)?.getattr("schema_validations")?,
-            normalize_type: py
-                .import(NORMALIZE_TYPE_MODULE)?
-                .getattr("normalize_type")?,
+            project_with: registry::native(py, NativeAttr::ProjectWith)?,
+            with_type_recovery: registry::native(py, NativeAttr::WithTypeRecovery)?,
+            with_binding_diagnostics: registry::native(py, NativeAttr::WithBindingDiagnostics)?,
+            schema_validations: registry::native(py, NativeAttr::SchemaValidations)?,
+            normalize_type: host::entry(py, AdapterHost::NormalizeType)?,
             sql_analysis_key: PyString::new(py, SQL_ANALYSIS_CONFIG_KEY).into_any(),
             udf_kind: kinds.getattr("UDF")?,
             table_function_kind: kinds.getattr("TABLE_FUNCTION")?,

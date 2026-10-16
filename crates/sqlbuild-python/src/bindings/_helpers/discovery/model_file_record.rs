@@ -1,5 +1,7 @@
 //! A discovered SQL model file as a native record whose Python attributes are built on demand.
 
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
@@ -7,8 +9,6 @@ use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{FromPyObject, IntoPyObjectExt, pyclass, pymethods};
 use sqlbuild_discovery::models::LineColumnSpan;
 
-const SOURCE_LOCATION_MODULE: &str = "sqlbuild._native";
-const SOURCE_LOCATION_CLASS: &str = "SourceLocation";
 const FIELD_NAMES: [&str; 10] = [
     "file_path",
     "relative_path",
@@ -62,9 +62,7 @@ impl Locations {
         Ok(self
             .projected
             .get_or_try_init(py, || {
-                let class: Bound<'py, PyAny> = py
-                    .import(SOURCE_LOCATION_MODULE)?
-                    .getattr(SOURCE_LOCATION_CLASS)?;
+                let class: Bound<'py, PyAny> = registry::class(py, RecordId::SourceLocation)?;
                 let dict: Bound<'py, PyDict> = PyDict::new(py);
                 for (name, span) in &self.rows {
                     let location: Bound<'py, PyAny> = class.call1((

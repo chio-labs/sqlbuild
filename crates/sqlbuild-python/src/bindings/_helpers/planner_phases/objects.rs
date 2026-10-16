@@ -1,9 +1,10 @@
 //! Boundary helpers shared by the native planner phases.
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
-use crate::bindings::_helpers::planner_phases::constants::{
-    NATIVE_MODULE, PLANNER_EXCEPTIONS, PLANNER_MODELS,
-};
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::models::HostId;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, NativeItem, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyFrozenSet, PyString, PyTuple};
 
@@ -17,31 +18,31 @@ pub(crate) fn optional_text<'py>(py: Python<'py>, value: Option<&str>) -> Bound<
     value.map_or_else(|| py.None().into_bound(py), |value| text(py, value))
 }
 
-/// `module.name(**fields)`.
+/// The staying-Python class `class(**fields)`.
 pub(crate) fn construct<'py>(
     py: Python<'py>,
-    (module, name): (&str, &str),
+    class: impl Into<HostId>,
     fields: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(&imported(py, module, name)?, fields)
+    call_with(&host::entry(py, class)?, fields)
 }
 
 /// A planner model dataclass.
 pub(crate) fn planner_model<'py>(
     py: Python<'py>,
-    name: &str,
+    name: RecordId,
     fields: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    construct(py, (PLANNER_MODELS, name), fields)
+    call_with(&registry::class(py, name)?, fields)
 }
 
 /// `sqlbuild._native.name(**fields)`.
 pub(crate) fn native<'py>(
     py: Python<'py>,
-    name: &str,
+    name: impl Into<NativeItem>,
     fields: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    construct(py, (NATIVE_MODULE, name), fields)
+    call_with(&registry::item(py, name)?, fields)
 }
 
 /// `dataclasses.replace(value, **fields)`.
@@ -53,13 +54,22 @@ pub(crate) fn replace<'py>(
         .call((value,), Some(&keywords(value.py(), fields)?))
 }
 
-/// A Python enum member from its value.
+/// A staying-Python enum member from its value.
 pub(crate) fn member<'py>(
     py: Python<'py>,
-    (module, name): (&str, &str),
+    class: impl Into<HostId>,
     value: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, module, name)?.call1((value,))
+    host::entry(py, class)?.call1((value,))
+}
+
+/// A native string enum member from its value.
+pub(crate) fn native_member<'py>(
+    py: Python<'py>,
+    class: RecordId,
+    value: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    registry::class(py, class)?.call1((value,))
 }
 
 /// `PlannerInputError(message, code=code, help=help)`.
@@ -68,7 +78,7 @@ pub(crate) fn planner_error(
     message: &str,
     (code, help): (Option<&str>, Option<&str>),
 ) -> PyErr {
-    let raised = imported(py, PLANNER_EXCEPTIONS, "PlannerInputError").and_then(|class| {
+    let raised = registry::error(py, ErrorId::PlannerInput).and_then(|class| {
         let fields = keywords(
             py,
             &[
@@ -146,7 +156,7 @@ pub(crate) fn by_name<'py>(
 pub(crate) fn config_str(model: &Bound<'_, PyAny>, key: &str) -> PyResult<Option<String>> {
     native(
         model.py(),
-        "get_config_str",
+        NativeAttr::GetConfigStr,
         &[
             ("values", model.getattr("config")?.getattr("values")?),
             ("key", text(model.py(), key)),
@@ -161,7 +171,7 @@ pub(crate) fn model_key<'py>(
     name: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(py, "sqlbuild._native", "CompiledObjectKey")?,
+        &registry::class(py, RecordId::CompiledObjectKey)?,
         &[
             (
                 "resource_type",

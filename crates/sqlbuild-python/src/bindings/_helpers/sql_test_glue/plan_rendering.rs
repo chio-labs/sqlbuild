@@ -1,10 +1,12 @@
 //! Adapter rendering and declared cursor-window boundaries for native test planning.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::sql_test_glue::plan_values::{model_payload, string};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::constants::SENTINEL;
 use crate::bindings::_helpers::sql_test_glue::cursor_window::{
     declared_window_cursor_models, declares_cursor_window, render_test_cursor_intrinsics,
@@ -160,7 +162,7 @@ pub(super) fn functions<'py>(
                 .filter(|(_, suffix)| !suffix.contains(SENTINEL))
             else {
                 return Err(PyErr::from_value(
-                    imported(py, "sqlbuild._native", "NativeSqlTestPlanningError")?
+                    registry::error(py, ErrorId::NativeSqlTestPlanning)?
                         .call1(("adapter SQL function call template is not deterministic",))?,
                 ));
             };

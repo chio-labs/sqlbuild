@@ -20,6 +20,8 @@ use sqlbuild_scopes::scope_index::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::relationship_scan::{
     RelationshipScanSettings, ScenarioRow, TestFileRow, scanned_relationships,
 };
@@ -32,7 +34,6 @@ use crate::bindings::types::CompilerDetach;
 
 /// Why `UnindexableScopeError` is raised; discovery only yields normalized project paths.
 const UNINDEXABLE_SCOPE_MESSAGE: &str = "Native scope indexing could not place a discovered path or resource kind. Discovery always yields normalized project-relative paths, so this is a SQLBuild bug; please file an issue with the project layout";
-const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const INSPECT_MODULE: &str = "inspect";
 const CODE_TYPE_MODULE: &str = "types";
 const PATHLIB_MODULE: &str = "pathlib";
@@ -145,8 +146,8 @@ impl<'py> Walk<'py> {
     ) -> PyResult<()> {
         let (path, root) = location;
         self.resource_identities
-            .push(self.classes.model("ResourceIdentity")?.call1((
-                self.classes.member("ResourceKind", kind.as_str())?,
+            .push(self.classes.model(RecordId::ResourceIdentity)?.call1((
+                self.classes.member(RecordId::ResourceKind, kind.as_str())?,
                 name.as_str(),
             ))?);
         self.resource_roots.push((kind, root));
@@ -223,8 +224,9 @@ impl<'py> Walk<'py> {
         name: &Bound<'py, PyAny>,
         owner: Option<&Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        self.classes.model("DeclarationIdentity")?.call1((
-            self.classes.member("DeclarationKind", kind.as_str())?,
+        self.classes.model(RecordId::DeclarationIdentity)?.call1((
+            self.classes
+                .member(RecordId::DeclarationKind, kind.as_str())?,
             name,
             owner,
         ))
@@ -246,12 +248,12 @@ impl<'py> Walk<'py> {
     }
 
     fn enum_metadata(&self, declaration: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-        let member_class: Bound<'py, PyAny> = self.classes.model("EnumMemberMetadata")?;
+        let member_class: Bound<'py, PyAny> = self.classes.model(RecordId::EnumMemberMetadata)?;
         let members: Vec<Bound<'py, PyAny>> = items(declaration, "members")?
             .iter()
             .map(|member| member_class.call1((member.getattr("name")?,)))
             .collect::<PyResult<_>>()?;
-        self.classes.model("EnumMetadata")?.call1((
+        self.classes.model(RecordId::EnumMetadata)?.call1((
             PyTuple::new(declaration.py(), members)?,
             declaration.getattr("scalar_type")?,
         ))
@@ -271,7 +273,7 @@ impl<'py> Walk<'py> {
         let render_as: Option<Bound<'py, PyAny>> = optional_item(declaration, "render_as")?
             .map(|rendering| rendering.getattr("value"))
             .transpose()?;
-        self.classes.model("ConstantMetadata")?.call1((
+        self.classes.model(RecordId::ConstantMetadata)?.call1((
             declaration
                 .getattr("logical_type")?
                 .getattr("display_name")?,
@@ -295,14 +297,15 @@ impl<'py> Walk<'py> {
                 model_name.clone(),
                 (&path, ResourceRoot::Kind),
             )?;
-            let owner: Bound<'py, PyAny> = self.classes.model("ResourceIdentity")?.call1((
-                self.classes
-                    .member("ResourceKind", ResourceKind::Model.as_str())?,
-                model_name,
-            ))?;
+            let owner: Bound<'py, PyAny> =
+                self.classes.model(RecordId::ResourceIdentity)?.call1((
+                    self.classes
+                        .member(RecordId::ResourceKind, ResourceKind::Model.as_str())?,
+                    model_name,
+                ))?;
             let private: Bound<'py, PyAny> = self
                 .classes
-                .member("ScopeKind", ScopeKind::Private.as_str())?;
+                .member(RecordId::ScopeKind, ScopeKind::Private.as_str())?;
             for declaration in items(&model_file, "enum_declarations")? {
                 let identity: Bound<'py, PyAny> = self.declaration_identity(
                     DeclarationKind::Enum,
@@ -501,7 +504,7 @@ impl<'py> Walk<'py> {
             Some(file) => file.getattr("scope_kind")?,
             None => self
                 .classes
-                .member("ScopeKind", ScopeKind::Global.as_str())?,
+                .member(RecordId::ScopeKind, ScopeKind::Global.as_str())?,
         };
         let dependencies: Vec<Bound<'py, PyAny>> = items(export, "dependencies")?;
         let placement: Placement = Placement {
@@ -539,7 +542,7 @@ impl<'py> Walk<'py> {
             .try_iter()?
             .collect::<PyResult<_>>()?;
         let raw_source: String = field(loaded, "raw_source")?;
-        let metadata: Bound<'py, PyAny> = self.classes.model("MacroMetadata")?.call1((
+        let metadata: Bound<'py, PyAny> = self.classes.model(RecordId::MacroMetadata)?.call1((
             PyTuple::new(py, parameters)?,
             loaded.getattr("dependencies")?,
             macro_source_digest(&raw_source),
@@ -577,11 +580,12 @@ impl<'py> Walk<'py> {
         for export in static_macros.try_iter()? {
             let export: Bound<'py, PyAny> = export?;
             let key: String = normalized(py, &export.getattr("relative_path")?)?;
-            let metadata: Bound<'py, PyAny> = self.classes.model("MacroMetadata")?.call1((
-                export.getattr("parameters")?,
-                export.getattr("dependencies")?,
-                export.getattr("source_digest")?,
-            ))?;
+            let metadata: Bound<'py, PyAny> =
+                self.classes.model(RecordId::MacroMetadata)?.call1((
+                    export.getattr("parameters")?,
+                    export.getattr("dependencies")?,
+                    export.getattr("source_digest")?,
+                ))?;
             let (values, placement) = self.macro_values(
                 macro_files.get(&key),
                 (&export, field(&export, "line")?, metadata),
@@ -603,9 +607,7 @@ fn normalized(py: Python<'_>, path: &Bound<'_, PyAny>) -> PyResult<String> {
 
 fn unindexable(py: Python<'_>) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
-        py.import(EXCEPTIONS_MODULE)?
-            .getattr("UnindexableScopeError")?
-            .call1((UNINDEXABLE_SCOPE_MESSAGE,))?,
+        registry::error(py, ErrorId::UnindexableScope)?.call1((UNINDEXABLE_SCOPE_MESSAGE,))?,
     ))
 }
 
@@ -631,15 +633,17 @@ fn resource_root<'py>(
             Some((_, path)) => (path, "resource", kind),
             None => {
                 return Err(PyKeyError::new_err(
-                    classes.member("ResourceKind", kind.as_str())?.unbind(),
+                    classes
+                        .member(RecordId::ResourceKind, kind.as_str())?
+                        .unbind(),
                 ));
             }
         },
     };
-    classes.model("OwnershipRoot")?.call1((
+    classes.model(RecordId::OwnershipRoot)?.call1((
         path,
-        classes.member("OwnershipRootKind", root_kind)?,
-        classes.member("ResourceKind", resource_kind.as_str())?,
+        classes.member(RecordId::OwnershipRootKind, root_kind)?,
+        classes.member(RecordId::ResourceKind, resource_kind.as_str())?,
     ))
 }
 
@@ -653,7 +657,7 @@ fn materialise<'py>(walk: Walk<'py>, native: ScopeIndex) -> PyResult<NativeScope
         .zip(&walk.resource_roots)
         .zip(&walk.resource_identities)
     {
-        resources.push(classes.model("ResourceRecord")?.call1((
+        resources.push(classes.model(RecordId::ResourceRecord)?.call1((
             identity,
             record.path.as_str(),
             resource_root(classes, *kind, *root)?,
@@ -676,13 +680,13 @@ fn materialise<'py>(walk: Walk<'py>, native: ScopeIndex) -> PyResult<NativeScope
         ];
         declarations.push(
             classes
-                .model("DeclarationRecord")?
+                .model(RecordId::DeclarationRecord)?
                 .call1(PyTuple::new(py, arguments)?)?,
         );
     }
-    let usage_class: Bound<'py, PyAny> = classes.model("UsageRecord")?;
+    let usage_class: Bound<'py, PyAny> = classes.model(RecordId::UsageRecord)?;
     let dependency_kind: Bound<'py, PyAny> =
-        classes.member("UsageKind", "declaration_dependency")?;
+        classes.member(RecordId::UsageKind, "declaration_dependency")?;
     let mut usages: Vec<Bound<'py, PyAny>> = Vec::with_capacity(native.usages.len());
     for usage in &native.usages {
         usages.push(usage_class.call1((
@@ -691,7 +695,7 @@ fn materialise<'py>(walk: Walk<'py>, native: ScopeIndex) -> PyResult<NativeScope
             &dependency_kind,
         ))?);
     }
-    let diagnostic_class: Bound<'py, PyAny> = classes.model("ScopeDiagnostic")?;
+    let diagnostic_class: Bound<'py, PyAny> = classes.model(RecordId::ScopeDiagnostic)?;
     let mut diagnostics: Vec<Bound<'py, PyAny>> = Vec::with_capacity(native.diagnostics.len());
     for diagnostic in &native.diagnostics {
         let keywords: Bound<'py, PyDict> = PyDict::new(py);
@@ -714,7 +718,7 @@ fn materialise<'py>(walk: Walk<'py>, native: ScopeIndex) -> PyResult<NativeScope
         )?;
         diagnostics.push(diagnostic_class.call(
             (
-                classes.member("ScopeDiagnosticCode", diagnostic.code.as_str())?,
+                classes.member(RecordId::ScopeDiagnosticCode, diagnostic.code.as_str())?,
                 diagnostic.message.as_str(),
             ),
             Some(&keywords),
@@ -727,9 +731,11 @@ fn materialise<'py>(walk: Walk<'py>, native: ScopeIndex) -> PyResult<NativeScope
             keywords.set_item("path", *path)?;
             keywords.set_item(
                 "resource_kind",
-                classes.member("ResourceKind", kind.as_str())?,
+                classes.member(RecordId::ResourceKind, kind.as_str())?,
             )?;
-            classes.model("OwnershipRoot")?.call((), Some(&keywords))
+            classes
+                .model(RecordId::OwnershipRoot)?
+                .call((), Some(&keywords))
         })
         .collect::<PyResult<_>>()?;
     let completeness: Bound<'py, PyAny> = {
@@ -743,14 +749,14 @@ fn materialise<'py>(walk: Walk<'py>, native: ScopeIndex) -> PyResult<NativeScope
             keywords.set_item(section, false)?;
         }
         classes
-            .model("ScopeCompleteness")?
+            .model(RecordId::ScopeCompleteness)?
             .call((), Some(&keywords))?
     };
     let ordered =
         |records: &[Bound<'py, PyAny>], order: &[usize]| -> PyResult<Bound<'py, PyTuple>> {
             PyTuple::new(py, order.iter().map(|position| records[*position].clone()))
         };
-    let index: Bound<'py, PyAny> = classes.model("ScopeIndex")?.call1((
+    let index: Bound<'py, PyAny> = classes.model(RecordId::ScopeIndex)?.call1((
         PyTuple::new(py, roots)?,
         ordered(&resources, &native.resource_order)?,
         ordered(&declarations, &native.declaration_order)?,
@@ -841,8 +847,8 @@ impl NativeScopeIndex {
         let mut records: Vec<Bound<'_, PyAny>> = Vec::with_capacity(grants.len());
         for grant in &grants {
             let through: Bound<'_, PyAny> = match &grant.through {
-                GrantThrough::Model(name) => classes.model("ResourceIdentity")?.call1((
-                    classes.member("ResourceKind", ResourceKind::Model.as_str())?,
+                GrantThrough::Model(name) => classes.model(RecordId::ResourceIdentity)?.call1((
+                    classes.member(RecordId::ResourceKind, ResourceKind::Model.as_str())?,
                     name.as_str(),
                 ))?,
                 GrantThrough::Declaration(position) => {
@@ -850,16 +856,16 @@ impl NativeScopeIndex {
                 }
             };
             records.push(
-                classes.model("GrantRecord")?.call1((
-                    classes.model("ResourceIdentity")?.call1((
-                        classes.member("ResourceKind", grant.resource.kind.as_str())?,
+                classes.model(RecordId::GrantRecord)?.call1((
+                    classes.model(RecordId::ResourceIdentity)?.call1((
+                        classes.member(RecordId::ResourceKind, grant.resource.kind.as_str())?,
                         grant.resource.name.as_str(),
                     ))?,
                     self.declarations[grant.declaration]
                         .bind(py)
                         .getattr("identity")?,
                     through,
-                    classes.member("GrantKind", grant.kind.as_str())?,
+                    classes.member(RecordId::GrantKind, grant.kind.as_str())?,
                 ))?,
             );
         }

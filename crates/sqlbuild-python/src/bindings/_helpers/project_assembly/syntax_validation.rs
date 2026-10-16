@@ -11,12 +11,9 @@ use sqlbuild_analysis::assembly::project::main::sql_analysis_opt_out_help::sql_a
 use sqlbuild_analysis::assembly::project::models::{SyntaxCheck, SyntaxMode};
 
 use crate::bindings::_helpers::project_assembly::resources::syntax_error_message;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
-const SQL_HOOK_ENTRY: &str = "SqlHookEntry";
-const PYTHON_HOOK_ENTRY: &str = "PythonHookEntry";
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
-const COMPILE_INPUT_ERROR: &str = "CompileInputError";
 const GENERIC_DIALECT: &str = "generic";
 
 /// `(placeholder defaults, dialect)` a statement parses with.
@@ -44,10 +41,8 @@ fn syntax_error(py: Python<'_>, message: String) -> PyErr {
     let raised = || -> PyResult<PyErr> {
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
         keywords.set_item("help", sql_analysis_opt_out_help(true))?;
-        let error: Bound<'_, PyAny> = py
-            .import(COMPILE_ERRORS_MODULE)?
-            .getattr(COMPILE_INPUT_ERROR)?
-            .call((message,), Some(&keywords))?;
+        let error: Bound<'_, PyAny> =
+            registry::error(py, ErrorId::CompileInput)?.call((message,), Some(&keywords))?;
         Ok(PyErr::from_value(error))
     };
     raised().unwrap_or_else(|error| error)
@@ -158,7 +153,6 @@ fn validate_hook_sql_syntax(
     let (model_name, file_path) = model;
     let (placeholders, dialect) = parsing;
     let py: Python<'_> = value.py();
-    let models: Bound<'_, PyModule> = py.import(DISCOVERY_MODELS_MODULE)?;
     let dialect: String = dialect
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| GENERIC_DIALECT.to_owned());
@@ -167,8 +161,8 @@ fn validate_hook_sql_syntax(
         model_name: &model_name,
         placeholders: &placeholders,
         dialect: &dialect,
-        sql_hook_entry: models.getattr(SQL_HOOK_ENTRY)?,
-        python_hook_entry: models.getattr(PYTHON_HOOK_ENTRY)?,
+        sql_hook_entry: registry::class(py, RecordId::SqlHookEntry)?,
+        python_hook_entry: registry::class(py, RecordId::PythonHookEntry)?,
     };
     check_hook_value(
         &context,
@@ -234,10 +228,7 @@ pub(crate) fn hook_statements(
 /// The hook SQL strings a hook value holds, in validation order.
 #[pyfunction]
 pub(crate) fn hook_sql_statements(value: Bound<'_, PyAny>) -> PyResult<Vec<String>> {
-    let sql_hook_entry: Bound<'_, PyAny> = value
-        .py()
-        .import(DISCOVERY_MODELS_MODULE)?
-        .getattr(SQL_HOOK_ENTRY)?;
+    let sql_hook_entry: Bound<'_, PyAny> = registry::class(value.py(), RecordId::SqlHookEntry)?;
     hook_statements(&value, &sql_hook_entry)
 }
 

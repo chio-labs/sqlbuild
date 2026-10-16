@@ -21,20 +21,14 @@ use sqlbuild_core::scenario_command::models::{
 };
 
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
 use crate::bindings::_helpers::discovery::guidance::sql_analysis_guidance;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-pub(crate) const NATIVE_MODULE: &str = "sqlbuild._native";
-const ERRORS_MODULE: &str = "sqlbuild._native";
-const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const SCENARIO_CONFIG_MODULE: &str = "sqlbuild._native";
-const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
-const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
-const SCENARIO_MODELS: &str = "sqlbuild.executor.scenario.models";
 const METADATA_MODULE: &str = "importlib.metadata";
 const DISTRIBUTION_NAME: &str = "sqlbuild";
 const UNKNOWN_VERSION: &str = "unknown";
@@ -53,7 +47,7 @@ pub(crate) fn cli_user_error(py: Python<'_>, error: ScenarioCommandError) -> PyE
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", error.code)?;
         options.set_item("help", error.help)?;
-        imported(py, ERRORS_MODULE, "CliUserError")?.call((error.message,), Some(&options))
+        registry::error(py, ErrorId::CliUser)?.call((error.message,), Some(&options))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),
@@ -120,13 +114,13 @@ pub(crate) fn discover_project<'py>(
         _ => py.import("pathlib")?.getattr("Path")?.call_method0("cwd")?,
     };
     let discovered: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "discover_project_inputs")?,
+        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
         &[("project_dir", project_dir.clone())],
     )?;
     let selectors: Bound<'py, PyAny> = request.getattr("selectors")?;
     let exclude: Bound<'py, PyAny> = request.getattr("exclude")?;
     call_with(
-        &imported(py, REJECT_UNIT_TESTS_MODULE, "reject_unit_test_selectors")?,
+        &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
         &[
             ("select", selectors.clone()),
             ("exclude", exclude.clone()),
@@ -192,7 +186,7 @@ pub(crate) fn require_sql_analysis(
 pub(crate) fn project_adapter_name(project: &ScenarioProject<'_>) -> PyResult<String> {
     let py: Python<'_> = project.discovered.py();
     call_with(
-        &imported(py, ADAPTER_NAME_MODULE, "resolve_effective_adapter_name")?,
+        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
             (
                 "project_config",
@@ -227,7 +221,7 @@ pub(crate) fn project_connection_config<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project.discovered.py();
     call_with(
-        &imported(py, NATIVE_MODULE, "resolve_project_connection_config")?,
+        &registry::native(py, NativeAttr::ResolveProjectConnectionConfig)?,
         &[
             ("discovered_inputs", project.discovered.clone()),
             ("project_dir", project.project_dir.clone()),
@@ -252,7 +246,7 @@ pub(crate) fn write_headers<'py>(
     write(stream, &render_namespace_header(&project.namespace))?;
     let selectors: Vec<String> = project.selectors.extract()?;
     let planning: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "PlanningProgressReporter")?,
+        &registry::native(py, NativeAttr::PlanningProgressReporter)?,
         &[
             ("stream", stream.clone()),
             ("use_color", boolean(py, style.use_color)),
@@ -261,7 +255,7 @@ pub(crate) fn write_headers<'py>(
     write(stream, "\n")?;
     let target: Option<String> = (!selectors.is_empty()).then(|| selectors.join(" "));
     call_with(
-        &imported(py, NATIVE_MODULE, "write_execution_header")?,
+        &registry::native(py, NativeAttr::WriteExecutionHeader)?,
         &[
             ("stream", stream.clone()),
             ("command", text(py, command)),
@@ -292,11 +286,7 @@ pub(crate) fn compile<'py>(
     } = inputs;
     let py: Python<'py> = project.discovered.py();
     let resolver: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            EXTERNAL_REFS_MODULE,
-            "resolve_external_sql_reference_resolver",
-        )?,
+        &registry::native(py, NativeAttr::ResolveExternalSqlReferenceResolver)?,
         &[
             ("project_dir", project.project_dir.clone()),
             ("discovered_inputs", project.discovered.clone()),
@@ -305,11 +295,11 @@ pub(crate) fn compile<'py>(
     let mut pairs: Vec<(&str, Bound<'py, PyAny>)> = options.to_vec();
     pairs.push(("external_sql_reference_resolver", resolver));
     let options: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "CompilePipelineOptions")?,
+        &registry::class(py, RecordId::CompilePipelineOptions)?,
         &pairs,
     )?;
     let lifecycle: Bound<'py, PyAny> = call_with(
-        &imported(py, LIFECYCLE_MODULE, "OperationLifecycle")?,
+        &host::entry(py, ExecutorHost::OperationLifecycle)?,
         &[
             ("operation_kind", text(py, "project")),
             ("operation_name", text(py, "project_compile")),
@@ -317,7 +307,7 @@ pub(crate) fn compile<'py>(
     )?;
     within(&lifecycle, |_| {
         call_with(
-            &imported(py, NATIVE_MODULE, "run_compile_only_pipeline")?,
+            &registry::native(py, NativeAttr::RunCompileOnlyPipeline)?,
             &[
                 ("discovered_inputs", project.discovered.clone()),
                 ("adapter", adapter.clone()),
@@ -373,11 +363,7 @@ pub(crate) fn capture_limits<'py>(
     let py: Python<'py> = request.py();
     let inputs: Bound<'py, PyAny> = request.getattr("limit_inputs")?;
     let configured: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            SCENARIO_CONFIG_MODULE,
-            "resolve_effective_scenario_config",
-        )?,
+        &registry::native(py, NativeAttr::ResolveEffectiveScenarioConfig)?,
         &[
             (
                 "project_config",
@@ -403,7 +389,7 @@ pub(crate) fn capture_limits<'py>(
         },
     );
     call_with(
-        &imported(py, SCENARIO_MODELS, "ScenarioSnapshotCaptureLimits")?,
+        &host::entry(py, ExecutorHost::ScenarioSnapshotCaptureLimits)?,
         &[
             (
                 "max_rows_per_relation",
@@ -443,7 +429,7 @@ pub(crate) fn capture_settings<'py>(
             i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX)
         });
     call_with(
-        &imported(py, SCENARIO_MODELS, "ScenarioCaptureSettings")?,
+        &host::entry(py, ExecutorHost::ScenarioCaptureSettings)?,
         &[
             ("captured_at", text(py, &format_captured_at(epoch_seconds))),
             ("capture_adapter", text(py, capture_adapter)),

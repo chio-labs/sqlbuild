@@ -9,8 +9,9 @@ use sqlbuild_pysource::string_literals::main::string_literal_locations::string_l
 use sqlbuild_pysource::string_literals::models::StringQuery;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
-const REFACTORING_MODELS_MODULE: &str = "sqlbuild._native";
 /// The discovered Python declarations whose files a refactoring searches.
 const PYTHON_DECLARATIONS: [&str; 8] = [
     "loader_functions",
@@ -68,9 +69,7 @@ fn find_python_string_locations<'py>(
         Some(context) => context.extract()?,
         None => None,
     };
-    let location_type: Bound<'py, PyAny> = py
-        .import(REFACTORING_MODELS_MODULE)?
-        .getattr("ManualLocation")?;
+    let location_type: Bound<'py, PyAny> = registry::class(py, RecordId::ManualLocation)?;
     let version = py.version_info();
     let mut locations: Vec<Bound<'py, PyAny>> = Vec::new();
     for (_, relative_path) in python_paths(&request.get("discovered")?)? {

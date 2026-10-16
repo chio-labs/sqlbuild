@@ -9,6 +9,10 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::declaration_values::resolved_declaration_context;
 use crate::bindings::_helpers::render::macro_call_rows::span_row;
 use crate::bindings::_helpers::render::macro_expansion::{
@@ -16,23 +20,11 @@ use crate::bindings::_helpers::render::macro_expansion::{
 };
 use crate::bindings::_helpers::sqltext::sql_references::extract_references;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
-const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
-const FRONTIER_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
-const SCOPES_MODELS_MODULE: &str = "sqlbuild._native";
-const SCOPES_TYPES_MODULE: &str = "sqlbuild._native";
-const REF_MODELS_MODULE: &str = "sqlbuild.python_nodes.models";
-const REF_TYPES_MODULE: &str = "sqlbuild.python_nodes.types";
 const TYPED_REFERENCE_FUNCTIONS: [(&str, &str); 3] = [
     ("model", "__ref"),
     ("source", "__source"),
     ("seed", "__seed"),
 ];
-const USER_MACROS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.user_macros";
-const ACTIVE_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.main.active_macro_bridge";
 /// The call prefix of every reference function, in `SqlReferenceKind` order.
 const GENERATED_REFERENCE_MARKERS: [&str; 6] = [
     "__ref(",
@@ -42,9 +34,6 @@ const GENERATED_REFERENCE_MARKERS: [&str; 6] = [
     "__udf(",
     "__table_fn(",
 ];
-const DIAGNOSTICS_MODULE: &str = "sqlbuild._native";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
-const SQL_ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
 const BUILTINS_MODULE: &str = "builtins";
 const MACRO_TOKEN: &str = "@";
 const GENERATED_ALLOWED: &str = "macro-generated references";
@@ -64,8 +53,7 @@ struct ExpansionRequest<'py> {
 }
 
 fn generated_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
-    let native: Bound<'_, PyAny> = py.import(NATIVE_MODULE)?.into_any();
-    let help: Bound<'_, PyAny> = native.getattr("explicit_references_help")?.call(
+    let help: Bound<'_, PyAny> = registry::native(py, NativeAttr::ExplicitReferencesHelp)?.call(
         (),
         Some(&keywords(
             py,
@@ -78,23 +66,23 @@ fn generated_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
         &[
             (
                 "compiler_diagnostic",
-                imported(py, COMPILE_MODELS_MODULE, "CompilerDiagnostic")?,
+                registry::class(py, RecordId::CompilerDiagnostic)?,
             ),
             (
                 "report_diagnostic",
-                imported(py, DIAGNOSTICS_MODULE, "report_compile_diagnostic")?,
+                registry::native(py, NativeAttr::ReportCompileDiagnostic)?,
             ),
             (
                 "source_location",
-                imported(py, CONTRACT_MODELS_MODULE, "SourceLocation")?,
+                registry::class(py, RecordId::SourceLocation)?,
             ),
             (
                 "resource_identity",
-                imported(py, SCOPES_MODELS_MODULE, "ResourceIdentity")?,
+                registry::class(py, RecordId::ResourceIdentity)?,
             ),
             (
                 "generic_syntax",
-                imported(py, SQL_ANALYSIS_MODELS_MODULE, "SqlLexicalSyntax")?
+                registry::class(py, RecordId::SqlLexicalSyntax)?
                     .call0()?
                     .getattr("native_mapping")?,
             ),
@@ -105,9 +93,8 @@ fn generated_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
 }
 
 fn built_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
-    let native: Bound<'_, PyAny> = py.import(NATIVE_MODULE)?.into_any();
-    let declaration_kind: Bound<'_, PyAny> = imported(py, SCOPES_TYPES_MODULE, "DeclarationKind")?;
-    let ref_kind: Bound<'_, PyAny> = imported(py, REF_TYPES_MODULE, "SqlResourceRefKind")?;
+    let declaration_kind: Bound<'_, PyAny> = registry::class(py, RecordId::DeclarationKind)?;
+    let ref_kind: Bound<'_, PyAny> = host::entry(py, UserCodeHost::SqlResourceRefKind)?;
     let ref_kinds: Bound<'_, PyDict> = PyDict::new(py);
     let ref_functions: Bound<'_, PyDict> = PyDict::new(py);
     for (kind, function) in TYPED_REFERENCE_FUNCTIONS {
@@ -117,61 +104,61 @@ fn built_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     let store_tokens: Bound<'_, PyDict> = keywords(
         py,
         &[
-            ("macro_token", native.getattr("macro_store_token")?),
-            ("context_token", native.getattr("context_store_token")?),
+            (
+                "macro_token",
+                registry::native(py, NativeAttr::MacroStoreToken)?,
+            ),
+            (
+                "context_token",
+                registry::native(py, NativeAttr::ContextStoreToken)?,
+            ),
         ],
     )?;
     keywords(
         py,
         &[
-            (
-                "compile_error",
-                imported(py, COMPILE_EXCEPTIONS_MODULE, "CompileInputError")?,
-            ),
+            ("compile_error", registry::error(py, ErrorId::CompileInput)?),
             (
                 "macro_argument_error",
-                imported(py, COMPILE_EXCEPTIONS_MODULE, "MacroArgumentError")?,
+                registry::error(py, ErrorId::MacroArgument)?,
             ),
             (
                 "mismatch_error",
-                imported(py, FRONTIER_EXCEPTIONS_MODULE, "NativeStageMismatchError")?,
+                registry::error(py, ErrorId::NativeStageMismatch)?,
             ),
             (
                 "declaration_identity",
-                imported(py, SCOPES_MODELS_MODULE, "DeclarationIdentity")?,
+                registry::class(py, RecordId::DeclarationIdentity)?,
             ),
             ("macro_kind", declaration_kind.getattr("MACRO")?),
             ("declaration_kind", declaration_kind),
-            (
-                "usage_record",
-                imported(py, SCOPES_MODELS_MODULE, "UsageRecord")?,
-            ),
+            ("usage_record", registry::class(py, RecordId::UsageRecord)?),
             (
                 "runtime_usage",
-                imported(py, SCOPES_TYPES_MODULE, "UsageKind")?.getattr("RUNTIME")?,
+                registry::class(py, RecordId::UsageKind)?.getattr("RUNTIME")?,
             ),
             (
                 "resource_identity",
-                imported(py, SCOPES_MODELS_MODULE, "ResourceIdentity")?,
+                registry::class(py, RecordId::ResourceIdentity)?,
             ),
             (
                 "model_kind",
-                imported(py, SCOPES_TYPES_MODULE, "ResourceKind")?.getattr("MODEL")?,
+                registry::class(py, RecordId::ResourceKind)?.getattr("MODEL")?,
             ),
             (
                 "resource_ref",
-                imported(py, REF_MODELS_MODULE, "SqlResourceRef")?,
+                host::entry(py, UserCodeHost::SqlResourceRef)?,
             ),
             ("ref_kinds", ref_kinds.into_any()),
             ("ref_functions", ref_functions.into_any()),
             ("store_tokens", store_tokens.into_any()),
             (
                 "relation_renderer",
-                imported(py, REF_MODELS_MODULE, "RELATION_RENDERER")?,
+                host::entry(py, UserCodeHost::RelationRenderer)?,
             ),
             (
                 "invocation_context",
-                imported(py, USER_MACROS_MODULE, "macro_invocation_context")?,
+                host::entry(py, UserCodeHost::MacroInvocationContext)?,
             ),
             ("generated", generated_classes(py)?.into_any()),
             ("int_type", imported(py, BUILTINS_MODULE, "int")?),
@@ -200,10 +187,7 @@ fn result_model<'py>(
     py: Python<'py>,
     pairs: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "MacroExpansionResult")?,
-        pairs,
-    )
+    call_with(&registry::class(py, RecordId::MacroExpansionResult)?, pairs)
 }
 
 fn expansion_result<'py>(request: ExpansionRequest<'py>) -> PyResult<Bound<'py, PyAny>> {
@@ -238,10 +222,9 @@ fn expansion_result<'py>(request: ExpansionRequest<'py>) -> PyResult<Bound<'py, 
         macro_expansion_classes(py)?.unbind(),
     )?;
     let expansion: Bound<'py, NativeMacroExpansion> = Bound::new(py, expansion)?;
-    let bridge: Bound<'py, PyAny> =
-        imported(py, ACTIVE_BRIDGE_MODULE, "active_macro_bridge")?.call0()?;
+    let bridge: Bound<'py, PyAny> = host::entry(py, UserCodeHost::ActiveMacroBridge)?.call0()?;
     let output: ExpansionOutput = expanded(&expansion, request.sql.to_str()?, &bridge)?;
-    let span_class: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS_MODULE, "ExpansionSpan")?;
+    let span_class: Bound<'py, PyAny> = registry::class(py, RecordId::ExpansionSpan)?;
     let mut spans: Vec<Bound<'py, PyAny>> = Vec::with_capacity(output.spans.len());
     for span in output.spans {
         let (source_start, source_end, output_start, output_end) = span_row(span);
@@ -263,8 +246,7 @@ fn expansion_result<'py>(request: ExpansionRequest<'py>) -> PyResult<Bound<'py, 
             .iter()
             .map(|(kind, name)| format!("{}(\"{name}\")", typed_reference_function(kind)))
             .collect();
-        let syntax: Bound<'py, PyAny> =
-            imported(py, SQL_ANALYSIS_MODELS_MODULE, "SqlLexicalSyntax")?.call0()?;
+        let syntax: Bound<'py, PyAny> = registry::class(py, RecordId::SqlLexicalSyntax)?.call0()?;
         extract_references(&calls.join(" "), &syntax)?.into_any()
     };
     result_model(

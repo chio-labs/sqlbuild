@@ -10,10 +10,12 @@ use pyo3::types::{
 };
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::constants::{
     FROZEN_INSTANCE_ERROR, ORDERED_RECORDS, RECORD_FINISHERS, RECORD_SPEC_ATTRIBUTE, RECORDS,
 };
 use crate::bindings::_helpers::records::models::{FieldDefault, NativeRecord, RecordSpec};
+use crate::bindings::_helpers::records::registry;
 
 /// Every registered record spec, in registration order.
 pub(crate) fn all_specs() -> impl Iterator<Item = &'static RecordSpec> {
@@ -113,7 +115,10 @@ fn default_value<'py>(
         FieldDefault::EmptyDict => Ok(PyDict::new(py).into_any()),
         FieldDefault::EmptyFrozenset => Ok(PyFrozenSet::empty(py)?.into_any()),
         FieldDefault::Member(module, class, member) => imported(py, module, class)?.getattr(member),
-        FieldDefault::Call(module, name) => imported(py, module, name)?.call0(),
+        FieldDefault::HostMember(class, member) => host::entry(py, class)?.getattr(member),
+        FieldDefault::NativeMember(class, member) => registry::class(py, class)?.getattr(member),
+        FieldDefault::NativeCall(class) => registry::class(py, class)?.call0(),
+        FieldDefault::NativeClassCall(class) => registry::native(py, class)?.call0(),
         FieldDefault::Factory(factory) => factory(py),
         FieldDefault::CallText(module, name, text) => imported(py, module, name)?.call1((text,)),
     }

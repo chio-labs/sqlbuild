@@ -22,21 +22,18 @@ use crate::bindings::_helpers::command_runtime::runtime_errors::{
     expected_resolution_error, raised,
 };
 use crate::bindings::_helpers::command_runtime::warehouse_scope::current_command_warehouse_scope;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::discovery::configuration::discover_project_configuration;
 use crate::bindings::_helpers::model_config::template_data::expanded_template_data;
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 /// The `WarehouseGroup` whose warehouse is a target's `warehouses.build`; any other reads `query`.
 const BUILD_GROUP: &str = "build";
 const QUERY_GROUP: &str = "query";
 
-const ENTRY_MODELS: &str = "sqlbuild._native";
-const TARGET_NAME_MODULE: &str = "sqlbuild._native";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const SESSION_WAREHOUSE_MODULE: &str = "sqlbuild.adapter.discovery.main._session_warehouse_support";
-const EFFECTIVE_RUNTIME_MODULE: &str = "sqlbuild._native";
 const RESOLVE_OPTIONS: (&[&str], &[&str]) = (
     &[
         "discovered_inputs",
@@ -105,7 +102,7 @@ fn resolved_warehouse<'py>(
     source: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(py, ENTRY_MODELS, "ResolvedWarehouse")?,
+        &registry::class(py, RecordId::ResolvedWarehouse)?,
         &[
             (
                 "warehouse",
@@ -140,7 +137,7 @@ pub(crate) fn find_authored<'py>(
     let project_config: Bound<'py, PyAny> = inputs.discovered_inputs.getattr("project_config")?;
     let local_config: Bound<'py, PyAny> = inputs.discovered_inputs.getattr("local_config")?;
     let target_name: Bound<'py, PyAny> = call_with(
-        &imported(py, TARGET_NAME_MODULE, "resolve_target_name")?,
+        &registry::native(py, NativeAttr::ResolveTargetName)?,
         &[
             ("project_config", project_config.clone()),
             ("local_config", local_config.clone()),
@@ -177,11 +174,7 @@ fn expand_authored(
 ) -> PyResult<String> {
     let py: Python<'_> = found.group.py();
     let runtime: Bound<'_, PyAny> = call_with(
-        &imported(
-            py,
-            EFFECTIVE_RUNTIME_MODULE,
-            "build_effective_runtime_config",
-        )?,
+        &registry::native(py, NativeAttr::BuildEffectiveRuntimeConfig)?,
         &[
             ("discovered_inputs", inputs.discovered_inputs.clone()),
             ("selected_target", inputs.selected_target.clone()),
@@ -221,11 +214,7 @@ fn session_warehouse_support(
     project_dir: &Bound<'_, PyAny>,
 ) -> PyResult<bool> {
     call_with(
-        &imported(
-            py,
-            SESSION_WAREHOUSE_MODULE,
-            "adapter_supports_session_warehouse",
-        )?,
+        &host::entry(py, AdapterHost::AdapterSupportsSessionWarehouse)?,
         &[
             ("adapter_name", adapter_name.clone()),
             ("project_dir", project_dir.clone()),
@@ -296,7 +285,7 @@ fn validate_cli_warehouse(
     checked_cli_warehouse(py, &cli_warehouse)?;
     let discovered: Bound<'_, PyAny> = discover_project_configuration(py, &project_dir)?;
     let adapter_name: Bound<'_, PyAny> = call_with(
-        &imported(py, ADAPTER_NAME_MODULE, "resolve_effective_adapter_name")?,
+        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
             ("project_config", discovered.getattr("project_config")?),
             ("local_config", discovered.getattr("local_config")?),

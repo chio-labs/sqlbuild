@@ -12,15 +12,9 @@ use crate::bindings::_helpers::compile_command::target_writer::{
 use crate::bindings::_helpers::compile_driver::python_calls::{Status, call_with, imported};
 use crate::bindings::_helpers::dag_artifact::artifact::build_dag_json;
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const OUTPUT_MODELS_MODULE: &str = "sqlbuild._native";
-const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
-const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const EMPTY_DAG_PATH: &str = "";
 const TARGET_DIRECTORY: &str = "target";
 const DEFAULT_DAG_FILE: &str = "sqlbuild_dag.json";
@@ -62,14 +56,14 @@ pub(crate) fn manifest_payload<'py>(
     let project_config: Bound<'py, PyAny> = discovered.getattr("project_config")?;
     let graph: Bound<'py, PyAny> = analysis.getattr("graph")?;
     let adapter_type: Bound<'py, PyAny> = call_with(
-        &imported(py, ADAPTER_NAME_MODULE, "resolve_effective_adapter_name")?,
+        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
             ("project_config", project_config.clone()),
             ("local_config", discovered.getattr("local_config")?),
         ],
     )?;
     let payload: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "build_manifest")?,
+        &registry::native(py, NativeAttr::BuildManifest)?,
         &[
             ("project", graph.getattr("project")?),
             ("plan_output", py.None().into_bound(py)),
@@ -166,31 +160,28 @@ pub(crate) fn sql_test_planning_diagnostics<'py>(
         Ok(diagnostics) => return Ok(diagnostics),
         Err(error) => error,
     };
-    let compile_input_error: Bound<'py, PyAny> =
-        imported(py, COMPILE_EXCEPTIONS_MODULE, "CompileInputError")?;
-    let planner_input_error: Bound<'py, PyAny> =
-        imported(py, PLANNER_EXCEPTIONS_MODULE, "PlannerInputError")?;
+    let compile_input_error: Bound<'py, PyAny> = registry::error(py, ErrorId::CompileInput)?;
+    let planner_input_error: Bound<'py, PyAny> = registry::error(py, ErrorId::PlannerInput)?;
     let value: Bound<'py, PyAny> = error.value(py).clone().into_any();
     if !(value.is_instance(&compile_input_error)? || value.is_instance(&planner_input_error)?) {
         return Err(error);
     }
-    let reference_error: Bound<'py, PyAny> =
-        imported(py, COMPILE_EXCEPTIONS_MODULE, "SqlTestReferenceError")?;
+    let reference_error: Bound<'py, PyAny> = registry::error(py, ErrorId::SqlTestReference)?;
     let location: Bound<'py, PyAny> = if value.is_instance(&reference_error)? {
         value.getattr("location")?
     } else {
         py.None().into_bound(py)
     };
     let diagnostic: Bound<'py, PyAny> = call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "CompilerDiagnostic")?,
+        &registry::class(py, RecordId::CompilerDiagnostic)?,
         &[
             (
                 "phase",
-                imported(py, NATIVE_RECORDS_MODULE, "DiagnosticPhase")?.getattr("TEST")?,
+                registry::class(py, RecordId::DiagnosticPhase)?.getattr("TEST")?,
             ),
             (
                 "severity",
-                imported(py, NATIVE_RECORDS_MODULE, "DiagnosticSeverity")?.getattr("ERROR")?,
+                registry::class(py, RecordId::DiagnosticSeverity)?.getattr("ERROR")?,
             ),
             ("code", value.getattr("code")?),
             ("message", value.str()?.into_any()),
@@ -214,7 +205,7 @@ pub(crate) fn write_artifacts<'py>(
     let written: Bound<'py, PyAny> = if skip_write {
         let zero: Bound<'py, PyAny> = 0_i64.into_pyobject(py)?.into_any();
         call_with(
-            &imported(py, OUTPUT_MODELS_MODULE, "WrittenTarget")?,
+            &registry::class(py, RecordId::WrittenTarget)?,
             &[
                 ("model_count", zero.clone()),
                 ("seed_count", zero.clone()),

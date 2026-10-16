@@ -7,13 +7,14 @@ use pyo3::prelude::{
 use pyo3::types::{PyBool, PyDict, PyInt, PyString};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-const EXCEPTIONS_MODULE: &str = "sqlbuild.sql_values.exceptions";
 const DATETIME_MODULE: &str = "datetime";
 const JSON_MODULE: &str = "json";
 use sqlbuild_state::freshness::constants::STRING_STATE_VALUE_TYPE as STRING_TYPE;
 const INTEGER_TYPE: &str = "integer";
 const BOOLEAN_TYPE: &str = "boolean";
 const TIMESTAMP_TYPE: &str = "timestamp";
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use sqlbuild_state::freshness::constants::TEXT_TIMESTAMP_STATE_VALUE_TYPE as TEXT_TIMESTAMP_TYPE;
 const DATE_TYPE: &str = "date";
 const JSON_TYPE: &str = "json";
@@ -144,10 +145,8 @@ fn typed_null(declared_type: &str) -> &'static str {
 
 fn rendering_error(py: Python<'_>, message: &str) -> PyErr {
     let raised = || -> PyResult<PyErr> {
-        let error: Bound<'_, PyAny> = py
-            .import(EXCEPTIONS_MODULE)?
-            .getattr("SqlValueRenderingError")?
-            .call1((message,))?;
+        let error: Bound<'_, PyAny> =
+            host::entry(py, ExecutorHost::SqlValueRenderingError)?.call1((message,))?;
         Ok(PyErr::from_value(error))
     };
     raised().unwrap_or_else(|error| error)

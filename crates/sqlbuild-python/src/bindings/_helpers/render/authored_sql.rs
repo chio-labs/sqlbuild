@@ -10,6 +10,8 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::model_config::template_data::record_reads;
 use crate::bindings::_helpers::model_config::unicode_environment::unicode_environment;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::declaration_expansion::{
     DeclarationExpansion, ExpandedDeclarations, ExpansionClasses, ExpansionConsumer, SpanRow,
     expand_declarations, span_rows,
@@ -19,12 +21,6 @@ use crate::bindings::_helpers::render::macro_expansion_result::expand_sql_macros
 use crate::bindings::_helpers::sqltext::declaration_references::declaration_scan;
 use crate::bindings::_helpers::sqltext::static_sql::{InterpolationSources, interpolation_batch};
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
-const SCOPE_MODELS_MODULE: &str = "sqlbuild._native";
 const FUNCTOOLS_MODULE: &str = "functools";
 const DECLARATION_FIELDS: [&str; 4] = [
     "enums",
@@ -48,7 +44,7 @@ fn substituted<'py>(
         } else {
             Some(context_values.downcast()?.clone())
         },
-        imported(py, NATIVE_MODULE, "render_project_var_text")?,
+        registry::native(py, NativeAttr::RenderProjectVarText)?,
     );
     let text: String = sql.extract()?;
     let path: String = file_path.str()?.extract()?;
@@ -59,7 +55,7 @@ fn substituted<'py>(
     record_reads(py, reads.iter().map(|(kind, name)| (*kind, name.as_str())))?;
     if let Some(message) = error {
         return Err(PyErr::from_value(
-            imported(py, COMPILE_ERRORS_MODULE, "CompileInputError")?.call1((message,))?,
+            registry::error(py, ErrorId::CompileInput)?.call1((message,))?,
         ));
     }
     Ok((rendered.unwrap_or(text), spans))
@@ -67,7 +63,7 @@ fn substituted<'py>(
 
 /// `ExpansionSpan` objects for span rows, in order.
 fn span_objects<'py>(py: Python<'py>, spans: &[SpanRow]) -> PyResult<Bound<'py, PyTuple>> {
-    let span_class: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS_MODULE, "ExpansionSpan")?;
+    let span_class: Bound<'py, PyAny> = registry::class(py, RecordId::ExpansionSpan)?;
     let objects: Vec<Bound<'py, PyAny>> = spans
         .iter()
         .map(|span| span_class.call1(*span))
@@ -94,7 +90,7 @@ fn declaration_context<'py>(
         })
         .collect::<PyResult<_>>()?;
     call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "DeclarationResolutionContext")?,
+        &registry::class(py, RecordId::DeclarationResolutionContext)?,
         &fields,
     )
 }
@@ -116,7 +112,7 @@ fn declarations_expanded<'py>(
     }
     let context: Bound<'py, PyAny> = declaration_context(py, declarations)?;
     let render_constant: Bound<'py, PyAny> = imported(py, FUNCTOOLS_MODULE, "partial")?.call(
-        (imported(py, NATIVE_MODULE, "render_constant_declaration")?,),
+        (registry::native(py, NativeAttr::RenderConstantDeclaration)?,),
         Some(&keywords(
             py,
             &[
@@ -127,8 +123,8 @@ fn declarations_expanded<'py>(
         )?),
     )?;
     let classes = ExpansionClasses {
-        usage_record: imported(py, SCOPE_MODELS_MODULE, "UsageRecord")?,
-        compile_error: imported(py, COMPILE_ERRORS_MODULE, "CompileInputError")?,
+        usage_record: registry::class(py, RecordId::UsageRecord)?,
+        compile_error: registry::error(py, ErrorId::CompileInput)?,
     };
     let path: String = file_path.str()?.extract()?;
     let expanded: ExpandedDeclarations<'py> = expand_declarations(&DeclarationExpansion {
@@ -213,7 +209,7 @@ fn path_declarations<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = context.py();
     let resolution_class: Bound<'py, PyAny> =
-        imported(py, COMPILE_MODELS_MODULE, "DeclarationResolutionContext")?;
+        registry::class(py, RecordId::DeclarationResolutionContext)?;
     let resolver: Bound<'py, PyAny> = context.getattr("declaration_resolver")?;
     let declarations: Bound<'py, PyAny> = if resolver.is_none() {
         call_with(

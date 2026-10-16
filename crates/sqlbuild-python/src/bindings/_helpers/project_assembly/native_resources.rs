@@ -23,9 +23,10 @@ use crate::bindings::_helpers::model_config::template_data::record_reads;
 use crate::bindings::_helpers::project_assembly::models::{
     NativeProjectResources, NativeResourceFailure,
 };
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
 const OS_MODULE: &str = "os";
 const PROJECT_ASSEMBLY_CONTEXT: &str = "native project assembly";
 const GENERIC_DIALECT: &str = "generic";
@@ -344,7 +345,7 @@ fn failure_error<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     match error {
         AssemblyError::CompileInput { message, help } => {
-            imported(py, COMPILE_ERRORS_MODULE, "CompileInputError")?.call(
+            registry::error(py, ErrorId::CompileInput)?.call(
                 (message,),
                 Some(&keywords(
                     py,

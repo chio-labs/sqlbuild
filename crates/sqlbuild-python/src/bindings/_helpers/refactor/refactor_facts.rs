@@ -11,14 +11,12 @@ use sqlbuild_refactor::refactoring::models::{
     SchemaColumnFacts, SqlFileRole,
 };
 
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
 use crate::bindings::_helpers::scopes::scope_reports::scope_move_preview;
 use crate::bindings::_helpers::scopes::scope_validation::scope_relocated_declarations;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const CONFIG_MODULE: &str = "sqlbuild._native";
-const SCOPE_MODELS: &str = "sqlbuild._native";
-const SCOPE_TYPES: &str = "sqlbuild._native";
 const GENERIC_DIALECT: &str = "generic";
 const MATERIALIZED_KEY: &str = "materialized";
 const MIGRATE_FROM_KEY: &str = "migrate_from";
@@ -28,8 +26,8 @@ fn posix(path: &Bound<'_, PyAny>) -> PyResult<String> {
     path.call_method0("as_posix")?.extract()
 }
 
-fn native<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    py.import(NATIVE_MODULE)?.getattr(name)
+fn native<'py>(py: Python<'py>, name: NativeAttr) -> PyResult<Bound<'py, PyAny>> {
+    registry::native(py, name)
 }
 
 fn discovered_files(files: &Bound<'_, PyAny>) -> PyResult<Vec<DiscoveredFile>> {
@@ -123,9 +121,7 @@ fn model(model: &Bound<'_, PyAny>, expansion: Option<&Bound<'_, PyAny>>) -> PyRe
     let options: Bound<'_, PyDict> = PyDict::new(py);
     options.set_item("values", &values)?;
     options.set_item("key", MATERIALIZED_KEY)?;
-    let materialized: Option<String> = py
-        .import(CONFIG_MODULE)?
-        .getattr("get_config_str")?
+    let materialized: Option<String> = registry::native(py, NativeAttr::GetConfigStr)?
         .call((), Some(&options))?
         .extract()?;
     let migrate_from: Option<Bound<'_, PyAny>> = values.get_item(MIGRATE_FROM_KEY)?;
@@ -266,7 +262,7 @@ fn python_locations(
         )?;
     }
     let mut locations: Vec<ManualLocation> = Vec::new();
-    for location in native(py, "find_python_string_locations")?
+    for location in native(py, NativeAttr::FindPythonStringLocations)?
         .call((), Some(&options))?
         .try_iter()?
     {
@@ -335,15 +331,11 @@ pub(crate) fn declaration_placement(
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item(
             "kind",
-            py.import(SCOPE_TYPES)?
-                .getattr("ResourceKind")?
-                .getattr("MODEL")?,
+            registry::class(py, RecordId::ResourceKind)?.getattr("MODEL")?,
         )?;
         options.set_item("name", model)?;
-        let resource: Bound<'_, PyAny> = py
-            .import(SCOPE_MODELS)?
-            .getattr("ResourceIdentity")?
-            .call((), Some(&options))?;
+        let resource: Bound<'_, PyAny> =
+            registry::class(py, RecordId::ResourceIdentity)?.call((), Some(&options))?;
         let records: Option<Py<PyTuple>> =
             scope_relocated_declarations(py, &index, &resource, destination)?;
         if let Some(records) = records {

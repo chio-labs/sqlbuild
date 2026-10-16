@@ -8,8 +8,9 @@ use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{PyErr, pyclass, pyfunction, pymethods, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{context_variable, imported};
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
 const CONTEXT_VARIABLE_NAME: &str = "sqlbuild_collected_compile_diagnostics";
 
 static ACTIVE_COLLECTOR: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
@@ -122,8 +123,7 @@ pub(crate) fn report_compile_diagnostic(
     keywords.set_item("help", diagnostic.getattr("help")?)?;
     let message: String = format!("{}{pointer}", diagnostic.getattr("message")?.str()?);
     Err(PyErr::from_value(
-        imported(py, COMPILE_ERRORS_MODULE, "CompileInputError")?
-            .call((message,), Some(&keywords))?,
+        registry::error(py, ErrorId::CompileInput)?.call((message,), Some(&keywords))?,
     ))
 }
 

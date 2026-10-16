@@ -20,12 +20,14 @@ use sqlbuild_config::workspace::models::{PlaygroundRequest, SkillInstallRequest}
 use sqlbuild_core::cli_text::models::CliStyle;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::native_host::facade::FacadeHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 const SKILLS_DIRECTORY: &str = ".agents/skills/sqlbuild";
 const TEMPLATES_DIRECTORY: &str = "playground_templates";
-const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
-const OUTPUT_MODELS: &str = "sqlbuild._native";
 const SKILLS_OPTIONS: (&[&str], &[&str]) =
     (&["project_dir"], &["global_install", "targets", "force"]);
 const UPDATE_OPTIONS: (&[&str], &[&str]) = (
@@ -45,8 +47,8 @@ fn raised(py: Python<'_>, error: WorkspaceError) -> PyErr {
                 let keywords: Bound<'_, PyDict> = PyDict::new(py);
                 keywords.set_item("code", code)?;
                 keywords.set_item("help", help)?;
-                let instance: Bound<'_, PyAny> = imported(py, EXCEPTIONS_MODULE, "CliUserError")?
-                    .call((message,), Some(&keywords))?;
+                let instance: Bound<'_, PyAny> =
+                    registry::error(py, ErrorId::CliUser)?.call((message,), Some(&keywords))?;
                 Ok(PyErr::from_value(instance))
             };
             created().unwrap_or_else(|failure| failure)
@@ -63,7 +65,7 @@ fn raised(py: Python<'_>, error: WorkspaceError) -> PyErr {
 
 /// The installed `sqlbuild` package directory.
 fn package_dir(py: Python<'_>) -> PyResult<PathBuf> {
-    let file: PathBuf = py.import("sqlbuild")?.getattr("__file__")?.extract()?;
+    let file: PathBuf = host::entry(py, FacadeHost::PackageFile)?.extract()?;
     Ok(file.parent().map(Path::to_path_buf).unwrap_or_default())
 }
 
@@ -117,7 +119,7 @@ fn update_sqlbuild_skills<'py>(
     let written: Vec<PathBuf> = install(py, &request)?;
     let keywords: Bound<'py, PyDict> = PyDict::new(py);
     keywords.set_item("written_paths", PyTuple::new(py, written)?)?;
-    imported(py, OUTPUT_MODELS, "SkillUpdateResult")?.call((), Some(&keywords))
+    registry::class(py, RecordId::SkillUpdateResult)?.call((), Some(&keywords))
 }
 
 /// Check or refresh generated project skills without changing command success.
@@ -128,7 +130,7 @@ fn maintain_sqlbuild_skills(py: Python<'_>, project_dir: PathBuf) -> PyResult<Bo
         .map_err(|error| raised(py, error))?;
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
     keywords.set_item("message", message)?;
-    imported(py, OUTPUT_MODELS, "SkillMaintenanceResult")?.call((), Some(&keywords))
+    registry::class(py, RecordId::SkillMaintenanceResult)?.call((), Some(&keywords))
 }
 
 /// Return every packaged skill file keyed by skill-relative path, with generated markers.

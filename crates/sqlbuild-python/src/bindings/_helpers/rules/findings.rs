@@ -1,16 +1,14 @@
 //! Rule findings converted between the Python `Finding` model and native rows and payloads.
 
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
 use serde_json::Value;
 use sqlbuild_rules::models::Fault;
 
-const MODELS_MODULE: &str = "sqlbuild._native";
-const FINDING_CLASS: &str = "Finding";
 const PATHLIB_MODULE: &str = "pathlib";
 const PATH_CLASS: &str = "Path";
-const ERRORS_MODULE: &str = "sqlbuild._native";
-const RULES_ERROR: &str = "RulesError";
 const INVALID_FINDING: &str = "native rules engine returned an invalid finding";
 
 /// The Python `Finding` and `Path` classes, imported once per conversion batch.
@@ -22,7 +20,7 @@ pub(crate) struct FindingClasses<'py> {
 impl<'py> FindingClasses<'py> {
     pub(crate) fn new(py: Python<'py>) -> PyResult<Self> {
         Ok(Self {
-            finding: py.import(MODELS_MODULE)?.getattr(FINDING_CLASS)?,
+            finding: registry::class(py, RecordId::Finding)?,
             path: py.import(PATHLIB_MODULE)?.getattr(PATH_CLASS)?,
         })
     }
@@ -98,7 +96,7 @@ pub(crate) fn finding_fault(finding: &Bound<'_, PyAny>) -> PyResult<Fault> {
 /// The `RulesError` a malformed native or custom-rule finding raises.
 pub(crate) fn invalid_finding(py: Python<'_>) -> PyErr {
     let raised = || -> PyResult<PyErr> {
-        let class: Bound<'_, PyAny> = py.import(ERRORS_MODULE)?.getattr(RULES_ERROR)?;
+        let class: Bound<'_, PyAny> = registry::error(py, ErrorId::Rules)?;
         Ok(PyErr::from_value(class.call1((INVALID_FINDING,))?))
     };
     raised().unwrap_or_else(|error| error)

@@ -1,6 +1,8 @@
 //! Python's lineage upstream edges and transitive closure over compiled resource keys.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::HashMap;
+
+use sqlbuild_core::graph_walk::main::breadth_first_path::breadth_first_path;
 
 use crate::explicit_references::constants::SQL_TEST_TYPE;
 use crate::explicit_references::models::GraphResource;
@@ -31,17 +33,13 @@ pub(crate) fn lineage_upstream(resources: &[GraphResource]) -> Upstream {
 
 /// Whether `target` is reachable from `start` over at least one upstream edge.
 pub(crate) fn reaches(upstream: &Upstream, start: &ResourceKey, target: &ResourceKey) -> bool {
-    let mut visited: HashSet<&ResourceKey> = HashSet::new();
-    let mut frontier: VecDeque<&ResourceKey> = VecDeque::from([start]);
-    while let Some(current) = frontier.pop_front() {
-        for neighbor in upstream.get(current).into_iter().flatten() {
-            if visited.insert(neighbor) {
-                if neighbor == target {
-                    return true;
-                }
-                frontier.push_back(neighbor);
-            }
-        }
-    }
-    false
+    breadth_first_path(
+        start,
+        (
+            |current: &&ResourceKey| upstream.get(*current).into_iter().flatten(),
+            |neighbour: &&ResourceKey| *neighbour == target,
+            |_: &&ResourceKey| true,
+        ),
+    )
+    .is_some()
 }

@@ -5,10 +5,9 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const UTF8: &str = "utf-8";
 
@@ -28,7 +27,6 @@ pub(crate) fn write_contracts<'py>(
     result: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = graph.py();
-    let native = py.import(NATIVE_MODULE)?;
     let project: Bound<'py, PyAny> = graph.getattr("project")?;
     let models: Bound<'py, PyDict> = by_name(&project.getattr("models")?)?;
     let sources: Bound<'py, PyDict> = by_name(&project.getattr("sources")?)?;
@@ -49,7 +47,7 @@ pub(crate) fn write_contracts<'py>(
             if evidence.getattr("resource_type")?.eq(&model_type)? {
                 let model: Bound<'py, PyAny> = models.as_any().get_item(&name)?;
                 let edited: Bound<'py, PyAny> = call_with(
-                    &native.getattr("edit_contract_model")?,
+                    &registry::native(py, NativeAttr::EditContractModel)?,
                     &[
                         ("model", model.clone()),
                         ("physical_columns", physical_columns),
@@ -65,7 +63,7 @@ pub(crate) fn write_contracts<'py>(
                 let path: Bound<'py, PyAny> =
                     source.getattr("source_file")?.getattr("file_path")?;
                 let edited: Bound<'py, PyAny> = call_with(
-                    &native.getattr("edit_contract_source")?,
+                    &registry::native(py, NativeAttr::EditContractSource)?,
                     &[
                         ("source", source),
                         ("physical_columns", physical_columns),
@@ -80,7 +78,7 @@ pub(crate) fn write_contracts<'py>(
             updates.set_item(&path, contents)?;
         }
         let remaining: Bound<'py, PyAny> = call_with(
-            &native.getattr("remaining_contract_findings")?,
+            &registry::native(py, NativeAttr::RemainingContractFindings)?,
             &[
                 ("findings", findings),
                 ("overwrite", write.overwrite.clone()),
@@ -128,10 +126,9 @@ fn applied<'py>(
     updates: &Bound<'py, PyDict>,
 ) -> PyResult<()> {
     let py: Python<'py> = result.py();
-    let native = py.import(NATIVE_MODULE)?;
     write_all(updates)?;
     let discovered: Bound<'py, PyAny> = call_with(
-        &native.getattr("discover_project_inputs")?,
+        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
         &[("project_dir", write.project_dir.clone())],
     )?;
     if write.adapter.is_none() {
@@ -140,10 +137,9 @@ fn applied<'py>(
     let keywords: Bound<'py, PyDict> = PyDict::new(py);
     keywords.set_item("no_cache", true)?;
     let selection: Bound<'py, PyAny> =
-        imported(py, NATIVE_RECORDS_MODULE, "CompileAnalysisSelection")?
-            .call((), Some(&keywords))?;
+        registry::class(py, RecordId::CompileAnalysisSelection)?.call((), Some(&keywords))?;
     call_with(
-        &native.getattr("build_compiled_project")?,
+        &registry::native(py, NativeAttr::BuildCompiledProject)?,
         &[
             ("discovered_inputs", discovered),
             ("adapter", write.adapter.clone()),
@@ -159,7 +155,7 @@ fn applied<'py>(
 /// Write each `path: contents` pair atomically, in order.
 fn write_all(contents_by_path: &Bound<'_, PyDict>) -> PyResult<()> {
     let py: Python<'_> = contents_by_path.py();
-    let write_atomically: Bound<'_, PyAny> = imported(py, NATIVE_MODULE, "write_atomically")?;
+    let write_atomically: Bound<'_, PyAny> = registry::native(py, NativeAttr::WriteAtomically)?;
     for (path, contents) in contents_by_path.iter() {
         call_with(&write_atomically, &[("path", path), ("contents", contents)])?;
     }

@@ -12,7 +12,8 @@ use sqlbuild_core::migration_values::models::{DecisionTraits, ModelMigrationFact
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cursor::scalars::parse_value;
 use crate::bindings::_helpers::record_behaviours::call_arguments::call_argument;
-use crate::bindings::_helpers::records::constants::NATIVE_MODULE;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 const DECREASING_DIRECTIONS: [&str; 2] = ["decrease", "mixed"];
 const STEP_ACTIONS: [&str; 2] = ["archive_and_view", "view_only"];
@@ -22,7 +23,6 @@ const SOURCE_MISSING: &str = "source_missing";
 const DENY_POLICY: &str = "deny";
 const INCOMPATIBLE: &str = "incompatible";
 const DEFAULT_TARGET_LABEL: &str = "default";
-const PLANNER_INPUT_ERROR: &str = "PlannerInputError";
 const INTEGER_CURSOR: &str = "integer";
 /// `CursorOverrides` field positions: `start_ts`, `end_ts`, `start_int`, `end_int`, `start`, `end`.
 const OVERRIDE_FIELDS: [&str; 6] = ["start_ts", "end_ts", "start_int", "end_int", "start", "end"];
@@ -153,8 +153,7 @@ pub(crate) fn column_migration_blocks_build(entry: &Bound<'_, PyAny>) -> PyResul
 
 /// The `PlannerInputError` carrying `message`.
 fn planner_error(py: Python<'_>, message: String) -> PyErr {
-    match imported(py, NATIVE_MODULE, PLANNER_INPUT_ERROR).and_then(|class| class.call1((message,)))
-    {
+    match registry::error(py, ErrorId::PlannerInput).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }
@@ -211,7 +210,7 @@ fn override_integer<'py>(
     }
     let parsed: Bound<'py, PyAny> =
         parse_value(value, &PyString::new(py, INTEGER_CURSOR).into_any())?;
-    if parsed.is_instance(&imported(py, NATIVE_MODULE, "IntegerValue")?)? {
+    if parsed.is_instance(&registry::class(py, RecordId::IntegerValue)?)? {
         return Ok(parsed);
     }
     Err(invalid())
@@ -305,9 +304,9 @@ pub(crate) fn forward_only_backfill(py: Python<'_>) -> PyResult<Bound<'_, PyAny>
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
     keywords.set_item(
         "action",
-        imported(py, NATIVE_MODULE, "BackfillAction")?.getattr("FORWARD_ONLY")?,
+        registry::class(py, RecordId::BackfillAction)?.getattr("FORWARD_ONLY")?,
     )?;
-    imported(py, NATIVE_MODULE, "BackfillResult")?.call((), Some(&keywords))
+    registry::class(py, RecordId::BackfillResult)?.call((), Some(&keywords))
 }
 
 /// `ScenarioArtifactIdentity.kind` coerced to `ScenarioArtifactKind`.
@@ -316,7 +315,7 @@ pub(crate) fn finish_scenario_artifact_kind(
     mut values: Vec<Py<PyAny>>,
 ) -> PyResult<Vec<Py<PyAny>>> {
     if let Some(kind) = values.first_mut() {
-        *kind = imported(py, NATIVE_MODULE, "ScenarioArtifactKind")?
+        *kind = registry::class(py, RecordId::ScenarioArtifactKind)?
             .call1((kind.bind(py),))?
             .unbind();
     }

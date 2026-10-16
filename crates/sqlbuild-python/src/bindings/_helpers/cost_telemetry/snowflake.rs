@@ -22,8 +22,9 @@ use crate::bindings::_helpers::cost_telemetry::allocation::{
 use crate::bindings::_helpers::cost_telemetry::health::consume_ledger_failure;
 use crate::bindings::_helpers::cost_telemetry::ledger::read_ledger;
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS: &str = "sqlbuild._native";
 const DEADLINE_SECONDS: f64 = 10.0;
 const QUERY_TIMEOUT_SECONDS: &str = "5";
 const RUNNING_STATUS: &str = "RUNNING";
@@ -258,7 +259,7 @@ fn row_observation<'py>(
     }
     let tag: QueryTag = tag.unwrap_or_default();
     let observation: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_RECORDS, "QueryCostObservation")?,
+        &registry::class(py, RecordId::QueryCostObservation)?,
         &[
             ("query_id", query_id.str()?.into_any()),
             ("warehouse_name", warehouse_name.str()?.into_any()),

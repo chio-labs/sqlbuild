@@ -5,6 +5,7 @@ use crate::bindings::_helpers::planner_migrations::column_objects::native;
 use crate::bindings::_helpers::planner_migrations::{
     discovery_events, discovery_models, discovery_requests,
 };
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyListMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -46,7 +47,7 @@ fn discover_model_migrations<'py>(
     let triggered =
         discovery_models::triggered(&models, &scope, &args.value("snapshot")?, &declared_names)?;
     if !triggered && !manual.is_truthy()? {
-        return native(py, "ModelMigrationDiscovery", &[]);
+        return native(py, RecordId::ModelMigrationDiscovery, &[]);
     }
     let metadata = discovery_models::metadata(&runtime, &models)?;
     let dialect = runtime
@@ -70,7 +71,7 @@ fn discover_model_migrations<'py>(
     if !triggered {
         let hashes = native(
             py,
-            "migration_destination_fingerprints",
+            NativeAttr::MigrationDestinationFingerprints,
             &[
                 ("requests", manual.clone()),
                 ("variants", seeds.into_any()),
@@ -81,7 +82,7 @@ fn discover_model_migrations<'py>(
         )?;
         return native(
             py,
-            "ModelMigrationDiscovery",
+            RecordId::ModelMigrationDiscovery,
             &[("requests", manual), ("destination_fingerprints", hashes)],
         );
     }
@@ -106,7 +107,7 @@ fn discover_model_migrations<'py>(
     }
     let matched = native(
         py,
-        "match_migration_fingerprints",
+        NativeAttr::MatchMigrationFingerprints,
         &[
             ("models", PyTuple::new(py, &models)?.into_any()),
             (
@@ -131,7 +132,7 @@ fn discover_model_migrations<'py>(
     let warnings = discovery_requests::warnings(&models, &scope, &matched.get_item(2)?)?;
     let hashes = native(
         py,
-        "migration_destination_fingerprints",
+        NativeAttr::MigrationDestinationFingerprints,
         &[
             ("requests", requests.clone().into_any()),
             ("variants", matched.get_item(0)?),
@@ -142,7 +143,7 @@ fn discover_model_migrations<'py>(
     )?;
     native(
         py,
-        "ModelMigrationDiscovery",
+        RecordId::ModelMigrationDiscovery,
         &[
             ("requests", requests.into_any()),
             ("warnings", warnings.into_any()),

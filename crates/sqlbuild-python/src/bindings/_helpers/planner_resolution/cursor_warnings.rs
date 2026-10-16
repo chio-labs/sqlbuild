@@ -1,8 +1,10 @@
 //! Prominent warnings for applied future-end and automatic-start cursor safety.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::cursor::scalars::render_value;
 use crate::bindings::_helpers::planner_resolution::values::string;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
 use pyo3::types::{PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -78,12 +80,12 @@ pub(crate) fn with_cursor_safety_warnings<'py>(
     ] {
         let Some(message) = message else { continue };
         all.push(call_with(
-            &imported(py, "sqlbuild._native", "PlanWarning")?,
+            &registry::class(py, RecordId::PlanWarning)?,
             &[
                 ("model_name", model_name.clone()),
                 (
                     "severity",
-                    imported(py, "sqlbuild._native", "WarningSeverity")?.getattr("WARNING")?,
+                    registry::class(py, RecordId::WarningSeverity)?.getattr("WARNING")?,
                 ),
                 ("code", string(py, code)),
                 ("message", string(py, &message)),

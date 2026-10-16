@@ -23,12 +23,11 @@ use sqlbuild_rules::lint_text::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::{compiler_guard, value_error};
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 
-const LINT_MODELS_MODULE: &str = "sqlbuild._native";
-const LINT_TYPES_MODULE: &str = "sqlbuild._native";
-const SCOPE_TYPES_MODULE: &str = "sqlbuild._native";
 const NATIVE_ENGINE: &str = "native";
 const FORMAT_UNSAFE_CODE: &str = "format-unsafe";
 const FORMAT_UNSAFE_REMEDIATION: &str = "Rewrite the unsupported SQL shape or report a minimal formatter reproduction. No header, SQL body, or fixture changes were written to this file.";
@@ -130,7 +129,7 @@ fn named_declaration_role_kind<'py>(
     let parts: Vec<String> = relative_path.getattr("parts")?.extract()?;
     match role_kind(&parts) {
         Some(kind) => Ok(Some(
-            imported(relative_path.py(), SCOPE_TYPES_MODULE, "DeclarationKind")?.call1((kind,))?,
+            registry::class(relative_path.py(), RecordId::DeclarationKind)?.call1((kind,))?,
         )),
         None => Ok(None),
     }
@@ -197,9 +196,9 @@ struct FindingClasses<'py> {
 impl<'py> FindingClasses<'py> {
     fn new(py: Python<'py>) -> PyResult<Self> {
         Ok(Self {
-            violation: imported(py, LINT_MODELS_MODULE, "LintViolation")?,
-            edit: imported(py, LINT_MODELS_MODULE, "LintEdit")?,
-            severity: imported(py, LINT_TYPES_MODULE, "LintSeverity")?,
+            violation: registry::class(py, RecordId::LintViolation)?,
+            edit: registry::class(py, RecordId::LintEdit)?,
+            severity: registry::class(py, RecordId::LintSeverity)?,
         })
     }
 
@@ -292,9 +291,8 @@ fn format_lint_sql_bodies<'py>(
     for (index, text) in result.formatted {
         formatted.set_item(&files[index].0, text)?;
     }
-    let violation: Bound<'py, PyAny> = imported(py, LINT_MODELS_MODULE, "LintViolation")?;
-    let fault: Bound<'py, PyAny> =
-        imported(py, LINT_TYPES_MODULE, "LintSeverity")?.getattr("FAULT")?;
+    let violation: Bound<'py, PyAny> = registry::class(py, RecordId::LintViolation)?;
+    let fault: Bound<'py, PyAny> = registry::class(py, RecordId::LintSeverity)?.getattr("FAULT")?;
     let faults: Vec<Bound<'py, PyAny>> = result
         .faults
         .into_iter()

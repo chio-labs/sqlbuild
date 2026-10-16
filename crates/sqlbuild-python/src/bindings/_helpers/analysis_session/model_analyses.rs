@@ -13,13 +13,13 @@ use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_s
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::cache::native_store::current_code_identity;
 use crate::bindings::_helpers::compile_driver::analysis_cache::record_analysis_cache_metrics;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::semantic_shapes::shapes::{VALID_FROM_DEFAULT, VALID_TO_DEFAULT};
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
-const PLANNER_TYPES_MODULE: &str = "sqlbuild._native";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
-const LOG_DEBUG_MODULE: &str = "sqlbuild.diagnostics.main.log_debug_event";
 const LOGGING_MODULE: &str = "logging";
 const DEBUG_LOGGER: &str = "sqlbuild.compile";
 const ANALYSIS_FAILURE_MESSAGE: &str = "native compact query analysis failed";
@@ -36,9 +36,7 @@ fn analyze_native_model_sql<'py>(
     let request = Request::new("analyze_native_model_sql", request)?;
     let py: Python<'py> = request.py();
     let request: Bound<'py, PyAny> = request.get("request")?;
-    let analyses_class: Bound<'py, PyAny> = py
-        .import(ANALYSIS_MODELS_MODULE)?
-        .getattr("NativeModelAnalyses")?;
+    let analyses_class: Bound<'py, PyAny> = registry::class(py, RecordId::NativeModelAnalyses)?;
     let model_inputs: Bound<'py, PyAny> = request.getattr("model_inputs")?;
     if !model_inputs.is_truthy()? {
         let arguments: Bound<'py, PyDict> = PyDict::new(py);
@@ -66,10 +64,13 @@ fn analyze_native_model_sql<'py>(
         ),
         None => (analysis_store(&request)?, py.None().into_bound(py)),
     };
-    let session: Bound<'py, PyAny> = py
-        .import(NATIVE_MODULE)?
-        .getattr("start_model_analysis_session")?
-        .call1((catalog.getattr("native")?, session_request, cache, adapter))?;
+    let session: Bound<'py, PyAny> = registry::native(py, NativeAttr::StartModelAnalysisSession)?
+        .call1((
+        catalog.getattr("native")?,
+        session_request,
+        cache,
+        adapter,
+    ))?;
     run_session(&request, (&python, &catalog), &session, &analyses_class)
 }
 
@@ -130,10 +131,8 @@ fn analysis_store<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny
             context.getattr("signature_namespace")?,
         ],
     )?;
-    let environment: Bound<'py, PyAny> = py
-        .import(NATIVE_MODULE)?
-        .getattr("content_digest")?
-        .call1((parts,))?;
+    let environment: Bound<'py, PyAny> =
+        registry::native(py, NativeAttr::ContentDigest)?.call1((parts,))?;
     Ok(PyTuple::new(py, [path, environment])?.into_any())
 }
 
@@ -270,11 +269,10 @@ fn model_rows<'py>(
     py: Python<'py>,
     model_inputs: &[Bound<'py, PyAny>],
 ) -> PyResult<Bound<'py, PyAny>> {
-    let planner = py.import(PLANNER_TYPES_MODULE)?;
-    let enforced: Bound<'py, PyAny> = planner.getattr("ContractPolicy")?.getattr("ENFORCED")?;
-    let snapshot: Bound<'py, PyAny> = planner
-        .getattr("MaterializationType")?
-        .getattr("SNAPSHOT")?;
+    let enforced: Bound<'py, PyAny> =
+        registry::class(py, RecordId::ContractPolicy)?.getattr("ENFORCED")?;
+    let snapshot: Bound<'py, PyAny> =
+        registry::class(py, RecordId::MaterializationType)?.getattr("SNAPSHOT")?;
     let mut rows: Vec<Bound<'py, PyAny>> = Vec::with_capacity(model_inputs.len());
     for model_input in model_inputs {
         let values: Bound<'py, PyAny> = model_input.getattr("config")?.getattr("values")?;
@@ -355,9 +353,7 @@ fn log_debug(py: Python<'_>, message: &str, failure: &Bound<'_, PyAny>) -> PyRes
     )?;
     arguments.set_item("message", message)?;
     arguments.set_item("sqlbuild_error", failure)?;
-    py.import(LOG_DEBUG_MODULE)?
-        .getattr("log_debug_event")?
-        .call((), Some(&arguments))?;
+    host::entry(py, ExecutorHost::LogDebugEvent)?.call((), Some(&arguments))?;
     Ok(())
 }
 

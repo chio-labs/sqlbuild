@@ -4,10 +4,10 @@ use pyo3::exceptions::{PyOSError, PySyntaxError, PyUnicodeError, PyValueError};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::PyTuple;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-const FAULT_CLASS: &str = "DiscoveryFileFault";
 const PROJECT_DIR_MARKER: &str = ".";
 
 /// The files one discovery builds, with the caller's optional `on_fault` reporter.
@@ -46,7 +46,7 @@ impl<'py> FileFaults<'py> {
             .str()?
             .call_method1("replace", (self.project_dir.str()?, PROJECT_DIR_MARKER))?;
         on_fault.call1((call_with(
-            &imported(py, NATIVE_RECORDS_MODULE, FAULT_CLASS)?,
+            &registry::class(py, RecordId::DiscoveryFileFault)?,
             &[("path", relative_path.clone()), ("message", message)],
         )?,))?;
         Ok(None)

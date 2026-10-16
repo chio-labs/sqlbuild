@@ -7,6 +7,7 @@ use sqlbuild_analysis::planner_fixtures::main::fixture_schema::fixture_schema;
 
 use crate::bindings::_helpers::planner_strategy::fixture_metadata::model_fixture_metadata;
 use crate::bindings::_helpers::planner_strategy::fixture_values::{columns, metadata, record};
+use crate::bindings::_helpers::records::ids::RecordId;
 
 #[pyfunction]
 #[pyo3(signature = (*, project, models_by_name = None))]
@@ -35,7 +36,7 @@ pub(crate) fn build_relation_fixture_context<'py>(
     )?;
     kwargs.set_item("expected_types", base_expected_fixture_types(&relations)?)?;
     kwargs.set_item("relations", relations)?;
-    record(py, "RelationFixturePlanningContext", &kwargs)
+    record(py, RecordId::RelationFixturePlanningContext, &kwargs)
 }
 
 fn relation_metadata<'py>(

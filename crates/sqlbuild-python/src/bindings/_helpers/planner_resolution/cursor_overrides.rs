@@ -1,9 +1,9 @@
 //! Selected-model inspection and untyped override conversion.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::planner_resolution::values::{method, string};
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
@@ -27,7 +27,7 @@ fn type_cursor_overrides<'py>(
     if overrides.is_none() || !overrides.getattr("has_untyped")?.is_truthy()? {
         return Ok(overrides);
     }
-    let get_config = imported(py, "sqlbuild._native", "get_config_str")?;
+    let get_config = registry::native(py, NativeAttr::GetConfigStr)?;
     let mut models: Vec<(String, String)> = Vec::new();
     let selected = if args.passed("selected_models")? {
         args.value("selected_models")?
@@ -68,12 +68,12 @@ fn type_cursor_overrides<'py>(
         }
     }
     let kind = override_kind(&models, integer_literals).map_err(|message| {
-        match imported(py, "sqlbuild._native", "PlannerInputError").and_then(|class| call_with(&class, &[
+        match registry::error(py, ErrorId::PlannerInput).and_then(|class| call_with(&class, &[
             ("message", string(py, &message)), ("code", string(py, "S303")),
             ("help", string(py, "select models with one cursor type, or set each type explicitly with --start-cursor-ts/--end-cursor-ts and --start-cursor-int/--end-cursor-int")),
         ])) { Ok(error) => PyErr::from_value(error), Err(error) => error }
     })?;
-    let kind = imported(py, "sqlbuild._native", "CursorType")?.call1((kind,))?;
+    let kind = registry::class(py, RecordId::CursorType)?.call1((kind,))?;
     method(&overrides, "typed_as", &[("cursor_type", kind)])
 }
 

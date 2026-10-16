@@ -17,12 +17,12 @@ use sqlbuild_cursor::algebra::main::split_into_batches::split_into_batches;
 use sqlbuild_cursor::algebra::main::validate_interval::validate_interval;
 use sqlbuild_cursor::algebra::models::{Interval, Scalar};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::cursor::scalars::as_scalar;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 
-const MICROBATCH_MODELS_MODULE: &str = "sqlbuild.microbatches.models";
-const MICROBATCH_EXCEPTIONS_MODULE: &str = "sqlbuild.microbatches.exceptions";
 const RAW_INTERVAL_CURSOR_TYPES: [&str; 2] = ["timestamp", "integer"];
 
 /// One stored interval with its parsed bounds.
@@ -112,11 +112,9 @@ fn merge_raw_intervals<'py>(
     let py: Python<'py> = intervals.py();
     let kind: String = cursor_type.str()?.extract()?;
     if !RAW_INTERVAL_CURSOR_TYPES.contains(&kind.as_str()) {
-        return Err(
-            imported(py, MICROBATCH_EXCEPTIONS_MODULE, "MicrobatchStateError")
-                .and_then(|class| class.call1((format!("unsupported cursor type: {kind}"),)))
-                .map_or_else(|error| error, PyErr::from_value),
-        );
+        return Err(host::entry(py, ExecutorHost::MicrobatchStateError)
+            .and_then(|class| class.call1((format!("unsupported cursor type: {kind}"),)))
+            .map_or_else(|error| error, PyErr::from_value));
     }
     let session: CursorSession<'py> = CursorSession::new(py)?;
     let mut parsed: Vec<RawInterval<'py>> = Vec::new();
@@ -140,7 +138,7 @@ fn merge_raw_intervals<'py>(
     if let Some(error) = failure {
         return Err(error);
     }
-    let class: Bound<'py, PyAny> = imported(py, MICROBATCH_MODELS_MODULE, "MicrobatchInterval")?;
+    let class: Bound<'py, PyAny> = host::entry(py, ExecutorHost::MicrobatchInterval)?;
     let mut merged: Vec<RawInterval<'py>> = Vec::new();
     for next in parsed {
         let Some(last) = merged.last_mut() else {

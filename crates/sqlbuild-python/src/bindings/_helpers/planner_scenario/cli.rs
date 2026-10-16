@@ -1,16 +1,14 @@
 //! Assemble CLI scenario plans while retaining adapter and executor boundaries.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_GRAPH_VALIDATION;
 use crate::bindings::_helpers::planner_scenario::graph::plan_scenario_graph;
 use crate::bindings::_helpers::planner_scenario::relations::build_scenario_relation_plan;
-use crate::bindings::_helpers::planner_scenario::values::{TYPES, string};
+use crate::bindings::_helpers::planner_scenario::values::string;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
-
-const ARTIFACTS: &str = "sqlbuild._native";
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
@@ -39,7 +37,7 @@ pub(crate) fn build_cli_scenario_plan<'py>(
     let (graph, warnings) = plan_scenario_graph(&scenario, &project, true, None)?;
     raise_for_warnings(warnings.as_any())?;
     let hashes = call_with(
-        &imported(py, ARTIFACTS, "build_scenario_hash_index")?,
+        &registry::native(py, NativeAttr::BuildScenarioHashIndex)?,
         &[
             ("project_name", args.value("project_name")?),
             ("scenarios", project.getattr("sql_scenarios")?),
@@ -59,11 +57,11 @@ pub(crate) fn build_cli_scenario_plan<'py>(
     ] {
         for name in graph.getattr(field)?.try_iter()? {
             identities.push(call_with(
-                &imported(py, "sqlbuild._native", "ScenarioArtifactIdentity")?,
+                &registry::class(py, RecordId::ScenarioArtifactIdentity)?,
                 &[
                     (
                         "kind",
-                        imported(py, TYPES, "ScenarioArtifactKind")?.getattr(kind)?,
+                        registry::class(py, RecordId::ScenarioArtifactKind)?.getattr(kind)?,
                     ),
                     ("logical_name", name?),
                 ],
@@ -71,7 +69,7 @@ pub(crate) fn build_cli_scenario_plan<'py>(
         }
     }
     let map = call_with(
-        &imported(py, ARTIFACTS, "build_scenario_relation_map")?,
+        &registry::native(py, NativeAttr::BuildScenarioRelationMap)?,
         &[
             ("scenario_name", scenario.getattr("name")?),
             ("hash_prefix", hashes.get_item(scenario.getattr("name")?)?),
@@ -99,7 +97,7 @@ pub(crate) fn build_cli_scenario_plan<'py>(
     }
     let relations = build_scenario_relation_plan(py, Some(relation_args))?;
     let result = call_with(
-        &imported(py, "sqlbuild._native", "build_scenario_execution_plan")?,
+        &registry::native(py, NativeAttr::BuildScenarioExecutionPlan)?,
         &[
             ("scenario", scenario),
             ("project", project),
@@ -142,7 +140,7 @@ fn namespace<'py>(
 
 fn raise_for_warnings(warnings: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = warnings.py();
-    let severity = imported(py, "sqlbuild._native", "WarningSeverity")?.getattr("ERROR")?;
+    let severity = registry::class(py, RecordId::WarningSeverity)?.getattr("ERROR")?;
     let mut messages: Vec<String> = Vec::new();
     let mut code = None;
     for warning in warnings.try_iter()? {
@@ -161,7 +159,7 @@ fn raise_for_warnings(warnings: &Bound<'_, PyAny>) -> PyResult<()> {
     }
     if let Some(code) = code {
         return Err(PyErr::from_value(call_with(
-            &imported(py, "sqlbuild._native", "PlannerInputError")?,
+            &registry::error(py, ErrorId::PlannerInput)?,
             &[
                 ("message", string(py, &messages.join("\n"))),
                 ("code", code),

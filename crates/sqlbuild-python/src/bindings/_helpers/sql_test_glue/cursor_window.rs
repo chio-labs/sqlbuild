@@ -15,10 +15,12 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::cursor::scalars::{parse_value, render_value};
 use crate::bindings::_helpers::model_config::config_values::config_str;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::constants::{
     CURSOR_ALGEBRA_EXCEPTIONS, CURSOR_END_KEY, CURSOR_START_KEY, DEFAULT_INTEGER_END,
     DEFAULT_INTEGER_START, DEFAULT_TIMESTAMP_END, DEFAULT_TIMESTAMP_START, INTEGER_CURSOR_TYPE,
-    PLANNER_TYPES, TIMESTAMP_CURSOR_TYPE,
+    TIMESTAMP_CURSOR_TYPE,
 };
 
 /// One model's cursor name, type and timestamp grain.
@@ -237,13 +239,13 @@ fn model_cursor<'py>(model: &Bound<'py, PyAny>) -> PyResult<ModelCursor<'py>> {
             .extract::<String>()
             .is_ok_and(|value| !value.is_empty())
     });
-    let cursor_type = imported(py, PLANNER_TYPES, "CursorType")?.call1((
+    let cursor_type = registry::class(py, RecordId::CursorType)?.call1((
         declared.unwrap_or_else(|| PyString::new(py, TIMESTAMP_CURSOR_TYPE).into_any()),
     ))?;
     let type_name: String = cursor_type.getattr("value")?.extract()?;
     let grain = match config_str(&values, "cursor_grain")? {
         Some(grain) if type_name == TIMESTAMP_CURSOR_TYPE => {
-            let grain = imported(py, PLANNER_TYPES, "CursorGrain")?.call1((grain,))?;
+            let grain = registry::class(py, RecordId::CursorGrain)?.call1((grain,))?;
             let session = CursorSession::new(py)?;
             session
                 .grain(&grain)?

@@ -5,95 +5,54 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
-const AUDITING_MODELS_MODULE: &str = "sqlbuild._native";
 const AUDITING_TYPES_MODULE: &str = "sqlbuild.compiler.auditing.types";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
-const CONTRACT_TYPES_MODULE: &str = "sqlbuild._native";
-const DLT_MODELS_MODULE: &str = "sqlbuild.integrations.dlt.models";
-const INGESTR_MODELS_MODULE: &str = "sqlbuild.integrations.ingestr.models";
-const CONTRACT_CLASSES: [(&str, &str, &str); 6] = [
-    ("schema_column", CONTRACT_MODELS_MODULE, "SchemaColumn"),
-    (
-        "schema_audit_instance",
-        CONTRACT_MODELS_MODULE,
-        "SchemaAuditInstance",
-    ),
+const CONTRACT_CLASSES: [(&str, RecordId); 6] = [
+    ("schema_column", RecordId::SchemaColumn),
+    ("schema_audit_instance", RecordId::SchemaAuditInstance),
     (
         "schema_dynamic_column_family",
-        CONTRACT_MODELS_MODULE,
-        "SchemaDynamicColumnFamily",
+        RecordId::SchemaDynamicColumnFamily,
     ),
-    ("source_location", CONTRACT_MODELS_MODULE, "SourceLocation"),
-    (
-        "measurement_thresholds",
-        AUDITING_MODELS_MODULE,
-        "MeasurementThresholds",
-    ),
+    ("source_location", RecordId::SourceLocation),
+    ("measurement_thresholds", RecordId::MeasurementThresholds),
     (
         "measurement_threshold_bound",
-        AUDITING_MODELS_MODULE,
-        "MeasurementThresholdBound",
+        RecordId::MeasurementThresholdBound,
     ),
 ];
-const YAML_ENTRY_CLASSES: [(&str, &str, &str); 13] = [
-    (
-        "schema_seed_entry",
-        CONTRACT_MODELS_MODULE,
-        "SchemaSeedEntry",
-    ),
-    (
-        "seed_csv_settings",
-        CONTRACT_MODELS_MODULE,
-        "SeedCsvSettings",
-    ),
-    ("source_entry", CONTRACT_MODELS_MODULE, "SourceEntry"),
-    (
-        "source_column_entry",
-        CONTRACT_MODELS_MODULE,
-        "SourceColumnEntry",
-    ),
-    (
-        "source_freshness_config",
-        CONTRACT_MODELS_MODULE,
-        "SourceFreshnessConfig",
-    ),
+const YAML_ENTRY_CLASSES: [(&str, RecordId); 10] = [
+    ("schema_seed_entry", RecordId::SchemaSeedEntry),
+    ("seed_csv_settings", RecordId::SeedCsvSettings),
+    ("source_entry", RecordId::SourceEntry),
+    ("source_column_entry", RecordId::SourceColumnEntry),
+    ("source_freshness_config", RecordId::SourceFreshnessConfig),
     (
         "source_freshness_age_policy",
-        CONTRACT_MODELS_MODULE,
-        "SourceFreshnessAgePolicy",
+        RecordId::SourceFreshnessAgePolicy,
     ),
     (
         "integration_loader_config",
-        CONTRACT_MODELS_MODULE,
-        "IntegrationLoaderConfig",
+        RecordId::IntegrationLoaderConfig,
     ),
-    (
-        "ingestr_source_config",
-        INGESTR_MODELS_MODULE,
-        "IngestrSourceConfig",
-    ),
-    ("dlt_source_config", DLT_MODELS_MODULE, "DltSourceConfig"),
-    (
-        "dlt_resource_config",
-        DLT_MODELS_MODULE,
-        "DltResourceConfig",
-    ),
-    (
-        "source_write_strategy",
-        CONTRACT_TYPES_MODULE,
-        "SourceWriteStrategy",
-    ),
+    ("source_write_strategy", RecordId::SourceWriteStrategy),
     (
         "source_freshness_strategy",
-        CONTRACT_TYPES_MODULE,
-        "SourceFreshnessStrategy",
+        RecordId::SourceFreshnessStrategy,
     ),
     (
         "source_freshness_value_kind",
-        CONTRACT_TYPES_MODULE,
-        "SourceFreshnessValueKind",
+        RecordId::SourceFreshnessValueKind,
     ),
+];
+const INTEGRATION_ENTRY_CLASSES: [(&str, ThirdPartyHost); 3] = [
+    ("ingestr_source_config", ThirdPartyHost::IngestrSourceConfig),
+    ("dlt_source_config", ThirdPartyHost::DltSourceConfig),
+    ("dlt_resource_config", ThirdPartyHost::DltResourceConfig),
 ];
 
 static CONTRACT_CLASS_TABLE: PyOnceLock<Py<PyDict>> = PyOnceLock::new();
@@ -115,8 +74,8 @@ pub(crate) fn yaml_entry_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> 
 
 fn built_contract_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     let classes: Bound<'_, PyDict> = PyDict::new(py);
-    for (key, module, name) in CONTRACT_CLASSES {
-        classes.set_item(key, imported(py, module, name)?)?;
+    for (key, class) in CONTRACT_CLASSES {
+        classes.set_item(key, registry::class(py, class)?)?;
     }
     classes.set_item(
         "severities",
@@ -132,8 +91,11 @@ fn built_contract_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
 fn built_yaml_entry_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     let classes: Bound<'_, PyDict> = PyDict::new(py);
     classes.set_item("contracts", contract_classes(py)?)?;
-    for (key, module, name) in YAML_ENTRY_CLASSES {
-        classes.set_item(key, imported(py, module, name)?)?;
+    for (key, class) in YAML_ENTRY_CLASSES {
+        classes.set_item(key, registry::class(py, class)?)?;
+    }
+    for (key, class) in INTEGRATION_ENTRY_CLASSES {
+        classes.set_item(key, host::entry(py, class)?)?;
     }
     Ok(classes)
 }

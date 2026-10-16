@@ -13,8 +13,8 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::contract_classes::contract_classes;
 use crate::bindings::_helpers::model_config::header_metadata::{ContractClasses, audit_tuple};
-
-const IDENTITY_ERRORS_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 
 /// A resource identity error as `ResourceIdentityError`, anything else as `error_class(message)`.
 fn raised(py: Python<'_>, error: ConfigError, error_class: &Bound<'_, PyAny>) -> PyResult<PyErr> {
@@ -24,8 +24,7 @@ fn raised(py: Python<'_>, error: ConfigError, error_class: &Bound<'_, PyAny>) ->
             if let Some(help) = error.help {
                 keywords.set_item("help", help)?;
             }
-            py.import(IDENTITY_ERRORS_MODULE)?
-                .getattr("ResourceIdentityError")?
+            registry::error(py, ErrorId::ResourceIdentity)?
         }
         _ => error_class.clone(),
     };

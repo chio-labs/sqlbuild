@@ -1,6 +1,8 @@
 //! Fixture column inference computed once per fixture body and inference profile.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyclass, pymethods};
@@ -31,7 +33,7 @@ impl FixtureColumnInferences {
         let py = query_sql.py();
         let compute = || {
             call_with(
-                &imported(py, "sqlbuild._native", "infer_fixture_column_facts")?,
+                &registry::native(py, NativeAttr::InferFixtureColumnFacts)?,
                 &[
                     ("query_sql", query_sql.clone()),
                     ("inference_profile", inference_profile.clone()),

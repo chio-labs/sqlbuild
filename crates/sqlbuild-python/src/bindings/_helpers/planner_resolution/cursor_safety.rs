@@ -3,15 +3,14 @@
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::planner_resolution::cursor_bounds::duration;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use sqlbuild_cursor::algebra::models::{DurationSpan, Grain, Scalar};
 use sqlbuild_cursor::planner::main::safety_horizon::safety_horizon;
 
-pub(super) const MODELS: &str = "sqlbuild._native";
-pub(super) const EXCEPTIONS: &str = "sqlbuild._native";
-
-pub(super) fn safety_error(py: Python<'_>, class: &str, message: &str) -> PyErr {
-    match imported(py, EXCEPTIONS, class).and_then(|class| class.call1((message,))) {
+pub(super) fn safety_error(py: Python<'_>, class: ErrorId, message: &str) -> PyErr {
+    match registry::error(py, class).and_then(|class| class.call1((message,))) {
         Ok(value) => PyErr::from_value(value),
         Err(error) => error,
     }
@@ -31,9 +30,9 @@ pub(super) fn safety_duration(value: &Bound<'_, PyAny>, future: bool) -> PyResul
         });
     }
     let (class, field) = if future {
-        ("FutureCursorSafetyError", "future.max_distance")
+        (ErrorId::FutureCursorSafety, "future.max_distance")
     } else {
-        ("MaximumAutomaticStartError", "start.max_ahead")
+        (ErrorId::MaximumAutomaticStart, "start.max_ahead")
     };
     Err(safety_error(
         value.py(),
@@ -45,8 +44,8 @@ pub(super) fn safety_duration(value: &Bound<'_, PyAny>, future: bool) -> PyResul
 pub(super) fn timestamp_bound(value: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = value.py();
     Ok(
-        value.is_instance(&imported(py, "sqlbuild._native", "DateValue")?)?
-            || value.is_instance(&imported(py, "sqlbuild._native", "TimestampValue")?)?,
+        value.is_instance(&registry::class(py, RecordId::DateValue)?)?
+            || value.is_instance(&registry::class(py, RecordId::TimestampValue)?)?,
     )
 }
 
@@ -63,7 +62,7 @@ pub(super) fn horizon<'py>(
     let py = session.py();
     let (clock, grain) = clock_and_grain;
     let mut clock = utc_clock(clock)?;
-    let date_only = discovered.is_instance(&imported(py, "sqlbuild._native", "DateValue")?)?;
+    let date_only = discovered.is_instance(&registry::class(py, RecordId::DateValue)?)?;
     if date_only || discovered.getattr("value")?.getattr("tzinfo")?.is_none() {
         clock = call_with(
             &clock.getattr("replace")?,
@@ -71,7 +70,7 @@ pub(super) fn horizon<'py>(
         )?;
     }
     let clock = call_with(
-        &imported(py, "sqlbuild._native", "TimestampValue")?,
+        &registry::class(py, RecordId::TimestampValue)?,
         &[("value", clock)],
     )?;
     let grain = if grain.is_truthy()? {

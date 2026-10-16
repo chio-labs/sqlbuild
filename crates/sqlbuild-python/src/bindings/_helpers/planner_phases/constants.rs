@@ -1,12 +1,5 @@
 //! Python modules and names the planner phases exchange values with.
 
-pub(crate) const NATIVE_MODULE: &str = "sqlbuild._native";
-pub(crate) const PLANNER_MODELS: &str = "sqlbuild._native";
-pub(crate) const PLANNER_TYPES: &str = "sqlbuild._native";
-pub(crate) const PLANNER_EXCEPTIONS: &str = "sqlbuild._native";
-pub(crate) const ADAPTER_MODELS: &str = "sqlbuild.adapter.contract.models";
-pub(crate) const ADAPTER_TYPES: &str = "sqlbuild.adapter.contract.types";
-pub(crate) const SPEC_MODELS: &str = "sqlbuild._native";
 pub(crate) const SNOWFLAKE_ADAPTER: &str = "snowflake";
 pub(crate) const BIGQUERY_ADAPTER: &str = "bigquery";
 pub(crate) const TRANSIENT_TABLE_TYPE: &str = "transient";

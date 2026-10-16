@@ -16,14 +16,10 @@ use sqlbuild_rules::lint_text::main::scan_fixture_null_candidates::scan_fixture_
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const PLANNER_ERRORS_MODULE: &str = "sqlbuild._native";
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
-const UNIT_TEST_SELECTORS_MODULE: &str = "sqlbuild._native";
-const GRAPH_SELECTION_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
 const SELECTION_CODE: &str = "S007";
 
 /// The adapter, the selected files when a selector scopes the run, and the discovered inputs.
@@ -44,7 +40,7 @@ fn planner_error(py: Python<'_>, message: &str, code: &str) -> PyErr {
     let raised = (|| -> PyResult<Bound<'_, PyAny>> {
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
         keywords.set_item("code", code)?;
-        imported(py, PLANNER_ERRORS_MODULE, "PlannerInputError")?.call((message,), Some(&keywords))
+        registry::error(py, ErrorId::PlannerInput)?.call((message,), Some(&keywords))
     })();
     match raised {
         Ok(instance) => PyErr::from_value(instance),
@@ -77,7 +73,7 @@ fn discovered_adapter<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project_dir.py();
     let adapter_name: Bound<'py, PyAny> = call_with(
-        &imported(py, ADAPTER_NAME_MODULE, "resolve_effective_adapter_name")?,
+        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
             ("project_config", discovered.getattr("project_config")?),
             ("local_config", discovered.getattr("local_config")?),
@@ -156,14 +152,14 @@ fn model_paths(
         return Ok(paths);
     }
     let graph: Bound<'_, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "build_project_graph")?,
+        &registry::native(py, NativeAttr::BuildProjectGraph)?,
         &[
             ("discovered_inputs", scope.discovered.clone()),
             ("adapter", scope.adapter.clone()),
         ],
     )?;
     let keys: Bound<'_, PyAny> = call_with(
-        &imported(py, GRAPH_SELECTION_MODULE, "select_project_graph")?,
+        &registry::native(py, NativeAttr::SelectProjectGraph)?,
         &[
             ("graph", graph.clone()),
             ("select", selectors(py, select)?),
@@ -239,22 +235,22 @@ fn selected_contract_inputs<'py>(
     referenced_model_names: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project_dir.py();
-    let native = |name: &str| imported(py, NATIVE_MODULE, name);
+    let native = |name: NativeAttr| registry::native(py, name);
     let project_config: Bound<'py, PyAny> =
-        native("load_project_config_file")?.call1((project_dir,))?;
+        native(NativeAttr::LoadProjectConfigFile)?.call1((project_dir,))?;
     let local_config: Bound<'py, PyAny> =
-        native("load_local_config_file")?.call1((project_dir,))?;
+        native(NativeAttr::LoadLocalConfigFile)?.call1((project_dir,))?;
     let disabled: Bound<'py, PyAny> = PyBool::new(py, false).to_owned().into_any();
     let scope: Bound<'py, PyAny> = call_with(
-        &native("directory_snapshot_scope")?,
+        &native(NativeAttr::DirectorySnapshotScope)?,
         &[("project_dir", project_dir.clone())],
     )?;
     within(&scope, |_| {
-        let project_only = |name: &str| -> PyResult<Bound<'py, PyAny>> {
+        let project_only = |name: NativeAttr| -> PyResult<Bound<'py, PyAny>> {
             call_with(&native(name)?, &[("project_dir", project_dir.clone())])
         };
         call_with(
-            &imported(py, DISCOVERY_MODELS_MODULE, "DiscoveredProjectInputs")?,
+            &registry::class(py, RecordId::DiscoveredProjectInputs)?,
             &[
                 ("project_config", project_config),
                 ("local_config", local_config),
@@ -262,7 +258,7 @@ fn selected_contract_inputs<'py>(
                 (
                     "model_files",
                     call_with(
-                        &native("discover_model_files")?,
+                        &native(NativeAttr::DiscoverModelFiles)?,
                         &[
                             ("project_dir", project_dir.clone()),
                             ("extract_implicit_alias_columns", disabled.clone()),
@@ -273,14 +269,20 @@ fn selected_contract_inputs<'py>(
                 ),
                 (
                     "model_schema_files",
-                    project_only("discover_model_schema_files")?,
+                    project_only(NativeAttr::DiscoverModelSchemaFiles)?,
                 ),
-                ("schema_files", project_only("discover_schema_files")?),
-                ("source_files", project_only("discover_source_files")?),
+                (
+                    "schema_files",
+                    project_only(NativeAttr::DiscoverSchemaFiles)?,
+                ),
+                (
+                    "source_files",
+                    project_only(NativeAttr::DiscoverSourceFiles)?,
+                ),
                 (
                     "test_files",
                     call_with(
-                        &native("discover_test_files")?,
+                        &native(NativeAttr::DiscoverTestFiles)?,
                         &[
                             ("project_dir", project_dir.clone()),
                             ("selected_paths", selected_test_paths),
@@ -326,7 +328,7 @@ pub(crate) fn resolve_lint_inputs<'py>(
     }
     let disabled: Bound<'py, PyAny> = PyBool::new(py, false).to_owned().into_any();
     let discovered: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "discover_project_inputs")?,
+        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
         &[
             ("project_dir", project_dir.clone()),
             ("sql_analysis_enabled_override", disabled.clone()),
@@ -334,7 +336,7 @@ pub(crate) fn resolve_lint_inputs<'py>(
         ],
     )?;
     call_with(
-        &imported(py, UNIT_TEST_SELECTORS_MODULE, "reject_unit_test_selectors")?,
+        &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
         &[
             ("select", selectors(py, select)?),
             ("exclude", selectors(py, exclude)?),

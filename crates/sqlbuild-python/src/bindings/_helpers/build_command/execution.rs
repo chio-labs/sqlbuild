@@ -18,19 +18,15 @@ use crate::bindings::_helpers::check::check_core::{
     build_check_relation_targets, load_results_by_loader_name, record_python_run_state_results,
     relevant_check_functions,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
 use crate::bindings::_helpers::cursor::overrides::{cursor_integer, cursor_timestamp};
 use crate::bindings::_helpers::freshness::publication::append_freshness_records;
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const CURSOR_OVERRIDES_MODULE: &str = "sqlbuild._native";
-const PLANNER_MODELS: &str = "sqlbuild._native";
-const BUILD_MODELS: &str = "sqlbuild.executor.build.models";
-const PIPELINE_RUN_MODULE: &str = "sqlbuild.executor.pipeline.main.run";
-const COST_CONTEXT_MODULE: &str = "sqlbuild._native";
-const CHECKS_MODULE: &str = "sqlbuild.executor.python_nodes.main._checks";
-const EXECUTOR_PYTHON_MODELS: &str = "sqlbuild.executor.python_nodes.models";
 const EXECUTION_COMMAND: &str = "sqb build";
 const SUCCESS_STATUS: &str = "success";
 const NODE_START: [&str; 2] = ["name", "resource_kind"];
@@ -104,7 +100,7 @@ fn run_context_facts(
         + count(&discovered, "task_functions")?
         + count(&discovered, "asset_functions")?;
     let resolved: Bound<'_, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "describe_connection_warehouse")?,
+        &registry::native(py, NativeAttr::DescribeConnectionWarehouse)?,
         &[
             ("discovered_inputs", discovered),
             ("selected_target", project.getattr("effective_target_name")?),
@@ -178,7 +174,7 @@ fn cursors<'py>(
     let mut overrides: Bound<'py, PyAny> = plan.getattr("cursor_overrides")?;
     if !overrides.is_truthy()? {
         overrides = call_with(
-            &imported(py, CURSOR_OVERRIDES_MODULE, "type_cursor_overrides")?,
+            &registry::native(py, NativeAttr::TypeCursorOverrides)?,
             &[(
                 "cursor_overrides",
                 context.request.getattr("cursor_overrides")?,
@@ -186,7 +182,7 @@ fn cursors<'py>(
         )?;
     }
     if !overrides.is_truthy()? {
-        overrides = imported(py, PLANNER_MODELS, "CursorOverrides")?.call0()?;
+        overrides = registry::class(py, RecordId::CursorOverrides)?.call0()?;
     }
     Ok([
         cursor_timestamp(&overrides.getattr("start_ts")?)?,
@@ -206,7 +202,7 @@ pub(crate) fn prepare_build_execution<'py>(
     let plan: Bound<'py, PyAny> = pipeline.getattr("plan_output")?;
     let debug: bool = context.request_flag("debug")? || context.request_flag("json_output")?;
     let callbacks: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "BuildProgressCallbacks")?,
+        &registry::native(py, NativeAttr::BuildProgressCallbacks)?,
         &[
             ("plan", plan.clone()),
             ("use_color", boolean(py, context.use_color)),
@@ -223,7 +219,7 @@ pub(crate) fn prepare_build_execution<'py>(
         write_run_context(context, pipeline)?;
     } else {
         call_with(
-            &imported(py, NATIVE_MODULE, "write_execution_header")?,
+            &registry::native(py, NativeAttr::WriteExecutionHeader)?,
             &[
                 ("stream", context.stream.clone()),
                 ("command", text(py, EXECUTION_COMMAND)),
@@ -234,7 +230,7 @@ pub(crate) fn prepare_build_execution<'py>(
         )?;
     }
     let connection_progress: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "ConnectionProgressReporter")?,
+        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
         &[
             ("adapter_name", context.get("adapter_name")?),
             ("stream", context.stream.clone()),
@@ -292,7 +288,7 @@ pub(crate) fn execute_build_plan<'py>(
     let [start_ts, end_ts, start_int, end_int] = &preparation.cursors;
     let request = |name: &str| context.request.getattr(name);
     let runtime: Bound<'py, PyAny> = call_with(
-        &imported(py, BUILD_MODELS, "BuildRuntimeParams")?,
+        &host::entry(py, ExecutorHost::BuildRuntimeParams)?,
         &[
             ("run_id", project.getattr("run_id")?),
             (
@@ -324,7 +320,7 @@ pub(crate) fn execute_build_plan<'py>(
             (
                 "project_relations",
                 call_with(
-                    &imported(py, NATIVE_MODULE, "build_project_relation_targets")?,
+                    &registry::native(py, NativeAttr::BuildProjectRelationTargets)?,
                     &[("adapter", adapter.clone()), ("plan_output", plan.clone())],
                 )?,
             ),
@@ -332,7 +328,7 @@ pub(crate) fn execute_build_plan<'py>(
     )?;
     let connection: &Bound<'py, PyAny> = &preparation.connection_progress;
     let build_callbacks: Bound<'py, PyAny> = call_with(
-        &imported(py, BUILD_MODELS, "BuildCallbacks")?,
+        &host::entry(py, ExecutorHost::BuildCallbacks)?,
         &[
             ("on_migration_progress", line_writer(&context.stream)?),
             (
@@ -373,7 +369,7 @@ pub(crate) fn execute_build_plan<'py>(
         ],
     )?;
     let customizations: Bound<'py, PyAny> = call_with(
-        &imported(py, BUILD_MODELS, "BuildCustomizations")?,
+        &host::entry(py, ExecutorHost::BuildCustomizations)?,
         &[
             (
                 "custom_materializations",
@@ -383,7 +379,7 @@ pub(crate) fn execute_build_plan<'py>(
         ],
     )?;
     let initial_state: Bound<'py, PyAny> = call_with(
-        &imported(py, BUILD_MODELS, "BuildInitialState")?,
+        &host::entry(py, ExecutorHost::BuildInitialState)?,
         &[
             ("precompleted_keys", lifecycle.precompleted_keys(py)?),
             ("initial_load_results", lifecycle.ingress_load_results(py)),
@@ -391,7 +387,7 @@ pub(crate) fn execute_build_plan<'py>(
         ],
     )?;
     let result: Bound<'py, PyAny> = call_with(
-        &imported(py, PIPELINE_RUN_MODULE, "run_build_pipeline")?,
+        &host::entry(py, ExecutorHost::RunBuildPipeline)?,
         &[
             ("plan", plan.clone()),
             ("connection_config", connection_config.clone()),
@@ -430,7 +426,7 @@ fn check_runtime<'py>(
         .map(|check| check.getattr("name"))
         .collect::<PyResult<_>>()?;
     call_with(
-        &imported(py, EXECUTOR_PYTHON_MODELS, "PythonNodeRuntime")?,
+        &host::entry(py, ExecutorHost::PythonNodeRuntime)?,
         &[
             ("adapter", adapter.clone()),
             ("connection_config", context.get("connection_config")?),
@@ -451,7 +447,7 @@ fn check_runtime<'py>(
             (
                 "project_relations",
                 call_with(
-                    &imported(py, NATIVE_MODULE, "build_project_relation_targets")?,
+                    &registry::native(py, NativeAttr::BuildProjectRelationTargets)?,
                     &[
                         ("adapter", adapter),
                         ("plan_output", pipeline.getattr("plan_output")?),
@@ -511,7 +507,7 @@ pub(crate) fn run_post_build_python_checks<'py>(
         adapter.call_method1("connect", (context.get("connection_config")?,))?;
     let executed: PyResult<Bound<'py, PyAny>> = (|| {
         let run_state: Bound<'py, PyAny> =
-            imported(py, EXECUTOR_PYTHON_MODELS, "PythonNodeRunState")?.call0()?;
+            host::entry(py, ExecutorHost::PythonNodeRunState)?.call0()?;
         record_python_run_state_results(
             &discovered,
             &run_state,
@@ -519,14 +515,14 @@ pub(crate) fn run_post_build_python_checks<'py>(
             Some(&plan.getattr("source_map")?),
         )?;
         let callbacks: Bound<'py, PyAny> = call_with(
-            &imported(py, EXECUTOR_PYTHON_MODELS, "PythonCheckCallbacks")?,
+            &host::entry(py, ExecutorHost::PythonCheckCallbacks)?,
             &[(
                 "on_check_complete",
                 preparation.callbacks.getattr("write_execution_event")?,
             )],
         )?;
         call_with(
-            &imported(py, CHECKS_MODULE, "execute_python_checks")?,
+            &host::entry(py, ExecutorHost::ExecutePythonChecks)?,
             &[
                 ("check_functions", tuple(py, &checks)?),
                 ("python_graph", graph.clone()),
@@ -546,7 +542,7 @@ pub(crate) fn run_post_build_python_checks<'py>(
     let check_results: Bound<'py, PyAny> = executed?;
     closed?;
     call_with(
-        &imported(py, NATIVE_MODULE, "write_check_results")?,
+        &registry::native(py, NativeAttr::WriteCheckResults)?,
         &[
             ("stream", context.stream.clone()),
             ("results", check_results.clone()),
@@ -573,7 +569,7 @@ pub(crate) fn execute_direct_build<'py>(
     } else {
         context.get("adapter_name")?
     };
-    let cost_context: Bound<'py, PyAny> = imported(py, COST_CONTEXT_MODULE, "CostContext")?;
+    let cost_context: Bound<'py, PyAny> = registry::native(py, NativeAttr::CostContext)?;
     let options: Bound<'py, PyDict> = PyDict::new(py);
     options.set_item("run_id", &run_id)?;
     options.set_item("resource_type", "run")?;

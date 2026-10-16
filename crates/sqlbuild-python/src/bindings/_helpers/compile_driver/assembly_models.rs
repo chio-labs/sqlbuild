@@ -6,15 +6,14 @@ use pyo3::types::{PyDict, PyList, PyString, PyTuple};
 use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_sql;
 use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
 use crate::bindings::_helpers::compile_driver::assembly_analysis::{
-    ANALYSIS_MODELS_MODULE, AnalysisContext, model_stem, selected_for_analysis,
+    AnalysisContext, model_stem, selected_for_analysis,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::hand_built::compiled_model::compiled_model as hand_built_model;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::macro_calls::top_level_macro_call_names;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
 const NATIVE_FAILURE_PREFIX: &str = "NativeCompilerError: ";
 const HOOK_NAMES: [&str; 2] = ["pre_hooks", "post_hooks"];
 
@@ -41,12 +40,11 @@ pub(crate) fn compiled_models<'py>(
     (native_models, names): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = inputs.py();
-    let native: Bound<'py, PyAny> = py.import(NATIVE_MODULE)?.into_any();
     let stages: ModelStages<'py> = ModelStages {
-        placeholders: native.getattr("model_placeholders")?,
-        validate_hooks: native.getattr("validate_hook_sql_syntax")?,
-        validate_sql: native.getattr("validate_sql_syntax")?,
-        native_input: native.getattr("NativeModelInput")?,
+        placeholders: registry::native(py, NativeAttr::ModelPlaceholders)?,
+        validate_hooks: registry::native(py, NativeAttr::ValidateHookSqlSyntax)?,
+        validate_sql: registry::native(py, NativeAttr::ValidateSqlSyntax)?,
+        native_input: registry::native(py, NativeAttr::NativeModelInput)?,
     };
     let analysis_enabled: bool = context.sql_analysis_enabled.is_truthy()?;
     let mut models: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -173,7 +171,7 @@ fn compiled_model<'py>(
         );
     }
     let analysis: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "HandBuiltAnalysis")?,
+        &registry::class(py, RecordId::HandBuiltAnalysis)?,
         &[
             ("session", session_analysis),
             ("fallback", fallback),
@@ -199,7 +197,7 @@ fn fallback_columns<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = analysis_query_sql.py();
     let query: Bound<'py, PyAny> = call_with(
-        &imported(py, ANALYSIS_MODELS_MODULE, "NativeColumnQuery")?,
+        &registry::class(py, RecordId::NativeColumnQuery)?,
         &[
             ("sql", analysis_query_sql.clone()),
             ("mode", PyString::new(py, "parse").into_any()),
@@ -207,7 +205,7 @@ fn fallback_columns<'py>(
         ],
     )?;
     call_with(
-        &imported(py, NATIVE_MODULE, "infer_native_query_column_rows")?,
+        &registry::native(py, NativeAttr::InferNativeQueryColumnRows)?,
         &[
             ("queries", PyTuple::new(py, [query])?.into_any()),
             ("profile", context.profile.clone()),

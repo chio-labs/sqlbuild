@@ -1,7 +1,9 @@
 //! Python's unified selector resolution across SQL resources and Python nodes.
 
-use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::convert::Infallible;
 
+use sqlbuild_core::graph_walk::main::breadth_first_reach::breadth_first_reach;
 use sqlbuild_core::text::main::glob_match::glob_match;
 
 use crate::assembly::project::types::ObjectKey;
@@ -192,14 +194,13 @@ fn sql_dependency_upstream(context: &SelectionContext<'_>, atoms: &Atoms) -> Ato
         return Atoms::new();
     }
     let mut visited: HashSet<&ObjectKey> = starts.iter().copied().collect();
-    let mut frontier: VecDeque<&ObjectKey> = starts.iter().copied().collect();
-    while let Some(current) = frontier.pop_front() {
-        for neighbor in edge_keys(context.sql.graph, current, EdgeDirection::Upstream) {
-            if visited.insert(neighbor) {
-                frontier.push_back(neighbor);
-            }
-        }
-    }
+    let Ok(()) = breadth_first_reach(starts, None, &mut visited, |current| {
+        Ok::<_, Infallible>(edge_keys(
+            context.sql.graph,
+            current,
+            EdgeDirection::Upstream,
+        ))
+    });
     let selected: Atoms = sql_atoms(visited.into_iter().cloned());
     let loaders: Atoms = terminal_loader_atoms(context, &selected);
     selected.into_iter().chain(loaders).collect()

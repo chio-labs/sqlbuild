@@ -32,3 +32,5 @@ DYNAMIC_MODULE_PATHS: tuple[re.Pattern[str], ...] = (
     ),
     re.compile(r"\b(?:format|concat)!\(\s*\"sqlbuild\."),
 )
+HOST_MODULE: str = "sqlbuild._native_host"
+HOST_ENTRY: re.Pattern[str] = re.compile(r"\bHostEntry\s*\{\s*name:\s*" + ATTRIBUTE_NAME)

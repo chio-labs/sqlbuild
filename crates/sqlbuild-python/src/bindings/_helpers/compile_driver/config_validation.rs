@@ -4,14 +4,12 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyString, PyTuple};
 use sqlbuild_config::project::main::unsupported_target_warehouse::unsupported_target_warehouse;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
-const SPEC_ERRORS_MODULE: &str = "sqlbuild._native";
-const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const SESSION_WAREHOUSE_MODULE: &str = "sqlbuild.adapter.discovery.main._session_warehouse_support";
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
+use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 const LOCAL_CONFIG_FILENAME: &str = "sqlbuild_local.toml";
 const SQL_ANALYSIS_KEY: &str = "sql_analysis";
@@ -29,8 +27,7 @@ fn project_config_error(py: Python<'_>, message: &str, help: Option<&str>) -> Py
     let raised = (|| -> PyResult<Bound<'_, PyAny>> {
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
         keywords.set_item("help", help)?;
-        imported(py, DISCOVERY_ERRORS_MODULE, "ProjectConfigError")?
-            .call((message,), Some(&keywords))
+        registry::error(py, ErrorId::ProjectConfig)?.call((message,), Some(&keywords))
     })();
     match raised {
         Ok(instance) => PyErr::from_value(instance),
@@ -66,7 +63,7 @@ fn reject_local_sql_analysis_opt_out(config: &ProjectConfiguration<'_, '_>) -> P
             local_settings.getattr(SQL_ANALYSIS_KEY)?,
         ],
     )?;
-    imported(py, NATIVE_MODULE, "validate_local_sql_analysis")?
+    registry::native(py, NativeAttr::ValidateLocalSqlAnalysis)?
         .call1((config.project_dir, flags))?;
     Ok(())
 }
@@ -94,11 +91,7 @@ fn session_warehouse_support(
     project_dir: &Bound<'_, PyAny>,
 ) -> PyResult<bool> {
     call_with(
-        &imported(
-            py,
-            SESSION_WAREHOUSE_MODULE,
-            "adapter_supports_session_warehouse",
-        )?,
+        &host::entry(py, AdapterHost::AdapterSupportsSessionWarehouse)?,
         &[
             ("adapter_name", adapter_name.clone()),
             ("project_dir", project_dir.clone()),
@@ -114,7 +107,7 @@ fn reject_group(
     (target, group, value): (String, String, String),
 ) -> PyErr {
     let raised = (|| -> PyResult<PyErr> {
-        let file_path: String = imported(py, NATIVE_MODULE, "resolve_config_file_path")?
+        let file_path: String = registry::native(py, NativeAttr::ResolveConfigFilePath)?
             .call1((project_dir, local))?
             .str()?
             .extract()?;
@@ -151,7 +144,7 @@ fn reject_unsupported_target_warehouses(config: &ProjectConfiguration<'_, '_>) -
         return Ok(());
     };
     let adapter_name: Bound<'_, PyAny> = call_with(
-        &imported(py, ADAPTER_NAME_MODULE, "resolve_effective_adapter_name")?,
+        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
             ("project_config", config.project_config.clone()),
             ("local_config", config.local_config.clone()),
@@ -175,8 +168,8 @@ fn reject_invalid_target_connections(config: &ProjectConfiguration<'_, '_>) -> P
     names.extend(target_names(config.local_config)?);
     names.sort();
     names.dedup();
-    let resolve: Bound<'_, PyAny> = imported(py, TARGET_CONFIG_MODULE, "resolve_target_config")?;
-    let spec_error: Bound<'_, PyAny> = imported(py, SPEC_ERRORS_MODULE, "SpecConfigError")?;
+    let resolve: Bound<'_, PyAny> = registry::native(py, NativeAttr::ResolveTargetConfig)?;
+    let spec_error: Bound<'_, PyAny> = registry::error(py, ErrorId::SpecConfig)?;
     for name in names {
         let resolved: PyResult<Bound<'_, PyAny>> = call_with(
             &resolve,

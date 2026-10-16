@@ -14,11 +14,10 @@ use sqlbuild_core::loader_connection::models::LoaderConnection;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::load::ingestr_command::connection;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 
-const DLT_ERROR: (&str, &str) = (
-    "sqlbuild.integrations.dlt.exceptions",
-    "DltIntegrationError",
-);
+const DLT_ERROR: ThirdPartyHost = ThirdPartyHost::DltIntegrationError;
 
 /// `(factory, arguments, options, dataset_name)` of one dlt destination.
 type DestinationCall<'py> = (
@@ -30,7 +29,7 @@ type DestinationCall<'py> = (
 
 /// A `DltIntegrationError`, or the failure to construct one.
 fn dlt_error(py: Python<'_>, message: String) -> PyErr {
-    imported(py, DLT_ERROR.0, DLT_ERROR.1)
+    host::entry(py, DLT_ERROR)
         .and_then(|class| class.call1((message,)))
         .map_or_else(|error| error, PyErr::from_value)
 }

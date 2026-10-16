@@ -20,15 +20,11 @@ use crate::bindings::_helpers::freshness::observation::Observer;
 use crate::bindings::_helpers::freshness::state_io::{StateRead, read_latest};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const ERRORS_MODULE: &str = "sqlbuild._native";
-const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const CONNECTION_MODULE: &str = "sqlbuild._native";
-const GRAPH_SELECTION_MODULE: &str = "sqlbuild._native";
-const UPSTREAM_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const RELATION_LOOKUP_MODULE: &str = "sqlbuild.adapter.relations.main.relation_lookup";
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
+use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::SOURCE_FRESHNESS_TABLE_NAME as STATE_TABLE_NAME;
 const STALE_REQUIRES_STATE_MESSAGE: &str = "freshness --fail-on-stale requires --state";
 const STALE_REQUIRES_STATE_CODE: &str = "C238";
@@ -52,7 +48,7 @@ fn user_error(py: Python<'_>, (message, code): (&str, &str)) -> PyErr {
     let raised = (|| {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", code)?;
-        imported(py, ERRORS_MODULE, "CliUserError")?.call((message,), Some(&options))
+        registry::error(py, ErrorId::CliUser)?.call((message,), Some(&options))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),
@@ -76,7 +72,7 @@ fn source_names_for_keys(
     let py: Python<'_> = graph.py();
     let source_type: Bound<'_, PyAny> =
         imported(py, COMPILE_TYPES_MODULE, "CompiledResourceType")?.getattr("SOURCE")?;
-    let expand: Bound<'_, PyAny> = imported(py, UPSTREAM_MODULE, "expand_project_upstream_keys")?;
+    let expand: Bound<'_, PyAny> = registry::native(py, NativeAttr::ExpandProjectUpstreamKeys)?;
     let upstream_deps: Bound<'_, PyAny> = graph.getattr("upstream_deps")?;
     for key in keys.try_iter()? {
         let key: Bound<'_, PyAny> = key?;
@@ -103,7 +99,7 @@ fn graph_keys<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = graph.py();
     let empty: Bound<'py, PyAny> = PyTuple::empty(py).into_any();
-    imported(py, GRAPH_SELECTION_MODULE, "select_project_graph")?.call(
+    registry::native(py, NativeAttr::SelectProjectGraph)?.call(
         (),
         Some(&keywords(
             py,
@@ -167,18 +163,17 @@ fn previous_records<'py>(
             )
         })
         .collect::<PyResult<_>>()?;
-    let lookup: Bound<'py, PyAny> = imported(py, RELATION_LOOKUP_MODULE, "build_relation_lookup")?
-        .call(
-            (),
-            Some(&keywords(
-                py,
-                &[
-                    ("adapter", adapter),
-                    ("connection", connection),
-                    ("locations", &PyTuple::new(py, locations)?.into_any()),
-                ],
-            )?),
-        )?;
+    let lookup: Bound<'py, PyAny> = host::entry(py, AdapterHost::BuildRelationLookup)?.call(
+        (),
+        Some(&keywords(
+            py,
+            &[
+                ("adapter", adapter),
+                ("connection", connection),
+                ("locations", &PyTuple::new(py, locations)?.into_any()),
+            ],
+        )?),
+    )?;
     let read: StateRead<'py> = StateRead {
         connection: connection.clone(),
         execute: adapter.getattr("execute")?,
@@ -212,7 +207,7 @@ fn observe(
 ) -> PyResult<Vec<FreshnessSourceResult>> {
     let py: Python<'_> = adapter.py();
     let connection_config: Bound<'_, PyAny> =
-        imported(py, CONNECTION_MODULE, "resolve_project_connection_config")?.call(
+        registry::native(py, NativeAttr::ResolveProjectConnectionConfig)?.call(
             (),
             Some(&keywords(
                 py,
@@ -266,7 +261,7 @@ fn write_json_output(
     let options: Bound<'_, PyDict> = keywords(py, &[("json_output_path", json_output_path)])?;
     options.set_item("payload", format!("{payload}\n"))?;
     options.set_item("json_output", json_output)?;
-    imported(py, NATIVE_MODULE, "write_execution_json_output")?.call((), Some(&options))?;
+    registry::native(py, NativeAttr::WriteExecutionJsonOutput)?.call((), Some(&options))?;
     Ok(())
 }
 
@@ -286,11 +281,11 @@ fn run_freshness_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult
         directory if !directory.is_none() => directory,
         _ => py.import("pathlib")?.getattr("Path")?.call_method0("cwd")?,
     };
-    let discovered: Bound<'_, PyAny> = imported(py, NATIVE_MODULE, "discover_project_inputs")?
+    let discovered: Bound<'_, PyAny> = registry::native(py, NativeAttr::DiscoverProjectInputs)?
         .call((), Some(&keywords(py, &[("project_dir", &project_dir)])?))?;
     let select: Bound<'_, PyAny> = request.getattr("select")?;
     let exclude: Bound<'_, PyAny> = request.getattr("exclude")?;
-    imported(py, REJECT_UNIT_TESTS_MODULE, "reject_unit_test_selectors")?.call(
+    registry::native(py, NativeAttr::RejectUnitTestSelectors)?.call(
         (),
         Some(&keywords(
             py,
@@ -302,7 +297,7 @@ fn run_freshness_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult
         )?),
     )?;
     let adapter_name: Bound<'_, PyAny> =
-        imported(py, ADAPTER_NAME_MODULE, "resolve_effective_adapter_name")?.call(
+        registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?.call(
             (),
             Some(&keywords(
                 py,
@@ -313,7 +308,7 @@ fn run_freshness_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult
             )?),
         )?;
     let adapter: Bound<'_, PyAny> = resolve_cli_adapter(&adapter_name, &project_dir)?;
-    let graph: Bound<'_, PyAny> = imported(py, NATIVE_MODULE, "build_project_graph")?.call(
+    let graph: Bound<'_, PyAny> = registry::native(py, NativeAttr::BuildProjectGraph)?.call(
         (),
         Some(&keywords(
             py,

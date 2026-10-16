@@ -19,18 +19,18 @@ use sqlbuild_state::freshness::types::TimestampParser;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cursor::values::{DATETIME_MODULE, local_date_time};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::timestamps::{
     date_time_typed, in_utc, offset_aware, presumed_utc,
 };
 
-const NATIVE_RECORDS: &str = "sqlbuild._native";
-const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const TIMESTAMP_KIND: &str = "timestamp";
 const INTEGER_KIND: &str = "integer";
 const STRING_KIND: &str = "string";
 
-fn raised(py: Python<'_>, class: &str, message: String) -> PyErr {
-    match imported(py, EXCEPTIONS_MODULE, class).and_then(|class| class.call1((message,))) {
+fn raised(py: Python<'_>, class: NativeAttr, message: String) -> PyErr {
+    match registry::native(py, class).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }
@@ -39,9 +39,11 @@ fn raised(py: Python<'_>, class: &str, message: String) -> PyErr {
 fn python_error(py: Python<'_>, error: FreshnessError) -> PyErr {
     match error {
         FreshnessError::Observation(message) => {
-            raised(py, "SourceFreshnessObservationError", message)
+            raised(py, NativeAttr::SourceFreshnessObservationError, message)
         }
-        FreshnessError::Input(message) => raised(py, "SourceFreshnessInputError", message),
+        FreshnessError::Input(message) => {
+            raised(py, NativeAttr::SourceFreshnessInputError, message)
+        }
         FreshnessError::Overflow(message) => PyOverflowError::new_err(message),
     }
 }
@@ -60,7 +62,11 @@ pub(crate) fn version_hash(
 }
 
 fn observation_error(py: Python<'_>, message: &str) -> PyErr {
-    raised(py, "SourceFreshnessObservationError", message.to_owned())
+    raised(
+        py,
+        NativeAttr::SourceFreshnessObservationError,
+        message.to_owned(),
+    )
 }
 
 /// A source freshness value normalized for stable state storage.
@@ -107,7 +113,7 @@ pub(crate) fn normalize<'py>(
     }
     Err(raised(
         py,
-        "SourceFreshnessObservationError",
+        NativeAttr::SourceFreshnessObservationError,
         format!(
             "Unsupported source freshness value kind: {}",
             value_kind.str()?
@@ -206,7 +212,7 @@ pub(crate) fn age_policy<'py>(
     if policy.is_none() {
         return Ok(None);
     }
-    let statuses: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS, "SourceFreshnessAgeStatus")?;
+    let statuses: Bound<'py, PyAny> = registry::class(py, RecordId::SourceFreshnessAgeStatus)?;
     if !date_time_typed(data_version)? {
         return statuses.getattr("UNKNOWN").map(Some);
     }

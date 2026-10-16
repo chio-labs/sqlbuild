@@ -6,7 +6,8 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
-use crate::bindings::_helpers::records::constants::NATIVE_MODULE;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
 /// Keyword fields every `RuleOption` constructor requires.
 const REQUIRED_OPTION_FIELDS: [&str; 3] = ["name", "default", "description"];
@@ -37,7 +38,7 @@ pub(crate) fn project_path_depth(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyA
 /// `Rule.project_wide`: whether the rule runs once for the compiled project.
 pub(crate) fn rule_project_wide(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     let project: Bound<'_, PyAny> =
-        imported(instance.py(), NATIVE_MODULE, "RuleSubject")?.getattr("PROJECT")?;
+        registry::class(instance.py(), RecordId::RuleSubject)?.getattr("PROJECT")?;
     instance
         .getattr("subject")?
         .is(&project)
@@ -59,7 +60,7 @@ pub(crate) fn rule_option_class_getitem(
     _kwargs: Option<&Bound<'_, PyDict>>,
 ) -> PyResult<Py<PyAny>> {
     let py: Python<'_> = receiver.py();
-    let class: Bound<'_, PyAny> = imported(py, NATIVE_MODULE, "RuleOption")?;
+    let class: Bound<'_, PyAny> = registry::class(py, RecordId::RuleOption)?;
     Ok(imported(py, "types", "GenericAlias")?
         .call1((class, args.get_item(0)?))?
         .unbind())
@@ -100,7 +101,7 @@ fn rule_option(
     for (name, value) in extra {
         fields.set_item(*name, value)?;
     }
-    Ok(imported(py, NATIVE_MODULE, "RuleOption")?
+    Ok(registry::class(py, RecordId::RuleOption)?
         .call((), Some(&fields))?
         .unbind())
 }

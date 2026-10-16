@@ -13,18 +13,14 @@ use sqlbuild_core::dbt_command::models::DbtInitSummary;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, flag, path, stream};
-
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const ERRORS_MODULE: &str = "sqlbuild._native";
-const PROGRESS_REPORTER_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 fn missing_project(py: Python<'_>) -> PyErr {
     let raised = (|| {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", "C242")?;
-        imported(py, ERRORS_MODULE, "CliUserError")?.call(
+        registry::error(py, ErrorId::CliUser)?.call(
             ("sqb dbt init requires --project-dir pointing at a dbt project",),
             Some(&options),
         )
@@ -84,21 +80,21 @@ fn run_dbt_init_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<
     let project_dir: Bound<'_, PyAny> = dbt_project_dir(request)?;
     let use_color: bool = color_enabled(py)?;
     let progress: Bound<'_, PyAny> = call_with(
-        &imported(py, PROGRESS_REPORTER_MODULE, "DbtInitProgressReporter")?,
+        &registry::native(py, NativeAttr::DbtInitProgressReporter)?,
         &[
             ("stream", stream(py, "stdout")?),
             ("use_color", flag(py, use_color)),
         ],
     )?;
     let callbacks: Bound<'_, PyAny> = call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "DbtInitProgressCallbacks")?,
+        &registry::class(py, RecordId::DbtInitProgressCallbacks)?,
         &[
             ("start", progress.getattr("start")?),
             ("complete", progress.getattr("complete")?),
         ],
     )?;
     let init_request: Bound<'_, PyAny> = call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "DbtInitRequest")?,
+        &registry::class(py, RecordId::DbtInitRequest)?,
         &[
             ("cwd", request.getattr("cwd")?),
             ("dbt_project_dir", project_dir),
@@ -119,11 +115,11 @@ fn run_dbt_init_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<
         ],
     )?;
     call_with(
-        &imported(py, NATIVE_MODULE, "validate_dbt_init_project")?,
+        &registry::native(py, NativeAttr::ValidateDbtInitProject)?,
         &[("request", init_request.clone())],
     )?;
     let result: Bound<'_, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "build_dbt_init_project")?,
+        &registry::native(py, NativeAttr::BuildDbtInitProject)?,
         &[("request", init_request)],
     )?;
     let style: CliStyle = CliStyle { use_color };

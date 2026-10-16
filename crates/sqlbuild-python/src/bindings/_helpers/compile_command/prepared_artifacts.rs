@@ -15,6 +15,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
 use crate::bindings::_helpers::compile_outputs::artifacts::staged_artifact_files;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 
 const MIN_PREPARED_ARTIFACT_MODELS: usize = 128;
 const MAX_PREPARED_ARTIFACT_MODELS: usize = 5000;
@@ -286,7 +288,7 @@ impl PreparedCompileArtifacts {
               -> PyResult<Py<PyAny>> {
             let py: Python<'_> = arguments.py();
             Ok(call_with(
-                &imported(py, "sqlbuild._native", "plan_static_sql_tests")?,
+                &registry::native(py, NativeAttr::PlanStaticSqlTests)?,
                 &[
                     ("target_dir", planned_target.bind(py).clone()),
                     ("adapter", planned_adapter.bind(py).clone()),

@@ -4,13 +4,13 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::cursor::scalars::parse_value;
 use crate::bindings::_helpers::planner_resolution::values::string;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_cursor::algebra::main::floor_to_grain::floor_to_grain;
 use sqlbuild_cursor::planner::main::empty_inputs::empty_inputs;
-
-const MODELS: &str = "sqlbuild._native";
 
 #[pyfunction]
 #[pyo3(signature = (*, empty_input_names, waits_for_every_input, inputs_with_rows, has_window_start))]
@@ -21,7 +21,7 @@ fn decide_empty_cursor_inputs<'py>(
     has_window_start: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = empty_input_names.py();
-    let class = imported(py, MODELS, "EmptyCursorInputDecision")?;
+    let class = registry::class(py, RecordId::EmptyCursorInputDecision)?;
     if !empty_input_names.is_truthy()?
         || !empty_inputs(waits_for_every_input, inputs_with_rows, has_window_start)
     {
@@ -48,7 +48,7 @@ fn cursor_inputs_without_rows<'py>(
         .getattr("unreadable_input_names")?
         .is_truthy()?
     {
-        return imported(cursor_snapshot.py(), MODELS, "EmptyCursorInputDecision")?.call0();
+        return registry::class(cursor_snapshot.py(), RecordId::EmptyCursorInputDecision)?.call0();
     }
     let rows = cursor_snapshot.getattr("upstream_maxes")?.is_truthy()?
         || cursor_snapshot
@@ -94,12 +94,12 @@ fn empty_cursor_window<'py>(
     let mut bound = parse_value(&raw, &kind)?;
     if cursor_start.is_none() && !kind.eq("integer")? {
         bound = call_with(
-            &imported(py, "sqlbuild._native", "TimestampValue")?,
+            &registry::class(py, RecordId::TimestampValue)?,
             &[("value", bound.getattr("value")?)],
         )?;
     }
     call_with(
-        &imported(py, MODELS, "CursorBounds")?,
+        &registry::class(py, RecordId::CursorBounds)?,
         &[("start", bound.clone()), ("end", bound)],
     )
 }
@@ -143,7 +143,7 @@ fn unreadable_cursor_inputs_error<'py>(
     input_names: Vec<String>,
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(py, "sqlbuild._native", "PlannerInputError")?,
+        &registry::error(py, ErrorId::PlannerInput)?,
         &[
             (
                 "message",

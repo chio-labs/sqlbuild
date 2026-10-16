@@ -7,8 +7,9 @@ use pyo3::types::{PyString, PyTuple};
 use sqlbuild_analysis::janitor_planning::models::ArchiveTimestamp;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 
-pub(crate) const JANITOR_MODELS: &str = "sqlbuild.executor.janitor.models";
 const DATETIME_MODULE: &str = "datetime";
 
 /// `(database, schema)` as spelled.
@@ -58,7 +59,7 @@ impl Key {
     pub(crate) fn to_python<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         record(
             py,
-            "JanitorRelationKey",
+            ExecutorHost::JanitorRelationKey,
             &[
                 ("database", optional(py, self.database.as_deref())?),
                 ("schema", optional(py, self.schema.as_deref())?),
@@ -139,10 +140,10 @@ pub(crate) fn tuple<'py>(
 /// `sqlbuild.executor.janitor.models.<class_name>(**pairs)`.
 pub(crate) fn record<'py>(
     py: Python<'py>,
-    class_name: &str,
+    class_name: ExecutorHost,
     pairs: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(&imported(py, JANITOR_MODELS, class_name)?, pairs)
+    call_with(&host::entry(py, class_name)?, pairs)
 }
 
 fn utc(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {

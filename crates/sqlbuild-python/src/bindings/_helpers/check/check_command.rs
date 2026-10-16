@@ -24,23 +24,13 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::compile_outputs::runtime_target::write_python_check_runtime_target;
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::graph::python_selection::python_node_names;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const ERRORS_MODULE: &str = "sqlbuild._native";
-const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
-const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
-const STATIC_COMMAND_MODULE: &str = "sqlbuild._native";
-const RELATION_PLAN_MODULE: &str = "sqlbuild._native";
-const SELECTOR_PARSE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS: &str = "sqlbuild._native";
 const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
-const PYTHON_NODE_TYPES: &str = "sqlbuild.compiler.python_nodes.types";
-const EXECUTOR_MODELS: &str = "sqlbuild.executor.python_nodes.models";
-const CHECKS_MODULE: &str = "sqlbuild.executor.python_nodes.main._checks";
-const INGRESS_MODULE: &str = "sqlbuild.executor.python_nodes.main._ingress";
-const PROVIDER_SESSION_MODULE: &str = "sqlbuild.provider.main.session";
 const GRAPH_OPERATOR_CODE: &str = "C681";
 const GRAPH_OPERATOR_MESSAGE: &str = "sqb check selectors do not support graph operators; \
     select checks directly without '+', '~', or path-between expansion";
@@ -62,7 +52,7 @@ fn user_error(py: Python<'_>, (code, message): (&str, &str)) -> PyErr {
     let raised = (|| {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", code)?;
-        imported(py, ERRORS_MODULE, "CliUserError")?.call((message,), Some(&options))
+        registry::error(py, ErrorId::CliUser)?.call((message,), Some(&options))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),
@@ -80,8 +70,8 @@ fn empty_tuple(py: Python<'_>) -> Bound<'_, PyAny> {
 
 /// Refuse `+`, `~` and path selectors, splitting selectors as Python's `split` does.
 fn refuse_graph_selectors(py: Python<'_>, selectors: &[Bound<'_, PyAny>]) -> PyResult<()> {
-    let parse: Bound<'_, PyAny> = imported(py, SELECTOR_PARSE_MODULE, "parse_project_selector")?;
-    let path_selector: Bound<'_, PyAny> = imported(py, NATIVE_RECORDS_MODULE, "PathSelector")?;
+    let parse: Bound<'_, PyAny> = registry::native(py, NativeAttr::ParseProjectSelector)?;
+    let path_selector: Bound<'_, PyAny> = registry::class(py, RecordId::PathSelector)?;
     for selector in selectors {
         for token in selector.call_method0("split")?.try_iter()? {
             for part in token?.call_method1("split", (",",))?.try_iter()? {
@@ -132,7 +122,7 @@ fn selected_check_names<'py>(
         .collect::<PyResult<_>>()?;
     refuse_graph_selectors(py, &selectors)?;
     let check_kind: Bound<'py, PyAny> =
-        imported(py, PYTHON_NODE_TYPES, "PythonNodeKind")?.getattr("CHECK")?;
+        host::entry(py, UserCodeHost::PythonNodeKind)?.getattr("CHECK")?;
     if select.is_truthy()? {
         let selected: Bound<'py, PyAny> = python_nodes(graph, (select, exclude))?;
         let mut non_checks: Vec<String> = Vec::new();
@@ -174,7 +164,7 @@ fn compile_pipeline<'py>(
         &[("selected_names", check_names.clone().into_any())],
     )?;
     let closure: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "transitive_closure_many")?,
+        &registry::native(py, NativeAttr::TransitiveClosureMany)?,
         &[
             ("starts", check_names.clone().into_any()),
             ("edges", graph.getattr("upstream_deps")?),
@@ -185,7 +175,7 @@ fn compile_pipeline<'py>(
         ],
     )?;
     let loader_kind: Bound<'py, PyAny> =
-        imported(py, PYTHON_NODE_TYPES, "PythonNodeKind")?.getattr("LOADER")?;
+        host::entry(py, UserCodeHost::PythonNodeKind)?.getattr("LOADER")?;
     let mut loaders: Vec<Bound<'py, PyAny>> = Vec::new();
     for name in closure.try_iter()? {
         let name: Bound<'py, PyAny> = name?;
@@ -194,10 +184,10 @@ fn compile_pipeline<'py>(
         }
     }
     let loaders: Bound<'py, PyFrozenSet> = PyFrozenSet::new(py, loaders)?;
-    let key_class: Bound<'py, PyAny> = imported(py, COMPILE_MODELS, "CompiledObjectKey")?;
+    let key_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledObjectKey)?;
     let source_type: Bound<'py, PyAny> =
         imported(py, COMPILE_TYPES, "CompiledResourceType")?.getattr("SOURCE")?;
-    let ref_key: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "sql_ref_key")?;
+    let ref_key: Bound<'py, PyAny> = registry::native(py, NativeAttr::SqlRefKey)?;
     let mut keys: Vec<Bound<'py, PyAny>> = Vec::new();
     for reference in required_refs.try_iter()? {
         keys.push(ref_key.call1((reference?,))?);
@@ -218,18 +208,14 @@ fn compile_pipeline<'py>(
     }
     let keys: Bound<'py, PyAny> = PyFrozenSet::new(py, keys)?.into_any();
     let resolver: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            EXTERNAL_REFS_MODULE,
-            "resolve_external_sql_reference_resolver",
-        )?,
+        &registry::native(py, NativeAttr::ResolveExternalSqlReferenceResolver)?,
         &[
             ("project_dir", invocation.getattr("effective_project_dir")?),
             ("discovered_inputs", discovered.clone()),
         ],
     )?;
     let options: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "CompilePipelineOptions")?,
+        &registry::class(py, RecordId::CompilePipelineOptions)?,
         &[
             ("selected_target", request.getattr("selected_target")?),
             ("no_sql_validation", request.getattr("no_sql_validation")?),
@@ -242,7 +228,7 @@ fn compile_pipeline<'py>(
         ],
     )?;
     let context: Bound<'py, PyAny> = call_with(
-        &imported(py, STATIC_COMMAND_MODULE, "compile_static_command_context")?,
+        &registry::native(py, NativeAttr::CompileStaticCommandContext)?,
         &[
             ("discovered_inputs", discovered),
             ("adapter", invocation.getattr("adapter")?),
@@ -258,7 +244,7 @@ fn compile_pipeline<'py>(
         ],
     )?;
     let plan_output: Bound<'py, PyAny> = call_with(
-        &imported(py, RELATION_PLAN_MODULE, "build_relation_command_plan")?,
+        &registry::native(py, NativeAttr::BuildRelationCommandPlan)?,
         &[
             ("project", context.getattr("project")?),
             ("scope", context.getattr("scope")?),
@@ -266,7 +252,7 @@ fn compile_pipeline<'py>(
         ],
     )?;
     call_with(
-        &imported(py, NATIVE_MODULE, "build_static_pipeline_result")?,
+        &registry::native(py, NativeAttr::BuildStaticPipelineResult)?,
         &[("context", context), ("plan_output", plan_output)],
     )
 }
@@ -292,7 +278,7 @@ fn python_selection<'py>(
     let py: Python<'py> = request.py();
     let python_graph: Bound<'py, PyAny> = python_node_graph(discovered)?;
     call_with(
-        &imported(py, REJECT_UNIT_TESTS_MODULE, "reject_unit_test_selectors")?,
+        &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
         &[
             ("select", request.getattr("select")?),
             ("exclude", request.getattr("exclude")?),
@@ -322,14 +308,14 @@ fn prepare<'py>(
         }
     }
     let selection: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "PythonSqlRunSelection")?,
+        &registry::class(py, RecordId::PythonSqlRunSelection)?,
         &[
             ("sql_keys", PyFrozenSet::empty(py)?.into_any()),
             ("python_node_names", PyFrozenSet::empty(py)?.into_any()),
         ],
     )?;
     let lifecycle_plan: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "build_python_sql_run_lifecycle")?,
+        &registry::native(py, NativeAttr::BuildPythonSqlRunLifecycle)?,
         &[
             ("selection", selection),
             ("python_graph", python_graph.clone()),
@@ -342,7 +328,7 @@ fn prepare<'py>(
     let project: Bound<'py, PyAny> = pipeline.getattr("project")?;
     let plan_output: Bound<'py, PyAny> = pipeline.getattr("plan_output")?;
     let relation_targets: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "build_python_relation_targets")?,
+        &registry::native(py, NativeAttr::BuildPythonRelationTargets)?,
         &[
             ("adapter", adapter.clone()),
             ("project", project.clone()),
@@ -368,7 +354,7 @@ fn prepare<'py>(
             )?,
         ),
         project_relations: call_with(
-            &imported(py, NATIVE_MODULE, "build_project_relation_targets")?,
+            &registry::native(py, NativeAttr::BuildProjectRelationTargets)?,
             &[("adapter", adapter), ("plan_output", plan_output)],
         )?,
         python_graph,
@@ -403,10 +389,7 @@ fn node_runtime<'py>(
         fields.push(("project_relations", prepared.project_relations.clone()));
     }
     fields.push(("providers", providers.clone()));
-    call_with(
-        &imported(py, EXECUTOR_MODELS, "PythonNodeRuntime")?,
-        &fields,
-    )
+    call_with(&host::entry(py, ExecutorHost::PythonNodeRuntime)?, &fields)
 }
 
 fn record_run_state<'py>(
@@ -440,11 +423,11 @@ fn run_checks<'py>(
     let plan_output: Bound<'py, PyAny> = prepared.pipeline.getattr("plan_output")?;
     let source_map: Bound<'py, PyAny> = plan_output.getattr("source_map")?;
     let callbacks: Bound<'py, PyAny> = call_with(
-        &imported(py, EXECUTOR_MODELS, "IngressCallbacks")?,
+        &host::entry(py, ExecutorHost::IngressCallbacks)?,
         &[("use_color", invocation.getattr("use_color")?)],
     )?;
     let ingress: Bound<'py, PyAny> = call_with(
-        &imported(py, INGRESS_MODULE, "execute_ingress_python_loader_nodes")?,
+        &host::entry(py, ExecutorHost::ExecuteIngressPythonLoaderNodes)?,
         &[
             ("python_graph", prepared.python_graph.clone()),
             (
@@ -511,11 +494,11 @@ fn run_checks<'py>(
     )?
     .into_any();
     let check_callbacks: Bound<'py, PyAny> = call_with(
-        &imported(py, EXECUTOR_MODELS, "PythonCheckCallbacks")?,
+        &host::entry(py, ExecutorHost::PythonCheckCallbacks)?,
         &[("on_check_complete", on_complete)],
     )?;
     call_with(
-        &imported(py, CHECKS_MODULE, "execute_python_checks")?,
+        &host::entry(py, ExecutorHost::ExecutePythonChecks)?,
         &[
             ("check_functions", prepared.check_functions.clone()),
             ("python_graph", prepared.python_graph.clone()),
@@ -571,10 +554,10 @@ fn execute<'py>(
     let connection: Bound<'py, PyAny> =
         adapter.call_method1("connect", (invocation.getattr("connection_config")?,))?;
     let event_writer: Bound<'py, PyAny> =
-        imported(py, NATIVE_MODULE, "ExecutionEventWriter")?.call0()?;
+        registry::native(py, NativeAttr::ExecutionEventWriter)?.call0()?;
     let executed: PyResult<Vec<Bound<'py, PyAny>>> = (|| {
         let projector: Bound<'py, PyAny> =
-            imported(py, NATIVE_MODULE, "current_native_progress_projector")?.call0()?;
+            registry::native(py, NativeAttr::CurrentNativeProgressProjector)?.call0()?;
         if !projector.is_none() {
             let ordinals: Bound<'py, PyDict> = PyDict::new(py);
             let mut total: usize = 0;
@@ -635,7 +618,7 @@ fn complete<'py>(
         &tuple,
     )?;
     call_with(
-        &imported(py, NATIVE_MODULE, "write_execution_json_output")?,
+        &registry::native(py, NativeAttr::WriteExecutionJsonOutput)?,
         &[
             (
                 "payload",
@@ -654,7 +637,7 @@ fn complete<'py>(
 fn run_check_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let invocation: Bound<'_, PyAny> = resolve_reported_command_invocation(
         request,
-        &imported(py, NATIVE_MODULE, "CheckInvocation")?,
+        &registry::class(py, RecordId::CheckInvocation)?,
         true,
     )?;
     let stream: Bound<'_, PyAny> = invocation.getattr("progress_stream")?;
@@ -665,10 +648,10 @@ fn run_check_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32
     header.set_item("target", py.None())?;
     header.set_item("concurrency", PyInt::new(py, 1))?;
     header.set_item("use_color", invocation.getattr("use_color")?)?;
-    imported(py, NATIVE_MODULE, "write_execution_header")?.call((), Some(&header))?;
+    registry::native(py, NativeAttr::WriteExecutionHeader)?.call((), Some(&header))?;
     let prepared: Prepared<'_> = prepare(request, &invocation)?;
     let session: Bound<'_, PyAny> = call_with(
-        &imported(py, PROVIDER_SESSION_MODULE, "build_provider_session")?,
+        &host::entry(py, UserCodeHost::BuildProviderSession)?,
         &[(
             "discovered_providers",
             invocation

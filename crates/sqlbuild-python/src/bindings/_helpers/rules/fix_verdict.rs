@@ -8,9 +8,9 @@ use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 use sqlbuild_rules::fix_verification::main::compare::compare;
 use sqlbuild_rules::fix_verification::models::{DiagnosticComparison, ModelComparison};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-
-const LINT_MODELS: &str = "sqlbuild._native";
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
 /// Compare compile facts using native decisions and the existing Python boundary models.
 #[pyfunction]
@@ -70,7 +70,7 @@ pub(crate) fn fix_verdict<'py>(
         failing.set_item(owners.get_item(owner)?, reason)?;
     }
     call_with(
-        &imported(py, LINT_MODELS, "FixVerdict")?,
+        &registry::class(py, RecordId::FixVerdict)?,
         &[
             ("failing", failing.into_any()),
             (

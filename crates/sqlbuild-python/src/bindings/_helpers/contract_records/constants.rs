@@ -1,5 +1,6 @@
 //! Layouts of the project configuration and contract value records hosted natively.
 
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::models::{FieldDefault, FieldSpec, RecordSpec};
 
 const R_CLONE_POLICY: RecordSpec = RecordSpec {
@@ -40,15 +41,15 @@ const R_MATERIALIZATION_DEFAULTS_CONFIG: RecordSpec = RecordSpec {
     fields: &[
         FieldSpec::new(
             "table",
-            FieldDefault::Call("sqlbuild._native", "MaterializationRetentionDefaults"),
+            FieldDefault::NativeCall(RecordId::MaterializationRetentionDefaults),
         ),
         FieldSpec::new(
             "incremental",
-            FieldDefault::Call("sqlbuild._native", "MaterializationRetentionDefaults"),
+            FieldDefault::NativeCall(RecordId::MaterializationRetentionDefaults),
         ),
         FieldSpec::new(
             "snapshot",
-            FieldDefault::Call("sqlbuild._native", "MaterializationRetentionDefaults"),
+            FieldDefault::NativeCall(RecordId::MaterializationRetentionDefaults),
         ),
     ],
 };
@@ -67,11 +68,11 @@ const R_RESOLVED_TABLE_TYPE: RecordSpec = RecordSpec {
     fields: &[
         FieldSpec::new(
             "value",
-            FieldDefault::Member("sqlbuild._native", "TableType", "TRANSIENT"),
+            FieldDefault::NativeMember(RecordId::TableType, "TRANSIENT"),
         ),
         FieldSpec::new(
             "source",
-            FieldDefault::Member("sqlbuild._native", "TableTypeSource", "DEFAULT"),
+            FieldDefault::NativeMember(RecordId::TableTypeSource, "DEFAULT"),
         ),
         FieldSpec::new("declared", FieldDefault::False),
     ],
@@ -111,10 +112,7 @@ const R_TARGET_CONFIG: RecordSpec = RecordSpec {
         FieldSpec::new("loader_schema", FieldDefault::None),
         FieldSpec::new("defer_sources_to", FieldDefault::None),
         FieldSpec::new("defer_clone_from", FieldDefault::None),
-        FieldSpec::new(
-            "clone",
-            FieldDefault::Call("sqlbuild._native", "ClonePolicy"),
-        ),
+        FieldSpec::new("clone", FieldDefault::NativeCall(RecordId::ClonePolicy)),
         FieldSpec::new("compile_cache", FieldDefault::None),
         FieldSpec::new("time_travel_retention", FieldDefault::None),
         FieldSpec::new(
@@ -125,31 +123,24 @@ const R_TARGET_CONFIG: RecordSpec = RecordSpec {
         FieldSpec::new("default_table_type", FieldDefault::None),
         FieldSpec::new(
             "table_type_downgrade",
-            FieldDefault::Member(
-                "sqlbuild._native",
-                "TableTypeDowngradePolicy",
-                "REQUIRE_CONFIRMATION",
-            ),
+            FieldDefault::NativeMember(RecordId::TableTypeDowngradePolicy, "REQUIRE_CONFIRMATION"),
         ),
         FieldSpec::new(
             "time_travel_retention_decrease",
-            FieldDefault::Member("sqlbuild._native", "RetentionDecreasePolicy", "DENY"),
+            FieldDefault::NativeMember(RecordId::RetentionDecreasePolicy, "DENY"),
         ),
         FieldSpec::new(
             "missing_migration_origin",
-            FieldDefault::Member("sqlbuild._native", "MissingMigrationOriginPolicy", "ALLOW"),
+            FieldDefault::NativeMember(RecordId::MissingMigrationOriginPolicy, "ALLOW"),
         ),
         FieldSpec::new(
             "execution_limits",
-            FieldDefault::Call("sqlbuild._native", "ExecutionLimitsConfig"),
+            FieldDefault::NativeCall(RecordId::ExecutionLimitsConfig),
         ),
-        FieldSpec::new(
-            "diff",
-            FieldDefault::Call("sqlbuild._native", "TargetDiffConfig"),
-        ),
+        FieldSpec::new("diff", FieldDefault::NativeCall(RecordId::TargetDiffConfig)),
         FieldSpec::new(
             "warehouses",
-            FieldDefault::Call("sqlbuild._native", "TargetWarehousesConfig"),
+            FieldDefault::NativeCall(RecordId::TargetWarehousesConfig),
         ),
     ],
 };
@@ -167,7 +158,7 @@ const R_LOCAL_TARGET_CONFIG: RecordSpec = RecordSpec {
         FieldSpec::new("defer_clone_from", FieldDefault::None),
         FieldSpec::new(
             "clone",
-            FieldDefault::Call("sqlbuild._native", "LocalClonePolicy"),
+            FieldDefault::NativeCall(RecordId::LocalClonePolicy),
         ),
         FieldSpec::new("compile_cache", FieldDefault::None),
         FieldSpec::new("time_travel_retention", FieldDefault::None),
@@ -182,15 +173,12 @@ const R_LOCAL_TARGET_CONFIG: RecordSpec = RecordSpec {
         FieldSpec::new("missing_migration_origin", FieldDefault::None),
         FieldSpec::new(
             "execution_limits",
-            FieldDefault::Call("sqlbuild._native", "ExecutionLimitsConfig"),
+            FieldDefault::NativeCall(RecordId::ExecutionLimitsConfig),
         ),
-        FieldSpec::new(
-            "diff",
-            FieldDefault::Call("sqlbuild._native", "TargetDiffConfig"),
-        ),
+        FieldSpec::new("diff", FieldDefault::NativeCall(RecordId::TargetDiffConfig)),
         FieldSpec::new(
             "warehouses",
-            FieldDefault::Call("sqlbuild._native", "TargetWarehousesConfig"),
+            FieldDefault::NativeCall(RecordId::TargetWarehousesConfig),
         ),
     ],
 };
@@ -203,7 +191,7 @@ const R_SETTINGS_CONFIG: RecordSpec = RecordSpec {
         FieldSpec::new("query_change_tracking", FieldDefault::True),
         FieldSpec::new(
             "column_contract_mode",
-            FieldDefault::Member("sqlbuild._native", "ColumnContractMode", "IMPLICIT"),
+            FieldDefault::NativeMember(RecordId::ColumnContractMode, "IMPLICIT"),
         ),
         FieldSpec::new("concurrency", FieldDefault::Int(1)),
         FieldSpec::new("auto_load_sources", FieldDefault::True),
@@ -243,7 +231,7 @@ const R_CONSTANTS_CONFIG: RecordSpec = RecordSpec {
     doc: "Project-wide constant rendering configuration.",
     fields: &[FieldSpec::new(
         "collection_rendering",
-        FieldDefault::Member("sqlbuild._native", "CollectionRendering", "VALUE_LIST"),
+        FieldDefault::NativeMember(RecordId::CollectionRendering, "VALUE_LIST"),
     )],
 };
 const R_FUTURE_CURSORS_CONFIG: RecordSpec = RecordSpec {
@@ -253,7 +241,7 @@ const R_FUTURE_CURSORS_CONFIG: RecordSpec = RecordSpec {
         FieldSpec::new("max_distance", FieldDefault::None),
         FieldSpec::new(
             "action",
-            FieldDefault::Member("sqlbuild._native", "FutureCursorAction", "ERROR"),
+            FieldDefault::NativeMember(RecordId::FutureCursorAction, "ERROR"),
         ),
     ],
 };
@@ -264,7 +252,7 @@ const R_START_CURSORS_CONFIG: RecordSpec = RecordSpec {
         FieldSpec::new("max_ahead", FieldDefault::None),
         FieldSpec::new(
             "action",
-            FieldDefault::Member("sqlbuild._native", "FutureCursorAction", "ERROR"),
+            FieldDefault::NativeMember(RecordId::FutureCursorAction, "ERROR"),
         ),
     ],
 };
@@ -274,11 +262,11 @@ const R_CURSORS_CONFIG: RecordSpec = RecordSpec {
     fields: &[
         FieldSpec::new(
             "future",
-            FieldDefault::Call("sqlbuild._native", "FutureCursorsConfig"),
+            FieldDefault::NativeCall(RecordId::FutureCursorsConfig),
         ),
         FieldSpec::new(
             "start",
-            FieldDefault::Call("sqlbuild._native", "StartCursorsConfig"),
+            FieldDefault::NativeCall(RecordId::StartCursorsConfig),
         ),
     ],
 };
@@ -289,7 +277,7 @@ const R_MICROBATCH_LIMITS_CONFIG: RecordSpec = RecordSpec {
         FieldSpec::new("max_batches", FieldDefault::None),
         FieldSpec::new(
             "action",
-            FieldDefault::Member("sqlbuild._native", "MicrobatchLimitAction", "ERROR"),
+            FieldDefault::NativeMember(RecordId::MicrobatchLimitAction, "ERROR"),
         ),
     ],
 };
@@ -298,7 +286,7 @@ const R_MICROBATCHES_CONFIG: RecordSpec = RecordSpec {
     doc: "Project-wide microbatch configuration.",
     fields: &[FieldSpec::new(
         "limits",
-        FieldDefault::Call("sqlbuild._native", "MicrobatchLimitsConfig"),
+        FieldDefault::NativeCall(RecordId::MicrobatchLimitsConfig),
     )],
 };
 const R_DEFAULTS_CONFIG: RecordSpec = RecordSpec {
@@ -400,7 +388,7 @@ const R_SCENARIO_CONFIG: RecordSpec = RecordSpec {
         FieldSpec::new("local_type_overrides", FieldDefault::EmptyDict),
         FieldSpec::new(
             "snapshot_limits",
-            FieldDefault::Call("sqlbuild._native", "ScenarioSnapshotLimitsConfig"),
+            FieldDefault::NativeCall(RecordId::ScenarioSnapshotLimitsConfig),
         ),
     ],
 };
@@ -437,7 +425,7 @@ const R_LIFECYCLE_EVENT_SINKS_CONFIG: RecordSpec = RecordSpec {
     fields: &[
         FieldSpec::new(
             "defaults",
-            FieldDefault::Call("sqlbuild._native", "LifecycleEventSinkFilterConfig"),
+            FieldDefault::NativeCall(RecordId::LifecycleEventSinkFilterConfig),
         ),
         FieldSpec::new("named", FieldDefault::EmptyDict),
         FieldSpec::new("shutdown_timeout", FieldDefault::None),
@@ -449,7 +437,7 @@ const R_SINKS_CONFIG: RecordSpec = RecordSpec {
     doc: "Typed destination sink configuration.",
     fields: &[FieldSpec::new(
         "lifecycle",
-        FieldDefault::Call("sqlbuild._native", "LifecycleEventSinksConfig"),
+        FieldDefault::NativeCall(RecordId::LifecycleEventSinksConfig),
     )],
 };
 const R_PROJECT_CONFIG: RecordSpec = RecordSpec {
@@ -463,62 +451,50 @@ const R_PROJECT_CONFIG: RecordSpec = RecordSpec {
         FieldSpec::new("connections", FieldDefault::EmptyDict),
         FieldSpec::new(
             "settings",
-            FieldDefault::Call("sqlbuild._native", "SettingsConfig"),
+            FieldDefault::NativeCall(RecordId::SettingsConfig),
         ),
-        FieldSpec::new(
-            "scopes",
-            FieldDefault::Call("sqlbuild._native", "ScopesConfig"),
-        ),
+        FieldSpec::new("scopes", FieldDefault::NativeCall(RecordId::ScopesConfig)),
         FieldSpec::new(
             "references",
-            FieldDefault::Call("sqlbuild._native", "ReferencesConfig"),
+            FieldDefault::NativeCall(RecordId::ReferencesConfig),
         ),
-        FieldSpec::new("cost", FieldDefault::Call("sqlbuild._native", "CostConfig")),
+        FieldSpec::new("cost", FieldDefault::NativeCall(RecordId::CostConfig)),
         FieldSpec::new(
             "constants",
-            FieldDefault::Call("sqlbuild._native", "ConstantsConfig"),
+            FieldDefault::NativeCall(RecordId::ConstantsConfig),
         ),
-        FieldSpec::new(
-            "cursors",
-            FieldDefault::Call("sqlbuild._native", "CursorsConfig"),
-        ),
+        FieldSpec::new("cursors", FieldDefault::NativeCall(RecordId::CursorsConfig)),
         FieldSpec::new(
             "microbatches",
-            FieldDefault::Call("sqlbuild._native", "MicrobatchesConfig"),
+            FieldDefault::NativeCall(RecordId::MicrobatchesConfig),
         ),
         FieldSpec::new(
             "defaults",
-            FieldDefault::Call("sqlbuild._native", "DefaultsConfig"),
+            FieldDefault::NativeCall(RecordId::DefaultsConfig),
         ),
-        FieldSpec::new("diff", FieldDefault::Call("sqlbuild._native", "DiffConfig")),
+        FieldSpec::new("diff", FieldDefault::NativeCall(RecordId::DiffConfig)),
         FieldSpec::new(
             "materialization_defaults",
-            FieldDefault::Call("sqlbuild._native", "MaterializationDefaultsConfig"),
+            FieldDefault::NativeCall(RecordId::MaterializationDefaultsConfig),
         ),
         FieldSpec::new("path_defaults", FieldDefault::EmptyDict),
         FieldSpec::new("vars", FieldDefault::EmptyDict),
         FieldSpec::new("targets", FieldDefault::EmptyDict),
-        FieldSpec::new(
-            "janitor",
-            FieldDefault::Call("sqlbuild._native", "JanitorConfig"),
-        ),
+        FieldSpec::new("janitor", FieldDefault::NativeCall(RecordId::JanitorConfig)),
         FieldSpec::new(
             "migrations",
-            FieldDefault::Call("sqlbuild._native", "MigrationsConfig"),
+            FieldDefault::NativeCall(RecordId::MigrationsConfig),
         ),
         FieldSpec::new(
             "snapshots",
-            FieldDefault::Call("sqlbuild._native", "SnapshotsConfig"),
+            FieldDefault::NativeCall(RecordId::SnapshotsConfig),
         ),
         FieldSpec::new(
             "scenario",
-            FieldDefault::Call("sqlbuild._native", "ScenarioConfig"),
+            FieldDefault::NativeCall(RecordId::ScenarioConfig),
         ),
-        FieldSpec::new("dbt", FieldDefault::Call("sqlbuild._native", "DbtConfig")),
-        FieldSpec::new(
-            "sinks",
-            FieldDefault::Call("sqlbuild._native", "SinksConfig"),
-        ),
+        FieldSpec::new("dbt", FieldDefault::NativeCall(RecordId::DbtConfig)),
+        FieldSpec::new("sinks", FieldDefault::NativeCall(RecordId::SinksConfig)),
     ],
 };
 const R_LOCAL_CONFIG: RecordSpec = RecordSpec {
@@ -532,17 +508,14 @@ const R_LOCAL_CONFIG: RecordSpec = RecordSpec {
         FieldSpec::new("targets", FieldDefault::EmptyDict),
         FieldSpec::new(
             "settings",
-            FieldDefault::Call("sqlbuild._native", "SettingsConfig"),
+            FieldDefault::NativeCall(RecordId::SettingsConfig),
         ),
         FieldSpec::new("setting_overrides", FieldDefault::EmptyFrozenset),
         FieldSpec::new("vars", FieldDefault::EmptyDict),
-        FieldSpec::new(
-            "dbt",
-            FieldDefault::Call("sqlbuild._native", "LocalDbtConfig"),
-        ),
+        FieldSpec::new("dbt", FieldDefault::NativeCall(RecordId::LocalDbtConfig)),
         FieldSpec::new(
             "scenario",
-            FieldDefault::Call("sqlbuild._native", "ScenarioConfig"),
+            FieldDefault::NativeCall(RecordId::ScenarioConfig),
         ),
     ],
 };
@@ -646,7 +619,7 @@ const R_SCHEMA_SEED_ENTRY: RecordSpec = RecordSpec {
         FieldSpec::new("meta", FieldDefault::EmptyDict),
         FieldSpec::new(
             "csv_settings",
-            FieldDefault::Call("sqlbuild._native", "SeedCsvSettings"),
+            FieldDefault::NativeCall(RecordId::SeedCsvSettings),
         ),
         FieldSpec::new("columns", FieldDefault::EmptyTuple),
         FieldSpec::new("tags", FieldDefault::EmptyTuple),

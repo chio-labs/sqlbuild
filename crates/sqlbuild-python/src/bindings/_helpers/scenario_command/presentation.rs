@@ -13,15 +13,17 @@ use sqlbuild_core::scenario_command::main::scenario_activity_message::scenario_a
 use sqlbuild_core::scenario_command::models::ScenarioNamespace;
 
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scenario_command::conversions::{
     capture_row, scenario_result_row, write_local_runtime_target, write_warehouse_runtime_target,
 };
 use crate::bindings::_helpers::scenario_command::setup::{
-    NATIVE_MODULE, boolean, flush, stream_isatty, text, write,
+    boolean, flush, stream_isatty, text, write,
 };
-
-const RUNTIME_CONTRACT_MODELS: &str = "sqlbuild.runtime.contracts.models";
 
 /// How a finished scenario is reported.
 #[derive(Clone, Debug)]
@@ -159,7 +161,7 @@ pub(crate) fn connection_hooks<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = stream.py();
     let reporter: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "ConnectionProgressReporter")?,
+        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
         &[
             ("adapter_name", text(py, adapter_name)),
             ("blank_line_after_complete", boolean(py, true)),
@@ -174,7 +176,7 @@ pub(crate) fn connection_hooks<'py>(
         },
     )?;
     call_with(
-        &imported(py, RUNTIME_CONTRACT_MODELS, "ConnectionHooks")?,
+        &host::entry(py, ExecutorHost::ConnectionHooks)?,
         &[
             (
                 "on_connection_start",

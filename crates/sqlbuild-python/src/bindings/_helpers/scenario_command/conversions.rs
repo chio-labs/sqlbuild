@@ -15,7 +15,11 @@ use sqlbuild_core::scenario_command::models::{
     NamedStatements, RetainedInputs, RetainedRelation, ScenarioResultRow, WarehouseRuntimeInputs,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
 const SUCCESS_STATUS: &str = "success";
 const FAILED_STATUS: &str = "failed";
@@ -25,9 +29,6 @@ const FAIL_STATUS: &str = "FAIL";
 const RUN_DIR: &str = "run";
 const SCENARIOS_DIR: &str = "scenarios";
 const LOCAL_DIR: &str = "local";
-const PLANNER_TYPES: &str = "sqlbuild._native";
-const QUALIFIED_NAME_MODULE: &str =
-    "sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name";
 
 fn items<'py>(value: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {
     value.try_iter()?.collect()
@@ -91,7 +92,7 @@ fn assertion_row(assertion: &Bound<'_, PyAny>) -> PyResult<AssertionRow> {
 
 fn retained_relations(relation_map: &Bound<'_, PyAny>) -> PyResult<Vec<RetainedRelation>> {
     let py: Python<'_> = relation_map.py();
-    let kinds: Bound<'_, PyAny> = imported(py, PLANNER_TYPES, "ScenarioArtifactKind")?;
+    let kinds: Bound<'_, PyAny> = registry::class(py, RecordId::ScenarioArtifactKind)?;
     items(&relation_map.getattr("artifacts")?)?
         .iter()
         .map(|artifact| {
@@ -250,11 +251,7 @@ fn expectation_sql(
     let mut expectations: ExpectationSql = ExpectationSql::default();
     for expected in items(&scenario_plan.getattr("expected_expectations")?)? {
         let actual_relation: String = call_with(
-            &imported(
-                py,
-                QUALIFIED_NAME_MODULE,
-                "resolve_relation_location_qualified_name",
-            )?,
+            &host::entry(py, AdapterHost::ResolveRelationLocationQualifiedName)?,
             &[
                 ("adapter", adapter.clone()),
                 ("location", expected.getattr("actual_destination")?),

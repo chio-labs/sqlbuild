@@ -1,7 +1,9 @@
 //! Applying load selectors and excludes to the selected source and loader sets.
 
 use std::collections::BTreeSet;
+use std::convert::Infallible;
 
+use crate::graph_walk::main::breadth_first_reach::breadth_first_reach;
 use crate::load_command::_helpers::graph::GraphIndex;
 use crate::load_command::constants::UPSTREAM_MARK;
 use crate::load_command::errors::UnknownLoadSelector;
@@ -177,14 +179,16 @@ impl Selection {
                 needed.insert(loader.clone());
             }
         }
-        let mut pending: Vec<String> = needed.iter().cloned().collect();
-        while let Some(loader) = pending.pop() {
-            for dependency in index.dependencies(&loader) {
-                if self.loaders.contains(dependency) && needed.insert(dependency.clone()) {
-                    pending.push(dependency.clone());
-                }
-            }
-        }
+        let starts: Vec<String> = needed.iter().cloned().collect();
+        let Ok(()) = breadth_first_reach(starts, None, &mut needed, |loader| {
+            Ok::<_, Infallible>(
+                index
+                    .dependencies(loader)
+                    .iter()
+                    .filter(|dependency| self.loaders.contains(*dependency))
+                    .cloned(),
+            )
+        });
         self.loaders.retain(|loader| needed.contains(loader));
     }
 }

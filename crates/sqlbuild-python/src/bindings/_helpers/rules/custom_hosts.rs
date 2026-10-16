@@ -26,17 +26,16 @@ use sqlbuild_rules::custom_host_pool::types::{HostInvocation, HostPlan};
 use sqlbuild_rules::engine::main::custom_host::run_custom_host_json;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::native_host::constants::CUSTOM_HOST_LAUNCH_MODULE;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::constants::{
-    CUSTOM_HOST_ABANDONED_SUFFIX, CUSTOM_HOST_CANCELLED_MARKER, CUSTOM_HOST_LAUNCH_MODULE,
-    CUSTOM_HOST_RUNTIME_VERSION,
+    CUSTOM_HOST_ABANDONED_SUFFIX, CUSTOM_HOST_CANCELLED_MARKER, CUSTOM_HOST_RUNTIME_VERSION,
 };
 use crate::bindings::_helpers::rules::custom_host_observation::{
     LaunchLog, ObservedHosts, before_publish, observed_hosts, record_launch,
 };
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const RULES_ERRORS_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const HOST_INPUTS: [&str; 3] = ["target", "rules-cache", "host-inputs"];
 /// The model fields hosts decode; every other model field is dropped from their payload.
 const PAYLOAD_MODEL_FIELDS: [&str; 18] = [
@@ -398,7 +397,7 @@ pub(crate) fn host_payload_project<'py>(
     project: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project.py();
-    let model_class: Bound<'py, PyAny> = imported(py, COMPILE_MODELS_MODULE, "CompiledModel")?;
+    let model_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledModel)?;
     let mut models: Vec<Bound<'py, PyAny>> = Vec::new();
     for model in project.getattr("models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
@@ -409,7 +408,7 @@ pub(crate) fn host_payload_project<'py>(
         models.push(model_class.call((), Some(&fields))?);
     }
     let record: Bound<'py, PyAny> =
-        imported(py, NATIVE_MODULE, "compiled_project_record")?.call1((project,))?;
+        registry::native(py, NativeAttr::CompiledProjectRecord)?.call1((project,))?;
     let options: Bound<'py, PyDict> = PyDict::new(py);
     options.set_item("models", PyTuple::new(py, models)?)?;
     options.set_item("native_project", py.None())?;
@@ -476,8 +475,7 @@ fn text(path: &Path) -> String {
 }
 
 fn rules_error(py: Python<'_>, message: String) -> PyErr {
-    match imported(py, RULES_ERRORS_MODULE, "RulesError").and_then(|class| class.call1((message,)))
-    {
+    match registry::error(py, ErrorId::Rules).and_then(|class| class.call1((message,))) {
         Ok(instance) => PyErr::from_value(instance),
         Err(error) => error,
     }

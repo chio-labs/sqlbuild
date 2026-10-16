@@ -8,15 +8,17 @@ use crate::bindings::_helpers::{
     compile_attachment, compile_command, compile_driver, compile_outputs, compiled_project,
     contracts, cursor, dag_artifact, diagnostics, discovery, exported_constants, fingerprints,
     frontier, graph, lifecycle_events, lineage, macro_bridge, manifest, microbatches, model_config,
-    plan_output, planner_registration, project_assembly, records, refactor, references, render,
-    rules, scopes, semantic_checks, semantic_shapes, sql_test_glue, sqltext, state_rows,
-    type_system,
+    native_host, plan_output, planner_registration, project_assembly, records, refactor,
+    references, render, rules, scopes, semantic_checks, semantic_shapes, sql_test_glue, sqltext,
+    state_rows, type_system,
 };
 use crate::bindings::models;
 
 #[pymodule]
 pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     records::registration::register(module)?;
+    records::registry::verify_tables()?;
+    native_host::registration::register(module)?;
     rules::registration::register(module)?;
     cli::registration::register(module)?;
     analysis::normalization::register(module)?;
@@ -33,7 +35,7 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     register_analysis_stages(module)?;
     module.add("API_VERSION", API_VERSION)?;
     module.add("BUILD_IDENTITY", NATIVE_BUILD_IDENTITY)?;
-    Ok(())
+    records::registry::verify_attributes(module)
 }
 
 fn register_project_stages(module: &Bound<'_, PyModule>) -> PyResult<()> {

@@ -1,16 +1,16 @@
 //! The Python lineage models and enums native lineage builds.
 
-use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyResult, Python};
 use pyo3::types::{PyDict, PyTuple};
 use sqlbuild_analysis::lineage::models::{LineageColumn, LineageSource};
 
-const LINEAGE_MODELS_MODULE: &str = "sqlbuild._native";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const LOGGING_MODULE: &str = "logging";
-const DEBUG_EVENT_MODULE: &str = "sqlbuild.diagnostics.main.log_debug_event";
 const LINEAGE_LOGGER: &str = "sqlbuild.lineage";
 
 /// The lineage model classes and enums, imported once per call.
@@ -35,26 +35,24 @@ pub(crate) struct LineageClasses<'py> {
 
 impl<'py> LineageClasses<'py> {
     pub(crate) fn new(py: Python<'py>) -> PyResult<Self> {
-        let models: Bound<'py, PyModule> = py.import(LINEAGE_MODELS_MODULE)?;
         let types: Bound<'py, PyModule> = py.import(LINEAGE_TYPES_MODULE)?;
-        let compile_models: Bound<'py, PyModule> = py.import(COMPILE_MODELS_MODULE)?;
         let resource_type: Bound<'py, PyAny> = py
             .import(COMPILE_TYPES_MODULE)?
             .getattr("CompiledResourceType")?;
         let nullability: Bound<'py, PyAny> = types.getattr("InferredNullability")?;
         Ok(Self {
-            qualified_column: models.getattr("QualifiedLineageColumn")?,
-            lineage_source: models.getattr("ColumnLineageSource")?,
-            lineage_edge: models.getattr("ColumnLineageEdge")?,
-            column_lineage: models.getattr("ColumnLineage")?,
-            model_lineage: models.getattr("ModelColumnLineage")?,
-            semantic_use: models.getattr("DirectSemanticColumnUse")?,
-            column_fact: shape_class(compile_models.as_any(), "CompiledLineageColumnFact")?,
-            source_fact: compile_models.getattr("CompiledLineageSourceFact")?,
-            compact_facts: compile_models.getattr("CompactLineageFacts")?,
-            transform_kind: shape_class(types.as_any(), "ColumnTransformKind")?,
-            confidence: shape_class(types.as_any(), "ColumnLineageConfidence")?,
-            analysis_dialect: shape_class(types.as_any(), "PolyglotAnalysisDialect")?,
+            qualified_column: registry::class(py, RecordId::QualifiedLineageColumn)?,
+            lineage_source: registry::class(py, RecordId::ColumnLineageSource)?,
+            lineage_edge: registry::class(py, RecordId::ColumnLineageEdge)?,
+            column_lineage: registry::class(py, RecordId::ColumnLineage)?,
+            model_lineage: registry::class(py, RecordId::ModelColumnLineage)?,
+            semantic_use: registry::class(py, RecordId::DirectSemanticColumnUse)?,
+            column_fact: registry::class(py, RecordId::CompiledLineageColumnFact)?,
+            source_fact: registry::class(py, RecordId::CompiledLineageSourceFact)?,
+            compact_facts: registry::class(py, RecordId::CompactLineageFacts)?,
+            transform_kind: registry::class(types.py(), RecordId::ColumnTransformKind)?,
+            confidence: registry::class(types.py(), RecordId::ColumnLineageConfidence)?,
+            analysis_dialect: registry::class(types.py(), RecordId::PolyglotAnalysisDialect)?,
             model_resource: resource_type.getattr("MODEL")?,
             unknown_nullability: nullability.getattr("UNKNOWN")?,
             nullability,
@@ -177,9 +175,6 @@ pub(crate) fn log_lineage_event(
     fields.set_item("message", message)?;
     fields.set_item("sqlbuild_model", model_name)?;
     fields.set_item("sqlbuild_error", error)?;
-    let _ = py
-        .import(DEBUG_EVENT_MODULE)?
-        .getattr("log_debug_event")?
-        .call((), Some(&fields))?;
+    let _ = host::entry(py, ExecutorHost::LogDebugEvent)?.call((), Some(&fields))?;
     Ok(())
 }

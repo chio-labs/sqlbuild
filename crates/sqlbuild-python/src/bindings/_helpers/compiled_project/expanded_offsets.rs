@@ -1,12 +1,12 @@
 //! Map offsets in expanded SQL back onto the authored text that produced them.
 
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::PyDict;
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::compiled_project::main::map_expanded_offset::map_expanded_offset as mapped;
 use sqlbuild_analysis::compiled_project::models::SplicedSpan;
-
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 /// `map_expanded_offset(*, offset, passes)`: a `MappedOffset` in the first pass's source.
 #[pyfunction]
@@ -34,9 +34,7 @@ fn map_expanded_offset<'py>(
     let arguments: Bound<'py, PyDict> = PyDict::new(py);
     arguments.set_item("offset", offset)?;
     arguments.set_item("generated", generated)?;
-    py.import(NATIVE_RECORDS_MODULE)?
-        .getattr("MappedOffset")?
-        .call((), Some(&arguments))
+    registry::class(py, RecordId::MappedOffset)?.call((), Some(&arguments))
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

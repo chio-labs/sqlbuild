@@ -12,18 +12,18 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_model_config::name_patterns::main::compile_name_pattern::compile_name_pattern;
 use sqlbuild_model_config::name_patterns::models::NamePattern;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::contracts::effective_config::{
     effective_config_target_fields, effective_config_target_name,
 };
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const MODELS_MODULE: &str = "sqlbuild._native";
-const ERRORS_MODULE: &str = "sqlbuild._native";
-const TARGET_GROUPS: [(&str, &str); 4] = [
-    ("clone", "ClonePolicy"),
-    ("execution_limits", "ExecutionLimitsConfig"),
-    ("diff", "TargetDiffConfig"),
-    ("warehouses", "TargetWarehousesConfig"),
+const TARGET_GROUPS: [(&str, RecordId); 4] = [
+    ("clone", RecordId::ClonePolicy),
+    ("execution_limits", RecordId::ExecutionLimitsConfig),
+    ("diff", RecordId::TargetDiffConfig),
+    ("warehouses", RecordId::TargetWarehousesConfig),
 ];
 const SNAPSHOT_LIMITS: [&str; 4] = [
     "max_rows_per_relation",
@@ -42,7 +42,7 @@ thread_local! {
 
 fn spec_error<'py>(py: Python<'py>, message: Bound<'py, PyString>) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
-        imported(py, ERRORS_MODULE, "SpecConfigError")?.call1((message,))?,
+        registry::error(py, ErrorId::SpecConfig)?.call1((message,))?,
     ))
 }
 
@@ -72,7 +72,7 @@ pub(crate) fn resolve_target_config<'py>(
     local_config: &Bound<'py, PyAny>,
     target_name: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let target_class: Bound<'py, PyAny> = imported(py, MODELS_MODULE, "TargetConfig")?;
+    let target_class: Bound<'py, PyAny> = registry::class(py, RecordId::TargetConfig)?;
     let (rows, error) = effective_config_target_fields(
         py,
         (project_config.clone(), local_config.clone()),
@@ -99,8 +99,7 @@ pub(crate) fn resolve_target_config<'py>(
         }
     }
     for ((group, class_name), (_, fields)) in TARGET_GROUPS.iter().zip(&grouped) {
-        let nested: Bound<'py, PyAny> =
-            imported(py, MODELS_MODULE, class_name)?.call((), Some(fields))?;
+        let nested: Bound<'py, PyAny> = registry::class(py, *class_name)?.call((), Some(fields))?;
         values.set_item(*group, nested)?;
     }
     target_class.call((), Some(&values))
@@ -184,7 +183,7 @@ fn resolve_effective_scenario_config<'py>(
         })
         .collect::<PyResult<_>>()?;
     call_with(
-        &imported(py, MODELS_MODULE, "ScenarioConfig")?,
+        &registry::class(py, RecordId::ScenarioConfig)?,
         &[
             (
                 "run_namespace",
@@ -197,7 +196,7 @@ fn resolve_effective_scenario_config<'py>(
             (
                 "snapshot_limits",
                 call_with(
-                    &imported(py, MODELS_MODULE, "ScenarioSnapshotLimitsConfig")?,
+                    &registry::class(py, RecordId::ScenarioSnapshotLimitsConfig)?,
                     &limits,
                 )?,
             ),
@@ -282,7 +281,7 @@ fn loader_parts<'py>(
             ),
             _ => (text(parts[0]), text(parts[1]), text(parts[2])),
         };
-    imported(py, MODELS_MODULE, "LoaderDestinationParts")?.call1((database, schema, table))
+    registry::class(py, RecordId::LoaderDestinationParts)?.call1((database, schema, table))
 }
 
 /// Whether a family's optional `name_pattern` accepts `column_name`.

@@ -10,8 +10,10 @@ use crate::bindings::_helpers::planner_scenario::{
     fixtures::{extract_fixtures, fixture_plans},
     models::SqlContext,
     sql::{required_target, resolve_model_dbt_refs, resolve_sql, source_label},
-    values::{MODELS, error, string},
+    values::{error, string},
 };
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
 
@@ -54,7 +56,7 @@ pub(crate) fn build_scenario_execution_plan<'py>(
     let snapshot = if snapshot.is_truthy()? {
         snapshot
     } else {
-        imported(py, "sqlbuild._native", "WarehouseSnapshot")?.call0()?
+        registry::class(py, RecordId::WarehouseSnapshot)?.call0()?
     };
     let columns = args.value("source_warehouse_columns")?;
     let columns = if columns.is_truthy()? {
@@ -70,12 +72,12 @@ pub(crate) fn build_scenario_execution_plan<'py>(
     };
     let models = by_attribute(&project.getattr("models")?, "name")?;
     let functions = by_attribute(&project.getattr("functions")?, "key")?;
-    let locations = imported(py, "sqlbuild._native", "build_function_locations")?
+    let locations = registry::native(py, NativeAttr::BuildFunctionLocations)?
         .call1((project.getattr("functions")?,))?;
     let upstream =
-        imported(py, "sqlbuild._native", "build_execution_upstream_deps")?.call1((&project,))?;
+        registry::native(py, NativeAttr::BuildExecutionUpstreamDeps)?.call1((&project,))?;
     let ordered = call_with(
-        &imported(py, "sqlbuild._native", "topologically_order_keys")?,
+        &registry::native(py, NativeAttr::TopologicallyOrderKeys)?,
         &[("upstream", upstream)],
     )?;
     let mut model_keys: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -121,14 +123,14 @@ pub(crate) fn build_scenario_execution_plan<'py>(
             &model.getattr("query_sql")?.extract::<String>()?,
             &context.relations,
         )?;
-        let record = imported(py, "sqlbuild._native", "compiled_model_record")?.call1((&model,))?;
+        let record = registry::native(py, NativeAttr::CompiledModelRecord)?.call1((&model,))?;
         let changes = PyDict::new(py);
         changes.set_item("destination", destination)?;
         changes.set_item("query_sql", query)?;
         let model = imported(py, "dataclasses", "replace")?.call((record,), Some(&changes))?;
         let model_context = model_context(&project, &context, (&models, &locations, &columns))?;
         let result = call_with(
-            &imported(py, "sqlbuild._native", "plan_model")?,
+            &registry::native(py, NativeAttr::PlanModel)?,
             &[
                 ("model", model),
                 ("snapshot", snapshot.clone()),
@@ -145,7 +147,7 @@ pub(crate) fn build_scenario_execution_plan<'py>(
                 ("full_refresh", PyBool::new(py, true).to_owned().into_any()),
                 (
                     "cursor_overrides",
-                    imported(py, "sqlbuild._native", "CursorOverridePair")?.call0()?,
+                    registry::class(py, RecordId::CursorOverridePair)?.call0()?,
                 ),
             ],
         )?;
@@ -156,7 +158,7 @@ pub(crate) fn build_scenario_execution_plan<'py>(
     }
     let (expected, assertions) = expectations(&scenario, &context)?;
     let plan = call_with(
-        &imported(py, MODELS, "ScenarioExecutionPlan")?,
+        &registry::class(py, RecordId::ScenarioExecutionPlan)?,
         &[
             ("key", scenario.getattr("key")?),
             ("name", scenario.getattr("name")?),
@@ -206,7 +208,7 @@ fn complete_fixtures<'py>(
         .map(|key| key.getattr("name"))
         .collect::<PyResult<Vec<_>>>()?;
     let completion = call_with(
-        &imported(py, "sqlbuild._native", "build_relation_fixture_completion")?,
+        &registry::native(py, NativeAttr::BuildRelationFixtureCompletion)?,
         &[
             ("project", project.clone()),
             ("adapter", context.adapter.clone()),
@@ -255,7 +257,7 @@ fn model_context<'py>(
     let (models, locations, columns) = inputs;
     let py = project.py();
     call_with(
-        &imported(py, "sqlbuild._native", "ModelPlanContext")?,
+        &registry::class(py, RecordId::ModelPlanContext)?,
         &[
             (
                 "model_locations",
@@ -298,7 +300,7 @@ fn expectations<'py>(
             false,
         )?;
         expected.push(call_with(
-            &imported(py, MODELS, "ScenarioExpectedExpectationPlan")?,
+            &registry::class(py, RecordId::ScenarioExpectedExpectationPlan)?,
             &[
                 ("model_name", string(py, name)),
                 ("actual_destination", target),
@@ -316,7 +318,7 @@ fn expectations<'py>(
             false,
         )?;
         assertions.push(call_with(
-            &imported(py, MODELS, "ScenarioAssertionExpectationPlan")?,
+            &registry::class(py, RecordId::ScenarioAssertionExpectationPlan)?,
             &[
                 (
                     "name",

@@ -1,12 +1,13 @@
 //! Plan output assembly: storage policies, warnings and direct-mode metadata.
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::planner_phases::constants::NATIVE_MODULE;
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::planner_phases::objects::{
     model_key_names, native, replace, sorted_names, strings, text, tuple,
 };
 use crate::bindings::_helpers::planner_warehouse::source_freshness::source_freshness_unknown_warnings;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::PyDict as KeywordDict;
@@ -78,7 +79,7 @@ pub(crate) fn assemble_base_plan_output<'py>(
     let version = identities.getattr("version_identities")?;
     let extras = native(
         py,
-        "PlanOutputExtras",
+        RecordId::PlanOutputExtras,
         &[
             (
                 "seed_version_hashes",
@@ -92,7 +93,7 @@ pub(crate) fn assemble_base_plan_output<'py>(
         ],
     )?;
     let plan_output = call_with(
-        &imported(py, NATIVE_MODULE, "build_plan_output")?,
+        &registry::native(py, NativeAttr::BuildPlanOutput)?,
         &[
             ("project", runtime.getattr("project")?),
             ("adapter", runtime.getattr("adapter")?),
@@ -191,7 +192,7 @@ pub(crate) fn with_storage_policies<'py>(
         }
         entries = native(
             py,
-            "with_migration_fingerprints",
+            NativeAttr::WithMigrationFingerprints,
             &[
                 ("entries", entries),
                 ("models_by_name", models.into_any()),
@@ -223,8 +224,8 @@ pub(crate) fn with_storage_policies<'py>(
         ("warehouse", warehouse.clone()),
         ("scope", selected),
     ];
-    let table_types = native(py, "plan_table_types", &storage)?;
-    let retention = native(py, "plan_retention", &storage)?;
+    let table_types = native(py, NativeAttr::PlanTableTypes, &storage)?;
+    let retention = native(py, NativeAttr::PlanRetention, &storage)?;
     replace(
         plan_output,
         &[
@@ -287,7 +288,7 @@ pub(crate) fn with_plan_warnings<'py>(
     }
     let stale = native(
         py,
-        "build_stale_out_of_selection_warnings",
+        NativeAttr::BuildStaleOutOfSelectionWarnings,
         &[
             ("original_scope", scopes.getattr("stale_warning_scope")?),
             ("execution_scope", pruning.getattr("execution_scope")?),

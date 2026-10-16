@@ -1,6 +1,10 @@
-//! Python's breadth-first transitive closure and directed path nodes over graph edges.
+//! Transitive closure and directed path nodes over project graph edges.
 
-use std::collections::{BTreeSet, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashSet};
+use std::convert::Infallible;
+
+use sqlbuild_core::graph_walk::main::breadth_first_reach::breadth_first_reach;
+use sqlbuild_core::graph_walk::main::directed_path_nodes::directed_path_nodes;
 
 use crate::assembly::project::types::ObjectKey;
 use crate::graph::models::{EdgeDirection as Direction, ProjectGraph};
@@ -19,14 +23,9 @@ impl ProjectGraph {
     /// Every key reachable from `start`; `start` itself only through a cycle.
     pub(crate) fn closure(&self, start: &ObjectKey, direction: Direction) -> BTreeSet<ObjectKey> {
         let mut visited: HashSet<&ObjectKey> = HashSet::new();
-        let mut frontier: VecDeque<&ObjectKey> = VecDeque::from([start]);
-        while let Some(current) = frontier.pop_front() {
-            for neighbor in self.edges(current, direction) {
-                if visited.insert(neighbor) {
-                    frontier.push_back(neighbor);
-                }
-            }
-        }
+        let Ok(()) = breadth_first_reach([start], None, &mut visited, |current| {
+            Ok::<_, Infallible>(self.edges(current, direction))
+        });
         visited.into_iter().cloned().collect()
     }
 
@@ -36,35 +35,25 @@ impl ProjectGraph {
         start: &ObjectKey,
         end: &ObjectKey,
     ) -> Option<BTreeSet<ObjectKey>> {
-        let reachable: BTreeSet<ObjectKey> = self.closure(start, Direction::Downstream);
-        if !reachable.contains(end) {
-            return None;
-        }
-        let mut upstream_of_end: BTreeSet<ObjectKey> = BTreeSet::new();
-        let mut stack: Vec<ObjectKey> = vec![end.clone()];
-        while let Some(current) = stack.pop() {
-            if !upstream_of_end.insert(current.clone()) {
-                continue;
-            }
-            for parent in self.downstream_parents(&current) {
-                if reachable.contains(&parent) || &parent == start {
-                    stack.push(parent);
-                }
-            }
-        }
-        let mut nodes: BTreeSet<ObjectKey> =
-            reachable.intersection(&upstream_of_end).cloned().collect();
-        nodes.insert(start.clone());
-        nodes.insert(end.clone());
-        Some(nodes)
+        let (mut reachable, mut path): (HashSet<&ObjectKey>, HashSet<&ObjectKey>) =
+            (HashSet::new(), HashSet::new());
+        let Ok(found) = directed_path_nodes(
+            (start, end),
+            (
+                |current: &&ObjectKey| Ok(self.edges(current, Direction::Downstream)),
+                |current: &&ObjectKey| Ok(self.downstream_parents(current)),
+            ),
+            (&mut reachable, &mut path),
+        );
+        found.then(|| path.into_iter().cloned().collect())
     }
 
     /// Keys whose downstream list holds `key`: the inverse of the downstream edges.
-    fn downstream_parents(&self, key: &ObjectKey) -> Vec<ObjectKey> {
+    fn downstream_parents<'graph>(&'graph self, key: &ObjectKey) -> Vec<&'graph ObjectKey> {
         self.downstream
             .iter()
             .filter(|(_, children)| children.contains(key))
-            .map(|(parent, _)| parent.clone())
+            .map(|(parent, _)| parent)
             .collect()
     }
 }

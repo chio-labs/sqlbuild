@@ -56,6 +56,7 @@ pub(crate) mod macro_bridge;
 pub(crate) mod manifest;
 pub(crate) mod microbatches;
 pub(crate) mod model_config;
+pub(crate) mod native_host;
 pub(crate) mod native_threads;
 pub(crate) mod output_capture;
 pub(crate) mod plan_command;

@@ -15,13 +15,11 @@ use sqlbuild_core::load_command::models::{LoadEntry, LoadGraph};
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const ERRORS_MODULE: &str = "sqlbuild._native";
-const CONTRACT_MODELS: &str = "sqlbuild._native";
-const DESTINATION_MODULE: &str = "sqlbuild._native";
-const CONNECTION_CONFIG_MODULE: &str = "sqlbuild._native";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const ADAPTER_TYPES_MODULE: &str = "sqlbuild.adapter.contract.types";
 const LOADER_NODE_KEY: &str = "sqlbuild_loader_node";
 const LOADER_TABLE_PREFIX: &str = "__loader__";
 const UNKNOWN_SELECTOR_CODE: &str = "C901";
@@ -125,7 +123,7 @@ impl<'py> LoadProject<'py> {
             destination
         };
         let parts: Bound<'py, PyAny> = call_with(
-            &imported(py, DESTINATION_MODULE, "loader_destination_parts")?,
+            &registry::native(py, NativeAttr::LoaderDestinationPartsFunction)?,
             &[
                 ("destination", destination),
                 ("default_database", defaults.database.clone()),
@@ -136,7 +134,7 @@ impl<'py> LoadProject<'py> {
         meta.set_item(LOADER_NODE_KEY, true)?;
         let name_value: Bound<'py, PyAny> = PyString::new(py, name).into_any();
         call_with(
-            &imported(py, CONTRACT_MODELS, "SourceEntry")?,
+            &registry::class(py, RecordId::SourceEntry)?,
             &[
                 ("name", name_value.clone()),
                 ("database", parts.getattr("database")?),
@@ -204,7 +202,7 @@ fn unknown_selector(py: Python<'_>, error: &UnknownLoadSelector) -> PyErr {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", UNKNOWN_SELECTOR_CODE)?;
         options.set_item("help", UNKNOWN_SELECTOR_HELP)?;
-        imported(py, ERRORS_MODULE, "CliUserError")?.call(
+        registry::error(py, ErrorId::CliUser)?.call(
             (format!(
                 "sqb load selector '{}' does not match any managed source or loader",
                 error.name
@@ -255,11 +253,7 @@ pub(crate) fn loader_defaults<'py>(
 ) -> PyResult<LoaderDefaults<'py>> {
     let py: Python<'py> = discovered.py();
     let connection: Bound<'py, PyDict> = call_with(
-        &imported(
-            py,
-            CONNECTION_CONFIG_MODULE,
-            "build_effective_connection_config",
-        )?,
+        &registry::native(py, NativeAttr::BuildEffectiveConnectionConfig)?,
         &[
             ("discovered_inputs", discovered.clone()),
             ("selected_target", selected_target.clone()),
@@ -268,14 +262,14 @@ pub(crate) fn loader_defaults<'py>(
     )?
     .downcast_into()?;
     let adapter_name: Bound<'py, PyAny> = call_with(
-        &imported(py, ADAPTER_NAME_MODULE, "resolve_effective_adapter_name")?,
+        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
             ("project_config", discovered.getattr("project_config")?),
             ("local_config", discovered.getattr("local_config")?),
         ],
     )?;
     let duckdb: Bound<'py, PyAny> =
-        imported(py, ADAPTER_TYPES_MODULE, "BuiltinAdapter")?.getattr("DUCKDB")?;
+        host::entry(py, AdapterHost::BuiltinAdapter)?.getattr("DUCKDB")?;
     let connection_database: Option<Bound<'py, PyAny>> = if adapter_name.eq(duckdb)? {
         None
     } else {

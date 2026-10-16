@@ -3,7 +3,13 @@
 use ruff_python_ast::ExceptHandler;
 use ruff_python_ast::{ModModule, Stmt, StmtFunctionDef, StmtImportFrom};
 use std::collections::{HashMap, HashSet};
+use std::convert::Infallible;
 use std::iter::once;
+
+use sqlbuild_core::graph_walk::main::breadth_first_reach::breadth_first_reach;
+use sqlbuild_core::graph_walk::main::find_cycle::find_cycle;
+use sqlbuild_core::graph_walk::models::VisitOrder;
+use sqlbuild_core::graph_walk::types::NodeSet;
 
 use crate::cpython_tree::models::CpythonNode;
 use crate::macro_modules::_helpers::declarations::module_exports;
@@ -292,21 +298,20 @@ fn export_dependencies(
 ) -> HashMap<String, Vec<String>> {
     let mut dependencies: HashMap<String, Vec<String>> = HashMap::new();
     for export in exports {
+        let mut visited: VisitOrder<&str> = VisitOrder::default();
+        let Ok(_) = visited.insert_new(&export.as_str());
+        let Ok(()) = breadth_first_reach([export.as_str()], None, &mut visited, |function| {
+            Ok::<_, Infallible>(helper_calls[*function].iter().map(String::as_str))
+        });
         let mut found: Vec<String> = Vec::new();
-        let mut pending: std::collections::VecDeque<&str> =
-            std::collections::VecDeque::from([export.as_str()]);
-        let mut visited: HashSet<&str> = HashSet::new();
-        while let Some(function) = pending.pop_front() {
-            if !visited.insert(function) {
-                continue;
-            }
+        for function in visited.order {
             found.extend(direct_dependencies[function].iter().cloned());
-            for called in &helper_calls[function] {
-                if exports.contains(called) {
-                    found.push(called.clone());
-                }
-                pending.push_back(called);
-            }
+            found.extend(
+                helper_calls[function]
+                    .iter()
+                    .filter(|called| exports.contains(*called))
+                    .cloned(),
+            );
         }
         dependencies.insert(export.clone(), unique(found));
     }
@@ -320,38 +325,23 @@ fn validate_local_call_cycles(
 ) -> Result<(), String> {
     let mut sorted: Vec<&String> = exports.iter().collect();
     sorted.sort();
-    let mut completed: HashSet<String> = HashSet::new();
-    for export in sorted {
-        completed = visit_cycle(export, (helper_calls, &[]), completed).map_err(|cycle| {
-            format!(
-                "Macro call cycle in '{display}': {}",
-                cycle.join(CYCLE_SEPARATOR)
-            )
-        })?;
-    }
-    Ok(())
+    let Some(cycle) = repeated_path(sorted, helper_calls) else {
+        return Ok(());
+    };
+    let names: Vec<&str> = cycle.iter().map(|name| name.as_str()).collect();
+    Err(format!(
+        "Macro call cycle in '{display}': {}",
+        names.join(CYCLE_SEPARATOR)
+    ))
 }
 
-/// Depth-first cycle search returning the completed names; the error is the cycle path.
-pub(crate) fn visit_cycle(
-    name: &str,
-    (edges, active): (&HashMap<String, Vec<String>>, &[String]),
-    completed: HashSet<String>,
-) -> Result<HashSet<String>, Vec<String>> {
-    if let Some(start) = active.iter().position(|item| item == name) {
-        let mut cycle: Vec<String> = active[start..].to_vec();
-        cycle.push(name.to_owned());
-        return Err(cycle);
-    }
-    if completed.contains(name) {
-        return Ok(completed);
-    }
-    let mut path: Vec<String> = active.to_vec();
-    path.push(name.to_owned());
-    let mut updated: HashSet<String> = completed;
-    for dependency in &edges[name] {
-        updated = visit_cycle(dependency, (edges, &path), updated)?;
-    }
-    updated.insert(name.to_owned());
-    Ok(updated)
+/// The first dependency cycle depth first from `roots` in order, from its repeated name back to itself.
+pub(crate) fn repeated_path<'a>(
+    roots: Vec<&'a String>,
+    edges: &'a HashMap<String, Vec<String>>,
+) -> Option<Vec<&'a String>> {
+    let path: Vec<&String> = find_cycle(roots, |name| edges.get(*name).into_iter().flatten())?;
+    let repeated: &String = path.last()?;
+    let start: usize = path.iter().position(|name| name == &repeated)?;
+    Some(path[start..].to_vec())
 }

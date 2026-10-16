@@ -10,6 +10,8 @@ use sqlbuild_scopes::scope_index::models::{
     OwnershipRoot, OwnershipRootKind, RejectedPath, ResourceIdentity, ResourceKind, ResourceRecord,
 };
 
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_lookup::{
     NativeScopeLookup, ResolvedRows, TargetRows, path_message, scope_path_error,
 };
@@ -19,7 +21,6 @@ use crate::bindings::_helpers::scopes::scope_objects::{
 
 type PyObject = Py<PyAny>;
 
-const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const CURRENT_PATH: &str = ".";
 
 fn native_lookup(lookup: &Bound<'_, PyAny>) -> PyResult<Py<NativeScopeLookup>> {
@@ -33,8 +34,8 @@ fn target_query<'py>(
     target: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = classes.py();
-    let identity: bool = target.is_instance(&classes.model("ResourceIdentity")?)?
-        || target.is_instance(&classes.model("DeclarationIdentity")?)?;
+    let identity: bool = target.is_instance(&classes.model(RecordId::ResourceIdentity)?)?
+        || target.is_instance(&classes.model(RecordId::DeclarationIdentity)?)?;
     let raw: String = if identity {
         String::new()
     } else {
@@ -49,9 +50,7 @@ fn target_query<'py>(
         native_lookup(lookup)?.get().target(row, &raw)?;
     if let Some(message) = identity_error {
         return Err(PyErr::from_value(
-            py.import(EXCEPTIONS_MODULE)?
-                .getattr("InvalidQualifiedIdentityError")?
-                .call1((message,))?,
+            registry::error(py, ErrorId::InvalidQualifiedIdentity)?.call1((message,))?,
         ));
     }
     if let Some(message) = path_error {
@@ -86,7 +85,7 @@ fn target_query<'py>(
         matched,
     )?;
     classes
-        .model("ScopeTargetQuery")?
+        .model(RecordId::ScopeTargetQuery)?
         .call((value,), Some(&keywords))
 }
 
@@ -149,8 +148,8 @@ fn resolved_visibility(
         tuple_attribute(&lookup.getattr("visibility_index")?, "identities")?;
     let declarations: Bound<'_, PyTuple> = tuple_attribute(&index, "declarations")?;
     let grants: Bound<'_, PyTuple> = tuple_attribute(&index, "grants")?;
-    let visible_class: Bound<'_, PyAny> = classes.model("VisibilityRecord")?;
-    let inaccessible_class: Bound<'_, PyAny> = classes.model("InaccessibleRecord")?;
+    let visible_class: Bound<'_, PyAny> = classes.model(RecordId::VisibilityRecord)?;
+    let inaccessible_class: Bound<'_, PyAny> = classes.model(RecordId::InaccessibleRecord)?;
     let mut visible: Vec<Bound<'_, PyAny>> = Vec::new();
     let mut inaccessible: Vec<Bound<'_, PyAny>> = Vec::new();
     for resource in tuple_attribute(&query, "matches")?.iter() {
@@ -164,7 +163,7 @@ fn resolved_visibility(
             visible.push(visible_class.call1((
                 &owner,
                 identities.get_item(position)?,
-                classes.member("VisibilityReason", reason)?,
+                classes.member(RecordId::VisibilityReason, reason)?,
                 through,
             ))?);
         }
@@ -175,17 +174,17 @@ fn resolved_visibility(
                 inaccessible_class.call1((
                     &owner,
                     identity,
-                    classes.member("InaccessibleReason", reason)?,
+                    classes.member(RecordId::InaccessibleReason, reason)?,
                 ))?
             } else {
                 identity
             });
         }
     }
-    let result: &str = if with_reasons {
-        "VisibilityResolution"
+    let result: RecordId = if with_reasons {
+        RecordId::VisibilityResolution
     } else {
-        "DeclarationVisibility"
+        RecordId::DeclarationVisibility
     };
     Ok(classes
         .model(result)?

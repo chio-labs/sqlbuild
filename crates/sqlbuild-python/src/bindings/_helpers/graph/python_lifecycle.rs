@@ -2,13 +2,14 @@
 
 use std::collections::{BTreeSet, HashMap};
 
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyFrozenSet};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::python_plan::main::run_lifecycle::run_lifecycle;
 use sqlbuild_analysis::python_plan::models::{LifecycleNode, RunLifecycle};
 
-const PYTHON_NODE_MODELS_MODULE: &str = "sqlbuild._native";
 const EXTERNAL_CONNECTION_MODE: &str = "external";
 
 /// `build_python_sql_run_lifecycle(*, selection, python_graph)`: a `PythonSqlRunLifecyclePlan`.
@@ -60,9 +61,7 @@ fn build_python_sql_run_lifecycle<'py>(
         "read_side_python_node_names",
         PyFrozenSet::new(py, lifecycle.read_side_names)?,
     )?;
-    py.import(PYTHON_NODE_MODELS_MODULE)?
-        .getattr("PythonSqlRunLifecyclePlan")?
-        .call((), Some(&arguments))
+    registry::class(py, RecordId::PythonSqlRunLifecyclePlan)?.call((), Some(&arguments))
 }
 
 fn lifecycle_node(node: &Bound<'_, PyAny>) -> PyResult<LifecycleNode> {

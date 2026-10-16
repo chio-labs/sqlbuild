@@ -1,7 +1,8 @@
 //! Boundary conversions for the column migration planner.
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::planner_migrations::constants::PLANNER_MODELS;
+use crate::bindings::_helpers::records::ids::{NativeAttr, NativeItem, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString};
 
@@ -26,24 +27,24 @@ pub(super) fn replace<'py>(
 
 pub(super) fn model<'py>(
     py: Python<'py>,
-    name: &str,
+    name: RecordId,
     fields: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(&imported(py, PLANNER_MODELS, name)?, fields)
+    call_with(&registry::class(py, name)?, fields)
 }
 
 pub(super) fn native<'py>(
     py: Python<'py>,
-    name: &str,
+    name: impl Into<NativeItem>,
     fields: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(&imported(py, "sqlbuild._native", name)?, fields)
+    call_with(&registry::item(py, name)?, fields)
 }
 
 pub(super) fn config<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
     native(
         model.py(),
-        "get_config_str",
+        NativeAttr::GetConfigStr,
         &[
             ("values", model.getattr("config")?.getattr("values")?),
             ("key", text(model.py(), key)),
@@ -57,7 +58,7 @@ pub(super) fn definition_hash<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     native(
         model.py(),
-        "model_definition_hash",
+        NativeAttr::ModelDefinitionHash,
         &[
             ("model_name", model.getattr("name")?),
             ("query_sql", model.getattr("query_sql")?),

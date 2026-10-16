@@ -18,10 +18,10 @@ use crate::bindings::_helpers::cursor::values::{
     DATETIME_MODULE, civil_date, local_date_time, naive_date_time, plain_date, replaced,
     timedelta_micros,
 };
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
-pub(crate) const MODELS_MODULE: &str = "sqlbuild._native";
 const EXCEPTIONS_MODULE: &str = "sqlbuild.cursor_algebra.exceptions";
-const PLANNER_TYPES_MODULE: &str = "sqlbuild._native";
 /// Cursor grain names, finest first.
 pub(crate) const GRAIN_NAMES: [(&str, Grain); 6] = [
     ("second", Grain::Second),
@@ -56,12 +56,11 @@ pub(crate) struct CursorSession<'py> {
 
 impl<'py> CursorSession<'py> {
     pub(crate) fn new(py: Python<'py>) -> PyResult<Self> {
-        let models = py.import(MODELS_MODULE)?;
         Ok(Self {
             py,
-            timestamp_class: models.getattr("TimestampValue")?,
-            date_class: models.getattr("DateValue")?,
-            integer_class: models.getattr("IntegerValue")?,
+            timestamp_class: registry::class(py, RecordId::TimestampValue)?,
+            date_class: registry::class(py, RecordId::DateValue)?,
+            integer_class: registry::class(py, RecordId::IntegerValue)?,
             inputs: RefCell::new(Vec::new()),
             failure: RefCell::new(None),
         })
@@ -135,7 +134,7 @@ impl<'py> CursorSession<'py> {
                 return Ok(Some(*known));
             }
         }
-        imported(self.py, PLANNER_TYPES_MODULE, "CursorGrain")?.call1((grain,))?;
+        registry::class(self.py, RecordId::CursorGrain)?.call1((grain,))?;
         Err(PyTypeError::new_err("cursor grain must be a CursorGrain"))
     }
 
@@ -198,13 +197,13 @@ impl<'py> CursorSession<'py> {
             .iter()
             .find(|(_, known)| *known == grain)
             .map_or("", |(name, _)| name);
-        imported(self.py, PLANNER_TYPES_MODULE, "CursorGrain")?.call1((name,))
+        registry::class(self.py, RecordId::CursorGrain)?.call1((name,))
     }
 
     /// A new `AlignedInterval`, validated as its constructor validates.
     pub(crate) fn python_interval(&self, interval: &Interval) -> PyResult<Bound<'py, PyAny>> {
         call_with(
-            &imported(self.py, MODELS_MODULE, "AlignedInterval")?,
+            &registry::class(self.py, RecordId::AlignedInterval)?,
             &[
                 ("start", self.python_scalar(&interval.start)?),
                 ("end", self.python_scalar(&interval.end)?),

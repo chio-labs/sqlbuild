@@ -14,12 +14,11 @@ use sqlbuild_analysis::semantic_checks::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::models::ProjectCatalog;
 use crate::bindings::types::CompilerDetach;
 
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
 const SQL_ANALYSIS_CONFIG_KEY: &str = "sql_analysis";
 const MODEL_HOOK_KEYS: [&str; 2] = ["pre_hooks", "post_hooks"];
 const BUILT_IN_AUDIT_ROOT: &str = "<built-in>";
@@ -53,12 +52,8 @@ pub(crate) fn resource_sql_diagnostics_of<'py>(
         Err(failure) => return Err(failure_error(py, failure)?),
     };
     let classes = DiagnosticClasses {
-        compiler_diagnostic: py
-            .import(COMPILE_MODELS_MODULE)?
-            .getattr("CompilerDiagnostic")?,
-        source_location: py
-            .import(CONTRACT_MODELS_MODULE)?
-            .getattr("SourceLocation")?,
+        compiler_diagnostic: registry::class(py, RecordId::CompilerDiagnostic)?,
+        source_location: registry::class(py, RecordId::SourceLocation)?,
         path: py.import("pathlib")?.getattr("Path")?,
     };
     let built: Vec<Bound<'py, PyAny>> = diagnostics
@@ -74,9 +69,7 @@ fn request(
     profile: &Bound<'_, PyAny>,
 ) -> PyResult<ResourceSqlRequest> {
     let py: Python<'_> = project.py();
-    let reference_class: Bound<'_, PyAny> = py
-        .import(COMPILE_MODELS_MODULE)?
-        .getattr("CompileSqlReference")?;
+    let reference_class: Bound<'_, PyAny> = registry::class(py, RecordId::CompileSqlReference)?;
     let mut audits: Vec<AuditSqlInput> = Vec::new();
     for audit in project.getattr("audits")?.try_iter()? {
         audits.push(audit_input(&audit?, &reference_class)?);
@@ -331,11 +324,9 @@ fn python_diagnostic<'py>(
 
 fn failure_error(py: Python<'_>, failure: ResourceSqlFailure) -> PyResult<PyErr> {
     Ok(match failure {
-        ResourceSqlFailure::CursorIntrinsic(message) => PyErr::from_value(
-            py.import(COMPILE_ERRORS_MODULE)?
-                .getattr("CompileInputError")?
-                .call1((message,))?,
-        ),
+        ResourceSqlFailure::CursorIntrinsic(message) => {
+            PyErr::from_value(registry::error(py, ErrorId::CompileInput)?.call1((message,))?)
+        }
         ResourceSqlFailure::Normalization(message) | ResourceSqlFailure::Internal(message) => {
             compiler_error(message)
         }

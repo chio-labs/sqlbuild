@@ -13,14 +13,14 @@ use sqlbuild_analysis::planner_strategy::models::{
     ModelStrategy, PlanAction, PlanReason, SchemaActionKind, WarningInputs,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::planner_changes::results::planner_enum;
 use crate::bindings::_helpers::planner_strategy::values::{
-    PLANNER_EXCEPTIONS_MODULE, change_facts, config_value, finding_rows, input_error,
-    materialization_value, model_materialization, optional_string, plan_warning, text,
+    change_facts, config_value, finding_rows, input_error, materialization_value,
+    model_materialization, optional_string, plan_warning, text,
 };
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 fn action_value(action: PlanAction) -> &'static str {
     match action {
@@ -64,7 +64,7 @@ fn schema_policy(on_schema_change: &Bound<'_, PyAny>) -> PyResult<Option<String>
 fn materialization_of<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     planner_enum(
         model.py(),
-        "MaterializationType",
+        RecordId::MaterializationType,
         materialization_value(model_materialization(model)?),
     )
 }
@@ -90,7 +90,7 @@ fn resolve_model_plan_action<'py>(
             |error| {
                 input_error(
                     py,
-                    (PLANNER_EXCEPTIONS_MODULE, "PlannerInputError"),
+                    ErrorId::PlannerInput,
                     &error.message(),
                     Some(error.code()),
                 )
@@ -99,8 +99,8 @@ fn resolve_model_plan_action<'py>(
     PyTuple::new(
         py,
         [
-            planner_enum(py, "PlanAction", action_value(action))?,
-            planner_enum(py, "PlanReason", reason_value(reason))?,
+            planner_enum(py, RecordId::PlanAction, action_value(action))?,
+            planner_enum(py, RecordId::PlanReason, reason_value(reason))?,
         ],
     )
 }
@@ -113,7 +113,7 @@ fn resolve_schema_actions<'py>(
     on_schema_change: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = schema_findings.py();
-    let class: Bound<'py, PyAny> = imported(py, "sqlbuild._native", "SchemaAction")?;
+    let class: Bound<'py, PyAny> = registry::class(py, RecordId::SchemaAction)?;
     let policy: Option<String> = schema_policy(on_schema_change)?;
     let mut actions: Vec<Bound<'py, PyAny>> = Vec::new();
     for row in schema_actions(&finding_rows(schema_findings)?, policy.as_deref()) {
@@ -125,7 +125,7 @@ fn resolve_schema_actions<'py>(
         actions.push(call_with(
             &class,
             &[
-                ("kind", native_enum(py, "SchemaActionKind", kind)?),
+                ("kind", native_enum(py, RecordId::SchemaActionKind, kind)?),
                 (
                     "column_name",
                     PyString::new(py, &row.column_name).into_any(),

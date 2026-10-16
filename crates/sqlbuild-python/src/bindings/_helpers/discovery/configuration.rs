@@ -3,11 +3,11 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyString;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
-const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 /// `DiscoveredProjectInputs` with the loaded configuration, inside the project discovery lifecycle.
 pub(crate) fn discover_project_configuration<'py>(
@@ -15,7 +15,7 @@ pub(crate) fn discover_project_configuration<'py>(
     project_dir: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let lifecycle: Bound<'py, PyAny> = call_with(
-        &imported(py, LIFECYCLE_MODULE, "OperationLifecycle")?,
+        &host::entry(py, ExecutorHost::OperationLifecycle)?,
         &[
             ("operation_kind", PyString::new(py, "project").into_any()),
             (
@@ -26,17 +26,17 @@ pub(crate) fn discover_project_configuration<'py>(
     )?;
     within(&lifecycle, |_| {
         call_with(
-            &imported(py, DISCOVERY_MODELS_MODULE, "DiscoveredProjectInputs")?,
+            &registry::class(py, RecordId::DiscoveredProjectInputs)?,
             &[
                 ("project_dir", project_dir.clone()),
                 (
                     "project_config",
-                    imported(py, NATIVE_MODULE, "load_project_config_file")?
+                    registry::native(py, NativeAttr::LoadProjectConfigFile)?
                         .call1((project_dir,))?,
                 ),
                 (
                     "local_config",
-                    imported(py, NATIVE_MODULE, "load_local_config_file")?.call1((project_dir,))?,
+                    registry::native(py, NativeAttr::LoadLocalConfigFile)?.call1((project_dir,))?,
                 ),
             ],
         )

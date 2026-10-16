@@ -10,48 +10,28 @@ use sqlbuild_discovery::models::{DiscoveryFailure, ReadFailure, StageFailure};
 use sqlbuild_discovery::tree::models::ProjectTree;
 
 use crate::bindings::_helpers::discovery::project_files::path_object;
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 
-const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
-const IDENTITY_ERRORS_MODULE: &str = "sqlbuild._native";
 const BUILTINS_MODULE: &str = "builtins";
 const OS_MODULE: &str = "os";
 const DECODE_ENCODING: &str = "utf-8";
 
 /// The exception class of each native failure kind.
-const FAILURE_CLASSES: [(&str, &str, &str); 13] = [
-    ("model_sql", DISCOVERY_ERRORS_MODULE, "ModelSqlParseError"),
-    (
-        "declaration",
-        DISCOVERY_ERRORS_MODULE,
-        "DeclarationParseError",
-    ),
-    ("sql_test", DISCOVERY_ERRORS_MODULE, "SqlTestParseError"),
-    (
-        "sql_scenario",
-        DISCOVERY_ERRORS_MODULE,
-        "SqlScenarioParseError",
-    ),
-    ("schema", DISCOVERY_ERRORS_MODULE, "SchemaParseError"),
-    ("source", DISCOVERY_ERRORS_MODULE, "SourceParseError"),
-    ("project_path", DISCOVERY_ERRORS_MODULE, "ProjectPathError"),
-    ("sql_hook", DISCOVERY_ERRORS_MODULE, "SqlHookParseError"),
-    ("sql_audit", DISCOVERY_ERRORS_MODULE, "SqlAuditParseError"),
-    (
-        "resource_identity",
-        IDENTITY_ERRORS_MODULE,
-        "ResourceIdentityError",
-    ),
-    (
-        "conflict",
-        DISCOVERY_ERRORS_MODULE,
-        "DiscoveryConflictError",
-    ),
-    ("seed", DISCOVERY_ERRORS_MODULE, "SeedDiscoveryError"),
-    (
-        "python_path",
-        DISCOVERY_ERRORS_MODULE,
-        "ProjectPythonPathError",
-    ),
+const FAILURE_CLASSES: [(&str, ErrorId); 13] = [
+    ("model_sql", ErrorId::ModelSqlParse),
+    ("declaration", ErrorId::DeclarationParse),
+    ("sql_test", ErrorId::SqlTestParse),
+    ("sql_scenario", ErrorId::SqlScenarioParse),
+    ("schema", ErrorId::SchemaParse),
+    ("source", ErrorId::SourceParse),
+    ("project_path", ErrorId::ProjectPath),
+    ("sql_hook", ErrorId::SqlHookParse),
+    ("sql_audit", ErrorId::SqlAuditParse),
+    ("resource_identity", ErrorId::ResourceIdentity),
+    ("conflict", ErrorId::DiscoveryConflict),
+    ("seed", ErrorId::SeedDiscovery),
+    ("python_path", ErrorId::ProjectPythonPath),
 ];
 
 fn raised(result: PyResult<Bound<'_, PyAny>>) -> PyErr {
@@ -68,15 +48,13 @@ pub(crate) fn discovery_error(
     message: String,
     help: Option<String>,
 ) -> PyErr {
-    let Some((_, module, class)) = FAILURE_CLASSES.iter().find(|(name, _, _)| *name == kind) else {
+    let Some((_, class)) = FAILURE_CLASSES.iter().find(|(name, _)| *name == kind) else {
         return PyKeyError::new_err(kind.to_owned());
     };
     raised((|| {
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
         keywords.set_item("help", help)?;
-        py.import(*module)?
-            .getattr(*class)?
-            .call((message,), Some(&keywords))
+        registry::error(py, *class)?.call((message,), Some(&keywords))
     })())
 }
 

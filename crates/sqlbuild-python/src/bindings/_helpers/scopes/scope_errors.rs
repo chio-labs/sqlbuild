@@ -1,21 +1,17 @@
 //! Report a scope index's error findings as individual compile diagnostics.
 
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 
-const COLLECTOR_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const ERROR_SEVERITY: &str = "error";
 
 /// `report_scope_index_errors`: each error-severity finding of `index`, keyed for the collector.
 pub(crate) fn report_scope_index_errors(index: &Bound<'_, PyAny>) -> PyResult<()> {
     let py: Python<'_> = index.py();
-    let report = py
-        .import(COLLECTOR_MODULE)?
-        .getattr("report_compile_diagnostic")?;
-    let compiler_diagnostic = py
-        .import(COMPILE_MODELS_MODULE)?
-        .getattr("CompilerDiagnostic")?;
+    let report = registry::native(py, NativeAttr::ReportCompileDiagnostic)?;
+    let compiler_diagnostic = registry::class(py, RecordId::CompilerDiagnostic)?;
     let path_class = py.import("pathlib")?.getattr("Path")?;
     for item in index.getattr("diagnostics")?.try_iter()? {
         let item: Bound<'_, PyAny> = item?;

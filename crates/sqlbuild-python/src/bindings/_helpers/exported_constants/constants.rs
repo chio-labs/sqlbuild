@@ -42,10 +42,9 @@ use crate::bindings::_helpers::compile_command::constants::{
     REUSE_DISABLE_ENV_VAR, TRACKED_ENVIRONMENT_PREFIXES, UNTRACKED_ENVIRONMENT_NAMES,
 };
 use crate::bindings::_helpers::frontier::stage_capture::CAPTURE_DIR_ENV_VAR;
+use crate::bindings::_helpers::native_host::constants::CUSTOM_HOST_LAUNCH_MODULE;
 use crate::bindings::_helpers::result_output::event_writer::RESULT_PATH_ENV;
-use crate::bindings::_helpers::rules::constants::{
-    CUSTOM_HOST_LAUNCH_MODULE, CUSTOM_HOST_RUNTIME_VERSION,
-};
+use crate::bindings::_helpers::rules::constants::CUSTOM_HOST_RUNTIME_VERSION;
 use crate::bindings::_helpers::semantic_shapes::shapes::{VALID_FROM_DEFAULT, VALID_TO_DEFAULT};
 use crate::bindings::_helpers::state_rows::constants::MIGRATION_WRITE_ATTEMPTS;
 

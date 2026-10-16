@@ -11,6 +11,8 @@ use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_core::terminal_events::main::claim_resource_terminal::claim_resource_terminal;
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::terminal_events::main::consume_terminal_fact::consume_terminal_fact;
 use sqlbuild_core::terminal_events::main::latest_resource_terminal::latest_resource_terminal;
 use sqlbuild_core::terminal_events::main::lifecycle_terminal::lifecycle_terminal;
@@ -19,7 +21,6 @@ use sqlbuild_core::terminal_events::models::{TerminalFact, TerminalIndex, Termin
 /// The module attribute holding the `ContextVar` of the installed index.
 const CONTEXT_ATTRIBUTE: &str = "_terminal_event_index_context";
 const CONTEXT_NAME: &str = "sqlbuild_terminal_event_index";
-const NATIVE_MODULE: &str = "sqlbuild._native";
 const CLAIM_OPTIONS: (&[&str], &[&str]) = (
     &["resource_name"],
     &["resource_id", "resource_attempt_id", "attempt_number"],
@@ -229,7 +230,7 @@ pub(crate) struct TerminalEventIndexScope {
 }
 
 fn context_variable(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    py.import(NATIVE_MODULE)?.getattr(CONTEXT_ATTRIBUTE)
+    registry::native(py, NativeAttr::TerminalEventIndexContext)
 }
 
 #[pymethods]

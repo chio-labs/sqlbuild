@@ -1,14 +1,12 @@
 //! A `CompiledModel` for a model input built outside the native compile-input stage.
 
-use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyList, PyString, PyTuple};
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
 
 type Object<'py> = Bound<'py, PyAny>;
 
@@ -20,8 +18,6 @@ pub(crate) fn compiled_model<'py>(
     macro_deps: &Object<'py>,
 ) -> PyResult<Object<'py>> {
     let py: Python<'py> = model_input.py();
-    let native = py.import(NATIVE_MODULE)?;
-    let models = py.import(COMPILE_MODELS_MODULE)?;
     let types = py.import(COMPILE_TYPES_MODULE)?;
     let model_file: Object<'py> = model_input.getattr("model_file")?;
     let model_name: Object<'py> = model_file.getattr("file_path")?.getattr("stem")?;
@@ -32,8 +28,7 @@ pub(crate) fn compiled_model<'py>(
     let mut star_resolved: Object<'py> = false_object(py);
     let mut diagnostics: Object<'py> = PyTuple::empty(py).into_any();
     let mut validated: Object<'py> = false_object(py);
-    let mut proof: Object<'py> = native
-        .getattr("dynamic_contract_proof")?
+    let mut proof: Object<'py> = registry::native(py, NativeAttr::DynamicContractProof)?
         .call1((analysis.getattr("standalone_proof")?,))?;
     let session: Object<'py> = analysis.getattr("session")?;
     if !session.is_none() {
@@ -42,9 +37,8 @@ pub(crate) fn compiled_model<'py>(
         arguments.set_item("session", session)?;
         arguments.set_item("position", position)?;
         arguments.set_item("placeholders", &none)?;
-        let outcome: Object<'py> = native
-            .getattr("session_outcome_analysis")?
-            .call((), Some(&arguments))?;
+        let outcome: Object<'py> =
+            registry::native(py, NativeAttr::SessionOutcomeAnalysis)?.call((), Some(&arguments))?;
         let result: Object<'py> = outcome.getattr("polyglot_analysis")?;
         if result.getattr("analysis_succeeded")?.is_truthy()? {
             inferred = result.getattr("columns")?;
@@ -76,7 +70,7 @@ pub(crate) fn compiled_model<'py>(
         has_star = true_object(py);
     }
     let resource_type: Object<'py> = types.getattr("CompiledResourceType")?;
-    let key_class: Object<'py> = models.getattr("CompiledObjectKey")?;
+    let key_class: Object<'py> = registry::class(py, RecordId::CompiledObjectKey)?;
     let mut dependency_keys: Vec<Object<'py>> = Vec::new();
     for dependency in deps.try_iter()? {
         let (kind, name): (Object<'py>, Object<'py>) = dependency?.extract()?;
@@ -97,7 +91,7 @@ pub(crate) fn compiled_model<'py>(
         ],
     )?;
     call(
-        &models.getattr("CompiledModel")?,
+        &registry::class(py, RecordId::CompiledModel)?,
         &[
             ("key", key),
             ("deps", PyTuple::new(py, dependency_keys)?.into_any()),
@@ -161,8 +155,7 @@ fn destination<'py>(config: &Object<'py>, model_name: &Object<'py>) -> PyResult<
     };
     let none: Object<'py> = py.None().into_bound(py);
     call(
-        &py.import(COMPILE_MODELS_MODULE)?
-            .getattr("CompiledRelationLocation")?,
+        &registry::class(py, RecordId::CompiledRelationLocation)?,
         &[
             (
                 "database",
@@ -183,9 +176,7 @@ fn fallback_columns<'py>(rows: &Object<'py>) -> PyResult<Object<'py>> {
     if rows.is_none() {
         return Ok(rows.clone());
     }
-    let column_class: Object<'py> = py
-        .import(COMPILE_MODELS_MODULE)?
-        .getattr("InferredColumn")?;
+    let column_class: Object<'py> = registry::class(py, RecordId::InferredColumn)?;
     let nullability: Object<'py> = py
         .import(LINEAGE_TYPES_MODULE)?
         .getattr("InferredNullability")?;
@@ -263,17 +254,13 @@ fn located<'py>(
         )?
         .into_any()
     };
-    let located: Object<'py> = py
-        .import(NATIVE_MODULE)?
-        .getattr("locate_model_binding_diagnostics")?
+    let located: Object<'py> = registry::native(py, NativeAttr::LocateModelBindingDiagnostics)?
         .call1((PyList::new(py, rows)?, texts, expansion_row))?;
-    let models = py.import(COMPILE_MODELS_MODULE)?;
     let types = py.import(COMPILE_TYPES_MODULE)?;
-    let diagnostic_class: Object<'py> = models.getattr("CompilerDiagnostic")?;
-    let location_class: Object<'py> = py
-        .import(CONTRACT_MODELS_MODULE)?
-        .getattr("SourceLocation")?;
-    let phase: Object<'py> = shape_class(types.as_any(), "DiagnosticPhase")?.getattr("COMPILE")?;
+    let diagnostic_class: Object<'py> = registry::class(py, RecordId::CompilerDiagnostic)?;
+    let location_class: Object<'py> = registry::class(py, RecordId::SourceLocation)?;
+    let phase: Object<'py> =
+        registry::class(types.py(), RecordId::DiagnosticPhase)?.getattr("COMPILE")?;
     let model: Object<'py> = types.getattr("CompiledResourceType")?.getattr("MODEL")?;
     let name: Object<'py> = model_file.getattr("file_path")?.getattr("stem")?;
     let mut built: Vec<Object<'py>> = Vec::new();

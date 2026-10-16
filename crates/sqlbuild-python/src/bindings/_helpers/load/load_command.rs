@@ -17,7 +17,7 @@ use sqlbuild_core::load_command::main::render_load_ready::render_load_ready;
 use sqlbuild_core::load_command::models::{LoadCounts, LoadResultText};
 
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::cursor::overrides::{cursor_integer, cursor_timestamp};
 use crate::bindings::_helpers::load::load_progress::{
     LoadCallbackRelay, LoadProgressReporter, load_result_text,
@@ -25,23 +25,14 @@ use crate::bindings::_helpers::load::load_progress::{
 use crate::bindings::_helpers::load::load_selection::{
     LoadProject, LoaderDefaults, loader_defaults,
 };
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const ERRORS_MODULE: &str = "sqlbuild._native";
-const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
-const EFFECTIVE_TARGET_MODULE: &str = "sqlbuild._native";
-const EFFECTIVE_RUNTIME_MODULE: &str = "sqlbuild._native";
-const EFFECTIVE_SETTINGS_MODULE: &str = "sqlbuild._native";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const RELATION_LOOKUP_MODULE: &str = "sqlbuild.adapter.relations.main.relation_lookup";
-const CURSOR_OVERRIDES_MODULE: &str = "sqlbuild._native";
-const PLANNER_MODELS: &str = "sqlbuild._native";
-const PROVIDER_SESSION_MODULE: &str = "sqlbuild.provider.main.session";
-const PYTHON_NODE_MODELS: &str = "sqlbuild.python_nodes.models";
-const PYTHON_NODE_TYPES: &str = "sqlbuild.python_nodes.types";
-const LOAD_MODELS: &str = "sqlbuild.executor.load.models";
-const LOAD_RUN_MODULE: &str = "sqlbuild.executor.load.main.run";
 const LOADER_NODE_KEY: &str = "sqlbuild_loader_node";
 const EXECUTION_COMMAND: &str = "sqb load";
 
@@ -84,13 +75,13 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
         _ => py.import("pathlib")?.getattr("Path")?.call_method0("cwd")?,
     };
     let discovered: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "discover_project_inputs")?,
+        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
         &[("project_dir", project_dir.clone())],
     )?;
     let select: Bound<'py, PyAny> = request.getattr("select")?;
     let exclude: Bound<'py, PyAny> = request.getattr("exclude")?;
     call_with(
-        &imported(py, REJECT_UNIT_TESTS_MODULE, "reject_unit_test_selectors")?,
+        &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
         &[
             ("select", select.clone()),
             ("exclude", exclude.clone()),
@@ -99,7 +90,7 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
     )?;
     let selected_target: Bound<'py, PyAny> = request.getattr("selected_target")?;
     let target_config: Bound<'py, PyAny> = call_with(
-        &imported(py, EFFECTIVE_TARGET_MODULE, "build_effective_target_config")?,
+        &registry::native(py, NativeAttr::BuildEffectiveTargetConfig)?,
         &[
             ("discovered_inputs", discovered.clone()),
             ("selected_target", selected_target.clone()),
@@ -141,7 +132,7 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
 }
 
 fn user_error(py: Python<'_>, message: String) -> PyErr {
-    match imported(py, ERRORS_MODULE, "CliUserError").and_then(|class| class.call1((message,))) {
+    match registry::error(py, ErrorId::CliUser).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }
@@ -187,7 +178,7 @@ fn check_reference_targets(
             })
             .collect::<PyResult<_>>()?;
         let lookup: Bound<'_, PyAny> = call_with(
-            &imported(py, RELATION_LOOKUP_MODULE, "build_relation_lookup")?,
+            &host::entry(py, AdapterHost::BuildRelationLookup)?,
             &[
                 ("adapter", adapter.clone()),
                 ("connection", connection.clone()),
@@ -253,10 +244,10 @@ fn project_relations<'py>(
             sources.set_item(source.getattr("name")?, source)?;
         }
     }
-    let reference_class: Bound<'py, PyAny> = imported(py, PYTHON_NODE_MODELS, "SqlResourceRef")?;
+    let reference_class: Bound<'py, PyAny> = host::entry(py, UserCodeHost::SqlResourceRef)?;
     let source_kind: Bound<'py, PyAny> =
-        imported(py, PYTHON_NODE_TYPES, "SqlResourceRefKind")?.getattr("SOURCE")?;
-    let render: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "render_source_relation")?;
+        host::entry(py, UserCodeHost::SqlResourceRefKind)?.getattr("SOURCE")?;
+    let render: Bound<'py, PyAny> = registry::native(py, NativeAttr::RenderSourceRelation)?;
     let relations: Bound<'py, PyDict> = PyDict::new(py);
     for (name, source) in sources.iter() {
         let key: Bound<'py, PyAny> = call_with(
@@ -277,7 +268,7 @@ fn prepare<'py>(
     let py: Python<'py> = request.py();
     let discovered: &Bound<'py, PyAny> = &invocation.discovered;
     let adapter_name: Bound<'py, PyAny> = call_with(
-        &imported(py, ADAPTER_NAME_MODULE, "resolve_effective_adapter_name")?,
+        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
             ("project_config", discovered.getattr("project_config")?),
             ("local_config", discovered.getattr("local_config")?),
@@ -285,7 +276,7 @@ fn prepare<'py>(
     )?;
     let adapter: Bound<'py, PyAny> = resolve_cli_adapter(&adapter_name, &invocation.project_dir)?;
     let connection_config: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "resolve_project_connection_config")?,
+        &registry::native(py, NativeAttr::ResolveProjectConnectionConfig)?,
         &[
             ("discovered_inputs", discovered.clone()),
             ("project_dir", invocation.project_dir.clone()),
@@ -295,11 +286,7 @@ fn prepare<'py>(
     )?;
     check_reference_targets(invocation, (&adapter, &connection_config))?;
     let runtime: (Bound<'py, PyAny>, Bound<'py, PyAny>, Bound<'py, PyAny>) = call_with(
-        &imported(
-            py,
-            EFFECTIVE_RUNTIME_MODULE,
-            "build_effective_runtime_config",
-        )?,
+        &registry::native(py, NativeAttr::BuildEffectiveRuntimeConfig)?,
         &[
             ("discovered_inputs", discovered.clone()),
             ("selected_target", request.getattr("selected_target")?),
@@ -310,11 +297,7 @@ fn prepare<'py>(
     let requested: Bound<'py, PyAny> = request.getattr("concurrency")?;
     let concurrency: i64 = if requested.is_none() {
         call_with(
-            &imported(
-                py,
-                EFFECTIVE_SETTINGS_MODULE,
-                "build_effective_settings_config",
-            )?,
+            &registry::native(py, NativeAttr::BuildEffectiveSettingsConfig)?,
             &[("discovered_inputs", discovered.clone())],
         )?
         .getattr("concurrency")?
@@ -323,16 +306,16 @@ fn prepare<'py>(
         requested.extract()?
     };
     let typed: Bound<'py, PyAny> = call_with(
-        &imported(py, CURSOR_OVERRIDES_MODULE, "type_cursor_overrides")?,
+        &registry::native(py, NativeAttr::TypeCursorOverrides)?,
         &[("cursor_overrides", request.getattr("cursor_overrides")?)],
     )?;
     let cursor_overrides: Bound<'py, PyAny> = if typed.is_truthy()? {
         typed
     } else {
-        imported(py, PLANNER_MODELS, "CursorOverrides")?.call0()?
+        registry::class(py, RecordId::CursorOverrides)?.call0()?
     };
     let provider_session: Bound<'py, PyAny> = call_with(
-        &imported(py, PROVIDER_SESSION_MODULE, "build_provider_session")?,
+        &host::entry(py, UserCodeHost::BuildProviderSession)?,
         &[("discovered_providers", discovered.getattr("providers")?)],
     )?;
     Ok(Preparation {
@@ -357,7 +340,7 @@ fn runtime_params<'py>(
     let (target_name, effective_vars, run_id) = &preparation.runtime;
     let overrides: &Bound<'py, PyAny> = &preparation.cursor_overrides;
     call_with(
-        &imported(py, LOAD_MODELS, "LoadRuntimeParams")?,
+        &host::entry(py, ExecutorHost::LoadRuntimeParams)?,
         &[
             ("run_id", run_id.clone()),
             (
@@ -409,13 +392,13 @@ fn execute<'py>(
     let py: Python<'py> = request.py();
     let started: Instant = Instant::now();
     let event_writer: Bound<'py, PyAny> =
-        imported(py, NATIVE_MODULE, "ExecutionEventWriter")?.call0()?;
+        registry::native(py, NativeAttr::ExecutionEventWriter)?.call0()?;
     let order: Bound<'py, PyDict> = PyDict::new(py);
     for (index, source) in invocation.selected.iter().enumerate() {
         order.set_item(source.getattr("name")?, index + 1)?;
     }
     let reporter: Bound<'py, LoadProgressReporter> =
-        imported(py, NATIVE_MODULE, "LoadProgressReporter")?
+        registry::native(py, NativeAttr::LoadProgressReporter)?
             .call(
                 (),
                 Some(&{
@@ -429,7 +412,7 @@ fn execute<'py>(
             )?
             .downcast_into()?;
     let connection: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "ConnectionProgressReporter")?,
+        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
         &[
             ("adapter_name", text(py, &preparation.adapter_name)),
             ("stream", invocation.stream.clone()),
@@ -455,7 +438,7 @@ fn execute<'py>(
     )?;
     let executed: PyResult<Vec<Bound<'py, PyAny>>> = (|| {
         let callbacks: Bound<'py, PyAny> = call_with(
-            &imported(py, LOAD_MODELS, "LoadCallbacks")?,
+            &host::entry(py, ExecutorHost::LoadCallbacks)?,
             &[
                 ("on_load_start", reporter.getattr("on_start")?),
                 ("on_load_progress", reporter.getattr("on_progress")?),
@@ -472,7 +455,7 @@ fn execute<'py>(
             ],
         )?;
         call_with(
-            &imported(py, LOAD_RUN_MODULE, "run_load_pipeline")?,
+            &host::entry(py, ExecutorHost::RunLoadPipeline)?,
             &[
                 (
                     "sources",
@@ -508,11 +491,11 @@ fn execute<'py>(
 fn write_json(request: &Bound<'_, PyAny>, results: &[Bound<'_, PyAny>]) -> PyResult<()> {
     let py: Python<'_> = request.py();
     let payload: Bound<'_, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "format_load_execution_json")?,
+        &registry::native(py, NativeAttr::FormatLoadExecutionJson)?,
         &[("results", PyTuple::new(py, results)?.into_any())],
     )?;
     call_with(
-        &imported(py, NATIVE_MODULE, "write_execution_json_output")?,
+        &registry::native(py, NativeAttr::WriteExecutionJsonOutput)?,
         &[
             ("payload", payload),
             ("json_output", request.getattr("json_output")?),
@@ -566,7 +549,7 @@ fn run_load_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32>
         options.set_item("target", py.None())?;
         options.set_item("concurrency", preparation.concurrency)?;
         options.set_item("use_color", invocation.style.use_color)?;
-        imported(py, NATIVE_MODULE, "write_execution_header")?.call((), Some(&options))?;
+        registry::native(py, NativeAttr::WriteExecutionHeader)?.call((), Some(&options))?;
         execute(request, &invocation, &preparation)
     })();
     let closed: PyResult<Bound<'_, PyAny>> = preparation.provider_session.call_method0("close");

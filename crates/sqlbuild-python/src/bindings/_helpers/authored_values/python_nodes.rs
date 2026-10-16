@@ -13,11 +13,11 @@ use sqlbuild_core::identifier_text::main::is_lowercase_identifier::is_lowercase_
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 
 const ERRORS_MODULE: &str = "sqlbuild.errors.contracts.exceptions";
 const SHARED_INPUT_ERROR: &str = "SharedInputError";
-const MODELS_MODULE: &str = "sqlbuild.python_nodes.models";
-const RESOURCE_REF_CLASS: &str = "SqlResourceRef";
 const RANDOM_MODULE: &str = "random";
 const MAX_ATTEMPTS_TOO_LOW: &str = "RetryPolicy max_attempts must be at least 1";
 const INITIAL_DELAY_NEGATIVE: &str = "RetryPolicy initial_delay_seconds must be non-negative";
@@ -177,7 +177,7 @@ fn validate_audit_case(
 #[pyfunction]
 fn normalize_hook_reads<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = value.py();
-    let reference: Bound<'py, PyAny> = imported(py, MODELS_MODULE, RESOURCE_REF_CLASS)?;
+    let reference: Bound<'py, PyAny> = host::entry(py, UserCodeHost::SqlResourceRef)?;
     let reads: Vec<Bound<'py, PyAny>> = if value.is_instance(&reference)? {
         vec![value.clone()]
     } else {

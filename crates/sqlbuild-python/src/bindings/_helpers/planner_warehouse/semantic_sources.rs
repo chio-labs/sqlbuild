@@ -1,7 +1,8 @@
 //! Complete missing source metadata in bounded, database-grouped batches.
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_phases::objects::{text, tuple};
 use crate::bindings::_helpers::planner_warehouse::constants::ACTIVE_CATALOG;
 use crate::bindings::_helpers::planner_warehouse::snapshot::{columns_for, list_relations};
@@ -54,7 +55,7 @@ fn source_candidates<'py>(
     let mut pending: Vec<Bound<'py, PyAny>> = entries.to_vec();
     let mut relations: Vec<Bound<'py, PyAny>> = Vec::new();
     let catalog = call_with(
-        &imported(py, ACTIVE_CATALOG.0, ACTIVE_CATALOG.1)?,
+        &host::entry(py, ACTIVE_CATALOG)?,
         &[
             ("adapter", adapter.clone()),
             ("connection", connection.clone()),

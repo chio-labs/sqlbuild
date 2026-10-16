@@ -1,5 +1,6 @@
 //! Layouts of the declaration scope value records hosted natively.
 
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::models::{FieldDefault, FieldSpec, RecordSpec};
 
 const R_RESOURCE_IDENTITY: RecordSpec = RecordSpec {
@@ -23,7 +24,7 @@ const R_OWNERSHIP_ROOT: RecordSpec = RecordSpec {
         FieldSpec::required("path"),
         FieldSpec::new(
             "kind",
-            FieldDefault::Member("sqlbuild._native", "OwnershipRootKind", "RESOURCE"),
+            FieldDefault::NativeMember(RecordId::OwnershipRootKind, "RESOURCE"),
         ),
         FieldSpec::new("resource_kind", FieldDefault::None),
     ],
@@ -94,7 +95,7 @@ const R_USAGE_RECORD: RecordSpec = RecordSpec {
         FieldSpec::required("declaration"),
         FieldSpec::new(
             "kind",
-            FieldDefault::Member("sqlbuild._native", "UsageKind", "RUNTIME"),
+            FieldDefault::NativeMember(RecordId::UsageKind, "RUNTIME"),
         ),
         FieldSpec::new("through", FieldDefault::None),
         FieldSpec::new("enum_member", FieldDefault::None),
@@ -109,7 +110,7 @@ const R_GRANT_RECORD: RecordSpec = RecordSpec {
         FieldSpec::required("through"),
         FieldSpec::new(
             "kind",
-            FieldDefault::Member("sqlbuild._native", "GrantKind", "EXPECTED_MODEL"),
+            FieldDefault::NativeMember(RecordId::GrantKind, "EXPECTED_MODEL"),
         ),
     ],
 };
@@ -140,7 +141,7 @@ const R_SCOPE_DIAGNOSTIC: RecordSpec = RecordSpec {
         FieldSpec::required("message"),
         FieldSpec::new(
             "severity",
-            FieldDefault::Member("sqlbuild._native", "ScopeDiagnosticSeverity", "ERROR"),
+            FieldDefault::NativeMember(RecordId::ScopeDiagnosticSeverity, "ERROR"),
         ),
         FieldSpec::new("path", FieldDefault::None),
         FieldSpec::new("line", FieldDefault::None),
@@ -175,7 +176,7 @@ const R_SCOPE_INDEX: RecordSpec = RecordSpec {
         FieldSpec::new("diagnostics", FieldDefault::EmptyTuple),
         FieldSpec::new(
             "completeness",
-            FieldDefault::Call("sqlbuild._native", "ScopeCompleteness"),
+            FieldDefault::NativeCall(RecordId::ScopeCompleteness),
         ),
     ],
 };
@@ -402,7 +403,7 @@ const R_SCOPE_REPORT: RecordSpec = RecordSpec {
         FieldSpec::new("nearby_unavailable", FieldDefault::EmptyTuple),
         FieldSpec::new(
             "filters",
-            FieldDefault::Call("sqlbuild._native", "ScopeReportFilters"),
+            FieldDefault::NativeCall(RecordId::ScopeReportFilters),
         ),
         FieldSpec::new("sections", FieldDefault::EmptyTuple),
         FieldSpec::new("explanation", FieldDefault::None),

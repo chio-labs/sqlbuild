@@ -1,10 +1,10 @@
 //! Project inherited fingerprints and live relation facts before normal planning.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::planner_migrations::column_objects::native;
 use crate::bindings::_helpers::planner_migrations::column_objects::{config, replace};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods};
 
@@ -88,11 +88,7 @@ pub(super) fn overlay<'py>(
         .cast_into::<PyDict>()?
         .copy()?;
     let gathered = call_with(
-        &imported(
-            py,
-            "sqlbuild._native",
-            "migration_redirected_cursor_snapshots",
-        )?,
+        &registry::native(py, NativeAttr::MigrationRedirectedCursorSnapshots)?,
         &[
             ("runtime", runtime),
             ("scope", args.value("scope")?),
@@ -112,7 +108,7 @@ pub(super) fn overlay<'py>(
                 "fingerprints",
                 native(
                     py,
-                    "WarehouseFingerprints",
+                    RecordId::WarehouseFingerprints,
                     &[
                         ("models", models.into_any()),
                         ("functions", fingerprints.getattr("functions")?),

@@ -11,18 +11,15 @@ use sqlbuild_rules::fix_verification::main::refusal::refusal;
 use sqlbuild_rules::fix_verification::main::with_edits::with_edits;
 use sqlbuild_rules::fix_verification::models::{FixEdit, FixEligibility};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::constants::SAFE_RULE_FIX_CODES;
 use crate::bindings::_helpers::rules::fix_facts::compile_facts;
 use crate::bindings::_helpers::rules::fix_verdict::fix_verdict;
 
-const NATIVE: &str = "sqlbuild._native";
-const MODELS: &str = "sqlbuild._native";
-const ADAPTER: &str = "sqlbuild.adapter.contract.classes.base_adapter";
-const COMPILE_ERRORS: &str = "sqlbuild._native";
-const LINT_ERRORS: &str = "sqlbuild._native";
 const VERIFICATION_FAILURE: &str =
     "Compilation could not prove unchanged output columns, types, dependencies and lineage";
 const APPLIED_REASON: &str = "Meaning-preserving rewrite; compiler invariants verified";
@@ -77,9 +74,9 @@ pub(crate) fn plan_rule_fixes<'py>(
     }
     let adapter = args.value("adapter")?;
     let inputs = args.value("discovered_inputs")?;
-    if !adapter.is_instance(&imported(py, ADAPTER, "BaseAdapter")?)? || inputs.is_none() {
+    if !adapter.is_instance(&host::entry(py, AdapterHost::BaseAdapter)?)? || inputs.is_none() {
         return Err(PyErr::from_value(
-            imported(py, LINT_ERRORS, "ProjectCompileError")?
+            registry::error(py, ErrorId::ProjectCompile)?
                 .call1(("format --fix requires discovered compiler inputs and an adapter",))?,
         ));
     }
@@ -156,7 +153,7 @@ impl<'py> FixSession<'py> {
             ],
         )?;
         let lint = call_with(
-            &imported(py, NATIVE, "run_lint")?,
+            &registry::native(py, NativeAttr::RunLint)?,
             &[
                 ("project_dir", self.project_dir.clone()),
                 ("config", config),
@@ -346,7 +343,7 @@ impl<'py> FixSession<'py> {
             return Ok(baseline.clone());
         }
         let baseline = call_with(
-            &imported(self.inputs.py(), NATIVE, "build_compiled_project")?,
+            &registry::native(self.inputs.py(), NativeAttr::BuildCompiledProject)?,
             &[
                 ("discovered_inputs", self.inputs.clone()),
                 ("adapter", self.adapter.clone()),
@@ -361,17 +358,15 @@ impl<'py> FixSession<'py> {
         let baseline = match self.baseline() {
             Ok(value) => value,
             Err(error)
-                if error.value(py).is_instance(&imported(
-                    py,
-                    COMPILE_ERRORS,
-                    "CompileInputError",
-                )?)? =>
+                if error
+                    .value(py)
+                    .is_instance(&registry::error(py, ErrorId::CompileInput)?)? =>
             {
                 return Ok(PyDict::new(py).into_any());
             }
             Err(error) => return Err(error),
         };
-        imported(py, NATIVE, "compiled_relation_keys")?.call1((baseline,))
+        registry::native(py, NativeAttr::CompiledRelationKeys)?.call1((baseline,))
     }
 
     fn verdict(&mut self, files: &Bound<'py, PyDict>) -> PyResult<Option<Bound<'py, PyAny>>> {
@@ -390,7 +385,7 @@ impl<'py> FixSession<'py> {
             self.baseline_facts = Some(compile_facts(py, &baseline, &self.project_dir)?);
         }
         let compiled = call_with(
-            &imported(py, NATIVE, "build_compiled_project")?,
+            &registry::native(py, NativeAttr::BuildCompiledProject)?,
             &[
                 ("discovered_inputs", updated_inputs(&self.inputs, files)?),
                 ("adapter", self.adapter.clone()),
@@ -584,7 +579,7 @@ fn report<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = source.py();
     call_with(
-        &imported(py, MODELS, "RuleFixResult")?,
+        &registry::class(py, RecordId::RuleFixResult)?,
         &[
             ("file_path", source.getattr("file_path")?),
             ("code", source.getattr("code")?),
@@ -614,7 +609,7 @@ fn violation<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = path.py();
     call_with(
-        &imported(py, MODELS, "LintViolation")?,
+        &registry::class(py, RecordId::LintViolation)?,
         &[
             ("file_path", path.clone()),
             ("line", 1_i64.into_pyobject(py)?.into_any()),

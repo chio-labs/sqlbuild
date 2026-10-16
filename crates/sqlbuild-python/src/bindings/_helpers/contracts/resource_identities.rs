@@ -1,5 +1,7 @@
 //! Canonical snake_case resource identity checks and SQL function node types.
 
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
@@ -7,7 +9,6 @@ use pyo3::types::{PyDict, PyString, PyStringMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_model_config::resource_identities::main::resource_identity_failure::resource_identity_failure;
 
-const RESOURCE_NAME_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const TABLE_FUNCTION_NODE_TYPE: &str = "table_fn";
 const UDF_NODE_TYPE: &str = "udf";
 
@@ -32,10 +33,8 @@ fn validate_resource_identity(
     );
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
     keywords.set_item("help", help_text)?;
-    let error: Bound<'_, PyAny> = py
-        .import(RESOURCE_NAME_EXCEPTIONS_MODULE)?
-        .getattr("ResourceIdentityError")?
-        .call((message,), Some(&keywords))?;
+    let error: Bound<'_, PyAny> =
+        registry::error(py, ErrorId::ResourceIdentity)?.call((message,), Some(&keywords))?;
     Err(PyErr::from_value(error))
 }
 

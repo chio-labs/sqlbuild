@@ -16,9 +16,9 @@ use crate::bindings::_helpers::frontier::constants::{
     COMPILER_CACHE_DIRECTORY_NAME, RETIRED_CACHE_NAMESPACE_SUFFIXES,
 };
 use crate::bindings::_helpers::model_config::template_data::{early_model_templates, run_id};
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 
-const TARGET_NAME_MODULE: &str = "sqlbuild._native";
-const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
 const DATABASE_KEY: &str = "database";
 const SCHEMA_KEY: &str = "schema";
 
@@ -31,7 +31,7 @@ fn resolved_target<'py>(
     let project_config: Bound<'py, PyAny> = discovered.getattr("project_config")?;
     let local_config: Bound<'py, PyAny> = discovered.getattr("local_config")?;
     let target_name: Bound<'py, PyAny> = call_with(
-        &imported(py, TARGET_NAME_MODULE, "resolve_target_name")?,
+        &registry::native(py, NativeAttr::ResolveTargetName)?,
         &[
             ("project_config", project_config.clone()),
             ("local_config", local_config.clone()),
@@ -42,7 +42,7 @@ fn resolved_target<'py>(
         return Ok((target_name, py.None().into_bound(py)));
     }
     let target_config: Bound<'py, PyAny> = call_with(
-        &imported(py, TARGET_CONFIG_MODULE, "resolve_target_config")?,
+        &registry::native(py, NativeAttr::ResolveTargetConfig)?,
         &[
             ("project_config", project_config),
             ("local_config", local_config),

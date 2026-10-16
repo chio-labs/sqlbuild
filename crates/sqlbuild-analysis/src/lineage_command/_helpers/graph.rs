@@ -1,6 +1,9 @@
-//! Breadth-first closures and selected-graph assembly over a lineage index.
+//! Closures and selected-graph assembly over a lineage index.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
+use std::convert::Infallible;
+
+use sqlbuild_core::graph_walk::main::breadth_first_reach::breadth_first_reach;
 
 use crate::lineage_command::constants::{
     BOTH_DIRECTIONS, DOWNSTREAM_DIRECTION, UPSTREAM_DIRECTION,
@@ -24,20 +27,14 @@ pub(crate) fn closure(
     starts: &[LineageKey],
     max_depth: Option<i64>,
 ) -> HashSet<LineageKey> {
-    let mut visited: HashSet<LineageKey> = HashSet::new();
-    let mut frontier: VecDeque<(&LineageKey, i64)> =
-        starts.iter().map(|start| (start, 0)).collect();
-    while let Some((current, depth)) = frontier.pop_front() {
-        if max_depth.is_some_and(|maximum| depth >= maximum) {
-            continue;
-        }
-        for neighbor in edges.get(current).copied().unwrap_or_default() {
-            if visited.insert(neighbor.clone()) {
-                frontier.push_back((neighbor, depth + 1));
-            }
-        }
-    }
-    visited
+    let mut visited: HashSet<&LineageKey> = HashSet::new();
+    let Ok(()) = breadth_first_reach(
+        starts,
+        max_depth.map(|maximum| u64::try_from(maximum).unwrap_or(0)),
+        &mut visited,
+        |current| Ok::<_, Infallible>(edges.get(*current).copied().unwrap_or_default()),
+    );
+    visited.into_iter().cloned().collect()
 }
 
 /// The keys `direction` reaches from `keys` within `depth`.

@@ -14,13 +14,14 @@ use sqlbuild_rules::rule_catalogue::models::{CatalogueRule, OptionKind, OptionSp
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::builtin_catalogue::builtin_rules;
 use crate::bindings::_helpers::rules::custom_rule_evidence::verify_custom_rules as verify_rule_sources;
 use crate::bindings::_helpers::rules::selection::{rules_error, selected_rule_codes};
 
-const CUSTOM_CATALOGUE_MODULE: &str = "sqlbuild.rule_engine._helpers.engine._custom_catalogue";
-const CUSTOM_PAYLOADS_MODULE: &str = "sqlbuild.rule_engine._helpers.engine.custom_payloads";
-const PLANNER_SCOPE_MODULE: &str = "sqlbuild._native";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const JSON_MODULE: &str = "json";
 const BUILTINS_MODULE: &str = "builtins";
@@ -186,7 +187,7 @@ fn custom_rules<'py>(project_dir: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py,
         ));
     }
     call_with(
-        &imported(py, CUSTOM_CATALOGUE_MODULE, "load_custom_rules")?,
+        &host::entry(py, UserCodeHost::LoadCustomRules)?,
         &[("project_dir", project_dir.clone())],
     )?
     .try_iter()?
@@ -233,7 +234,7 @@ pub(crate) fn select_rules<'py>(
     let payloads: Bound<'py, PyAny> = match custom_payloads {
         Some(payloads) if !payloads.is_none() => payloads,
         _ => call_with(
-            &imported(py, CUSTOM_PAYLOADS_MODULE, "custom_rule_payloads")?,
+            &host::entry(py, UserCodeHost::CustomRulePayloads)?,
             &[
                 ("catalogue", PyTuple::new(py, catalogue)?.into_any()),
                 ("project_dir", project_dir.clone()),
@@ -336,7 +337,7 @@ pub(crate) fn resolved_ignore_selectors<'py>(
         return Ok(config.clone());
     }
     let replace: Bound<'py, PyAny> = imported(py, DATACLASSES_MODULE, "replace")?;
-    let scope: Bound<'py, PyAny> = imported(py, PLANNER_SCOPE_MODULE, "build_planner_scope")?;
+    let scope: Bound<'py, PyAny> = registry::native(py, NativeAttr::BuildPlannerScope)?;
     let path_by_key: Bound<'py, PyDict> = resource_paths(project)?;
     let mut resolved: Vec<Bound<'py, PyAny>> = Vec::with_capacity(ignores.len());
     for ignore in ignores {

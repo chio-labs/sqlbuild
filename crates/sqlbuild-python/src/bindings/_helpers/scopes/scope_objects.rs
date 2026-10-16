@@ -1,6 +1,6 @@
 //! Python `ScopeIndex` models read into the native full index, and built back from it.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyTuple;
 use sqlbuild_scopes::placement::models::{PlacementIndex, PlacementUsage};
 use sqlbuild_scopes::scope_cache::models::{
@@ -17,44 +17,40 @@ use sqlbuild_scopes::scope_report::models::{
     ProjectionGrant, ProjectionIndex, ProjectionStanding, ProjectionUsage, ReportValues,
 };
 
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::placement::{
     IdentityRow, QualifiedRow, RootRow, declaration_identity, declaration_record, ownership_root,
     qualified_identity, resource_identity,
 };
 use crate::bindings::_helpers::scopes::scope_lookup::grant_kind;
 
-const MODELS_MODULE: &str = "sqlbuild._native";
-const TYPES_MODULE: &str = "sqlbuild._native";
 const ENUM_MODULE: &str = "enum";
 
-/// The scope model and enum modules every built object comes from.
+/// The native scope model and enum classes every built object comes from.
 pub(crate) struct ScopeClasses<'py> {
-    models: Bound<'py, PyModule>,
-    types: Bound<'py, PyModule>,
+    py: Python<'py>,
 }
 
 impl<'py> ScopeClasses<'py> {
-    /// Import the scope models and enums.
+    /// The scope classes of `py`.
     pub(crate) fn new(py: Python<'py>) -> PyResult<Self> {
-        Ok(Self {
-            models: py.import(MODELS_MODULE)?,
-            types: py.import(TYPES_MODULE)?,
-        })
+        Ok(Self { py })
     }
 
     /// One scope model class.
-    pub(crate) fn model(&self, name: &str) -> PyResult<Bound<'py, PyAny>> {
-        self.models.getattr(name)
+    pub(crate) fn model(&self, name: RecordId) -> PyResult<Bound<'py, PyAny>> {
+        registry::class(self.py, name)
     }
 
     /// The member of scope enum `name` with `value`; an unknown value raises `ValueError`.
-    pub(crate) fn member(&self, name: &str, value: &str) -> PyResult<Bound<'py, PyAny>> {
-        self.types.getattr(name)?.call1((value,))
+    pub(crate) fn member(&self, name: RecordId, value: &str) -> PyResult<Bound<'py, PyAny>> {
+        registry::class(self.py, name)?.call1((value,))
     }
 
     /// The interpreter the classes belong to.
     pub(crate) fn py(&self) -> Python<'py> {
-        self.models.py()
+        self.py
     }
 }
 
@@ -464,8 +460,8 @@ pub(crate) fn resource_identity_object<'py>(
     classes: &ScopeClasses<'py>,
     identity: &ResourceIdentity,
 ) -> PyResult<Bound<'py, PyAny>> {
-    classes.model("ResourceIdentity")?.call1((
-        classes.member("ResourceKind", identity.kind.as_str())?,
+    classes.model(RecordId::ResourceIdentity)?.call1((
+        classes.member(RecordId::ResourceKind, identity.kind.as_str())?,
         identity.name.as_str(),
     ))
 }
@@ -480,8 +476,8 @@ pub(crate) fn declaration_identity_object<'py>(
         .as_ref()
         .map(|owner| resource_identity_object(classes, owner))
         .transpose()?;
-    classes.model("DeclarationIdentity")?.call1((
-        classes.member("DeclarationKind", identity.kind.as_str())?,
+    classes.model(RecordId::DeclarationIdentity)?.call1((
+        classes.member(RecordId::DeclarationKind, identity.kind.as_str())?,
         identity.name.as_str(),
         owner,
     ))
@@ -514,11 +510,11 @@ pub(crate) fn root_object<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let resource_kind: Option<Bound<'py, PyAny>> = root
         .resource_kind
-        .map(|kind| classes.member("ResourceKind", ResourceKind::as_str(kind)))
+        .map(|kind| classes.member(RecordId::ResourceKind, ResourceKind::as_str(kind)))
         .transpose()?;
-    classes.model("OwnershipRoot")?.call1((
+    classes.model(RecordId::OwnershipRoot)?.call1((
         root.path.as_str(),
-        classes.member("OwnershipRootKind", root.kind.as_str())?,
+        classes.member(RecordId::OwnershipRootKind, root.kind.as_str())?,
         resource_kind,
     ))
 }
@@ -527,7 +523,7 @@ fn resource_object<'py>(
     classes: &ScopeClasses<'py>,
     record: &ResourceRecord,
 ) -> PyResult<Bound<'py, PyAny>> {
-    classes.model("ResourceRecord")?.call1((
+    classes.model(RecordId::ResourceRecord)?.call1((
         resource_identity_object(classes, &record.identity)?,
         record.path.as_str(),
         root_object(classes, &record.ownership_root)?,
@@ -548,7 +544,7 @@ fn macro_object<'py>(
     facts: &MacroFacts,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = classes.py();
-    classes.model("MacroMetadata")?.call1((
+    classes.model(RecordId::MacroMetadata)?.call1((
         PyTuple::new(py, &facts.parameters)?,
         tuple_of(py, &facts.dependencies, |identity| {
             declaration_identity_object(classes, identity)
@@ -558,8 +554,8 @@ fn macro_object<'py>(
 }
 
 fn enum_object<'py>(classes: &ScopeClasses<'py>, facts: &EnumFacts) -> PyResult<Bound<'py, PyAny>> {
-    let member_class: Bound<'py, PyAny> = classes.model("EnumMemberMetadata")?;
-    classes.model("EnumMetadata")?.call1((
+    let member_class: Bound<'py, PyAny> = classes.model(RecordId::EnumMemberMetadata)?;
+    classes.model(RecordId::EnumMetadata)?.call1((
         tuple_of(classes.py(), &facts.members, |name| {
             member_class.call1((name.as_str(),))
         })?,
@@ -571,7 +567,7 @@ fn constant_object<'py>(
     classes: &ScopeClasses<'py>,
     facts: &ConstantFacts,
 ) -> PyResult<Bound<'py, PyAny>> {
-    classes.model("ConstantMetadata")?.call1((
+    classes.model(RecordId::ConstantMetadata)?.call1((
         facts.logical_type.as_str(),
         facts.collection_kind.as_deref(),
         facts.item_count,
@@ -600,12 +596,12 @@ fn declaration_object<'py>(
             .transpose()?,
     ];
     let [macro_metadata, enum_metadata, constant_metadata] = values;
-    classes.model("DeclarationRecord")?.call1((
+    classes.model(RecordId::DeclarationRecord)?.call1((
         declaration_identity_object(classes, &record.identity)?,
         record.path.as_str(),
         record.line,
         record.column,
-        classes.member("ScopeKind", record.scope.as_str())?,
+        classes.member(RecordId::ScopeKind, record.scope.as_str())?,
         root_object(classes, &record.ownership_root)?,
         record.owning_path.as_deref(),
         macro_metadata,
@@ -618,10 +614,10 @@ fn usage_object<'py>(
     classes: &ScopeClasses<'py>,
     item: &CachedUsage,
 ) -> PyResult<Bound<'py, PyAny>> {
-    classes.model("UsageRecord")?.call1((
+    classes.model(RecordId::UsageRecord)?.call1((
         qualified_object(classes, &item.consumer)?,
         declaration_identity_object(classes, &item.declaration)?,
-        classes.member("UsageKind", &item.kind)?,
+        classes.member(RecordId::UsageKind, &item.kind)?,
         optional_qualified_object(classes, item.through.as_ref())?,
         item.enum_member.as_deref(),
     ))
@@ -631,11 +627,11 @@ fn grant_object<'py>(
     classes: &ScopeClasses<'py>,
     item: &ReportGrant,
 ) -> PyResult<Bound<'py, PyAny>> {
-    classes.model("GrantRecord")?.call1((
+    classes.model(RecordId::GrantRecord)?.call1((
         resource_identity_object(classes, &item.resource)?,
         declaration_identity_object(classes, &item.declaration)?,
         qualified_object(classes, &item.through)?,
-        classes.member("GrantKind", item.kind.as_str())?,
+        classes.member(RecordId::GrantKind, item.kind.as_str())?,
     ))
 }
 
@@ -643,10 +639,10 @@ fn visibility_object<'py>(
     classes: &ScopeClasses<'py>,
     item: &CachedVisibility,
 ) -> PyResult<Bound<'py, PyAny>> {
-    classes.model("VisibilityRecord")?.call1((
+    classes.model(RecordId::VisibilityRecord)?.call1((
         resource_identity_object(classes, &item.resource)?,
         declaration_identity_object(classes, &item.declaration)?,
-        classes.member("VisibilityReason", &item.reason)?,
+        classes.member(RecordId::VisibilityReason, &item.reason)?,
         optional_qualified_object(classes, item.through.as_ref())?,
     ))
 }
@@ -655,10 +651,10 @@ fn inaccessible_object<'py>(
     classes: &ScopeClasses<'py>,
     item: &CachedInaccessible,
 ) -> PyResult<Bound<'py, PyAny>> {
-    classes.model("InaccessibleRecord")?.call1((
+    classes.model(RecordId::InaccessibleRecord)?.call1((
         resource_identity_object(classes, &item.resource)?,
         declaration_identity_object(classes, &item.declaration)?,
-        classes.member("InaccessibleReason", &item.reason)?,
+        classes.member(RecordId::InaccessibleReason, &item.reason)?,
     ))
 }
 
@@ -667,10 +663,10 @@ pub(crate) fn diagnostic_object<'py>(
     classes: &ScopeClasses<'py>,
     item: &CachedDiagnostic,
 ) -> PyResult<Bound<'py, PyAny>> {
-    classes.model("ScopeDiagnostic")?.call1((
-        classes.member("ScopeDiagnosticCode", &item.code)?,
+    classes.model(RecordId::ScopeDiagnostic)?.call1((
+        classes.member(RecordId::ScopeDiagnosticCode, &item.code)?,
         item.message.as_str(),
-        classes.member("ScopeDiagnosticSeverity", &item.severity)?,
+        classes.member(RecordId::ScopeDiagnosticSeverity, &item.severity)?,
         item.path.as_deref(),
         item.line,
         item.column,
@@ -691,7 +687,7 @@ pub(crate) fn completeness_object<'py>(
     done: [bool; 6],
 ) -> PyResult<Bound<'py, PyAny>> {
     classes
-        .model("ScopeCompleteness")?
+        .model(RecordId::ScopeCompleteness)?
         .call1((done[0], done[1], done[2], done[3], done[4], done[5]))
 }
 
@@ -701,7 +697,7 @@ pub(crate) fn index_object<'py>(
     index: &CachedIndex,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = classes.py();
-    classes.model("ScopeIndex")?.call1((
+    classes.model(RecordId::ScopeIndex)?.call1((
         tuple_of(py, &index.roots, |root| root_object(classes, root))?,
         tuple_of(py, &index.resources, |record| {
             resource_object(classes, record)

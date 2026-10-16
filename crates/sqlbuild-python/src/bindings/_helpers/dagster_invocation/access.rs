@@ -5,9 +5,8 @@ use std::collections::HashSet;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyTuple};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
-
-pub(crate) const CONSTANTS_MODULE: &str = "sqlbuild.integrations.dagster.constants";
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 
 /// An asset path as Dagster spells it.
 pub(crate) type AssetPath = Vec<String>;
@@ -61,17 +60,20 @@ pub(crate) fn asset_path_or_empty(node: &Bound<'_, PyAny>) -> PyResult<AssetPath
 }
 
 /// A Dagster integration constant.
-pub(crate) fn constant<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, CONSTANTS_MODULE, name)
+pub(crate) fn constant<'py>(py: Python<'py>, name: ThirdPartyHost) -> PyResult<Bound<'py, PyAny>> {
+    host::entry(py, name)
 }
 
 /// Whether a constant set holds `value`.
-pub(crate) fn constant_contains(py: Python<'_>, (name, value): (&str, &str)) -> PyResult<bool> {
+pub(crate) fn constant_contains(
+    py: Python<'_>,
+    (name, value): (ThirdPartyHost, &str),
+) -> PyResult<bool> {
     constant(py, name)?.contains(value)
 }
 
 /// `bool(record.get(<constant field>, True))`.
-pub(crate) fn enabled(record: &Bound<'_, PyAny>, field_constant: &str) -> PyResult<bool> {
+pub(crate) fn enabled(record: &Bound<'_, PyAny>, field_constant: ThirdPartyHost) -> PyResult<bool> {
     let py: Python<'_> = record.py();
     let field: Bound<'_, PyAny> = constant(py, field_constant)?;
     record.call_method1("get", (field, true))?.is_truthy()
@@ -79,12 +81,12 @@ pub(crate) fn enabled(record: &Bound<'_, PyAny>, field_constant: &str) -> PyResu
 
 /// Whether a translated DAG node is owned by the SQLBuild asset definition.
 pub(crate) fn asset_enabled(node: &Bound<'_, PyAny>) -> PyResult<bool> {
-    enabled(node, "DAGSTER_ASSET_ENABLED_FIELD")
+    enabled(node, ThirdPartyHost::DagsterAssetEnabledField)
 }
 
 /// Whether a translated DAG check is owned by the SQLBuild asset definition.
 pub(crate) fn check_enabled(check: &Bound<'_, PyAny>) -> PyResult<bool> {
-    enabled(check, "DAGSTER_CHECK_ENABLED_FIELD")
+    enabled(check, ThirdPartyHost::DagsterCheckEnabledField)
 }
 
 /// `{str(node.get("id")): node for node in dag.get("nodes", ())}`, keeping the last node per id.

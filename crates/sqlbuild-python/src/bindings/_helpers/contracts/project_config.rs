@@ -16,30 +16,19 @@ use sqlbuild_config::project::main::resolve_config_file::resolve_config_file;
 use sqlbuild_config::project::models::{Built, ConfigFile, ConfigPaths};
 
 use crate::bindings::_helpers::boundary::config_values::config_value_to_python;
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 
-const MODELS_MODULE: &str = "sqlbuild._native";
-const ERRORS_MODULE: &str = "sqlbuild._native";
-const PROJECT_CONFIG_ERROR: &str = "ProjectConfigError";
 const FILE_NAMES: [&str; 4] = [
     PROJECT_CONFIG_FILENAME,
     "sqlbuild_project.yml",
     "sqlbuild_local.toml",
     "sqlbuild_local.yml",
 ];
-/// The module of each `StrEnum` a loaded config holds.
-const ENUM_MODULES: [(&str, &str); 10] = [
-    ("ColumnContractMode", "sqlbuild._native"),
-    ("FutureCursorAction", "sqlbuild._native"),
-    ("MicrobatchLimitAction", "sqlbuild._native"),
-    ("TableType", "sqlbuild._native"),
-    ("TableTypeDowngradePolicy", "sqlbuild._native"),
-    ("RetentionDecreasePolicy", "sqlbuild._native"),
-    ("MissingMigrationOriginPolicy", "sqlbuild._native"),
-    ("EventExportSeverity", "sqlbuild._native"),
-    ("AuditSeverity", "sqlbuild.compiler.auditing.types"),
-    ("CollectionRendering", "sqlbuild._native"),
-];
+/// The Python module of each `StrEnum` a loaded config holds that is not native.
+const PYTHON_ENUM_MODULES: [(&str, &str); 1] =
+    [("AuditSeverity", "sqlbuild.compiler.auditing.types")];
 
 /// The four configuration file paths of a project directory, as Python and native paths.
 struct Files<'py> {
@@ -95,10 +84,7 @@ fn config_error(py: Python<'_>, failure: &ConfigFailure, files: &Files<'_>) -> P
     }
     let keywords = PyDict::new(py);
     keywords.set_item("help", failure.help.as_deref())?;
-    let error = py
-        .import(ERRORS_MODULE)?
-        .getattr(PROJECT_CONFIG_ERROR)?
-        .call((message,), Some(&keywords))?;
+    let error = registry::error(py, ErrorId::ProjectConfig)?.call((message,), Some(&keywords))?;
     Ok(PyErr::from_value(error))
 }
 
@@ -126,11 +112,12 @@ fn load_error(py: Python<'_>, failure: &LoadFailure, files: &Files<'_>) -> PyRes
 }
 
 fn enum_member<'py>(py: Python<'py>, class: &str, value: &str) -> PyResult<Bound<'py, PyAny>> {
-    let module = ENUM_MODULES
-        .iter()
-        .find(|(name, _)| *name == class)
-        .map_or("sqlbuild._native", |(_, module)| *module);
-    py.import(module)?.getattr(class)?.call1((value,))
+    let class_object: Bound<'py, PyAny> =
+        match PYTHON_ENUM_MODULES.iter().find(|(name, _)| *name == class) {
+            Some((_, module)) => py.import(*module)?.getattr(class)?,
+            None => registry::class(py, registry::record_named(class)?)?,
+        };
+    class_object.call1((value,))
 }
 
 fn object<'py>(
@@ -142,9 +129,7 @@ fn object<'py>(
     for (name, value) in fields {
         keywords.set_item(name, built(py, value)?)?;
     }
-    py.import(MODELS_MODULE)?
-        .getattr(class)?
-        .call((), Some(&keywords))
+    registry::class(py, registry::record_named(class)?)?.call((), Some(&keywords))
 }
 
 fn built(py: Python<'_>, value: Built) -> PyResult<Py<PyAny>> {

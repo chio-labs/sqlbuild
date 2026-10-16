@@ -17,46 +17,30 @@ use crate::bindings::_helpers::cli::dispatch::{command_facts, dispatch_command};
 use crate::bindings::_helpers::cli::launch_state::offer_launch_record;
 use crate::bindings::_helpers::cli::observability::cli_observability_scope;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::facade::FacadeHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::output_capture::records::invocation_context;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use sqlbuild_cli::launcher::constants::LAUNCH_RECORD_OPTION;
 use sqlbuild_core::cli_text::main::format_coded_error::format_coded_error;
 use sqlbuild_core::cli_text::models::CliStyle;
 
 const NO_COLOR_OPTION: &str = "--no-color";
-const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
-const COMPUTE_LOGS_MODULE: &str =
-    "sqlbuild.cli.commands.main.entrypoint._dispatch_with_compute_logs";
-const LIFECYCLE_EVENT_MODULE: &str = "sqlbuild.runtime.observability.main.create_lifecycle_event";
-const INVOCATION_SCOPE_MODULE: &str = "sqlbuild.runtime.observability.main.invocation_scope";
-const EXTERNAL_SCOPE_MODULE: &str =
-    "sqlbuild.runtime.observability.main.invocation_external_context_scope";
-const OUTPUT_CAPTURE_ERRORS_MODULE: &str = "sqlbuild.runtime.output_capture.exceptions";
-const DIAGNOSTICS_MODULE: &str = "sqlbuild.diagnostics.main.diagnostics_context";
-const TRANSIENT_LINE_MODULE: &str = "sqlbuild._native";
-const SKILLS_MODULE: &str = "sqlbuild._native";
-const RULES_ERRORS_MODULE: &str = "sqlbuild._native";
-const LINT_ERRORS_MODULE: &str = "sqlbuild._native";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
-const NATIVE_MODULE: &str = "sqlbuild._native";
 const CLI_LOGGER: &str = "sqlbuild.cli";
 const UNKNOWN_COMMAND: &str = "unknown";
 const DIFF_PUBLICATION_CODE: &str = "C257";
 const DIFF_EXECUTION_STATUS: &str = "execution_failed";
 const DIFF_OUTCOME_PREFIX: &str = "Query diff outcome  ";
-/// Expected command failures by module and class, loaded only once a command raised.
-const EXPECTED_COMMAND_FAILURES: [(&str, &str); 4] = [
-    (
-        "sqlbuild.executor.pipeline.exceptions",
-        "AuditExecutionError",
-    ),
-    ("sqlbuild._native", "DiscoveryError"),
-    (
-        "sqlbuild.runtime.execution_limits.exceptions",
-        "ExecutionDurationLimitError",
-    ),
-    ("sqlbuild._native", "SpecConfigError"),
+/// Expected staying-Python command failures, loaded only once a command raised.
+const EXPECTED_COMMAND_FAILURES: [ExecutorHost; 2] = [
+    ExecutorHost::AuditExecutionError,
+    ExecutorHost::ExecutionDurationLimitError,
 ];
+/// Expected native command failures.
+const EXPECTED_NATIVE_FAILURES: [ErrorId; 2] = [ErrorId::Discovery, ErrorId::SpecConfig];
 
 /// One parsed invocation: its namespace, injected handlers and error colour.
 struct Invocation<'py> {
@@ -111,10 +95,6 @@ fn print_object(value: &Bound<'_, PyAny>, stream: Option<&str>, end: Option<&str
         .getattr("print")?
         .call((value,), Some(&keywords))?;
     Ok(())
-}
-
-fn class<'py>(py: Python<'py>, module: &str, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, module, name)
 }
 
 /// `(code, message, help)` of an expected error as Python objects, as the CLI renders it.
@@ -183,13 +163,13 @@ fn write_compile_machine_error(
         .getattr_opt("location")?
         .unwrap_or_else(|| py.None().into_bound(py));
     let location: Bound<'_, PyAny> =
-        if location.is_instance(&class(py, CONTRACT_MODELS_MODULE, "SourceLocation")?)? {
+        if location.is_instance(&registry::class(py, RecordId::SourceLocation)?)? {
             location
         } else {
             py.None().into_bound(py)
         };
     let document: Bound<'_, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "format_compile_error_json")?,
+        &registry::native(py, NativeAttr::FormatCompileErrorJson)?,
         &[
             ("code", code),
             ("message", message),
@@ -205,7 +185,7 @@ fn render_diff_error<'py>(
     fields: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(py, NATIVE_MODULE, "render_diff_error_json")?,
+        &registry::native(py, NativeAttr::RenderDiffErrorJson)?,
         fields,
     )
 }
@@ -262,8 +242,8 @@ fn write_diff_machine_error<'py>(
             }
             let keywords: Bound<'py, PyDict> = PyDict::new(py);
             keywords.set_item("code", DIFF_PUBLICATION_CODE)?;
-            let publication: Bound<'py, PyAny> =
-                class(py, EXCEPTIONS_MODULE, "QueryDiffExecutionError")?.call(
+            let publication: Bound<'py, PyAny> = registry::error(py, ErrorId::QueryDiffExecution)?
+                .call(
                     (format!(
                         "failed to publish query diff output: {}",
                         value.str()?
@@ -307,19 +287,24 @@ fn exit<'py>(py: Python<'py>, code: i64) -> PyResult<Bound<'py, PyAny>> {
 
 /// The kind of expected failure `error` is, or `None` when it propagates.
 fn failure_kind(py: Python<'_>, error: &Bound<'_, PyAny>) -> PyResult<Option<CommandFailure>> {
-    if error.is_instance(&class(py, EXCEPTIONS_MODULE, "CliUserError")?)?
-        || error.is_instance(&class(py, RULES_ERRORS_MODULE, "RulesError")?)?
+    if error.is_instance(&registry::error(py, ErrorId::CliUser)?)?
+        || error.is_instance(&registry::error(py, ErrorId::Rules)?)?
     {
         return Ok(Some(CommandFailure::User));
     }
-    if error.is_instance(&class(py, LINT_ERRORS_MODULE, "LintError")?)? {
+    if error.is_instance(&registry::error(py, ErrorId::Lint)?)? {
         return Ok(Some(CommandFailure::Lint));
     }
     if error.is_instance_of::<pyo3::exceptions::PyValueError>() {
         return Ok(Some(CommandFailure::Command));
     }
-    for (module, name) in EXPECTED_COMMAND_FAILURES {
-        if error.is_instance(&class(py, module, name)?)? {
+    for failure in EXPECTED_COMMAND_FAILURES {
+        if error.is_instance(&host::entry(py, failure)?)? {
+            return Ok(Some(CommandFailure::Command));
+        }
+    }
+    for native in EXPECTED_NATIVE_FAILURES {
+        if error.is_instance(&registry::error(py, native)?)? {
             return Ok(Some(CommandFailure::Command));
         }
     }
@@ -335,7 +320,7 @@ fn report_failure<'py>(
     let py: Python<'py> = invocation.py();
     let (fallback_code, log_message) = failure_report(kind);
     log_failure(py, log_message, &error)?;
-    let user_error_class: Bound<'py, PyAny> = class(py, EXCEPTIONS_MODULE, "CliUserError")?;
+    let user_error_class: Bound<'py, PyAny> = registry::error(py, ErrorId::CliUser)?;
     let is_user_error: bool = error.is_instance(&user_error_class)?;
     let effective: Bound<'py, PyAny> = if is_user_error {
         write_diff_machine_error(invocation, &error)?.unwrap_or(error)
@@ -343,7 +328,7 @@ fn report_failure<'py>(
         error
     };
     write_compile_machine_error(invocation, &effective, fallback_code)?;
-    if effective.is_instance(&class(py, EXCEPTIONS_MODULE, "QueryDiffOutcomeError")?)? {
+    if effective.is_instance(&registry::error(py, ErrorId::QueryDiffOutcome)?)? {
         let line: Bound<'py, PyAny> = PyString::new(py, DIFF_OUTCOME_PREFIX)
             .into_any()
             .add(effective.getattr("status")?.str()?)?;
@@ -367,13 +352,13 @@ fn report_skill_freshness(invocation: &Invocation<'_>, policy: InvocationPolicy)
     let py: Python<'_> = invocation.py();
     let project_dir: Bound<'_, PyAny> = invocation.project_dir()?;
     let result: Bound<'_, PyAny> = match call_with(
-        &imported(py, SKILLS_MODULE, "maintain_sqlbuild_skills")?,
+        &registry::native(py, NativeAttr::MaintainSqlbuildSkills)?,
         &[("project_dir", project_dir)],
     ) {
         Ok(result) => result,
         Err(error) => {
             let value: Bound<'_, PyAny> = error.value(py).clone().into_any();
-            if value.is_instance(&class(py, EXCEPTIONS_MODULE, "CliUserError")?)?
+            if value.is_instance(&registry::error(py, ErrorId::CliUser)?)?
                 || value.is_instance_of::<pyo3::exceptions::PyOSError>()
                 || value.is_instance_of::<pyo3::exceptions::PyUnicodeError>()
             {
@@ -395,7 +380,7 @@ fn lifecycle_event<'py>(
     payload: Bound<'py, PyDict>,
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(py, LIFECYCLE_EVENT_MODULE, "create_lifecycle_event")?,
+        &host::entry(py, ExecutorHost::CreateLifecycleEvent)?,
         &[
             ("event_type", PyString::new(py, event_type).into_any()),
             ("payload", payload.into_any()),
@@ -467,13 +452,9 @@ fn handled_dispatch<'py>(invocation: &Invocation<'py>) -> PyResult<Bound<'py, Py
     let policy: InvocationPolicy = invocation_policy(&invocation.facts);
     report_skill_freshness(invocation, policy)?;
     let dispatched: PyResult<Bound<'py, PyAny>> = observed_dispatch(invocation, policy);
-    imported(
-        py,
-        TRANSIENT_LINE_MODULE,
-        "shared_transient_line_coordinator",
-    )?
-    .call0()?
-    .call_method0("clear_active")?;
+    registry::native(py, NativeAttr::SharedTransientLineCoordinator)?
+        .call0()?
+        .call_method0("clear_active")?;
     let error: PyErr = match dispatched {
         Ok(exit_code) => return Ok(exit_code),
         Err(error) => error,
@@ -498,10 +479,7 @@ fn external_context(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     match invocation_context(py, None) {
         Ok(context) => Ok(context),
         Err(error)
-            if error.is_instance(
-                py,
-                &class(py, OUTPUT_CAPTURE_ERRORS_MODULE, "OutputCaptureInputError")?,
-            ) =>
+            if error.is_instance(py, &host::entry(py, ExecutorHost::OutputCaptureInputError)?) =>
         {
             Ok(PyDict::new(py).into_any())
         }
@@ -551,7 +529,7 @@ fn parsed_invocation<'py>(
         },
     )?;
     call_with(
-        &imported(py, COMPUTE_LOGS_MODULE, "dispatch_with_compute_logs")?,
+        &host::entry(py, FacadeHost::DispatchWithComputeLogs)?,
         &[
             ("args", args),
             ("identity", identity.clone()),
@@ -604,19 +582,15 @@ fn run_cli<'py>(
     let argv: Bound<'py, PyAny> = offered_launch_record(&argv)?;
     let external: Bound<'py, PyAny> = external_context(py)?;
     let invocation_scope: Bound<'py, PyAny> =
-        imported(py, INVOCATION_SCOPE_MODULE, "invocation_scope")?.call0()?;
+        host::entry(py, ExecutorHost::InvocationScope)?.call0()?;
     within(&invocation_scope, |identity| {
         let external_scope: Bound<'py, PyAny> = call_with(
-            &imported(
-                py,
-                EXTERNAL_SCOPE_MODULE,
-                "invocation_external_context_scope",
-            )?,
+            &host::entry(py, ExecutorHost::InvocationExternalContextScope)?,
             &[("external_context", external.clone())],
         )?;
         within(&external_scope, |_| {
             let diagnostics: Bound<'py, PyAny> = call_with(
-                &imported(py, DIAGNOSTICS_MODULE, "diagnostics_context")?,
+                &host::entry(py, ExecutorHost::DiagnosticsContext)?,
                 &[("sqlbuild_invocation_id", identity.getattr("invocation_id")?)],
             )?;
             within(&diagnostics, |_| {

@@ -42,13 +42,15 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::execution_history::appends::prepared_batch;
 use crate::bindings::_helpers::execution_history::conversion::{
-    MODELS_MODULE, checked, event_filter_spec, exact_int, history_error_of_kind, new_namespace,
-    now, optional_text, parsed_status, projection_facts, rejection, run_filter_spec, run_records,
+    checked, event_filter_spec, exact_int, history_error_of_kind, new_namespace, now,
+    optional_text, parsed_status, projection_facts, rejection, run_filter_spec, run_records,
     run_rows, storage_error, stored_event, text_of, utc, utc_time,
 };
 use crate::bindings::_helpers::execution_history::statements::{
     column, execute, execute_plain, execute_query, fetch_all, fetch_one, tuple_of,
 };
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 
 const PSYCOPG_MODULE: &str = "psycopg";
 const PSYCOPG_ROWS_MODULE: &str = "psycopg.rows";
@@ -58,7 +60,7 @@ const CONNECT_FAILED: &str = "cannot connect to PostgreSQL execution history; ve
 const READ_FAILED: &str = "PostgreSQL execution history read failed";
 const METADATA_INVALID: &str = "PostgreSQL execution history schema metadata is invalid";
 const NAMESPACE_MISSING: &str = "PostgreSQL execution history cursor namespace is missing";
-const STORAGE_ERROR: &str = "ExecutionHistoryStorageError";
+const STORAGE_ERROR: ExecutorHost = ExecutorHost::ExecutionHistoryStorageError;
 
 /// The `psycopg.Error` class.
 fn driver_error_class(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
@@ -667,7 +669,7 @@ impl PostgresExecutionHistory {
             None => py.None().into_bound(py),
         };
         call_with(
-            &imported(py, MODELS_MODULE, "EventPage")?,
+            &host::entry(py, ExecutorHost::EventPage)?,
             &[
                 ("records", tuple_of(py, records)?.into_any()),
                 ("next_cursor", next_cursor),
@@ -734,7 +736,7 @@ impl PostgresExecutionHistory {
             None => py.None().into_bound(py),
         };
         call_with(
-            &imported(py, MODELS_MODULE, "RunPage")?,
+            &host::entry(py, ExecutorHost::RunPage)?,
             &[
                 ("records", run_records(py, &runs)?.into_any()),
                 ("next_cursor", next_cursor),

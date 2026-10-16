@@ -1,5 +1,7 @@
 //! Layouts of the compile and discovery value records hosted natively.
 
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::models::{FieldDefault, FieldSpec, RecordSpec};
 
 const R_RELATED_LOCATION: RecordSpec = RecordSpec {
@@ -52,11 +54,11 @@ const R_COMPILE_MODEL_CONFIG: RecordSpec = RecordSpec {
         FieldSpec::new("logical_database", FieldDefault::None),
         FieldSpec::new(
             "time_travel_retention",
-            FieldDefault::Call("sqlbuild._native", "ResolvedTimeTravelRetention"),
+            FieldDefault::NativeCall(RecordId::ResolvedTimeTravelRetention),
         ),
         FieldSpec::new(
             "table_type",
-            FieldDefault::Call("sqlbuild._native", "ResolvedTableType"),
+            FieldDefault::NativeCall(RecordId::ResolvedTableType),
         ),
     ],
 };
@@ -181,11 +183,11 @@ const R_COMPILED_LINEAGE_COLUMN_FACT: RecordSpec = RecordSpec {
         FieldSpec::new("upstream_columns", FieldDefault::EmptyTuple),
         FieldSpec::new(
             "transform_kind",
-            FieldDefault::Member("sqlbuild._native", "ColumnTransformKind", "UNKNOWN"),
+            FieldDefault::NativeMember(RecordId::ColumnTransformKind, "UNKNOWN"),
         ),
         FieldSpec::new(
             "confidence",
-            FieldDefault::Member("sqlbuild._native", "ColumnLineageConfidence", "UNKNOWN"),
+            FieldDefault::NativeMember(RecordId::ColumnLineageConfidence, "UNKNOWN"),
         ),
     ],
 };
@@ -299,7 +301,7 @@ const R_COMPILE_PROJECT_INPUTS: RecordSpec = RecordSpec {
         FieldSpec::new("effective_connection", FieldDefault::EmptyDict),
         FieldSpec::new(
             "effective_settings",
-            FieldDefault::Call("sqlbuild._native", "SettingsConfig"),
+            FieldDefault::NativeCall(RecordId::SettingsConfig),
         ),
         FieldSpec::new("no_sql_validation", FieldDefault::False),
         FieldSpec::new("effective_vars", FieldDefault::EmptyDict),
@@ -323,7 +325,7 @@ const R_COMPILE_PROJECT_INPUTS: RecordSpec = RecordSpec {
         FieldSpec::new("external_sql_reference_resolver", FieldDefault::None),
         FieldSpec::new(
             "scope_index",
-            FieldDefault::Call("sqlbuild._native", "ScopeIndex"),
+            FieldDefault::NativeCall(RecordId::ScopeIndex),
         ),
         FieldSpec {
             name: "declaration_scope",
@@ -448,7 +450,7 @@ const R_COMPILE_SQL_TEST_INPUT: RecordSpec = RecordSpec {
         ),
         FieldSpec::new(
             "payload",
-            FieldDefault::Call("sqlbuild._native", "CompileModelSqlTestInputPayload"),
+            FieldDefault::NativeCall(RecordId::CompileModelSqlTestInputPayload),
         ),
         FieldSpec::new("declaration_usages", FieldDefault::EmptyTuple),
         FieldSpec::new("parent_name", FieldDefault::None),
@@ -599,7 +601,7 @@ const R_DISCOVERED_SQL_HOOK_FILE: RecordSpec = RecordSpec {
         FieldSpec::new("description", FieldDefault::None),
         FieldSpec::new(
             "scope_kind",
-            FieldDefault::Member("sqlbuild._native", "ScopeKind", "GLOBAL"),
+            FieldDefault::NativeMember(RecordId::ScopeKind, "GLOBAL"),
         ),
         FieldSpec::new("ownership_root", FieldDefault::None),
         FieldSpec::new("owning_path", FieldDefault::None),
@@ -621,7 +623,7 @@ const R_DISCOVERED_ENUM_FILE: RecordSpec = RecordSpec {
         FieldSpec::required("declarations"),
         FieldSpec::new(
             "scope_kind",
-            FieldDefault::Member("sqlbuild._native", "ScopeKind", "GLOBAL"),
+            FieldDefault::NativeMember(RecordId::ScopeKind, "GLOBAL"),
         ),
         FieldSpec::new("ownership_root", FieldDefault::None),
         FieldSpec::new("owning_path", FieldDefault::None),
@@ -638,7 +640,7 @@ const R_DISCOVERED_CONSTANT_FILE: RecordSpec = RecordSpec {
         FieldSpec::required("declarations"),
         FieldSpec::new(
             "scope_kind",
-            FieldDefault::Member("sqlbuild._native", "ScopeKind", "GLOBAL"),
+            FieldDefault::NativeMember(RecordId::ScopeKind, "GLOBAL"),
         ),
         FieldSpec::new("ownership_root", FieldDefault::None),
         FieldSpec::new("owning_path", FieldDefault::None),
@@ -666,7 +668,7 @@ const R_DISCOVERED_MODEL_SCHEMA_FILE: RecordSpec = RecordSpec {
         FieldSpec::required("declarations"),
         FieldSpec::new(
             "scope_kind",
-            FieldDefault::Member("sqlbuild._native", "ScopeKind", "GLOBAL"),
+            FieldDefault::NativeMember(RecordId::ScopeKind, "GLOBAL"),
         ),
         FieldSpec::new("ownership_root", FieldDefault::None),
         FieldSpec::new("owning_path", FieldDefault::None),
@@ -742,11 +744,11 @@ const R_DISCOVERED_AUDIT_FILE: RecordSpec = RecordSpec {
         FieldSpec::required("blocks"),
         FieldSpec::new(
             "declaration_kind",
-            FieldDefault::Member("sqlbuild._native", "DeclarationKind", "AUDIT"),
+            FieldDefault::NativeMember(RecordId::DeclarationKind, "AUDIT"),
         ),
         FieldSpec::new(
             "scope_kind",
-            FieldDefault::Member("sqlbuild._native", "ScopeKind", "GLOBAL"),
+            FieldDefault::NativeMember(RecordId::ScopeKind, "GLOBAL"),
         ),
         FieldSpec::new("ownership_root", FieldDefault::None),
         FieldSpec::new("owning_path", FieldDefault::None),
@@ -897,7 +899,7 @@ const R_DISCOVERED_MACRO_FILE: RecordSpec = RecordSpec {
         FieldSpec::required("contents"),
         FieldSpec::new(
             "scope_kind",
-            FieldDefault::Member("sqlbuild._native", "ScopeKind", "GLOBAL"),
+            FieldDefault::NativeMember(RecordId::ScopeKind, "GLOBAL"),
         ),
         FieldSpec::new("ownership_root", FieldDefault::None),
         FieldSpec::new("owning_path", FieldDefault::None),
@@ -942,7 +944,7 @@ const R_DISCOVERED_LOADER_FUNCTION: RecordSpec = RecordSpec {
         FieldSpec::new("description", FieldDefault::None),
         FieldSpec::new(
             "connection_mode",
-            FieldDefault::Member("sqlbuild._native", "LoaderConnectionMode", "SQLBUILD"),
+            FieldDefault::NativeMember(RecordId::LoaderConnectionMode, "SQLBUILD"),
         ),
         FieldSpec::new("provider_usages", FieldDefault::EmptyTuple),
     ],
@@ -994,11 +996,7 @@ const R_DISCOVERED_CHECK_FUNCTION: RecordSpec = RecordSpec {
         FieldSpec::required("depends_on"),
         FieldSpec::new(
             "severity",
-            FieldDefault::Member(
-                "sqlbuild.python_nodes.types",
-                "PythonCheckSeverity",
-                "ERROR",
-            ),
+            FieldDefault::HostMember(UserCodeHost::PythonCheckSeverity.id(), "ERROR"),
         ),
         FieldSpec::new("tags", FieldDefault::EmptyTuple),
         FieldSpec::new("group", FieldDefault::None),
@@ -1020,7 +1018,7 @@ const R_DISCOVERED_HOOK_FUNCTION: RecordSpec = RecordSpec {
         FieldSpec::new("provider_usages", FieldDefault::EmptyTuple),
         FieldSpec::new(
             "scope_kind",
-            FieldDefault::Member("sqlbuild._native", "ScopeKind", "GLOBAL"),
+            FieldDefault::NativeMember(RecordId::ScopeKind, "GLOBAL"),
         ),
         FieldSpec::new("ownership_root", FieldDefault::None),
         FieldSpec::new("owning_path", FieldDefault::None),
@@ -1074,7 +1072,7 @@ const R_DISCOVERED_EVENT_EXPORTER: RecordSpec = RecordSpec {
         ),
         FieldSpec::new(
             "min_severity",
-            FieldDefault::Member("sqlbuild._native", "EventExportSeverity", "DEBUG"),
+            FieldDefault::NativeMember(RecordId::EventExportSeverity, "DEBUG"),
         ),
         FieldSpec::new("provider_usages", FieldDefault::EmptyTuple),
     ],
@@ -1269,7 +1267,7 @@ const R_MACRO_CONTEXT: RecordSpec = RecordSpec {
         },
         FieldSpec {
             name: "_collection_rendering",
-            default: FieldDefault::Member("sqlbuild._native", "CollectionRendering", "VALUE_LIST"),
+            default: FieldDefault::NativeMember(RecordId::CollectionRendering, "VALUE_LIST"),
             compared: false,
             shown: false,
         },
@@ -1368,7 +1366,7 @@ const R_COMPILE_MODEL_INPUT: RecordSpec = RecordSpec {
         FieldSpec::required("model_file"),
         FieldSpec::new(
             "config",
-            FieldDefault::Call("sqlbuild._native", "CompileModelConfig"),
+            FieldDefault::NativeCall(RecordId::CompileModelConfig),
         ),
         FieldSpec::new("query_sql", FieldDefault::Text("")),
         FieldSpec::new("macro_source_sql", FieldDefault::Text("")),
@@ -1518,16 +1516,16 @@ const R_COMPILED_PROJECT: RecordSpec = RecordSpec {
         FieldSpec::new("sql_analysis_dialect", FieldDefault::None),
         FieldSpec::new(
             "sql_lexical_syntax",
-            FieldDefault::Call("sqlbuild._native", "SqlLexicalSyntax"),
+            FieldDefault::NativeCall(RecordId::SqlLexicalSyntax),
         ),
         FieldSpec::new("compile_cache_dir", FieldDefault::None),
         FieldSpec::new(
             "settings",
-            FieldDefault::Call("sqlbuild._native", "SettingsConfig"),
+            FieldDefault::NativeCall(RecordId::SettingsConfig),
         ),
         FieldSpec::new(
             "scenario",
-            FieldDefault::Call("sqlbuild._native", "ScenarioConfig"),
+            FieldDefault::NativeCall(RecordId::ScenarioConfig),
         ),
         FieldSpec::new("models", FieldDefault::EmptyTuple),
         FieldSpec::new("sources", FieldDefault::EmptyTuple),
@@ -1549,7 +1547,7 @@ const R_COMPILED_PROJECT: RecordSpec = RecordSpec {
         FieldSpec::new("external_sql_reference_resolver", FieldDefault::None),
         FieldSpec::new(
             "scope_index",
-            FieldDefault::Call("sqlbuild._native", "ScopeIndex"),
+            FieldDefault::NativeCall(RecordId::ScopeIndex),
         ),
         FieldSpec {
             name: "sql_expansions",
@@ -1587,7 +1585,7 @@ const R_COMPILED_SQL_TEST: RecordSpec = RecordSpec {
         ),
         FieldSpec::new(
             "payload",
-            FieldDefault::Call("sqlbuild._native", "CompiledModelSqlTestPayload"),
+            FieldDefault::NativeCall(RecordId::CompiledModelSqlTestPayload),
         ),
         FieldSpec::new("source_path", FieldDefault::None),
         FieldSpec::new("ownership_root", FieldDefault::None),

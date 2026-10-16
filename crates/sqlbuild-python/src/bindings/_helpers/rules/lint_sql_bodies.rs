@@ -9,11 +9,11 @@ use sqlbuild_rules::lint_text::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::value_error;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 
-const LINT_MODELS_MODULE: &str = "sqlbuild._native";
-const LINT_TYPES_MODULE: &str = "sqlbuild._native";
 const NATIVE_ENGINE: &str = "native";
 
 fn spans(passes: &Bound<'_, PyAny>) -> PyResult<Vec<Vec<ExpansionSpan>>> {
@@ -94,9 +94,9 @@ struct ViolationClasses<'py> {
 impl<'py> ViolationClasses<'py> {
     fn new(py: Python<'py>) -> PyResult<Self> {
         Ok(Self {
-            violation: imported(py, LINT_MODELS_MODULE, "LintViolation")?,
-            edit: imported(py, LINT_MODELS_MODULE, "LintEdit")?,
-            severity: imported(py, LINT_TYPES_MODULE, "LintSeverity")?,
+            violation: registry::class(py, RecordId::LintViolation)?,
+            edit: registry::class(py, RecordId::LintEdit)?,
+            severity: registry::class(py, RecordId::LintSeverity)?,
         })
     }
 

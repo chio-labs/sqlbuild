@@ -6,10 +6,9 @@ use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
 const HEADER_CACHE_SIZE: usize = 4096;
 
 /// `(name, line, column, end line, end column)`.
@@ -50,10 +49,8 @@ fn prepare_model_header_tokens(headers: &Bound<'_, PyAny>) -> PyResult<()> {
         cache.clear();
     }
     let names: Bound<'_, PyList> = missing.keys();
-    let parsed: Bound<'_, PyAny> = py
-        .import(NATIVE_MODULE)?
-        .getattr("parse_model_headers")?
-        .call1((&names,))?;
+    let parsed: Bound<'_, PyAny> =
+        registry::native(py, NativeAttr::ParseModelHeaders)?.call1((&names,))?;
     for (header, row) in names.iter().zip(parsed.try_iter()?) {
         let row: Bound<'_, PyAny> = row?;
         cache.set_item(
@@ -83,11 +80,10 @@ fn parse_header_values<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bo
         return Ok(copied);
     }
     let header_line: Bound<'py, PyAny> = request.get("header_line")?;
-    let (detail, help, line): (String, Option<String>, Option<usize>) = py
-        .import(NATIVE_MODULE)?
-        .getattr("model_header_failure")?
-        .call1((error.str()?, &header, &header_line))?
-        .extract()?;
+    let (detail, help, line): (String, Option<String>, Option<usize>) =
+        registry::native(py, NativeAttr::ModelHeaderFailure)?
+            .call1((error.str()?, &header, &header_line))?
+            .extract()?;
     let file_path: String = request.get("file_path")?.str()?.extract()?;
     let location: String = match line {
         Some(line) => format!("{file_path}:{line}"),
@@ -96,9 +92,7 @@ fn parse_header_values<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bo
     let statement: String = request.get("statement_name")?.extract()?;
     let error_class: Bound<'py, PyAny> = match request.optional("error_class")? {
         Some(class) if !class.is_none() => class,
-        _ => py
-            .import(DISCOVERY_ERRORS_MODULE)?
-            .getattr("ModelSqlParseError")?,
+        _ => registry::error(py, ErrorId::ModelSqlParse)?,
     };
     let keywords: Bound<'py, PyDict> = PyDict::new(py);
     keywords.set_item("help", help)?;
@@ -117,9 +111,7 @@ fn source_locations<'py>(
     relative_path: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = rows.py();
-    let location_class: Bound<'py, PyAny> = py
-        .import(CONTRACT_MODELS_MODULE)?
-        .getattr("SourceLocation")?;
+    let location_class: Bound<'py, PyAny> = registry::class(py, RecordId::SourceLocation)?;
     let locations: Bound<'py, PyDict> = PyDict::new(py);
     for row in rows.try_iter()? {
         let (name, line, column, end_line, end_column): LocationRow<'py> = row?.extract()?;
@@ -146,9 +138,7 @@ fn model_output_column_locations<'py>(
         Some(value) => value.is_truthy()?,
         None => true,
     };
-    let rows: Bound<'py, PyAny> = py
-        .import(NATIVE_MODULE)?
-        .getattr("model_output_columns")?
+    let rows: Bound<'py, PyAny> = registry::native(py, NativeAttr::ModelOutputColumns)?
         .call1((request.get("contents")?, implicit))?;
     source_locations(&rows, &request.get("relative_path")?)
 }

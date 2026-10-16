@@ -13,20 +13,16 @@ use crate::bindings::_helpers::janitor::janitor_keys::{
     sorted_schemas, text, tuple,
 };
 
-const QUERY_ARTIFACT_LIFECYCLE: (&str, &str) = (
-    "sqlbuild.executor.diff.classes.query_artifact_lifecycle",
-    "QueryDiffArtifactLifecycle",
-);
-const RELATION_LOOKUP: (&str, &str) = (
-    "sqlbuild.adapter.relations.main.relation_lookup",
-    "build_relation_lookup",
-);
-const LOG_DEBUG_EVENT: (&str, &str) = (
-    "sqlbuild.diagnostics.main.log_debug_event",
-    "log_debug_event",
-);
-const READ_LATEST_FINGERPRINTS: (&str, &str) = ("sqlbuild._native", "read_latest_fingerprints");
+const QUERY_ARTIFACT_LIFECYCLE: ExecutorHost = ExecutorHost::QueryDiffArtifactLifecycle;
+const RELATION_LOOKUP: AdapterHost = AdapterHost::BuildRelationLookup;
+const LOG_DEBUG_EVENT: ExecutorHost = ExecutorHost::LogDebugEvent;
+const READ_LATEST_FINGERPRINTS: NativeAttr = NativeAttr::ReadLatestFingerprints;
 const EXECUTION_LOGGER: &str = "sqlbuild.execution";
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::FINGERPRINT_TABLE_NAME;
 use sqlbuild_core::constants::SOURCE_FRESHNESS_TABLE_NAME;
 
@@ -245,7 +241,7 @@ fn relation_lookup<'py>(
         )?);
     }
     call_with(
-        &imported(py, RELATION_LOOKUP.0, RELATION_LOOKUP.1)?,
+        &host::entry(py, RELATION_LOOKUP)?,
         &[
             ("adapter", warehouse.adapter.clone()),
             ("connection", warehouse.connection.clone()),
@@ -300,7 +296,7 @@ fn tracked_relation_keys(
             (database.as_deref(), schema, FINGERPRINT_TABLE_NAME),
         )?;
         let read: PyResult<Bound<'_, PyAny>> = call_with(
-            &imported(py, READ_LATEST_FINGERPRINTS.0, READ_LATEST_FINGERPRINTS.1)?,
+            &registry::native(py, READ_LATEST_FINGERPRINTS)?,
             &[
                 ("connection", warehouse.connection.clone()),
                 ("execute", warehouse.adapter.getattr("execute")?),
@@ -326,7 +322,7 @@ fn tracked_relation_keys(
             Ok(set) => set,
             Err(error) if error.is_instance_of::<PyException>(py) => {
                 call_with(
-                    &imported(py, LOG_DEBUG_EVENT.0, LOG_DEBUG_EVENT.1)?,
+                    &host::entry(py, LOG_DEBUG_EVENT)?,
                     &[
                         (
                             "logger",
@@ -448,7 +444,7 @@ pub(crate) fn direct_state_prune_candidates<'py>(
             )?;
             candidates.push(record(
                 py,
-                "JanitorDirectStatePruneCandidate",
+                ExecutorHost::JanitorDirectStatePruneCandidate,
                 &[
                     ("database", optional(py, database.as_deref())?),
                     ("schema", text(py, schema)),
@@ -472,8 +468,7 @@ pub(crate) fn query_diff_artifact_candidates<'py>(
     now: &Bound<'py, PyAny>,
 ) -> PyResult<ArtifactCandidates<'py>> {
     let py: Python<'py> = warehouse.py();
-    let lifecycle: Bound<'py, PyAny> =
-        imported(py, QUERY_ARTIFACT_LIFECYCLE.0, QUERY_ARTIFACT_LIFECYCLE.1)?;
+    let lifecycle: Bound<'py, PyAny> = host::entry(py, QUERY_ARTIFACT_LIFECYCLE)?;
     let mut sorted: Vec<(Option<String>, String)> = schemas.to_vec();
     sorted.sort_by(|left, right| {
         (left.0.as_deref().unwrap_or(""), left.1.as_str())
@@ -496,7 +491,7 @@ pub(crate) fn query_diff_artifact_candidates<'py>(
             let key: Key = Key::of(&artifact?)?;
             candidates.push(record(
                 py,
-                "JanitorQueryDiffArtifactCandidate",
+                ExecutorHost::JanitorQueryDiffArtifactCandidate,
                 &[("key", key.to_python(py)?)],
             )?);
         }
@@ -521,7 +516,7 @@ pub(crate) fn skipped_relation<'py>(
     let py: Python<'py> = relation.py();
     record(
         py,
-        "JanitorSkippedRelation",
+        ExecutorHost::JanitorSkippedRelation,
         &[
             ("key", key.to_python(py)?),
             ("relation", relation.clone()),

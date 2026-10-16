@@ -1,1 +1,1 @@
-pub mod hosted_native_name;
+pub mod captured_shape_name;

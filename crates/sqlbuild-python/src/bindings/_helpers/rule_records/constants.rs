@@ -1,5 +1,6 @@
 //! Layouts of the rule engine value records hosted natively.
 
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::models::{FieldDefault, FieldSpec, RecordSpec};
 
 const R_RULE_GUIDANCE: RecordSpec = RecordSpec {
@@ -297,15 +298,12 @@ const R_RULES_CONFIG: RecordSpec = RecordSpec {
         FieldSpec::new("retired_source_tokens", FieldDefault::EmptyDict),
         FieldSpec::new(
             "sql_tests",
-            FieldDefault::Call("sqlbuild._native", "SqlTestRulesConfig"),
+            FieldDefault::NativeCall(RecordId::SqlTestRulesConfig),
         ),
-        FieldSpec::new(
-            "layout",
-            FieldDefault::Call("sqlbuild._native", "LayoutConfig"),
-        ),
+        FieldSpec::new("layout", FieldDefault::NativeCall(RecordId::LayoutConfig)),
         FieldSpec::new(
             "cache",
-            FieldDefault::Call("sqlbuild._native", "RulesCacheConfig"),
+            FieldDefault::NativeCall(RecordId::RulesCacheConfig),
         ),
     ],
 };

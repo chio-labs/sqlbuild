@@ -12,10 +12,12 @@ use sqlbuild_state::microbatches::models::{
 };
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::microbatches::conversion::{
-    BoundParser, MODELS_MODULE, TYPES_MODULE, enum_text, optional_text, timestamp,
+    BoundParser, enum_text, optional_text, timestamp,
 };
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 
 const COMPLETION_RECORD_TYPES: [&str; 2] = ["partition_completion", "synthetic_completion"];
 const ORDINARY_COMPLETION: &str = "partition_completion";
@@ -26,7 +28,7 @@ fn python_intervals<'py>(
     py: Python<'py>,
     intervals: &[TextInterval],
 ) -> PyResult<Bound<'py, PyTuple>> {
-    let class: Bound<'py, PyAny> = imported(py, MODELS_MODULE, "MicrobatchInterval")?;
+    let class: Bound<'py, PyAny> = host::entry(py, ExecutorHost::MicrobatchInterval)?;
     let built: Vec<Bound<'py, PyAny>> = intervals
         .iter()
         .map(|interval| {
@@ -48,7 +50,7 @@ fn python_coverage<'py>(
     events: &[Bound<'py, PyAny>],
 ) -> PyResult<Bound<'py, PyAny>> {
     let projected_class: Bound<'py, PyAny> =
-        imported(py, MODELS_MODULE, "ProjectedMicrobatchInterval")?;
+        host::entry(py, ExecutorHost::ProjectedMicrobatchInterval)?;
     let mut projected: Vec<Bound<'py, PyAny>> = Vec::with_capacity(projection.segments.len());
     for segment in &projection.segments {
         let event: &Bound<'py, PyAny> = &events[segment.completion];
@@ -69,7 +71,7 @@ fn python_coverage<'py>(
         )?);
     }
     call_with(
-        &imported(py, MODELS_MODULE, "MicrobatchCoverageProjection")?,
+        &host::entry(py, ExecutorHost::MicrobatchCoverageProjection)?,
         &[
             ("intervals", PyTuple::new(py, projected)?.into_any()),
             (
@@ -196,12 +198,12 @@ fn replay<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py, PyAn
         )
     };
     call_with(
-        &imported(py, MODELS_MODULE, "ReplayRequirementProjection")?,
+        &host::entry(py, ExecutorHost::ReplayRequirementProjection)?,
         &[
             ("requirement", requirement),
             (
                 "state",
-                imported(py, TYPES_MODULE, "ReplayRequirementState")?
+                host::entry(py, ExecutorHost::ReplayRequirementState)?
                     .getattr(replay_state_member(projection.state))?,
             ),
             ("missing", selected(&projection.missing)?.into_any()),

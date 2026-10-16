@@ -3,12 +3,11 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use sqlbuild_core::dbt_command::constants::NO_CONNECTION_OPTION;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::dbt_command::auto_init::args_tuple;
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, flag, status, stream};
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const DEBUG_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 
 /// Run `body` under a stderr status line that is always closed; returns its exit code.
 fn with_status(
@@ -35,7 +34,7 @@ pub(crate) fn run_dbt_debug(
     let use_color: bool = !no_color && color_enabled(py)?;
     let dbt_code: i64 = with_status(py, ("Running dbt debug...", use_color), || {
         call_with(
-            &imported(py, DEBUG_MODULE, "debug_dbt_from_project")?,
+            &registry::native(py, NativeAttr::DebugDbtFromProject)?,
             &[
                 ("project_dir", project_dir.clone()),
                 ("args", args_tuple(py, args)?),
@@ -49,7 +48,7 @@ pub(crate) fn run_dbt_debug(
     let sqlbuild_code: i64 =
         with_status(py, ("Running SQLBuild diagnostics...", use_color), || {
             call_with(
-                &imported(py, NATIVE_MODULE, "run_debug_command")?,
+                &registry::native(py, NativeAttr::RunDebugCommand)?,
                 &[
                     ("project_dir", project_dir.clone()),
                     ("no_color", flag(py, no_color)),

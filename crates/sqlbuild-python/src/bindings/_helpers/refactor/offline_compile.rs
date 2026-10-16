@@ -2,25 +2,15 @@
 
 use std::path::Path;
 
-use crate::bindings::_helpers::compiler_records::shape_classes::shape_class_at;
 use pyo3::IntoPyObject;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyBool, PyString};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS: &str = "sqlbuild._native";
-const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
-const COMPILE_ERRORS: &str = "sqlbuild._native";
-const PLANNER_ERRORS: &str = "sqlbuild._native";
-const RULES_ERRORS: &str = "sqlbuild._native";
-const SPEC_ERRORS: &str = "sqlbuild._native";
-const ENTRY_MODELS: &str = "sqlbuild._native";
-const COMMAND_TYPES: &str = "sqlbuild._native";
-const REFACTOR_MODELS: &str = "sqlbuild._native";
 const DEFAULT_ERROR_CODE: &str = "E001";
 
 /// One offline compile's project facts, or `None`, and every error that stopped or followed it.
@@ -29,13 +19,13 @@ pub(crate) struct OfflineCompile<'py> {
     pub(crate) errors: Vec<Bound<'py, PyAny>>,
 }
 
-fn enum_member<'py>(py: Python<'py>, class: &str, member: &str) -> PyResult<Bound<'py, PyAny>> {
-    shape_class_at(py, COMPILE_TYPES, class)?.getattr(member)
+fn enum_member<'py>(py: Python<'py>, class: RecordId, member: &str) -> PyResult<Bound<'py, PyAny>> {
+    registry::member(py, class, member)
 }
 
-fn matches_any_class(py: Python<'_>, error: &PyErr, classes: &[(&str, &str)]) -> PyResult<bool> {
-    for (module, name) in classes {
-        if error.value(py).is_instance(&imported(py, module, name)?)? {
+fn matches_any_class(py: Python<'_>, error: &PyErr, classes: &[ErrorId]) -> PyResult<bool> {
+    for class in classes {
+        if error.value(py).is_instance(&registry::error(py, *class)?)? {
             return Ok(true);
         }
     }
@@ -56,10 +46,16 @@ fn compile_error_diagnostic<'py>(py: Python<'py>, error: &PyErr) -> PyResult<Bou
         value.str()?.into_any()
     };
     call_with(
-        &imported(py, COMPILE_MODELS, "CompilerDiagnostic")?,
+        &registry::class(py, RecordId::CompilerDiagnostic)?,
         &[
-            ("phase", enum_member(py, "DiagnosticPhase", "COMPILE")?),
-            ("severity", enum_member(py, "DiagnosticSeverity", "ERROR")?),
+            (
+                "phase",
+                enum_member(py, RecordId::DiagnosticPhase, "COMPILE")?,
+            ),
+            (
+                "severity",
+                enum_member(py, RecordId::DiagnosticSeverity, "ERROR")?,
+            ),
             ("code", code),
             ("message", message),
         ],
@@ -70,16 +66,19 @@ fn compile_error_diagnostic<'py>(py: Python<'py>, error: &PyErr) -> PyResult<Bou
 fn planning_error_diagnostic<'py>(py: Python<'py>, error: &PyErr) -> PyResult<Bound<'py, PyAny>> {
     let value: Bound<'py, PyAny> = error.value(py).clone().into_any();
     let location: Bound<'py, PyAny> =
-        if value.is_instance(&imported(py, COMPILE_ERRORS, "SqlTestReferenceError")?)? {
+        if value.is_instance(&registry::error(py, ErrorId::SqlTestReference)?)? {
             value.getattr("location")?
         } else {
             py.None().into_bound(py)
         };
     call_with(
-        &imported(py, COMPILE_MODELS, "CompilerDiagnostic")?,
+        &registry::class(py, RecordId::CompilerDiagnostic)?,
         &[
-            ("phase", enum_member(py, "DiagnosticPhase", "TEST")?),
-            ("severity", enum_member(py, "DiagnosticSeverity", "ERROR")?),
+            ("phase", enum_member(py, RecordId::DiagnosticPhase, "TEST")?),
+            (
+                "severity",
+                enum_member(py, RecordId::DiagnosticSeverity, "ERROR")?,
+            ),
             ("code", value.getattr("code")?),
             ("message", value.str()?.into_any()),
             ("help", value.getattr("help")?),
@@ -105,11 +104,11 @@ fn analyzed<'py>(
     no_cache: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
     let selection: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "CompileAnalysisSelection")?,
+        &registry::class(py, RecordId::CompileAnalysisSelection)?,
         &[("no_cache", PyBool::new(py, no_cache).to_owned().into_any())],
     )?;
     call_with(
-        &imported(py, NATIVE_MODULE, "analyze_compile_project")?,
+        &registry::native(py, NativeAttr::AnalyzeCompileProject)?,
         &[
             ("project_dir", project_dir.into_pyobject(py)?.into_any()),
             (
@@ -119,12 +118,12 @@ fn analyzed<'py>(
             ("selected_target", py.None().into_bound(py)),
             (
                 "lineage_mode",
-                imported(py, COMMAND_TYPES, "CompileLineageMode")?.getattr("NONE")?,
+                registry::class(py, RecordId::CompileLineageMode)?.getattr("NONE")?,
             ),
             ("cli_vars", py.None().into_bound(py)),
             (
                 "profile_flags",
-                imported(py, ENTRY_MODELS, "CompileProfileFlags")?.call0()?,
+                registry::class(py, RecordId::CompileProfileFlags)?.call0()?,
             ),
             ("analysis_selection", selection),
             ("status", py.None().into_bound(py)),
@@ -141,15 +140,8 @@ pub(crate) fn compile_for_refactor<'py>(
     let analysis: Bound<'py, PyAny> = match analyzed(py, project_dir, no_cache) {
         Ok(analysis) => analysis,
         Err(error)
-            if matches_any_class(
-                py,
-                &error,
-                &[
-                    ("builtins", "ValueError"),
-                    (RULES_ERRORS, "RulesError"),
-                    (SPEC_ERRORS, "SpecConfigError"),
-                ],
-            )? =>
+            if error.is_instance_of::<PyValueError>(py)
+                || matches_any_class(py, &error, &[ErrorId::Rules, ErrorId::SpecConfig])? =>
         {
             return Ok(OfflineCompile {
                 project: py.None().into_bound(py),
@@ -161,7 +153,7 @@ pub(crate) fn compile_for_refactor<'py>(
     let mut errors: Vec<Bound<'py, PyAny>> = error_diagnostics(analysis.getattr("diagnostics")?)?;
     if errors.is_empty() {
         let planned: PyResult<Bound<'py, PyAny>> = call_with(
-            &imported(py, NATIVE_MODULE, "static_sql_test_planning_diagnostics")?,
+            &registry::native(py, NativeAttr::StaticSqlTestPlanningDiagnostics)?,
             &[
                 (
                     "target_dir",
@@ -177,10 +169,7 @@ pub(crate) fn compile_for_refactor<'py>(
                 if matches_any_class(
                     py,
                     &error,
-                    &[
-                        (COMPILE_ERRORS, "CompileInputError"),
-                        (PLANNER_ERRORS, "PlannerInputError"),
-                    ],
+                    &[ErrorId::CompileInput, ErrorId::PlannerInput],
                 )? =>
             {
                 errors.push(planning_error_diagnostic(py, &error)?);
@@ -189,7 +178,7 @@ pub(crate) fn compile_for_refactor<'py>(
         }
     }
     let project: Bound<'py, PyAny> = call_with(
-        &imported(py, REFACTOR_MODELS, "RefactorProject")?,
+        &registry::class(py, RecordId::RefactorProject)?,
         &[
             ("project_dir", project_dir.into_pyobject(py)?.into_any()),
             ("graph", analysis.getattr("graph")?),

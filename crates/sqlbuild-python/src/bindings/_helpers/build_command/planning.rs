@@ -14,13 +14,12 @@ use crate::bindings::_helpers::build_command::support::{
     boolean, emit, joined, keyword_relay, none,
 };
 use crate::bindings::_helpers::cli::progress_text::with_verbose_inspection;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
-const RUNTIME_CONTRACT_MODELS: &str = "sqlbuild.runtime.contracts.models";
 const CONNECTION_TIMING: [&str; 2] = ["connection_count", "elapsed_seconds"];
 
 /// Clone out-of-selection boundaries from the defer-clone origin before planning.
@@ -40,18 +39,14 @@ fn request_options<'py>(context: &BuildContext<'py>) -> PyResult<Bound<'py, PyAn
     let python_selectors: bool =
         context.request_flag("include_python")? || should_load_sources.is_truthy()?;
     let resolver: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            EXTERNAL_REFS_MODULE,
-            "resolve_external_sql_reference_resolver",
-        )?,
+        &registry::native(py, NativeAttr::ResolveExternalSqlReferenceResolver)?,
         &[
             ("project_dir", context.get("effective_project_dir")?),
             ("discovered_inputs", context.get("discovered_inputs")?),
         ],
     )?;
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "CompilePipelineOptions")?,
+        &registry::class(py, RecordId::CompilePipelineOptions)?,
         &[
             ("no_sql_validation", field("no_sql_validation")?),
             ("no_cache", field("no_cache")?),
@@ -85,7 +80,7 @@ pub(crate) fn compile_build_plan<'py>(context: &BuildContext<'py>) -> PyResult<B
     emit(&context.stream, "\n")?;
     let connection: Bound<'py, PyAny> = context.get("connection_progress")?;
     let hooks: Bound<'py, PyAny> = call_with(
-        &imported(py, RUNTIME_CONTRACT_MODELS, "ConnectionHooks")?,
+        &host::entry(py, ExecutorHost::ConnectionHooks)?,
         &[
             (
                 "on_progress",
@@ -114,7 +109,7 @@ pub(crate) fn compile_build_plan<'py>(context: &BuildContext<'py>) -> PyResult<B
     let verbose: bool = context.request.getattr("verbose")?.is_truthy()?;
     with_verbose_inspection(py, verbose, || {
         call_with(
-            &imported(py, NATIVE_MODULE, "run_compile_pipeline")?,
+            &registry::native(py, NativeAttr::RunCompilePipeline)?,
             &[
                 ("discovered_inputs", context.get("discovered_inputs")?),
                 ("adapter", context.get("adapter")?),
@@ -136,7 +131,7 @@ pub(crate) fn write_plan_text(
         py.import("sys")?
             .getattr(if machine { "stderr" } else { "stdout" })?;
     let plan_text: String = call_with(
-        &imported(py, NATIVE_MODULE, "format_plan")?,
+        &registry::native(py, NativeAttr::FormatPlan)?,
         &[
             ("plan", pipeline.getattr("plan_output")?),
             ("full_refresh", context.request.getattr("full_refresh")?),
@@ -196,7 +191,7 @@ pub(crate) fn write_compile_target(
     let plan: Bound<'_, PyAny> = pipeline.getattr("plan_output")?;
     let manifest: Bound<'_, PyAny> = if context.request_flag("manifest")? {
         call_with(
-            &imported(py, NATIVE_MODULE, "build_manifest")?,
+            &registry::native(py, NativeAttr::BuildManifest)?,
             &[
                 ("project", pipeline.getattr("project")?),
                 ("plan_output", plan.clone()),
@@ -216,7 +211,7 @@ pub(crate) fn write_compile_target(
         none(py)
     };
     call_with(
-        &imported(py, NATIVE_MODULE, "write_compile_target")?,
+        &registry::native(py, NativeAttr::WriteCompileTarget)?,
         &[
             (
                 "target_dir",

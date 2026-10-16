@@ -9,10 +9,9 @@ use pyo3::types::PyString;
 use sqlbuild_rules::lint_text::main::resolve_format_settings::resolve_format_settings;
 use sqlbuild_rules::lint_text::models::FormatSettings;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const LINT_MODELS_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 /// Format settings and whether lint suppressions are allowed.
 pub(crate) struct FormatConfig {
@@ -30,7 +29,7 @@ pub(crate) fn format_config(
         resolve_format_settings(Path::new(&directory)).map_err(PyValueError::new_err)?;
     let allow_suppressions: bool = if settings.has_project_config {
         call_with(
-            &imported(py, NATIVE_MODULE, "load_rules_config")?,
+            &registry::native(py, NativeAttr::LoadRulesConfig)?,
             &[("project_dir", project_dir.call_method0("resolve")?)],
         )?
         .getattr("allow_exceptions")?
@@ -52,7 +51,7 @@ pub(crate) fn lint_config<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let settings: &FormatSettings = &config.settings;
     call_with(
-        &imported(py, LINT_MODELS_MODULE, "LintConfig")?,
+        &registry::class(py, RecordId::LintConfig)?,
         &[
             (
                 "line_width",

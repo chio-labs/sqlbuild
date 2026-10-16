@@ -16,9 +16,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
 use crate::bindings::_helpers::graph::views::project_lineage_views;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 
 /// Indexes of the `CompiledObjectKey`s a diff graph names, assigned on first sight.
@@ -111,7 +111,7 @@ fn diff_graph<'py>(project: &Bound<'py, PyAny>, keys: &KeyIndexes<'py>) -> PyRes
 /// The `PlannerInputError` a rejected selector raises.
 fn selector_error(py: Python<'_>, error: SelectorError) -> PyErr {
     let raised: PyResult<Bound<'_, PyAny>> = (|| {
-        imported(py, PLANNER_EXCEPTIONS_MODULE, "PlannerInputError")?.call(
+        registry::error(py, ErrorId::PlannerInput)?.call(
             (error.message,),
             Some(&keywords(
                 py,
@@ -202,7 +202,7 @@ fn run_diff_pipeline<'py>(
             &["cli_vars", "external_sql_reference_resolver"],
         ),
     )?;
-    let build: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "build_compiled_project")?;
+    let build: Bound<'py, PyAny> = registry::native(py, NativeAttr::BuildCompiledProject)?;
     let compile = |target: &str| -> PyResult<Bound<'py, PyAny>> {
         call_with(
             &build,

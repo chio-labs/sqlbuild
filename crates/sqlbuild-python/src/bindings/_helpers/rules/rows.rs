@@ -32,15 +32,14 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::compiled_project::records::declaration_rows;
 use crate::bindings::_helpers::compiled_project::values::plain_value;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::findings::{FindingClasses, finding_fault};
 use crate::bindings::_helpers::rules::selection::rules_error;
 use crate::bindings::_helpers::rules::sql_test_objects::{scenario_fact, sql_test_fact};
 use crate::bindings::_helpers::type_system::equality::types_equal;
 use crate::bindings::types::CompilerDetach;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const NATIVE_RULES_CACHE_FILE: &str = "native.json";
 const NATIVE_RULES_MEMO_FILE: &str = "native-response.json";
@@ -116,7 +115,7 @@ fn built_request(options: &Request<'_, '_>) -> PyResult<NativeRulesRequest> {
         "dialect": dialect.extract::<String>()?,
         "config": config_value(&config)?,
         "scope_index": plain_value(&call_with(
-            &imported(py, NATIVE_MODULE, "scope_metadata_projection")?,
+            &registry::native(py, NativeAttr::ScopeMetadataProjection)?,
             &[("index", project.getattr("scope_index")?)],
         )?)?,
         "defer_suppressions": true,
@@ -164,7 +163,7 @@ fn built_request(options: &Request<'_, '_>) -> PyResult<NativeRulesRequest> {
         dialect,
     };
     let facts: Bound<'_, NativeCompiledProject> =
-        imported(py, NATIVE_MODULE, "compiled_project_facts")?
+        registry::native(py, NativeAttr::CompiledProjectFacts)?
             .call1((&project,))?
             .downcast_into()?;
     let mut names: Vec<String> = Vec::new();
@@ -243,7 +242,7 @@ fn evaluated<'py>(
         .map(|fault| classes.finding_of_fault(fault, false))
         .collect::<PyResult<_>>()?;
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "NativeRulesEvaluation")?,
+        &registry::class(py, RecordId::NativeRulesEvaluation)?,
         &[
             ("findings", PyTuple::new(py, findings)?.into_any()),
             (

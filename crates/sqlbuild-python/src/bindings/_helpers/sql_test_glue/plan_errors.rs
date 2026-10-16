@@ -1,13 +1,13 @@
 //! Project native planning failures into existing located diagnostic exceptions.
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::plan_values::string;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
 use sqlbuild_analysis::sql_test_attachment::main::sql_test_cte_location::sql_test_cte_location;
 use sqlbuild_analysis::sql_test_attachment::models::CteLocation;
-
-const SOURCE_LOCATION_MODULE: &str = "sqlbuild._native";
 
 /// The location of `call` inside one CTE of a SQL test block, else the CTE header, else the block.
 fn cte_call_location<'py>(
@@ -32,7 +32,7 @@ fn cte_call_location<'py>(
     arguments.set_item("column", located.column)?;
     arguments.set_item("end_line", located.end_line)?;
     arguments.set_item("end_column", located.end_column)?;
-    imported(py, SOURCE_LOCATION_MODULE, "SourceLocation")?.call((), Some(&arguments))
+    registry::class(py, RecordId::SourceLocation)?.call((), Some(&arguments))
 }
 
 pub(super) fn planning_error(
@@ -73,27 +73,26 @@ pub(super) fn planning_error(
         kwargs.set_item("help", help)?;
         let class = if let Some(test) = found {
             kwargs.set_item("location", cte_call_location(py, &test, (&cte, &call))?)?;
-            "SqlTestReferenceError"
+            ErrorId::SqlTestReference
         } else {
             kwargs.set_item("code", super::constants::SQL_TEST_HELPER_REFERENCE_CODE)?;
-            "CompileInputError"
+            ErrorId::CompileInput
         };
         return Ok(PyErr::from_value(
-            imported(py, "sqlbuild._native", class)?.call((message,), Some(&kwargs))?,
+            registry::error(py, class)?.call((message,), Some(&kwargs))?,
         ));
     }
-    let (module, class, message) = if let Some(message) = message.strip_prefix("compile_input:") {
-        ("sqlbuild._native", "CompileInputError", message.to_owned())
+    let (class, message) = if let Some(message) = message.strip_prefix("compile_input:") {
+        (ErrorId::CompileInput, message.to_owned())
     } else if let Some(message) = message.strip_prefix("planner_input:") {
-        ("sqlbuild._native", "PlannerInputError", message.to_owned())
+        (ErrorId::PlannerInput, message.to_owned())
     } else {
         (
-            "sqlbuild._native",
-            "NativeSqlTestPlanningError",
+            ErrorId::NativeSqlTestPlanning,
             format!("native SQL-test planning failed: {message}"),
         )
     };
     Ok(PyErr::from_value(
-        imported(py, module, class)?.call1((string(py, &message),))?,
+        registry::error(py, class)?.call1((string(py, &message),))?,
     ))
 }

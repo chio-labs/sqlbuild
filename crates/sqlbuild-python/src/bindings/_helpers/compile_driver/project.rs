@@ -18,20 +18,11 @@ use crate::bindings::_helpers::compile_driver::targets::{
     project_targets,
 };
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const FRONTIER_MODULE: &str = "sqlbuild._native";
-const FRONTIER_TYPES_MODULE: &str = "sqlbuild._native";
-const BUILD_INPUTS_MODULE: &str = "sqlbuild._native";
-const ASSEMBLE_MODULE: &str = "sqlbuild._native";
-const PROJECT_WITH_MODULE: &str = "sqlbuild._native";
-const PROMOTION_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 use sqlbuild_core::constants::TABLE_PROMOTION_MODE_SETTING_KEY;
 const LOCAL_CONFIG_FILENAME: &str = "sqlbuild_local.toml";
-const ANALYSIS_SELECTION_MODULE: &str = "sqlbuild._native";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const COLLECTION_RENDERING_MODULE: &str = "sqlbuild._native";
 /// Optional keywords of the project graph builders.
 const GRAPH_OPTIONAL: [&str; 7] = [
     "selected_target",
@@ -63,7 +54,7 @@ pub(crate) fn lineage_mode<'py>(arguments: &KeywordArguments<'py>) -> PyResult<B
     if arguments.passed("column_lineage_mode")? {
         return Ok(mode);
     }
-    imported(mode.py(), NATIVE_RECORDS_MODULE, "ColumnLineageMode")?.getattr("FAST")
+    registry::class(mode.py(), RecordId::ColumnLineageMode)?.getattr("FAST")
 }
 
 /// `value` as a Python `bool`.
@@ -130,12 +121,11 @@ fn compiled_project(py: Python<'_>, request: ProjectRequest) -> PyResult<Bound<'
         },
     )?;
     call_with(
-        &imported(py, FRONTIER_MODULE, "compile_frontier")?,
+        &registry::native(py, NativeAttr::CompileFrontier)?,
         &[
             (
                 "until",
-                imported(py, FRONTIER_TYPES_MODULE, "CompilerStage")?
-                    .getattr("COMPILED_PROJECT")?,
+                registry::class(py, RecordId::CompilerStage)?.getattr("COMPILED_PROJECT")?,
             ),
             ("python_stage", stage.into_any()),
         ],
@@ -165,11 +155,7 @@ fn python_compiled_project<'py>(
     let inference_profile: Bound<'py, PyAny> =
         adapter.call_method0("expression_inference_profile")?;
     let analysis_model_names: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            ANALYSIS_SELECTION_MODULE,
-            "resolve_analysis_model_names",
-        )?,
+        &registry::native(py, NativeAttr::ResolveAnalysisModelNames)?,
         &[
             ("compile_inputs", compile_inputs.clone()),
             ("inference_profile", inference_profile.clone()),
@@ -177,7 +163,7 @@ fn python_compiled_project<'py>(
         ],
     )?;
     let project: Bound<'py, PyAny> = call_with(
-        &imported(py, ASSEMBLE_MODULE, "assemble_project")?,
+        &registry::native(py, NativeAttr::AssembleProject)?,
         &[
             ("inputs", compile_inputs.clone()),
             ("inference_profile", inference_profile),
@@ -225,7 +211,7 @@ fn targeted_project<'py>(
     let project_config: Bound<'py, PyAny> = discovered.getattr("project_config")?;
     let local_config: Bound<'py, PyAny> = discovered.getattr("local_config")?;
     let adapter_name: Bound<'py, PyAny> = call_with(
-        &imported(py, ADAPTER_NAME_MODULE, "resolve_effective_adapter_name")?,
+        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
             ("project_config", project_config),
             ("local_config", local_config.clone()),
@@ -243,7 +229,7 @@ fn targeted_project<'py>(
         pyo3::types::PyString::new(py, PROJECT_CONFIG_FILENAME).into_any()
     };
     let conflicts: Bound<'py, PyAny> = call_with(
-        &imported(py, PROMOTION_MODULE, "promotion_conflict_diagnostics")?,
+        &registry::native(py, NativeAttr::PromotionConflictDiagnostics)?,
         &[
             ("project", project.clone()),
             (
@@ -262,7 +248,7 @@ fn targeted_project<'py>(
             .collect::<PyResult<Vec<_>>>()?,
     )?;
     call_with(
-        &imported(py, PROJECT_WITH_MODULE, "project_with")?,
+        &registry::native(py, NativeAttr::ProjectWith)?,
         &[
             ("project", project),
             ("diagnostics", diagnostics.into_any()),
@@ -279,18 +265,14 @@ fn frontier_compile_inputs<'py>(
     let discovered: &Bound<'py, PyAny> = request.discovered_inputs.bind(py);
     let adapter: &Bound<'py, PyAny> = request.adapter.bind(py);
     let collection_rendering: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            COLLECTION_RENDERING_MODULE,
-            "resolve_effective_collection_rendering",
-        )?,
+        &registry::native(py, NativeAttr::ResolveEffectiveCollectionRendering)?,
         &[
             ("project_config", discovered.getattr("project_config")?),
             ("declaration_override", py.None().into_bound(py)),
         ],
     )?;
     let adapter_context: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "CompileAdapterContext")?,
+        &registry::class(py, RecordId::CompileAdapterContext)?,
         &[
             ("value_renderer", adapter.clone()),
             ("collection_rendering", collection_rendering),
@@ -302,7 +284,7 @@ fn frontier_compile_inputs<'py>(
         ],
     )?;
     let stage: Bound<'py, PyAny> = imported(py, "functools", "partial")?.call(
-        (imported(py, BUILD_INPUTS_MODULE, "build_compile_inputs")?,),
+        (registry::native(py, NativeAttr::BuildCompileInputs)?,),
         Some(&keywords(
             py,
             &[
@@ -325,12 +307,11 @@ fn frontier_compile_inputs<'py>(
         )?),
     )?;
     call_with(
-        &imported(py, FRONTIER_MODULE, "compile_frontier")?,
+        &registry::native(py, NativeAttr::CompileFrontier)?,
         &[
             (
                 "until",
-                imported(py, FRONTIER_TYPES_MODULE, "CompilerStage")?
-                    .getattr("COMPILE_PROJECT_INPUTS")?,
+                registry::class(py, RecordId::CompilerStage)?.getattr("COMPILE_PROJECT_INPUTS")?,
             ),
             ("python_stage", stage),
         ],
@@ -372,7 +353,7 @@ fn build_project_graph<'py>(
         (&["discovered_inputs", "adapter"], &optional),
     )?;
     let selection: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "CompileAnalysisSelection")?,
+        &registry::class(py, RecordId::CompileAnalysisSelection)?,
         &[("no_cache", py_bool(py, arguments.flag("no_cache")?))],
     )?;
     selected_graph(&arguments, selection)

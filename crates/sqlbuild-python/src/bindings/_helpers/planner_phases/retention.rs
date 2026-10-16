@@ -1,15 +1,19 @@
 //! Warehouse-aware time-travel retention and Snowflake table-type planning.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_phases::constants::{
-    ADAPTER_MODELS, ADAPTER_TYPES, BIGQUERY_ADAPTER, DECREASE_WARNING, DOWNGRADE_HISTORY_DAYS,
-    PERMANENT_TABLE_TYPE, PLANNER_TYPES, RETENTION_DECREASE, RETENTION_INCREASE, RETENTION_MATCH,
-    SNOWFLAKE_ADAPTER, SPEC_MODELS, TRANSIENT_TABLE_TYPE,
+    BIGQUERY_ADAPTER, DECREASE_WARNING, DOWNGRADE_HISTORY_DAYS, PERMANENT_TABLE_TYPE,
+    RETENTION_DECREASE, RETENTION_INCREASE, RETENTION_MATCH, SNOWFLAKE_ADAPTER,
+    TRANSIENT_TABLE_TYPE,
 };
 use crate::bindings::_helpers::planner_phases::objects::{
-    construct, member, model_key_names, native, optional_text, planner_error, planner_model,
-    replace, sorted_names, text, tuple,
+    construct, member, model_key_names, native, native_member, optional_text, planner_error,
+    planner_model, replace, sorted_names, text, tuple,
 };
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
@@ -31,11 +35,11 @@ pub(crate) fn effective_target_config<'py>(
         .getattr("project")?
         .getattr("effective_target_name")?;
     if project_config.is_none() || local_config.is_none() || target_name.is_none() {
-        return construct(py, (SPEC_MODELS, "TargetConfig"), &[]);
+        return native(py, RecordId::TargetConfig, &[]);
     }
     native(
         py,
-        "resolve_target_config",
+        NativeAttr::ResolveTargetConfig,
         &[
             ("project_config", project_config),
             ("local_config", local_config),
@@ -115,7 +119,7 @@ pub(crate) fn plan_table_types<'py>(
         .getattr("snapshot")?
         .getattr("existing_relations")?;
     let adapter = runtime.getattr("adapter")?;
-    let materialization = imported(py, PLANNER_TYPES, "MaterializationType")?;
+    let materialization = registry::class(py, RecordId::MaterializationType)?;
     let mut entries: Vec<_> = Vec::new();
     for model in models {
         let config = model.getattr("config")?;
@@ -154,7 +158,7 @@ pub(crate) fn plan_table_types<'py>(
         let target_name: String = destination.getattr("name")?.extract()?;
         entries.push(planner_model(
             py,
-            "TableTypePlanEntry",
+            RecordId::TableTypePlanEntry,
             &[
                 ("model_name", model.getattr("name")?),
                 ("destination", destination),
@@ -218,7 +222,7 @@ fn entry<'py>(
     };
     planner_model(
         py,
-        "RetentionPlanEntry",
+        RecordId::RetentionPlanEntry,
         &[
             ("request", base.request.clone()),
             ("model_names", base.model_names.clone()),
@@ -227,11 +231,11 @@ fn entry<'py>(
             ("source", base.source.clone()),
             (
                 "direction",
-                member(py, (PLANNER_TYPES, "RetentionDirection"), direction)?,
+                native_member(py, RecordId::RetentionDirection, direction)?,
             ),
             (
                 "phase",
-                member(py, (PLANNER_TYPES, "RetentionPlanPhase"), phase)?,
+                native_member(py, RecordId::RetentionPlanPhase, phase)?,
             ),
             ("statements", statements),
             (
@@ -335,12 +339,12 @@ fn relation_retention<'py>(
     }
     let request = construct(
         py,
-        (ADAPTER_MODELS, "RetentionRequest"),
+        AdapterHost::RetentionRequest,
         &[
             ("request_id", model.getattr("name")?),
             (
                 "scope",
-                member(py, (ADAPTER_TYPES, "RetentionScope"), "relation")?,
+                member(py, AdapterHost::RetentionScope, "relation")?,
             ),
             ("database", destination.getattr("database")?),
             ("schema", schema.clone()),
@@ -373,7 +377,7 @@ fn relation_retention<'py>(
     let relation = relations.get_item(model.getattr("name")?)?;
     let relation_transient = relation.getattr("is_transient")?;
     let lookup = call_with(
-        &imported(py, ADAPTER_MODELS, "RelationLookup")?.getattr("key")?,
+        &host::entry(py, AdapterHost::RelationLookup)?.getattr("key")?,
         &[
             ("database", destination.getattr("database")?),
             ("schema", schema),
@@ -526,12 +530,12 @@ fn bigquery_retention<'py>(
         let desired_days = desired_values.into_iter().next().unwrap_or_default();
         let request = construct(
             py,
-            (ADAPTER_MODELS, "RetentionRequest"),
+            AdapterHost::RetentionRequest,
             &[
                 ("request_id", text(py, &format!("{prefix}{schema}"))),
                 (
                     "scope",
-                    member(py, (ADAPTER_TYPES, "RetentionScope"), "namespace")?,
+                    member(py, AdapterHost::RetentionScope, "namespace")?,
                 ),
                 ("database", optional_text(py, database.as_deref())),
                 ("schema", text(py, &schema)),

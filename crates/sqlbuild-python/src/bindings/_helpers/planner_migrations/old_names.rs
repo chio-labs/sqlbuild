@@ -1,9 +1,11 @@
 //! Existing old-name planner models at the native decision boundary.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::old_name_objects::relation;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PySet, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
@@ -115,12 +117,8 @@ fn old_name_claim_errors<'py>(
         if existing.is_none() {
             continue;
         }
-        let kind = imported(
-            py,
-            "sqlbuild.adapter.type_system.main.normalize_relation_type",
-            "normalize_relation_type",
-        )?
-        .call1((existing.getattr("relation_type")?,))?;
+        let kind = host::entry(py, AdapterHost::NormalizeRelationType)?
+            .call1((existing.getattr("relation_type")?,))?;
         if !kind.eq("view")? {
             continue;
         }
@@ -137,12 +135,12 @@ fn old_name_claim_errors<'py>(
             let message =
                 claim_message(&name.extract::<String>()?, &view, &arguments.value("now")?)?;
             errors.push(call_with(
-                &imported(py, "sqlbuild._native", "PlanWarning")?,
+                &registry::class(py, RecordId::PlanWarning)?,
                 &[
                     ("model_name", name.clone()),
                     (
                         "severity",
-                        imported(py, "sqlbuild._native", "WarningSeverity")?.getattr("ERROR")?,
+                        registry::class(py, RecordId::WarningSeverity)?.getattr("ERROR")?,
                     ),
                     ("message", message.into_pyobject(py)?.into_any()),
                     ("code", "M114".into_pyobject(py)?.into_any()),

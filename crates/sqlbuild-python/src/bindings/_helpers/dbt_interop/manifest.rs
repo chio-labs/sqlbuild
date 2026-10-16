@@ -22,9 +22,9 @@ use sqlbuild_config::dbt_manifest::models::{
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS: &str = "sqlbuild._native";
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
 const DBT_REF_KIND: &str = "dbt_ref";
 const RELATION_OPTIONS: (&[&str], &[&str]) =
     (&["manifest", "ref_kind", "ref_name", "ref_package"], &[]);
@@ -34,8 +34,8 @@ fn raised(py: Python<'_>, error: ManifestError) -> PyErr {
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
         keywords.set_item("code", error.code)?;
         keywords.set_item("help", error.help)?;
-        let instance: Bound<'_, PyAny> = imported(py, COMPILE_ERRORS_MODULE, "CompileInputError")?
-            .call((error.message,), Some(&keywords))?;
+        let instance: Bound<'_, PyAny> =
+            registry::error(py, ErrorId::CompileInput)?.call((error.message,), Some(&keywords))?;
         Ok(PyErr::from_value(instance))
     };
     created().unwrap_or_else(|failure| failure)
@@ -139,7 +139,7 @@ fn model_object<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = raw.py();
     call_with(
-        &imported(py, NATIVE_RECORDS, "DbtManifestModel")?,
+        &registry::class(py, RecordId::DbtManifestModel)?,
         &[
             ("unique_id", unique_id.clone()),
             ("package_name", text(py, &model.package_name)),
@@ -170,7 +170,7 @@ fn seed_object<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = raw.py();
     call_with(
-        &imported(py, NATIVE_RECORDS, "DbtManifestSeed")?,
+        &registry::class(py, RecordId::DbtManifestSeed)?,
         &[
             ("unique_id", unique_id.clone()),
             ("package_name", text(py, &seed.package_name)),
@@ -191,7 +191,7 @@ fn source_object<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = raw.py();
     call_with(
-        &imported(py, NATIVE_RECORDS, "DbtManifestSource")?,
+        &registry::class(py, RecordId::DbtManifestSource)?,
         &[
             ("unique_id", unique_id.clone()),
             ("package_name", text(py, &source.package_name)),
@@ -337,7 +337,7 @@ fn manifest_index<'py>(raw_data: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAn
         sources_by_unique_id.set_item(&unique_id, source_object(&unique_id, &source, &raw)?)?;
     }
     call_with(
-        &imported(py, NATIVE_RECORDS, "DbtManifestIndex")?,
+        &registry::class(py, RecordId::DbtManifestIndex)?,
         &[
             ("models_by_unique_id", indexes.by_unique_id.into_any()),
             ("models_by_name", indexes.by_name.into_any()),

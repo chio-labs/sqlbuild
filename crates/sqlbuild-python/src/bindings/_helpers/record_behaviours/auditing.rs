@@ -8,16 +8,12 @@ use sqlbuild_model_config::header_metadata::main::check_threshold_bound::check_t
 use sqlbuild_model_config::header_metadata::main::check_threshold_pair::check_threshold_pair;
 use sqlbuild_model_config::header_metadata::models::{ThresholdBound, ThresholdInput};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
-use crate::bindings::_helpers::records::constants::NATIVE_MODULE;
-
-const MEASUREMENT_AUDIT_ERROR: &str = "MeasurementAuditError";
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 
 /// The `MeasurementAuditError` carrying `message`.
 fn measurement_error(py: Python<'_>, message: &str) -> PyErr {
-    match imported(py, NATIVE_MODULE, MEASUREMENT_AUDIT_ERROR)
-        .and_then(|class| class.call1((message,)))
-    {
+    match registry::error(py, ErrorId::MeasurementAudit).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }

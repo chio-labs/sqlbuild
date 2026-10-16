@@ -1,7 +1,7 @@
 use crate::hosted_shapes::constants::HOSTED_SHAPE_TYPES;
-use crate::hosted_shapes::main::hosted_native_name::hosted_native_name;
+use crate::hosted_shapes::main::captured_shape_name::captured_shape_name;
 use crate::hosted_shapes::tests::helpers::duplicates;
-use crate::hosted_shapes::tests::test_types::{HostedKeyTestCase, NativeNameTestCase};
+use crate::hosted_shapes::tests::test_types::{CapturedNameTestCase, HostedKeyTestCase};
 
 #[test]
 fn given_hosted_shape_table_when_keyed_then_every_native_and_python_name_is_unique() {
@@ -34,28 +34,23 @@ fn given_hosted_shape_table_when_keyed_then_every_native_and_python_name_is_uniq
 }
 
 #[test]
-fn given_python_shape_when_resolving_then_only_its_own_module_selects_the_native_class() {
+fn given_native_class_when_naming_its_capture_then_only_hosted_shapes_keep_a_python_name() {
     let test_cases = [
-        NativeNameTestCase {
-            description: "a scope severity resolves to the scope enum",
-            shape: ("sqlbuild.compiler.scopes.types", "DiagnosticSeverity"),
-            expected_native: Some("ScopeDiagnosticSeverity"),
+        CapturedNameTestCase {
+            description: "a hosted planner record keeps its Python name",
+            native: "sqlbuild._native:PlanOutput",
+            expected_python: Some("sqlbuild.compiler.planner.models:PlanOutput"),
         },
-        NativeNameTestCase {
-            description: "a shape name from another module is not hosted",
-            shape: ("sqlbuild.compiler.compile.models", "DiagnosticSeverity"),
-            expected_native: None,
-        },
-        NativeNameTestCase {
-            description: "a hosted planner record resolves by its own name",
-            shape: ("sqlbuild.compiler.planner.models", "PlanOutput"),
-            expected_native: Some("PlanOutput"),
+        CapturedNameTestCase {
+            description: "a native class hosting no shape has no Python name",
+            native: "sqlbuild._native:NoSuchShape",
+            expected_python: None,
         },
     ];
     for test_case in test_cases {
         assert_eq!(
-            hosted_native_name(test_case.shape.0, test_case.shape.1),
-            Ok(test_case.expected_native),
+            captured_shape_name(test_case.native),
+            test_case.expected_python,
             "{}",
             test_case.description
         );

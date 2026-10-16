@@ -24,6 +24,9 @@ use sqlbuild_analysis::planner_changes::models::{
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::planner_changes::renames::origin_names;
 use crate::bindings::_helpers::planner_changes::results::{
     backfill_result, change_kind, planner_enum, replay_policy_error, schema_findings,
@@ -35,13 +38,10 @@ use crate::bindings::_helpers::planner_identity::metadata::{
     compiled_function_fingerprint_sql, function_local_hashes, model_declared_columns_hash,
     model_version_identity_metadata_json,
 };
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::type_system::equality::types_equal as native_types_equal;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const HOOK_IDENTITIES_MODULE: &str = "sqlbuild.compiler.python_nodes.main._hook_identities";
-const DYNAMIC_FAMILIES_MODULE: &str = "sqlbuild._native";
-const DEBUG_EVENT_MODULE: &str = "sqlbuild.diagnostics.main.log_debug_event";
-const LOG_SQL_MODULE: &str = "sqlbuild.diagnostics.main.log_sql";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const CHANGES_LOGGER: &str = "sqlbuild.planner.changes";
 const REPLAY_CONFIG_KEY: &str = "replay_on_change";
@@ -87,7 +87,7 @@ fn detect_changes<'py>(
         ),
     )?;
     let functions: Bound<'py, PyDict> = PyDict::new(py);
-    let result_class: Bound<'py, PyAny> = imported(py, "sqlbuild._native", "FunctionChangeResult")?;
+    let result_class: Bound<'py, PyAny> = registry::class(py, RecordId::FunctionChangeResult)?;
     let selected: Bound<'py, PyAny> = scope.getattr("selected_keys")?;
     let recorded: Bound<'py, PyAny> = snapshot.getattr("fingerprints")?.getattr("functions")?;
     let query_change_tracking: bool = project
@@ -128,12 +128,12 @@ fn detect_changes<'py>(
                     "no_change"
                 }
             };
-            arguments.push(("reason", planner_enum(py, "PlanReason", reason)?));
+            arguments.push(("reason", planner_enum(py, RecordId::PlanReason, reason)?));
         }
         functions.set_item(name, call_with(&result_class, &arguments)?)?;
     }
     call_with(
-        &imported(py, "sqlbuild._native", "PlannerChangeResults")?,
+        &registry::class(py, RecordId::PlannerChangeResults)?,
         &[
             ("models", models.into_any()),
             ("functions", functions.into_any()),
@@ -241,9 +241,8 @@ fn scope_model_changes<'py>(
     )?
     .into_any();
     let hook_version_hashes: Bound<'py, PyDict> = PyDict::new(py);
-    let identities: Bound<'py, PyAny> =
-        imported(py, HOOK_IDENTITIES_MODULE, "build_hook_identities")?
-            .call1((project.getattr("hook_functions")?,))?;
+    let identities: Bound<'py, PyAny> = host::entry(py, UserCodeHost::BuildHookIdentities)?
+        .call1((project.getattr("hook_functions")?,))?;
     for item in identities.call_method0("items")?.try_iter()? {
         let item: Bound<'py, PyAny> = item?;
         hook_version_hashes.set_item(
@@ -429,7 +428,7 @@ pub(crate) fn model_change<'py>(
 fn replay_policy(model: &Bound<'_, PyAny>) -> PyResult<Backfill> {
     let py: Python<'_> = model.py();
     let raw: Option<String> = call_with(
-        &imported(py, NATIVE_MODULE, "get_config_str")?,
+        &registry::native(py, NativeAttr::GetConfigStr)?,
         &[
             ("values", model.getattr("config")?.getattr("values")?),
             ("key", PyString::new(py, REPLAY_CONFIG_KEY).into_any()),
@@ -467,7 +466,7 @@ fn log_query_check(
         imported(py, "logging", "getLogger")?.call1((CHANGES_LOGGER,))?;
     let text = |value: &str| PyString::new(py, value).into_any();
     call_with(
-        &imported(py, DEBUG_EVENT_MODULE, "log_debug_event")?,
+        &host::entry(py, ExecutorHost::LogDebugEvent)?,
         &[
             ("logger", logger.clone()),
             (
@@ -492,7 +491,7 @@ fn log_query_check(
             ),
         ],
     )?;
-    let log_sql: Bound<'_, PyAny> = imported(py, LOG_SQL_MODULE, "log_sql")?;
+    let log_sql: Bound<'_, PyAny> = host::entry(py, ExecutorHost::LogSql)?;
     call_with(
         &log_sql,
         &[
@@ -597,7 +596,7 @@ fn schema_findings_of<'py>(
     let mut types_equal =
         |left: &str, right: &str| -> PyResult<bool> { native_types_equal(dialect, left, right) };
     let matching_function: Bound<'py, PyAny> =
-        imported(py, DYNAMIC_FAMILIES_MODULE, "matching_dynamic_families")?;
+        registry::native(py, NativeAttr::MatchingDynamicFamilies)?;
     let mut single_family_type = |name: &str| -> PyResult<Option<String>> {
         let Some(families) = &dynamic else {
             return Ok(None);
@@ -733,7 +732,7 @@ impl<'py> ChangeResult<'py> {
     }
 
     fn finish(self, backfill: Backfill, kind: &str) -> PyResult<Bound<'py, PyAny>> {
-        let kind: Bound<'py, PyAny> = native_enum(self.py, "ChangeKind", kind)?;
+        let kind: Bound<'py, PyAny> = native_enum(self.py, RecordId::ChangeKind, kind)?;
         self.finish_kind(backfill, kind)
     }
 
@@ -749,7 +748,7 @@ impl<'py> ChangeResult<'py> {
                 .map(|flag| flag.to_owned().into_any())
         };
         call_with(
-            &imported(py, "sqlbuild._native", "ChangeDetectionResult")?,
+            &registry::class(py, RecordId::ChangeDetectionResult)?,
             &[
                 ("model_name", self.model_name),
                 ("change_kind", kind),

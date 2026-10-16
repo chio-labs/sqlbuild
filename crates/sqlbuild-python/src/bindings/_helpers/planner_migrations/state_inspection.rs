@@ -12,10 +12,13 @@ use sqlbuild_core::constants::OLD_NAME_VIEW_TABLE_NAME;
 use sqlbuild_state::events::main::newest_fingerprint::newest_fingerprint;
 use sqlbuild_state::events::models::{EventRelation, FingerprintKey, FingerprintOrder};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::constants::{
-    GET_COLUMNS_FOR_INSPECTION, LIST_RELATIONS_FOR_INSPECTION, NATIVE_MODULE,
+    GET_COLUMNS_FOR_INSPECTION, LIST_RELATIONS_FOR_INSPECTION,
 };
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::constants::{COLUMN_KIND, MODEL_KIND, OLD_NAME_KIND};
 use crate::bindings::_helpers::state_rows::migration_io::{read_events, stored_old_name_columns};
 use crate::bindings::_helpers::state_rows::migration_objects::layout;
@@ -145,9 +148,8 @@ impl MigrationStateInspection {
         schemas: Vec<Bound<'py, PyAny>>,
         names: Bound<'py, PyAny>,
     ) -> PyResult<Vec<Bound<'py, PyAny>>> {
-        let (module, name) = LIST_RELATIONS_FOR_INSPECTION;
         call_with(
-            &imported(py, module, name)?,
+            &host::entry(py, LIST_RELATIONS_FOR_INSPECTION)?,
             &[
                 ("adapter", self.adapter.bind(py).clone()),
                 ("connection", self.connection.bind(py).clone()),
@@ -173,7 +175,7 @@ impl MigrationStateInspection {
         let latest: Bound<'py, PyAny> = if known.is_none() {
             let adapter: &Bound<'py, PyAny> = self.adapter.bind(py);
             let fingerprint_set: Bound<'py, PyAny> = call_with(
-                &imported(py, NATIVE_MODULE, "read_latest_fingerprints")?,
+                &registry::native(py, NativeAttr::ReadLatestFingerprints)?,
                 &[
                     ("connection", self.connection.bind(py).clone()),
                     ("execute", adapter.getattr("execute")?),
@@ -479,13 +481,12 @@ impl MigrationStateInspection {
         let columns: Bound<'_, PyAny> = if matched.is_empty() {
             PyDict::new(py).into_any()
         } else {
-            let (module, name) = GET_COLUMNS_FOR_INSPECTION;
             let this: PyRef<'_, Self> = slf.borrow();
             let adapter: Bound<'_, PyAny> = this.adapter.bind(py).clone();
             let connection: Bound<'_, PyAny> = this.connection.bind(py).clone();
             drop(this);
             call_with(
-                &imported(py, module, name)?,
+                &host::entry(py, GET_COLUMNS_FOR_INSPECTION)?,
                 &[
                     ("adapter", adapter),
                     ("connection", connection),

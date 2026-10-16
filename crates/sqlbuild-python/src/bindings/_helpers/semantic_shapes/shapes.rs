@@ -8,10 +8,11 @@ use crate::bindings::_helpers::analysis::binding_catalog::{
     BindingCatalog, CASE_SENSITIVE_BINDING_DIALECTS,
 };
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const ADAPTER_MODELS_MODULE: &str = "sqlbuild.adapter.contract.models";
-const PLANNER_TYPES_MODULE: &str = "sqlbuild._native";
-const NATIVE_MODULE: &str = "sqlbuild._native";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const UNKNOWN: &str = "UNKNOWN";
 const GENERIC_DIALECT: &str = "generic";
@@ -72,10 +73,8 @@ pub(crate) fn published_shape<'py>(
     let py: Python<'py> = model.py();
     let shape: Bound<'py, PyDict> = binding_shape(model, columns, inputs, profile)?;
     let values: Bound<'py, PyAny> = model.getattr("config")?.getattr("values")?;
-    let snapshot: Bound<'py, PyAny> = py
-        .import(PLANNER_TYPES_MODULE)?
-        .getattr("MaterializationType")?
-        .getattr("SNAPSHOT")?;
+    let snapshot: Bound<'py, PyAny> =
+        registry::class(py, RecordId::MaterializationType)?.getattr("SNAPSHOT")?;
     if values
         .call_method1("get", ("materialized",))?
         .eq(snapshot)?
@@ -133,10 +132,8 @@ fn binding_shape<'py>(
     request.set_item("dialect", or_generic(&dialect)?)?;
     request.set_item("stubs", PyDict::new(py))?;
     request.set_item("placeholders", PyDict::new(py))?;
-    let sql: Bound<'py, PyAny> = py
-        .import(NATIVE_MODULE)?
-        .getattr("normalize_analysis_sql")?
-        .call1((request,))?;
+    let sql: Bound<'py, PyAny> =
+        registry::native(py, NativeAttr::NormalizeAnalysisSql)?.call1((request,))?;
     let arguments: Bound<'py, PyDict> = PyDict::new(py);
     arguments.set_item("sql", sql)?;
     arguments.set_item("columns", columns)?;
@@ -201,9 +198,7 @@ pub(crate) fn project_profile<'py>(
                 "sql_analysis_dialect",
                 project.getattr("sql_analysis_dialect")?,
             )?;
-            py.import(ADAPTER_MODELS_MODULE)?
-                .getattr("ExpressionInferenceProfile")?
-                .call((), Some(&arguments))?
+            host::entry(py, AdapterHost::ExpressionInferenceProfile)?.call((), Some(&arguments))?
         }
     };
     let arguments: Bound<'py, PyDict> = PyDict::new(py);
@@ -241,10 +236,8 @@ pub(crate) fn project_shapes<'py>(
             shapes.set_item(format!("{TABLE_FUNCTION_PREFIX}{name}"), shape)?;
         }
     }
-    let enforced: Bound<'py, PyAny> = py
-        .import(PLANNER_TYPES_MODULE)?
-        .getattr("ContractPolicy")?
-        .getattr("ENFORCED")?;
+    let enforced: Bound<'py, PyAny> =
+        registry::class(py, RecordId::ContractPolicy)?.getattr("ENFORCED")?;
     let mut expression_names: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut expressions: Vec<Bound<'py, PyAny>> = Vec::new();
     for source in project.getattr("sources")?.try_iter()? {
@@ -266,10 +259,9 @@ pub(crate) fn project_shapes<'py>(
     let arguments: Bound<'py, PyDict> = PyDict::new(py);
     arguments.set_item("expressions", PyTuple::new(py, expressions)?)?;
     arguments.set_item("profile", &profile)?;
-    let source_shapes: Bound<'py, PyAny> = py
-        .import(NATIVE_MODULE)?
-        .getattr("infer_native_expression_source_shapes")?
-        .call((), Some(&arguments))?;
+    let source_shapes: Bound<'py, PyAny> =
+        registry::native(py, NativeAttr::InferNativeExpressionSourceShapes)?
+            .call((), Some(&arguments))?;
     for (name, shape) in expression_names.iter().zip(source_shapes.try_iter()?) {
         let shape: Bound<'py, PyAny> = shape?;
         if !shape.is_none() {

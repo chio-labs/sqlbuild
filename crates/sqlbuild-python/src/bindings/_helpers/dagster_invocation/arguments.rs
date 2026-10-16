@@ -19,6 +19,7 @@ use crate::bindings::_helpers::dagster_invocation::access::{
     constant_contains, get, items, node_with_id, nodes_by_id, path_set, string_tuple, text_of,
 };
 use crate::bindings::_helpers::dagster_invocation::results::{dagster_check_name, sorted_nodes};
+use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 
 const SELECT_FILE_FLAG: &str = "--select-file";
 const EVENT_OUTPUT_FLAG: &str = "--event-output";
@@ -176,7 +177,7 @@ fn scenario_selection<'py>(
             selected_ids.insert(text_of(&node, "id")?);
         }
     }
-    let scenario_kind: String = constant(dag.py(), "SCENARIO_CHECK_KIND")?.extract()?;
+    let scenario_kind: String = constant(dag.py(), ThirdPartyHost::ScenarioCheckKind)?.extract()?;
     let mut selectors: Vec<String> = Vec::new();
     for check in items(dag, "checks")? {
         if !check_enabled(&check)? || text_of(&check, "kind")? != scenario_kind {
@@ -220,10 +221,10 @@ fn asset_selection<'py>(
     if is_scenario_test(args) {
         return scenario_selection((args, dag), read_selection);
     }
-    if !constant_contains(py, ("ASSET_SELECTION_COMMANDS", &args[0]))? {
+    if !constant_contains(py, (ThirdPartyHost::AssetSelectionCommands, &args[0]))? {
         return Ok(unselected(args));
     }
-    let explicit: Bound<'py, PyAny> = constant(py, "EXPLICIT_SELECTION_FLAGS")?;
+    let explicit: Bound<'py, PyAny> = constant(py, ThirdPartyHost::ExplicitSelectionFlags)?;
     for argument in args {
         if explicit.contains(argument)? {
             return Ok(unselected(args));
@@ -246,9 +247,9 @@ fn asset_selection<'py>(
     let kinds: Bound<'py, PyAny> = constant(
         py,
         if args[0] == LOAD_COMMAND {
-            "LOAD_SELECTABLE_NODE_KINDS"
+            ThirdPartyHost::LoadSelectableNodeKinds
         } else {
-            "DEFAULT_SELECTABLE_NODE_KINDS"
+            ThirdPartyHost::DefaultSelectableNodeKinds
         },
     )?;
     let mut selectors: Vec<String> = Vec::new();
@@ -313,7 +314,7 @@ pub(crate) fn dagster_cli_arguments<'py>(
     let mut json_path: Option<Bound<'py, PyAny>> = None;
     if managed
         && !json_output_requested(&resolved)
-        && (constant_contains(py, ("ASSET_SELECTION_COMMANDS", &resolved[0]))?
+        && (constant_contains(py, (ThirdPartyHost::AssetSelectionCommands, &resolved[0]))?
             || is_scenario_test(&resolved))
     {
         let path: Bound<'py, PyAny> = temporary_file(py, EXECUTION_JSON_FILE, &[])?;
@@ -328,7 +329,7 @@ pub(crate) fn dagster_cli_arguments<'py>(
         json_path = Some(imported(py, "pathlib", "Path")?.call1((path,))?);
     }
     let event_path: Option<Bound<'py, PyAny>> = if managed
-        && constant_contains(py, ("LIVE_EVENT_COMMANDS", &resolved[0]))?
+        && constant_contains(py, (ThirdPartyHost::LiveEventCommands, &resolved[0]))?
         && !resolved
             .iter()
             .any(|argument| argument == EVENT_OUTPUT_FLAG)

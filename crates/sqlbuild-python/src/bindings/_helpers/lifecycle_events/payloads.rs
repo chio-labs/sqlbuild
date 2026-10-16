@@ -5,12 +5,12 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFloat, PyInt, PyList, PyStrin
 use sqlbuild_core::lifecycle_events::models::PayloadValue;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
-
-const EXCEPTIONS_MODULE: &str = "sqlbuild.runtime.observability.exceptions";
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 
 /// `ObservabilityValidationError(message)`.
 pub(crate) fn validation_error(py: Python<'_>, message: &str) -> PyErr {
-    match imported(py, EXCEPTIONS_MODULE, "ObservabilityValidationError")
+    match host::entry(py, ExecutorHost::ObservabilityValidationError)
         .and_then(|class| class.call1((message,)))
     {
         Ok(error) => PyErr::from_value(error),

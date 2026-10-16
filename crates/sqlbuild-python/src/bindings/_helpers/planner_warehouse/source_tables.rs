@@ -2,11 +2,13 @@
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_phases::objects::{planner_error, tuple};
 use crate::bindings::_helpers::planner_warehouse::constants::{
     MISSING_SOURCE_TABLE_CODE, RENDER_SOURCE_READ, RUN_BOUNDED, WILDCARD_TABLE_CHARACTER,
     YAML_ENTRY_LINE,
 };
+use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
@@ -65,7 +67,7 @@ fn read_relation<'py>(
     entry: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(adapter.py(), RENDER_SOURCE_READ.0, RENDER_SOURCE_READ.1)?,
+        &registry::native(adapter.py(), RENDER_SOURCE_READ)?,
         &[
             ("adapter", adapter.clone()),
             ("source_entry", entry.clone()),
@@ -80,7 +82,7 @@ fn declaration_location(source: &Bound<'_, PyAny>) -> PyResult<String> {
         .call_method0("as_posix")?
         .extract()?;
     let line = call_with(
-        &imported(source.py(), YAML_ENTRY_LINE.0, YAML_ENTRY_LINE.1)?,
+        &registry::native(source.py(), YAML_ENTRY_LINE)?,
         &[
             ("contents", file.getattr("contents")?),
             ("name", source.getattr("name")?),
@@ -142,7 +144,7 @@ pub(crate) fn check_selected_source_tables_exist<'py>(
         .call1((adapter.getattr("metadata_inspection_concurrency")?,))?
         .extract()?;
     let probes = call_with(
-        &imported(py, RUN_BOUNDED.0, RUN_BOUNDED.1)?,
+        &host::entry(py, RUN_BOUNDED)?,
         &[
             ("tasks", tuple(py, tasks)?),
             (

@@ -8,10 +8,12 @@ use pyo3::pyclass::CompareOp;
 use pyo3::types::{PyDict, PyTuple, PyType};
 use pyo3::{IntoPyObjectExt, pyclass, pymethods};
 
+use crate::bindings::_helpers::native_host::models::HostId;
 use crate::bindings::_helpers::records::fields::{
     build_values, cached_value, compared_values, frozen_error, ordered_comparison, record_spec,
     repr_text, store_cached,
 };
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::types::{ClassMethod, ClassProperty, RecordFactory};
 
 /// How a record field is filled when the caller does not pass it.
@@ -32,8 +34,14 @@ pub(crate) enum FieldDefault {
     EmptyFrozenset,
     /// `getattr(getattr(import(module), class), member)`.
     Member(&'static str, &'static str, &'static str),
-    /// `getattr(import(module), name)()`, evaluated for every instance.
-    Call(&'static str, &'static str),
+    /// A member of a native string enum.
+    NativeMember(RecordId, &'static str),
+    /// A member of a staying-Python enum reached through the host.
+    HostMember(HostId, &'static str),
+    /// A native record class called with no arguments, evaluated for every instance.
+    NativeCall(RecordId),
+    /// A native Rust class called with no arguments, evaluated for every instance.
+    NativeClassCall(NativeAttr),
     /// A native factory, evaluated for every instance.
     Factory(RecordFactory),
     /// `getattr(import(module), name)(text)`, evaluated for every instance.

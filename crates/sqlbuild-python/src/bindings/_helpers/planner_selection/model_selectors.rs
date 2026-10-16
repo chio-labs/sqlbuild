@@ -14,6 +14,8 @@ use sqlbuild_analysis::planner_selection::models::{
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::planner_selection::carrier::Carrier;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
 const SHARED_EXCEPTIONS_MODULE: &str = "sqlbuild.errors.contracts.exceptions";
 
@@ -34,7 +36,7 @@ fn split_selector_expansion<'py>(raw: &Bound<'py, PyString>) -> PyResult<Bound<'
     let expansion: SelectorExpansion =
         split(&carrier.send(raw)?).map_err(|message| shared_input_error(&carrier, &message))?;
     call_with(
-        &imported(py, "sqlbuild._native", "SelectorExpansion")?,
+        &registry::class(py, RecordId::SelectorExpansion)?,
         &[
             ("core", carrier.back(&expansion.core)?.into_any()),
             (

@@ -22,14 +22,13 @@ use sqlbuild_analysis::planner_identity::models::{AvailableUpstreams, GraphKey, 
 use crate::bindings::_helpers::analysis::explicit_references::{
     GateRow, HookRow, native_execution_gate_edges,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::graph::algorithms::{closure, inverted};
 use crate::bindings::_helpers::graph::keys::KeyCache;
 use crate::bindings::_helpers::planner_identity::hashing::graph_key;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const TABLE_FN_TEST_MODE: &str = "table_fn";
 const INLINE_SQL_HOOK: &str = "inline SQL";
 
@@ -241,9 +240,7 @@ fn build_downstream_deps<'py>(upstream: &Bound<'py, PyAny>) -> PyResult<Bound<'p
 }
 
 fn planner_input_error(py: Python<'_>, message: String) -> PyErr {
-    match imported(py, EXCEPTIONS_MODULE, "PlannerInputError")
-        .and_then(|class| class.call1((message,)))
-    {
+    match registry::error(py, ErrorId::PlannerInput).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }
@@ -369,7 +366,7 @@ fn check_buildability<'py>(
             Some(name_set(&deferred_relations)?)
         },
     };
-    let entry_class: Bound<'py, PyAny> = imported(py, "sqlbuild._native", "MissingUpstream")?;
+    let entry_class: Bound<'py, PyAny> = registry::class(py, RecordId::MissingUpstream)?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
     for missing in missing_upstreams(&selected, &deps, &available) {
         entries.push(call_with(

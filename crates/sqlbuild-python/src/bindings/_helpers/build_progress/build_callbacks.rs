@@ -30,8 +30,9 @@ use crate::bindings::_helpers::build_progress::terminal::{
     terminal_columns, tty_flag, write,
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported, within};
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
 const RUNTIME_LOGGER: &str = "sqlbuild.executor.runtime";
 const PASS_OUTCOME: &str = "pass";
 const SCHEDULER_DIAGNOSTIC_LIMIT: usize = 50;
@@ -407,7 +408,8 @@ impl BuildProgressCallbacks {
         let writer_options: Bound<'_, PyDict> = PyDict::new(py);
         writer_options.set_item("path", path)?;
         let event_writer: Bound<'_, PyAny> =
-            imported(py, NATIVE_MODULE, "ExecutionEventWriter")?.call((), Some(&writer_options))?;
+            registry::native(py, NativeAttr::ExecutionEventWriter)?
+                .call((), Some(&writer_options))?;
         let facts: BuildPlanFacts = build_plan_facts(&plan)?;
         let projector: Option<Py<PyAny>> = projector(py)?;
         if let Some(projector) = &projector {

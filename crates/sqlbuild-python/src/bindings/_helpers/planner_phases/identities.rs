@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_phases::objects::{frozenset, native, replace};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
@@ -15,7 +16,7 @@ fn version_identities<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     native(
         project.py(),
-        "build_direct_model_version_identities",
+        NativeAttr::BuildDirectModelVersionIdentities,
         &[
             ("functions", project.getattr("functions")?),
             ("seeds", project.getattr("seeds")?),
@@ -41,7 +42,7 @@ pub(crate) fn build_planner_identity_context<'py>(
     };
     native(
         project.py(),
-        "PlannerIdentityContext",
+        RecordId::PlannerIdentityContext,
         &[
             ("version_identities", identities),
             ("stale_warning_identities", stale),
@@ -128,7 +129,7 @@ pub(crate) fn detect_stale_warning_changes<'py>(
     let stale_identities = identities.getattr("stale_warning_identities")?;
     let remaining_changes = native(
         py,
-        "detect_model_changes_in_scope",
+        NativeAttr::DetectModelChangesInScope,
         &[
             ("project", project.clone()),
             (
@@ -168,7 +169,7 @@ pub(crate) fn detect_stale_warning_changes<'py>(
     }
     native(
         py,
-        "PlannerChangeResults",
+        RecordId::PlannerChangeResults,
         &[
             ("models", models.into_any()),
             ("functions", PyDict::new(py).into_any()),

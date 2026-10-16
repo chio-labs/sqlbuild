@@ -8,16 +8,19 @@ use sqlbuild_state::freshness::models::QueryShape;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 use crate::bindings::_helpers::freshness::support::{
-    ADAPTER_MODELS, ADAPTER_TYPES, CONTRACT_MODELS, CONTRACT_TYPES, FRESHNESS_MODELS,
-    LIFECYCLE_MODULE, OBSERVABILITY_MODELS, OBSERVATION_ERROR, exception_text, freshness_error,
-    presumed_utc_datetime, presumed_utc_value, text,
+    OBSERVATION_ERROR, exception_text, freshness_error, presumed_utc_datetime, presumed_utc_value,
+    text,
 };
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::constants::{DATA_VERSION_FIELD, OBSERVED_AT_FIELD};
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 use crate::bindings::_helpers::state_rows::freshness::{normalize, version_hash};
 use crate::bindings::_helpers::state_rows::timestamps::{in_utc, offset_aware};
 
-const NATIVE_RECORDS: &str = "sqlbuild._native";
 const ADAPTER_STRATEGY: &str = "adapter";
 const COLUMN_STRATEGY: &str = "column";
 const DEFAULT_STRATEGY: &str = "sql";
@@ -62,7 +65,7 @@ pub(crate) fn observation_source<'py>(
         return Ok(None);
     }
     let config: Bound<'py, PyAny> = call_with(
-        &imported(py, CONTRACT_MODELS, "SourceFreshnessConfig")?,
+        &registry::class(py, RecordId::SourceFreshnessConfig)?,
         &[("strategy", adapter_strategy(py)?)],
     )?;
     replaced_source(source, config).map(Some)
@@ -78,7 +81,7 @@ fn replaced_source<'py>(
 }
 
 fn adapter_strategy(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    imported(py, CONTRACT_TYPES, "SourceFreshnessStrategy")?.getattr("ADAPTER")
+    registry::class(py, RecordId::SourceFreshnessStrategy)?.getattr("ADAPTER")
 }
 
 /// `OperationLifecycle(operation_kind="freshness", ...)` for one observation phase.
@@ -88,7 +91,7 @@ fn lifecycle<'py>(
     item_count: Option<usize>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let attributes: Bound<'py, PyAny> = call_with(
-        &imported(py, OBSERVABILITY_MODELS, "OperationAttributes")?,
+        &host::entry(py, ExecutorHost::OperationAttributes)?,
         &[
             ("phase", text(py, "observe")),
             ("strategy", text(py, strategy)),
@@ -106,7 +109,7 @@ fn lifecycle<'py>(
     }
     options.push(("attributes", attributes));
     call_with(
-        &imported(py, LIFECYCLE_MODULE, "OperationLifecycle")?,
+        &host::entry(py, ExecutorHost::OperationLifecycle)?,
         &options,
     )
 }
@@ -117,11 +120,7 @@ fn observation<'py>(
     (data_version, observed_at): (Bound<'py, PyAny>, Bound<'py, PyAny>),
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(
-            source_name.py(),
-            NATIVE_RECORDS,
-            "SourceFreshnessObservation",
-        )?,
+        &registry::class(source_name.py(), RecordId::SourceFreshnessObservation)?,
         &[
             ("source_name", source_name.clone()),
             ("strategy", strategy),
@@ -309,12 +308,12 @@ pub(crate) fn unknown<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = source_name.py();
     call_with(
-        &imported(py, NATIVE_RECORDS, "SourceFreshnessUnknown")?,
+        &registry::class(py, RecordId::SourceFreshnessUnknown)?,
         &[
             ("source_name", source_name.clone()),
             (
                 "reason",
-                imported(py, NATIVE_RECORDS, "SourceFreshnessUnknownReason")?.getattr(reason)?,
+                registry::class(py, RecordId::SourceFreshnessUnknownReason)?.getattr(reason)?,
             ),
             ("message", message),
         ],
@@ -329,7 +328,7 @@ fn metadata_unknown<'py>(
     let py: Python<'py> = source_name.py();
     let name: String = source_name.str()?.extract()?;
     let unavailable: Bound<'py, PyAny> =
-        imported(py, ADAPTER_TYPES, "TableFreshnessStatus")?.getattr("UNAVAILABLE")?;
+        host::entry(py, AdapterHost::TableFreshnessStatus)?.getattr("UNAVAILABLE")?;
     if metadata.getattr("status")?.eq(unavailable)? {
         let message: Bound<'py, PyAny> = metadata.getattr("message")?;
         let message: String = if message.is_truthy()? {
@@ -362,7 +361,7 @@ fn metadata_observation<'py>(
         source_name,
         (
             adapter_strategy(py)?,
-            imported(py, CONTRACT_TYPES, "SourceFreshnessValueKind")?
+            registry::class(py, RecordId::SourceFreshnessValueKind)?
                 .call1((metadata.getattr("value_kind")?,))?,
         ),
         (
@@ -406,7 +405,7 @@ pub(crate) fn observe_adapter_batch<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = observer.adapter.py();
     let batch_class: Bound<'py, PyAny> =
-        imported(py, NATIVE_RECORDS, "AdapterSourceFreshnessBatch")?;
+        registry::class(py, RecordId::AdapterSourceFreshnessBatch)?;
     if sources.is_empty() {
         return batch_class.call0();
     }
@@ -434,10 +433,10 @@ fn observe_adapter_batch_inner<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = observer.adapter.py();
     let batch_class: Bound<'py, PyAny> =
-        imported(py, NATIVE_RECORDS, "AdapterSourceFreshnessBatch")?;
+        registry::class(py, RecordId::AdapterSourceFreshnessBatch)?;
     let unknown_sources: Bound<'py, PyDict> = PyDict::new(py);
     let requests: Bound<'py, PyDict> = PyDict::new(py);
-    let request_class: Bound<'py, PyAny> = imported(py, ADAPTER_MODELS, "TableFreshnessRequest")?;
+    let request_class: Bound<'py, PyAny> = host::entry(py, AdapterHost::TableFreshnessRequest)?;
     for source in sources {
         let name: Bound<'py, PyAny> = source.getattr("name")?;
         if let Some(message) = unsupported_message(&observer.adapter, source)? {
@@ -471,7 +470,7 @@ fn observe_adapter_batch_inner<'py>(
             ("requests", PyTuple::new(py, unique.keys())?.into_any()),
         ],
     )?;
-    let metadata_class: Bound<'py, PyAny> = imported(py, ADAPTER_MODELS, "TableFreshnessMetadata")?;
+    let metadata_class: Bound<'py, PyAny> = host::entry(py, AdapterHost::TableFreshnessMetadata)?;
     let observations: Bound<'py, PyDict> = PyDict::new(py);
     for (name, request) in requests.iter() {
         let missing: Bound<'py, PyAny> = call_with(
@@ -526,7 +525,7 @@ pub(crate) fn observation_record<'py>(
         &data_version.extract::<String>()?,
     )?;
     call_with(
-        &imported(py, FRESHNESS_MODELS, "SourceFreshnessRecord")?,
+        &registry::class(py, RecordId::SourceFreshnessRecord)?,
         &[
             ("source_name", source_name),
             ("target_database", source.getattr("database")?),

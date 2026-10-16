@@ -1,12 +1,13 @@
 //! Preserve column-migration diagnostic codes and public messages.
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::planner_migrations::column_objects::native;
 use crate::bindings::_helpers::planner_migrations::column_objects::text;
 use crate::bindings::_helpers::planner_migrations::constants::{
     DONE, MISSING_ORIGIN_ALLOW_OUTCOME, MISSING_ORIGIN_CONFIRMATION_OUTCOME,
     MISSING_ORIGIN_DENY_OUTCOME,
 };
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::exceptions::PyKeyError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use sqlbuild_analysis::planner_migrations::main::column_warning::column_warning;
@@ -21,12 +22,12 @@ pub(super) fn warning<'py>(
     let py = entry.py();
     native(
         py,
-        "PlanWarning",
+        RecordId::PlanWarning,
         &[
             ("model_name", entry.getattr("model_name")?),
             (
                 "severity",
-                imported(py, "sqlbuild._native", "WarningSeverity")?.getattr(if error {
+                registry::class(py, RecordId::WarningSeverity)?.getattr(if error {
                     "ERROR"
                 } else {
                     "WARNING"

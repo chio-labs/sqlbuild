@@ -24,19 +24,13 @@ use crate::bindings::_helpers::clone::clone_execution::{
 use crate::bindings::_helpers::clone::clone_pipeline::{ClonePipeline, prepared_clone_pipeline};
 use crate::bindings::_helpers::clone::clone_progress::{clone_item_text, write_line};
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const ERRORS_MODULE: &str = "sqlbuild._native";
-const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
-const TARGET_NAME_MODULE: &str = "sqlbuild._native";
-const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
-const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const NO_DESTINATION: (&str, &str) = (
     "C406",
     "clone requires --to when the project has no active target",
@@ -60,7 +54,7 @@ fn user_error(py: Python<'_>, (code, message): (&str, &str)) -> PyErr {
     let raised = (|| {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", code)?;
-        imported(py, ERRORS_MODULE, "CliUserError")?.call((message,), Some(&options))
+        registry::error(py, ErrorId::CliUser)?.call((message,), Some(&options))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),
@@ -84,12 +78,12 @@ fn progress_reporter<'py>(
     let options: Bound<'py, PyDict> = PyDict::new(py);
     options.set_item("stream", stream)?;
     options.set_item("use_color", style.use_color)?;
-    imported(py, NATIVE_MODULE, "PlanningProgressReporter")?.call((), Some(&options))
+    registry::native(py, NativeAttr::PlanningProgressReporter)?.call((), Some(&options))
 }
 
 fn lifecycle<'py>(py: Python<'py>, (kind, name): (&str, &str)) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(py, LIFECYCLE_MODULE, "OperationLifecycle")?,
+        &host::entry(py, ExecutorHost::OperationLifecycle)?,
         &[
             ("operation_kind", text(py, kind)),
             ("operation_name", text(py, name)),
@@ -110,7 +104,7 @@ fn target_names(discovered: &Bound<'_, PyAny>) -> PyResult<BTreeSet<String>> {
 fn clone_policy(discovered: &Bound<'_, PyAny>, (target, flag): (&str, &str)) -> PyResult<bool> {
     let py: Python<'_> = discovered.py();
     call_with(
-        &imported(py, TARGET_CONFIG_MODULE, "resolve_target_config")?,
+        &registry::native(py, NativeAttr::ResolveTargetConfig)?,
         &[
             ("project_config", discovered.getattr("project_config")?),
             ("local_config", discovered.getattr("local_config")?),
@@ -135,12 +129,12 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
     let progress: Bound<'py, PyAny> = progress_reporter(&stream, style)?;
     progress.call_method1("start", ("Discovering project...",))?;
     let discovered: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "discover_project_inputs")?,
+        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
         &[("project_dir", project_dir.clone())],
     )?;
     progress.call_method1("complete", ("Discovered project.",))?;
     call_with(
-        &imported(py, REJECT_UNIT_TESTS_MODULE, "reject_unit_test_selectors")?,
+        &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
         &[
             ("select", request.getattr("select")?),
             ("exclude", request.getattr("exclude")?),
@@ -150,7 +144,7 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
     let mut destination: Bound<'py, PyAny> = request.getattr("destination_target_name")?;
     if destination.is_none() {
         destination = call_with(
-            &imported(py, TARGET_NAME_MODULE, "resolve_target_name")?,
+            &registry::native(py, NativeAttr::ResolveTargetName)?,
             &[
                 ("project_config", discovered.getattr("project_config")?),
                 ("local_config", discovered.getattr("local_config")?),
@@ -172,7 +166,7 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
     );
     validate_clone_policy(targets, policy).map_err(|error| target_error(py, error))?;
     let adapter_name: Bound<'py, PyAny> = call_with(
-        &imported(py, ADAPTER_NAME_MODULE, "resolve_effective_adapter_name")?,
+        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
             ("project_config", discovered.getattr("project_config")?),
             ("local_config", discovered.getattr("local_config")?),
@@ -197,7 +191,7 @@ fn connect<'py>(
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let py: Python<'py> = request.py();
     let config: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "resolve_target_connection_config")?,
+        &registry::native(py, NativeAttr::ResolveTargetConnectionConfig)?,
         &[
             ("discovered_inputs", invocation.discovered.clone()),
             ("project_dir", invocation.project_dir.clone()),
@@ -244,22 +238,18 @@ fn prepare<'py>(
         within(&lifecycle(py, ("project", "project_compile"))?, |_| {
             progress.call_method1("on_progress", ("Preparing clone plan...",))?;
             let resolver: Bound<'py, PyAny> = call_with(
-                &imported(
-                    py,
-                    EXTERNAL_REFS_MODULE,
-                    "resolve_external_sql_reference_resolver",
-                )?,
+                &registry::native(py, NativeAttr::ResolveExternalSqlReferenceResolver)?,
                 &[
                     ("project_dir", invocation.project_dir.clone()),
                     ("discovered_inputs", invocation.discovered.clone()),
                 ],
             )?;
             let destination_connection: Bound<'py, PyAny> = call_with(
-                &imported(py, NATIVE_RECORDS_MODULE, "ClonePipelineConnection")?,
+                &registry::class(py, RecordId::ClonePipelineConnection)?,
                 &[("config", config.clone()), ("handle", connection.clone())],
             )?;
             let options: Bound<'py, PyAny> = call_with(
-                &imported(py, NATIVE_RECORDS_MODULE, "ClonePipelineOptions")?,
+                &registry::class(py, RecordId::ClonePipelineOptions)?,
                 &[
                     ("no_sql_validation", request.getattr("no_sql_validation")?),
                     ("select", request.getattr("select")?),
@@ -343,14 +333,14 @@ fn run_clone_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32
         resource_types.set_item(name, resource_type)?;
     }
     let payload: Bound<'_, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "format_clone_execution_json")?,
+        &registry::native(py, NativeAttr::FormatCloneExecutionJson)?,
         &[
             ("result", result.clone()),
             ("resource_types_by_name", resource_types.into_any()),
         ],
     )?;
     call_with(
-        &imported(py, NATIVE_MODULE, "write_execution_json_output")?,
+        &registry::native(py, NativeAttr::WriteExecutionJsonOutput)?,
         &[
             ("payload", payload),
             ("json_output", PyBool::new(py, false).to_owned().into_any()),

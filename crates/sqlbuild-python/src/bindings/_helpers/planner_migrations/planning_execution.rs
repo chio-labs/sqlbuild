@@ -1,9 +1,11 @@
 //! Preserve adapter overrides when describing migration execution.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::planner_migrations::{
-    column_objects::replace, constants::MIGRATION_TYPES,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::planner_migrations::column_objects::replace;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
 use pyo3::types::PyBool;
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -24,7 +26,7 @@ fn migration_promotion<'py>(
     decision: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let adapter = runtime.getattr("adapter")?;
-    let promotion = imported(runtime.py(), MIGRATION_TYPES, "MigrationPromotion")?;
+    let promotion = registry::class(runtime.py(), RecordId::MigrationPromotion)?;
     if adapter
         .call_method0("supports_transactional_ddl")?
         .is_truthy()?
@@ -71,7 +73,7 @@ fn migration_with_execution<'py>(
     )?;
     let transfer = stage.getattr("transfer")?;
     let fallback = if stage.getattr("fallback_statements")?.is_truthy()? {
-        imported(py, "sqlbuild.adapter.contract.types", "MigrationTransfer")?.getattr("COPY")?
+        host::entry(py, AdapterHost::MigrationTransfer)?.getattr("COPY")?
     } else {
         py.None().into_bound(py)
     };

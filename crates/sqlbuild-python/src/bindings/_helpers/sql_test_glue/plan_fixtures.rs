@@ -4,8 +4,9 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::authored_ctes::prefixed_ctes;
-use crate::bindings::_helpers::sql_test_glue::constants::NATIVE_PLANNING;
 use crate::bindings::_helpers::sql_test_glue::fixture_validation::validated_fixtures;
 use crate::bindings::_helpers::sql_test_glue::plan_values::model_payload;
 
@@ -92,7 +93,7 @@ pub(super) fn validate<'py>(
         return Ok((tests.to_vec(), Default::default()));
     }
     let chains = call_with(
-        &imported(py, NATIVE_PLANNING, "resolve_sql_test_model_chains")?,
+        &registry::native(py, NativeAttr::ResolveSqlTestModelChains)?,
         &[
             ("project", inputs.0.clone()),
             ("tests", PyTuple::new(py, model_tests)?.into_any()),

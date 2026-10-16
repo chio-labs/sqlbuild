@@ -11,16 +11,15 @@ use sqlbuild_core::plan_display::errors::UnknownCursorGrain;
 use sqlbuild_core::plan_display::main::effective_timestamp_grain::effective_timestamp_grain;
 use sqlbuild_core::plan_display::models::TimestampGrainFacts;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::compiled_project::records::replace;
 use crate::bindings::_helpers::plan_output::display::resolve_effective_microbatch_batch_size;
-use crate::bindings::_helpers::planner_strategy::constants::PLANNER_TYPES_MODULE;
 use crate::bindings::_helpers::planner_strategy::microbatches::{
-    CAP_ACTIONS, CONTRACT_TYPES_MODULE, capped_microbatch_bounds, count_microbatches,
+    CAP_ACTIONS, capped_microbatch_bounds, count_microbatches,
 };
-use crate::bindings::_helpers::planner_strategy::values::{
-    COMPILE_EXCEPTIONS_MODULE, input_error, optional_string, text,
-};
+use crate::bindings::_helpers::planner_strategy::values::{input_error, optional_string, text};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 const ERROR_ACTION: &str = "error";
 const SKIP_ACTION: &str = "skip";
@@ -33,7 +32,7 @@ type LimitedEntry<'py> = (Bound<'py, PyAny>, Option<Bound<'py, PyAny>>);
 
 /// `CursorGrain(grain)`'s error for a grain outside the known grains.
 pub(crate) fn unknown_grain(py: Python<'_>, error: UnknownCursorGrain) -> PyErr {
-    imported(py, PLANNER_TYPES_MODULE, "CursorGrain")
+    registry::class(py, RecordId::CursorGrain)
         .and_then(|class| class.call1((error.0,)))
         .err()
         .unwrap_or_else(|| pyo3::exceptions::PyValueError::new_err("unknown cursor grain"))
@@ -149,18 +148,16 @@ fn limited<'py>(
         return Ok((limited_entry, None));
     };
     if action_text == ERROR_ACTION {
-        return Err(input_error(
-            py,
-            (COMPILE_EXCEPTIONS_MODULE, "CompileInputError"),
-            &message,
-            None,
-        ));
+        return Err(input_error(py, ErrorId::CompileInput, &message, None));
     }
     let plan_warning: Bound<'py, PyAny> = call_with(
-        &imported(py, "sqlbuild._native", "PlanWarning")?,
+        &registry::class(py, RecordId::PlanWarning)?,
         &[
             ("model_name", name),
-            ("severity", native_enum(py, "WarningSeverity", "warning")?),
+            (
+                "severity",
+                native_enum(py, RecordId::WarningSeverity, "warning")?,
+            ),
             (
                 "code",
                 PyString::new(py, MICROBATCH_LIMIT_WARNING_CODE).into_any(),
@@ -238,7 +235,7 @@ pub(crate) fn apply_configured_microbatch_limits<'py>(
         .is_truthy()?
     {
         let error: Bound<'py, PyAny> =
-            imported(py, CONTRACT_TYPES_MODULE, "MicrobatchLimitAction")?.getattr("ERROR")?;
+            registry::class(py, RecordId::MicrobatchLimitAction)?.getattr("ERROR")?;
         return with_warnings(limited(entry, configured, error)?, Vec::new());
     }
     let declared: Bound<'py, PyAny> = entry.getattr("declared_microbatch_limit_action")?;

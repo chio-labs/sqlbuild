@@ -1,29 +1,28 @@
 //! Model cursor orchestration over live warehouse snapshot facts.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_resolution::constants::CURSOR_START;
 use crate::bindings::_helpers::planner_resolution::cursor_policies::{
     future_cursor_config, start_cursor_config,
 };
-use crate::bindings::_helpers::planner_resolution::values::{NATIVE_MODULE, string};
+use crate::bindings::_helpers::planner_resolution::values::string;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::PyDict;
 use pyo3::{IntoPyObject, PyErr, pyfunction, wrap_pyfunction};
 
-const MODELS: &str = "sqlbuild._native";
-const CURSOR: &str = "sqlbuild._native";
-
 fn config<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(
+        &registry::native(
             model.py(),
-            NATIVE_MODULE,
             if key == CURSOR_START {
-                "get_config_cursor_bound"
+                NativeAttr::GetConfigCursorBound
             } else {
-                "get_config_str"
+                NativeAttr::GetConfigStr
             },
         )?,
         &[
@@ -34,9 +33,9 @@ fn config<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAn
 }
 
 fn unbounded(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    let sentinel = imported(py, "sqlbuild.cursor_algebra.types", "BoundSentinel")?;
+    let sentinel = host::entry(py, ExecutorHost::BoundSentinel)?;
     call_with(
-        &imported(py, MODELS, "CursorBounds")?,
+        &registry::class(py, RecordId::CursorBounds)?,
         &[
             ("start", sentinel.getattr("START")?),
             ("end", sentinel.getattr("END")?),
@@ -53,12 +52,7 @@ fn destination_exists(model: &Bound<'_, PyAny>, snapshot: &Bound<'_, PyAny>) -> 
     }
     let destination = model.getattr("destination")?;
     let key = call_with(
-        &imported(
-            model.py(),
-            "sqlbuild.adapter.contract.models",
-            "RelationLookup",
-        )?
-        .getattr("key")?,
+        &host::entry(model.py(), AdapterHost::RelationLookup)?.getattr("key")?,
         &[
             ("database", destination.getattr("database")?),
             ("schema", destination.getattr("schema")?),
@@ -114,7 +108,7 @@ fn compute_model_cursor_bounds<'py>(
     let start_override = args.value("start_cursor_override")?;
     let end_override = args.value("end_cursor_override")?;
     let bounded = call_with(
-        &imported(py, NATIVE_MODULE, "resolve_bounded_cursor_override")?,
+        &registry::native(py, NativeAttr::ResolveBoundedCursorOverride)?,
         &[
             ("start_cursor_override", start_override.clone()),
             ("end_cursor_override", end_override.clone()),
@@ -130,7 +124,7 @@ fn compute_model_cursor_bounds<'py>(
         .getattr("cursor_snapshots")?
         .call_method1("get", (model.getattr("name")?,))?;
     let roles = call_with(
-        &imported(py, NATIVE_MODULE, "resolve_cursor_input_roles")?,
+        &registry::native(py, NativeAttr::ResolveCursorInputRoles)?,
         &[("model", model.clone())],
     )?;
     let producers = args.value("runtime_cursor_producer_names")?;
@@ -145,7 +139,7 @@ fn compute_model_cursor_bounds<'py>(
     let replaces = args.flag("replaces_relation")?;
     if !full_refresh && !runtime_owned && !cursor_snapshot.is_none() {
         let empty = call_with(
-            &imported(py, CURSOR, "cursor_inputs_without_rows")?,
+            &registry::native(py, NativeAttr::CursorInputsWithoutRows)?,
             &[("cursor_snapshot", cursor_snapshot.clone())],
         )?
         .getattr("input_names")?;
@@ -155,7 +149,7 @@ fn compute_model_cursor_bounds<'py>(
                 || history_redirected(&model, &cursor_snapshot)?)
         {
             let refusal = call_with(
-                &imported(py, CURSOR, "empty_input_rebuild_refusal")?,
+                &registry::native(py, NativeAttr::EmptyInputRebuildRefusal)?,
                 &[
                     ("model_name", model.getattr("name")?),
                     ("input_names", empty.clone()),
@@ -163,7 +157,7 @@ fn compute_model_cursor_bounds<'py>(
                 ],
             )?;
             return Err(PyErr::from_value(call_with(
-                &imported(py, "sqlbuild._native", "PlannerInputError")?,
+                &registry::error(py, ErrorId::PlannerInput)?,
                 &[
                     ("message", refusal.get_item(0)?),
                     ("code", string(py, "S302")),
@@ -173,7 +167,7 @@ fn compute_model_cursor_bounds<'py>(
         }
         if empty.is_truthy()? {
             return call_with(
-                &imported(py, CURSOR, "empty_cursor_window")?,
+                &registry::native(py, NativeAttr::EmptyCursorWindow)?,
                 &[
                     ("cursor_type", cursor_type),
                     ("cursor_start", config(&model, "cursor_start")?),
@@ -191,7 +185,7 @@ fn compute_model_cursor_bounds<'py>(
                 cursor_snapshot.getattr("unavailable_watermark_tags")?
             };
             return Err(PyErr::from_value(call_with(
-                &imported(py, CURSOR, "unreadable_cursor_inputs_error")?,
+                &registry::native(py, NativeAttr::UnreadableCursorInputsError)?,
                 &[
                     ("model_name", model.getattr("name")?),
                     ("cursor_type", cursor_type),
@@ -211,7 +205,7 @@ fn compute_model_cursor_bounds<'py>(
     }
     if replaces {
         cursor_snapshot = call_with(
-            &imported(py, CURSOR, "without_destination_cursor")?,
+            &registry::native(py, NativeAttr::WithoutDestinationCursor)?,
             &[("cursor_snapshot", cursor_snapshot)],
         )?;
     }
@@ -222,7 +216,7 @@ fn compute_model_cursor_bounds<'py>(
         py.None().into_bound(py)
     };
     let policy = call_with(
-        &imported(py, MODELS, "MaximumStartPolicyInputs")?,
+        &registry::class(py, RecordId::MaximumStartPolicyInputs)?,
         &[
             ("config", start_config),
             ("invocation_time", context.getattr("invocation_time")?),
@@ -234,7 +228,7 @@ fn compute_model_cursor_bounds<'py>(
         ],
     )?;
     let bounds = call_with(
-        &imported(py, NATIVE_MODULE, "compute_cursor_bounds")?,
+        &registry::native(py, NativeAttr::ComputeCursorBounds)?,
         &[
             ("cursor_snapshot", cursor_snapshot.clone()),
             ("cursor_type", cursor_type.clone()),
@@ -255,7 +249,7 @@ fn compute_model_cursor_bounds<'py>(
         return Ok(bounds);
     }
     call_with(
-        &imported(py, NATIVE_MODULE, "resolve_future_cursor_safety")?,
+        &registry::native(py, NativeAttr::ResolveFutureCursorSafety)?,
         &[
             ("bounds", bounds),
             ("cursor_type", cursor_type),

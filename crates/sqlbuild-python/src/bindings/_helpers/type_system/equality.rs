@@ -9,10 +9,11 @@ use sqlbuild_analysis::type_system::main::normalize_type::normalize_type;
 use sqlbuild_analysis::type_system::models::{NormalizedType, TypeNormalization};
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::type_system::normalization::normalization_error;
 
-const DEBUG_EVENT_MODULE: &str = "sqlbuild.diagnostics.main.log_debug_event";
 const TYPE_NORMALIZATION_LOGGER: &str = "sqlbuild.adapter";
 const TYPE_PARSE_FALLBACK_MESSAGE: &str = "type normalization polyglot parse failed; falling back";
 const DEFAULT_DIALECT: &str = "generic";
@@ -69,7 +70,7 @@ fn log_parse_fallback(
 ) -> PyResult<()> {
     let py: Python<'_> = dialect.py();
     call_with(
-        &imported(py, DEBUG_EVENT_MODULE, "log_debug_event")?,
+        &host::entry(py, ExecutorHost::LogDebugEvent)?,
         &[
             (
                 "logger",

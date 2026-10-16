@@ -15,10 +15,9 @@ use sqlbuild_refactor::refactoring::models::{
 use sqlbuild_refactor::refactoring::types::PhysicalColumn;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const ADOPTION_ERRORS_MODULE: &str = "sqlbuild._native";
-const ADOPTION_MODELS_MODULE: &str = "sqlbuild._native";
-const ADOPTION_TYPES_MODULE: &str = "sqlbuild._native";
 /// Finding kinds an edit resolves without overwrite, then the ones overwrite also resolves.
 const RESOLVED_KINDS: ([&str; 1], [&str; 2]) = (
     ["missing_declaration"],
@@ -40,11 +39,7 @@ fn edit_row(result: Result<ContractEdit, RefactorError>) -> PyResult<EditRow> {
 
 /// `ContractAdoptionError(message)`.
 fn adoption_error(py: Python<'_>, message: String) -> PyErr {
-    match py
-        .import(ADOPTION_ERRORS_MODULE)
-        .and_then(|module| module.getattr("ContractAdoptionError"))
-        .and_then(|class| class.call1((message,)))
-    {
+    match registry::error(py, ErrorId::ContractAdoption).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }
@@ -175,15 +170,11 @@ fn remaining_contract_findings<'py>(
         keywords.set_item("resource_name", first.getattr("resource_name")?)?;
         keywords.set_item(
             "kind",
-            py.import(ADOPTION_TYPES_MODULE)?
-                .getattr("ContractFindingKind")?
-                .getattr("OWNERSHIP_CONFLICT")?,
+            registry::class(py, RecordId::ContractFindingKind)?.getattr("OWNERSHIP_CONFLICT")?,
         )?;
         keywords.set_item("message", conflict)?;
-        let ownership: Bound<'py, PyAny> = py
-            .import(ADOPTION_MODELS_MODULE)?
-            .getattr("ContractFinding")?
-            .call((), Some(&keywords))?;
+        let ownership: Bound<'py, PyAny> =
+            registry::class(py, RecordId::ContractFinding)?.call((), Some(&keywords))?;
         let mut remaining: Vec<Bound<'py, PyAny>> = findings.clone();
         remaining.push(ownership);
         return PyTuple::new(py, remaining);

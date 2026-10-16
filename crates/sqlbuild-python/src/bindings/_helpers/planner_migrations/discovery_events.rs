@@ -1,6 +1,8 @@
 //! Preserve event and declared-origin precedence at the inspection boundary.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::column_objects::config;
 use crate::bindings::_helpers::state_rows::migration_projections::newest_move;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
@@ -20,22 +22,13 @@ pub(super) fn newest<'py>(
     events: &Bound<'py, PyAny>,
     location: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let relation = imported(
-        location.py(),
-        "sqlbuild.executor.migrations._helpers.relation_for_location",
-        "migration_relation_for_location",
-    )?
-    .call1((location,))?;
+    let relation = host::entry(location.py(), ExecutorHost::MigrationRelationForLocation)?
+        .call1((location,))?;
     newest_move(events, &relation)
 }
 
 pub(super) fn relation<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    imported(
-        location.py(),
-        "sqlbuild.executor.migrations._helpers.relation_for_location",
-        "migration_relation_for_location",
-    )?
-    .call1((location,))
+    host::entry(location.py(), ExecutorHost::MigrationRelationForLocation)?.call1((location,))
 }
 
 pub(super) fn declared<'py>(

@@ -12,13 +12,12 @@ use sqlbuild_config::dbt_profile::models::{
     ConnectionKey, ConnectionSource, DbtInitConfig, NormalizedProfile, ProfileEntry, ProfileValue,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const DBT_ERRORS_MODULE: &str = "sqlbuild.integrations.dbt.exceptions";
 const INIT_TOML_OPTIONS: (&[&str], &[&str]) = (
     &[
         "project_name",
@@ -35,8 +34,7 @@ const INIT_TOML_OPTIONS: (&[&str], &[&str]) = (
 );
 
 pub(crate) fn raised(py: Python<'_>, error: DbtProfileError) -> PyErr {
-    match imported(py, DBT_ERRORS_MODULE, "DbtProfileError")
-        .and_then(|class| class.call1((error.0,)))
+    match host::entry(py, ThirdPartyHost::DbtProfileError).and_then(|class| class.call1((error.0,)))
     {
         Ok(instance) => PyErr::from_value(instance),
         Err(failure) => failure,
@@ -83,7 +81,7 @@ fn normalized_connection<'py>(
         connection.set_item(key, value)?;
     }
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "NormalizedDbtProfileConnection")?,
+        &registry::class(py, RecordId::NormalizedDbtProfileConnection)?,
         &[
             ("adapter", PyString::new(py, profile.adapter).into_any()),
             ("connection", connection.into_any()),

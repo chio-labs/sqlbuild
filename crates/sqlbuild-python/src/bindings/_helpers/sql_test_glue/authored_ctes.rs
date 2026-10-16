@@ -12,10 +12,10 @@ use sqlbuild_analysis::compiler::models::{SqlTestExtractionFailure, SqlTestReque
 use sqlbuild_analysis::sql_test_attachment::main::authored_test_offset::authored_test_offset;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
-const COMPILE_INPUT_ERROR: &str = "CompileInputError";
 const MODEL_MODE: &str = "model";
 
 /// Extract fixture bodies from authored test or scenario CTEs in authored order.
@@ -81,10 +81,8 @@ fn located_error(py: Python<'_>, failure: &SqlTestExtractionFailure, body: &Auth
     let raised = || -> PyResult<PyErr> {
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
         keywords.set_item("help", failure.help.as_deref())?;
-        let error: Bound<'_, PyAny> = py
-            .import(COMPILE_ERRORS_MODULE)?
-            .getattr(COMPILE_INPUT_ERROR)?
-            .call((message,), Some(&keywords))?;
+        let error: Bound<'_, PyAny> =
+            registry::error(py, ErrorId::CompileInput)?.call((message,), Some(&keywords))?;
         Ok(PyErr::from_value(error))
     };
     raised().unwrap_or_else(|error| error)

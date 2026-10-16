@@ -16,28 +16,18 @@ use crate::bindings::_helpers::model_config::unicode_environment::unicode_enviro
 use crate::bindings::_helpers::render::declaration_values::constant_declaration_sql;
 use crate::bindings::_helpers::render::macro_expansion_result::macro_expansion_classes;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
-const SCOPE_MODELS_MODULE: &str = "sqlbuild._native";
-const SCOPE_TYPES_MODULE: &str = "sqlbuild._native";
-const COLLECTOR_MODULE: &str = "sqlbuild._native";
-const PROJECT_VARS_MODULE: &str = "sqlbuild._native";
-const MACRO_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.main.active_macro_bridge";
-const SQL_ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
-const PYTHON_NODE_MODELS_MODULE: &str = "sqlbuild.python_nodes.models";
-const PYTHON_NODE_TYPES_MODULE: &str = "sqlbuild.python_nodes.types";
 /// The explicit reference call kinds and the `SqlResourceRefKind` member each resolves to.
 const EXPLICIT_REFERENCE_KINDS: [(&str, &str); 3] =
     [("ref", "MODEL"), ("source", "SOURCE"), ("seed", "SEED")];
 
 /// The explicit reference call kinds mapped to their `SqlResourceRefKind` members.
 fn explicit_reference_kinds(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
-    let kinds: Bound<'_, PyAny> = imported(py, PYTHON_NODE_TYPES_MODULE, "SqlResourceRefKind")?;
+    let kinds: Bound<'_, PyAny> = host::entry(py, UserCodeHost::SqlResourceRefKind)?;
     let built: Bound<'_, PyDict> = PyDict::new(py);
     for (call_kind, member) in EXPLICIT_REFERENCE_KINDS {
         built.set_item(call_kind, kinds.getattr(member)?)?;
@@ -97,7 +87,7 @@ fn macro_inputs<'py>(context: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>
             ("macro_context", context.getattr("macro_context")?),
             (
                 "bridge",
-                imported(py, MACRO_BRIDGE_MODULE, "active_macro_bridge")?.call0()?,
+                host::entry(py, UserCodeHost::ActiveMacroBridge)?.call0()?,
             ),
             (
                 "scoped",
@@ -107,16 +97,16 @@ fn macro_inputs<'py>(context: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>
             ),
             (
                 "declaration_context",
-                imported(py, COMPILE_MODELS_MODULE, "DeclarationResolutionContext")?,
+                registry::class(py, RecordId::DeclarationResolutionContext)?,
             ),
             (
                 "macro_argument_error",
-                imported(py, COMPILE_ERRORS_MODULE, "MacroArgumentError")?,
+                registry::error(py, ErrorId::MacroArgument)?,
             ),
             ("expansion", macro_expansion_classes(py)?.into_any()),
             (
                 "generic_syntax",
-                imported(py, SQL_ANALYSIS_MODELS_MODULE, "SqlLexicalSyntax")?
+                registry::class(py, RecordId::SqlLexicalSyntax)?
                     .call0()?
                     .getattr("native_mapping")?,
             ),
@@ -134,31 +124,31 @@ fn sql_hook_inputs<'py>(
         vec![
             (
                 "named_sql_hook_entry",
-                imported(py, NATIVE_RECORDS_MODULE, "NamedSqlHookEntry")?,
+                registry::class(py, RecordId::NamedSqlHookEntry)?,
             ),
             (
                 "python_hook_entry",
-                imported(py, DISCOVERY_MODELS_MODULE, "PythonHookEntry")?,
+                registry::class(py, RecordId::PythonHookEntry)?,
             ),
             ("hook_files", discovered.getattr("sql_hook_files")?),
             ("effective_vars", context.getattr("effective_vars")?),
             ("environment", unicode_environment(py)?),
             (
                 "render_project_var",
-                imported(py, PROJECT_VARS_MODULE, "render_project_var_text")?,
+                registry::native(py, NativeAttr::RenderProjectVarText)?,
             ),
             (
                 "sql_resource_ref",
-                imported(py, PYTHON_NODE_MODELS_MODULE, "SqlResourceRef")?,
+                host::entry(py, UserCodeHost::SqlResourceRef)?,
             ),
             ("explicit_kinds", explicit_reference_kinds(py)?.into_any()),
             (
                 "declaration_identity",
-                imported(py, SCOPE_MODELS_MODULE, "DeclarationIdentity")?,
+                registry::class(py, RecordId::DeclarationIdentity)?,
             ),
             (
                 "sql_hook_kind",
-                imported(py, SCOPE_TYPES_MODULE, "DeclarationKind")?.getattr("SQL_HOOK")?,
+                registry::class(py, RecordId::DeclarationKind)?.getattr("SQL_HOOK")?,
             ),
         ],
     )
@@ -191,7 +181,7 @@ pub(crate) fn build_model_inputs<'py>(
     let defer_model_sql_validation: bool = arguments.flag("defer_model_sql_validation")?;
     let external: Bound<'py, PyAny> = arguments.value("external_sql_reference_resolver")?;
     let settings: Bound<'py, PyAny> = context.getattr("effective_settings")?;
-    let validator: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "NativeModelValidator")?
+    let validator: Bound<'py, PyAny> = registry::native(py, NativeAttr::NativeModelValidator)?
         .call_method1(
             "from_inputs",
             (
@@ -213,7 +203,7 @@ pub(crate) fn build_model_inputs<'py>(
     };
     let project_config_path: Bound<'py, PyAny> = root.div(PROJECT_CONFIG_FILENAME)?;
     let config_inputs: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "NativeModelConfigInputs")?,
+        &registry::class(py, RecordId::NativeModelConfigInputs)?,
         &[
             (
                 "project_config",
@@ -243,15 +233,15 @@ pub(crate) fn build_model_inputs<'py>(
         vec![
             (
                 "report_diagnostic",
-                imported(py, COLLECTOR_MODULE, "report_compile_diagnostic")?,
+                registry::native(py, NativeAttr::ReportCompileDiagnostic)?,
             ),
             (
                 "record_template_reads",
-                imported(py, NATIVE_MODULE, "record_template_reads")?,
+                registry::native(py, NativeAttr::RecordTemplateReads)?,
             ),
             (
                 "visible_declarations",
-                imported(py, NATIVE_RECORDS_MODULE, "VisibleModelDeclarations")?,
+                registry::class(py, RecordId::VisibleModelDeclarations)?,
             ),
             ("config_session", session),
             ("syntax_help", opt_out_help(py, true)?),
@@ -279,7 +269,7 @@ pub(crate) fn build_model_inputs<'py>(
     )?;
     let syntax: Bound<'py, PyAny> = context.getattr("sql_lexical_syntax")?;
     let native_loop: Bound<'py, PyAny> =
-        imported(py, NATIVE_MODULE, "NativeModelLoop")?.call1((
+        registry::native(py, NativeAttr::NativeModelLoop)?.call1((
             (validator, contract_classes(py)?.into_any(), classes),
             syntax.getattr("native_mapping")?,
             reserved_cursor_markers(),

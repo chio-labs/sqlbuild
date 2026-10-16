@@ -13,9 +13,9 @@ use sqlbuild_rules::models::{
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::compiled_project::records::plain_typed_value;
 use crate::bindings::_helpers::compiled_project::values::plain_value;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-const MODEL_PAYLOAD_CLASS: &str = "CompiledModelSqlTestPayload";
 const DESCRIPTION_KEY: &str = "description";
 
 fn posix(value: &Bound<'_, PyAny>) -> PyResult<String> {
@@ -87,10 +87,8 @@ fn tested_resources(test: &Bound<'_, PyAny>) -> PyResult<Vec<TestedResource>> {
 
 fn with_payload(test: &Bound<'_, PyAny>, mut fact: SqlTestFact) -> PyResult<SqlTestFact> {
     let payload: Bound<'_, PyAny> = test.getattr("payload")?;
-    let model_payload: Bound<'_, PyAny> = test
-        .py()
-        .import(NATIVE_RECORDS_MODULE)?
-        .getattr(MODEL_PAYLOAD_CLASS)?;
+    let model_payload: Bound<'_, PyAny> =
+        registry::class(test.py(), RecordId::CompiledModelSqlTestPayload)?;
     if !payload.is_instance(&model_payload)? {
         return Ok(fact);
     }

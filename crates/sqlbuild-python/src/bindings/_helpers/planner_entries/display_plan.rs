@@ -1,9 +1,10 @@
 //! Display-only plans for external plan surfaces when warehouse planning cannot resolve.
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::planner_entries::values::{
-    NATIVE_MODULE, boolean, native, none, planner_model, planner_type, string,
+    boolean, native, none, planner_model, planner_type, string,
 };
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyFrozenSet, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -34,7 +35,7 @@ fn display_action(
 fn config<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
     native(
         model.py(),
-        "get_config_str",
+        NativeAttr::GetConfigStr,
         &[
             ("values", model.getattr("config")?.getattr("values")?),
             ("key", string(model.py(), key)),
@@ -47,10 +48,14 @@ fn display_entry<'py>(
     full_refresh: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = model.py();
-    let materialization_type = native(py, "get_materialization_type", &[("model", model.clone())])?;
+    let materialization_type = native(
+        py,
+        NativeAttr::GetMaterializationType,
+        &[("model", model.clone())],
+    )?;
     let effective = native(
         py,
-        "resolve_model_full_refresh",
+        NativeAttr::ResolveModelFullRefresh,
         &[
             ("model", model.clone()),
             ("cli_full_refresh", boolean(py, full_refresh)?),
@@ -65,7 +70,7 @@ fn display_entry<'py>(
     };
     planner_model(
         py,
-        "ModelPlanEntry",
+        RecordId::ModelPlanEntry,
         &[
             ("key", model.getattr("key")?),
             ("name", model.getattr("name")?),
@@ -74,7 +79,7 @@ fn display_entry<'py>(
                 "action",
                 planner_type(
                     py,
-                    "PlanAction",
+                    RecordId::PlanAction,
                     display_action(&materialization_type, effective)?,
                 )?,
             ),
@@ -83,7 +88,7 @@ fn display_entry<'py>(
                 "reason",
                 planner_type(
                     py,
-                    "PlanReason",
+                    RecordId::PlanReason,
                     if effective {
                         "FULL_REFRESH"
                     } else {
@@ -106,12 +111,12 @@ fn display_entry<'py>(
                 "backfill",
                 native(
                     py,
-                    "BackfillResult",
+                    RecordId::BackfillResult,
                     &[(
                         "action",
                         planner_type(
                             py,
-                            "BackfillAction",
+                            RecordId::BackfillAction,
                             if effective { "FULL" } else { "FORWARD_ONLY" },
                         )?,
                     )],
@@ -149,11 +154,11 @@ fn build_display_only_sqlbuild_plan<'py>(
         .map(|entry| entry.getattr("key"))
         .collect::<PyResult<_>>()?;
     let upstream =
-        imported(py, NATIVE_MODULE, "build_execution_upstream_deps")?.call1((project,))?;
-    let downstream = imported(py, NATIVE_MODULE, "build_downstream_deps")?.call1((&upstream,))?;
+        registry::native(py, NativeAttr::BuildExecutionUpstreamDeps)?.call1((project,))?;
+    let downstream = registry::native(py, NativeAttr::BuildDownstreamDeps)?.call1((&upstream,))?;
     planner_model(
         py,
-        "PlanOutput",
+        RecordId::PlanOutput,
         &[
             ("execution_order", PyTuple::new(py, &keys)?.into_any()),
             ("model_entries", PyTuple::new(py, entries)?.into_any()),

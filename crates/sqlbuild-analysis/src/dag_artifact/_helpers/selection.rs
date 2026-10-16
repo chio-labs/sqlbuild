@@ -1,7 +1,10 @@
-//! Breadth-first closures and directed path nodes over string-keyed DAG edges.
+//! Closures, directed path nodes and selector resolution over string-keyed DAG edges.
 
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet};
+use std::convert::Infallible;
 
+use sqlbuild_core::graph_walk::main::breadth_first_reach::breadth_first_reach;
+use sqlbuild_core::graph_walk::main::directed_path_nodes::directed_path_nodes;
 use sqlbuild_core::text::main::python_isspace::python_isspace;
 use sqlbuild_core::text::main::python_str_repr::python_str_repr;
 
@@ -23,20 +26,14 @@ pub(crate) fn closure(
     edges: &Adjacency,
     include_starts: bool,
 ) -> BTreeSet<String> {
-    let mut visited: BTreeSet<String> = if include_starts {
-        starts.clone()
-    } else {
-        BTreeSet::new()
-    };
-    let mut frontier: VecDeque<&String> = starts.iter().collect();
-    while let Some(current) = frontier.pop_front() {
-        for neighbor in edges.get(current).into_iter().flatten() {
-            if visited.insert(neighbor.clone()) {
-                frontier.push_back(neighbor);
-            }
-        }
+    let mut visited: BTreeSet<&String> = BTreeSet::new();
+    if include_starts {
+        visited.extend(starts);
     }
-    visited
+    let Ok(()) = breadth_first_reach(starts.iter(), None, &mut visited, |current| {
+        Ok::<_, Infallible>(edges.get(*current).into_iter().flatten())
+    });
+    visited.into_iter().cloned().collect()
 }
 
 /// Ids on directed paths from `start` to `end`, or `None` when `end` is not downstream.
@@ -44,27 +41,18 @@ pub(crate) fn path_nodes(
     (start, end): (&str, &str),
     (upstream, downstream): (&Adjacency, &Adjacency),
 ) -> Option<BTreeSet<String>> {
-    let reachable: BTreeSet<String> =
-        closure(&BTreeSet::from([start.to_owned()]), downstream, false);
-    if !reachable.contains(end) {
-        return None;
-    }
-    let mut upstream_of_end: BTreeSet<String> = BTreeSet::new();
-    let mut stack: Vec<String> = vec![end.to_owned()];
-    while let Some(current) = stack.pop() {
-        if !upstream_of_end.insert(current.clone()) {
-            continue;
-        }
-        for parent in upstream.get(&current).into_iter().flatten() {
-            if reachable.contains(parent) || parent == start {
-                stack.push(parent.clone());
-            }
-        }
-    }
-    let mut nodes: BTreeSet<String> = reachable.intersection(&upstream_of_end).cloned().collect();
-    nodes.insert(start.to_owned());
-    nodes.insert(end.to_owned());
-    Some(nodes)
+    let (start, end): (String, String) = (start.to_owned(), end.to_owned());
+    let (mut reachable, mut path): (BTreeSet<&String>, BTreeSet<&String>) =
+        (BTreeSet::new(), BTreeSet::new());
+    let Ok(found) = directed_path_nodes(
+        (&start, &end),
+        (
+            |current: &&String| Ok(downstream.get(*current).into_iter().flatten()),
+            |current: &&String| Ok(upstream.get(*current).into_iter().flatten()),
+        ),
+        (&mut reachable, &mut path),
+    );
+    found.then(|| path.into_iter().cloned().collect())
 }
 
 pub(crate) fn resolve_expression(

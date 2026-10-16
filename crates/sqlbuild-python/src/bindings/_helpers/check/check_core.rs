@@ -10,18 +10,14 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::build_command::errors::BuildCommandError;
 
 use crate::bindings::_helpers::build_command::policies::build_command_error;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const BUILD_TYPES: &str = "sqlbuild.executor.build.types";
-const PYTHON_NODE_TYPES: &str = "sqlbuild.compiler.python_nodes.types";
-const EXECUTOR_MODELS: &str = "sqlbuild.executor.python_nodes.models";
-const READ_SIDE_MODULE: &str = "sqlbuild.executor.python_nodes.main.read_side";
-const RELATION_LOOKUP_MODULE: &str = "sqlbuild.adapter.relations.main.relation_lookup";
-const QUALIFIED_NAME_MODULE: &str =
-    "sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name";
 const MISSING_RELATION_CODE: &str = "C682";
 const MODEL_KIND: &str = "model";
 const SEED_KIND: &str = "seed";
@@ -56,8 +52,8 @@ fn load_result_as_python_result<'py>(
     result: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = name.py();
-    let execution: Bound<'py, PyAny> = imported(py, BUILD_TYPES, "ExecutionStatus")?;
-    let node_status: Bound<'py, PyAny> = imported(py, PYTHON_NODE_TYPES, "PythonNodeStatus")?;
+    let execution: Bound<'py, PyAny> = host::entry(py, ExecutorHost::ExecutionStatus)?;
+    let node_status: Bound<'py, PyAny> = host::entry(py, UserCodeHost::PythonNodeStatus)?;
     let status: Bound<'py, PyAny> = result.getattr("status")?;
     let mapped: Bound<'py, PyAny> = if status.eq(execution.getattr("SUCCESS")?)? {
         node_status.getattr("SUCCESS")?
@@ -67,12 +63,12 @@ fn load_result_as_python_result<'py>(
         node_status.getattr("FAILED")?
     };
     call_with(
-        &imported(py, EXECUTOR_MODELS, "PythonNodeExecutionResult")?,
+        &host::entry(py, ExecutorHost::PythonNodeExecutionResult)?,
         &[
             ("node_name", name.clone()),
             (
                 "kind",
-                imported(py, PYTHON_NODE_TYPES, "PythonNodeKind")?.getattr("LOADER")?,
+                host::entry(py, UserCodeHost::PythonNodeKind)?.getattr("LOADER")?,
             ),
             ("status", mapped),
             ("payload", result.clone()),
@@ -175,7 +171,7 @@ pub(crate) fn build_check_relation_targets<'py>(
         &[("selected_names", selected_python_names)],
     )?;
     call_with(
-        &imported(py, NATIVE_MODULE, "build_python_relation_targets")?,
+        &registry::native(py, NativeAttr::BuildPythonRelationTargets)?,
         &[
             ("adapter", adapter.clone()),
             ("project", pipeline_result.getattr("project")?),
@@ -194,11 +190,11 @@ pub(crate) fn relevant_check_functions<'py>(
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py: Python<'py> = discovered_inputs.py();
     let excluded: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "resolve_python_check_excludes")?,
+        &registry::native(py, NativeAttr::ResolvePythonCheckExcludes)?,
         &[("graph", python_graph.clone()), ("exclude", exclude)],
     )?;
     let check_kind: Bound<'py, PyAny> =
-        imported(py, PYTHON_NODE_TYPES, "PythonNodeKind")?.getattr("CHECK")?;
+        host::entry(py, UserCodeHost::PythonNodeKind)?.getattr("CHECK")?;
     let upstream_deps: Bound<'py, PyAny> = python_graph.getattr("upstream_deps")?;
     let mut check_names: Vec<Bound<'py, PyAny>> = Vec::new();
     for node in python_graph.getattr("nodes")?.try_iter()? {
@@ -367,11 +363,7 @@ fn validate_reference_exists(
                 ),
             )?;
             let relation: Bound<'_, PyAny> = call_with(
-                &imported(
-                    py,
-                    QUALIFIED_NAME_MODULE,
-                    "resolve_relation_location_qualified_name",
-                )?,
+                &host::entry(py, AdapterHost::ResolveRelationLocationQualifiedName)?,
                 &[("adapter", inputs.adapter.clone()), ("location", location)],
             )?;
             (exists, relation)
@@ -438,7 +430,7 @@ fn node_runtime<'py>(inputs: &ReadSideInputs<'py>) -> PyResult<Bound<'py, PyAny>
     let py: Python<'py> = inputs.adapter.py();
     let project: Bound<'py, PyAny> = inputs.pipeline_result.getattr("project")?;
     call_with(
-        &imported(py, EXECUTOR_MODELS, "PythonNodeRuntime")?,
+        &host::entry(py, ExecutorHost::PythonNodeRuntime)?,
         &[
             ("adapter", inputs.adapter.clone()),
             ("connection_config", inputs.connection_config.clone()),
@@ -484,7 +476,7 @@ pub(crate) fn run_read_side_dependencies<'py>(
         }
     }
     let lookup: Bound<'py, PyAny> = call_with(
-        &imported(py, RELATION_LOOKUP_MODULE, "build_relation_lookup")?,
+        &host::entry(py, AdapterHost::BuildRelationLookup)?,
         &[
             ("adapter", inputs.adapter.clone()),
             ("connection", inputs.connection.clone()),
@@ -498,11 +490,7 @@ pub(crate) fn run_read_side_dependencies<'py>(
         return Ok(PyTuple::empty(py).into_any());
     }
     let tracker: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            READ_SIDE_MODULE,
-            "create_read_side_python_execution_tracker",
-        )?,
+        &host::entry(py, ExecutorHost::CreateReadSidePythonExecutionTracker)?,
         &[
             ("python_graph", inputs.python_graph.clone()),
             ("selected_python_names", read_side_names),

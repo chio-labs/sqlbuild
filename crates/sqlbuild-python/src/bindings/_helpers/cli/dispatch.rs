@@ -19,10 +19,9 @@ use sqlbuild_core::format_command::main::format_path_selectors::format_path_sele
 use sqlbuild_core::text::main::python_strip::python_strip;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
-const ENTRY_MODELS_MODULE: &str = "sqlbuild._native";
-const WAREHOUSES_MODULE: &str = "sqlbuild._native";
 const PATHLIB_MODULE: &str = "pathlib";
 const COMMENT_PREFIX: &str = "#";
 const UTF8: &str = "utf-8";
@@ -120,7 +119,7 @@ impl<'py> Invocation<'py> {
                         |error| {
                             cli_error(
                                 py,
-                                "CliUserError",
+                                ErrorId::CliUser,
                                 &DiffUserError {
                                     message: error.message,
                                     code: error.code.to_owned(),
@@ -148,7 +147,7 @@ impl<'py> Invocation<'py> {
         }
         let py: Python<'py> = self.py();
         let (from_name, to_name) = parse_diff_name_range(&range.extract::<String>()?)
-            .map_err(|error| cli_error(py, "CliUserError", &error))?;
+            .map_err(|error| cli_error(py, ErrorId::CliUser, &error))?;
         match side {
             DiffSide::From => from_name.into_bound_py_any(py),
             DiffSide::To => to_name.into_bound_py_any(py),
@@ -176,7 +175,7 @@ fn path_class(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 }
 
 fn class_object<'py>(py: Python<'py>, class: ClassRef) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, class.module, class.name)
+    registry::class(py, registry::record_named(class.name)?)
 }
 
 fn tuple_of<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -200,7 +199,7 @@ fn user_error(py: Python<'_>, failure: DispatchFailure) -> PyErr {
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
         keywords.set_item("code", failure.code)?;
         keywords.set_item("help", failure.help)?;
-        imported(py, EXCEPTIONS_MODULE, "CliUserError")?.call((failure.message,), Some(&keywords))
+        registry::error(py, ErrorId::CliUser)?.call((failure.message,), Some(&keywords))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),
@@ -217,8 +216,7 @@ fn selector_inputs<'py>(
         .getattr("select")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
-    let summary_class: Bound<'py, PyAny> =
-        imported(py, ENTRY_MODELS_MODULE, "SelectorFileSummary")?;
+    let summary_class: Bound<'py, PyAny> = registry::class(py, RecordId::SelectorFileSummary)?;
     let mut files: Vec<Bound<'py, PyAny>> = Vec::new();
     for raw_path in args.getattr("select_file")?.try_iter()? {
         let path: Bound<'py, PyAny> = path_class(py)?.call1((raw_path?,))?;
@@ -260,7 +258,7 @@ fn call_route<'py>(
     let (callable, positional_count) = match handler {
         Some(handler) => (handler, route.shape.slot_positional),
         None => {
-            let (module, function) = route.implementation;
+            let function: NativeAttr = registry::attribute_named(route.implementation)?;
             if let Some(extra) = route.implementation_extra {
                 keywords.set_item(extra.name, invocation.value(extra.source)?)?;
             }
@@ -269,7 +267,7 @@ fn call_route<'py>(
             } else {
                 route.shape.slot_positional
             };
-            (imported(py, module, function)?, count)
+            (registry::native(py, function)?, count)
         }
     };
     for (index, field) in route.arguments.iter().enumerate() {
@@ -347,7 +345,7 @@ pub(crate) fn dispatch_command<'py>(
                 .call_method0("resolve")?
         };
         call_with(
-            &imported(py, WAREHOUSES_MODULE, "validate_cli_warehouse")?,
+            &registry::native(py, NativeAttr::ValidateCliWarehouse)?,
             &[
                 ("cli_warehouse", warehouse.clone()),
                 ("project_dir", project_dir),

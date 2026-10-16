@@ -7,16 +7,16 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods};
 
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_adapter_connection_context;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
 use crate::bindings::_helpers::janitor::janitor_facts::Warehouse;
 use crate::bindings::_helpers::janitor::janitor_planning::{
     JanitorSettings, RelationScope, build_plan,
 };
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
-const JANITOR_EXECUTE_MODULE: &str = "sqlbuild.executor.janitor.main.execute";
-const ERRORS_MODULE: &str = "sqlbuild._native";
 const UNKNOWN_VIEW_CODE: &str = "C503";
 const UNKNOWN_VIEW_HELP: &str =
     "Run sqb janitor without --drop-old-name-view to list compatibility views.";
@@ -48,7 +48,7 @@ fn lifecycle<'py>(py: Python<'py>, (kind, name): (&str, &str)) -> PyResult<Bound
     let options: Bound<'py, PyDict> = PyDict::new(py);
     options.set_item("operation_kind", kind)?;
     options.set_item("operation_name", name)?;
-    imported(py, LIFECYCLE_MODULE, "OperationLifecycle")?.call((), Some(&options))
+    host::entry(py, ExecutorHost::OperationLifecycle)?.call((), Some(&options))
 }
 
 /// Compile for the janitor or `--as` target and resolve the active target connection.
@@ -67,7 +67,7 @@ pub(crate) fn compile_janitor_project<'py>(
     )?;
     let started: Instant = Instant::now();
     let status: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "PlanningProgressReporter")?,
+        &registry::native(py, NativeAttr::PlanningProgressReporter)?,
         &[
             ("stream", stdout(py)?),
             (
@@ -88,7 +88,7 @@ pub(crate) fn compile_janitor_project<'py>(
         within(&lifecycle(py, ("project", "project_compile"))?, |_| {
             status.call_method1("on_progress", ("Compiling project...",))?;
             let project: Bound<'py, PyAny> = call_with(
-                &imported(py, NATIVE_MODULE, "build_compiled_project")?,
+                &registry::native(py, NativeAttr::BuildCompiledProject)?,
                 &[
                     (
                         "discovered_inputs",
@@ -131,7 +131,7 @@ pub(crate) fn connect_janitor_warehouse<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = invocation.py();
     let progress: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "ConnectionProgressReporter")?,
+        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
         &[
             ("adapter_name", compiled.adapter_name.clone()),
             ("stream", stdout(py)?),
@@ -187,7 +187,7 @@ fn unknown_view_error(py: Python<'_>, requests: &Bound<'_, PyAny>) -> PyResult<P
     let options: Bound<'_, PyDict> = PyDict::new(py);
     options.set_item("code", UNKNOWN_VIEW_CODE)?;
     options.set_item("help", UNKNOWN_VIEW_HELP)?;
-    let error: Bound<'_, PyAny> = imported(py, ERRORS_MODULE, "CliUserError")?.call(
+    let error: Bound<'_, PyAny> = registry::error(py, ErrorId::CliUser)?.call(
         (format!(
             "no compatibility view is recorded at {}",
             names.join(", ")
@@ -277,11 +277,7 @@ pub(crate) fn execute_janitor_cleanup<'py>(
     plan: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(
-            compiled.adapter.py(),
-            JANITOR_EXECUTE_MODULE,
-            "execute_janitor_plan",
-        )?,
+        &host::entry(compiled.adapter.py(), ExecutorHost::ExecuteJanitorPlan)?,
         &[
             ("plan", plan.clone()),
             ("adapter", compiled.adapter.clone()),

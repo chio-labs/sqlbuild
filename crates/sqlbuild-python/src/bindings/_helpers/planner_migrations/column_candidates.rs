@@ -5,6 +5,7 @@ use crate::bindings::_helpers::planner_migrations::column_objects::{
     config, definition_hash, lower, native,
 };
 use crate::bindings::_helpers::planner_migrations::models::ColumnCandidate;
+use crate::bindings::_helpers::records::ids::NativeAttr;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
 
@@ -72,7 +73,7 @@ pub(super) fn candidates<'py>(
         let previous = if changed {
             native(
                 py,
-                "parse_query_shape",
+                NativeAttr::ParseQueryShape,
                 &[
                     ("query_sql", fingerprint.getattr("definition")?),
                     ("dialect", dialect.clone()),
@@ -83,7 +84,7 @@ pub(super) fn candidates<'py>(
         };
         let current = native(
             py,
-            "parse_query_shape",
+            NativeAttr::ParseQueryShape,
             &[
                 ("query_sql", model.getattr("query_sql")?),
                 ("dialect", dialect.clone()),

@@ -14,11 +14,10 @@ use sqlbuild_analysis::dag_artifact::models::{
     DagProjectionCheck, DagProjectionGraph, DagProjectionNode,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::dag_artifact::selection::selected_node_ids;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 
-const DAGSTER_CONSTANTS: &str = "sqlbuild.integrations.dagster.constants";
-const RIVERS_CONSTANTS: &str = "sqlbuild.integrations.rivers.constants";
 const PROJECT_NAME_KEY: &str = "project_name";
 const DEFAULT_MATERIALIZATION: &str = "table";
 
@@ -112,15 +111,15 @@ fn translated_nodes<'py>(artifact: &ArtifactGraph<'py>) -> PyResult<Vec<Bound<'p
         .collect()
 }
 
-fn kind_set(py: Python<'_>, (module, name): (&str, &str)) -> PyResult<BTreeSet<String>> {
-    listed(&imported(py, module, name)?)?
+fn kind_set(py: Python<'_>, constant: ThirdPartyHost) -> PyResult<BTreeSet<String>> {
+    listed(&host::entry(py, constant)?)?
         .iter()
         .map(text)
         .collect()
 }
 
-fn constant_text(py: Python<'_>, (module, name): (&str, &str)) -> PyResult<String> {
-    text(&imported(py, module, name)?)
+fn constant_text(py: Python<'_>, constant: ThirdPartyHost) -> PyResult<String> {
+    text(&host::entry(py, constant)?)
 }
 
 fn picked<'py>(objects: &[Bound<'py, PyAny>], indexes: &[usize]) -> Vec<Bound<'py, PyAny>> {
@@ -148,13 +147,13 @@ fn dagster_asset_plans<'py>(dag: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyLi
     let artifact: ArtifactGraph<'py> = artifact_graph(dag, false)?;
     let upstream_nodes: Vec<Bound<'py, PyAny>> = translated_nodes(&artifact)?;
     let policy: AssetProjectionPolicy = AssetProjectionPolicy {
-        asset_kinds: kind_set(py, (DAGSTER_CONSTANTS, "DAGSTER_ASSET_NODE_KINDS"))?,
+        asset_kinds: kind_set(py, ThirdPartyHost::DagsterAssetNodeKinds)?,
         upstream_asset_kinds_only: false,
     };
     let kinds: AssetSpecKindPolicy = AssetSpecKindPolicy {
-        model_kind: constant_text(py, (DAGSTER_CONSTANTS, "MODEL_NODE_KIND"))?,
-        view_materialization: constant_text(py, (DAGSTER_CONSTANTS, "VIEW_MATERIALIZATION_TYPE"))?,
-        direct_kinds: kind_set(py, (DAGSTER_CONSTANTS, "DAGSTER_DIRECT_KIND_NODE_KINDS"))?,
+        model_kind: constant_text(py, ThirdPartyHost::ModelNodeKind)?,
+        view_materialization: constant_text(py, ThirdPartyHost::ViewMaterializationType)?,
+        direct_kinds: kind_set(py, ThirdPartyHost::DagsterDirectKindNodeKinds)?,
     };
     let plans: Vec<Bound<'py, PyTuple>> = dag_asset_plans(&artifact.graph, &policy)
         .iter()
@@ -187,7 +186,7 @@ fn rivers_asset_plans<'py>(dag: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyLis
     let py: Python<'py> = dag.py();
     let artifact: ArtifactGraph<'py> = artifact_graph(dag, false)?;
     let policy: AssetProjectionPolicy = AssetProjectionPolicy {
-        asset_kinds: kind_set(py, (RIVERS_CONSTANTS, "RIVERS_ASSET_NODE_KINDS"))?,
+        asset_kinds: kind_set(py, ThirdPartyHost::RiversAssetNodeKinds)?,
         upstream_asset_kinds_only: true,
     };
     let plans: Vec<Bound<'py, PyTuple>> = dag_asset_plans(&artifact.graph, &policy)
@@ -226,10 +225,8 @@ fn dagster_check_plans<'py>(
     let py: Python<'py> = dag.py();
     let artifact: ArtifactGraph<'py> = artifact_graph(dag, true)?;
     let checked_nodes: Vec<Bound<'py, PyAny>> = translated_nodes(&artifact)?;
-    let scenario: BTreeSet<String> = BTreeSet::from([constant_text(
-        py,
-        (DAGSTER_CONSTANTS, "SCENARIO_CHECK_KIND"),
-    )?]);
+    let scenario: BTreeSet<String> =
+        BTreeSet::from([constant_text(py, ThirdPartyHost::ScenarioCheckKind)?]);
     let filter: CheckKindFilter = CheckKindFilter {
         excluded: if include_scenarios || only_scenarios {
             BTreeSet::new()
@@ -273,8 +270,7 @@ fn dagster_selected_asset_nodes<'py>(
         nodes: nodes.iter().map(selection_node).collect::<PyResult<_>>()?,
         ..DagProjectionGraph::default()
     };
-    let asset_kinds: BTreeSet<String> =
-        kind_set(py, (DAGSTER_CONSTANTS, "DAGSTER_ASSET_NODE_KINDS"))?;
+    let asset_kinds: BTreeSet<String> = kind_set(py, ThirdPartyHost::DagsterAssetNodeKinds)?;
     let translated: Vec<Bound<'py, PyAny>> =
         dag_selected_asset_nodes(&graph, &selected, &asset_kinds)
             .iter()

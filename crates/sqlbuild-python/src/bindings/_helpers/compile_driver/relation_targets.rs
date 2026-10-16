@@ -9,12 +9,11 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 
-const REF_MODELS_MODULE: &str = "sqlbuild.python_nodes.models";
-const REF_TYPES_MODULE: &str = "sqlbuild.python_nodes.types";
-const QUALIFIED_NAME_MODULE: &str =
-    "sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name";
 const SHARED_EXCEPTIONS_MODULE: &str = "sqlbuild.errors.contracts.exceptions";
 
 /// The `SqlResourceRefKind` members a relation map distinguishes.
@@ -26,7 +25,7 @@ struct RefKinds<'py> {
 
 impl<'py> RefKinds<'py> {
     fn load(py: Python<'py>) -> PyResult<Self> {
-        let kinds: Bound<'py, PyAny> = imported(py, REF_TYPES_MODULE, "SqlResourceRefKind")?;
+        let kinds: Bound<'py, PyAny> = host::entry(py, UserCodeHost::SqlResourceRefKind)?;
         Ok(Self {
             model: kinds.getattr("MODEL")?,
             seed: kinds.getattr("SEED")?,
@@ -118,7 +117,7 @@ fn planned_relation_refs<'py>(
     kinds: &RefKinds<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = plan_output.py();
-    let reference: Bound<'py, PyAny> = imported(py, REF_MODELS_MODULE, "SqlResourceRef")?;
+    let reference: Bound<'py, PyAny> = host::entry(py, UserCodeHost::SqlResourceRef)?;
     let refs: Bound<'py, PySet> = PySet::empty(py)?;
     for (attribute, kind) in [
         ("model_locations", &kinds.model),
@@ -189,10 +188,9 @@ fn qualified_name<'py>(
     location: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(
+        &host::entry(
             adapter.py(),
-            QUALIFIED_NAME_MODULE,
-            "resolve_relation_location_qualified_name",
+            AdapterHost::ResolveRelationLocationQualifiedName,
         )?,
         &[("adapter", adapter.clone()), ("location", location.clone())],
     )

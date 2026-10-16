@@ -19,8 +19,9 @@ use crate::bindings::_helpers::model_config::config_templates::{
     resolve_effective_vars,
 };
 use crate::bindings::_helpers::model_config::unicode_environment::unicode_environment;
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
 const UUID_MODULE: &str = "uuid";
 const ENVIRONMENT_READ: &str = "env";
 const RUN_ID_KEY: &str = "run.id";
@@ -82,27 +83,26 @@ pub(crate) fn expanded_effective_vars<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = raw_values.py();
     if let Some((name, path, byte_offset)) = lone_surrogate_site(raw_values)? {
-        let error: Bound<'py, PyAny> = imported(py, COMPILE_ERRORS_MODULE, "CompileInputError")?
-            .call(
-                (format!(
-                    "Variable '{name}' holds a lone surrogate in {path} at UTF-8 byte \
+        let error: Bound<'py, PyAny> = registry::error(py, ErrorId::CompileInput)?.call(
+            (format!(
+                "Variable '{name}' holds a lone surrogate in {path} at UTF-8 byte \
                      {byte_offset}, which is not valid Unicode text"
-                ),),
-                Some(&keywords(
-                    py,
-                    &[(
-                        "help",
-                        PyString::new(
-                            py,
-                            &format!(
-                                "Set '{name}' to valid Unicode text in --vars or the [vars] \
+            ),),
+            Some(&keywords(
+                py,
+                &[(
+                    "help",
+                    PyString::new(
+                        py,
+                        &format!(
+                            "Set '{name}' to valid Unicode text in --vars or the [vars] \
                                  table; the value is not shown because it may be a secret"
-                            ),
-                        )
-                        .into_any(),
-                    )],
-                )?),
-            )?;
+                        ),
+                    )
+                    .into_any(),
+                )],
+            )?),
+        )?;
         return Err(PyErr::from_value(error));
     }
     applied(

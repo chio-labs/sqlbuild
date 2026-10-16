@@ -26,8 +26,9 @@ use crate::bindings::_helpers::format_command::run::{FormatOutcome, FormatReques
 use crate::bindings::_helpers::format_command::selection::{LintInputs, resolve_lint_inputs};
 use crate::bindings::_helpers::frontier::encoder::emit_error;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
 const SQL_ANALYSIS_SETTING_KEY: &str = "sql_analysis";
 const DEFAULT_DIALECT: &str = "generic";
 const START_MESSAGE: &str = "Formatting SQL  START";
@@ -115,7 +116,7 @@ fn resolve_inputs<'py>(
     }
     if fix {
         resolved.discovered = Some(call_with(
-            &imported(py, NATIVE_MODULE, "discover_project_inputs")?,
+            &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
             &[("project_dir", project_dir.clone())],
         )?);
     }

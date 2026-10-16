@@ -4,14 +4,12 @@ use pyo3::exceptions::PyException;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::event_exporting::scope::current_scope;
-
-pub(crate) const NATIVE_MODULE: &str = "sqlbuild._native";
-pub(crate) const SHIM_MODULE: &str =
-    "sqlbuild.compiler.discovery._helpers.filesystem.project_modules";
-pub(crate) const MODELS_MODULE: &str = "sqlbuild._native";
-pub(crate) const ERRORS_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 /// One project directory under discovery.
 pub(crate) struct ProjectDir<'py> {
@@ -31,7 +29,7 @@ impl<'py> ProjectDir<'py> {
     /// `project_relative_path(path=file_path, project_dir=project_dir)`.
     pub(crate) fn relative(&self, file_path: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         call_with(
-            &imported(self.py(), NATIVE_MODULE, "project_relative_path")?,
+            &registry::native(self.py(), NativeAttr::ProjectRelativePath)?,
             &[
                 ("path", file_path.clone()),
                 ("project_dir", self.path.clone()),
@@ -55,7 +53,7 @@ impl<'py> ProjectDir<'py> {
     ) -> PyResult<Vec<Bound<'py, PyAny>>> {
         let py: Python<'py> = self.py();
         call_with(
-            &imported(py, NATIVE_MODULE, "discover_python_module_files")?,
+            &registry::native(py, NativeAttr::DiscoverPythonModuleFiles)?,
             &[
                 ("project_dir", self.path.clone()),
                 ("root", PyString::new(py, root).into_any()),
@@ -74,7 +72,7 @@ impl<'py> ProjectDir<'py> {
     /// `shim.<loader>(file_path=file_path, project_dir=project_dir)`.
     pub(crate) fn load(
         &self,
-        loader: &str,
+        loader: UserCodeHost,
         file_path: &Bound<'py, PyAny>,
     ) -> PyResult<Bound<'py, PyAny>> {
         call_with(
@@ -101,15 +99,15 @@ impl<'py> ProjectDir<'py> {
 }
 
 /// `project_modules.<name>`.
-pub(crate) fn shim<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, SHIM_MODULE, name)
+pub(crate) fn shim<'py>(py: Python<'py>, name: UserCodeHost) -> PyResult<Bound<'py, PyAny>> {
+    host::entry(py, name)
 }
 
 /// Functions defined in one loaded module.
 pub(crate) fn module_functions<'py>(
     module: &Bound<'py, PyAny>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    shim(module.py(), "module_functions")?
+    shim(module.py(), UserCodeHost::ModuleFunctions)?
         .call1((module,))?
         .try_iter()?
         .collect()
@@ -118,15 +116,15 @@ pub(crate) fn module_functions<'py>(
 /// `sqlbuild._native.<class_name>(**pairs)`.
 pub(crate) fn discovered<'py>(
     py: Python<'py>,
-    class_name: &str,
+    class_name: RecordId,
     pairs: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(&imported(py, MODELS_MODULE, class_name)?, pairs)
+    call_with(&registry::class(py, class_name)?, pairs)
 }
 
 /// `sqlbuild._native.<class_name>(message)`.
-pub(crate) fn discovery_error(py: Python<'_>, class_name: &str, message: String) -> PyErr {
-    imported(py, ERRORS_MODULE, class_name)
+pub(crate) fn discovery_error(py: Python<'_>, class_name: ErrorId, message: String) -> PyErr {
+    registry::error(py, class_name)
         .and_then(|class| class.call1((message,)))
         .map_or_else(|error| error, PyErr::from_value)
 }
@@ -134,7 +132,7 @@ pub(crate) fn discovery_error(py: Python<'_>, class_name: &str, message: String)
 /// `discovery_error` raised from `cause`.
 pub(crate) fn discovery_error_from(
     py: Python<'_>,
-    (class_name, message): (&str, String),
+    (class_name, message): (ErrorId, String),
     cause: PyErr,
 ) -> PyErr {
     let error: PyErr = discovery_error(py, class_name, message);
@@ -163,7 +161,7 @@ pub(crate) fn provider_usages<'py>(
     provider_by_name: &Bound<'py, PyDict>,
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &shim(function.py(), "provider_usages")?,
+        &shim(function.py(), UserCodeHost::ProviderUsages)?,
         &[
             ("function", function.clone()),
             ("provider_by_name", provider_by_name.clone().into_any()),
@@ -182,8 +180,8 @@ pub(crate) fn tuple_of<'py>(
 /// `name` of the read definition, or `None` when the function carries no such definition.
 pub(crate) fn definition<'py>(
     function: &Bound<'py, PyAny>,
-    (module, reader): (&str, &str),
+    reader: UserCodeHost,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let read: Bound<'py, PyAny> = imported(function.py(), module, reader)?.call1((function,))?;
+    let read: Bound<'py, PyAny> = host::entry(function.py(), reader)?.call1((function,))?;
     Ok((!read.is_none()).then_some(read))
 }

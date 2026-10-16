@@ -36,13 +36,13 @@ use crate::bindings::_helpers::boundary::panics::{NativeCompilerError, compiler_
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::lineage::lineage_index::lineage_key;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::refactor::offline_compile::{OfflineCompile, compile_for_refactor};
 use crate::bindings::_helpers::refactor::refactor_facts::{
     declaration_placement, model_facts, refactor_facts,
 };
 
-const ERRORS_MODULE: &str = "sqlbuild._native";
-const REFACTOR_ERRORS_MODULE: &str = "sqlbuild._native";
 const STAGING_PREFIX: &str = "sqb-refactor-";
 const MOVE_COMMAND: &str = "mv";
 const EDIT_ERROR_CODE: &str = "C957";
@@ -58,7 +58,7 @@ fn user_error(py: Python<'_>, (message, code, help): (String, &str, Option<Strin
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", code)?;
         options.set_item("help", help)?;
-        imported(py, ERRORS_MODULE, "CliUserError")?.call((message,), Some(&options))
+        registry::error(py, ErrorId::CliUser)?.call((message,), Some(&options))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),
@@ -68,10 +68,8 @@ fn user_error(py: Python<'_>, (message, code, help): (String, &str, Option<Strin
 
 /// The Python exception a native refactoring failure becomes.
 fn refactor_error(py: Python<'_>, error: RefactorError) -> PyErr {
-    let class = |name: &str| -> PyErr {
-        match imported(py, REFACTOR_ERRORS_MODULE, name)
-            .and_then(|class| class.call1((error.message.clone(),)))
-        {
+    let class = |name: ErrorId| -> PyErr {
+        match registry::error(py, name).and_then(|class| class.call1((error.message.clone(),))) {
             Ok(raised) => PyErr::from_value(raised),
             Err(failure) => failure,
         }
@@ -80,8 +78,8 @@ fn refactor_error(py: Python<'_>, error: RefactorError) -> PyErr {
         RefactorErrorKind::Input => user_error(py, (error.message, &error.code, error.help)),
         RefactorErrorKind::Edit => user_error(py, (error.message, EDIT_ERROR_CODE, None)),
         RefactorErrorKind::Write => user_error(py, (error.message, WRITE_ERROR_CODE, error.help)),
-        RefactorErrorKind::Value => class("RefactorValueError"),
-        RefactorErrorKind::Io => class("RefactorIOError"),
+        RefactorErrorKind::Value => class(ErrorId::RefactorValue),
+        RefactorErrorKind::Io => class(ErrorId::RefactorIO),
         RefactorErrorKind::Internal => NativeCompilerError::new_err(error.message),
     }
 }

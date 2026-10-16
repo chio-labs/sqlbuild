@@ -1,12 +1,14 @@
-//! Breadth-first closure, edge inversion and path nodes over any Python-keyed edge mapping.
-
-use std::collections::VecDeque;
+//! Closure, edge inversion and path nodes over any Python-keyed edge mapping.
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{
     PyDict, PyDictMethods, PyFrozenSet, PyList, PyListMethods, PySet, PySetMethods, PyTuple,
 };
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_core::graph_walk::main::breadth_first_reach::breadth_first_reach;
+use sqlbuild_core::graph_walk::main::directed_path_nodes::directed_path_nodes;
+
+use crate::bindings::_helpers::graph::node_set::PyNodeSet;
 
 const BUILTINS_MODULE: &str = "builtins";
 
@@ -17,29 +19,32 @@ pub(crate) fn closure<'py>(
     (include_starts, max_depth): (bool, Option<i64>),
 ) -> PyResult<Bound<'py, PySet>> {
     let py: Python<'py> = edges.py();
-    let visited: Bound<'py, PySet> = PySet::empty(py)?;
+    let mut visited: PyNodeSet<'py> = PyNodeSet(PySet::empty(py)?);
     if include_starts {
         for start in &starts {
-            visited.add(start)?;
+            visited.0.add(start)?;
         }
     }
-    let mut frontier: VecDeque<(Bound<'py, PyAny>, i64)> =
-        starts.into_iter().map(|start| (start, 0)).collect();
     let none: Bound<'py, PyTuple> = PyTuple::empty(py);
-    while let Some((current, depth)) = frontier.pop_front() {
-        if max_depth.is_some_and(|maximum| depth >= maximum) {
-            continue;
-        }
-        for neighbor in edges.call_method1("get", (&current, &none))?.try_iter()? {
-            let neighbor: Bound<'py, PyAny> = neighbor?;
-            if visited.contains(&neighbor)? {
-                continue;
-            }
-            visited.add(&neighbor)?;
-            frontier.push_back((neighbor, depth + 1));
-        }
-    }
-    Ok(visited)
+    breadth_first_reach(
+        starts,
+        max_depth.map(|maximum| u64::try_from(maximum).unwrap_or(0)),
+        &mut visited,
+        |current| neighbours(edges, current, &none),
+    )?;
+    Ok(visited.0)
+}
+
+/// The keys `edges.get(current, ())` lists.
+fn neighbours<'py>(
+    edges: &Bound<'py, PyAny>,
+    current: &Bound<'py, PyAny>,
+    none: &Bound<'py, PyTuple>,
+) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    edges
+        .call_method1("get", (current, none))?
+        .try_iter()?
+        .collect()
 }
 
 /// Keys within `max_depth` edges of any start, plus the starts when requested.
@@ -130,35 +135,22 @@ fn path_nodes<'py>(
     downstream: &Bound<'py, PyAny>,
 ) -> PyResult<Option<Bound<'py, PyFrozenSet>>> {
     let py: Python<'py> = downstream.py();
-    let reachable: Bound<'py, PySet> = closure(vec![start.clone()], downstream, (false, None))?;
-    if !reachable.contains(&end)? {
+    let upstream: Bound<'py, PyDict> = inverted(downstream)?;
+    let none: Bound<'py, PyTuple> = PyTuple::empty(py);
+    let mut reachable: PyNodeSet<'py> = PyNodeSet(PySet::empty(py)?);
+    let mut path: PyNodeSet<'py> = PyNodeSet(PySet::empty(py)?);
+    let found: bool = directed_path_nodes(
+        (start, end),
+        (
+            |current: &Bound<'py, PyAny>| neighbours(downstream, current, &none),
+            |current: &Bound<'py, PyAny>| neighbours(upstream.as_any(), current, &none),
+        ),
+        (&mut reachable, &mut path),
+    )?;
+    if !found {
         return Ok(None);
     }
-    let upstream: Bound<'py, PyDict> = inverted(downstream)?;
-    let upstream_from_end: Bound<'py, PySet> = PySet::empty(py)?;
-    let mut stack: Vec<Bound<'py, PyAny>> = vec![end.clone()];
-    while let Some(current) = stack.pop() {
-        if upstream_from_end.contains(&current)? {
-            continue;
-        }
-        upstream_from_end.add(&current)?;
-        let Some(parents) = upstream.get_item(&current)? else {
-            continue;
-        };
-        for parent in parents.try_iter()? {
-            let parent: Bound<'py, PyAny> = parent?;
-            if reachable.contains(&parent)? || parent.eq(&start)? {
-                stack.push(parent);
-            }
-        }
-    }
-    let nodes: Bound<'py, PyAny> = reachable
-        .call_method1("__and__", (&upstream_from_end,))?
-        .call_method1("__or__", (PySet::new(py, [&start, &end])?,))?;
-    Ok(Some(PyFrozenSet::new(
-        py,
-        nodes.try_iter()?.collect::<PyResult<Vec<_>>>()?,
-    )?))
+    Ok(Some(PyFrozenSet::new(py, path.0.iter())?))
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

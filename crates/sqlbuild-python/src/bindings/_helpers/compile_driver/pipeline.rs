@@ -15,26 +15,19 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
 use crate::bindings::_helpers::frontier::stage_capture::write_plan_capture;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::results::{format_rules_result, rules_progress};
 use crate::bindings::_helpers::rules::rules_config::load_rules_config;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const EFFECTIVE_CONFIG_MODULE: &str = "sqlbuild._native";
-const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const ANALYSIS_SELECTION_MODULE: &str = "sqlbuild._native";
-const TIMING_TRACKER_MODULE: &str = "sqlbuild._native";
-const RULE_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
-const RULE_THREADS_MODULE: &str = "sqlbuild._native";
-const RULE_MODELS_MODULE: &str = "sqlbuild._native";
-const RUNTIME_MODELS_MODULE: &str = "sqlbuild.runtime.contracts.models";
 const GENERIC_DIALECT: &str = "generic";
 
 /// The current build's phase timing tracker, when one is recording.
 fn timing_tracker(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    imported(py, TIMING_TRACKER_MODULE, "BuildPhaseTimingTracker")?.call_method0("current")
+    registry::native(py, NativeAttr::BuildPhaseTimingTracker)?.call_method0("current")
 }
 
 /// Report `message` through `on_progress` when a callback is set.
@@ -81,16 +74,12 @@ fn compiled_phase<'py>(
     let options: Bound<'py, PyAny> = if options.is_truthy()? {
         options.clone()
     } else {
-        imported(py, NATIVE_RECORDS_MODULE, "CompilePipelineOptions")?.call0()?
+        registry::class(py, RecordId::CompilePipelineOptions)?.call0()?
     };
     let configured: Bound<'py, PyAny> = options.getattr("connection_config")?;
     let connection_config: Bound<'py, PyAny> = if configured.is_none() {
         call_with(
-            &imported(
-                py,
-                EFFECTIVE_CONFIG_MODULE,
-                "build_effective_connection_config",
-            )?,
+            &registry::native(py, NativeAttr::BuildEffectiveConnectionConfig)?,
             &[
                 ("discovered_inputs", discovered.clone()),
                 ("selected_target", options.getattr("selected_target")?),
@@ -105,7 +94,7 @@ fn compiled_phase<'py>(
     let compiled: PyResult<Bound<'py, PyAny>> = (|| {
         let selection: Bound<'py, PyAny> = compile_analysis_selection(&options, discovered)?;
         call_with(
-            &imported(py, NATIVE_MODULE, "build_compiled_project")?,
+            &registry::native(py, NativeAttr::BuildCompiledProject)?,
             &[
                 ("discovered_inputs", discovered.clone()),
                 ("adapter", adapter.clone()),
@@ -133,7 +122,7 @@ fn compiled_phase<'py>(
         &format!("Compiled project. ({compile_seconds:.2}s)"),
     )?;
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "CompiledProjectPhaseResult")?,
+        &registry::class(py, RecordId::CompiledProjectPhaseResult)?,
         &[
             ("project", project),
             ("connection_config", connection_config),
@@ -194,14 +183,13 @@ fn reject_compile_errors(
     } else {
         py.None().into_bound(py)
     };
-    let error: Bound<'_, PyAny> = imported(py, COMPILE_EXCEPTIONS_MODULE, "CompileInputError")?
-        .call(
-            (lines.join("\n"),),
-            Some(&keywords(
-                py,
-                &[("code", first.getattr("code")?), ("help", help)],
-            )?),
-        )?;
+    let error: Bound<'_, PyAny> = registry::error(py, ErrorId::CompileInput)?.call(
+        (lines.join("\n"),),
+        Some(&keywords(
+            py,
+            &[("code", first.getattr("code")?), ("help", help)],
+        )?),
+    )?;
     Err(PyErr::from_value(error))
 }
 
@@ -221,7 +209,7 @@ fn run_compile_pipeline<'py>(
     let discovered: Bound<'py, PyAny> = arguments.value("discovered_inputs")?;
     let adapter: Bound<'py, PyAny> = arguments.value("adapter")?;
     let options: Bound<'py, PyAny> = call_with(
-        &imported(py, ANALYSIS_SELECTION_MODULE, "apply_unit_test_selectors")?,
+        &registry::native(py, NativeAttr::ApplyUnitTestSelectors)?,
         &[
             ("options", arguments.value("options")?),
             ("discovered_inputs", discovered.clone()),
@@ -229,7 +217,7 @@ fn run_compile_pipeline<'py>(
     )?;
     let hooks: Bound<'py, PyAny> = arguments.value("hooks")?;
     let hooks: Bound<'py, PyAny> = if hooks.is_none() {
-        imported(py, RUNTIME_MODELS_MODULE, "ConnectionHooks")?.call0()?
+        host::entry(py, ExecutorHost::ConnectionHooks)?.call0()?
     } else {
         hooks
     };
@@ -253,7 +241,7 @@ fn run_rules_gate<'py>(
     (project, graph): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<()> {
     let py: Python<'py> = discovered.py();
-    let rules_error: Bound<'py, PyAny> = imported(py, RULE_EXCEPTIONS_MODULE, "RulesError")?;
+    let rules_error: Bound<'py, PyAny> = registry::error(py, ErrorId::Rules)?;
     let project_dir: Bound<'py, PyAny> = discovered.getattr("project_dir")?;
     if project_dir.is_none() {
         return Err(PyErr::from_value(
@@ -264,7 +252,7 @@ fn run_rules_gate<'py>(
         load_rules_config(py, project_dir.extract()?)?.into_bound(py);
     if options.getattr("no_cache")?.is_truthy()? {
         let cache: Bound<'py, PyAny> = call_with(
-            &imported(py, NATIVE_RECORDS_MODULE, "RulesCacheConfig")?,
+            &registry::class(py, RecordId::RulesCacheConfig)?,
             &[("enabled", false.into_pyobject(py)?.to_owned().into_any())],
         )?;
         config = imported(py, "dataclasses", "replace")?
@@ -279,11 +267,7 @@ fn run_rules_gate<'py>(
         GENERIC_DIALECT.into_pyobject(py)?.into_any()
     };
     let selected_keys: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            ANALYSIS_SELECTION_MODULE,
-            "resolve_configured_rule_selection",
-        )?,
+        &registry::native(py, NativeAttr::ResolveConfiguredRuleSelection)?,
         &[
             ("options", options.clone()),
             ("discovered_inputs", discovered.clone()),
@@ -291,7 +275,7 @@ fn run_rules_gate<'py>(
         ],
     )?;
     let result: Bound<'py, PyAny> = call_with(
-        &imported(py, RULE_THREADS_MODULE, "evaluate_rules")?,
+        &registry::native(py, NativeAttr::EvaluateRules)?,
         &[
             ("graph", graph.clone()),
             ("discovered_inputs", discovered.clone()),
@@ -312,7 +296,7 @@ fn run_rules_gate<'py>(
         return Ok(());
     }
     let summary: Bound<'py, PyAny> = call_with(
-        &imported(py, RULE_MODELS_MODULE, "RulesResult")?,
+        &registry::class(py, RecordId::RulesResult)?,
         &[
             ("findings", findings),
             ("evaluated_models", result.getattr("evaluated_models")?),

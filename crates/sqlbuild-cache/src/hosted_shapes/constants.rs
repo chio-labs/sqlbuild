@@ -1,7 +1,5 @@
 //! The Python shape names of the natively hosted compiler shapes.
 
-/// The extension module hosting the shapes.
-pub const NATIVE_MODULE: &str = "sqlbuild._native";
 /// The Python model type a natively hosted compiler shape is captured as.
 pub const HOSTED_SHAPE_TYPES: [(&str, &str); 491] = [
     (

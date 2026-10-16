@@ -17,6 +17,8 @@ use sqlbuild_scopes::scope_index::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::placement::{QualifiedRow, qualified_identity};
 use crate::bindings::_helpers::scopes::scope_objects::{
     ScopeClasses, read_index, report_records, resource_identity_object, tuple_attribute,
@@ -24,7 +26,6 @@ use crate::bindings::_helpers::scopes::scope_objects::{
 use crate::bindings::types::CompilerDetach;
 
 const TYPES_MODULE: &str = "types";
-const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 
 /// `(declarations, canonical positions)` matched, else identity and path error messages.
 pub(crate) type TargetRows = (bool, Vec<usize>, Option<String>, Option<String>);
@@ -250,7 +251,7 @@ fn visibility_index<'py>(
             PyTuple::new(py, positions)?,
         )?;
     }
-    classes.model("DeclarationVisibilityIndex")?.call1((
+    classes.model(RecordId::DeclarationVisibilityIndex)?.call1((
         PyTuple::new(py, identities)?,
         PyTuple::new(py, &visibility.global)?,
         mapping_proxy(&private)?,
@@ -261,9 +262,7 @@ fn visibility_index<'py>(
 
 pub(crate) fn scope_path_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
-        py.import(EXCEPTIONS_MODULE)?
-            .getattr("InvalidScopePathError")?
-            .call1((message,))?,
+        registry::error(py, ErrorId::InvalidScopePath)?.call1((message,))?,
     ))
 }
 
@@ -285,7 +284,7 @@ pub(crate) fn build_scope_lookup(py: Python<'_>, index: &Bound<'_, PyAny>) -> Py
     let usages: Bound<'_, PyTuple> = tuple_attribute(index, "usages")?;
     let grants: Bound<'_, PyTuple> = tuple_attribute(index, "grants")?;
     let canonical_declarations: Bound<'_, PyTuple> = picked(&declarations, &lookup.declarations)?;
-    let canonical_index: Bound<'_, PyAny> = classes.model("ScopeIndex")?.call1((
+    let canonical_index: Bound<'_, PyAny> = classes.model(RecordId::ScopeIndex)?.call1((
         picked(&tuple_attribute(index, "ownership_roots")?, &lookup.roots)?,
         picked(&resources, &lookup.resources)?,
         &canonical_declarations,
@@ -333,7 +332,7 @@ pub(crate) fn build_scope_lookup(py: Python<'_>, index: &Bound<'_, PyAny>) -> Py
         by_resource,
     ] = mappings;
     Ok(classes
-        .model("ScopeLookup")?
+        .model(RecordId::ScopeLookup)?
         .call1((
             canonical_index,
             by_identity,

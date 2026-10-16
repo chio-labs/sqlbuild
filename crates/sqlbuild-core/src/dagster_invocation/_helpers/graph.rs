@@ -1,6 +1,6 @@
 //! Edge sets of a DAG artifact keyed by node position.
 
-use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeSet, HashMap};
 
 /// Upstream positions and ordered, distinct downstream positions of each node.
 pub(crate) struct EdgeSets {
@@ -56,17 +56,5 @@ pub(crate) fn id_positions(ids: &[String]) -> HashMap<&str, usize> {
     ids.iter()
         .enumerate()
         .map(|(position, id)| (id.as_str(), position))
-        .collect()
-}
-
-/// Nodes without upstream nodes, in node order.
-pub(crate) fn initially_ready(
-    unique: &[usize],
-    incoming: &HashMap<usize, BTreeSet<usize>>,
-) -> VecDeque<usize> {
-    unique
-        .iter()
-        .copied()
-        .filter(|position| incoming.get(position).is_none_or(BTreeSet::is_empty))
         .collect()
 }

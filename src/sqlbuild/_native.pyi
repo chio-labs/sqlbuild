@@ -168,6 +168,7 @@ from sqlbuild.runtime.output_capture.models import (
 from sqlbuild.runtime.output_capture.types import CommandOutputStream
 
 BUILD_IDENTITY: str
+HOST_ENTRIES: tuple[tuple[str, str, str], ...]
 MICROBATCH_START_SENTINEL: str
 MICROBATCH_END_SENTINEL: str
 MIGRATION_FINGERPRINT_METADATA_KEY: str

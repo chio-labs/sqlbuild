@@ -1,6 +1,8 @@
 //! Expected results and assertions must not define or read each other, even through helpers.
 
-use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashMap};
+
+use sqlbuild_core::graph_walk::main::breadth_first_path::breadth_first_path;
 
 use polyglot_sql::{Dialect, DialectType, Expression, ExpressionWalk};
 use serde_json::Value;
@@ -246,20 +248,12 @@ fn dependency_path(
     prohibited: &BTreeSet<String>,
     dependencies: &HashMap<String, Vec<String>>,
 ) -> Option<Vec<String>> {
-    let mut pending: VecDeque<Vec<String>> = VecDeque::from([vec![origin.to_owned()]]);
-    let mut visited: HashSet<String> = HashSet::from([origin.to_owned()]);
-    while let Some(path) = pending.pop_front() {
-        let last: &String = path.last()?;
-        for dependency in dependencies.get(last).into_iter().flatten() {
-            let mut candidate: Vec<String> = path.clone();
-            candidate.push(dependency.clone());
-            if prohibited.contains(dependency) {
-                return Some(candidate);
-            }
-            if visited.insert(dependency.clone()) {
-                pending.push_back(candidate);
-            }
-        }
-    }
-    None
+    breadth_first_path(
+        origin.to_owned(),
+        (
+            |last: &String| dependencies.get(last).into_iter().flatten().cloned(),
+            |dependency: &String| prohibited.contains(dependency),
+            |_: &String| true,
+        ),
+    )
 }
