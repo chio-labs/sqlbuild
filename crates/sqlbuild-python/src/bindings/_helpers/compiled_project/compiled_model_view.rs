@@ -331,6 +331,16 @@ impl NativeCompiledModel {
         })
     }
 
+    /// The attached schema's declared `SchemaColumn`s, or `None` without a schema.
+    pub(crate) fn declared_columns(&self, py: Python<'_>) -> PyResult<Option<Py<PyTuple>>> {
+        self.read(py, |record, py| {
+            Ok(record
+                .schema
+                .as_ref()
+                .map(|schema| schema.columns.clone_ref(py)))
+        })
+    }
+
     fn model_file_attribute(&self, py: Python<'_>, name: &str) -> PyResult<Py<PyAny>> {
         self.read(py, |record, py| {
             Ok(record.model_file.bind(py).getattr(name)?.unbind())
@@ -404,7 +414,7 @@ impl NativeCompiledModel {
     }
 
     #[getter]
-    fn relative_path(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn relative_path(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.model_file_attribute(py, "relative_path")
     }
 
@@ -414,7 +424,7 @@ impl NativeCompiledModel {
     }
 
     #[getter]
-    fn config(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn config(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.read(py, |record, py| Ok(record.config.clone_ref(py)))
     }
 
@@ -456,7 +466,7 @@ impl NativeCompiledModel {
 
     /// `(resource type, name)` of the model's key.
     #[getter]
-    fn key_row(&self, py: Python<'_>) -> PyResult<(String, String)> {
+    pub(crate) fn key_row(&self, py: Python<'_>) -> PyResult<(String, String)> {
         self.read(py, |record, py| {
             Ok((MODEL_RESOURCE.to_owned(), model_name(record, py)?))
         })
@@ -464,7 +474,7 @@ impl NativeCompiledModel {
 
     /// `(resource type, name)` of each dependency.
     #[getter]
-    fn dep_rows(&self, py: Python<'_>) -> PyResult<Vec<(String, String)>> {
+    pub(crate) fn dep_rows(&self, py: Python<'_>) -> PyResult<Vec<(String, String)>> {
         self.compiled(py, |compiled, _| Ok(compiled.deps.clone()))
     }
 
@@ -601,7 +611,7 @@ impl NativeCompiledModel {
     }
 
     #[getter]
-    fn authored_sql(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn authored_sql(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.model_file_attribute(py, "contents")
     }
 
@@ -626,12 +636,12 @@ impl NativeCompiledModel {
     }
 
     #[getter]
-    fn enum_declarations(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+    pub(crate) fn enum_declarations(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
         self.read(py, |record, py| Ok(record.enum_declarations.clone_ref(py)))
     }
 
     #[getter]
-    fn constant_declarations(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+    pub(crate) fn constant_declarations(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
         self.read(py, |record, py| {
             Ok(record.constant_declarations.clone_ref(py))
         })

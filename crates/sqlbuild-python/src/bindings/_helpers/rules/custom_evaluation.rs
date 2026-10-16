@@ -1,12 +1,10 @@
 //! Incremental custom-rule evaluation keyed on the compiler facts each invocation read.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use pyo3::prelude::{
-    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
-};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_cache::digest::main::sha256_hex::sha256_hex;
@@ -19,9 +17,7 @@ use sqlbuild_rules::custom_rule_cache::types::ReadSet;
 
 use crate::bindings::_helpers::cache::native_store::current_code_identity;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::constants::{
     CUSTOM_HOST_RUNTIME_VERSION, CUSTOM_RULES_CACHE_FILE,
@@ -30,6 +26,8 @@ use crate::bindings::_helpers::rules::custom_hosts::{
     HostCancel, HostRequest, host_payload_project, run_custom_hosts,
 };
 use crate::bindings::_helpers::rules::custom_rule_cache::CustomRuleCache;
+use crate::bindings::_helpers::rules::fact_encoder::{Encoded, reproducible};
+use crate::bindings::_helpers::rules::fact_replay::{FactReplay, is_tree_fact};
 
 const PROJECT_SUBJECT: &str = "project";
 const MODEL_SUBJECT: &str = "model";
@@ -84,7 +82,6 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
     if custom.is_empty() {
         return outcome(py, (Vec::new(), 0, 0), (0, 0));
     }
-    let facts_project: Bound<'py, PyAny> = host_project(run.project)?;
     let enabled: bool = run
         .config
         .getattr("cache")?
@@ -126,12 +123,12 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
         run.project.getattr("effective_target_name")?.extract()?,
         model_rows(run.project)?,
     );
-    let mut digests: FactDigests<'py> =
-        FactDigests::new(&facts_project, run.project_dir, run.dialect)?;
+    let project_dir: PathBuf = run.project_dir.extract()?;
+    let mut digests: FactDigests<'py> = FactDigests::new(run.project, &project_dir)?;
     let pending: Vec<ReadSet> = cache.pending_readsets().to_vec();
     let mut readset_digests: Vec<Option<String>> = Vec::new();
     for readset in &pending {
-        readset_digests.push(digests.reproducible(|digests| digests.combined(readset))?);
+        readset_digests.push(reproducible(digests.combined(readset))?);
     }
     let plan: HostPlan = cache.plan(readset_digests);
     if !plan.is_empty() {
@@ -144,7 +141,7 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
             .map(|(path, _, _)| path)
             .collect();
         model_paths.sort();
-        let project_dir: PathBuf = run.project_dir.extract()?;
+        let facts_project: Bound<'py, PyAny> = host_project(run.project)?;
         let host_run: HostRun = run_custom_hosts(
             py,
             &HostRequest {
@@ -206,7 +203,7 @@ fn evaluations(
                 Some(reads) => reads,
                 None => {
                     if full_keys.is_none() {
-                        full_keys = Some(digests.full_fact_keys()?);
+                        full_keys = Some(digests.replay.full_fact_keys()?);
                     }
                     let mut reads: Vec<FactKey> = run
                         .untracked_reads
@@ -223,9 +220,8 @@ fn evaluations(
                 .into_iter()
                 .collect();
             if !combined.contains_key(&readset) {
-                let digest: Option<String> = digests
-                    .reproducible(|digests| digests.observed(&readset, &run.observed))?
-                    .flatten();
+                let digest: Option<String> =
+                    reproducible(digests.observed(&readset, &run.observed))?.flatten();
                 combined.insert(readset.clone(), digest);
             }
             let digest: Option<String> = combined.get(&readset).cloned().flatten();
@@ -243,69 +239,30 @@ fn evaluations(
 
 /// Memoized digests of recorded fact keys against one compiled project snapshot.
 struct FactDigests<'py> {
-    project: Bound<'py, PyAny>,
-    project_dir: Bound<'py, PyAny>,
-    dialect: String,
-    views: Option<Bound<'py, PyAny>>,
-    shared: Bound<'py, PyAny>,
+    replay: FactReplay<'py>,
     digests: HashMap<FactKey, String>,
 }
 
 impl<'py> FactDigests<'py> {
-    fn new(
-        project: &Bound<'py, PyAny>,
-        project_dir: &Bound<'py, PyAny>,
-        dialect: &str,
-    ) -> PyResult<Self> {
+    fn new(project: &Bound<'py, PyAny>, project_dir: &Path) -> PyResult<Self> {
         Ok(Self {
-            project: project.clone(),
-            project_dir: project_dir.clone(),
-            dialect: dialect.to_owned(),
-            views: None,
-            shared: host::entry(project.py(), UserCodeHost::SharedFactEncoder)?.call0()?,
+            replay: FactReplay::new(project, project_dir)?,
             digests: HashMap::new(),
         })
     }
 
-    fn views(&mut self) -> PyResult<Bound<'py, PyAny>> {
-        if let Some(views) = &self.views {
-            return Ok(views.clone());
-        }
-        let py: Python<'py> = self.project.py();
-        let views: Bound<'py, PyAny> = call_with(
-            &host::entry(py, UserCodeHost::BuildRuleFactViews)?,
-            &[
-                ("project", self.project.clone()),
-                ("project_dir", self.project_dir.clone()),
-                ("dialect", self.dialect.clone().into_bound_py_any(py)?),
-            ],
-        )?;
-        self.views = Some(views.clone());
-        Ok(views)
-    }
-
-    /// One fact digest; raises `FactDigestError` when it cannot be reproduced.
-    fn digest(&mut self, key: &FactKey) -> PyResult<String> {
+    /// One fact digest; `Unreproducible` when it cannot be recomputed.
+    fn digest(&mut self, key: &FactKey) -> Encoded<String> {
         if let Some(cached) = self.digests.get(key) {
             return Ok(cached.clone());
         }
-        let py: Python<'py> = self.project.py();
-        let views: Bound<'py, PyAny> = self.views()?;
-        let digest: String = call_with(
-            &host::entry(py, UserCodeHost::FactOutcomeDigest)?,
-            &[
-                ("views", views),
-                ("key", PyTuple::new(py, key)?.into_any()),
-                ("shared", self.shared.clone()),
-            ],
-        )?
-        .extract()?;
+        let digest: String = self.replay.digest(key)?;
         self.digests.insert(key.clone(), digest.clone());
         Ok(digest)
     }
 
     /// One read set's digest over its keys in canonical order.
-    fn combined(&mut self, keys: &[FactKey]) -> PyResult<String> {
+    fn combined(&mut self, keys: &[FactKey]) -> Encoded<String> {
         let mut sorted: Vec<&FactKey> = keys.iter().collect();
         sorted.sort();
         let mut bytes: Vec<u8> = Vec::new();
@@ -321,11 +278,9 @@ impl<'py> FactDigests<'py> {
         &mut self,
         readset: &[FactKey],
         observed: &BTreeMap<FactKey, Option<String>>,
-    ) -> PyResult<Option<String>> {
-        let py: Python<'py> = self.project.py();
-        let is_tree_fact: Bound<'py, PyAny> = host::entry(py, UserCodeHost::IsTreeFact)?;
+    ) -> Encoded<Option<String>> {
         for key in readset {
-            if is_tree_fact.call1((PyTuple::new(py, key)?,))?.is_truthy()?
+            if is_tree_fact(key)
                 && let Some(seen) = observed.get(key)
                 && seen.as_deref() != Some(self.digest(key)?.as_str())
             {
@@ -334,32 +289,6 @@ impl<'py> FactDigests<'py> {
         }
         self.combined(readset).map(Some)
     }
-
-    /// Keys covering every fact a custom rule can observe through its context.
-    fn full_fact_keys(&mut self) -> PyResult<Vec<FactKey>> {
-        let py: Python<'py> = self.project.py();
-        host::entry(py, UserCodeHost::FullFactKeys)?
-            .call1((self.views()?,))?
-            .extract()
-    }
-
-    /// `body`'s value, or `None` when it raised `FactDigestError`.
-    fn reproducible<T>(
-        &mut self,
-        body: impl FnOnce(&mut Self) -> PyResult<T>,
-    ) -> PyResult<Option<T>> {
-        let py: Python<'py> = self.project.py();
-        match body(self) {
-            Ok(value) => Ok(Some(value)),
-            Err(error) if fact_digest_error(py, &error)? => Ok(None),
-            Err(error) => Err(error),
-        }
-    }
-}
-
-fn fact_digest_error(py: Python<'_>, error: &PyErr) -> PyResult<bool> {
-    let class: Bound<'_, PyAny> = registry::error(py, ErrorId::FactDigest)?;
-    error.value(py).is_instance(&class)
 }
 
 /// `orjson.dumps(key)` of one fact key.
@@ -506,6 +435,18 @@ fn custom_host_payload<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, 
     host_payload_project(&host_project(project)?)
 }
 
+/// The digest the custom-rule cache keys one recorded fact on, or `None` when unreproducible.
+#[pyfunction]
+#[pyo3(signature = (*, project, project_dir, key))]
+fn custom_rule_fact_digest(
+    project: &Bound<'_, PyAny>,
+    project_dir: PathBuf,
+    key: FactKey,
+) -> PyResult<Option<String>> {
+    reproducible(FactReplay::new(project, &project_dir)?.digest(&key))
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(custom_host_payload, module)?)
+    module.add_function(wrap_pyfunction!(custom_host_payload, module)?)?;
+    module.add_function(wrap_pyfunction!(custom_rule_fact_digest, module)?)
 }

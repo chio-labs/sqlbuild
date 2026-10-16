@@ -128,11 +128,6 @@ rule = 2
 note = "Public custom-rule test harness that writes a temporary project and runs user rules over it; rule-option TOML literals are native (rule_option_toml_value)."
 
 [[stays]]
-path = "rule_engine/_helpers/engine/fact_replay.py"
-rule = 2
-note = "Rule 2: the fact digest scheme shared with the rule host (tracked_facts.py, custom_host.py); recomputes values through the user-facing fact views and encodes live Python objects with orjson. The readable-file selection is native (tracked_text_file_values)."
-
-[[stays]]
 path = "rule_engine/main/define.py"
 rule = 3
 note = "Public @rule decorator entry point."
@@ -185,7 +180,7 @@ note = "Fact view user rules read through RuleContext; the Python API over nativ
 [[stays]]
 path = "rule_engine/classes/project_tree.py"
 rule = 3
-note = "Project-tree fact view user rules read through RuleContext; the walk, path validation, file resolution and the children, descendants, glob and relative_parts queries are native (project_tree_*), and only the file read and the model lookup stay here."
+note = "Project-tree fact view user rules read through RuleContext; the walk, path validation, file resolution and the children, descendants, glob, relative_parts and read_text queries are native (project_tree_*), and only the model lookup stays here."
 
 [[stays]]
 path = "rule_engine/classes/sql_document.py"
@@ -196,11 +191,6 @@ note = "Lazy Polyglot SQL document user rules read through RuleContext."
 path = "rule_engine/classes/fact_reads.py"
 rule = 2
 note = "Records the fact-view reads of one user rule evaluation."
-
-[[stays]]
-path = "rule_engine/classes/shared_fact_encoder.py"
-rule = 2
-note = "Encodes the Python fact-view values user rules read, for their digests."
 
 [[stays]]
 path = "runtime/observability"
@@ -755,7 +745,7 @@ note = "Shape rule: typing protocols, enums and aliases only (CompiledProjectVie
 [[stays]]
 path = "rule_engine/types.py"
 rule = 3
-note = "Shape rule: data protocol and aliases only (RuleContext, RuleCheck, RuleOptionValue, FactKey, CustomRulePlan), no logic; re-exported by rules/__init__.py and consumed by rule_engine/main/define.py, rule_engine/_helpers/host/custom_host.py, rule_engine/_helpers/engine/fact_replay.py and 4 more."
+note = "Shape rule: data protocol and aliases only (RuleContext, RuleCheck, RuleOptionValue, FactKey, CustomRulePlan), no logic; re-exported by rules/__init__.py and consumed by rule_engine/main/define.py, rule_engine/_helpers/host/custom_host.py and 4 more."
 
 [[stays]]
 path = "rule_engine/constants.py"

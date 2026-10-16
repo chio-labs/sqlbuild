@@ -11,7 +11,7 @@ import pickle
 import sys
 import time
 from dataclasses import asdict
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any, BinaryIO
 
 from sqlbuild._native import (
@@ -29,7 +29,6 @@ from sqlbuild._native import (
     build_rule_catalogue,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.rule_engine._helpers.engine.fact_replay import fact_key_payload
 from sqlbuild.rule_engine._helpers.host.custom_evaluation import evaluate_custom_rules
 from sqlbuild.rule_engine.classes.runtime_guard import RuntimeGuard
 from sqlbuild.rule_engine.constants import (
@@ -279,6 +278,12 @@ def _write_error(message: str) -> int:
     }
     sys.stdout.write(json.dumps(response, sort_keys=True))
     return 0
+
+
+def fact_key_payload(key: tuple[object, ...]) -> list[str]:
+    """Return the JSON form of one recorded fact key."""
+
+    return [value.as_posix() if isinstance(value, PurePath) else str(value) for value in key]
 
 
 if __name__ == "__main__":

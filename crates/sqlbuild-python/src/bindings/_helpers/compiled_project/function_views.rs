@@ -4,7 +4,7 @@ use pyo3::exceptions::{PyIndexError, PyRuntimeError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
-use pyo3::{FromPyObject, pyclass, pymethods};
+use pyo3::{FromPyObject, IntoPyObjectExt, pyclass, pymethods};
 
 use crate::bindings::_helpers::compiled_project::compiled_model_view::{
     DestinationFact, defaulted_destination, object_key, relation_location,
@@ -562,3 +562,29 @@ function_getters!(NativeCompiledFunction, {
         ))
     }
 });
+
+impl NativeCompiledFunction {
+    /// The `CompiledFunction` field values, in field order, without building the record.
+    pub(crate) fn record_values<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+        Ok(vec![
+            self.key(py)?.into_bound(py),
+            self.deps(py)?.into_any(),
+            self.name(py)?.into_bound_py_any(py)?,
+            self.relative_path(py)?.into_bound(py),
+            self.arguments(py)?.into_bound(py).into_any(),
+            self.returns(py)?.into_bound_py_any(py)?,
+            self.body_sql(py)?.into_bound_py_any(py)?,
+            self.destination(py)?.into_bound(py),
+            self.fingerprint_destination(py)?.into_bound(py),
+            self.return_columns(py)?.into_bound(py).into_any(),
+            self.references(py)?.into_bound(py).into_any(),
+            self.language(py)?,
+            self.source_file_path(py)?.into_bound(py),
+            self.runtime_version(py)?.into_bound_py_any(py)?,
+            self.entry_point(py)?.into_bound_py_any(py)?,
+            self.packages(py)?.into_any(),
+            self.tags(py)?.into_any(),
+            self.description(py)?.into_bound_py_any(py)?,
+        ])
+    }
+}

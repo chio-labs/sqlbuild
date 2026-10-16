@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use pyo3::exceptions::{PyAttributeError, PyOSError, PyValueError};
+use pyo3::exceptions::PyAttributeError;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
@@ -12,11 +12,8 @@ use pyo3::types::{
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_config::toml::main::toml_literal::toml_literal;
 use sqlbuild_config::toml::models::TomlLiteral;
-use sqlbuild_rules::project_tree::errors::ProjectTreeFileError;
 use sqlbuild_rules::project_tree::main::project_path_escapes::project_path_escapes;
 use sqlbuild_rules::project_tree::main::project_tree_entries::project_tree_entries;
-use sqlbuild_rules::project_tree::main::project_tree_file::project_tree_file;
-use sqlbuild_rules::project_tree::main::tracked_text_suffixes::tracked_text_suffixes;
 use sqlbuild_rules::project_tree::models::ProjectTreeEntry;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
@@ -25,10 +22,6 @@ use crate::bindings::_helpers::records::registry;
 
 const BUILTINS_MODULE: &str = "builtins";
 const DEFAULT_POSITION: i64 = 1;
-#[cfg(unix)]
-const OS_MODULE: &str = "os";
-/// The error `os.lstat` raises for a path holding a NUL byte.
-const EMBEDDED_NUL_MESSAGE: &str = "lstat: embedded null character in path";
 
 /// `RuleUsageError(message)`.
 fn usage_error(py: Python<'_>, message: String) -> PyErr {
@@ -154,33 +147,6 @@ fn escapes(path: &Bound<'_, PyAny>) -> PyResult<bool> {
     )))
 }
 
-/// The `OSError` `Path.is_file()` raises for a stat failure it does not ignore.
-#[cfg(unix)]
-fn unreadable(py: Python<'_>, path: PathBuf, errno: i32) -> PyResult<PyErr> {
-    let message: String = imported(py, OS_MODULE, "strerror")?
-        .call1((errno,))?
-        .extract()?;
-    let Ok(path) = path.into_os_string().into_pyobject(py);
-    Ok(PyOSError::new_err((errno, message, path.unbind())))
-}
-
-/// The `OSError` `Path.is_file()` raises for a Windows stat failure it does not ignore.
-#[cfg(not(unix))]
-fn unreadable(py: Python<'_>, path: PathBuf, code: i32) -> PyResult<PyErr> {
-    let detail: String = std::io::Error::from_raw_os_error(code).to_string();
-    let detail: &str = detail
-        .strip_suffix(&format!(" (os error {code})"))
-        .unwrap_or(&detail)
-        .trim_end_matches(|character: char| character <= ' ' || character == '.');
-    let Ok(path) = path.into_os_string().into_pyobject(py);
-    Ok(PyOSError::new_err((
-        code,
-        detail.to_owned(),
-        path.unbind(),
-        code,
-    )))
-}
-
 /// Every supported path under the resolved project `root`, as sorted `ProjectPath`s.
 #[pyfunction]
 fn project_tree_paths<'py>(root: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
@@ -219,38 +185,10 @@ fn project_tree_paths<'py>(root: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTu
     PyTuple::new(py, nodes)
 }
 
-/// The real file a rule may read at the project-relative `path` under the resolved `root`.
-#[pyfunction]
-fn project_tree_file_path<'py>(
-    root: &Bound<'py, PyAny>,
-    path: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = root.py();
-    let relative: PathBuf = path.str()?.extract()?;
-    let prefix: String = match project_tree_file(&root.extract::<PathBuf>()?, &relative) {
-        Ok(file) => return Ok(file.into_os_string().into_pyobject(py)?.into_any()),
-        Err(ProjectTreeFileError::Escapes) => "project path escapes the project: ".to_owned(),
-        Err(ProjectTreeFileError::EmbeddedNul) => {
-            return Err(PyValueError::new_err(EMBEDDED_NUL_MESSAGE));
-        }
-        Err(ProjectTreeFileError::Missing) => "project file does not exist: ".to_owned(),
-        Err(ProjectTreeFileError::Untracked) => format!(
-            "compiler rules input must be a tracked file type ({}): ",
-            tracked_text_suffixes().join(", ")
-        ),
-        Err(ProjectTreeFileError::Symlink) => "project file must not be a symlink: ".to_owned(),
-        Err(ProjectTreeFileError::Unreadable { path, errno }) => {
-            return Err(unreadable(py, path, errno)?);
-        }
-    };
-    Err(usage_error_for(&prefix, path))
-}
-
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(finding_position, module)?)?;
     module.add_function(wrap_pyfunction!(rule_option_toml_value, module)?)?;
     module.add_function(wrap_pyfunction!(validate_project_relative, module)?)?;
     module.add_function(wrap_pyfunction!(project_tree_paths, module)?)?;
-    module.add_function(wrap_pyfunction!(project_tree_file_path, module)?)?;
     Ok(())
 }

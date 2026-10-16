@@ -494,23 +494,6 @@ def few_marts(*, project: Project, ctx: RuleContext) -> list[Finding]:
     return [ctx.finding(subject=marts[0], message=f"{len(marts)} marts")]
 """,
 }
-STALE_SOURCE_FACTS_SITECUSTOMIZE: str = """from sqlbuild.rule_engine._helpers.engine import (
-    fact_replay,
-)
-
-_digest = fact_replay.fact_outcome_digest
-
-
-def _stale_sources(*, views, key, shared=None):
-    if key == ("project.sources",):
-        return "stale"
-    return _digest(views=views, key=key, shared=shared)
-
-
-fact_replay.fact_outcome_digest = _stale_sources
-"""
-
-
 ONE_MODEL_EDIT_MODEL_COUNT: int = 6
 # One cached result per model for the custom rule, plus the cached built-in rules request.
 ONE_MODEL_EDIT_CACHED_RESULTS: int = ONE_MODEL_EDIT_MODEL_COUNT + 1

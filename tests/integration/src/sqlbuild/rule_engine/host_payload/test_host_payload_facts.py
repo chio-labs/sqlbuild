@@ -117,8 +117,8 @@ def test_given_compiled_project_when_trimming_host_payload_then_every_fact_is_un
     trimmed: CompiledProjectView = custom_host_payload(project)
     monkeypatch.undo()
 
-    full_digests: dict[FactKey, tuple[str, str]] = fact_digests(project=project, root=tmp_path)
-    trimmed_digests: dict[FactKey, tuple[str, str]] = fact_digests(project=trimmed, root=tmp_path)
+    full_digests: dict[FactKey, str | None] = fact_digests(project=project, root=tmp_path)
+    trimmed_digests: dict[FactKey, str | None] = fact_digests(project=trimmed, root=tmp_path)
 
     assert trimmed_digests == full_digests
     assert tuple(map(public_model, trimmed.models)) == tuple(map(public_model, project.models))

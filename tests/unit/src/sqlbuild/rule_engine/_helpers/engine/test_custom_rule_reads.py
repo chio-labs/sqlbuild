@@ -1,15 +1,13 @@
 """Custom-rule results are reused only when every fact the invocation read is unchanged."""
 
-from collections.abc import Callable
+import os
 from pathlib import Path
-from typing import Any
 
 import pytest
 
 import sqlbuild._native as native_module
 from sqlbuild._native import CustomRulesOutcome
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.rule_engine._helpers.engine import fact_replay
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (
     CustomRuleProjectFileTestCase,
     CustomRuleReadTrackingTestCase,
@@ -26,6 +24,18 @@ from tests.unit.src.sqlbuild.rule_engine._helpers.engine.helpers import (
 _CUSTOMERS_SQL: str = "SELECT 1 AS customer_id"
 _OWNERS_BEFORE: str = "owners: [customers]\n"
 _OWNERS_AFTER: str = "owners: [orders]\n"
+# Rule hosts report every filesystem read as changed since the rule observed it.
+_STALE_OBSERVATION_SITECUSTOMIZE: str = """from sqlbuild.rule_engine._helpers.host import tracked_facts
+
+_digest = tracked_facts._digest_or_none
+
+
+def _stale(*, value=None, error=None):
+    return _digest(value=("stale", value)) if error is None else _digest(error=error)
+
+
+tracked_facts._digest_or_none = _stale
+"""
 _FLAG_ORDERS: str = (
     '    return [ctx.finding(subject=model)] if model.name == "orders" and {condition} else []'
 )
@@ -253,17 +263,15 @@ def test_given_file_edited_while_rules_run_when_rerunning_then_new_contents_are_
     project: CompiledProjectView = two_model_project(
         customers_sql=_CUSTOMERS_SQL, customers_config={}
     )
-    digest: Callable[..., str] = fact_replay.fact_outcome_digest
-
-    def edit_then_digest(**kwargs: Any) -> str:
-        _ = owners.write_text(_OWNERS_AFTER, encoding="utf-8")
-        return digest(**kwargs)
-
-    monkeypatch.setattr(fact_replay, "fact_outcome_digest", edit_then_digest)
+    site: Path = tmp_path.parent / f"{tmp_path.name}-site"
+    site.mkdir()
+    _ = (site / "sitecustomize.py").write_text(_STALE_OBSERVATION_SITECUSTOMIZE, encoding="utf-8")
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join((str(site), os.environ.get("PYTHONPATH", ""))))
     during_edit: CustomRulesOutcome = evaluate_cached_custom_rules(
         project=project, project_dir=tmp_path, cache_enabled=True
     )
     monkeypatch.undo()
+    _ = owners.write_text(_OWNERS_AFTER, encoding="utf-8")
     rerun: CustomRulesOutcome = evaluate_cached_custom_rules(
         project=project, project_dir=tmp_path, cache_enabled=True
     )

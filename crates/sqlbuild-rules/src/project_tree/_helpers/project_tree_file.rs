@@ -10,7 +10,7 @@ use crate::project_tree::errors::ProjectTreeFileError;
 use crate::project_tree::models::PureParts;
 
 /// The tracked file inside the resolved `root` that the project-relative `path` names.
-pub fn project_tree_file(root: &Path, path: &Path) -> Result<PathBuf, ProjectTreeFileError> {
+pub(crate) fn project_tree_file(root: &Path, path: &Path) -> Result<PathBuf, ProjectTreeFileError> {
     if escapes(path) {
         return Err(ProjectTreeFileError::Escapes);
     }

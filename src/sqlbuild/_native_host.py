@@ -259,17 +259,6 @@ _TARGETS: dict[str, tuple[str, str]] = {
         "sqlbuild.rule_engine._helpers.engine.custom_payloads",
         "custom_rule_payloads",
     ),
-    "fact_outcome_digest": (
-        "sqlbuild.rule_engine._helpers.engine.fact_replay",
-        "fact_outcome_digest",
-    ),
-    "full_fact_keys": ("sqlbuild.rule_engine._helpers.engine.fact_replay", "full_fact_keys"),
-    "is_tree_fact": ("sqlbuild.rule_engine._helpers.engine.fact_replay", "is_tree_fact"),
-    "shared_fact_encoder": (
-        "sqlbuild.rule_engine._helpers.engine.fact_replay",
-        "shared_fact_encoder",
-    ),
-    "build_rule_fact_views": ("sqlbuild.rule_engine.classes.rule_context", "build_rule_fact_views"),
     "EventExporterInputError": (
         "sqlbuild.runtime.event_exporting.exceptions",
         "EventExporterInputError",

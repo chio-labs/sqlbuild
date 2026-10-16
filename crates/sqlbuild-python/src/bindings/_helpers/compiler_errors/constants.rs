@@ -492,15 +492,6 @@ pub(crate) const COMPILER_ERRORS: &[ErrorSpec] = &[
         fixed: &[],
     },
     ErrorSpec {
-        name: "FactDigestError",
-        parent: "RulesError",
-        doc: "Raised when a recorded custom-rule fact cannot be recomputed or encoded deterministically.",
-        class_attributes: &[],
-        required: &[],
-        optional: &[],
-        fixed: &[],
-    },
-    ErrorSpec {
         name: "OpaqueModuleStateError",
         parent: "RulesError",
         doc: "Raised when custom-rule module state holds a value whose mutations cannot be observed.",

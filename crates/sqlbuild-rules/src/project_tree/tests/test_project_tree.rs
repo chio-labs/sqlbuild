@@ -1,8 +1,8 @@
 use std::path::Path;
 
+use crate::project_tree::_helpers::project_tree_file::project_tree_file;
 use crate::project_tree::errors::ProjectTreeFileError;
 use crate::project_tree::main::project_tree_entries::project_tree_entries;
-use crate::project_tree::main::project_tree_file::project_tree_file;
 use crate::project_tree::tests::helpers::linked_project;
 use crate::project_tree::tests::test_types::{ProjectTreeEntriesTestCase, ProjectTreeFileTestCase};
 

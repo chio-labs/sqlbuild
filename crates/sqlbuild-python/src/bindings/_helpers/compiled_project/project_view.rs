@@ -250,6 +250,22 @@ impl NativeProjectView {
         ))
     }
 
+    /// The project field custom-rule facts read by `name`, or `None` for any other field.
+    pub(crate) fn fact_field(&self, py: Python<'_>, name: &str) -> Option<Py<PyAny>> {
+        let field: &Py<PyAny> = match name {
+            "sources" => &self.fields.compiler.sources,
+            "seeds" => &self.fields.compiler.seeds,
+            "functions" => &self.fields.compiler.functions,
+            "audits" => &self.fields.compiler.audits,
+            "sql_tests" => &self.fields.compiler.sql_tests,
+            "public_enums" => &self.fields.boundary.public_enums,
+            "public_constants" => &self.fields.boundary.public_constants,
+            "models" => return Some(self.fields.models.clone_ref(py).into_any()),
+            _ => return None,
+        };
+        Some(field.clone_ref(py))
+    }
+
     /// The compiled project this view projects.
     pub(crate) fn owner(&self) -> &Py<NativeCompiledProject> {
         &self.owner

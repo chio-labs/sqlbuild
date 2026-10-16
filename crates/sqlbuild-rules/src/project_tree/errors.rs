@@ -29,3 +29,31 @@ pub enum RelativePartsError<E> {
     /// The path is not beneath the requested directory.
     NotBeneath,
 }
+
+/// Why a tracked project file's text cannot be read.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ProjectTextError {
+    /// The path names no file rules may read.
+    File(ProjectTreeFileError),
+    /// Opening or reading the file at `path` failed with this `errno`.
+    Read { path: PathBuf, errno: i32 },
+    /// The file is not valid UTF-8.
+    Decode(Utf8Failure),
+}
+
+/// The first invalid UTF-8 sequence, as Python's strict decoder reports it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Utf8Failure {
+    pub byte: u8,
+    pub start: usize,
+    pub end: usize,
+    pub reason: Utf8Reason,
+}
+
+/// The reason Python's UTF-8 decoder gives.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Utf8Reason {
+    InvalidStart,
+    InvalidContinuation,
+    UnexpectedEnd,
+}

@@ -10,7 +10,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     write_project_file,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.rules._test_types import (
-    BrokenInvalidationChainCase,
     OneModelCustomRuleEditCase,
     RulesCacheEditCase,
     RulesEditChainCase,
@@ -18,7 +17,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.rules._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.rules.helpers import (
     ONE_MODEL_EDIT_CACHED_RESULTS,
     ONE_MODEL_EDIT_PROJECT,
-    STALE_SOURCE_FACTS_SITECUSTOMIZE,
     custom_rules_edit_chain,
     rule_cache_counts,
     rules_compile_outcome,
@@ -107,35 +105,6 @@ def test_given_warm_custom_rules_when_applying_edit_chain_then_every_compile_equ
     assert ("raw_returns" in edited[1][1], "raw_returns" in edited[2][1]) == (True, False)
     assert rewarmed == oracles[-1]
     assert rule_cache_counts(tmp_path / "orders")[1] == 0
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    (
-        BrokenInvalidationChainCase(
-            description="stale_shared_source_digests",
-            edits=CUSTOM_EDIT_SEQUENCE,
-            stale_digests_sitecustomize=STALE_SOURCE_FACTS_SITECUSTOMIZE,
-            expected_first_divergent_edit="source_in_shared_file_renamed",
-        ),
-    ),
-    ids=lambda case: case.description,
-)
-def test_given_broken_invalidation_when_applying_edit_chain_then_oracle_detects_divergence(
-    tmp_path: Path, test_case: BrokenInvalidationChainCase
-) -> None:
-    write_project_file(tmp_path / "site", "sitecustomize.py", test_case.stale_digests_sitecustomize)
-
-    _, edited, oracles = custom_rules_edit_chain(
-        root=tmp_path, edits=test_case.edits, environment=(("PYTHONPATH", str(tmp_path / "site")),)
-    )
-    matches: list[bool] = [
-        outcome == oracle for outcome, oracle in zip(edited, oracles, strict=True)
-    ]
-
-    assert test_case.edits[matches.index(False)].description == (
-        test_case.expected_first_divergent_edit
-    )
 
 
 @pytest.mark.parametrize(

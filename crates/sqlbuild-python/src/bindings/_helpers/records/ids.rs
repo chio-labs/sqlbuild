@@ -604,7 +604,6 @@ native_ids! {
         DiscoveryConflict => "DiscoveryConflictError",
         Discovery => "DiscoveryError",
         EventExporterDiscovery => "EventExporterDiscoveryError",
-        FactDigest => "FactDigestError",
         FingerprintInput => "FingerprintInputError",
         FutureCursorSafety => "FutureCursorSafetyError",
         HostCancelled => "HostCancelledError",

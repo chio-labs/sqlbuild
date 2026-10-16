@@ -1,20 +1,25 @@
 //! Project-tree queries custom rules run over the discovered paths.
 
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
+use crate::bindings::_helpers::rules::fact_tree::{Raised, VALUE_ERROR, strerror, text_error};
+use pyo3::exceptions::PyOSError;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyString, PyTuple};
+use pyo3::types::{PyString, PyStringMethods, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
-use sqlbuild_rules::project_tree::errors::RelativePartsError;
+use sqlbuild_rules::project_tree::errors::{
+    ProjectTextError, ProjectTreeFileError, RelativePartsError,
+};
 use sqlbuild_rules::project_tree::main::project_relative_parts::project_relative_parts;
 use sqlbuild_rules::project_tree::main::project_tree_children::project_tree_children;
 use sqlbuild_rules::project_tree::main::project_tree_descendants::project_tree_descendants;
 use sqlbuild_rules::project_tree::main::project_tree_glob::project_tree_glob;
-use sqlbuild_rules::project_tree::main::tracked_text_path::tracked_text_path;
+use sqlbuild_rules::project_tree::main::read_project_text::read_project_text;
+use sqlbuild_rules::project_tree::main::resolve_project_path::resolve_project_path;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::records::ids::ErrorId;
@@ -97,23 +102,6 @@ fn project_tree_glob_nodes<'py>(
     selected(py, &nodes, project_tree_glob(&values, &pattern))
 }
 
-/// The values of the file nodes rules may read as tracked text, in order.
-#[pyfunction]
-fn tracked_text_file_values<'py>(nodes: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
-    let mut values: Vec<Bound<'py, PyAny>> = Vec::new();
-    for node in nodes.try_iter()? {
-        let node: Bound<'py, PyAny> = node?;
-        if !node.getattr("is_file")?.is_truthy()? {
-            continue;
-        }
-        let value: Bound<'py, PyAny> = node.getattr("value")?;
-        if tracked_text_path(&value.extract::<PathBuf>()?) {
-            values.push(value);
-        }
-    }
-    PyTuple::new(nodes.py(), values)
-}
-
 /// `RuleUsageError(f"project path {path} is not beneath {under}")`, spelled by Python.
 fn not_beneath(path: &Bound<'_, PyAny>, under: &Bound<'_, PyAny>) -> PyErr {
     let py: Python<'_> = path.py();
@@ -152,12 +140,9 @@ fn project_tree_relative_parts<'py>(
         &relative.extract::<PathBuf>()?,
         &root.extract::<PathBuf>()?,
         under_path.as_deref(),
-        |_| relative.call_method0("resolve")?.extract::<PathBuf>(),
+        resolve_project_path,
     ) {
         Ok(parts) => parts,
-        Err(RelativePartsError::Resolve(error)) if !error.is_instance_of::<PyValueError>(py) => {
-            return Err(error);
-        }
         Err(RelativePartsError::Resolve(_) | RelativePartsError::Escapes) => {
             return Err(usage_error_for("project path escapes the project: ", path));
         }
@@ -170,11 +155,32 @@ fn project_tree_relative_parts<'py>(
     PyTuple::new(py, parts)
 }
 
+/// The UTF-8 text of the tracked project file at `path` under the resolved `root`.
+#[pyfunction]
+fn project_tree_read_text(root: PathBuf, path: &Bound<'_, PyAny>) -> PyResult<String> {
+    let py: Python<'_> = path.py();
+    let text: String = path.str()?.to_string_lossy().into_owned();
+    let raised: Raised = match read_project_text(&root, Path::new(&text)) {
+        Ok(contents) => return Ok(contents),
+        Err(ProjectTextError::File(ProjectTreeFileError::Unreadable { path, errno })) => {
+            let Ok(path) = path.into_os_string().into_pyobject(py);
+            return Err(PyOSError::new_err((errno, strerror(errno), path.unbind())));
+        }
+        Err(error) => text_error(&error, &text),
+    };
+    if raised.kind == VALUE_ERROR {
+        return Err(PyValueError::new_err(raised.message));
+    }
+    Err(PyErr::from_value(
+        registry::error(py, ErrorId::RuleUsage)?.call1((raised.message,))?,
+    ))
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(project_tree_child_nodes, module)?)?;
     module.add_function(wrap_pyfunction!(project_tree_descendant_nodes, module)?)?;
     module.add_function(wrap_pyfunction!(project_tree_glob_nodes, module)?)?;
-    module.add_function(wrap_pyfunction!(tracked_text_file_values, module)?)?;
     module.add_function(wrap_pyfunction!(project_tree_relative_parts, module)?)?;
+    module.add_function(wrap_pyfunction!(project_tree_read_text, module)?)?;
     Ok(())
 }

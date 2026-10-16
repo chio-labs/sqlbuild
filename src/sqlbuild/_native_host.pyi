@@ -450,15 +450,6 @@ from sqlbuild.rule_engine._helpers.engine._custom_catalogue import (
 from sqlbuild.rule_engine._helpers.engine.custom_payloads import (
     custom_rule_payloads as custom_rule_payloads,
 )
-from sqlbuild.rule_engine._helpers.engine.fact_replay import (
-    fact_outcome_digest as fact_outcome_digest,
-)
-from sqlbuild.rule_engine._helpers.engine.fact_replay import full_fact_keys as full_fact_keys
-from sqlbuild.rule_engine._helpers.engine.fact_replay import is_tree_fact as is_tree_fact
-from sqlbuild.rule_engine._helpers.engine.fact_replay import (
-    shared_fact_encoder as shared_fact_encoder,
-)
-from sqlbuild.rule_engine.classes.rule_context import build_rule_fact_views as build_rule_fact_views
 from sqlbuild.runtime.compute_logs.classes.text_tee import TextComputeLogTee as TextComputeLogTee
 from sqlbuild.runtime.compute_logs.exceptions import (
     CaptureAlreadyExistsError as CaptureAlreadyExistsError,
