@@ -14,6 +14,7 @@ use sqlbuild_analysis::semantic_validation::models as validation;
 
 use crate::bindings::_helpers::analysis::model_reads::binding_validated;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
 use crate::bindings::_helpers::semantic_checks::failures::semantic_error;
 use crate::bindings::_helpers::semantic_checks::inputs::{
     column_names, resource_sql_diagnostics, sql_test_columns,
@@ -471,16 +472,29 @@ fn metadata_model(classes: &StageClasses<'_>, model: &Bound<'_, PyAny>) -> PyRes
 }
 
 fn metadata_audits(model: &Bound<'_, PyAny>) -> PyResult<Vec<MetadataAudit>> {
-    let entry: Bound<'_, PyAny> = model.getattr("schema_entry")?;
-    if entry.is_none() {
-        return Ok(Vec::new());
-    }
     let py: Python<'_> = model.py();
+    let (entry_audits, columns): (Bound<'_, PyAny>, Bound<'_, PyAny>) =
+        match model.downcast::<NativeCompiledModel>() {
+            Ok(view) => match view.get().schema_audits_and_columns(py)? {
+                Some((audits, columns)) => (
+                    audits.into_bound(py).into_any(),
+                    columns.into_bound(py).into_any(),
+                ),
+                None => return Ok(Vec::new()),
+            },
+            Err(_) => {
+                let entry: Bound<'_, PyAny> = model.getattr("schema_entry")?;
+                if entry.is_none() {
+                    return Ok(Vec::new());
+                }
+                (entry.getattr("audits")?, entry.getattr("columns")?)
+            }
+        };
     let mut attached: Vec<(Option<String>, Bound<'_, PyAny>)> = Vec::new();
-    for audit in entry.getattr("audits")?.try_iter()? {
+    for audit in entry_audits.try_iter()? {
         attached.push((None, audit?));
     }
-    for column in entry.getattr("columns")?.try_iter()? {
+    for column in columns.try_iter()? {
         let column: Bound<'_, PyAny> = column?;
         let name: String = column.getattr("name")?.extract()?;
         for audit in column.getattr("audits")?.try_iter()? {

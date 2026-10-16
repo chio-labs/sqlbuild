@@ -358,22 +358,25 @@ impl<'py> FactReplay<'py> {
             Err(_) => None,
         };
         let value: JsonValue = match fact {
-            Fact::SqlForModel => {
-                let (authored, expanded) = match &view {
-                    Some(view) => (
-                        view.authored_sql(py)?.into_bound(py),
-                        view.query_sql(py)?.into_bound(py).into_any(),
-                    ),
-                    None => (
-                        record_field(&self.encoder, &model, "authored_sql")?,
-                        record_field(&self.encoder, &model, "query_sql")?,
-                    ),
-                };
-                JsonValue::Array(vec![
-                    self.encoder.encode(&authored)?,
-                    self.encoder.encode(&expanded)?,
-                ])
-            }
+            Fact::SqlForModel => match &view {
+                Some(view) => {
+                    let (authored, expanded) = view.sql_texts(py)?;
+                    JsonValue::Array(vec![
+                        JsonValue::String(authored),
+                        JsonValue::String(expanded),
+                    ])
+                }
+                None => {
+                    let authored: Bound<'py, PyAny> =
+                        record_field(&self.encoder, &model, "authored_sql")?;
+                    let expanded: Bound<'py, PyAny> =
+                        record_field(&self.encoder, &model, "query_sql")?;
+                    JsonValue::Array(vec![
+                        self.encoder.encode(&authored)?,
+                        self.encoder.encode(&expanded)?,
+                    ])
+                }
+            },
             Fact::Dependencies => {
                 let models: &Models<'py> = self.models()?;
                 let indexes: Vec<usize> = models.entries[index]

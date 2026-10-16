@@ -6,7 +6,10 @@ use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple, PyTuple
 use pyo3::{FromPyObject, pyclass, pymethods};
 
 use sqlbuild_analysis::assembly::analysis_session::models::LineageRow;
-use sqlbuild_analysis::compiled_project::models::{DynamicProofFact, ModelAnalysisFact};
+use sqlbuild_analysis::compiled_project::main::model_facts::model_facts;
+use sqlbuild_analysis::compiled_project::models::{
+    CompiledModelFacts, DynamicProofFact, ModelAnalysisFact,
+};
 
 use crate::bindings::_helpers::compiled_project::compiled_model_analysis::{
     AnalysisRecord, ProofArgument, SessionArgument, analysis_record,
@@ -341,6 +344,29 @@ impl NativeCompiledModel {
         })
     }
 
+    /// The attached schema's entry audits and columns, without building its `SchemaModelEntry`.
+    pub(crate) fn schema_audits_and_columns(
+        &self,
+        py: Python<'_>,
+    ) -> PyResult<Option<(Py<PyTuple>, Py<PyTuple>)>> {
+        self.read(py, |record, py| {
+            Ok(record
+                .schema
+                .as_ref()
+                .map(|schema| (schema.audits.clone_ref(py), schema.columns.clone_ref(py))))
+        })
+    }
+
+    /// The model's authored file text and expanded query, from its recorded facts.
+    pub(crate) fn sql_texts(&self, py: Python<'_>) -> PyResult<(String, String)> {
+        let name: String = self.name(py)?;
+        let owner = self.owner.bind(py).borrow();
+        let facts: &CompiledModelFacts = model_facts(owner.facts(), &name).ok_or_else(|| {
+            pyo3::exceptions::PyRuntimeError::new_err("the model was not assembled")
+        })?;
+        Ok((facts.authored_sql.clone(), facts.query_sql.clone()))
+    }
+
     fn model_file_attribute(&self, py: Python<'_>, name: &str) -> PyResult<Py<PyAny>> {
         self.read(py, |record, py| {
             Ok(record.model_file.bind(py).getattr(name)?.unbind())
@@ -515,19 +541,21 @@ impl NativeCompiledModel {
     /// Each declared column of the attached schema as `(name, type)`, or `None` without one.
     #[getter]
     pub(crate) fn schema_column_rows(&self, py: Python<'_>) -> PyResult<Option<Vec<DeclaredRow>>> {
-        self.read(py, |record, py| {
-            let Some(schema) = &record.schema else {
-                return Ok(None);
-            };
-            let mut rows: Vec<DeclaredRow> = Vec::new();
-            for column in schema.columns.bind(py).iter() {
-                rows.push((
-                    column.getattr("name")?.extract()?,
-                    column.getattr("type")?.extract()?,
-                ));
-            }
-            Ok(Some(rows))
-        })
+        let name: String = self.name(py)?;
+        let owner = self.owner.bind(py).borrow();
+        let facts: &CompiledModelFacts = model_facts(owner.facts(), &name).ok_or_else(|| {
+            pyo3::exceptions::PyRuntimeError::new_err("the model was not assembled")
+        })?;
+        let Some(schema) = &facts.schema else {
+            return Ok(None);
+        };
+        Ok(Some(
+            schema
+                .columns
+                .iter()
+                .map(|column| (column.name.clone(), column.data_type.clone()))
+                .collect(),
+        ))
     }
 
     /// Whether the attached schema declares dynamic columns.
