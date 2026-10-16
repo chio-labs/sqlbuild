@@ -6,6 +6,8 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::analysis::model_reads::{inferred_rows, star_flags};
+use crate::bindings::_helpers::compiled_project::compiled_model_view::InferredRow;
 use crate::bindings::_helpers::semantic_shapes::shapes::project_shapes;
 
 const TYPE_CHECKED_DIALECTS: [&str; 4] = ["duckdb", "snowflake", "postgresql", "bigquery"];
@@ -99,19 +101,17 @@ pub(crate) fn semantic_coverage<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bo
                 partial.insert(format!("depends on invalid model {cause}"));
             }
         }
-        let inferred: Bound<'py, PyAny> = model.getattr("inferred_rows")?;
-        if !inferred.is_truthy()? {
+        let inferred: Vec<InferredRow> = inferred_rows(model)?.unwrap_or_default();
+        if inferred.is_empty() {
             partial.insert("output shape could not be inferred".to_owned());
-        } else if model.getattr("fast_lineage_has_star")?.is_truthy()? && !shapes.contains(name)? {
+        } else if star_flags(model)?.0 && !shapes.contains(name)? {
             partial.insert("unresolved star over open inputs".to_owned());
         }
-        if inferred.is_truthy()? {
-            for row in inferred.try_iter()? {
-                if row?.get_item(1)?.is_none() {
-                    partial.insert("some output types are unknown".to_owned());
-                    break;
-                }
-            }
+        if inferred
+            .iter()
+            .any(|(_, column_type, _)| column_type.is_none())
+        {
+            partial.insert("some output types are unknown".to_owned());
         }
         if !TYPE_CHECKED_DIALECTS.contains(&dialect.as_str()) {
             partial.insert("type checking awaits dialect coercion support".to_owned());

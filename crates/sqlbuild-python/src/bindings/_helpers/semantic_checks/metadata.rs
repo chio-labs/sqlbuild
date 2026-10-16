@@ -12,6 +12,7 @@ use sqlbuild_analysis::semantic_checks::models::{
 };
 use sqlbuild_analysis::semantic_validation::models as validation;
 
+use crate::bindings::_helpers::analysis::model_reads::binding_validated;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::semantic_checks::failures::semantic_error;
 use crate::bindings::_helpers::semantic_checks::inputs::{
@@ -406,7 +407,7 @@ fn checked(classes: &StageClasses<'_>, model: &Bound<'_, PyAny>) -> PyResult<boo
     if opted.is(PyBool::new(model.py(), false)) {
         return Ok(false);
     }
-    model.getattr("binding_validated")?.is_truthy()
+    binding_validated(model)
 }
 
 fn text(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {

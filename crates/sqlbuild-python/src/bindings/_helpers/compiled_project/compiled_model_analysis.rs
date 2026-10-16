@@ -175,6 +175,13 @@ fn located(
 }
 
 impl AnalysisRecord {
+    /// The session's lineage rows, or `None` when the model kept no lineage.
+    pub(crate) fn lineage_rows(&self) -> Option<&[LineageRow]> {
+        self.lineage.as_ref().map(|lineage| match lineage {
+            LineageFacts::Native(rows) | LineageFacts::NativeFacts(rows) => rows.as_slice(),
+        })
+    }
+
     /// The session's lineage as `CompactLineageFacts` or plain facts, or `None`.
     pub(crate) fn lineage_object(
         &self,

@@ -5,6 +5,8 @@ use sqlbuild_analysis::lineage::models::{
     LineageResourceType, LineageSchemaResource, RichSchemaResource,
 };
 
+use crate::bindings::_helpers::analysis::model_reads::{declared_rows, inferred_rows};
+
 type TypedColumns = Vec<(String, Option<String>)>;
 
 /// The project's models, then sources, then seeds, each with its typed and schema columns.
@@ -90,23 +92,13 @@ fn project_columns(project: &Bound<'_, PyAny>) -> PyResult<Vec<ProjectColumns>> 
 }
 
 fn inferred_columns(model: &Bound<'_, PyAny>) -> PyResult<TypedColumns> {
-    let rows: Bound<'_, PyAny> = model.getattr("inferred_rows")?;
-    if !rows.is_truthy()? {
-        return Ok(Vec::new());
-    }
-    rows.try_iter()?
-        .map(|row| {
-            let (name, column_type, _nullability): (String, Option<String>, Bound<'_, PyAny>) =
-                row?.extract()?;
-            Ok((name, column_type))
-        })
-        .collect()
+    Ok(inferred_rows(model)?
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(name, column_type, _)| (name, column_type))
+        .collect())
 }
 
 fn schema_columns(model: &Bound<'_, PyAny>) -> PyResult<TypedColumns> {
-    let rows: Bound<'_, PyAny> = model.getattr("schema_column_rows")?;
-    if !rows.is_truthy()? {
-        return Ok(Vec::new());
-    }
-    rows.try_iter()?.map(|row| row?.extract()).collect()
+    Ok(declared_rows(model)?.unwrap_or_default())
 }

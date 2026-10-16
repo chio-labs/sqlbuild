@@ -7,7 +7,11 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::analysis::binding_catalog::{
     BindingCatalog, CASE_SENSITIVE_BINDING_DIALECTS,
 };
+use crate::bindings::_helpers::analysis::model_reads::{
+    declared_rows, dynamic_columns_declared, inferred_rows, star_flags, unchecked_columns,
+};
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::compiled_project::compiled_model_view::{DeclaredRow, InferredRow};
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
@@ -152,13 +156,17 @@ fn or_generic<'py>(dialect: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
 }
 
 /// `{name: type or "UNKNOWN"}` over `(name, type, ...)` rows.
-fn typed_columns<'py>(py: Python<'py>, rows: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+fn typed_columns<'py>(py: Python<'py>, rows: &[InferredRow]) -> PyResult<Bound<'py, PyDict>> {
     let columns: Bound<'py, PyDict> = PyDict::new(py);
-    for row in rows.try_iter()? {
-        let row: Bound<'py, PyAny> = row?;
-        columns.set_item(row.get_item(0)?, or_unknown(&row.get_item(1)?)?)?;
+    for (name, column_type, _) in rows {
+        columns.set_item(name, text_or_unknown(column_type.as_deref()))?;
     }
     Ok(columns)
+}
+
+/// `value or "UNKNOWN"` for an optional type name.
+fn text_or_unknown(value: Option<&str>) -> &str {
+    value.filter(|text| !text.is_empty()).unwrap_or(UNKNOWN)
 }
 
 fn or_unknown<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -287,8 +295,8 @@ fn model_shapes<'py>(
     while !pending.is_empty() {
         let mut remaining: Vec<Bound<'py, PyAny>> = Vec::new();
         for model in &pending {
-            let declared: Bound<'py, PyAny> = model.getattr("schema_column_rows")?;
-            let inferred: Bound<'py, PyAny> = model.getattr("inferred_rows")?;
+            let declared: Option<Vec<DeclaredRow>> = declared_rows(model)?;
+            let inferred: Option<Vec<InferredRow>> = inferred_rows(model)?;
             let rows: Bound<'py, PyAny> = model.getattr("reference_rows")?;
             let relations: Vec<String> = relation_row_names(&rows)?;
             let contract: Bound<'py, PyAny> = model
@@ -296,32 +304,29 @@ fn model_shapes<'py>(
                 .getattr("values")?
                 .call_method1("get", ("contract",))?;
             if contract.eq(enforced)?
-                && !declared.is_none()
-                && !model.getattr("has_dynamic_columns")?.is_truthy()?
+                && let Some(declared) = &declared
+                && !dynamic_columns_declared(model)?
             {
-                let unchecked: Bound<'py, PyAny> = model.getattr("unchecked_output_columns")?;
+                let unchecked: Vec<String> = unchecked_columns(model)?;
                 let shape: Bound<'py, PyDict> = PyDict::new(py);
-                for row in declared.try_iter()? {
-                    let row: Bound<'py, PyAny> = row?;
-                    let name: Bound<'py, PyAny> = row.get_item(0)?;
-                    let column_type: Bound<'py, PyAny> = if unchecked.contains(&name)? {
-                        PyString::new(py, UNKNOWN).into_any()
+                for (name, column_type) in declared {
+                    let column_type: &str = if unchecked.contains(name) {
+                        UNKNOWN
                     } else {
-                        or_unknown(&row.get_item(1)?)?
+                        text_or_unknown(column_type.as_deref())
                     };
                     shape.set_item(name, column_type)?;
                 }
                 shapes.set_item(model.getattr("name")?, shape)?;
                 continue;
             }
-            let closes: bool = inferred.is_truthy()?
-                && (!model.getattr("fast_lineage_has_star")?.is_truthy()?
-                    || (model.getattr("fast_lineage_star_resolved")?.is_truthy()?
-                        && rows.is_truthy()?
-                        && all_known(&relations, shapes)?));
-            if closes {
+            let (has_star, star_resolved): (bool, bool) = star_flags(model)?;
+            let closes: bool = inferred.as_ref().is_some_and(|rows| !rows.is_empty())
+                && (!has_star
+                    || (star_resolved && rows.is_truthy()? && all_known(&relations, shapes)?));
+            if let (true, Some(inferred)) = (closes, &inferred) {
                 let inputs: Bound<'py, PyDict> = model_inputs(model, shapes)?;
-                let columns: Bound<'py, PyDict> = typed_columns(py, &inferred)?;
+                let columns: Bound<'py, PyDict> = typed_columns(py, inferred)?;
                 shapes.set_item(
                     model.getattr("name")?,
                     published_shape(model, &columns, &inputs, profile)?,

@@ -5,6 +5,7 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple, PyTupleMethods};
 use pyo3::{FromPyObject, pyclass, pymethods};
 
+use sqlbuild_analysis::assembly::analysis_session::models::LineageRow;
 use sqlbuild_analysis::compiled_project::models::{DynamicProofFact, ModelAnalysisFact};
 
 use crate::bindings::_helpers::compiled_project::compiled_model_analysis::{
@@ -37,6 +38,9 @@ pub(crate) type DeclaredRow = (String, Option<String>);
 
 /// `(database, schema, name)` of a relation.
 pub(crate) type DestinationRow = (Option<String>, Option<String>, String);
+
+/// `(output column, [(resource name, column name)])` of one lineage output.
+pub(crate) type LineageInput = (String, Vec<(String, String)>);
 
 /// The Python classes a compiled model's projected attributes are built with.
 #[derive(FromPyObject)]
@@ -279,11 +283,46 @@ impl NativeCompiledModel {
         })
     }
 
+    /// Each output column of the kept lineage with its `(resource name, column)` sources.
+    pub(crate) fn lineage_inputs(&self, py: Python<'_>) -> PyResult<Option<Vec<LineageInput>>> {
+        self.compiled(py, |compiled, _| {
+            Ok(compiled
+                .analysis
+                .lineage_rows()
+                .map(|rows| rows.iter().map(lineage_input).collect()))
+        })
+    }
+
+    /// Whether the model's dynamic pivot proof proved its output columns.
+    pub(crate) fn output_proven(&self, py: Python<'_>) -> PyResult<bool> {
+        self.compiled(py, |compiled, _| {
+            Ok(compiled
+                .analysis
+                .proof
+                .as_ref()
+                .is_some_and(|proof| proof.output_proven))
+        })
+    }
+
+    /// Output columns whose types semantic recovery forgot.
+    pub(crate) fn unchecked_columns(&self) -> &[String] {
+        &self.overlay.poisoned
+    }
+
     fn model_file_attribute(&self, py: Python<'_>, name: &str) -> PyResult<Py<PyAny>> {
         self.read(py, |record, py| {
             Ok(record.model_file.bind(py).getattr(name)?.unbind())
         })
     }
+}
+
+/// A lineage row's output column with its `(resource name, column)` sources.
+fn lineage_input(row: &LineageRow) -> LineageInput {
+    let mut sources: Vec<(String, String)> = Vec::with_capacity(row.sources.len());
+    for (_, resource, column) in &row.sources {
+        sources.push((resource.clone(), column.clone()));
+    }
+    (row.output_column.clone(), sources)
 }
 
 /// Each family's name casefolded as Python's, with its inferred type.
@@ -338,7 +377,7 @@ impl NativeCompiledModel {
     }
 
     #[getter]
-    fn name(&self, py: Python<'_>) -> PyResult<String> {
+    pub(crate) fn name(&self, py: Python<'_>) -> PyResult<String> {
         self.read(py, |record, py| model_name(record, py))
     }
 
@@ -426,7 +465,7 @@ impl NativeCompiledModel {
 
     /// Each inferred column as `(name, type, nullability)`, or `None` when none were inferred.
     #[getter]
-    fn inferred_rows(&self, py: Python<'_>) -> PyResult<Option<Vec<InferredRow>>> {
+    pub(crate) fn inferred_rows(&self, py: Python<'_>) -> PyResult<Option<Vec<InferredRow>>> {
         self.compiled(py, |compiled, _| {
             let Some(rows) = &compiled.analysis.inferred else {
                 return Ok(None);
@@ -443,7 +482,7 @@ impl NativeCompiledModel {
 
     /// Each declared column of the attached schema as `(name, type)`, or `None` without one.
     #[getter]
-    fn schema_column_rows(&self, py: Python<'_>) -> PyResult<Option<Vec<DeclaredRow>>> {
+    pub(crate) fn schema_column_rows(&self, py: Python<'_>) -> PyResult<Option<Vec<DeclaredRow>>> {
         self.read(py, |record, py| {
             let Some(schema) = &record.schema else {
                 return Ok(None);
@@ -461,7 +500,7 @@ impl NativeCompiledModel {
 
     /// Whether the attached schema declares dynamic columns.
     #[getter(has_dynamic_columns)]
-    fn dynamic_columns_declared(&self, py: Python<'_>) -> PyResult<bool> {
+    pub(crate) fn dynamic_columns_declared(&self, py: Python<'_>) -> PyResult<bool> {
         self.read(py, |record, py| {
             Ok(record
                 .schema
@@ -530,12 +569,12 @@ impl NativeCompiledModel {
     }
 
     #[getter]
-    fn fast_lineage_has_star(&self, py: Python<'_>) -> PyResult<bool> {
+    pub(crate) fn fast_lineage_has_star(&self, py: Python<'_>) -> PyResult<bool> {
         self.compiled(py, |compiled, _| Ok(compiled.analysis.has_star))
     }
 
     #[getter]
-    fn fast_lineage_star_resolved(&self, py: Python<'_>) -> PyResult<bool> {
+    pub(crate) fn fast_lineage_star_resolved(&self, py: Python<'_>) -> PyResult<bool> {
         self.compiled(py, |compiled, _| Ok(compiled.analysis.star_resolved))
     }
 
@@ -597,7 +636,7 @@ impl NativeCompiledModel {
     }
 
     #[getter]
-    fn binding_validated(&self, py: Python<'_>) -> PyResult<bool> {
+    pub(crate) fn binding_validated(&self, py: Python<'_>) -> PyResult<bool> {
         self.compiled(py, |compiled, _| Ok(compiled.analysis.binding_validated))
     }
 

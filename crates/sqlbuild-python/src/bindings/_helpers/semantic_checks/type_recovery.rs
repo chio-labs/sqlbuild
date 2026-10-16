@@ -12,8 +12,10 @@ use sqlbuild_analysis::semantic_checks::models::{
 use sqlbuild_analysis::semantic_checks::types::RevisedBinding;
 use sqlbuild_analysis::semantic_validation::models as validation;
 
+use crate::bindings::_helpers::analysis::model_reads::{inferred_names, lineage_inputs};
 use crate::bindings::_helpers::analysis_session::session::NativeModelAnalysisSession;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::compiled_project::compiled_model_view::LineageInput;
 use crate::bindings::_helpers::semantic_checks::failures::{internal_error, semantic_error};
 use crate::bindings::_helpers::semantic_checks::inputs::revalidation_request;
 use crate::bindings::_helpers::semantic_checks::session_facts::{
@@ -25,9 +27,6 @@ use crate::bindings::types::CompilerDetach;
 
 const UNCHANGED: &str = "unchanged";
 const UNKNOWN_RECOVERED_TYPE: &str = "UNKNOWN";
-
-/// `(output_column, [(resource_name, column_name)])`.
-pub(crate) type LineageInput = (String, Vec<(String, String)>);
 
 /// The analysis state every semantic completion step shares.
 pub(crate) struct StageShared<'a> {
@@ -164,28 +163,6 @@ pub(crate) fn id_of(ids: &Bound<'_, PyDict>, item: &Bound<'_, PyAny>) -> PyResul
     ids.as_any().get_item(item)?.extract()
 }
 
-/// Each output column with the `(resource, column)` pairs it reads.
-pub(crate) fn lineage_payload(model: &Bound<'_, PyAny>) -> PyResult<Vec<LineageInput>> {
-    let columns: Bound<'_, PyAny> = model.getattr("fast_lineage_columns")?;
-    if !columns.is_truthy()? {
-        return Ok(Vec::new());
-    }
-    let mut lineage: Vec<LineageInput> = Vec::new();
-    for output in columns.try_iter()? {
-        let output: Bound<'_, PyAny> = output?;
-        let mut upstream: Vec<(String, String)> = Vec::new();
-        for source in output.getattr("upstream_columns")?.try_iter()? {
-            let source: Bound<'_, PyAny> = source?;
-            upstream.push((
-                source.getattr("resource_name")?.extract()?,
-                source.getattr("column_name")?.extract()?,
-            ));
-        }
-        lineage.push((output.getattr("output_column")?.extract()?, upstream));
-    }
-    Ok(lineage)
-}
-
 pub(crate) fn lineage_outputs(lineage: Vec<LineageInput>) -> Vec<LineageOutput> {
     lineage
         .into_iter()
@@ -194,19 +171,6 @@ pub(crate) fn lineage_outputs(lineage: Vec<LineageInput>) -> Vec<LineageOutput> 
             upstream,
         })
         .collect()
-}
-
-/// The names of a model's inferred columns, or `None` when its shape is unknown.
-pub(crate) fn inferred_names(model: &Bound<'_, PyAny>) -> PyResult<Option<Vec<String>>> {
-    let columns: Bound<'_, PyAny> = model.getattr("inferred_columns")?;
-    if columns.is_none() {
-        return Ok(None);
-    }
-    columns
-        .try_iter()?
-        .map(|column| column?.getattr("name")?.extract())
-        .collect::<PyResult<_>>()
-        .map(Some)
 }
 
 fn blocking_binding_found(models: &[Bound<'_, PyAny>]) -> PyResult<bool> {
@@ -257,7 +221,7 @@ fn recovery_model(
         let facts = session_model_facts(shared.session, &name).map_err(compiler_error)?;
         (column_names(facts), facts.lineage.clone())
     } else {
-        (inferred_names(model)?, lineage_payload(model)?)
+        (inferred_names(model)?, lineage_inputs(model)?)
     };
     let mut references: Vec<String> = Vec::new();
     for reference in model.getattr("references")?.try_iter()? {
