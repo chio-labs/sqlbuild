@@ -6,6 +6,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_sqltext::compiler::main::placeholder_defaults::placeholder_defaults;
 
 use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_sql;
+use crate::bindings::_helpers::compiled_project::model_input_view::attached_schema;
 use crate::bindings::_helpers::project_assembly::syntax_validation::hook_sql_statements;
 
 const HOOK_NAMES: [&str; 2] = ["pre_hooks", "post_hooks"];
@@ -113,11 +114,10 @@ pub(crate) fn standalone_pivot_models<'py>(
     let models: Bound<'py, PyDict> = PyDict::new(py);
     for (index, model_input) in model_inputs.try_iter()?.enumerate() {
         let model_input: Bound<'py, PyAny> = model_input?;
-        let schema_entry: Bound<'py, PyAny> = model_input.getattr("schema_entry")?;
-        if schema_entry.is_none() {
+        let Some(schema) = attached_schema(&model_input)? else {
             continue;
-        }
-        let families: Bound<'py, PyAny> = schema_entry.getattr("dynamic_columns")?;
+        };
+        let families: Bound<'py, PyAny> = schema.dynamic_columns;
         if !families.is_truthy()? || analysed.contains(model_name(&model_input)?)? {
             continue;
         }

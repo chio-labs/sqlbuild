@@ -447,3 +447,67 @@ fn expansion_object(
     fields.set_item("passes", PyTuple::new(py, pass_objects)?)?;
     Ok(classes.sql_expansion.call((), Some(&fields))?.unbind())
 }
+
+/// A model input's attached schema: its name, columns and dynamic column families.
+pub(crate) struct AttachedSchema<'py> {
+    pub(crate) name: Bound<'py, PyAny>,
+    pub(crate) columns: Bound<'py, PyAny>,
+    pub(crate) dynamic_columns: Bound<'py, PyAny>,
+}
+
+/// The attached schema of `model_input`; a native input answers without building its entry.
+pub(crate) fn attached_schema<'py>(
+    model_input: &Bound<'py, PyAny>,
+) -> PyResult<Option<AttachedSchema<'py>>> {
+    let py: Python<'py> = model_input.py();
+    if let Ok(native) = model_input.cast::<NativeModelInput>() {
+        return native.get().read(py, |record, py| {
+            let Some(schema) = &record.schema else {
+                return Ok(None);
+            };
+            Ok(Some(AttachedSchema {
+                name: record
+                    .model_file
+                    .bind(py)
+                    .getattr("file_path")?
+                    .getattr("stem")?,
+                columns: schema.columns.bind(py).clone().into_any(),
+                dynamic_columns: schema.dynamic_columns.bind(py).clone().into_any(),
+            }))
+        });
+    }
+    let entry: Bound<'py, PyAny> = model_input.getattr("schema_entry")?;
+    if entry.is_none() {
+        return Ok(None);
+    }
+    Ok(Some(AttachedSchema {
+        name: entry.getattr("name")?,
+        columns: entry.getattr("columns")?,
+        dynamic_columns: entry.getattr("dynamic_columns")?,
+    }))
+}
+
+/// Each reference of `model_input` as `(kind, name, package, call argument count)`.
+pub(crate) fn input_reference_rows(model_input: &Bound<'_, PyAny>) -> PyResult<Vec<ReferenceRow>> {
+    let py: Python<'_> = model_input.py();
+    if let Ok(native) = model_input.cast::<NativeModelInput>() {
+        return native
+            .get()
+            .read(py, |record, _| Ok(record.references.clone()));
+    }
+    model_input
+        .getattr("references")?
+        .try_iter()?
+        .map(|reference| reference_row_of(&reference?))
+        .collect()
+}
+
+/// One `CompileSqlReference` record as its row.
+fn reference_row_of(reference: &Bound<'_, PyAny>) -> PyResult<ReferenceRow> {
+    Ok((
+        reference.getattr("ref_kind")?.str()?.extract()?,
+        reference.getattr("ref_name")?.extract()?,
+        reference.getattr("ref_package")?.extract()?,
+        reference.getattr("call_argument_count")?.extract()?,
+    ))
+}
