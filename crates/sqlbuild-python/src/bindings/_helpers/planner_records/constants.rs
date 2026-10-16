@@ -1335,45 +1335,6 @@ const R_PLAN_PROVIDER_USAGE: RecordSpec = RecordSpec {
         FieldSpec::new("annotation_module", FieldDefault::None),
     ],
 };
-const R_MODEL_MIGRATION_REQUEST: RecordSpec = RecordSpec {
-    name: "ModelMigrationRequest",
-    doc: "One destination model whose data should come from an earlier relation.",
-    fields: &[
-        FieldSpec::required("model"),
-        FieldSpec::required("discovery"),
-        FieldSpec::new("raw_origin", FieldDefault::None),
-        FieldSpec::new("origin_location", FieldDefault::None),
-        FieldSpec::new("origin_model", FieldDefault::None),
-        FieldSpec::new("force", FieldDefault::False),
-        FieldSpec::new("identity_only", FieldDefault::False),
-    ],
-};
-const R_MODEL_MIGRATION_DECLARATION: RecordSpec = RecordSpec {
-    name: "ModelMigrationDeclaration",
-    doc: "One project model's explicit migrate_from, resolved to a relation.",
-    fields: &[
-        FieldSpec::required("model_name"),
-        FieldSpec::required("origin_location"),
-        FieldSpec::required("origin_model"),
-    ],
-};
-const R_MODEL_MIGRATION_DISCOVERY: RecordSpec = RecordSpec {
-    name: "ModelMigrationDiscovery",
-    doc: "Manual and automatically discovered migration requests for one plan.",
-    fields: &[
-        FieldSpec::new("requests", FieldDefault::EmptyTuple),
-        FieldSpec::new("warnings", FieldDefault::EmptyTuple),
-        FieldSpec::new("destination_fingerprints", FieldDefault::EmptyDict),
-    ],
-};
-const R_MIGRATION_COMPATIBILITY_RESULT: RecordSpec = RecordSpec {
-    name: "MigrationCompatibilityResult",
-    doc: "Compatibility status plus human-readable blocking findings.",
-    fields: &[
-        FieldSpec::required("status"),
-        FieldSpec::new("findings", FieldDefault::EmptyTuple),
-    ],
-};
 
 /// Planner value records, in registration order.
 pub(crate) const PLANNER_VALUE_RECORDS: &[RecordSpec] = &[
@@ -1412,10 +1373,6 @@ pub(crate) const PLANNER_VALUE_RECORDS: &[RecordSpec] = &[
     R_SCENARIO_ARTIFACT_IDENTITY,
     R_SCENARIO_ARTIFACT_NAME,
     R_PLAN_PROVIDER_USAGE,
-    R_MODEL_MIGRATION_REQUEST,
-    R_MODEL_MIGRATION_DECLARATION,
-    R_MODEL_MIGRATION_DISCOVERY,
-    R_MIGRATION_COMPATIBILITY_RESULT,
 ];
 
 /// Planner string enums, in declaration order.

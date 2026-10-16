@@ -3,6 +3,9 @@
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::analysis::model_reads::inferred_rows;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::planner_migrations::models::{
+    CompatibilityCheck, MigrationCompatibilityResult,
+};
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::exceptions::PyValueError;
@@ -106,30 +109,13 @@ fn migration_snapshot_blocking_findings<'py>(
     )
 }
 
-#[pyfunction]
-#[pyo3(signature = (**options))]
-fn check_migration_compatibility<'py>(
-    py: Python<'py>,
-    options: Option<Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let arguments = KeywordArguments::read(
-        py,
-        "check_migration_compatibility",
-        options,
-        (
-            &[
-                "model",
-                "origin_relation",
-                "origin_columns",
-                "sql_analysis_enabled",
-                "column_dialect",
-                "snapshots_config",
-            ],
-            &[],
-        ),
-    )?;
-    let model = arguments.value("model")?;
-    let relation = arguments.value("origin_relation")?;
+/// Whether an origin relation's columns can carry the destination model's history.
+pub(super) fn check_migration_compatibility<'py>(
+    check: &CompatibilityCheck<'py>,
+) -> PyResult<MigrationCompatibilityResult<'py>> {
+    let py = check.model.py();
+    let model = check.model.clone();
+    let relation = check.origin_relation.clone();
     let relation_type: String = relation.getattr("relation_type")?.extract()?;
     if relation_type.to_uppercase().contains("VIEW") {
         return result(
@@ -146,14 +132,14 @@ fn check_migration_compatibility<'py>(
     let columns = PyDict::new(py);
     columns.set_item(
         model_reads::name_object(&model)?,
-        arguments.value("origin_columns")?,
+        check.origin_columns.clone(),
     )?;
     let snapshot = call_with(
         &registry::class(py, RecordId::WarehouseSnapshot)?,
         &[
             ("existing_relations", relations.into_any()),
             ("existing_columns", columns.into_any()),
-            ("column_dialect", arguments.value("column_dialect")?),
+            ("column_dialect", check.column_dialect.clone()),
         ],
     )?;
     let change = call_with(
@@ -161,10 +147,7 @@ fn check_migration_compatibility<'py>(
         &[
             ("model", model.clone()),
             ("snapshot", snapshot),
-            (
-                "sql_analysis_enabled",
-                arguments.value("sql_analysis_enabled")?,
-            ),
+            ("sql_analysis_enabled", check.sql_analysis_enabled.clone()),
             (
                 "query_change_tracking",
                 false.into_pyobject(py)?.to_owned().into_any(),
@@ -186,10 +169,10 @@ fn check_migration_compatibility<'py>(
         return result(py, "not_checked", PyTuple::empty(py));
     }
     let snapshot = config(&model, "materialized")?.as_deref() == Some("snapshot");
-    let snapshots_config = arguments.value("snapshots_config")?;
+    let snapshots_config = check.snapshots_config.clone();
     let findings = blocking(
         (&model, &change.getattr("schema_findings")?),
-        &arguments.value("column_dialect")?,
+        &check.column_dialect,
         snapshot.then_some(&snapshots_config),
     )?;
     result(
@@ -207,16 +190,14 @@ fn result<'py>(
     py: Python<'py>,
     status: &str,
     findings: Bound<'py, PyTuple>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let status = registry::class(py, RecordId::MigrationCompatibility)?.call1((status,))?;
-    call_with(
-        &registry::class(py, RecordId::MigrationCompatibilityResult)?,
-        &[("status", status), ("findings", findings.into_any())],
-    )
+) -> PyResult<MigrationCompatibilityResult<'py>> {
+    Ok(MigrationCompatibilityResult {
+        status: registry::class(py, RecordId::MigrationCompatibility)?.call1((status,))?,
+        findings: findings.into_any(),
+    })
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(check_migration_compatibility, module)?)?;
     module.add_function(wrap_pyfunction!(
         migration_incremental_blocking_findings,
         module

@@ -4,6 +4,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::column_objects::config;
+use crate::bindings::_helpers::planner_migrations::models::ModelMigrationDeclaration;
 use crate::bindings::_helpers::state_rows::migration_projections::newest_move;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
@@ -32,20 +33,19 @@ pub(super) fn relation<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
 }
 
 pub(super) fn declared<'py>(
-    declarations: &Bound<'py, PyAny>,
+    declarations: &[ModelMigrationDeclaration<'py>],
     state: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let result = PyDict::new(state.py());
-    for item in declarations.try_iter()? {
-        let item = item?;
+    for item in declarations {
         let fingerprint = call_with(
             &state.getattr("model_fingerprint")?,
             &[
-                ("location", item.getattr("origin_location")?),
-                ("model_name", item.getattr("origin_model")?),
+                ("location", item.origin_location.clone()),
+                ("model_name", item.origin_model.clone()),
             ],
         )?;
-        let explicit = item.getattr("origin_model")?;
+        let explicit = item.origin_model.clone();
         let origin = if explicit.is_truthy()? {
             explicit
         } else if !fingerprint.is_none() {
@@ -54,7 +54,7 @@ pub(super) fn declared<'py>(
             state.py().None().into_bound(state.py())
         };
         if !origin.is_none() {
-            result.set_item(item.getattr("model_name")?, origin)?;
+            result.set_item(&item.model_name, origin)?;
         }
     }
     Ok(result)

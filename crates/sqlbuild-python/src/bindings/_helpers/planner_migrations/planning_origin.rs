@@ -2,12 +2,13 @@
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::planner_migrations::constants::QUALIFIED_RELATION_MAX_PARTS;
+use crate::bindings::_helpers::planner_migrations::models::ModelMigrationRequest;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PySet, PySetMethods, PyTuple};
-use pyo3::{PyErr, pyfunction, wrap_pyfunction};
+use pyo3::PyErr;
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::types::{PySet, PySetMethods};
 
 pub(super) fn location<'py>(
     runtime: &Bound<'py, PyAny>,
@@ -32,17 +33,14 @@ fn named<'py>(
     destination: &Bound<'py, PyAny>,
     runtime: &Bound<'py, PyAny>,
     state: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
+) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     for item in runtime_field(runtime, |runtime| &runtime.project)?
         .getattr("models")?
         .try_iter()?
     {
         let item = item?;
         if item.getattr("name")?.eq(name)? {
-            return Ok(
-                PyTuple::new(runtime.py(), [item.getattr("destination")?, name.clone()])?
-                    .into_any(),
-            );
+            return Ok((item.getattr("destination")?, name.clone()));
         }
     }
     let fingerprint = call_with(
@@ -62,7 +60,7 @@ fn named<'py>(
             ("name", name.clone()),
         ]
     };
-    Ok(PyTuple::new(runtime.py(), [location(runtime, &fields)?, name.clone()])?.into_any())
+    Ok((location(runtime, &fields)?, name.clone()))
 }
 
 fn input_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
@@ -71,9 +69,8 @@ fn input_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
     ))
 }
 
-#[pyfunction]
-#[pyo3(signature = (*, runtime))]
-fn migration_planning_database<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+/// The database migration planning inspects: the first model destination's, else the target's.
+pub(super) fn planning_database<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let project = runtime_field(runtime, |runtime| &runtime.project)?;
     let fallback = project.getattr("effective_target_database")?;
     for item in project.getattr("models")?.try_iter()? {
@@ -85,9 +82,8 @@ fn migration_planning_database<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Bou
     Ok(fallback)
 }
 
-#[pyfunction]
-#[pyo3(signature = (*, runtime))]
-fn migration_project_schemas<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+/// The schemas the project's models write to.
+pub(super) fn project_schemas<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let schemas = PySet::empty(runtime.py())?;
     for item in runtime_field(runtime, |runtime| &runtime.project)?
         .getattr("models")?
@@ -101,9 +97,8 @@ fn migration_project_schemas<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Bound
     Ok(schemas.into_any())
 }
 
-#[pyfunction]
-#[pyo3(signature = (*, state, location))]
-fn migration_require_same_database(
+/// Reject a migration origin in a database other than the inspected one.
+pub(super) fn require_same_database(
     state: &Bound<'_, PyAny>,
     location: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
@@ -133,25 +128,21 @@ fn migration_require_same_database(
     )?)
 }
 
-#[pyfunction]
-#[pyo3(signature = (*, request, runtime, state))]
-fn migration_resolve_origin<'py>(
-    request: &Bound<'py, PyAny>,
+/// The origin location and origin model name of one migration request.
+pub(super) fn resolve_origin<'py>(
+    request: &ModelMigrationRequest<'py>,
     runtime: &Bound<'py, PyAny>,
     state: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
+) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let py = runtime.py();
-    let explicit = request.getattr("origin_location")?;
-    if !explicit.is_none() {
-        return Ok(PyTuple::new(py, [explicit, request.getattr("origin_model")?])?.into_any());
+    if let Some(explicit) = &request.origin_location {
+        return Ok((explicit.clone(), request.origin_model.clone()));
     }
-    let raw = request.getattr("raw_origin")?;
-    let raw = if raw.is_truthy()? {
-        raw
-    } else {
-        super::column_objects::text(py, "")
+    let raw = match &request.raw_origin {
+        Some(raw) if raw.is_truthy()? => raw.clone(),
+        _ => super::column_objects::text(py, ""),
     };
-    let item = request.getattr("model")?;
+    let item = request.model.clone();
     let destination = item.getattr("destination")?;
     let mut parts: Vec<Bound<'py, PyAny>> = Vec::new();
     for part in raw.call_method1("split", (".",))?.try_iter()? {
@@ -191,12 +182,5 @@ fn migration_resolve_origin<'py>(
             ("name", parts[parts.len() - 1].clone()),
         ],
     )?;
-    Ok(PyTuple::new(py, [origin, py.None().into_bound(py)])?.into_any())
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(migration_planning_database, module)?)?;
-    module.add_function(wrap_pyfunction!(migration_project_schemas, module)?)?;
-    module.add_function(wrap_pyfunction!(migration_require_same_database, module)?)?;
-    module.add_function(wrap_pyfunction!(migration_resolve_origin, module)?)
+    Ok((origin, py.None().into_bound(py)))
 }

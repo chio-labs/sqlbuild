@@ -8,7 +8,6 @@ use crate::bindings::_helpers::planner_migrations::models::{MigrationPhase, OldN
 use crate::bindings::_helpers::planner_migrations::old_name_objects::recorded_view;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PySet, PySetMethods, PyTuple};
 
@@ -52,11 +51,7 @@ fn schemas<'py>(
         }
     }
     if include_project {
-        let project = native(
-            py,
-            NativeAttr::MigrationProjectSchemas,
-            &[("runtime", runtime)],
-        )?;
+        let project = super::planning_origin::project_schemas(&runtime)?;
         for schema in project.try_iter()? {
             needed.add(schema?)?;
         }
@@ -95,27 +90,7 @@ pub(crate) fn plan_old_name_views<'py>(
             selected.push(item);
         }
     }
-    let state = call_with(
-        &registry::native(py, NativeAttr::MigrationStateInspection)?,
-        &[
-            (
-                "adapter",
-                runtime_field(&runtime, |runtime| &runtime.adapter)?,
-            ),
-            (
-                "connection",
-                runtime_field(&runtime, |runtime| &runtime.connection)?,
-            ),
-            (
-                "database",
-                native(
-                    py,
-                    NativeAttr::MigrationPlanningDatabase,
-                    &[("runtime", runtime.clone())],
-                )?,
-            ),
-        ],
-    )?;
+    let state = super::state_inspection::inspection(&runtime, None)?;
     let needed = schemas((phase, moves.0), &selected)?;
     if needed.is_truthy()? {
         call_with(

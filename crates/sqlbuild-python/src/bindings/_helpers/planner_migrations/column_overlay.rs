@@ -1,7 +1,7 @@
 //! Project column renames onto the existing snapshot and redirect cursor reads.
 
 use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::planner_migrations::column_objects::{
     config, definition_hash, lower, native, replace,
 };
@@ -10,7 +10,6 @@ use crate::bindings::_helpers::planner_migrations::models::{
     ColumnMigrationInputs, MigrationPhase,
 };
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
@@ -161,20 +160,10 @@ pub(super) fn cursors<'py>(
         };
         targets.set_item(name, target)?;
     }
-    let redirected = call_with(
-        &registry::native(py, NativeAttr::MigrationRedirectedCursorSnapshots)?,
-        &[
-            ("runtime", phase.runtime.clone()),
-            ("scope", scope),
-            (
-                "existing_relations",
-                snapshot.getattr("existing_relations")?,
-            ),
-            ("target_relations", targets.into_any()),
-            ("overrides", phase.overrides.clone()),
-            ("deferral", phase.deferral.clone()),
-            ("origin_cursor_columns", origins.into_any()),
-        ],
+    let redirected = super::planning_boundary::redirected_cursor_snapshots(
+        phase,
+        (snapshot.getattr("existing_relations")?, targets.into_any()),
+        Some(origins.into_any()),
     )?;
     let cursors =
         imported(py, "builtins", "dict")?.call1((snapshot.getattr("cursor_snapshots")?,))?;

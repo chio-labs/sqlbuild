@@ -6,12 +6,14 @@ use crate::bindings::_helpers::planner_migrations::column_objects::native;
 use crate::bindings::_helpers::planner_migrations::discovery_events::{
     identity, key, newest, relation,
 };
+use crate::bindings::_helpers::planner_migrations::models::{
+    ModelMigrationDeclaration, ModelMigrationRequest,
+};
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{
-    PyBool, PyDict, PyDictMethods, PyFrozenSet, PyListMethods, PySet, PySetMethods, PyString,
-    PyTuple,
+    PyDict, PyDictMethods, PyFrozenSet, PyListMethods, PySet, PySetMethods, PyString, PyTuple,
 };
 use sqlbuild_analysis::planner_migrations::main::discovery_materialization::discovery_materialization;
 use sqlbuild_analysis::planner_migrations::main::stored_migration_fingerprint::stored_migration_fingerprint;
@@ -48,12 +50,12 @@ pub(super) fn candidates<'py>(
     runtime: &Bound<'py, PyAny>,
     state: &Bound<'py, PyAny>,
     names: &Bound<'py, PyDict>,
-    claims: (&Bound<'py, PyAny>, &Bound<'py, PyDict>),
+    claims: (&[ModelMigrationDeclaration<'py>], &Bound<'py, PyDict>),
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py = runtime.py();
     let excluded = PySet::empty(py)?;
-    for declaration in claims.0.try_iter()? {
-        excluded.add(key(&declaration?.getattr("origin_location")?)?)?;
+    for declaration in claims.0 {
+        excluded.add(key(&declaration.origin_location)?)?;
     }
     for (_, event) in claims.1.iter() {
         excluded.add(key(&event.getattr("origin")?)?)?;
@@ -107,9 +109,9 @@ pub(super) fn automatic<'py>(
     scope: &Bound<'py, PyAny>,
     models: &[Bound<'py, PyAny>],
     matches: (&Bound<'py, PyAny>, &Bound<'py, PyDict>),
-) -> PyResult<Vec<Bound<'py, PyAny>>> {
+) -> PyResult<Vec<ModelMigrationRequest<'py>>> {
     let py = runtime.py();
-    let mut requests: Vec<Bound<'py, PyAny>> = Vec::new();
+    let mut requests: Vec<ModelMigrationRequest<'py>> = Vec::new();
     for item in models {
         if !scope
             .getattr("selected_keys")?
@@ -140,23 +142,16 @@ pub(super) fn automatic<'py>(
             None
         };
         if let Some((location, origin_model)) = origin {
-            requests.push(native(
-                py,
-                RecordId::ModelMigrationRequest,
-                &[
-                    ("model", item.clone()),
-                    (
-                        "discovery",
-                        registry::class(py, RecordId::MigrationDiscovery)?.getattr("AUTOMATIC")?,
-                    ),
-                    ("origin_location", location),
-                    ("origin_model", origin_model),
-                    (
-                        "identity_only",
-                        PyBool::new(py, identity(item)?).to_owned().into_any(),
-                    ),
-                ],
-            )?);
+            requests.push(ModelMigrationRequest {
+                model: item.clone(),
+                discovery: registry::class(py, RecordId::MigrationDiscovery)?
+                    .getattr("AUTOMATIC")?,
+                raw_origin: None,
+                origin_location: Some(location),
+                origin_model,
+                force: false,
+                identity_only: identity(item)?,
+            });
         }
     }
     Ok(requests)

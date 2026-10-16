@@ -1,61 +1,58 @@
 //! Native migration discovery over existing inspection and fingerprint cache boundaries.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
-use crate::bindings::_helpers::planner_migrations::column_objects::native;
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::planner_migrations::matching::{
+    match_migration_fingerprints, migration_destination_fingerprints,
+};
+use crate::bindings::_helpers::planner_migrations::models::{
+    DiscoveryRequest, FingerprintInputs, ModelMigrationDiscovery,
+};
 use crate::bindings::_helpers::planner_migrations::{
     discovery_events, discovery_models, discovery_requests,
 };
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyListMethods, PyTuple};
-use pyo3::{pyfunction, wrap_pyfunction};
+use pyo3::prelude::{PyAnyMethods, PyResult};
+use pyo3::types::{PyDict, PyDictMethods, PyListMethods, PyTuple, PyTupleMethods};
+use std::collections::BTreeSet;
 
-#[pyfunction]
-#[pyo3(signature = (**options))]
-fn discover_model_migrations<'py>(
-    py: Python<'py>,
-    options: Option<Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let args = KeywordArguments::read(
-        py,
-        "discover_model_migrations",
-        options,
-        (
-            &[
-                "runtime",
-                "scope",
-                "snapshot",
-                "manual_requests",
-                "declarations",
-                "state",
-                "project_schemas",
-                "fingerprints",
-            ],
-            &[],
-        ),
-    )?;
-    let runtime = args.value("runtime")?;
-    let scope = args.value("scope")?;
-    let state = args.value("state")?;
-    let manual = args.value("manual_requests")?;
-    let declarations = args.value("declarations")?;
+/// Manual and automatically discovered migration requests with their destination fingerprints.
+pub(super) fn discover_model_migrations<'py>(
+    request: DiscoveryRequest<'py>,
+) -> PyResult<ModelMigrationDiscovery<'py>> {
+    let DiscoveryRequest {
+        runtime,
+        scope,
+        snapshot,
+        manual_requests: manual,
+        declarations,
+        state,
+        project_schemas,
+        fingerprints: cache,
+    } = request;
+    let py = runtime.py();
     let models = discovery_models::ordered(&runtime)?;
     let declared_names = PyDict::new(py);
-    for declaration in declarations.try_iter()? {
-        declared_names.set_item(declaration?.getattr("model_name")?, py.None())?;
+    for declaration in &declarations {
+        declared_names.set_item(&declaration.model_name, py.None())?;
     }
-    let triggered =
-        discovery_models::triggered(&models, &scope, &args.value("snapshot")?, &declared_names)?;
-    if !triggered && !manual.is_truthy()? {
-        return native(py, RecordId::ModelMigrationDiscovery, &[]);
+    let triggered = discovery_models::triggered(&models, &scope, &snapshot, &declared_names)?;
+    if !triggered && manual.is_empty() {
+        return Ok(ModelMigrationDiscovery {
+            requests: Vec::new(),
+            warnings: Vec::new(),
+            destination_fingerprints: PyDict::new(py),
+        });
     }
     let metadata = discovery_models::metadata(&runtime, &models)?;
-    let dialect = runtime
-        .getattr("adapter")?
-        .call_method0("sql_analysis_dialect")?;
+    let inputs = FingerprintInputs {
+        metadata_jsons: metadata.into_any(),
+        dialect: runtime
+            .getattr("adapter")?
+            .call_method0("sql_analysis_dialect")?,
+        fingerprints: cache,
+    };
     call_with(
         &state.getattr("inspect_schemas")?,
-        &[("schemas", args.value("project_schemas")?)],
+        &[("schemas", project_schemas)],
     )?;
     let declared = discovery_events::declared(&declarations, &state)?;
     let names = PyDict::new(py);
@@ -66,25 +63,15 @@ fn discover_model_migrations<'py>(
     for (name, origin) in declared.iter() {
         event_renames.set_item(name, origin)?;
     }
-    let seeds = PyTuple::new(py, [event_renames, declared])?;
-    let cache = args.value("fingerprints")?;
+    let seeds = PyTuple::new(py, [event_renames, declared])?.into_any();
     if !triggered {
-        let hashes = native(
-            py,
-            NativeAttr::MigrationDestinationFingerprints,
-            &[
-                ("requests", manual.clone()),
-                ("variants", seeds.into_any()),
-                ("metadata_jsons", metadata.into_any()),
-                ("dialect", dialect),
-                ("fingerprints", cache),
-            ],
-        )?;
-        return native(
-            py,
-            RecordId::ModelMigrationDiscovery,
-            &[("requests", manual), ("destination_fingerprints", hashes)],
-        );
+        let destination_fingerprints =
+            migration_destination_fingerprints(&manual, &seeds, &inputs)?;
+        return Ok(ModelMigrationDiscovery {
+            requests: manual,
+            warnings: Vec::new(),
+            destination_fingerprints,
+        });
     }
     let unbuilt = PyDict::new(py);
     for item in &models {
@@ -105,53 +92,26 @@ fn discover_model_migrations<'py>(
     for (name, _) in resumed.iter() {
         unbuilt.del_item(name)?;
     }
-    let matched = native(
-        py,
-        NativeAttr::MatchMigrationFingerprints,
-        &[
-            ("models", PyTuple::new(py, &models)?.into_any()),
-            (
-                "new_names",
-                PyFrozenSet::new(py, unbuilt.keys().iter())?.into_any(),
-            ),
-            ("seed_variants", seeds.into_any()),
-            ("candidates", candidates.into_any()),
-            ("metadata_jsons", metadata.clone().into_any()),
-            ("dialect", dialect.clone()),
-            ("fingerprints", cache.clone()),
-        ],
-    )?;
-    let mut requests: Vec<Bound<'py, PyAny>> = manual.try_iter()?.collect::<PyResult<_>>()?;
+    let new_names: BTreeSet<String> = unbuilt
+        .keys()
+        .iter()
+        .map(|name| name.extract())
+        .collect::<PyResult<_>>()?;
+    let (variant_maps, matches, ambiguous) =
+        match_migration_fingerprints((&models, new_names), &seeds, candidates.as_any(), &inputs)?;
+    let mut requests = manual;
     requests.extend(discovery_requests::automatic(
         &runtime,
         &scope,
         &models,
-        (&matched.get_item(1)?, &resumed),
+        (matches.as_any(), &resumed),
     )?);
-    let requests = PyTuple::new(py, requests)?;
-    let warnings = discovery_requests::warnings(&models, &scope, &matched.get_item(2)?)?;
-    let hashes = native(
-        py,
-        NativeAttr::MigrationDestinationFingerprints,
-        &[
-            ("requests", requests.clone().into_any()),
-            ("variants", matched.get_item(0)?),
-            ("metadata_jsons", metadata.into_any()),
-            ("dialect", dialect),
-            ("fingerprints", cache),
-        ],
-    )?;
-    native(
-        py,
-        RecordId::ModelMigrationDiscovery,
-        &[
-            ("requests", requests.into_any()),
-            ("warnings", warnings.into_any()),
-            ("destination_fingerprints", hashes),
-        ],
-    )
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(discover_model_migrations, module)?)
+    let warnings = discovery_requests::warnings(&models, &scope, &ambiguous)?;
+    let destination_fingerprints =
+        migration_destination_fingerprints(&requests, &variant_maps, &inputs)?;
+    Ok(ModelMigrationDiscovery {
+        requests,
+        warnings: warnings.iter().collect(),
+        destination_fingerprints,
+    })
 }

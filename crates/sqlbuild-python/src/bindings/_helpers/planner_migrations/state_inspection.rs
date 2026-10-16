@@ -17,6 +17,7 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::constants::{
     GET_COLUMNS_FOR_INSPECTION, LIST_RELATIONS_FOR_INSPECTION,
 };
+use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::constants::{COLUMN_KIND, MODEL_KIND, OLD_NAME_KIND};
@@ -577,4 +578,18 @@ impl MigrationStateInspection {
         }
         PyTuple::new(py, orphans)
     }
+}
+
+/// A fresh live-state inspection over the runtime's connection and planning database.
+pub(super) fn inspection<'py>(
+    runtime: &Bound<'py, PyAny>,
+    known_fingerprints: Option<&Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let state = MigrationStateInspection::new(
+        &runtime_field(runtime, |runtime| &runtime.adapter)?,
+        &runtime_field(runtime, |runtime| &runtime.connection)?,
+        &super::planning_origin::planning_database(runtime)?,
+        known_fingerprints,
+    )?;
+    Ok(Bound::new(runtime.py(), state)?.into_any())
 }

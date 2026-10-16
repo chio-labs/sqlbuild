@@ -8,8 +8,6 @@ use crate::bindings::_helpers::planner_migrations::models::{
     ColumnMigrationInputs, ColumnMigrationPlanning, MigrationPhase,
 };
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PySet, PySetMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -77,21 +75,7 @@ pub(crate) fn plan_column_migrations<'py>(
             warnings: Vec::new(),
         });
     }
-    let database = call_with(
-        &registry::native(py, NativeAttr::MigrationPlanningDatabase)?,
-        &[("runtime", runtime.clone())],
-    )?;
-    let state = call_with(
-        &registry::native(py, NativeAttr::MigrationStateInspection)?,
-        &[
-            ("adapter", adapter),
-            (
-                "connection",
-                runtime_field(&runtime, |runtime| &runtime.connection)?,
-            ),
-            ("database", database),
-        ],
-    )?;
+    let state = super::state_inspection::inspection(&runtime, None)?;
     let schemas = PySet::empty(py)?;
     for candidate in &candidates {
         let schema = model_reads::destination(&candidate.model)?.getattr("schema")?;
@@ -131,10 +115,7 @@ pub(crate) fn plan_column_migrations<'py>(
         entries.extend(checked.entries);
         warnings.extend(checked.warnings);
     }
-    let policy = call_with(
-        &registry::native(py, NativeAttr::MigrationMissingOriginPolicy)?,
-        &[("runtime", runtime)],
-    )?;
+    let policy = super::planning_boundary::missing_origin_policy(&runtime)?;
     for entry in &mut entries {
         *entry = replace(entry, &[("missing_origin_policy", policy.clone())])?;
         if let Some(warning) = super::column_warnings::entry_warning(entry)? {
