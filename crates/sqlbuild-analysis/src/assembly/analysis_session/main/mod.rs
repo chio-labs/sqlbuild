@@ -1,4 +1,5 @@
 pub mod attach_analysis_cache;
+pub mod contract_proof_json;
 pub mod expression_shapes;
 pub mod finish_analysis_session;
 pub mod finished_fact_models;

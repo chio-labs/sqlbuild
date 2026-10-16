@@ -2,6 +2,8 @@
 mod analysis_cache;
 #[path = "tests/test_analysis_session.rs"]
 mod analysis_session;
+#[path = "tests/test_contract_proof_json.rs"]
+mod contract_proof_json;
 #[path = "tests/test_expression_shapes.rs"]
 mod expression_shapes;
 #[path = "tests/helpers.rs"]

@@ -19,6 +19,9 @@ use sqlbuild_rules::rule_results::models::RuleFinding;
 use crate::bindings::_helpers::analysis::model_reads::output_proven;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::compiled_project::compiled_model_view::{
+    NativeCompiledModel, SqlRuleInputs, SqlRuleKey,
+};
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::constants::SAFE_RULE_FIX_CODES;
@@ -186,9 +189,19 @@ fn finding_objects(py: Python<'_>, findings: Vec<RuleFinding>) -> PyResult<Bound
     PyTuple::new(py, objects)
 }
 
+/// One model SQL rules analyse: its relative path, cache key inputs when keyed, and model.
+struct SqlRuleModel<'py> {
+    path: String,
+    key: Option<SqlRuleKey>,
+    model: Bound<'py, PyAny>,
+}
+
 /// The project's models SQL rules analyse, keyed by relative path in project order.
-fn sql_rule_models<'py>(project: &Bound<'py, PyAny>) -> PyResult<Vec<(String, Bound<'py, PyAny>)>> {
-    let mut models: Vec<(String, Bound<'py, PyAny>)> = Vec::new();
+fn sql_rule_models<'py>(
+    project: &Bound<'py, PyAny>,
+    keyed: bool,
+) -> PyResult<Vec<SqlRuleModel<'py>>> {
+    let mut models: Vec<SqlRuleModel<'py>> = Vec::new();
     if !project
         .getattr("settings")?
         .getattr("sql_analysis")?
@@ -196,27 +209,75 @@ fn sql_rule_models<'py>(project: &Bound<'py, PyAny>) -> PyResult<Vec<(String, Bo
     {
         return Ok(models);
     }
-    let excluded: Bound<'py, PyAny> = false.into_bound_py_any(project.py())?;
     for model in project.getattr("models")?.try_iter()? {
-        let model: Bound<'py, PyAny> = model?;
-        let analysis: Bound<'py, PyAny> = model
-            .getattr("config")?
-            .getattr("values")?
-            .call_method1("get", ("sql_analysis",))?;
-        if analysis.is(&excluded) {
+        let Some(entry) = sql_rule_model(model?, keyed)? else {
             continue;
-        }
-        let path: String = model
-            .getattr("relative_path")?
-            .call_method0("as_posix")?
-            .extract()?;
-        if let Some(index) = models.iter().position(|(known, _)| *known == path) {
-            models[index].1 = model;
+        };
+        if let Some(index) = models.iter().position(|known| known.path == entry.path) {
+            models[index] = entry;
         } else {
-            models.push((path, model));
+            models.push(entry);
         }
     }
     Ok(models)
+}
+
+/// The model's SQL rule entry, or `None` when its config opts out of SQL analysis.
+fn sql_rule_model(model: Bound<'_, PyAny>, keyed: bool) -> PyResult<Option<SqlRuleModel<'_>>> {
+    let py: Python<'_> = model.py();
+    if let Ok(view) = model.downcast::<NativeCompiledModel>() {
+        let inputs: SqlRuleInputs = view.get().sql_rule_inputs(py, keyed)?;
+        let excluded: bool = match inputs.excluded {
+            Some(excluded) => excluded,
+            None => python_excluded(&model)?,
+        };
+        if excluded {
+            return Ok(None);
+        }
+        return Ok(Some(SqlRuleModel {
+            path: inputs.posix_path,
+            key: inputs.key,
+            model,
+        }));
+    }
+    if python_excluded(&model)? {
+        return Ok(None);
+    }
+    let key: Option<SqlRuleKey> = keyed
+        .then(|| -> PyResult<SqlRuleKey> {
+            Ok(SqlRuleKey {
+                authored_sql: model.getattr("authored_sql")?.extract()?,
+                query_sql: model.getattr("query_sql")?.extract()?,
+                contract: contract_text(&model)?,
+            })
+        })
+        .transpose()?;
+    Ok(Some(SqlRuleModel {
+        path: model_posix_path(&model)?,
+        key,
+        model,
+    }))
+}
+
+/// The model's relative path as POSIX text; a native view answers from its recorded facts.
+fn model_posix_path(model: &Bound<'_, PyAny>) -> PyResult<String> {
+    if let Ok(view) = model.downcast::<NativeCompiledModel>() {
+        return Ok(view.get().sql_rule_inputs(model.py(), false)?.posix_path);
+    }
+    model
+        .getattr("relative_path")?
+        .call_method0("as_posix")?
+        .extract()
+}
+
+/// Whether the model's config values set `sql_analysis` to `False`.
+fn python_excluded(model: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let excluded: Bound<'_, PyAny> = false.into_bound_py_any(model.py())?;
+    Ok(model
+        .getattr("config")?
+        .getattr("values")?
+        .call_method1("get", ("sql_analysis",))?
+        .is(&excluded))
 }
 
 /// Each analysed model's SQL rule cache key, in project order.
@@ -225,13 +286,10 @@ fn model_rule_identities(run: &SqlRun<'_, '_>, lint_key: &str) -> PyResult<Vec<(
         return Ok(Vec::new());
     }
     let mut models: Vec<(String, String, String, Option<String>)> = Vec::new();
-    for (path, model) in sql_rule_models(&run.project)? {
-        models.push((
-            path,
-            model.getattr("authored_sql")?.extract()?,
-            model.getattr("query_sql")?.extract()?,
-            contract_text(&model)?,
-        ));
+    for model in sql_rule_models(&run.project, true)? {
+        if let Some(key) = model.key {
+            models.push((model.path, key.authored_sql, key.query_sql, key.contract));
+        }
     }
     let keys: BTreeMap<String, String> = model_rule_keys(lint_key, run.codes, &models);
     Ok(models
@@ -243,7 +301,7 @@ fn model_rule_identities(run: &SqlRun<'_, '_>, lint_key: &str) -> PyResult<Vec<(
         .collect())
 }
 
-/// Canonical text of the dynamic column contract that SQL rule findings depend on.
+/// Canonical text of a hand-built model's dynamic column contract that SQL rule findings depend on.
 fn contract_text(model: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
     let py: Python<'_> = model.py();
     let contract: Bound<'_, PyAny> = model.getattr("dynamic_column_contract")?;
@@ -289,7 +347,7 @@ fn evaluated_sql_rules(
         return Ok((Vec::new(), 0, 0));
     }
     let project_dir: &Path = &run.project_dir;
-    let models: Vec<(String, Bound<'_, PyAny>)> = sql_rule_models(&run.project)?;
+    let models: Vec<SqlRuleModel<'_>> = sql_rule_models(&run.project, false)?;
     let cache_path: PathBuf = sql_rule_cache_path(project_dir);
     let mut bucket: StoredEntries = if run.cache_enabled {
         stored_entries(&cache_path)?
@@ -316,8 +374,7 @@ fn evaluated_sql_rules(
     if !run.model_selection {
         let mut model_paths: HashSet<PathBuf> = HashSet::new();
         for model in run.project.getattr("models")?.try_iter()? {
-            model_paths
-                .insert(project_dir.join(model?.getattr("relative_path")?.extract::<PathBuf>()?));
+            model_paths.insert(project_dir.join(model_posix_path(&model?)?));
         }
         let files: Vec<LintFile> = match prepared_result(run, py) {
             Some(Ok(result)) => result.outcome.files.clone(),
@@ -371,16 +428,14 @@ fn evaluated_sql_rules(
         Vec::new()
     } else {
         let mut dynamic: HashSet<PathBuf> = HashSet::new();
-        for (_, model) in &models {
-            if output_proven(model)? {
-                dynamic.insert(resolved(
-                    &project_dir.join(model.getattr("relative_path")?.extract::<PathBuf>()?),
-                ));
+        for model in &models {
+            if output_proven(&model.model)? {
+                dynamic.insert(resolved(&project_dir.join(&model.path)));
             }
         }
         prepared_lint_violations(run, (&selected_paths, &dynamic), &compiled, project_files)?
     };
-    let model_paths: BTreeSet<String> = models.into_iter().map(|(path, _)| path).collect();
+    let model_paths: BTreeSet<String> = models.into_iter().map(|model| model.path).collect();
     let evaluated: Vec<RuleFinding> = violation_findings(run, &violations, &model_paths)?;
     findings.extend(evaluated.iter().cloned());
     let mut written: Vec<(String, String)> = misses.clone();
