@@ -5,6 +5,7 @@ from __future__ import annotations
 import atexit
 import logging
 import queue
+import sys
 import threading
 import time
 from collections.abc import Callable, Iterator
@@ -70,6 +71,7 @@ from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 _STOP_POLL_SECONDS: float = 0.05
 _WORKER_EXIT_JOIN_SECONDS: float = 5.0
+_WORKER_EXIT_NOTICE: str = "Waiting up to 5s for running scenario statements to stop...\n"
 _WORKER_NAME_PREFIX: str = "sqlbuild-scenario-"
 _SCENARIO_INTERNAL_ERROR_HELP: str = (
     "This is likely a SQLBuild bug. Please file an issue with the scenario name."
@@ -577,11 +579,22 @@ def _start_scenario_workers[OutcomeT](
 def _join_scenario_workers() -> None:
     """Wait a bounded time at exit for abandoned workers, so none is ended inside native code."""
 
+    workers: list[threading.Thread] = [
+        thread
+        for thread in threading.enumerate()
+        if thread.name.startswith(_WORKER_NAME_PREFIX) and thread.is_alive()
+    ]
+    if not workers:
+        return
+    _ = sys.stderr.write(_WORKER_EXIT_NOTICE)
+    _ = sys.stderr.flush()
     deadline: float = time.monotonic() + _WORKER_EXIT_JOIN_SECONDS
     thread: threading.Thread
-    for thread in threading.enumerate():
-        if thread.name.startswith(_WORKER_NAME_PREFIX):
+    try:
+        for thread in workers:
             thread.join(timeout=max(0.0, deadline - time.monotonic()))
+    except KeyboardInterrupt:
+        return
 
 
 def _stop_scenarios[OutcomeT](

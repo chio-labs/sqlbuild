@@ -74,3 +74,4 @@ def test_given_abandoned_scenario_workers_when_interpreter_finalizes_then_proces
 
     assert result.returncode == test_case.expected_returncode, result.stderr
     assert "finalizing True" in result.stderr
+    assert "Waiting up to 5s for running scenario statements to stop" in result.stderr
