@@ -13,6 +13,7 @@ use crate::bindings::_helpers::rules::{
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     rule_api::register(module)?;
+    crate::bindings::_helpers::rules::project_tree_queries::register(module)?;
     module.add_function(wrap_pyfunction!(
         crate::bindings::_helpers::rules::lint_headers::lint_file_role,
         module

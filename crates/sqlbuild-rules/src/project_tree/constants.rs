@@ -12,5 +12,11 @@ pub(crate) const MISSING_FILE_ERRNOS: [i32; 4] = [2, 20, 9, 62];
 #[cfg(not(target_os = "macos"))]
 pub(crate) const MISSING_FILE_ERRNOS: [i32; 4] = [2, 20, 9, 40];
 pub(crate) const SEPARATOR: u8 = b'/';
+pub(crate) const ROOT: &[u8] = b"/";
+/// POSIX keeps exactly two leading slashes as their own root.
+pub(crate) const DOUBLE_ROOT: &[u8] = b"//";
+pub(crate) const DESCENDANT_SEPARATOR: &[u8] = b"/";
 pub(crate) const CURRENT: &[u8] = b".";
 pub(crate) const PARENT: &[u8] = b"..";
+/// Private-use characters standing for undecodable path bytes, one per byte value.
+pub(crate) const ESCAPED_BYTE_BASE: u32 = 0xF_0000;

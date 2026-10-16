@@ -130,7 +130,7 @@ note = "Public custom-rule test harness that writes a temporary project and runs
 [[stays]]
 path = "rule_engine/_helpers/engine/fact_replay.py"
 rule = 2
-note = "Rule 2: the fact digest scheme shared with the rule host (tracked_facts.py, custom_host.py); recomputes values through the user-facing fact views and encodes live Python objects with orjson."
+note = "Rule 2: the fact digest scheme shared with the rule host (tracked_facts.py, custom_host.py); recomputes values through the user-facing fact views and encodes live Python objects with orjson. The readable-file selection is native (tracked_text_file_values)."
 
 [[stays]]
 path = "rule_engine/main/define.py"
@@ -185,7 +185,7 @@ note = "Fact view user rules read through RuleContext; the Python API over nativ
 [[stays]]
 path = "rule_engine/classes/project_tree.py"
 rule = 3
-note = "Project-tree fact view user rules read through RuleContext; the walk, path validation and file resolution are native (project_tree_paths, project_tree_file_path, validate_project_relative) and only the file read stays here."
+note = "Project-tree fact view user rules read through RuleContext; the walk, path validation, file resolution and the children, descendants, glob and relative_parts queries are native (project_tree_*), and only the file read and the model lookup stay here."
 
 [[stays]]
 path = "rule_engine/classes/sql_document.py"

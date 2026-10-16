@@ -39,7 +39,7 @@ fn usage_error(py: Python<'_>, message: String) -> PyErr {
 }
 
 /// `RuleUsageError(prefix + str(value))`, keeping the value's text exactly as Python spells it.
-fn usage_error_for(prefix: &str, value: &Bound<'_, PyAny>) -> PyErr {
+pub(crate) fn usage_error_for(prefix: &str, value: &Bound<'_, PyAny>) -> PyErr {
     let py: Python<'_> = value.py();
     let message = value
         .str()
@@ -140,7 +140,7 @@ fn rule_option_toml_value(value: &Bound<'_, PyAny>) -> PyResult<String> {
 
 /// Reject a project path that is absolute or climbs out of the project.
 #[pyfunction]
-fn validate_project_relative(path: &Bound<'_, PyAny>) -> Result<(), PyErr> {
+pub(crate) fn validate_project_relative(path: &Bound<'_, PyAny>) -> Result<(), PyErr> {
     if posix_escapes_root(&path.str()?.to_string_lossy()) {
         return Err(usage_error_for("project path escapes the project: ", path));
     }

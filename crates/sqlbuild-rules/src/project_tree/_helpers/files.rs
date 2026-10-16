@@ -4,10 +4,9 @@ use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
-use sqlbuild_core::posix_path::main::posix_suffix::posix_suffix;
-
-use crate::project_tree::constants::{MISSING_FILE_ERRNOS, TRACKED_TEXT_SUFFIXES};
+use crate::project_tree::constants::MISSING_FILE_ERRNOS;
 use crate::project_tree::errors::ProjectTreeFileError;
+use crate::project_tree::main::tracked_text_path::tracked_text_path;
 
 /// `root` joined with the raw path components.
 pub(crate) fn joined(root: &Path, parts: &[&[u8]]) -> PathBuf {
@@ -51,12 +50,7 @@ pub(crate) fn regular_file(root: &Path, parts: &[&[u8]]) -> Option<PathBuf> {
 
 /// `candidate` when its lowercased suffix is a tracked text type.
 pub(crate) fn tracked(candidate: PathBuf) -> Result<PathBuf, ProjectTreeFileError> {
-    let name: String = candidate
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let suffix: String = posix_suffix(&name).to_lowercase();
-    if TRACKED_TEXT_SUFFIXES.contains(&suffix.as_str()) {
+    if tracked_text_path(&candidate) {
         Ok(candidate)
     } else {
         Err(ProjectTreeFileError::Untracked)

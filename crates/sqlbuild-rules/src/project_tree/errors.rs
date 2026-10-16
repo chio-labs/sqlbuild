@@ -18,3 +18,14 @@ pub enum ProjectTreeFileError {
     /// Testing the resolved path failed with this `errno`.
     Unreadable { path: PathBuf, errno: i32 },
 }
+
+/// Why a path has no parts relative to the project or the requested directory.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RelativePartsError<E> {
+    /// Resolving the absolute path failed.
+    Resolve(E),
+    /// The resolved path is outside the project.
+    Escapes,
+    /// The path is not beneath the requested directory.
+    NotBeneath,
+}

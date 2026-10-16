@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fnmatch
 from pathlib import Path
 
 import sqlbuild._native as _native
@@ -10,9 +9,12 @@ from sqlbuild._native import (
     Model,
     ProjectPath,
     RuleUsageError,
+    project_tree_child_nodes,
+    project_tree_descendant_nodes,
     project_tree_file_path,
+    project_tree_glob_nodes,
     project_tree_paths,
-    validate_project_relative,
+    project_tree_relative_parts,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
 
@@ -46,30 +48,16 @@ class ProjectTree:
         return self._nodes
 
     def children(self, path: str = "") -> tuple[ProjectPath, ...]:
-        parent: Path = Path(path)
-        return tuple(node for node in self._nodes if Path(node.value).parent == parent)
+        return project_tree_child_nodes(self._nodes, path)
 
     def descendants(self, path: str = "") -> tuple[ProjectPath, ...]:
-        prefix: str = f"{Path(path).as_posix().rstrip('/')}/" if path else ""
-        return tuple(node for node in self._nodes if node.value.startswith(prefix))
+        return project_tree_descendant_nodes(self._nodes, path)
 
     def glob(self, pattern: str) -> tuple[ProjectPath, ...]:
-        validate_project_relative(pattern)
-        return tuple(node for node in self._nodes if fnmatch.fnmatchcase(node.value, pattern))
+        return project_tree_glob_nodes(self._nodes, pattern)
 
     def relative_parts(self, *, path: Path | str, under: str = "") -> tuple[str, ...]:
-        relative: Path = Path(path)
-        if relative.is_absolute():
-            try:
-                relative = relative.resolve().relative_to(self._root)
-            except ValueError as error:
-                raise RuleUsageError(f"project path escapes the project: {path}") from error
-        if under:
-            try:
-                relative = relative.relative_to(Path(under))
-            except ValueError as error:
-                raise RuleUsageError(f"project path {path} is not beneath {under}") from error
-        return relative.parts
+        return project_tree_relative_parts(root=self._root, path=path, under=under)
 
     def resources_under(self, path: str) -> tuple[Model, ...]:
         prefix: str = f"{Path(path).as_posix().rstrip('/')}/"
