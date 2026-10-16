@@ -13,6 +13,9 @@ use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_s
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::cache::native_store::current_code_identity;
 use crate::bindings::_helpers::compile_driver::analysis_cache::record_analysis_cache_metrics;
+use crate::bindings::_helpers::compiled_project::model_input_view::{
+    AttachedSchema, attached_schema,
+};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
@@ -299,9 +302,11 @@ fn model_rows<'py>(
                 row.get_item(1)?.extract()?,
             ));
         }
-        let entry: Bound<'py, PyAny> = model_input.getattr("schema_entry")?;
+        let schema: Option<AttachedSchema<'py>> = attached_schema(model_input)?;
         let recovers: bool = get("contract")?.eq(&enforced)?
-            || (!entry.is_none() && entry.getattr("type_enforcement")?.is_truthy()?);
+            || schema
+                .as_ref()
+                .is_some_and(|schema| schema.type_enforcement);
         let snapshot_columns: Option<(String, String)> = if get("materialized")?.eq(&snapshot)? {
             Some((
                 or_default(&get("valid_from_column")?, VALID_FROM_DEFAULT)?,
@@ -310,10 +315,9 @@ fn model_rows<'py>(
         } else {
             None
         };
-        let families = if entry.is_none() {
-            Vec::new()
-        } else {
-            family_rows(&entry.getattr("dynamic_columns")?)?
+        let families = match &schema {
+            Some(schema) => family_rows(&schema.dynamic_columns)?,
+            None => Vec::new(),
         };
         let row: Vec<Bound<'py, PyAny>> = vec![
             model_input

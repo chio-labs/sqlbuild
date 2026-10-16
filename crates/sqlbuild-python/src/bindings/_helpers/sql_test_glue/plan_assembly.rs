@@ -4,18 +4,17 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
 use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, keywords,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::planner_strategy::fixture_context::planning_context;
 use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanningContext;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
-use crate::bindings::_helpers::sql_test_glue::plan_driver::plan_sql_tests_natively;
+use crate::bindings::_helpers::sql_test_glue::models::{SqlTestAssembly, SqlTestPlanOptions};
+use crate::bindings::_helpers::sql_test_glue::plan_driver::planned as planned_tests;
 
-#[pyfunction(name = "plan_sql_tests")]
+#[pyfunction]
 #[pyo3(signature = (**kwargs))]
-pub(crate) fn assemble_sql_test_plans<'py>(
+pub(super) fn plan_sql_tests<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
@@ -33,47 +32,54 @@ pub(crate) fn assemble_sql_test_plans<'py>(
         ),
     )?;
     let tests: Vec<Bound<'py, PyAny>> = args.value("tests")?.extract()?;
-    let project = args.value("project")?;
-    let adapter = args.value("adapter")?;
+    assemble_sql_test_plans(
+        &tests,
+        (&args.value("project")?, &args.value("adapter")?),
+        &SqlTestAssembly {
+            sql_analysis_enabled: args.value_or_false("sql_analysis_enabled")?,
+            validate_fixtures: args.flag("validate_fixtures")?,
+            fixture_planning_context: args.value("fixture_planning_context")?,
+        },
+    )
+}
+
+/// Plan results of SQL tests, with fixture and expected-output diagnostics in place of failing plans.
+pub(crate) fn assemble_sql_test_plans<'py>(
+    tests: &[Bound<'py, PyAny>],
+    (project, adapter): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    assembly: &SqlTestAssembly<'py>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let py = project.py();
     let mut context: Option<Bound<'py, RelationFixturePlanningContext>> = None;
-    let (planned, diagnostics) = if args.flag("sql_analysis_enabled")?
-        && args.flag("validate_fixtures")?
+    let (planned, diagnostics) = if assembly.sql_analysis_enabled.is_truthy()?
+        && assembly.validate_fixtures
     {
-        let given = args.value("fixture_planning_context")?;
+        let given = assembly.fixture_planning_context.clone();
         let shared = if given.is_none() {
-            Bound::new(py, planning_context(&project, None)?)?
+            Bound::new(py, planning_context(project, None)?)?
         } else {
             given.cast_into::<RelationFixturePlanningContext>()?
         };
-        let validated = super::plan_fixtures::validate(&tests, (&project, &adapter), shared.get())?;
+        let validated = super::plan_fixtures::validate(tests, (project, adapter), shared.get())?;
         context = Some(shared);
         validated
     } else {
-        (tests.clone(), Default::default())
+        (tests.to_vec(), Default::default())
     };
     let plannable: Vec<_> = planned
         .into_iter()
         .enumerate()
         .filter_map(|(index, test)| (!diagnostics.contains_key(&index)).then_some(test))
         .collect();
-    let plans = plan_sql_tests_natively(
-        py,
-        Some(keywords(
-            py,
-            &[
-                ("project", project.clone()),
-                ("tests", PyTuple::new(py, plannable)?.into_any()),
-                ("adapter", adapter),
-                (
-                    "sql_analysis_enabled",
-                    args.value_or_false("sql_analysis_enabled")?,
-                ),
-                (
-                    "render_sql",
-                    pyo3::types::PyBool::new(py, false).to_owned().into_any(),
-                ),
-            ],
-        )?),
+    let plans = planned_tests(
+        (project, adapter),
+        &PyTuple::new(py, plannable)?.into_any(),
+        &SqlTestPlanOptions {
+            sql_analysis_enabled: assembly.sql_analysis_enabled.clone(),
+            render_sql: false,
+            include_plan: true,
+            artifact: false,
+        },
     )?;
     let plans: Vec<Bound<'py, PyAny>> = plans.extract()?;
     if plans.len() != tests.len() - diagnostics.len() {
@@ -129,8 +135,8 @@ pub(crate) fn assemble_sql_test_plans<'py>(
                     super::plan_entries::entry(
                         test,
                         &plan,
-                        (&project, &models),
-                        &args.value_or_false("sql_analysis_enabled")?,
+                        (project, &models),
+                        &assembly.sql_analysis_enabled,
                     )?,
                 ),
                 ("warnings", plan.getattr("warnings")?),

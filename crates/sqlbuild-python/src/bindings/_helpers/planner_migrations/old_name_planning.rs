@@ -1,23 +1,24 @@
 //! Old-name planning orchestration over existing live state inspection.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::column_objects::native;
+use crate::bindings::_helpers::planner_migrations::models::{MigrationPhase, OldNameViewPlanning};
 use crate::bindings::_helpers::planner_migrations::old_name_objects::recorded_view;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PySet, PySetMethods, PyTuple};
-use pyo3::{pyfunction, wrap_pyfunction};
 
 fn schemas<'py>(
-    args: &KeywordArguments<'py>,
+    (phase, migration_entries): (&MigrationPhase<'py>, &Bound<'py, PyAny>),
     selected: &[Bound<'py, PyAny>],
 ) -> PyResult<Bound<'py, PyAny>> {
-    let runtime = args.value("runtime")?;
+    let runtime = phase.runtime.clone();
     let py = runtime.py();
-    let snapshot = args.value("snapshot")?;
+    let snapshot = phase.snapshot.clone();
     let needed = PySet::empty(py)?;
     for item in selected {
         let schema = item.getattr("destination")?.getattr("schema")?;
@@ -25,7 +26,7 @@ fn schemas<'py>(
             needed.add(schema)?;
         }
     }
-    for entry in args.value("migration_entries")?.try_iter()? {
+    for entry in migration_entries.try_iter()? {
         let schema = entry?.getattr("origin")?.getattr("schema")?;
         if !schema.is_none() {
             needed.add(schema)?;
@@ -67,30 +68,15 @@ fn schemas<'py>(
     )
 }
 
-#[pyfunction]
-#[pyo3(signature = (**options))]
+/// Old-name compatibility views to create, resume or retire for the planned model and column migrations.
 pub(crate) fn plan_old_name_views<'py>(
-    py: Python<'py>,
-    options: Option<Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let args = KeywordArguments::read(
-        py,
-        "plan_old_name_views",
-        options,
-        (
-            &[
-                "runtime",
-                "scope",
-                "snapshot",
-                "migration_entries",
-                "column_entries",
-            ],
-            &[],
-        ),
-    )?;
-    let runtime = args.value("runtime")?;
-    let scope = args.value("scope")?;
-    let project = runtime.getattr("project")?;
+    phase: &MigrationPhase<'py>,
+    moves: (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+) -> PyResult<OldNameViewPlanning<'py>> {
+    let py = phase.runtime.py();
+    let runtime = phase.runtime.clone();
+    let scope = phase.scope.clone();
+    let project = runtime_field(&runtime, |runtime| &runtime.project)?;
     let models: Vec<Bound<'py, PyAny>> = project
         .getattr("models")?
         .try_iter()?
@@ -112,8 +98,14 @@ pub(crate) fn plan_old_name_views<'py>(
     let state = call_with(
         &registry::native(py, NativeAttr::MigrationStateInspection)?,
         &[
-            ("adapter", runtime.getattr("adapter")?),
-            ("connection", runtime.getattr("connection")?),
+            (
+                "adapter",
+                runtime_field(&runtime, |runtime| &runtime.adapter)?,
+            ),
+            (
+                "connection",
+                runtime_field(&runtime, |runtime| &runtime.connection)?,
+            ),
             (
                 "database",
                 native(
@@ -124,7 +116,7 @@ pub(crate) fn plan_old_name_views<'py>(
             ),
         ],
     )?;
-    let needed = schemas(&args, &selected)?;
+    let needed = schemas((phase, moves.0), &selected)?;
     if needed.is_truthy()? {
         call_with(
             &state.getattr("inspect_old_name_views")?,
@@ -146,10 +138,15 @@ pub(crate) fn plan_old_name_views<'py>(
         histories.push(history);
     }
     let views = PyTuple::new(py, views)?.into_any();
-    let planner = super::models::OldNamePlanner::new(&args, models, histories, views.clone())?;
+    let planner = super::models::OldNamePlanner::new(
+        (&phase.runtime, moves.1),
+        models,
+        histories,
+        views.clone(),
+    )?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
     let covered = PySet::empty(py)?;
-    for entry in args.value("migration_entries")?.try_iter()? {
+    for entry in moves.0.try_iter()? {
         let entry = entry?;
         let name = entry.getattr("model_name")?;
         if let Some(item) = by_name.get_item(&name)?
@@ -172,26 +169,21 @@ pub(crate) fn plan_old_name_views<'py>(
         NativeAttr::OldNameClaimErrors,
         &[
             ("selected", PyTuple::new(py, selected)?.into_any()),
-            ("snapshot", args.value("snapshot")?),
+            ("snapshot", phase.snapshot.clone()),
             ("views", views.clone()),
-            ("now", runtime.getattr("invocation_time")?),
+            (
+                "now",
+                runtime_field(&runtime, |runtime| &runtime.invocation_time)?,
+            ),
         ],
     )?;
     let mut warnings: Vec<Bound<'py, PyAny>> = claims.try_iter()?.collect::<PyResult<_>>()?;
     warnings.extend(super::old_name_references::errors(
         &runtime, &views, &entries,
     )?);
-    native(
-        py,
-        RecordId::OldNameViewPlanning,
-        &[
-            ("entries", entries),
-            ("views", views),
-            ("warnings", PyTuple::new(py, warnings)?.into_any()),
-        ],
-    )
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(plan_old_name_views, module)?)
+    Ok(OldNameViewPlanning {
+        entries,
+        views,
+        warnings,
+    })
 }

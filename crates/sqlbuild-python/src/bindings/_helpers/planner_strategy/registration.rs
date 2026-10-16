@@ -8,7 +8,10 @@ use crate::bindings::_helpers::planner_strategy::{
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(super::audit_entries::plan_audit, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        super::audit_entries::plan_audit_of,
+        module
+    )?)?;
     module.add_function(wrap_pyfunction!(
         super::audit_entries::audit_is_selected,
         module
@@ -18,19 +21,15 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module
     )?)?;
     module.add_function(wrap_pyfunction!(
-        super::cursor_inputs::reject_unexposed_cursor_input_columns,
+        super::cursor_inputs::cursor_input_columns_of,
         module
     )?)?;
     module.add_function(wrap_pyfunction!(
-        super::cursor_inputs::build_cursor_input_relations,
+        super::cursor_inputs::cursor_input_relations_of,
         module
     )?)?;
     module.add_function(wrap_pyfunction!(
         super::cursor_inputs::runtime_cursor_producer_names,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
-        super::model_entries::assemble_model_plan_entry,
         module
     )?)?;
     module.add_function(wrap_pyfunction!(

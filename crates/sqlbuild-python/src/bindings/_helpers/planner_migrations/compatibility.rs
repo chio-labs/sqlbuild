@@ -20,23 +20,20 @@ fn config(model: &Bound<'_, PyAny>, key: &str) -> PyResult<Option<String>> {
         .extract()
 }
 
+/// The schema findings that block migrating one model's history; `snapshots_config` is given for snapshots.
 fn blocking<'py>(
-    py: Python<'py>,
-    arguments: &KeywordArguments<'py>,
-    snapshot: bool,
+    (model, findings_in): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    dialect: &Bound<'py, PyAny>,
+    snapshots_config: Option<&Bound<'py, PyAny>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
-    let model = arguments.value("model")?;
-    let policy = if snapshot {
-        config(&model, "snapshot_schema_change")?
+    let py = model.py();
+    let snapshot = snapshots_config.is_some();
+    let policy = if let Some(snapshots_config) = snapshots_config {
+        config(model, "snapshot_schema_change")?
             .filter(|value| !value.is_empty())
-            .unwrap_or(
-                arguments
-                    .value("snapshots_config")?
-                    .getattr("schema_change")?
-                    .extract()?,
-            )
+            .unwrap_or(snapshots_config.getattr("schema_change")?.extract()?)
     } else {
-        config(&model, "on_schema_change")?
+        config(model, "on_schema_change")?
             .filter(|value| !value.is_empty())
             .unwrap_or_else(|| "append_new_columns".to_owned())
     };
@@ -50,7 +47,7 @@ fn blocking<'py>(
     )?
     .call1((&policy,))?;
     let mut findings: Vec<CompatibilityFinding> = Vec::new();
-    for finding in arguments.value("findings")?.try_iter()? {
+    for finding in findings_in.try_iter()? {
         let finding = finding?;
         findings.push(CompatibilityFinding {
             kind: finding.getattr("kind")?.extract()?,
@@ -59,7 +56,7 @@ fn blocking<'py>(
             actual_type: finding.getattr("actual_type")?.extract()?,
         });
     }
-    let dialect: Option<String> = arguments.value("dialect")?.extract()?;
+    let dialect: Option<String> = dialect.extract()?;
     PyTuple::new(
         py,
         compatibility_findings(
@@ -83,7 +80,11 @@ fn migration_incremental_blocking_findings<'py>(
         options,
         (&["model", "findings", "dialect"], &[]),
     )?;
-    blocking(py, &arguments, false)
+    blocking(
+        (&arguments.value("model")?, &arguments.value("findings")?),
+        &arguments.value("dialect")?,
+        None,
+    )
 }
 
 #[pyfunction]
@@ -98,7 +99,11 @@ fn migration_snapshot_blocking_findings<'py>(
         options,
         (&["model", "findings", "dialect", "snapshots_config"], &[]),
     )?;
-    blocking(py, &arguments, true)
+    blocking(
+        (&arguments.value("model")?, &arguments.value("findings")?),
+        &arguments.value("dialect")?,
+        Some(&arguments.value("snapshots_config")?),
+    )
 }
 
 #[pyfunction]
@@ -181,16 +186,12 @@ fn check_migration_compatibility<'py>(
         return result(py, "not_checked", PyTuple::empty(py));
     }
     let snapshot = config(&model, "materialized")?.as_deref() == Some("snapshot");
-    let options = PyDict::new(py);
-    options.set_item("model", model)?;
-    options.set_item("findings", change.getattr("schema_findings")?)?;
-    options.set_item("dialect", arguments.value("column_dialect")?)?;
-    let findings = if snapshot {
-        options.set_item("snapshots_config", arguments.value("snapshots_config")?)?;
-        migration_snapshot_blocking_findings(py, Some(options))?
-    } else {
-        migration_incremental_blocking_findings(py, Some(options))?
-    };
+    let snapshots_config = arguments.value("snapshots_config")?;
+    let findings = blocking(
+        (&model, &change.getattr("schema_findings")?),
+        &arguments.value("column_dialect")?,
+        snapshot.then_some(&snapshots_config),
+    )?;
     result(
         py,
         if findings.is_empty() {

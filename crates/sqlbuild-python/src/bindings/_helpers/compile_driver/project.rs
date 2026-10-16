@@ -5,11 +5,10 @@ use pyo3::types::{PyBool, PyCFunction, PyDict, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::compile_timings::record_compile_timing;
+use crate::bindings::_helpers::compile_driver::inputs::{InputsRequest, attached_inputs};
 use crate::bindings::_helpers::compile_driver::phases::monotonic;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::project_graph;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, keywords,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::compile_driver::target_defaults::{
     TargetDefaults, apply_target_defaults,
 };
@@ -17,9 +16,16 @@ use crate::bindings::_helpers::compile_driver::targets::{
     managed_loader_target_isolation, managed_write_schemas, named_target_schema_strategy,
     project_targets,
 };
+use crate::bindings::_helpers::frontier::compile_frontier::{FrontierStage, bridged, produced};
 
+use crate::bindings::_helpers::compile_driver::assembly::assemble_project;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::compiled_project::records::project_with;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_collection_rendering;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
+use pyo3::IntoPyObjectExt;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 use sqlbuild_core::constants::TABLE_PROMOTION_MODE_SETTING_KEY;
 const LOCAL_CONFIG_FILENAME: &str = "sqlbuild_local.toml";
@@ -112,23 +118,9 @@ impl ProjectRequest {
 
 /// The compiled project produced through the `COMPILED_PROJECT` frontier.
 fn compiled_project(py: Python<'_>, request: ProjectRequest) -> PyResult<Bound<'_, PyAny>> {
-    let stage: Bound<'_, PyCFunction> = PyCFunction::new_closure(
-        py,
-        None,
-        None,
-        move |arguments: &Bound<'_, PyTuple>, _: Option<&Bound<'_, PyDict>>| {
-            python_compiled_project(arguments.py(), &request).map(Bound::unbind)
-        },
-    )?;
-    call_with(
-        &registry::native(py, NativeAttr::CompileFrontier)?,
-        &[
-            (
-                "until",
-                registry::class(py, RecordId::CompilerStage)?.getattr("COMPILED_PROJECT")?,
-            ),
-            ("python_stage", stage.into_any()),
-        ],
+    produced(
+        FrontierStage::CompiledProject,
+        python_compiled_project(py, &request)?,
     )
 }
 
@@ -162,26 +154,30 @@ fn python_compiled_project<'py>(
             ("selection", selection.clone()),
         ],
     )?;
-    let project: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::AssembleProject)?,
-        &[
-            ("inputs", compile_inputs.clone()),
-            ("inference_profile", inference_profile),
-            (
-                "skip_column_inference",
-                py_bool(py, request.skip_column_inference),
-            ),
-            (
-                "column_lineage_mode",
-                request.column_lineage_mode.bind(py).clone(),
-            ),
-            (
-                "analysis_cache_dir",
-                compile_inputs.getattr("compile_cache_dir")?,
-            ),
-            ("analysis_model_names", analysis_model_names),
-        ],
-    )?;
+    let project: Bound<'py, PyAny> = assemble_project(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("inputs", compile_inputs.clone()),
+                ("inference_profile", inference_profile),
+                (
+                    "skip_column_inference",
+                    py_bool(py, request.skip_column_inference),
+                ),
+                (
+                    "column_lineage_mode",
+                    request.column_lineage_mode.bind(py).clone(),
+                ),
+                (
+                    "analysis_cache_dir",
+                    compile_inputs.getattr("compile_cache_dir")?,
+                ),
+                ("analysis_model_names", analysis_model_names),
+            ],
+        )?),
+    )
+    .and_then(|value| value.into_bound_py_any(py))?;
     targeted_project(py, request, &project)
 }
 
@@ -210,13 +206,9 @@ fn targeted_project<'py>(
     let project: Bound<'py, PyAny> = apply_target_defaults(project, &defaults)?;
     let project_config: Bound<'py, PyAny> = discovered.getattr("project_config")?;
     let local_config: Bound<'py, PyAny> = discovered.getattr("local_config")?;
-    let adapter_name: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-        &[
-            ("project_config", project_config),
-            ("local_config", local_config.clone()),
-        ],
-    )?;
+    let adapter_name: Bound<'py, PyAny> =
+        resolve_effective_adapter_name(&project_config, &local_config.clone())
+            .and_then(|value| value.into_bound_py_any(py))?;
     project_targets(&adapter_name, &project)?;
     let promotion_key: Bound<'py, PyAny> =
         pyo3::types::PyString::new(py, TABLE_PROMOTION_MODE_SETTING_KEY).into_any();
@@ -247,12 +239,9 @@ fn targeted_project<'py>(
             .chain(conflicts.try_iter()?)
             .collect::<PyResult<Vec<_>>>()?,
     )?;
-    call_with(
-        &registry::native(py, NativeAttr::ProjectWith)?,
-        &[
-            ("project", project),
-            ("diagnostics", diagnostics.into_any()),
-        ],
+    project_with(
+        &project,
+        Some(keywords(py, &[("diagnostics", diagnostics.into_any())])?),
     )
 }
 
@@ -264,13 +253,11 @@ fn frontier_compile_inputs<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let discovered: &Bound<'py, PyAny> = request.discovered_inputs.bind(py);
     let adapter: &Bound<'py, PyAny> = request.adapter.bind(py);
-    let collection_rendering: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveCollectionRendering)?,
-        &[
-            ("project_config", discovered.getattr("project_config")?),
-            ("declaration_override", py.None().into_bound(py)),
-        ],
-    )?;
+    let collection_rendering: Bound<'py, PyAny> = resolve_effective_collection_rendering(
+        &discovered.getattr("project_config")?,
+        &py.None().into_bound(py),
+    )
+    .and_then(|value| value.into_bound_py_any(py))?;
     let adapter_context: Bound<'py, PyAny> = call_with(
         &registry::class(py, RecordId::CompileAdapterContext)?,
         &[
@@ -283,38 +270,29 @@ fn frontier_compile_inputs<'py>(
             ("sql_lexical_syntax", adapter.getattr("sql_lexical_syntax")?),
         ],
     )?;
-    let stage: Bound<'py, PyAny> = imported(py, "functools", "partial")?.call(
-        (registry::native(py, NativeAttr::BuildCompileInputs)?,),
-        Some(&keywords(
-            py,
-            &[
-                ("discovered_inputs", discovered.clone()),
-                ("adapter_context", adapter_context),
-                ("selected_target", request.selected_target.bind(py).clone()),
-                ("no_sql_validation", py_bool(py, request.no_sql_validation)),
-                ("defer_model_sql_validation", py_bool(py, true)),
-                ("cli_vars", request.cli_vars.bind(py).clone()),
-                (
-                    "resolved_connection",
-                    request.resolved_connection.bind(py).clone(),
-                ),
-                (
-                    "external_sql_reference_resolver",
-                    request.external_sql_reference_resolver.bind(py).clone(),
-                ),
-                ("no_cache", py_bool(py, no_cache)),
-            ],
-        )?),
+    let inputs: InputsRequest = InputsRequest {
+        discovered_inputs: discovered.clone().unbind(),
+        adapter_context: adapter_context.unbind(),
+        selected_target: request.selected_target.clone_ref(py),
+        cli_vars: request.cli_vars.clone_ref(py),
+        run_id: py.None(),
+        no_sql_validation: py_bool(py, request.no_sql_validation).unbind(),
+        defer_model_sql_validation: py_bool(py, true).unbind(),
+        external_sql_reference_resolver: request.external_sql_reference_resolver.clone_ref(py),
+        resolved_connection: request.resolved_connection.clone_ref(py),
+        no_cache: py_bool(py, no_cache).unbind(),
+    };
+    let stage: Bound<'py, PyCFunction> = PyCFunction::new_closure(
+        py,
+        None,
+        None,
+        move |arguments: &Bound<'_, PyTuple>, _: Option<&Bound<'_, PyDict>>| {
+            attached_inputs(arguments.py(), &inputs).map(Bound::unbind)
+        },
     )?;
-    call_with(
-        &registry::native(py, NativeAttr::CompileFrontier)?,
-        &[
-            (
-                "until",
-                registry::class(py, RecordId::CompilerStage)?.getattr("COMPILE_PROJECT_INPUTS")?,
-            ),
-            ("python_stage", stage),
-        ],
+    produced(
+        FrontierStage::CompileProjectInputs,
+        bridged(stage.as_any())?,
     )
 }
 

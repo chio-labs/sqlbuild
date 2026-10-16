@@ -1,12 +1,13 @@
 //! Project variable values rendered as the text SQL and config interpolation inserts.
 
+use crate::bindings::_helpers::native_host::facade::FacadeHost;
+use crate::bindings::_helpers::native_host::host;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
 use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString, PyTypeMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-const ERRORS_MODULE: &str = "sqlbuild.errors.contracts.exceptions";
 const JSON_MODULE: &str = "json";
 /// Characters of a structured value's JSON preview before it is cut short.
 const PREVIEW_LIMIT: usize = 120;
@@ -14,11 +15,7 @@ const PREVIEW_ELLIPSIS: &str = "...";
 
 /// `SharedInputError(message)`.
 fn shared_input_error(py: Python<'_>, message: String) -> PyErr {
-    match py
-        .import(ERRORS_MODULE)
-        .and_then(|module| module.getattr("SharedInputError"))
-        .and_then(|class| class.call1((message,)))
-    {
+    match host::entry(py, FacadeHost::SharedInputError).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }

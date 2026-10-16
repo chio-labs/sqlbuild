@@ -13,11 +13,10 @@ use sqlbuild_core::identifier_text::main::is_lowercase_identifier::is_lowercase_
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 
-const ERRORS_MODULE: &str = "sqlbuild.errors.contracts.exceptions";
-const SHARED_INPUT_ERROR: &str = "SharedInputError";
 const RANDOM_MODULE: &str = "random";
 const MAX_ATTEMPTS_TOO_LOW: &str = "RetryPolicy max_attempts must be at least 1";
 const INITIAL_DELAY_NEGATIVE: &str = "RetryPolicy initial_delay_seconds must be non-negative";
@@ -36,8 +35,7 @@ const HOOK_READS_INVALID: &str =
 
 /// `SharedInputError(message)`.
 fn shared_input_error(py: Python<'_>, message: &str) -> PyErr {
-    match imported(py, ERRORS_MODULE, SHARED_INPUT_ERROR).and_then(|class| class.call1((message,)))
-    {
+    match host::entry(py, FacadeHost::SharedInputError).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }

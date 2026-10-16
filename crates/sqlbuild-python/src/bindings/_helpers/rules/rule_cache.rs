@@ -1,7 +1,7 @@
 //! SQL rule result cache keys, stored-entry lookup and the cache file.
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{
@@ -22,33 +22,33 @@ use sqlbuild_rules::rule_cache::main::parse_rule_cache::parse_rule_cache;
 use sqlbuild_rules::rule_cache::main::rule_cache_text::rule_cache_text;
 use sqlbuild_rules::rule_cache::models::{CacheLookup, CachedEntry, LintKeyInput, ModelKeyInput};
 use sqlbuild_rules::rule_cache::types::CachedEntries;
+use sqlbuild_rules::rule_results::models::RuleFinding;
+
+use crate::bindings::_helpers::rules::lint_pipeline::LintSettings;
 
 /// Stored entries as `{path: (key, findings JSON)}`.
-type StoredEntries = BTreeMap<String, (String, String)>;
+pub(crate) type StoredEntries = BTreeMap<String, (String, String)>;
 
 fn invalid(error: serde_json::Error) -> PyErr {
     PyValueError::new_err(error.to_string())
 }
 
 /// The lint settings part of every SQL rule cache key.
+pub(crate) fn settings_lint_key(settings: &LintSettings) -> String {
+    lint_key(&LintKeyInput {
+        dialect: settings.sql.dialect.clone(),
+        max_literal_length: settings.sql.max_literal_length,
+        max_ranking_order_by: settings.sql.max_ranking_order_by,
+        relation_keys: settings.relation_keys.clone(),
+        allow_suppressions: settings.allow_suppressions,
+    })
+}
+
+/// The lint settings part of every SQL rule cache key.
 #[pyfunction]
 #[pyo3(signature = (*, config))]
 fn sql_rule_lint_key(config: &Bound<'_, PyAny>) -> PyResult<String> {
-    let mut relation_keys: Vec<(String, Vec<Vec<String>>)> = Vec::new();
-    for item in config
-        .getattr("relation_keys")?
-        .call_method0("items")?
-        .try_iter()?
-    {
-        relation_keys.push(item?.extract()?);
-    }
-    Ok(lint_key(&LintKeyInput {
-        dialect: config.getattr("dialect")?.extract()?,
-        max_literal_length: config.getattr("max_literal_length")?.extract()?,
-        max_ranking_order_by: config.getattr("max_ranking_order_by")?.extract()?,
-        relation_keys,
-        allow_suppressions: config.getattr("allow_suppressions")?.extract()?,
-    }))
+    Ok(settings_lint_key(&LintSettings::from_record(config)?))
 }
 
 /// Each model path's SQL rule cache key from `(path, authored_sql, query_sql, contract)`.
@@ -59,6 +59,15 @@ fn sql_model_rule_keys(
     codes: Vec<String>,
     models: Vec<(String, String, String, Option<String>)>,
 ) -> BTreeMap<String, String> {
+    model_rule_keys(lint_key, &codes, &models)
+}
+
+/// Each model path's SQL rule cache key from `(path, authored_sql, query_sql, contract)`.
+pub(crate) fn model_rule_keys(
+    lint_key: &str,
+    codes: &[String],
+    models: &[(String, String, String, Option<String>)],
+) -> BTreeMap<String, String> {
     models
         .iter()
         .map(|(path, authored_sql, query_sql, contract)| {
@@ -67,7 +76,7 @@ fn sql_model_rule_keys(
                 query_sql,
                 contract: contract.as_deref(),
             };
-            (path.clone(), model_rule_key(lint_key, &codes, &model))
+            (path.clone(), model_rule_key(lint_key, codes, &model))
         })
         .collect()
 }
@@ -94,7 +103,12 @@ fn sql_file_rule_key(request: Option<&Bound<'_, PyDict>>) -> PyResult<Option<Str
 #[pyfunction]
 #[pyo3(signature = (*, path))]
 fn load_sql_rule_cache(path: PathBuf) -> PyResult<StoredEntries> {
-    let Ok(text) = std::fs::read_to_string(&path) else {
+    stored_entries(&path)
+}
+
+/// The usable stored entries of the cache file at `path`; unreadable files read as empty.
+pub(crate) fn stored_entries(path: &Path) -> PyResult<StoredEntries> {
+    let Ok(text) = std::fs::read_to_string(path) else {
         return Ok(StoredEntries::new());
     };
     parse_rule_cache(&text)
@@ -118,6 +132,69 @@ fn cached_entries(entries: &StoredEntries) -> PyResult<CachedEntries> {
             Ok((path.clone(), entry))
         })
         .collect()
+}
+
+/// The stored findings of each path whose key matches, as rows; undecodable stored findings miss.
+pub(crate) fn cached_rule_findings(
+    entries: &StoredEntries,
+    keys: &[(String, String)],
+) -> PyResult<BTreeMap<String, Vec<RuleFinding>>> {
+    let lookup: CacheLookup = lookup_rule_cache(&cached_entries(entries)?, keys);
+    let mut hits: BTreeMap<String, Vec<RuleFinding>> = BTreeMap::new();
+    for (path, findings) in lookup.hits {
+        let decoded: Option<Vec<RuleFinding>> = findings.iter().map(payload_finding).collect();
+        if let Some(decoded) = decoded {
+            hits.insert(path, decoded);
+        }
+    }
+    Ok(hits)
+}
+
+/// One finding of a stored payload, or `None` when the payload is malformed.
+fn payload_finding(value: &Value) -> Option<RuleFinding> {
+    let payload = value.as_object()?;
+    let text = |key: &str| payload.get(key).and_then(Value::as_str).map(str::to_owned);
+    let number = |key: &str| {
+        payload
+            .get(key)
+            .filter(|value| value.is_u64())
+            .and_then(Value::as_i64)
+    };
+    let flag = |key: &str| payload.get(key).and_then(Value::as_bool) == Some(true);
+    Some(RuleFinding {
+        code: text("code")?,
+        path: text("path")?,
+        line: number("line")?,
+        column: number("column")?,
+        message: text("message")?,
+        remediation: text("remediation")?,
+        unevaluated: flag("unevaluated"),
+        affected_rules: Vec::new(),
+        fixable: flag("fixable"),
+    })
+}
+
+/// The stored payload of one finding row.
+pub(crate) fn finding_json(finding: &RuleFinding) -> Value {
+    json!({
+        "unevaluated": finding.unevaluated,
+        "code": finding.code,
+        "path": finding.path,
+        "line": finding.line,
+        "column": finding.column,
+        "message": finding.message,
+        "remediation": finding.remediation,
+        "fixable": finding.fixable,
+    })
+}
+
+/// The stored JSON of one path's finding rows.
+pub(crate) fn encoded_findings(findings: &[&RuleFinding]) -> PyResult<String> {
+    let payloads: Vec<Value> = findings
+        .iter()
+        .map(|finding| finding_json(finding))
+        .collect();
+    serde_json::to_string(&payloads).map_err(invalid)
 }
 
 /// The stored findings of each path whose key matches; undecodable stored findings miss.
@@ -179,13 +256,18 @@ fn write_sql_rule_cache(path: PathBuf, entries: &Bound<'_, PyDict>) -> PyResult<
     for (key, value) in entries.iter() {
         stored.insert(key.extract()?, value.extract()?);
     }
-    let text: String = rule_cache_text(&cached_entries(&stored)?);
+    write_rule_cache(&path, &stored)
+}
+
+/// Replace the cache file at `path` atomically with `entries`.
+pub(crate) fn write_rule_cache(path: &Path, stored: &StoredEntries) -> PyResult<()> {
+    let text: String = rule_cache_text(&cached_entries(stored)?);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
     let temporary: PathBuf = path.with_extension(format!("tmp-{}", std::process::id()));
     std::fs::write(&temporary, text)?;
-    std::fs::rename(&temporary, &path)?;
+    std::fs::rename(&temporary, path)?;
     Ok(())
 }
 

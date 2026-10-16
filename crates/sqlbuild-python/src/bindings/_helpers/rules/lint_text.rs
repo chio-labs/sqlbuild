@@ -6,7 +6,6 @@ use std::path::PathBuf;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyString};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
-use sqlbuild_rules::lint_text::constants::SUPPRESSION_CODE;
 use sqlbuild_rules::lint_text::errors::LintTextError;
 use sqlbuild_rules::lint_text::main::apply_suppressions::apply_suppressions;
 use sqlbuild_rules::lint_text::main::format_sql_bodies::format_sql_bodies;
@@ -19,16 +18,18 @@ use sqlbuild_rules::lint_text::main::restore_interpolation::restore_interpolatio
 use sqlbuild_rules::lint_text::main::scan_fixture_null_candidates::scan_fixture_null_candidates;
 use sqlbuild_rules::lint_text::models::{
     FormatFile, FormattedBodies, InterpolationSite, Neutralized, RetainedViolation,
-    SuppressibleViolation, SuppressionFinding,
+    SuppressibleViolation,
 };
 
 use crate::bindings::_helpers::boundary::panics::{compiler_guard, value_error};
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::rules::lint_pipeline::{
+    LintViolationRow, NATIVE_ENGINE, ViolationClasses,
+};
 use crate::bindings::types::CompilerDetach;
 
-const NATIVE_ENGINE: &str = "native";
 const FORMAT_UNSAFE_CODE: &str = "format-unsafe";
 const FORMAT_UNSAFE_REMEDIATION: &str = "Rewrite the unsupported SQL shape or report a minimal formatter reproduction. No header, SQL body, or fixture changes were written to this file.";
 
@@ -137,7 +138,7 @@ fn named_declaration_role_kind<'py>(
 
 /// Remove violations matched by suppressions and add the suppression findings, as lint models.
 #[pyfunction]
-fn apply_lint_suppressions<'py>(
+pub(crate) fn apply_lint_suppressions<'py>(
     py: Python<'py>,
     violations: Vec<Bound<'py, PyAny>>,
     contents_by_path: Bound<'py, PyDict>,
@@ -159,12 +160,15 @@ fn apply_lint_suppressions<'py>(
     let retained: Vec<RetainedViolation> = compiler_guard(|| {
         apply_suppressions(&texts, &keys, allow_suppressions).map_err(value_error)
     })?;
-    let classes: FindingClasses<'py> = FindingClasses::new(py)?;
+    let classes: ViolationClasses<'py> = ViolationClasses::new(py)?;
     retained
         .into_iter()
         .map(|item| match item {
             RetainedViolation::Existing(index) => Ok(violations[index].clone()),
-            RetainedViolation::Added(finding) => classes.violation(&paths[finding.file], finding),
+            RetainedViolation::Added(finding) => {
+                let row: LintViolationRow = LintViolationRow::suppression(finding);
+                classes.violation(&paths[row.file], &row)
+            }
         })
         .collect()
 }
@@ -184,70 +188,6 @@ fn suppressible(
         code: violation.getattr("code")?.extract()?,
         native: violation.getattr("engine")?.extract::<String>()? == NATIVE_ENGINE,
     })
-}
-
-/// The lint model classes suppression findings are built as.
-struct FindingClasses<'py> {
-    violation: Bound<'py, PyAny>,
-    edit: Bound<'py, PyAny>,
-    severity: Bound<'py, PyAny>,
-}
-
-impl<'py> FindingClasses<'py> {
-    fn new(py: Python<'py>) -> PyResult<Self> {
-        Ok(Self {
-            violation: registry::class(py, RecordId::LintViolation)?,
-            edit: registry::class(py, RecordId::LintEdit)?,
-            severity: registry::class(py, RecordId::LintSeverity)?,
-        })
-    }
-
-    fn violation(
-        &self,
-        file_path: &Bound<'py, PyAny>,
-        finding: SuppressionFinding,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let py: Python<'py> = file_path.py();
-        let code: Bound<'py, PyAny> = PyString::new(py, SUPPRESSION_CODE).into_any();
-        let fix: Bound<'py, PyAny> = match finding.fix {
-            Some((start, end)) => call_with(
-                &self.edit,
-                &[
-                    ("file_path", file_path.clone()),
-                    ("code", code.clone()),
-                    ("start", start.into_pyobject(py)?.into_any()),
-                    ("end", end.into_pyobject(py)?.into_any()),
-                    ("replacement", PyString::new(py, "").into_any()),
-                ],
-            )?,
-            None => py.None().into_bound(py),
-        };
-        let severity: &str = if finding.fault { "FAULT" } else { "WARNING" };
-        call_with(
-            &self.violation,
-            &[
-                ("file_path", file_path.clone()),
-                ("line", finding.line.into_pyobject(py)?.into_any()),
-                ("column", 1_usize.into_pyobject(py)?.into_any()),
-                ("code", code),
-                ("message", PyString::new(py, &finding.message).into_any()),
-                ("severity", self.severity.getattr(severity)?),
-                ("engine", PyString::new(py, NATIVE_ENGINE).into_any()),
-                (
-                    "remediation",
-                    PyString::new(py, finding.remediation).into_any(),
-                ),
-                ("fix", fix),
-                (
-                    "fix_unavailable_reason",
-                    finding.fix_unavailable_reason.map_or_else(
-                        || py.None().into_bound(py),
-                        |reason| PyString::new(py, reason).into_any(),
-                    ),
-                ),
-            ],
-        )
-    }
 }
 
 /// The parts of `path` below `project_dir`, or `None` outside the project.

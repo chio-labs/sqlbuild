@@ -1,22 +1,23 @@
 //! Plan output assembly: storage policies, warnings and direct-mode metadata.
 
 use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, keywords,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::planner_entries::models::PlanOutputInputs;
 use crate::bindings::_helpers::planner_entries::plan_output::plan_output_fields;
-use crate::bindings::_helpers::planner_phases::constants::PLAN_OUTPUT_INPUTS;
-use crate::bindings::_helpers::planner_phases::models::PlanOutputFields;
-use crate::bindings::_helpers::planner_phases::objects::{
-    model_key_names, native, replace, sorted_names, strings, text, tuple,
+use crate::bindings::_helpers::planner_phases::models::{
+    ChangeReconciliation, ModelEntryResults, PlanOutputFields,
 };
+use crate::bindings::_helpers::planner_phases::objects::{
+    native, replace, sorted_names, strings, text, tuple,
+};
+use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::planner_phases::runtime::warehouse_field;
 use crate::bindings::_helpers::planner_warehouse::source_freshness::source_freshness_unknown_warnings;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
-use std::collections::BTreeSet;
 
 fn concat<'py>(py: Python<'py>, parts: &[Bound<'py, PyAny>]) -> PyResult<Bound<'py, PyAny>> {
     let mut items: Vec<_> = Vec::new();
@@ -65,10 +66,10 @@ pub(crate) fn base_plan_output<'py>(
         &Bound<'py, PyAny>,
         &Bound<'py, PyAny>,
     ),
-    (pruning, reconciliation, entries, source_freshness): (
+    (execution_scope, reconciliation, entries, source_freshness): (
         &Bound<'py, PyAny>,
-        &Bound<'py, PyAny>,
-        &Bound<'py, PyAny>,
+        &ChangeReconciliation<'py>,
+        ModelEntryResults<'py>,
         &Bound<'py, PyAny>,
     ),
     planned_sql_tests: &Bound<'py, PyAny>,
@@ -90,38 +91,23 @@ pub(crate) fn base_plan_output<'py>(
             ("planned_sql_tests", planned_sql_tests.clone()),
         ],
     )?;
-    let inputs = keywords(
-        py,
-        &[
-            ("project", runtime.getattr("project")?),
-            ("adapter", runtime.getattr("adapter")?),
-            ("scope", pruning.getattr("execution_scope")?),
-            ("snapshot", warehouse.getattr("snapshot")?),
-            ("relations", warehouse.getattr("inspection_relations")?),
-            ("changes", reconciliation.getattr("changes")?),
-            (
-                "model_entry_results",
-                entries.getattr("model_entry_results")?,
-            ),
-            ("reload_sources", overrides.getattr("reload_sources")?),
-            ("extras", extras),
-        ],
-    )?;
     let mut output = PlanOutputFields {
-        fields: plan_output_fields(&KeywordArguments::read(
-            py,
-            "build_plan_output",
-            Some(inputs),
-            (PLAN_OUTPUT_INPUTS, &["extras"]),
-        )?)?,
+        fields: plan_output_fields(PlanOutputInputs {
+            project: runtime_field(runtime, |runtime| &runtime.project)?,
+            adapter: runtime_field(runtime, |runtime| &runtime.adapter)?,
+            scope: execution_scope.clone(),
+            snapshot: warehouse_field(warehouse, |warehouse| &warehouse.snapshot)?,
+            relations: warehouse_field(warehouse, |warehouse| &warehouse.inspection_relations)?,
+            changes: reconciliation.changes.clone(),
+            model_entries: entries.entries,
+            model_warnings: entries.warnings,
+            reload_sources: overrides.getattr("reload_sources")?,
+            extras,
+        })?,
         metadata: Vec::new(),
     };
     output.set("source_freshness", source_freshness.clone());
     output.set("cursor_overrides", overrides.getattr("cursor_overrides")?);
-    let pruned = pruning.getattr("pruned_direct_model_names")?;
-    if pruned.is_truthy()? {
-        output.metadata.push(("direct_pruned_model_names", pruned));
-    }
     Ok(output)
 }
 
@@ -177,7 +163,10 @@ pub(crate) fn add_storage_policies<'py>(
         .is_truthy()?
     {
         let models = PyDict::new(py);
-        for model in runtime.getattr("project")?.getattr("models")?.try_iter()? {
+        for model in runtime_field(runtime, |runtime| &runtime.project)?
+            .getattr("models")?
+            .try_iter()?
+        {
             let model = model?;
             models.set_item(model_reads::name_object(&model)?, model)?;
         }
@@ -187,7 +176,10 @@ pub(crate) fn add_storage_policies<'py>(
             &[
                 ("entries", entries),
                 ("models_by_name", models.into_any()),
-                ("fingerprints", warehouse.getattr("migration_fingerprints")?),
+                (
+                    "fingerprints",
+                    warehouse_field(warehouse, |warehouse| &warehouse.migration_fingerprints)?,
+                ),
                 (
                     "dialect",
                     runtime
@@ -197,15 +189,20 @@ pub(crate) fn add_storage_policies<'py>(
             ],
         )?;
     }
-    let entries = with_column_rename_hints(&entries, &warehouse.getattr("column_rename_hints")?)?;
-    let migration_entries = warehouse.getattr("migration_entries")?;
-    let column_entries = warehouse.getattr("column_migration_entries")?;
-    let old_name_entries = warehouse.getattr("old_name_view_entries")?;
-    let old_name_views = warehouse.getattr("old_name_views")?;
+    let entries = with_column_rename_hints(
+        &entries,
+        &warehouse_field(warehouse, |warehouse| &warehouse.column_rename_hints)?,
+    )?;
+    let migration_entries = warehouse_field(warehouse, |warehouse| &warehouse.migration_entries)?;
+    let column_entries =
+        warehouse_field(warehouse, |warehouse| &warehouse.column_migration_entries)?;
+    let old_name_entries =
+        warehouse_field(warehouse, |warehouse| &warehouse.old_name_view_entries)?;
+    let old_name_views = warehouse_field(warehouse, |warehouse| &warehouse.old_name_views)?;
     let warnings = concat(
         py,
         &[
-            warehouse.getattr("migration_warnings")?,
+            warehouse_field(warehouse, |warehouse| &warehouse.migration_warnings)?,
             output.field("warnings")?,
         ],
     )?;
@@ -237,11 +234,7 @@ pub(crate) fn add_plan_warnings<'py>(
         &Bound<'py, PyAny>,
         &Bound<'py, PyAny>,
     ),
-    (pruning, source_freshness, policies): (
-        &Bound<'py, PyAny>,
-        &Bound<'py, PyAny>,
-        &Bound<'py, PyAny>,
-    ),
+    (source_freshness, policies): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<PlanOutputFields<'py>> {
     let py = scopes.py();
     let freshness = source_freshness_unknown_warnings(source_freshness)?;
@@ -257,9 +250,12 @@ pub(crate) fn add_plan_warnings<'py>(
         NativeAttr::BuildStaleOutOfSelectionWarnings,
         &[
             ("original_scope", scopes.getattr("stale_warning_scope")?),
-            ("execution_scope", pruning.getattr("execution_scope")?),
+            ("execution_scope", scopes.getattr("inspection_scope")?),
             ("changes", stale_warning_changes.clone()),
-            ("snapshot", warehouse.getattr("snapshot")?),
+            (
+                "snapshot",
+                warehouse_field(warehouse, |warehouse| &warehouse.snapshot)?,
+            ),
             (
                 "version_identities",
                 identities.getattr("stale_warning_identities")?,
@@ -355,24 +351,10 @@ fn freshness_metadata<'py>(source_freshness: &Bound<'py, PyAny>) -> PyResult<Bou
 /// Add the direct-mode source freshness, remaining stale models and selection diagnostics metadata.
 pub(crate) fn add_plan_metadata<'py>(
     mut output: PlanOutputFields<'py>,
-    pruning: &Bound<'py, PyAny>,
     source_freshness: &Bound<'py, PyAny>,
     policies: &Bound<'py, PyAny>,
 ) -> PyResult<PlanOutputFields<'py>> {
-    let py = pruning.py();
-    let selected: BTreeSet<String> = model_key_names(
-        &pruning
-            .getattr("inspection_scope")?
-            .getattr("selected_keys")?,
-    )?
-    .into_iter()
-    .collect();
-    let remaining: Vec<String> = strings(&pruning.getattr("direct_identity_stale_model_names")?)?
-        .into_iter()
-        .filter(|name| !selected.contains(name))
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect();
+    let py = source_freshness.py();
     let diagnostics = PyDict::new(py);
     diagnostics.set_item("mode", text(py, "direct"))?;
     diagnostics.set_item("enabled", policies.getattr("selection_diagnostics")?)?;
@@ -382,7 +364,7 @@ pub(crate) fn add_plan_metadata<'py>(
     ));
     output.metadata.push((
         "direct_remaining_stale_model_names",
-        sorted_names(py, remaining)?,
+        sorted_names(py, Vec::new())?,
     ));
     output
         .metadata

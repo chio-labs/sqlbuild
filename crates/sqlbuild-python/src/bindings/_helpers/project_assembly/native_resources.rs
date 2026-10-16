@@ -19,6 +19,7 @@ use sqlbuild_model_config::templates::models::Scalar;
 use crate::bindings::_helpers::authored_values::project_vars::project_var_text;
 use crate::bindings::_helpers::boundary::panics::{NativeCompilerError, compiler_error};
 use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
+use crate::bindings::_helpers::compiled_project::model_input_view::input_reference_rows;
 use crate::bindings::_helpers::model_config::template_data::record_reads;
 use crate::bindings::_helpers::project_assembly::models::{
     NativeProjectResources, NativeResourceFailure,
@@ -162,15 +163,10 @@ fn tags(value: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
 
 fn model_facts(model_input: &Bound<'_, PyAny>, checks: &Bound<'_, PyAny>) -> PyResult<ModelFacts> {
     let model_file: Bound<'_, PyAny> = model_input.getattr("model_file")?;
-    let mut reference_rows: Vec<ReferenceRow> = Vec::new();
-    for reference in model_input.getattr("references")?.try_iter()? {
-        let reference: Bound<'_, PyAny> = reference?;
-        reference_rows.push((
-            reference.getattr("ref_kind")?.str()?.extract::<String>()?,
-            reference.getattr("ref_name")?.extract()?,
-            reference.getattr("ref_package")?.extract()?,
-        ));
-    }
+    let reference_rows: Vec<ReferenceRow> = input_reference_rows(model_input)?
+        .into_iter()
+        .map(|(kind, name, package, _)| (kind, name, package))
+        .collect();
     let mut syntax_checks: Vec<SyntaxCheck> = Vec::new();
     for check in checks.try_iter()? {
         let (sql, placeholders): (String, Bound<'_, PyAny>) = check?.extract()?;
@@ -449,7 +445,7 @@ fn resources_object<'py>(
 /// Return the resource facts and the resource Python's assembly raises at, if any.
 #[pyfunction]
 #[pyo3(signature = (*, inputs, dialect, syntax_checks))]
-fn assemble_native_project_resources<'py>(
+pub(crate) fn assemble_native_project_resources<'py>(
     inputs: &Bound<'py, PyAny>,
     dialect: Option<String>,
     syntax_checks: &Bound<'py, PyAny>,

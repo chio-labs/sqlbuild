@@ -41,15 +41,15 @@ const GENERATED_ALLOWED: &str = "macro-generated references";
 static EXPANSION_CLASSES: PyOnceLock<Py<PyDict>> = PyOnceLock::new();
 
 /// One expansion's inputs, as Python's `expand_sql_macros_result` takes them.
-struct ExpansionRequest<'py> {
-    sql: Bound<'py, PyString>,
-    file_path: Bound<'py, PyAny>,
-    loaded_macros: Bound<'py, PyDict>,
-    macro_overrides: Option<Bound<'py, PyDict>>,
-    macro_context: Bound<'py, PyAny>,
-    declaration_resolver: Option<Bound<'py, PyAny>>,
-    declarations: Option<Bound<'py, PyAny>>,
-    consumer: Option<Bound<'py, PyAny>>,
+pub(crate) struct ExpansionRequest<'py> {
+    pub(crate) sql: Bound<'py, PyString>,
+    pub(crate) file_path: Bound<'py, PyAny>,
+    pub(crate) loaded_macros: Bound<'py, PyDict>,
+    pub(crate) macro_overrides: Option<Bound<'py, PyDict>>,
+    pub(crate) macro_context: Bound<'py, PyAny>,
+    pub(crate) declaration_resolver: Option<Bound<'py, PyAny>>,
+    pub(crate) declarations: Option<Bound<'py, PyAny>>,
+    pub(crate) consumer: Option<Bound<'py, PyAny>>,
 }
 
 fn generated_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
@@ -190,12 +190,13 @@ fn result_model<'py>(
     call_with(&registry::class(py, RecordId::MacroExpansionResult)?, pairs)
 }
 
-fn expansion_result<'py>(request: ExpansionRequest<'py>) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = request.sql.py();
+/// The macro expansion of `request`'s SQL, or `None` when it calls no macro.
+pub(crate) fn macro_output(request: ExpansionRequest<'_>) -> PyResult<Option<ExpansionOutput>> {
+    let py: Python<'_> = request.sql.py();
     if !request.sql.to_str()?.contains(MACRO_TOKEN) {
-        return result_model(py, &[("sql", request.sql.into_any())]);
+        return Ok(None);
     }
-    let declarations: Bound<'py, PyAny> = match (request.declarations, request.declaration_resolver)
+    let declarations: Bound<'_, PyAny> = match (request.declarations, request.declaration_resolver)
     {
         (Some(declarations), _) => declarations,
         (None, Some(resolver)) => {
@@ -221,9 +222,17 @@ fn expansion_result<'py>(request: ExpansionRequest<'py>) -> PyResult<Bound<'py, 
             .is_truthy()?,
         macro_expansion_classes(py)?.unbind(),
     )?;
-    let expansion: Bound<'py, NativeMacroExpansion> = Bound::new(py, expansion)?;
-    let bridge: Bound<'py, PyAny> = host::entry(py, UserCodeHost::ActiveMacroBridge)?.call0()?;
-    let output: ExpansionOutput = expanded(&expansion, request.sql.to_str()?, &bridge)?;
+    let expansion: Bound<'_, NativeMacroExpansion> = Bound::new(py, expansion)?;
+    let bridge: Bound<'_, PyAny> = host::entry(py, UserCodeHost::ActiveMacroBridge)?.call0()?;
+    expanded(&expansion, request.sql.to_str()?, &bridge).map(Some)
+}
+
+fn expansion_result<'py>(request: ExpansionRequest<'py>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = request.sql.py();
+    let sql: Bound<'py, PyString> = request.sql.clone();
+    let Some(output) = macro_output(request)? else {
+        return result_model(py, &[("sql", sql.into_any())]);
+    };
     let span_class: Bound<'py, PyAny> = registry::class(py, RecordId::ExpansionSpan)?;
     let mut spans: Vec<Bound<'py, PyAny>> = Vec::with_capacity(output.spans.len());
     for span in output.spans {

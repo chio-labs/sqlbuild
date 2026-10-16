@@ -27,12 +27,13 @@ use crate::bindings::_helpers::discovery::snapshot::{
 };
 use crate::bindings::_helpers::discovery::sorted_keys::sorted_keys;
 use crate::bindings::_helpers::model_config::header_columns::schema_columns;
+use crate::bindings::_helpers::native_host::facade::FacadeHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sqltext::authored_values::map_to_python;
 use crate::bindings::models::{NativeDiscoverySession, NativeProjectTree};
 
-const AUDITING_TYPES_MODULE: &str = "sqlbuild.compiler.auditing.types";
 const PATHLIB_MODULE: &str = "pathlib";
 const SESSION_MEMO_KEY: &str = "native_discovery_session";
 const MEASUREMENT_MODE: &str = "MEASUREMENT";
@@ -283,12 +284,10 @@ fn hook_file<'py>(context: &FileContext<'_, 'py>, file: &HookFile) -> PyResult<B
 
 fn audit_block<'py>(py: Python<'py>, block: &AuditBlock) -> PyResult<Bound<'py, PyAny>> {
     let header_values: Bound<'py, PyDict> = authored(py, &block.header_values)?;
-    let mode: Bound<'py, PyAny> = imported(py, AUDITING_TYPES_MODULE, "AuditEvaluationMode")?
-        .call1((block.evaluation_mode,))?;
+    let mode: Bound<'py, PyAny> =
+        host::entry(py, FacadeHost::AuditEvaluationMode)?.call1((block.evaluation_mode,))?;
     let measurement: Bound<'py, PyAny> =
-        if mode.is(&imported(py, AUDITING_TYPES_MODULE, "AuditEvaluationMode")?
-            .getattr(MEASUREMENT_MODE)?)
-        {
+        if mode.is(&host::entry(py, FacadeHost::AuditEvaluationMode)?.getattr(MEASUREMENT_MODE)?) {
             call_with(
                 &registry::class(py, RecordId::MeasurementContract)?,
                 &[

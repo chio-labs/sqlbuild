@@ -4,6 +4,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyBool, PyDict, PyDictMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::compiled_project::model_input_view::attached_schema;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -72,12 +73,10 @@ fn declared_relations<'py>(inputs: Bound<'py, PyAny>) -> PyResult<DeclaredRelati
     let complete: Bound<'py, PyDict> = PyDict::new(py);
     for model in inputs.getattr("model_inputs")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
-        let entry: Bound<'py, PyAny> = model.getattr("schema_entry")?;
-        if entry.is_none() {
+        let Some(schema) = attached_schema(&model)? else {
             continue;
-        }
-        let name: Bound<'py, PyAny> = entry.getattr("name")?;
-        let columns: Bound<'py, PyAny> = entry.getattr("columns")?;
+        };
+        let (name, columns): (Bound<'py, PyAny>, Bound<'py, PyAny>) = (schema.name, schema.columns);
         types.set_item(&name, column_types(&columns, false)?)?;
         nulls.set_item(&name, column_nullability(&columns, &nullability)?)?;
         let contract: Option<Bound<'py, PyAny>> = model
@@ -89,7 +88,7 @@ fn declared_relations<'py>(inputs: Bound<'py, PyAny>) -> PyResult<DeclaredRelati
             Some(contract) => contract.eq(ENFORCED_CONTRACT)?,
             None => false,
         };
-        if enforced && columns.is_truthy()? && !entry.getattr("dynamic_columns")?.is_truthy()? {
+        if enforced && columns.is_truthy()? && !schema.dynamic_columns.is_truthy()? {
             let stem: Bound<'py, PyAny> = model
                 .getattr("model_file")?
                 .getattr("file_path")?

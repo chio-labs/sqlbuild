@@ -103,9 +103,9 @@ fn state_schemas(
     Ok(schemas)
 }
 
-#[pyfunction]
+#[pyfunction(name = "build_planner_source_freshness_result")]
 #[pyo3(signature = (**options))]
-pub(crate) fn build_planner_source_freshness_result<'py>(
+pub(crate) fn build_planner_source_freshness_result_of<'py>(
     py: pyo3::Python<'py>,
     options: Option<Bound<'py, KeywordDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -118,13 +118,21 @@ pub(crate) fn build_planner_source_freshness_result<'py>(
             &["freshness_state_schemas"],
         ),
     )?;
-    let project = &args.value("project")?;
-    let adapter = &args.value("adapter")?;
-    let connection = &args.value("connection")?;
-    let scope = &args.value("scope")?;
-    let relations = &args.value("relations")?;
-    let freshness_state_schemas = &args.value("freshness_state_schemas")?;
+    build_planner_source_freshness_result(
+        (&args.value("project")?, &args.value("scope")?),
+        (&args.value("adapter")?, &args.value("connection")?),
+        &args.value("relations")?,
+        &args.value("freshness_state_schemas")?,
+    )
+}
 
+/// The source freshness evaluation of one inspection scope against the warehouse.
+pub(crate) fn build_planner_source_freshness_result<'py>(
+    (project, scope): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    (adapter, connection): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    relations: &Bound<'py, PyAny>,
+    freshness_state_schemas: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
     let py = project.py();
     let schemas = state_schemas(project, scope)?;
     let mut lowered_state: BTreeSet<String> = BTreeSet::new();

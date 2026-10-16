@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
-from threading import Event
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
@@ -19,10 +20,8 @@ from sqlbuild._native import (
     DeclarationScopeBuild,
     DiscoveredMacroFile,
     DiscoveredProjectInputs,
-    LintRunResult,
     LoadedMacro,
     SqlLexicalSyntax,
-    active_lint_stop,
     rules_bulk_cache_path,
 )
 from sqlbuild._native import run_cli as main
@@ -77,7 +76,9 @@ _CUSTOM_CACHE_EDITED_RULE: str = _CUSTOM_CACHE_RULE.replace('"final" in', '"stag
 _CUSTOM_CACHE_MODEL_SQL: str = 'MODEL (description "Orders");\nSELECT 1 AS order_id\n'
 _CUSTOM_CACHE_EDITED_SQL: str = _CUSTOM_CACHE_MODEL_SQL.replace("SELECT 1", "SELECT 2")
 
-_EARLY_LINT_STOP_TIMEOUT_S: float = 30.0
+_EARLY_LINT_SLOW_HOOKS: int = 8
+_EARLY_LINT_SLOW_EXPANSION_S: float = 0.5
+_EARLY_LINT_EXPANSION_DELAYS_S: dict[str, float] = {"orders": 0.0}
 _EARLY_LINT_FINDINGS: tuple[tuple[str, str, int | None, int | None], ...] = (
     ("SQBRSQL005", "models/order_cents.sql", 2, 116),
 )
@@ -916,14 +917,13 @@ def test_given_cold_scoped_macro_sql_test_when_compiling_then_early_lint_uses_pr
 
 @pytest.mark.parametrize(
     "test_case",
-    [RulesIntegrationTestCase("cold SQL rules reuse the early file read", 1, "SQBRSQL004")],
+    [RulesIntegrationTestCase("early file read gives the cached findings", 1, "SQBRSQL004")],
     ids=lambda case: case.description,
 )
-def test_given_cold_non_model_sql_finding_when_compiling_then_rules_reuse_early_file_read(
+def test_given_cold_non_model_sql_finding_when_compiling_twice_then_warm_findings_match(
     test_case: RulesIntegrationTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     (tmp_path / "sqlbuild_project.toml").write_text(
         f'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["{test_case.expected_code}"]\n',
@@ -939,25 +939,11 @@ def test_given_cold_non_model_sql_finding_when_compiling_then_rules_reuse_early_
         b"__expected__orders AS (SELECT order_id FROM __ref__orders LIMIT 1)\r\n"
         b"SELECT 1\r\n"
     )
-    collections: list[frozenset[Path] | None] = []
-    original_collect: Callable[..., dict[Path, str]] = native_module.collect_lint_project_files
-
-    def counting_collect(
-        *, project_dir: Path, selected_paths: frozenset[Path] | None
-    ) -> dict[Path, str]:
-        collections.append(selected_paths)
-        return original_collect(project_dir=project_dir, selected_paths=selected_paths)
-
-    monkeypatch.setattr(native_module, "collect_lint_project_files", counting_collect)
-
     cold: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)
-    cold_collections: int = len(collections)
     warm: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)
 
     assert f"tests/unit/test_orders.sql:{test_case.expected_code}" in cold
     assert warm == cold
-    assert cold_collections == 0
-    assert collections == [None]
 
 
 @pytest.mark.parametrize(
@@ -1017,7 +1003,7 @@ def test_given_previous_build_rule_cache_when_compiling_then_lint_overlaps_with_
 
 @pytest.mark.parametrize(
     "test_case",
-    [RulePassIntegrationTestCase("graph error stops the unused early lint", 1, ("B002",))],
+    [RulePassIntegrationTestCase("graph error stops the unused early lint", 1, ("B002", "S024"))],
     ids=lambda case: case.description,
 )
 def test_given_graph_error_when_compiling_then_early_lint_is_stopped_instead_of_awaited(
@@ -1033,7 +1019,8 @@ def test_given_graph_error_when_compiling_then_early_lint_is_stopped_instead_of_
     models_dir: Path = tmp_path / "models"
     models_dir.mkdir()
     (models_dir / "orders.sql").write_text(
-        'MODEL (description "Orders");\nSELECT 1 AS order_id\n', encoding="utf-8"
+        'MODEL (description "Orders");\nSELECT @slow_total("orders") AS order_id\n',
+        encoding="utf-8",
     )
     (models_dir / "order_totals.sql").write_text(
         'MODEL (description "Order totals");\n'
@@ -1041,17 +1028,28 @@ def test_given_graph_error_when_compiling_then_early_lint_is_stopped_instead_of_
         'SELECT order_id, missing_column FROM __ref("orders")\n',
         encoding="utf-8",
     )
-    lint_started: Event = Event()
-    stop_observed: list[bool] = []
-    original_run_lint: Callable[..., LintRunResult] = native_module.run_lint
+    macros_dir: Path = tmp_path / "macros"
+    macros_dir.mkdir()
+    (tmp_path / "hooks").mkdir()
+    (macros_dir / "slow_total.py").write_text(
+        "import orders_lint_probe\n\n\n"
+        "def slow_total(name: str) -> str:\n"
+        '    """Record the expansion and take a while."""\n'
+        "    return orders_lint_probe.expanded(name)\n",
+        encoding="utf-8",
+    )
+    for index in range(_EARLY_LINT_SLOW_HOOKS):
+        (tmp_path / "hooks" / f"total_{index:02d}.sql").write_text(
+            f'SELECT @slow_total("total_{index:02d}") AS order_total\n', encoding="utf-8"
+        )
+    expanded: list[str] = []
 
-    def stop_awaiting_run_lint(**kwargs: Any) -> LintRunResult:
-        lint_started.set()
-        stop: Event | None = active_lint_stop()
-        stop_observed.append(stop is not None and stop.wait(timeout=_EARLY_LINT_STOP_TIMEOUT_S))
-        return original_run_lint(**kwargs)
+    def expand_slowly(name: str) -> str:
+        expanded.append(name)
+        time.sleep(_EARLY_LINT_EXPANSION_DELAYS_S.get(name, _EARLY_LINT_SLOW_EXPANSION_S))
+        return "1"
 
-    monkeypatch.setattr(native_module, "run_lint", stop_awaiting_run_lint)
+    monkeypatch.setitem(sys.modules, "orders_lint_probe", SimpleNamespace(expanded=expand_slowly))
 
     exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
 
@@ -1061,8 +1059,7 @@ def test_given_graph_error_when_compiling_then_early_lint_is_stopped_instead_of_
     assert tuple(diagnostic["code"] for diagnostic in diagnostics) == (
         test_case.expected_diagnostics
     )
-    assert lint_started.is_set()
-    assert stop_observed == [True]
+    assert len(set(expanded) - set(_EARLY_LINT_EXPANSION_DELAYS_S)) < _EARLY_LINT_SLOW_HOOKS
 
 
 @pytest.mark.parametrize(

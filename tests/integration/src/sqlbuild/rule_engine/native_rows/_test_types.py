@@ -3,11 +3,11 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class SqlRulePublicationTestCase:
-    """Increasing path counts and the linear conversion budget."""
+    """Paths whose lint findings are published to the SQL rule cache within a time limit."""
 
     description: str
     sizes: tuple[int, ...]
-    expected_counts: list[tuple[int, int]]
+    expected_max_seconds: float
 
 
 @dataclass(frozen=True)

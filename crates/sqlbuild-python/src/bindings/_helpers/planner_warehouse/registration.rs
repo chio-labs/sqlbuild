@@ -54,7 +54,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module
     )?)?;
     module.add_function(wrap_pyfunction!(
-        super::source_freshness::build_planner_source_freshness_result,
+        super::source_freshness::build_planner_source_freshness_result_of,
         module
     )?)
 }

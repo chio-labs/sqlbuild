@@ -1,4 +1,4 @@
-"""Lint bodies are prepared natively in one batch with per-body results and failure order."""
+"""Lint bodies are prepared natively in one batch; unexpandable files fail or skip in file order."""
 
 from __future__ import annotations
 
@@ -6,17 +6,13 @@ from pathlib import Path
 
 import pytest
 
-import sqlbuild._native as native_module
 from sqlbuild._native import LintConfig, LintRunResult, ProjectCompileError, run_lint
 from tests.unit.src.sqlbuild.lint._helpers._test_types import (
-    BatchedPreparationFailureTestCase,
     BatchedPreparationTestCase,
+    UnexpandableFailureTestCase,
+    UnexpandableSkipTestCase,
 )
-from tests.unit.src.sqlbuild.lint._helpers.helpers import (
-    prepare_nothing_in_batch,
-    refuse_preparation,
-    write_lint_project,
-)
+from tests.unit.src.sqlbuild.lint._helpers.helpers import write_lint_project
 
 _ORDERS_MODEL: str = (
     'MODEL (description "Orders");\n'
@@ -30,6 +26,13 @@ _ORDERS_TEST: str = (
     "__expected__orders AS (SELECT 1 AS customer_id)\nSELECT 1\n"
 )
 _NOT_NULL_AUDIT: str = "AUDIT ();\nSELECT 1 FROM @relation WHERE @column IS NULL\n"
+_BROKEN_MODEL: str = 'MODEL (description "Broken");\nSELECT @unknown()\n'
+_UNEXPANDABLE_FILES: dict[str, str] = {
+    "models/customers.sql": _CUSTOMERS_MODEL,
+    "models/orders.sql": _ORDERS_MODEL,
+    "models/aa_broken.sql": _BROKEN_MODEL,
+    "models/zz_broken.sql": _BROKEN_MODEL,
+}
 
 
 @pytest.mark.parametrize(
@@ -48,66 +51,65 @@ _NOT_NULL_AUDIT: str = "AUDIT ();\nSELECT 1 FROM @relation WHERE @column IS NULL
     ],
     ids=lambda case: case.description,
 )
-def test_given_project_when_linting_with_batched_preparation_then_result_matches_per_body(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: BatchedPreparationTestCase
+def test_given_project_when_linting_then_bodies_of_every_kind_are_prepared_in_one_batch(
+    tmp_path: Path, test_case: BatchedPreparationTestCase
 ) -> None:
     write_lint_project(root=tmp_path, files=test_case.files)
     config: LintConfig = LintConfig(dialect="duckdb")
 
-    batched: LintRunResult = run_lint(project_dir=tmp_path, config=config)
-    monkeypatch.setattr(native_module, "prepare_lint_sql_batch", prepare_nothing_in_batch)
-    per_body: LintRunResult = run_lint(project_dir=tmp_path, config=config)
+    first: LintRunResult = run_lint(project_dir=tmp_path, config=config)
+    second: LintRunResult = run_lint(project_dir=tmp_path, config=config)
 
-    assert batched == per_body
-    assert tuple(violation.code for violation in batched.violations) == test_case.expected_codes
+    assert first == second
+    assert tuple(violation.code for violation in first.violations) == test_case.expected_codes
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
-        BatchedPreparationFailureTestCase(
-            description="native failure before a later unexpandable file",
-            unexpandable_file="models/zz_broken.sql",
-            skip_unexpandable=False,
-            expected_error=ValueError,
-        ),
-        BatchedPreparationFailureTestCase(
-            description="unexpandable file before a later native failure",
-            unexpandable_file="models/aa_broken.sql",
-            skip_unexpandable=False,
-            expected_error=ProjectCompileError,
-        ),
-        BatchedPreparationFailureTestCase(
-            description="skipped unexpandable file before a later native failure",
-            unexpandable_file="models/aa_broken.sql",
-            skip_unexpandable=True,
-            expected_error=ValueError,
-        ),
+        UnexpandableFailureTestCase(
+            description="first unexpandable file in path order is raised",
+            expected_error_file="models/aa_broken.sql",
+        )
     ],
     ids=lambda case: case.description,
 )
-def test_given_native_and_expansion_failures_when_linting_then_first_in_file_order_is_raised(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: BatchedPreparationFailureTestCase
+def test_given_unexpandable_files_when_linting_then_first_in_file_order_is_raised(
+    tmp_path: Path, test_case: UnexpandableFailureTestCase
 ) -> None:
-    write_lint_project(
-        root=tmp_path,
-        files={
-            "models/customers.sql": _CUSTOMERS_MODEL,
-            "models/orders.sql": _ORDERS_MODEL,
-            test_case.unexpandable_file: 'MODEL (description "Broken");\nSELECT @unknown()\n',
-        },
-    )
-    monkeypatch.setattr(native_module, "prepare_lint_sql_batch", prepare_nothing_in_batch)
-    monkeypatch.setattr(native_module, "prepare_lint_sql", refuse_preparation)
+    write_lint_project(root=tmp_path, files=_UNEXPANDABLE_FILES)
 
-    with pytest.raises(Exception) as raised:
-        _ = run_lint(
-            project_dir=tmp_path,
-            config=LintConfig(dialect="duckdb"),
-            skip_unexpandable=test_case.skip_unexpandable,
+    with pytest.raises(ProjectCompileError) as raised:
+        _ = run_lint(project_dir=tmp_path, config=LintConfig(dialect="duckdb"))
+
+    assert str(raised.value).startswith(str(tmp_path / test_case.expected_error_file))
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        UnexpandableSkipTestCase(
+            description="skipped unexpandable files are reported and the rest is linted",
+            expected_unexpandable=("models/aa_broken.sql", "models/zz_broken.sql"),
+            expected_codes=("SQBRSQL001",),
         )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unexpandable_files_when_linting_with_skipping_then_they_are_reported(
+    tmp_path: Path, test_case: UnexpandableSkipTestCase
+) -> None:
+    write_lint_project(root=tmp_path, files=_UNEXPANDABLE_FILES)
 
-    assert type(raised.value) is test_case.expected_error
+    result: LintRunResult = run_lint(
+        project_dir=tmp_path, config=LintConfig(dialect="duckdb"), skip_unexpandable=True
+    )
+
+    assert (
+        tuple(path.relative_to(tmp_path).as_posix() for path in result.unexpandable)
+        == test_case.expected_unexpandable
+    )
+    assert tuple(violation.code for violation in result.violations) == test_case.expected_codes
 
 
 if __name__ == "__main__":

@@ -4806,7 +4806,6 @@ def full_macro_call_runs(
 
 
 _ANALYSIS_SEAMS: tuple[tuple[ModuleType, str], ...] = (
-    (native_module, "assemble_native_project_resources"),
     (native_module, "infer_native_expression_source_shapes"),
     (native_module, "analyze_native_model_sql"),
     (native_module, "assemble_native_sql_tests"),
@@ -4970,3 +4969,46 @@ def compile_with_binding_error(project_dir: Path) -> dict[str, Any]:
     assert result.returncode == 1, result.stdout + result.stderr
     payload: dict[str, Any] = json.loads(result.stdout)
     return payload
+
+
+_SLOW_LINT_MACRO: str = (
+    "import os\n"
+    "import threading\n"
+    "import time\n\n\n"
+    "def slow_total(amount: str) -> str:\n"
+    '    """Return the amount, pausing when the background SQL lint expands it."""\n'
+    "    if threading.current_thread() is not threading.main_thread():\n"
+    "        with open(os.environ['SLOW_MACRO_MARKER'], 'a', encoding='utf-8') as marker:\n"
+    "            marker.write('expanding\\n')\n"
+    "        time.sleep(float(os.environ['SLOW_MACRO_SECONDS']))\n"
+    "    return amount\n"
+)
+
+
+def slow_lint_model_files(*, model_count: int) -> dict[str, str]:
+    """A macro used by a model, a function, and macro tests only background SQL lint expands."""
+
+    return {
+        "macros/slow.py": _SLOW_LINT_MACRO,
+        "functions/sql/slow_amount.sql": (
+            'FUNCTION (description "Slow amount", arguments (p_amount INTEGER), returns INTEGER);\n'
+            'SELECT @slow_total("p_amount")\n'
+        ),
+        "models/slow_total.sql": (
+            'MODEL (description "Slow total");\n'
+            'SELECT @slow_total("amount") AS amount FROM (SELECT 5 AS amount) AS input_values\n'
+        ),
+        **{
+            f"tests/slow_total_{index}.sql": (
+                f'TEST (mode macro, name "slow_total_{index}");\n\n'
+                "WITH\n"
+                "input_values AS (SELECT 5 AS amount),\n"
+                "__macro_actual__ AS (\n"
+                '  SELECT @slow_total("amount") AS amount FROM input_values\n'
+                "),\n"
+                "__macro_expected__ AS (SELECT 5 AS amount)\n"
+                "SELECT 1\n"
+            )
+            for index in range(model_count)
+        },
+    }

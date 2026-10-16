@@ -1,14 +1,13 @@
 //! Assemble new and resumed old-name view steps from recorded facts.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::planner_migrations::column_objects::{model, native, text};
 use crate::bindings::_helpers::planner_migrations::constants::{PENDING_ARCHIVE, PENDING_VIEW};
 use crate::bindings::_helpers::planner_migrations::models::OldNamePlanner;
 use crate::bindings::_helpers::planner_migrations::old_name_objects::{
     expires, location, relation, retention, stores_history,
 };
+use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
@@ -16,14 +15,14 @@ use pyo3::types::{PyBool, PyList, PyTuple};
 
 impl<'py> OldNamePlanner<'py> {
     pub(super) fn new(
-        args: &KeywordArguments<'py>,
+        (runtime, columns): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
         models: Vec<Bound<'py, PyAny>>,
         histories: Vec<Bound<'py, PyAny>>,
         views: Bound<'py, PyAny>,
     ) -> PyResult<Self> {
-        let runtime = args.value("runtime")?;
+        let runtime = runtime.clone();
         let py = runtime.py();
-        let project_config = runtime.getattr("project_config")?;
+        let project_config = runtime_field(&runtime, |runtime| &runtime.project_config)?;
         let config = if project_config.is_none() {
             registry::class(py, RecordId::MigrationsConfig)?.call0()?
         } else {
@@ -33,9 +32,9 @@ impl<'py> OldNamePlanner<'py> {
             models,
             histories,
             views,
-            columns: args.value("column_entries")?,
+            columns: columns.clone(),
             retention: config.getattr("old_name_views")?,
-            now: runtime.getattr("invocation_time")?,
+            now: runtime_field(&runtime, |runtime| &runtime.invocation_time)?,
             runtime,
         })
     }

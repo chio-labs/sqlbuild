@@ -5,11 +5,14 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
 
 use crate::bindings::_helpers::attachments::cursor_intrinsics::validated_model_cursor_sql;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
+use crate::bindings::_helpers::native_host::facade::FacadeHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::declaration_values::declaration_scope_resolver;
+use pyo3::IntoPyObjectExt;
 
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 /// The `CompiledSqlScenario` fields copied from its input, in Python's keyword order.
 const SCENARIO_FIELDS: [&str; 12] = [
     "sql_body",
@@ -110,13 +113,11 @@ fn model_macro_context<'py>(inputs: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
     if macro_context.is_truthy()? {
         return Ok(macro_context);
     }
-    let adapter_name: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-        &[
-            ("project_config", inputs.getattr("project_config")?),
-            ("local_config", inputs.getattr("local_config")?),
-        ],
-    )?;
+    let adapter_name: Bound<'py, PyAny> = resolve_effective_adapter_name(
+        &inputs.getattr("project_config")?,
+        &inputs.getattr("local_config")?,
+    )
+    .and_then(|value| value.into_bound_py_any(py))?;
     call_with(
         &registry::class(py, RecordId::MacroContext)?,
         &[
@@ -141,7 +142,7 @@ pub(crate) fn compiled_sql_scenarios<'py>(
     let scenario_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledSqlScenario)?;
     let key_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledObjectKey)?;
     let resource_type: Bound<'py, PyAny> =
-        imported(py, COMPILE_TYPES_MODULE, "CompiledResourceType")?.getattr("SQL_SCENARIO")?;
+        host::entry(py, FacadeHost::CompiledResourceType)?.getattr("SQL_SCENARIO")?;
     let mut scenarios: Vec<Bound<'py, PyAny>> = Vec::new();
     for scenario_input in inputs.getattr("scenario_inputs")?.try_iter()? {
         let scenario_input: Bound<'py, PyAny> = scenario_input?;

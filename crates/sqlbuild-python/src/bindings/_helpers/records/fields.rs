@@ -118,7 +118,6 @@ fn default_value<'py>(
         FieldDefault::HostMember(class, member) => host::entry(py, class)?.getattr(member),
         FieldDefault::NativeMember(class, member) => registry::class(py, class)?.getattr(member),
         FieldDefault::NativeCall(class) => registry::class(py, class)?.call0(),
-        FieldDefault::NativeClassCall(class) => registry::native(py, class)?.call0(),
         FieldDefault::Factory(factory) => factory(py),
         FieldDefault::CallText(module, name, text) => imported(py, module, name)?.call1((text,)),
     }

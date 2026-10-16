@@ -2,22 +2,25 @@
 
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
-use crate::bindings::_helpers::planner_migrations::column_objects::native;
 use crate::bindings::_helpers::planner_migrations::column_objects::replace;
 use crate::bindings::_helpers::planner_migrations::known_input_columns::KnownInputColumns;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::planner_migrations::models::{
+    ColumnMigrationInputs, ColumnMigrationPlanning, MigrationPhase,
+};
+use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PySet, PySetMethods, PyTuple};
+use pyo3::types::{PyDict, PySet, PySetMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 /// Decide column renames and return the existing planning result model.
-#[pyfunction]
+#[pyfunction(name = "plan_column_migrations")]
 #[pyo3(signature = (**options))]
-pub(crate) fn plan_column_migrations<'py>(
+fn plan_column_migrations_of<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyAny>> {
+) -> PyResult<()> {
     let args = KeywordArguments::read(
         py,
         "plan_column_migrations",
@@ -36,19 +39,43 @@ pub(crate) fn plan_column_migrations<'py>(
             &[],
         ),
     )?;
-    let runtime = args.value("runtime")?;
-    let snapshot = args.value("snapshot")?;
-    let adapter = runtime.getattr("adapter")?;
+    plan_column_migrations(
+        &MigrationPhase {
+            runtime: args.value("runtime")?,
+            scope: args.value("scope")?,
+            snapshot: args.value("snapshot")?,
+            overrides: args.value("overrides")?,
+            deferral: args.value("deferral")?,
+        },
+        &ColumnMigrationInputs {
+            full_refresh_model_names: args.value("full_refresh_model_names")?,
+            physical_relations: args.value("physical_relations")?,
+            source_columns: args.value("source_columns")?,
+        },
+    )
+    .map(|_| ())
+}
+
+/// Decide column renames for the selected incremental and snapshot models.
+pub(crate) fn plan_column_migrations<'py>(
+    phase: &MigrationPhase<'py>,
+    columns: &ColumnMigrationInputs<'py>,
+) -> PyResult<ColumnMigrationPlanning<'py>> {
+    let py = phase.runtime.py();
+    let runtime = phase.runtime.clone();
+    let snapshot = phase.snapshot.clone();
+    let adapter = runtime_field(&runtime, |runtime| &runtime.adapter)?;
     let candidates = super::column_candidates::candidates(
-        &args,
+        (phase, columns),
         &adapter.call_method0("sql_analysis_dialect")?,
     )?;
     if candidates.is_empty() {
-        return native(
-            py,
-            RecordId::ColumnMigrationPlanning,
-            &[("snapshot", snapshot)],
-        );
+        return Ok(ColumnMigrationPlanning {
+            snapshot,
+            entries: Vec::new(),
+            hints: Vec::new(),
+            warnings: Vec::new(),
+        });
     }
     let database = call_with(
         &registry::native(py, NativeAttr::MigrationPlanningDatabase)?,
@@ -58,7 +85,10 @@ pub(crate) fn plan_column_migrations<'py>(
         &registry::native(py, NativeAttr::MigrationStateInspection)?,
         &[
             ("adapter", adapter),
-            ("connection", runtime.getattr("connection")?),
+            (
+                "connection",
+                runtime_field(&runtime, |runtime| &runtime.connection)?,
+            ),
             ("database", database),
         ],
     )?;
@@ -77,7 +107,7 @@ pub(crate) fn plan_column_migrations<'py>(
         py,
         KnownInputColumns::new(
             &snapshot.getattr("existing_columns")?,
-            &args.value("source_columns")?,
+            &columns.source_columns,
         ),
     )?
     .into_any();
@@ -91,8 +121,8 @@ pub(crate) fn plan_column_migrations<'py>(
             &state.getattr("column_events")?,
             &inputs,
         )?;
-        let physical = args
-            .value("physical_relations")?
+        let physical = columns
+            .physical_relations
             .call_method1("get", (model_reads::name_object(&candidate.model)?,))?;
         let checked = super::column_entries::checked(&runtime, candidate, decided, &physical)?;
         for hint in super::column_entries::hints(candidate, &checked.entries)?.try_iter()? {
@@ -112,19 +142,15 @@ pub(crate) fn plan_column_migrations<'py>(
         }
     }
     let overlaid = super::column_overlay::overlay(&snapshot, &candidates, &entries, &inputs)?;
-    let snapshot = super::column_overlay::cursors(&args, overlaid, &entries)?;
-    native(
-        py,
-        RecordId::ColumnMigrationPlanning,
-        &[
-            ("snapshot", snapshot),
-            ("entries", PyTuple::new(py, entries)?.into_any()),
-            ("hints", PyTuple::new(py, hints)?.into_any()),
-            ("warnings", PyTuple::new(py, warnings)?.into_any()),
-        ],
-    )
+    let snapshot = super::column_overlay::cursors((phase, columns), overlaid, &entries)?;
+    Ok(ColumnMigrationPlanning {
+        snapshot,
+        entries,
+        hints,
+        warnings,
+    })
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(plan_column_migrations, module)?)
+    module.add_function(wrap_pyfunction!(plan_column_migrations_of, module)?)
 }

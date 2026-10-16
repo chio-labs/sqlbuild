@@ -67,31 +67,6 @@ const R_SQL_TEST_RULES_CONFIG: RecordSpec = RecordSpec {
         FieldDefault::Text("pipelines"),
     )],
 };
-const R_PREPARED_SQL_LINT_RESULT: RecordSpec = RecordSpec {
-    name: "PreparedSqlLintResult",
-    doc: "Reusable expansion context and completed preliminary SQL checks.",
-    fields: &[
-        FieldSpec::required("result"),
-        FieldSpec::required("context"),
-    ],
-};
-const R_SQL_EXPANSION_REUSE: RecordSpec = RecordSpec {
-    name: "SqlExpansionReuse",
-    doc: "Compiler declaration scope for post-assembly SQL checks; assembly still runs its macros.",
-    fields: &[
-        FieldSpec::required("discovered_inputs"),
-        FieldSpec::required("declaration_scope"),
-    ],
-};
-const R_PREPARED_SQL_LINT: RecordSpec = RecordSpec {
-    name: "PreparedSqlLint",
-    doc: "Process-local SQL checks started after compiler expansion has completed.",
-    fields: &[
-        FieldSpec::required("codes"),
-        FieldSpec::required("future"),
-        FieldSpec::new("project_dir", FieldDefault::None),
-    ],
-};
 const R_SQL_RULES_EVALUATION: RecordSpec = RecordSpec {
     name: "SqlRulesEvaluation",
     doc: "SQL rule findings of one run, their cache accounting and elapsed time.",
@@ -397,9 +372,6 @@ pub(crate) const RULE_RECORDS: &[RecordSpec] = &[
     R_THRESHOLD_OVERRIDE,
     R_RULES_CACHE_CONFIG,
     R_SQL_TEST_RULES_CONFIG,
-    R_PREPARED_SQL_LINT_RESULT,
-    R_SQL_EXPANSION_REUSE,
-    R_PREPARED_SQL_LINT,
     R_SQL_RULES_EVALUATION,
     R_RULE_RUN_PLAN,
     R_RULES_RUN_RESULT,

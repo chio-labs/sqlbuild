@@ -7,6 +7,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::planner_strategy::fixture_context::count_chain_resolution;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::sql_test_glue::models::SqlTestPlanOptions;
 use crate::bindings::_helpers::sql_test_glue::plan_values::tuple;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python, pyfunction};
 use pyo3::types::{PyBool, PyDict, PyTuple};
@@ -47,36 +48,32 @@ pub(super) fn chains<'py>(
     Ok(PyTuple::new(py, result)?.into_any())
 }
 
-#[pyfunction]
-#[pyo3(signature = (**kwargs))]
+/// The model chain of each SQL test, resolved in one project batch and counted.
 pub(crate) fn resolve_sql_test_model_chains<'py>(
-    py: Python<'py>,
-    kwargs: Option<Bound<'py, PyDict>>,
+    project: &Bound<'py, PyAny>,
+    tests: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let args = KeywordArguments::read(
-        py,
-        "resolve_sql_test_model_chains",
-        kwargs,
-        (&["project", "tests"], &[]),
-    )?;
-    count_chain_resolution(py)?;
-    chains(&args.value("project")?, &args.value("tests")?)
+    count_chain_resolution(project.py())?;
+    chains(project, tests)
 }
 
-fn planned<'py>(args: &KeywordArguments<'py>, artifact: bool) -> PyResult<Bound<'py, PyTuple>> {
-    let project = args.value("project")?;
+/// Plans of one SQL-test batch, or their compiled artifacts.
+pub(crate) fn planned<'py>(
+    (project, adapter): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    tests: &Bound<'py, PyAny>,
+    options: &SqlTestPlanOptions<'py>,
+) -> PyResult<Bound<'py, PyTuple>> {
     let py = project.py();
-    let tests = args.value("tests")?;
+    let artifact = options.artifact;
     if !tests.is_truthy()? {
         return Ok(PyTuple::empty(py));
     }
     let start: u64 = imported(py, "time", "perf_counter_ns")?
         .call0()?
         .extract()?;
-    let adapter = args.value("adapter")?;
-    let model_sql = super::plan_rendering::models(&project, &adapter)?;
-    let functions = super::plan_rendering::functions(&project, &adapter)?;
-    let overrides = super::plan_rendering::overrides(&project, &tests, &adapter)?;
+    let model_sql = super::plan_rendering::models(project, adapter)?;
+    let functions = super::plan_rendering::functions(project, adapter)?;
+    let overrides = super::plan_rendering::overrides(project, tests, adapter)?;
     let request = call_with(
         &registry::class(py, RecordId::NativeSqlTestPlanningRequest)?,
         &[
@@ -85,7 +82,7 @@ fn planned<'py>(args: &KeywordArguments<'py>, artifact: bool) -> PyResult<Bound<
             ("functions", functions.into_any()),
             ("tests", tests.clone()),
             ("rendered_test_overrides", overrides.into_any()),
-            ("sql_analysis_enabled", args.value("sql_analysis_enabled")?),
+            ("sql_analysis_enabled", options.sql_analysis_enabled.clone()),
             (
                 "sql_analysis_dialect",
                 adapter.call_method0("sql_analysis_dialect")?,
@@ -106,18 +103,15 @@ fn planned<'py>(args: &KeywordArguments<'py>, artifact: bool) -> PyResult<Bound<
             ),
             (
                 "render_sql",
-                PyBool::new(py, artifact || args.flag("render_sql")?)
+                PyBool::new(py, artifact || options.render_sql)
                     .to_owned()
                     .into_any(),
             ),
             (
                 "include_plan",
-                PyBool::new(
-                    py,
-                    !artifact && (!args.passed("include_plan")? || args.flag("include_plan")?),
-                )
-                .to_owned()
-                .into_any(),
+                PyBool::new(py, !artifact && options.include_plan)
+                    .to_owned()
+                    .into_any(),
             ),
         ],
     )?;
@@ -125,7 +119,7 @@ fn planned<'py>(args: &KeywordArguments<'py>, artifact: bool) -> PyResult<Bound<
     let native = match native {
         Ok(value) => value,
         Err(error) if error.is_instance_of::<pyo3::exceptions::PyValueError>(py) => {
-            return Err(super::plan_errors::planning_error(py, error, &tests)?);
+            return Err(super::plan_errors::planning_error(py, error, tests)?);
         }
         Err(error) => return Err(error),
     };
@@ -175,7 +169,7 @@ fn planned<'py>(args: &KeywordArguments<'py>, artifact: bool) -> PyResult<Bound<
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-pub(crate) fn plan_sql_tests_natively<'py>(
+pub(super) fn plan_sql_tests_natively<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
@@ -194,7 +188,16 @@ pub(crate) fn plan_sql_tests_natively<'py>(
             &["include_plan"],
         ),
     )?;
-    planned(&args, false)
+    planned(
+        (&args.value("project")?, &args.value("adapter")?),
+        &args.value("tests")?,
+        &SqlTestPlanOptions {
+            sql_analysis_enabled: args.value("sql_analysis_enabled")?,
+            render_sql: args.flag("render_sql")?,
+            include_plan: !args.passed("include_plan")? || args.flag("include_plan")?,
+            artifact: false,
+        },
+    )
 }
 
 #[pyfunction]
@@ -212,7 +215,16 @@ pub(crate) fn plan_compiled_sql_test_artifacts<'py>(
             &[],
         ),
     )?;
-    planned(&args, true)
+    planned(
+        (&args.value("project")?, &args.value("adapter")?),
+        &args.value("tests")?,
+        &SqlTestPlanOptions {
+            sql_analysis_enabled: args.value("sql_analysis_enabled")?,
+            render_sql: true,
+            include_plan: false,
+            artifact: true,
+        },
+    )
 }
 
 #[pyfunction]

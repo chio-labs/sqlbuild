@@ -1,7 +1,7 @@
 //! Project discovery: configuration, declaration files and imported project Python, validated.
 
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyCFunction, PyDict, PySet, PySetMethods, PyTuple};
+use pyo3::types::{PyDict, PySet, PySetMethods, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::config_validation::{
@@ -16,6 +16,7 @@ use crate::bindings::_helpers::discovery::declaration_records::{
     discover_macro_files, discover_model_schema_files, discover_seed_files,
     discover_sql_function_files, discover_sql_hook_files, retained_discovery_session,
 };
+use crate::bindings::_helpers::discovery::imported_providers::discover_provider_classes;
 use crate::bindings::_helpers::discovery::model_records::{
     ModelFileSelection, discovered_model_files,
 };
@@ -29,11 +30,13 @@ use crate::bindings::_helpers::discovery::yaml_records::{
     discover_schema_files, discover_source_files,
 };
 use crate::bindings::_helpers::event_exporting::scope::configure_discovered_event_exporters;
+use crate::bindings::_helpers::frontier::compile_frontier::{FrontierStage, produced};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
+use pyo3::IntoPyObjectExt;
 
 const SQL_ANALYSIS_SETTING_KEY: &str = "sql_analysis";
 
@@ -185,29 +188,11 @@ fn discover_project_inputs<'py>(
             || arguments.flag("extract_output_column_locations")?,
     };
     within(&lifecycle(py, "project_discovery")?, |_| {
-        let stage: Bound<'py, PyCFunction> = PyCFunction::new_closure(
-            py,
-            None,
-            None,
-            move |arguments: &Bound<'_, PyTuple>, _: Option<&Bound<'_, PyDict>>| {
-                let py: Python<'_> = arguments.py();
-                within(&lifecycle(py, "discovery_project_assembly")?, |_| {
-                    assembled_inputs(py, &request)
-                })
-                .map(Bound::unbind)
-            },
-        )?;
-        call_with(
-            &registry::native(py, NativeAttr::CompileFrontier)?,
-            &[
-                (
-                    "until",
-                    registry::class(py, RecordId::CompilerStage)?
-                        .getattr("DISCOVERED_PROJECT_INPUTS")?,
-                ),
-                ("python_stage", stage.into_any()),
-            ],
-        )
+        let assembled: Bound<'py, PyAny> =
+            within(&lifecycle(py, "discovery_project_assembly")?, |_| {
+                assembled_inputs(py, &request)
+            })?;
+        produced(FrontierStage::DiscoveredProjectInputs, assembled)
     })
 }
 
@@ -371,10 +356,8 @@ fn declaration_files<'py>(
 /// Providers, then every kind of imported project Python that may use them.
 fn imported_python<'py>(project_dir: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = project_dir.py();
-    let providers: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::DiscoverProviderClasses)?,
-        &[("project_dir", project_dir.clone())],
-    )?;
+    let providers: Bound<'py, PyAny> = discover_provider_classes(project_dir.clone())
+        .and_then(|value| value.into_bound_py_any(py))?;
     let python: Bound<'py, PyDict> = PyDict::new(py);
     python.set_item("providers", &providers)?;
     for (field, discoverer) in PYTHON_DISCOVERERS {

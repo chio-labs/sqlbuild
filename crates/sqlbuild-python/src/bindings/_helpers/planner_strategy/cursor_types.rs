@@ -69,7 +69,7 @@ fn classify_cursor_sql_type<'py>(
 /// A `PlanWarning` when the warehouse cursor column type contradicts `cursor_type`.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-pub(crate) fn check_cursor_type_consistency<'py>(
+fn check_cursor_type_consistency<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
@@ -89,28 +89,41 @@ pub(crate) fn check_cursor_type_consistency<'py>(
         ),
     )?;
     let model_name: Bound<'py, PyAny> = arguments.value("model_name")?;
-    let mut warehouse_columns: Vec<(String, String)> = Vec::new();
-    for column in arguments.value("warehouse_columns")?.try_iter()? {
-        let column: Bound<'py, PyAny> = column?;
-        warehouse_columns.push((
-            text(&column.getattr("name")?)?,
-            text(&column.getattr("type")?)?,
-        ));
-    }
     let check = CursorTypeCheck {
         model_name: text(&model_name)?,
         cursor_column: optional_string(&arguments.value("cursor_column")?)?,
         cursor_type: optional_string(&arguments.value("cursor_type")?)?,
-        warehouse_columns,
+        warehouse_columns: warehouse_column_types(&arguments.value("warehouse_columns")?)?,
         sql_analysis_enabled: arguments.flag("sql_analysis_enabled")?,
     };
-    let (warning, parse_failure) = cursor_type_warning(&check);
-    if let Some(failure) = parse_failure {
-        log_parse_failure(py, &failure)?;
+    cursor_type_warning_record(&model_name, &check)
+}
+
+/// The `(name, type)` pairs of warehouse `ColumnInfo`s.
+pub(crate) fn warehouse_column_types(
+    columns: &Bound<'_, PyAny>,
+) -> PyResult<Vec<(String, String)>> {
+    let mut pairs: Vec<(String, String)> = Vec::new();
+    for column in columns.try_iter()? {
+        let column = column?;
+        pairs.push((
+            text(&column.getattr("name")?)?,
+            text(&column.getattr("type")?)?,
+        ));
     }
-    warning
-        .map(|row| plan_warning(&model_name, row))
-        .transpose()
+    Ok(pairs)
+}
+
+/// The `PlanWarning` of one cursor type check, logging an unclassifiable warehouse type.
+pub(crate) fn cursor_type_warning_record<'py>(
+    model_name: &Bound<'py, PyAny>,
+    check: &CursorTypeCheck,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let (warning, parse_failure) = cursor_type_warning(check);
+    if let Some(failure) = parse_failure {
+        log_parse_failure(model_name.py(), &failure)?;
+    }
+    warning.map(|row| plan_warning(model_name, row)).transpose()
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

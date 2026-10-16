@@ -11,6 +11,7 @@ use crate::bindings::_helpers::planner_migrations::column_objects::{
 };
 use crate::bindings::_helpers::planner_migrations::constants::{AUTOMATIC, DONE};
 use crate::bindings::_helpers::planner_migrations::models::{CheckedColumns, ColumnCandidate};
+use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::migration_projections::newest_column;
@@ -168,7 +169,10 @@ pub(super) fn checked<'py>(
             .getattr("adapter")?
             .getattr("column_rename_unavailable_reason")?,
         &[
-            ("connection", runtime.getattr("connection")?),
+            (
+                "connection",
+                runtime_field(runtime, |runtime| &runtime.connection)?,
+            ),
             ("destination", relation),
         ],
     )?;

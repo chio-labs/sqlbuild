@@ -19,6 +19,7 @@ use crate::bindings::_helpers::planner_strategy::constants::{
     SOURCE_REFERENCE, TIMESTAMP_CURSOR,
 };
 use crate::bindings::_helpers::planner_strategy::lineage::resolve_lineage_reference;
+use crate::bindings::_helpers::planner_strategy::models::CursorInputLookups;
 use crate::bindings::_helpers::planner_strategy::values::{input_error, text};
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -58,32 +59,61 @@ fn check_column(check: CursorInputColumnCheck, py: Python<'_>) -> PyResult<()> {
     }
 }
 
+/// Cursor input lookups from keyword arguments, empty where the caller left one out.
+fn lookups_of<'py>(request: &Request<'_, 'py>) -> PyResult<CursorInputLookups<'py>> {
+    let py: Python<'py> = request.py();
+    let lookup = |name: &str| or_empty(request.optional(name)?, py);
+    Ok(CursorInputLookups {
+        models_by_name: lookup("models_by_name")?,
+        functions_by_name: lookup("functions_by_name")?,
+        source_map: lookup("source_map")?,
+        source_warehouse_columns: lookup("source_warehouse_columns")?,
+        model_locations: lookup("model_locations")?,
+        seed_locations: lookup("seed_locations")?,
+        runtime_cursor_producer_names: match request.optional("runtime_cursor_producer_names")? {
+            Some(names) => names,
+            None => PyFrozenSet::empty(py)?.into_any(),
+        },
+    })
+}
+
 /// Validate authored cursor input columns against contracts, then source warehouse metadata.
 #[pyfunction(name = "validate_source_cursor_input_columns")]
 #[pyo3(signature = (**request))]
-pub(crate) fn reject_unexposed_cursor_input_columns<'py>(
-    request: Option<&Bound<'py, PyDict>>,
-) -> PyResult<()> {
+pub(crate) fn cursor_input_columns_of<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<()> {
     let request = Request::new("validate_source_cursor_input_columns", request)?;
-    let py: Python<'py> = request.py();
-    let model: Bound<'py, PyAny> = request.get("model")?;
-    if !incremental_cursor_flag(&model, &request.get("cursor_column")?)? {
+    request.get("source_warehouse_columns")?;
+    reject_unexposed_cursor_input_columns(
+        &request.get("model")?,
+        &request.get("cursor_column")?,
+        &lookups_of(&request)?,
+    )
+}
+
+/// Reject authored cursor input columns a contract or the source warehouse metadata does not expose.
+pub(crate) fn reject_unexposed_cursor_input_columns<'py>(
+    model: &Bound<'py, PyAny>,
+    cursor_column: &Bound<'py, PyAny>,
+    lookups: &CursorInputLookups<'py>,
+) -> PyResult<()> {
+    let py: Python<'py> = model.py();
+    if !incremental_cursor_flag(model, cursor_column)? {
         return Ok(());
     }
-    let roles: Bound<'py, PyAny> = resolve_cursor_input_roles(&model)?;
-    let models_by_name = or_empty(request.optional("models_by_name")?, py)?;
-    let functions_by_name = or_empty(request.optional("functions_by_name")?, py)?;
-    let source_map = or_empty(request.optional("source_map")?, py)?;
-    let warehouse_columns: Bound<'py, PyAny> = request.get("source_warehouse_columns")?;
-    let model_name: String = model_reads::model_name(&model)?;
+    let model: &Bound<'py, PyAny> = model;
+    let roles: Bound<'py, PyAny> = resolve_cursor_input_roles(model)?;
+    let models_by_name: &Bound<'py, PyAny> = &lookups.models_by_name;
+    let source_map: &Bound<'py, PyAny> = &lookups.source_map;
+    let warehouse_columns: &Bound<'py, PyAny> = &lookups.source_warehouse_columns;
+    let model_name: String = model_reads::model_name(model)?;
     for role in ["filter_inputs", "watermark_inputs"] {
         for item in roles.getattr(role)?.call_method0("items")?.try_iter()? {
             let (input_name, column): (String, String) = item?.extract()?;
             let reference: Bound<'py, PyAny> = resolve_lineage_reference(
-                &model,
+                model,
                 &input_name,
                 models_by_name.clone(),
-                functions_by_name.clone(),
+                lookups.functions_by_name.clone(),
             )?;
             let kind: String = text(&reference.getattr("ref_kind")?)?;
             let name: String = text(&reference.getattr("ref_name")?)?;
@@ -136,34 +166,26 @@ pub(crate) fn reject_unexposed_cursor_input_columns<'py>(
 
 /// The qualified relation one cursor input reference reads, when it resolves.
 fn input_relation<'py>(
-    request: &Request<'_, 'py>,
+    (lookups, adapter): (&CursorInputLookups<'py>, &Bound<'py, PyAny>),
     (kind, name): (&str, &str),
 ) -> PyResult<Option<String>> {
-    let py: Python<'py> = request.py();
+    let py: Python<'py> = adapter.py();
     let location: Bound<'py, PyAny> = match kind {
         MODEL_REFERENCE => {
-            let model: Bound<'py, PyAny> = request
-                .get("model_locations")?
-                .call_method1("get", (name,))?;
+            let model: Bound<'py, PyAny> = lookups.model_locations.call_method1("get", (name,))?;
             if model.is_none() {
-                request
-                    .get("seed_locations")?
-                    .call_method1("get", (name,))?
+                lookups.seed_locations.call_method1("get", (name,))?
             } else {
                 model
             }
         }
-        SEED_REFERENCE => request
-            .get("seed_locations")?
-            .call_method1("get", (name,))?,
+        SEED_REFERENCE => lookups.seed_locations.call_method1("get", (name,))?,
         SOURCE_REFERENCE => {
-            let source: Bound<'py, PyAny> =
-                request.get("source_map")?.call_method1("get", (name,))?;
+            let source: Bound<'py, PyAny> = lookups.source_map.call_method1("get", (name,))?;
             if source.is_none() {
                 return Ok(None);
             }
-            let adapter: Bound<'py, PyAny> = request.get("adapter")?;
-            return render_source_relation(&source, Some(&adapter)).map(Some);
+            return render_source_relation(&source, Some(adapter)).map(Some);
         }
         _ => py.None().into_bound(py),
     };
@@ -203,21 +225,44 @@ fn terminal_bound<'py>(
 }
 
 /// Cursor-bearing input relations of an incremental model, for runtime range discovery.
-#[pyfunction]
+#[pyfunction(name = "build_cursor_input_relations")]
 #[pyo3(signature = (**request))]
-pub(crate) fn build_cursor_input_relations<'py>(
+pub(crate) fn cursor_input_relations_of<'py>(
     request: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let request = Request::new("build_cursor_input_relations", request)?;
-    let py: Python<'py> = request.py();
-    let model: Bound<'py, PyAny> = request.get("model")?;
-    if !incremental_cursor_flag(&model, &request.get("cursor_column")?)? {
+    for name in [
+        "adapter",
+        "model_locations",
+        "models_by_name",
+        "seed_locations",
+        "source_map",
+        "runtime_cursor_producer_names",
+    ] {
+        request.get(name)?;
+    }
+    build_cursor_input_relations(
+        (&request.get("model")?, &request.get("adapter")?),
+        &request.get("cursor_column")?,
+        &lookups_of(&request)?,
+    )
+}
+
+/// Cursor-bearing input relations of an incremental model, for runtime range discovery.
+pub(crate) fn build_cursor_input_relations<'py>(
+    (model, adapter): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    cursor_column: &Bound<'py, PyAny>,
+    lookups: &CursorInputLookups<'py>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let py: Python<'py> = model.py();
+    if !incremental_cursor_flag(model, cursor_column)? {
         return Ok(PyTuple::empty(py));
     }
-    let models_by_name: Bound<'py, PyAny> = request.get("models_by_name")?;
-    let functions_by_name = or_empty(request.optional("functions_by_name")?, py)?;
-    let model_locations: Bound<'py, PyAny> = request.get("model_locations")?;
-    let producers: Bound<'py, PyAny> = request.get("runtime_cursor_producer_names")?;
+    let model: Bound<'py, PyAny> = model.clone();
+    let models_by_name: &Bound<'py, PyAny> = &lookups.models_by_name;
+    let functions_by_name: &Bound<'py, PyAny> = &lookups.functions_by_name;
+    let model_locations: &Bound<'py, PyAny> = &lookups.model_locations;
+    let producers: &Bound<'py, PyAny> = &lookups.runtime_cursor_producer_names;
     let cursor_type: Bound<'py, PyAny> = match config_str(&model_values(&model)?, "cursor_type")? {
         Some(cursor_type) if cursor_type.is_truthy()? => cursor_type,
         _ => PyString::new(py, TIMESTAMP_CURSOR).into_any(),
@@ -237,7 +282,7 @@ pub(crate) fn build_cursor_input_relations<'py>(
         let kind: String = text(&reference.getattr("ref_kind")?)?;
         let name: Bound<'py, PyAny> = reference.getattr("ref_name")?;
         let name_text: String = text(&name)?;
-        let Some(relation) = input_relation(&request, (&kind, &name_text))? else {
+        let Some(relation) = input_relation((lookups, adapter), (&kind, &name_text))? else {
             continue;
         };
         let producer: Option<Bound<'py, PyAny>> = if kind == MODEL_REFERENCE {

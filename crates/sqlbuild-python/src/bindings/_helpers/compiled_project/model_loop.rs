@@ -62,6 +62,7 @@ use crate::bindings::_helpers::render::declaration_expansion::{
     DeclarationExpansion, ExpandedDeclarations, ExpansionClasses, ExpansionConsumer, SpanRow,
     expand_declarations,
 };
+use crate::bindings::_helpers::render::declaration_values::ConstantRendering;
 use crate::bindings::_helpers::render::macro_call_rows::span_row;
 use crate::bindings::_helpers::sqltext::declaration_references::declaration_scan;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
@@ -98,8 +99,6 @@ const UNMANAGED_ATTRIBUTE: &str = "unmanaged";
 const TABLE_TYPE_ATTRIBUTE: &str = "table_type";
 const DECLARED_ATTRIBUTE: &str = "declared";
 const VALIDATE_METHOD: &str = "validate";
-const FILE_PATH_ARGUMENT: &str = "file_path";
-const CONSTANT_TEXT_CALLBACK: &str = "constant_text";
 const HELP_ARGUMENT: &str = "help";
 const CODE_ARGUMENT: &str = "code";
 const ANALYSIS_CONFLICT: &str = "MODEL sql_analysis conflicts with legacy sql_validation";
@@ -142,8 +141,6 @@ pub(crate) struct LoopClasses<'py> {
     pub(crate) external_resolver: Bound<'py, PyAny>,
     /// `SqlReferenceKind`.
     pub(crate) reference_kind: Bound<'py, PyAny>,
-    /// `functools.partial`, binding the model's file to its constant renderer.
-    pub(crate) partial: Bound<'py, PyAny>,
     /// What a model's effective config is built from.
     pub(crate) config: ConfigClasses<'py>,
     /// What a model's visible declarations are resolved from.
@@ -180,7 +177,7 @@ pub(crate) struct NativeModelLoop {
 
 /// What one run reads beside each model: the host, Python classes and header contract classes.
 pub(crate) struct LoopContext<'a, 'py> {
-    pub(crate) host: &'a Bound<'py, PyAny>,
+    pub(crate) host: &'a Bound<'py, ConstantRendering>,
     pub(crate) classes: &'a LoopClasses<'py>,
     pub(crate) contracts: &'a ContractClasses<'py>,
 }
@@ -229,22 +226,6 @@ impl NativeModelLoop {
             contract_classes,
             loop_classes,
         })
-    }
-
-    /// Build every model in order into `project`; return each model's input view.
-    fn run<'py>(
-        slf: &Bound<'py, Self>,
-        project: Bound<'py, NativeCompiledProject>,
-        host: Bound<'py, PyAny>,
-        model_files: Vec<Py<NativeModelFile>>,
-    ) -> PyResult<Vec<Bound<'py, NativeModelInput>>> {
-        let py: Python<'py> = slf.py();
-        let classes: LoopClasses<'py> = slf.get().loop_classes.bind(py).extract()?;
-        let models: Vec<ModelLoopRow> = prepared_rows(py, &classes, model_files)?;
-        project
-            .borrow_mut()
-            .keep_attachment_loop(slf.clone().unbind(), host.clone().unbind());
-        slf.get().run_models(py, project, host, models)
     }
 }
 
@@ -324,7 +305,7 @@ impl NativeModelLoop {
         &self,
         py: Python<'py>,
         project: Bound<'py, NativeCompiledProject>,
-        host: Bound<'py, PyAny>,
+        host: Bound<'py, ConstantRendering>,
         models: Vec<ModelLoopRow>,
     ) -> PyResult<Vec<Bound<'py, NativeModelInput>>> {
         let contracts: ContractClasses<'py> = self.contract_classes.bind(py).extract()?;
@@ -390,11 +371,27 @@ impl NativeModelLoop {
 }
 
 impl NativeModelLoop {
+    /// Build every model in order into `project`; return each model's input view.
+    pub(crate) fn run<'py>(
+        slf: &Bound<'py, Self>,
+        project: Bound<'py, NativeCompiledProject>,
+        host: Bound<'py, ConstantRendering>,
+        model_files: Vec<Py<NativeModelFile>>,
+    ) -> PyResult<Vec<Bound<'py, NativeModelInput>>> {
+        let py: Python<'py> = slf.py();
+        let classes: LoopClasses<'py> = slf.get().loop_classes.bind(py).extract()?;
+        let models: Vec<ModelLoopRow> = prepared_rows(py, &classes, model_files)?;
+        project
+            .borrow_mut()
+            .keep_attachment_loop(slf.clone().unbind(), host.clone().unbind());
+        slf.get().run_models(py, project, host, models)
+    }
+
     /// Attach every discovered source in order into `project`; return each source's view.
     pub(crate) fn run_sources<'py>(
         &self,
         project: &Bound<'py, NativeCompiledProject>,
-        host: &Bound<'py, PyAny>,
+        host: &Bound<'py, ConstantRendering>,
         rows: Vec<SourceRow>,
         settings: SourceSettings,
     ) -> PyResult<Vec<NativeSourceInput>> {
@@ -413,7 +410,7 @@ impl NativeModelLoop {
     /// Attach every singular audit, then each owner's attached audits.
     pub(crate) fn run_audits<'py>(
         &self,
-        host: &Bound<'py, PyAny>,
+        host: &Bound<'py, ConstantRendering>,
         files: &[AuditFileRow],
         owners: Vec<AttachmentOwner<'py>>,
         settings: &AuditSettings,
@@ -432,7 +429,7 @@ impl NativeModelLoop {
     /// Attach every SQL test case, then every scenario, against the project's resources.
     pub(crate) fn run_sql_tests<'py>(
         &self,
-        host: &Bound<'py, PyAny>,
+        host: &Bound<'py, ConstantRendering>,
         rows: (&[TestFileRow], &[ScenarioRow]),
         settings: &SqlTestSettings,
         table_function_arities: HashMap<String, usize>,
@@ -499,7 +496,7 @@ impl NativeModelLoop {
     /// Attach every SQL, then Python, function in order, checking table function call arities.
     pub(crate) fn run_functions<'py>(
         &self,
-        host: &Bound<'py, PyAny>,
+        host: &Bound<'py, ConstantRendering>,
         rows: (Vec<FunctionRow>, Vec<FunctionRow>),
         settings: FunctionSettings,
         models: &[(String, Vec<ReferenceRow>)],
@@ -567,15 +564,6 @@ impl NativeModelLoop {
         };
         let interpolated: String = applied_interpolation(context, interpolation)?;
         let (references, stop) = scan.clone().unwrap_or_default();
-        let file_keyword: Bound<'py, PyDict> = PyDict::new(py);
-        file_keyword.set_item(
-            FILE_PATH_ARGUMENT,
-            context.classes.path_class.call1((file_path,))?,
-        )?;
-        let render_constant: Bound<'py, PyAny> = context.classes.partial.call(
-            (context.host.getattr(CONSTANT_TEXT_CALLBACK)?,),
-            Some(&file_keyword),
-        )?;
         let expansion_classes: ExpansionClasses<'py> = ExpansionClasses {
             usage_record: context.classes.usage_record.clone(),
             compile_error: context.classes.compile_error.clone(),
@@ -590,7 +578,7 @@ impl NativeModelLoop {
                 relationship_visibility: false,
                 path: file_path,
             },
-            render_constant: &render_constant,
+            rendering: context.host.get(),
             classes: &expansion_classes,
         })?;
         let macros: Option<ExpandedMacros> = if calls_macros(&declarations.spliced.sql) {

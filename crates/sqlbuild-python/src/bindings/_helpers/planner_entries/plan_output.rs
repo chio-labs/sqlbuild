@@ -1,15 +1,17 @@
 //! `PlanOutput` assembly from planned model entries, seeds, sources, functions, audits and tests.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_entries::model_entries::scope_overlaps;
+use crate::bindings::_helpers::planner_entries::models::PlanOutputInputs;
 use crate::bindings::_helpers::planner_entries::values::{
     error_of, native, none, planner_model, planner_type, string,
 };
-use crate::bindings::_helpers::planner_phases::constants::PLAN_OUTPUT_INPUTS;
 use crate::bindings::_helpers::planner_strategy::fixture_context::planning_context;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::sql_test_glue::models::SqlTestAssembly;
 use crate::bindings::_helpers::sql_test_glue::plan_assembly::assemble_sql_test_plans;
+use crate::bindings::_helpers::sql_test_glue::plan_driver::resolve_sql_test_model_chains;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyList, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -482,21 +484,13 @@ pub(super) fn selected_test_entries<'py>(
         none(py)
     };
     let results = assemble_sql_test_plans(
-        py,
-        Some(keywords(
-            py,
-            &[
-                ("tests", tuple_of(py, selected)?),
-                ("project", project.clone()),
-                ("adapter", adapter.clone()),
-                ("sql_analysis_enabled", analysis),
-                (
-                    "validate_fixtures",
-                    pyo3::types::PyBool::new(py, true).to_owned().into_any(),
-                ),
-                ("fixture_planning_context", fixture_context),
-            ],
-        )?),
+        &selected,
+        (project, adapter),
+        &SqlTestAssembly {
+            sql_analysis_enabled: analysis,
+            validate_fixtures: true,
+            fixture_planning_context: fixture_context,
+        },
     )?;
     let mut diagnostics: Vec<String> = Vec::new();
     for result in results.try_iter()? {
@@ -547,16 +541,21 @@ fn planned_sql_tests<'py>(
 
 /// The plan output's fields from planned entries and resolved relation inputs.
 pub(crate) fn plan_output_fields<'py>(
-    args: &KeywordArguments<'py>,
+    inputs: PlanOutputInputs<'py>,
 ) -> PyResult<Vec<(&'static str, Bound<'py, PyAny>)>> {
-    let project = args.value("project")?;
+    let PlanOutputInputs {
+        project,
+        adapter,
+        scope,
+        snapshot,
+        relations,
+        changes,
+        model_entries,
+        model_warnings,
+        reload_sources,
+        extras,
+    } = inputs;
     let py = project.py();
-    let adapter = args.value("adapter")?;
-    let scope = args.value("scope")?;
-    let snapshot = args.value("snapshot")?;
-    let relations = args.value("relations")?;
-    let model_entry_results = args.value("model_entry_results")?;
-    let extras = args.value("extras")?;
     let extras = if extras.is_none() {
         native(py, RecordId::PlanOutputExtras, &[])?
     } else {
@@ -573,20 +572,18 @@ pub(crate) fn plan_output_fields<'py>(
             ("execution_order", execution_order.clone()),
             ("selected_keys", selected_keys.clone()),
             ("source_map", source_map.clone()),
-            ("is_reload", args.value("reload_sources")?),
+            ("is_reload", reload_sources),
         ],
     )?;
     require_intermediate_loader_targets(&project, &snapshot, &source_map, &source_load_entries)?;
     let functions = function_entries(
         (&project, &adapter, &snapshot),
         &relations,
-        &args.value("changes")?,
+        &changes,
         &selected_keys,
     )?;
-    let model_entries = model_entry_results.getattr("entries")?;
     let materializations = PyDict::new(py);
-    for entry in model_entries.try_iter()? {
-        let entry = entry?;
+    for entry in &model_entries {
         materializations.set_item(
             entry.getattr("name")?,
             entry.getattr("materialization_type")?,
@@ -624,13 +621,11 @@ pub(crate) fn plan_output_fields<'py>(
             scoped_order.push(key);
         }
     }
-    let mut warnings: Vec<Bound<'py, PyAny>> = Vec::new();
-    for warning in model_entry_results.getattr("warnings")?.try_iter()? {
-        warnings.push(warning?);
-    }
+    let mut warnings: Vec<Bound<'py, PyAny>> = model_warnings;
     for warning in planned.getattr("warnings")?.try_iter()? {
         warnings.push(warning?);
     }
+    let model_entries = tuple_of(py, model_entries)?;
     Ok(vec![
         ("execution_order", tuple_of(py, scoped_order)?),
         ("model_entries", model_entries.clone()),
@@ -686,22 +681,6 @@ pub(crate) fn plan_output_fields<'py>(
     ])
 }
 
-/// Assemble the plan output from planned entries and resolved relation inputs.
-#[pyfunction]
-#[pyo3(signature = (**kwargs))]
-fn build_plan_output<'py>(
-    py: Python<'py>,
-    kwargs: Option<Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let args = KeywordArguments::read(
-        py,
-        "build_plan_output",
-        kwargs,
-        (PLAN_OUTPUT_INPUTS, &["extras"]),
-    )?;
-    planner_model(py, RecordId::PlanOutput, &plan_output_fields(&args)?)
-}
-
 /// Build one canonical function entry from resolved relation inputs.
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
@@ -755,11 +734,7 @@ fn sql_test_model_chain_names_by_key<'py>(
     tests: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let py = project.py();
-    let chains = native(
-        py,
-        NativeAttr::ResolveSqlTestModelChains,
-        &[("project", project.clone()), ("tests", tests.clone())],
-    )?;
+    let chains = resolve_sql_test_model_chains(project, tests)?;
     let by_key = PyDict::new(py);
     for (test, chain) in tests.try_iter()?.zip(chains.try_iter()?) {
         by_key.set_item(test?.getattr("key")?, chain?)?;
@@ -807,7 +782,6 @@ fn build_selected_test_entries<'py>(
 }
 
 pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(build_plan_output, module)?)?;
     module.add_function(wrap_pyfunction!(plan_function, module)?)?;
     module.add_function(wrap_pyfunction!(plan_selected_sql_tests, module)?)?;
     module.add_function(wrap_pyfunction!(sql_test_is_selected, module)?)?;

@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::planner_migrations::column_objects::native;
+use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -45,8 +46,8 @@ fn migration_redirected_cursor_snapshots<'py>(
     let runtime = args.value("runtime")?;
     let scope = args.value("scope")?;
     let overrides = args.value("overrides")?;
-    let project = runtime.getattr("project")?;
-    let config = runtime.getattr("project_config")?;
+    let project = runtime_field(&runtime, |runtime| &runtime.project)?;
+    let config = runtime_field(&runtime, |runtime| &runtime.project_config)?;
     let start = if config.is_none() {
         py.None().into_bound(py)
     } else {
@@ -58,7 +59,10 @@ fn migration_redirected_cursor_snapshots<'py>(
         &[
             ("model_keys", scope.getattr("selected_keys")?),
             ("runtime_producer_keys", scope.getattr("selected_keys")?),
-            ("invocation_time", runtime.getattr("invocation_time")?),
+            (
+                "invocation_time",
+                runtime_field(&runtime, |runtime| &runtime.invocation_time)?,
+            ),
             ("start_cursor_config", start),
             ("cursor_overrides", overrides.getattr("cursor_overrides")?),
         ],
@@ -74,8 +78,14 @@ fn migration_redirected_cursor_snapshots<'py>(
         &registry::native(py, NativeAttr::GatherRedirectedCursorSnapshots)?,
         &[
             ("project", project),
-            ("adapter", runtime.getattr("adapter")?),
-            ("connection", runtime.getattr("connection")?),
+            (
+                "adapter",
+                runtime_field(&runtime, |runtime| &runtime.adapter)?,
+            ),
+            (
+                "connection",
+                runtime_field(&runtime, |runtime| &runtime.connection)?,
+            ),
             ("existing_relations", args.value("existing_relations")?),
             ("target_relations", args.value("target_relations")?),
             ("cursor_scope", cursor_scope),
@@ -84,7 +94,10 @@ fn migration_redirected_cursor_snapshots<'py>(
                 "deferred_locations",
                 args.value("deferral")?.getattr("deferred_locations")?,
             ),
-            ("on_progress", runtime.getattr("on_progress")?),
+            (
+                "on_progress",
+                runtime_field(&runtime, |runtime| &runtime.on_progress)?,
+            ),
             (
                 "origin_cursor_columns",
                 args.value("origin_cursor_columns")?,

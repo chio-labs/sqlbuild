@@ -1,9 +1,8 @@
 //! Layouts of the planner, migration, cursor and fingerprint value records hosted natively.
 
-use crate::bindings::_helpers::build_command::support::utc_now;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::record_behaviours::planner::forward_only_backfill;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::models::{EnumSpec, FieldDefault, FieldSpec, RecordSpec};
 
 const R_PARSED_SELECTOR: RecordSpec = RecordSpec {
@@ -1254,14 +1253,6 @@ const R_DIRECT_MODEL_VERSION_IDENTITIES: RecordSpec = RecordSpec {
         FieldSpec::required("model_version_hashes"),
     ],
 };
-const R_PLANNER_MODEL_ENTRY_RESULTS: RecordSpec = RecordSpec {
-    name: "PlannerModelEntryResults",
-    doc: "Model plan-entry phase output.",
-    fields: &[
-        FieldSpec::required("entries"),
-        FieldSpec::new("warnings", FieldDefault::EmptyTuple),
-    ],
-};
 const R_SCHEMA_ACTION: RecordSpec = RecordSpec {
     name: "SchemaAction",
     doc: "One concrete schema change action to apply to a target table.",
@@ -1403,19 +1394,6 @@ const R_PLAN_PROVIDER_USAGE: RecordSpec = RecordSpec {
         FieldSpec::new("annotation_module", FieldDefault::None),
     ],
 };
-const R_PLANNER_RUNTIME: RecordSpec = RecordSpec {
-    name: "PlannerRuntime",
-    doc: "Resolved execution environment shared by planner phases.",
-    fields: &[
-        FieldSpec::required("project"),
-        FieldSpec::required("adapter"),
-        FieldSpec::required("connection"),
-        FieldSpec::new("project_config", FieldDefault::None),
-        FieldSpec::new("local_config", FieldDefault::None),
-        FieldSpec::new("on_progress", FieldDefault::None),
-        FieldSpec::new("invocation_time", FieldDefault::Factory(utc_now)),
-    ],
-};
 const R_PLANNER_SCOPE_RESOLUTION: RecordSpec = RecordSpec {
     name: "PlannerScopeResolution",
     doc: "Resolved planner scopes for one plan build.",
@@ -1423,24 +1401,6 @@ const R_PLANNER_SCOPE_RESOLUTION: RecordSpec = RecordSpec {
         FieldSpec::required("selected_scope"),
         FieldSpec::required("stale_warning_scope"),
         FieldSpec::required("inspection_scope"),
-    ],
-};
-const R_PLANNER_WAREHOUSE_STATE: RecordSpec = RecordSpec {
-    name: "PlannerWarehouseState",
-    doc: "Warehouse snapshot and inspection relations gathered once per plan.",
-    fields: &[
-        FieldSpec::required("snapshot"),
-        FieldSpec::required("inspection_relations"),
-        FieldSpec::new("migration_entries", FieldDefault::EmptyTuple),
-        FieldSpec::new("migration_warnings", FieldDefault::EmptyTuple),
-        FieldSpec::new("column_migration_entries", FieldDefault::EmptyTuple),
-        FieldSpec::new("column_rename_hints", FieldDefault::EmptyTuple),
-        FieldSpec::new("old_name_view_entries", FieldDefault::EmptyTuple),
-        FieldSpec::new("old_name_views", FieldDefault::EmptyTuple),
-        FieldSpec::new(
-            "migration_fingerprints",
-            FieldDefault::NativeClassCall(NativeAttr::MigrationFingerprintCache),
-        ),
     ],
 };
 const R_MODEL_MIGRATION_REQUEST: RecordSpec = RecordSpec {
@@ -1482,34 +1442,6 @@ const R_MIGRATION_COMPATIBILITY_RESULT: RecordSpec = RecordSpec {
         FieldSpec::new("findings", FieldDefault::EmptyTuple),
     ],
 };
-const R_MODEL_MIGRATION_PLANNING: RecordSpec = RecordSpec {
-    name: "ModelMigrationPlanning",
-    doc: "Migration decisions plus the warehouse snapshot as it will look after moves.",
-    fields: &[
-        FieldSpec::required("snapshot"),
-        FieldSpec::new("entries", FieldDefault::EmptyTuple),
-        FieldSpec::new("warnings", FieldDefault::EmptyTuple),
-    ],
-};
-const R_OLD_NAME_VIEW_PLANNING: RecordSpec = RecordSpec {
-    name: "OldNameViewPlanning",
-    doc: "Old-name steps for this build plus every compatibility view still recorded.",
-    fields: &[
-        FieldSpec::new("entries", FieldDefault::EmptyTuple),
-        FieldSpec::new("views", FieldDefault::EmptyTuple),
-        FieldSpec::new("warnings", FieldDefault::EmptyTuple),
-    ],
-};
-const R_COLUMN_MIGRATION_PLANNING: RecordSpec = RecordSpec {
-    name: "ColumnMigrationPlanning",
-    doc: "Column rename decisions plus the warehouse snapshot as it will look after renames.",
-    fields: &[
-        FieldSpec::required("snapshot"),
-        FieldSpec::new("entries", FieldDefault::EmptyTuple),
-        FieldSpec::new("hints", FieldDefault::EmptyTuple),
-        FieldSpec::new("warnings", FieldDefault::EmptyTuple),
-    ],
-};
 const R_PLANNER_IDENTITY_CONTEXT: RecordSpec = RecordSpec {
     name: "PlannerIdentityContext",
     doc: "Expected version identities for inspection and stale-warning scopes.",
@@ -1517,30 +1449,6 @@ const R_PLANNER_IDENTITY_CONTEXT: RecordSpec = RecordSpec {
         FieldSpec::required("version_identities"),
         FieldSpec::required("stale_warning_identities"),
     ],
-};
-const R_PLANNER_SCOPE_PRUNING_RESULT: RecordSpec = RecordSpec {
-    name: "PlannerScopePruningResult",
-    doc: "Scope pruning outcome with pruned scopes, actions, and staleness state.",
-    fields: &[
-        FieldSpec::required("inspection_scope"),
-        FieldSpec::required("execution_scope"),
-        FieldSpec::required("resolved_actions"),
-        FieldSpec::required("pruned_direct_model_names"),
-        FieldSpec::required("direct_identity_stale_model_names"),
-    ],
-};
-const R_PLANNER_CHANGE_RECONCILIATION: RecordSpec = RecordSpec {
-    name: "PlannerChangeReconciliation",
-    doc: "Write-hash-honest changes merged back into resolved actions.",
-    fields: &[
-        FieldSpec::required("changes"),
-        FieldSpec::required("resolved_actions"),
-    ],
-};
-const R_PLANNER_ENTRY_RESULTS: RecordSpec = RecordSpec {
-    name: "PlannerEntryResults",
-    doc: "Model plan entries for one plan build.",
-    fields: &[FieldSpec::required("model_entry_results")],
 };
 
 /// Planner value records, in registration order.
@@ -1569,7 +1477,6 @@ pub(crate) const PLANNER_VALUE_RECORDS: &[RecordSpec] = &[
     R_RESOLVED_MODEL_ACTION,
     R_PLANNER_RESOLVED_ACTIONS,
     R_DIRECT_MODEL_VERSION_IDENTITIES,
-    R_PLANNER_MODEL_ENTRY_RESULTS,
     R_SCHEMA_ACTION,
     R_PLAN_WARNING,
     R_COLUMN_RENAME_HINT,
@@ -1583,20 +1490,12 @@ pub(crate) const PLANNER_VALUE_RECORDS: &[RecordSpec] = &[
     R_SCENARIO_ARTIFACT_IDENTITY,
     R_SCENARIO_ARTIFACT_NAME,
     R_PLAN_PROVIDER_USAGE,
-    R_PLANNER_RUNTIME,
     R_PLANNER_SCOPE_RESOLUTION,
-    R_PLANNER_WAREHOUSE_STATE,
     R_MODEL_MIGRATION_REQUEST,
     R_MODEL_MIGRATION_DECLARATION,
     R_MODEL_MIGRATION_DISCOVERY,
     R_MIGRATION_COMPATIBILITY_RESULT,
-    R_MODEL_MIGRATION_PLANNING,
-    R_OLD_NAME_VIEW_PLANNING,
-    R_COLUMN_MIGRATION_PLANNING,
     R_PLANNER_IDENTITY_CONTEXT,
-    R_PLANNER_SCOPE_PRUNING_RESULT,
-    R_PLANNER_CHANGE_RECONCILIATION,
-    R_PLANNER_ENTRY_RESULTS,
 ];
 
 /// Planner string enums, in declaration order.

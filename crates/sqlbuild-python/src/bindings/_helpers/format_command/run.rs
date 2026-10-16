@@ -7,6 +7,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 use sqlbuild_core::format_command::main::collect_lint_files::collect_lint_files;
 
+use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::discovery::description_inputs::externally_described_models;
 use crate::bindings::_helpers::format_command::files::{
@@ -14,6 +15,11 @@ use crate::bindings::_helpers::format_command::files::{
 };
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::rules::dsl_headers::{header_violations, rules_config};
+use crate::bindings::_helpers::rules::lint_pipeline::{LintViolationRow, ViolationClasses};
+use crate::bindings::_helpers::rules::lint_text::apply_lint_suppressions;
+use sqlbuild_rules::dsl_headers::main::scan_headers::scan_headers;
+use sqlbuild_rules::dsl_headers::models::{HeaderRulesConfig, HeaderViolation};
 
 const DESCRIPTION_PRESENT: &str = "description-present";
 
@@ -100,10 +106,6 @@ fn apply_fixes<'py>(
         return Ok((updated, faults));
     }
     let current: Bound<'py, PyDict> = overlaid(files, &updated)?;
-    call_with(
-        &native(py, NativeAttr::PrepareNativeHeaderCache)?,
-        &[("files", current.clone().into_any())],
-    )?;
     for (path, contents) in sorted_items(&current)? {
         let result: Bound<'py, PyAny> = call_with(
             &native(py, NativeAttr::FormatNativeHeaders)?,
@@ -158,23 +160,16 @@ fn lint_final_contents<'py>(
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py: Python<'py> = files.py();
     let mut violations: Vec<Bound<'py, PyAny>> = Vec::new();
+    let header_rules: HeaderRulesConfig = rules_config(request.config)?;
+    let classes: ViolationClasses<'py> = ViolationClasses::new(py)?;
     for (path, contents) in sorted_items(files)? {
-        let final_contents: Bound<'py, PyAny> = updated.get_item(&path)?.unwrap_or(contents);
-        let headers: Bound<'py, PyAny> = call_with(
-            &native(py, NativeAttr::ScanHeaders)?,
-            &[("contents", final_contents.clone())],
-        )?;
-        let found: Bound<'py, PyAny> = call_with(
-            &native(py, NativeAttr::LintNativeHeaders)?,
-            &[
-                ("contents", final_contents),
-                ("file_path", path),
-                ("headers", headers),
-                ("config", request.config.clone()),
-            ],
-        )?;
-        for violation in found.try_iter()? {
-            violations.push(violation?);
+        let final_contents: String = updated.get_item(&path)?.unwrap_or(contents).extract()?;
+        let text: Vec<char> = final_contents.chars().collect();
+        let found: Vec<HeaderViolation> =
+            header_violations(&text, &scan_headers(&text, false), header_rules)
+                .map_err(value_error)?;
+        for violation in found {
+            violations.push(classes.violation(&path, &LintViolationRow::header(0, violation))?);
         }
     }
     Ok(violations)
@@ -307,10 +302,9 @@ pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<Form
     let violations: Vec<Bound<'py, PyAny>> =
         drop_resolved_description_faults(request.project_dir, violations)?;
     let final_contents: Bound<'py, PyDict> = overlaid(&files, &updated)?;
-    let allow_suppressions: Bound<'py, PyAny> = request.config.getattr("allow_suppressions")?;
-    let violations: Vec<Bound<'py, PyAny>> = native(py, NativeAttr::ApplyLintSuppressions)?
-        .call1((violations, &final_contents, allow_suppressions))?
-        .extract()?;
+    let allow_suppressions: bool = request.config.getattr("allow_suppressions")?.extract()?;
+    let violations: Vec<Bound<'py, PyAny>> =
+        apply_lint_suppressions(py, violations, final_contents.clone(), allow_suppressions)?;
     Ok(FormatOutcome {
         files_checked,
         violations,

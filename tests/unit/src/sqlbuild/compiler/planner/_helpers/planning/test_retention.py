@@ -424,8 +424,8 @@ def test_given_changes_only_current_model_when_planning_type_then_selection_stil
             declared=True,
         ),
     )
-    warehouse = replace(
-        warehouse,
+    warehouse = PlannerWarehouseState(
+        inspection_relations=warehouse.inspection_relations,
         snapshot=replace(
             warehouse.snapshot,
             fingerprints=WarehouseFingerprints(
@@ -753,8 +753,11 @@ def test_given_missing_bigquery_dataset_when_planning_then_defers_retention_unti
         existing_relations={},
         config_values={},
     )
-    runtime: PlannerRuntime = replace(
-        runtime,
+    runtime: PlannerRuntime = PlannerRuntime(
+        project=runtime.project,
+        adapter=runtime.adapter,
+        connection=runtime.connection,
+        invocation_time=runtime.invocation_time,
         project_config=ProjectConfig(
             name="test",
             adapter=BuiltinAdapter.BIGQUERY.value,

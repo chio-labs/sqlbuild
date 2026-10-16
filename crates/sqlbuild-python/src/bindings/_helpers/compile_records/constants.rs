@@ -1,5 +1,6 @@
 //! Layouts of the compile and discovery value records hosted natively.
 
+use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::models::{FieldDefault, FieldSpec, RecordSpec};
@@ -383,7 +384,7 @@ const R_COMPILED_FUNCTION: RecordSpec = RecordSpec {
         FieldSpec::new("references", FieldDefault::EmptyTuple),
         FieldSpec::new(
             "language",
-            FieldDefault::Member("sqlbuild.compiler.compile.types", "FunctionLanguage", "SQL"),
+            FieldDefault::HostMember(FacadeHost::FunctionLanguage.id(), "SQL"),
         ),
         FieldSpec::new("source_file_path", FieldDefault::None),
         FieldSpec::new("runtime_version", FieldDefault::None),
@@ -446,7 +447,7 @@ const R_COMPILE_SQL_TEST_INPUT: RecordSpec = RecordSpec {
         FieldSpec::required("sql_body"),
         FieldSpec::new(
             "mode",
-            FieldDefault::Member("sqlbuild.compiler.compile.types", "SqlTestMode", "MODEL"),
+            FieldDefault::HostMember(FacadeHost::SqlTestMode.id(), "MODEL"),
         ),
         FieldSpec::new(
             "payload",
@@ -528,7 +529,7 @@ const R_COMPILED_DIRECT_LOGIC_SQL_TEST_PAYLOAD: RecordSpec = RecordSpec {
         FieldSpec::required("expected_cte"),
         FieldSpec::new(
             "mode",
-            FieldDefault::Member("sqlbuild.compiler.compile.types", "SqlTestMode", "MODEL"),
+            FieldDefault::HostMember(FacadeHost::SqlTestMode.id(), "MODEL"),
         ),
         FieldSpec::new("helper_ctes", FieldDefault::EmptyTuple),
         FieldSpec::new("tested_resource_names", FieldDefault::EmptyTuple),
@@ -725,7 +726,7 @@ const R_DISCOVERED_SQL_TEST_BLOCK: RecordSpec = RecordSpec {
         FieldSpec::new("name", FieldDefault::None),
         FieldSpec::new(
             "mode",
-            FieldDefault::Member("sqlbuild.compiler.compile.types", "SqlTestMode", "MODEL"),
+            FieldDefault::HostMember(FacadeHost::SqlTestMode.id(), "MODEL"),
         ),
         FieldSpec::new("parameters", FieldDefault::EmptyTuple),
         FieldSpec::new("cases", FieldDefault::EmptyTuple),
@@ -765,11 +766,7 @@ const R_DISCOVERED_AUDIT_BLOCK: RecordSpec = RecordSpec {
         FieldSpec::new("name", FieldDefault::None),
         FieldSpec::new(
             "evaluation_mode",
-            FieldDefault::Member(
-                "sqlbuild.compiler.auditing.types",
-                "AuditEvaluationMode",
-                "VIOLATIONS",
-            ),
+            FieldDefault::HostMember(FacadeHost::AuditEvaluationMode.id(), "VIOLATIONS"),
         ),
         FieldSpec::new("measurement_contract", FieldDefault::None),
         FieldSpec::new("measure_sql", FieldDefault::None),
@@ -1448,11 +1445,7 @@ const R_COMPILED_AUDIT: RecordSpec = RecordSpec {
         FieldSpec::required("sql_body"),
         FieldSpec::new(
             "evaluation_mode",
-            FieldDefault::Member(
-                "sqlbuild.compiler.auditing.types",
-                "AuditEvaluationMode",
-                "VIOLATIONS",
-            ),
+            FieldDefault::HostMember(FacadeHost::AuditEvaluationMode.id(), "VIOLATIONS"),
         ),
         FieldSpec::new("measurement_contract", FieldDefault::None),
         FieldSpec::new("thresholds", FieldDefault::None),
@@ -1577,7 +1570,7 @@ const R_COMPILED_SQL_TEST: RecordSpec = RecordSpec {
         FieldSpec::required("sql_body"),
         FieldSpec::new(
             "mode",
-            FieldDefault::Member("sqlbuild.compiler.compile.types", "SqlTestMode", "MODEL"),
+            FieldDefault::HostMember(FacadeHost::SqlTestMode.id(), "MODEL"),
         ),
         FieldSpec::new(
             "payload",

@@ -1,7 +1,8 @@
 //! Top-level planner orchestration producing an execution plan.
 
+use crate::bindings::_helpers::build_command::support::utc_now;
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, keywords, within,
+    KeywordArguments, call_with, imported, within,
 };
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
@@ -13,21 +14,23 @@ use crate::bindings::_helpers::planner_entries::test_planning::{
 use crate::bindings::_helpers::planner_entries::values::{COMPILE_TYPES, native, replaced};
 use crate::bindings::_helpers::planner_phases::buildability::check_selected_scope_buildability;
 use crate::bindings::_helpers::planner_phases::execution_changes::{
-    build_planner_entry_results, prune_planner_execution_scope, reconcile_execution_changes,
+    build_planner_entry_results, reconcile_execution_changes,
 };
 use crate::bindings::_helpers::planner_phases::identities::{
     build_planner_identity_context, detect_stale_warning_changes,
 };
+use crate::bindings::_helpers::planner_phases::models::PlannerRuntime;
 use crate::bindings::_helpers::planner_phases::output_assembly::{
     add_plan_metadata, add_plan_warnings, add_storage_policies, base_plan_output,
 };
+use crate::bindings::_helpers::planner_phases::runtime::warehouse_field;
 use crate::bindings::_helpers::planner_phases::scopes::resolve_planner_scopes;
 use crate::bindings::_helpers::planner_phases::warehouse_state::gather_planner_warehouse_state;
 use crate::bindings::_helpers::planner_resolution::cursor_overrides::type_cursor_overrides;
 use crate::bindings::_helpers::planner_warehouse::source_freshness::build_planner_source_freshness_result;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyTuple};
+use pyo3::types::PyDict;
 use pyo3::{pyfunction, wrap_pyfunction};
 use std::time::Instant;
 
@@ -55,16 +58,7 @@ fn scopes_and_cursor_overrides<'py>(
         }
     }
     let overrides = args.value("overrides")?;
-    let typed = type_cursor_overrides(
-        py,
-        Some(keywords(
-            py,
-            &[
-                ("cursor_overrides", overrides.getattr("cursor_overrides")?),
-                ("selected_models", PyTuple::new(py, models)?.into_any()),
-            ],
-        )?),
-    )?;
+    let typed = type_cursor_overrides(&overrides.getattr("cursor_overrides")?, &models)?;
     Ok((
         scopes,
         replaced(&overrides, &[("cursor_overrides", typed)])?,
@@ -81,24 +75,12 @@ fn change_results<'py>(
     let py = project.py();
     let versions = identities.getattr("version_identities")?;
     let changes = detect_changes(
-        py,
-        Some(keywords(
-            py,
-            &[
-                ("project", project.clone()),
-                ("scope", scopes.getattr("inspection_scope")?),
-                ("snapshot", snapshot.clone()),
-                ("full_refresh", overrides.getattr("full_refresh")?),
-                (
-                    "expected_version_hashes",
-                    versions.getattr("model_version_hashes")?,
-                ),
-                (
-                    "expected_metadata_jsons",
-                    versions.getattr("model_metadata_jsons")?,
-                ),
-            ],
-        )?),
+        (project, &scopes.getattr("inspection_scope")?, snapshot),
+        overrides.getattr("full_refresh")?.is_truthy()?,
+        (
+            versions.getattr("model_version_hashes")?,
+            versions.getattr("model_metadata_jsons")?,
+        ),
     )?;
     if !policies.getattr("selection_diagnostics")?.is_truthy()? {
         let empty = native(
@@ -111,19 +93,7 @@ fn change_results<'py>(
         )?;
         return Ok((changes, empty));
     }
-    let stale = detect_stale_warning_changes(
-        py,
-        Some(keywords(
-            py,
-            &[
-                ("project", project.clone()),
-                ("scopes", scopes.clone()),
-                ("snapshot", snapshot.clone()),
-                ("identities", identities.clone()),
-                ("execution_changes", changes.clone()),
-            ],
-        )?),
-    )?;
+    let stale = detect_stale_warning_changes((project, scopes), snapshot, (identities, &changes))?;
     Ok((changes, stale))
 }
 
@@ -146,7 +116,7 @@ fn planned_output<'py>(
         policies.getattr("selection_diagnostics")?.extract()?,
     )?;
     check_selected_scope_buildability(runtime, scopes, &warehouse, &deferral)?;
-    let snapshot = warehouse.getattr("snapshot")?;
+    let snapshot = warehouse_field(&warehouse, |warehouse| &warehouse.snapshot)?;
     let (changes, stale_warning_changes) = change_results(
         &project,
         (scopes, &snapshot, &identities),
@@ -156,55 +126,41 @@ fn planned_output<'py>(
     let inspection_scope = scopes.getattr("inspection_scope")?;
     let resolved_actions = resolve_model_actions(&inspection_scope, &changes)?;
     let source_freshness = build_planner_source_freshness_result(
-        py,
-        Some(keywords(
-            py,
-            &[
-                ("project", project.clone()),
-                ("adapter", args.value("adapter")?),
-                ("connection", args.value("connection")?),
-                ("scope", inspection_scope),
-                ("relations", warehouse.getattr("inspection_relations")?),
-                (
-                    "freshness_state_schemas",
-                    snapshot.getattr("source_freshness_state_schemas")?,
-                ),
-            ],
-        )?),
+        (&project, &inspection_scope),
+        (&args.value("adapter")?, &args.value("connection")?),
+        &warehouse_field(&warehouse, |warehouse| &warehouse.inspection_relations)?,
+        &snapshot.getattr("source_freshness_state_schemas")?,
     )?;
-    let pruning = prune_planner_execution_scope(scopes, &resolved_actions)?;
-    let reconciliation = reconcile_execution_changes(&warehouse, &identities, &pruning, &changes)?;
+    let reconciliation = reconcile_execution_changes(
+        (&inspection_scope, &snapshot),
+        &identities,
+        &resolved_actions,
+        &changes,
+    )?;
     let entries = build_planner_entry_results(
-        py,
-        Some(keywords(
-            py,
-            &[
-                ("runtime", runtime.clone()),
-                ("warehouse", warehouse.clone()),
-                ("identities", identities.clone()),
-                ("overrides", overrides.clone()),
-                ("policies", policies.clone()),
-                ("deferral", deferral),
-                ("pruning", pruning.clone()),
-                ("reconciliation", reconciliation.clone()),
-                ("source_freshness", source_freshness.clone()),
-            ],
-        )?),
+        (runtime, &warehouse),
+        (overrides, &deferral),
+        (&inspection_scope, &reconciliation),
+        &source_freshness,
     )?;
     let planned_sql_tests = test_planning.result(py)?.into_bound(py);
     let output = base_plan_output(
         (runtime, &warehouse, &identities, overrides),
-        (&pruning, &reconciliation, &entries, &source_freshness),
+        (
+            &inspection_scope,
+            &reconciliation,
+            entries,
+            &source_freshness,
+        ),
         &planned_sql_tests,
     )?;
     let output = add_storage_policies(output, (runtime, &warehouse, scopes, &policies))?;
     let output = add_plan_warnings(
         output,
         (scopes, &warehouse, &identities, &stale_warning_changes),
-        (&pruning, &source_freshness, &policies),
+        (&source_freshness, &policies),
     )?;
-    let plan_output =
-        add_plan_metadata(output, &pruning, &source_freshness, &policies)?.build(py)?;
+    let plan_output = add_plan_metadata(output, &source_freshness, &policies)?.build(py)?;
     let on_progress = args.value("on_progress")?;
     if !on_progress.is_none() {
         on_progress.call1((format!(
@@ -242,18 +198,19 @@ fn build_execution_plan<'py>(
     let project = args.value("project")?;
     let adapter = args.value("adapter")?;
     let connection = args.value("connection")?;
-    let runtime = native(
+    let runtime = Bound::new(
         py,
-        RecordId::PlannerRuntime,
-        &[
-            ("project", project.clone()),
-            ("adapter", adapter.clone()),
-            ("connection", connection.clone()),
-            ("project_config", args.value("project_config")?),
-            ("local_config", args.value("local_config")?),
-            ("on_progress", args.value("on_progress")?),
-        ],
-    )?;
+        PlannerRuntime {
+            project: project.clone().unbind(),
+            adapter: adapter.clone().unbind(),
+            connection: connection.clone().unbind(),
+            project_config: args.value("project_config")?.unbind(),
+            local_config: args.value("local_config")?.unbind(),
+            on_progress: args.value("on_progress")?.unbind(),
+            invocation_time: utc_now(py)?.unbind(),
+        },
+    )?
+    .into_any();
     let (scopes, overrides) = scopes_and_cursor_overrides(&args)?;
     let inspection = scopes.getattr("inspection_scope")?;
     let test_planning = start_planning(

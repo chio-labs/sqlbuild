@@ -3,11 +3,12 @@
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyDict, PyString, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::compile_attachment::sql_expansion_context::SqlExpansionInputs;
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::model_config::template_data::record_reads;
 use crate::bindings::_helpers::model_config::unicode_environment::unicode_environment;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
@@ -16,12 +17,13 @@ use crate::bindings::_helpers::render::declaration_expansion::{
     DeclarationExpansion, ExpandedDeclarations, ExpansionClasses, ExpansionConsumer, SpanRow,
     expand_declarations, span_rows,
 };
+use crate::bindings::_helpers::render::declaration_values::ConstantRendering;
 use crate::bindings::_helpers::render::declaration_values::resolved_declaration_context;
-use crate::bindings::_helpers::render::macro_expansion_result::expand_sql_macros;
+use crate::bindings::_helpers::render::macro_call_rows::span_row;
+use crate::bindings::_helpers::render::macro_expansion_result::{ExpansionRequest, macro_output};
 use crate::bindings::_helpers::sqltext::declaration_references::declaration_scan;
 use crate::bindings::_helpers::sqltext::static_sql::{InterpolationSources, interpolation_batch};
 
-const FUNCTOOLS_MODULE: &str = "functools";
 const DECLARATION_FIELDS: [&str; 4] = [
     "enums",
     "constants",
@@ -111,17 +113,10 @@ fn declarations_expanded<'py>(
         return Ok((sql.to_owned(), Vec::new()));
     }
     let context: Bound<'py, PyAny> = declaration_context(py, declarations)?;
-    let render_constant: Bound<'py, PyAny> = imported(py, FUNCTOOLS_MODULE, "partial")?.call(
-        (registry::native(py, NativeAttr::RenderConstantDeclaration)?,),
-        Some(&keywords(
-            py,
-            &[
-                ("value_renderer", value_renderer.clone()),
-                ("collection_rendering", collection_rendering.clone()),
-                ("file_path", file_path.clone()),
-            ],
-        )?),
-    )?;
+    let rendering: ConstantRendering = ConstantRendering::new(
+        value_renderer.clone().unbind(),
+        collection_rendering.clone().unbind(),
+    );
     let classes = ExpansionClasses {
         usage_record: registry::class(py, RecordId::UsageRecord)?,
         compile_error: registry::error(py, ErrorId::CompileInput)?,
@@ -137,60 +132,136 @@ fn declarations_expanded<'py>(
             relationship_visibility: false,
             path: &path,
         },
-        render_constant: &render_constant,
+        rendering: &rendering,
         classes: &classes,
     })?;
     let spans: Vec<SpanRow> = span_rows(&expanded.spliced);
     Ok((expanded.spliced.sql, spans))
 }
 
+/// Authored SQL expanded through vars, declarations and macros, with each pass's spans.
+pub(crate) struct AuthoredExpansion {
+    pub(crate) sql: String,
+    /// Interpolation, declaration and macro spans, in pass order.
+    pub(crate) passes: [Vec<SpanRow>; 3],
+}
+
+/// What one authored SQL expansion reads.
+struct AuthoredSources<'a, 'py> {
+    sql: &'a Bound<'py, PyAny>,
+    file_path: &'a Bound<'py, PyAny>,
+    effective_vars: &'a Bound<'py, PyAny>,
+    context_values: &'a Bound<'py, PyAny>,
+    declarations: &'a Bound<'py, PyAny>,
+    value_renderer: &'a Bound<'py, PyAny>,
+    collection_rendering: &'a Bound<'py, PyAny>,
+    loaded_macros: &'a Bound<'py, PyAny>,
+    macro_context: &'a Bound<'py, PyAny>,
+    declaration_resolver: Option<Bound<'py, PyAny>>,
+}
+
+fn authored_expansion(sources: AuthoredSources<'_, '_>) -> PyResult<AuthoredExpansion> {
+    let py: Python<'_> = sources.sql.py();
+    let (interpolated, interpolation_spans) = substituted(
+        sources.sql,
+        sources.file_path,
+        (sources.effective_vars, sources.context_values),
+    )?;
+    let (declared, declaration_spans) = declarations_expanded(
+        &interpolated,
+        sources.file_path,
+        (
+            sources.declarations,
+            sources.value_renderer,
+            sources.collection_rendering,
+        ),
+    )?;
+    let request: ExpansionRequest<'_> = ExpansionRequest {
+        sql: PyString::new(py, &declared),
+        file_path: sources.file_path.clone(),
+        loaded_macros: sources.loaded_macros.downcast()?.clone(),
+        macro_overrides: None,
+        macro_context: sources.macro_context.clone(),
+        declaration_resolver: sources.declaration_resolver,
+        declarations: None,
+        consumer: None,
+    };
+    Ok(match macro_output(request)? {
+        Some(output) => AuthoredExpansion {
+            sql: output.sql,
+            passes: [
+                interpolation_spans,
+                declaration_spans,
+                output.spans.into_iter().map(span_row).collect(),
+            ],
+        },
+        None => AuthoredExpansion {
+            sql: declared,
+            passes: [interpolation_spans, declaration_spans, Vec::new()],
+        },
+    })
+}
+
+/// `(sql, passes)` with each pass's `ExpansionSpan` objects.
+fn expansion_tuple<'py>(
+    py: Python<'py>,
+    expansion: &AuthoredExpansion,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let passes: Vec<Bound<'py, PyTuple>> = expansion
+        .passes
+        .iter()
+        .map(|spans| span_objects(py, spans))
+        .collect::<PyResult<_>>()?;
+    PyTuple::new(
+        py,
+        [
+            PyString::new(py, &expansion.sql).into_any(),
+            PyTuple::new(py, passes)?.into_any(),
+        ],
+    )
+}
+
 /// Expand authored SQL, returning each pass's substitution spans in order.
 fn authored_sql_with_spans<'py>(request: &Request<'_, 'py>) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = request.py();
     let none = || py.None().into_bound(py);
-    let file_path: Bound<'py, PyAny> = request.get("file_path")?;
-    let (interpolated, interpolation_spans) = substituted(
-        &request.get("sql")?,
-        &file_path,
-        (
-            &request.get("effective_vars")?,
-            &request.optional("context_values")?.unwrap_or_else(none),
-        ),
-    )?;
-    let (declared, declaration_spans) = declarations_expanded(
-        &interpolated,
-        &file_path,
-        (
-            &request.optional("declarations")?.unwrap_or_else(none),
-            &request.get("value_renderer")?,
-            &request.get("collection_rendering")?,
-        ),
-    )?;
-    let macro_options: Bound<'py, PyDict> = keywords(
-        py,
-        &[
-            ("sql", PyString::new(py, &declared).into_any()),
-            ("file_path", file_path),
-            ("loaded_macros", request.get("loaded_macros")?),
-            ("macro_context", request.get("macro_context")?),
-            (
-                "declaration_resolver",
-                request
-                    .optional("declaration_resolver")?
-                    .unwrap_or_else(none),
-            ),
-        ],
-    )?;
-    let expansion: Bound<'py, PyAny> = expand_sql_macros(py, Some(macro_options))?;
-    let passes: Bound<'py, PyTuple> = PyTuple::new(
-        py,
-        [
-            span_objects(py, &interpolation_spans)?.into_any(),
-            span_objects(py, &declaration_spans)?.into_any(),
-            expansion.getattr("spans")?,
-        ],
-    )?;
-    PyTuple::new(py, [expansion.getattr("sql")?, passes.into_any()])
+    let expansion: AuthoredExpansion = authored_expansion(AuthoredSources {
+        sql: &request.get("sql")?,
+        file_path: &request.get("file_path")?,
+        effective_vars: &request.get("effective_vars")?,
+        context_values: &request.optional("context_values")?.unwrap_or_else(none),
+        declarations: &request.optional("declarations")?.unwrap_or_else(none),
+        value_renderer: &request.get("value_renderer")?,
+        collection_rendering: &request.get("collection_rendering")?,
+        loaded_macros: &request.get("loaded_macros")?,
+        macro_context: &request.get("macro_context")?,
+        declaration_resolver: request
+            .optional("declaration_resolver")?
+            .filter(|resolver| !resolver.is_none()),
+    })?;
+    expansion_tuple(py, &expansion)
+}
+
+/// `sql` expanded with lint's expansion inputs, as `file_path`'s declarations see them.
+pub(crate) fn expand_with_inputs(
+    inputs: &SqlExpansionInputs,
+    sql: &str,
+    file_path: &Bound<'_, PyAny>,
+) -> PyResult<AuthoredExpansion> {
+    let py: Python<'_> = file_path.py();
+    let resolver: Bound<'_, PyAny> = inputs.declaration_resolver.bind(py).clone();
+    authored_expansion(AuthoredSources {
+        sql: &PyString::new(py, sql).into_any(),
+        file_path,
+        effective_vars: inputs.effective_vars.bind(py),
+        context_values: &py.None().into_bound(py),
+        declarations: &input_declarations(inputs, file_path)?,
+        value_renderer: inputs.value_renderer.bind(py),
+        collection_rendering: inputs.collection_rendering.bind(py),
+        loaded_macros: inputs.loaded_macros.bind(py),
+        macro_context: inputs.macro_context.bind(py),
+        declaration_resolver: (!resolver.is_none()).then_some(resolver),
+    })
 }
 
 /// Expand authored SQL, returning each pass's substitution spans in order.
@@ -202,29 +273,29 @@ fn expand_authored_sql_with_spans<'py>(
     authored_sql_with_spans(&Request::new("expand_authored_sql_with_spans", request)?)
 }
 
-/// The declarations visible to `file_path`: the resolver's, else the context's, plus model-local.
-fn path_declarations<'py>(
-    context: &Bound<'py, PyAny>,
+/// The declarations visible to `file_path`: the resolver's, else the inputs', plus model-local.
+fn input_declarations<'py>(
+    inputs: &SqlExpansionInputs,
     file_path: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = context.py();
+    let py: Python<'py> = file_path.py();
     let resolution_class: Bound<'py, PyAny> =
         registry::class(py, RecordId::DeclarationResolutionContext)?;
-    let resolver: Bound<'py, PyAny> = context.getattr("declaration_resolver")?;
+    let resolver: &Bound<'py, PyAny> = inputs.declaration_resolver.bind(py);
     let declarations: Bound<'py, PyAny> = if resolver.is_none() {
         call_with(
             &resolution_class,
             &[
-                ("enums", context.getattr("enums")?),
-                ("constants", context.getattr("constants")?),
+                ("enums", inputs.enums.bind(py).clone()),
+                ("constants", inputs.constants.bind(py).clone()),
             ],
         )?
     } else {
-        resolved_declaration_context(&resolver, file_path, None)?
+        resolved_declaration_context(resolver, file_path, None)?
     };
-    let local: Bound<'py, PyAny> = context
-        .getattr("local_declarations")?
-        .call_method1("get", (file_path,))?;
+    let Some(local) = inputs.local_declarations.bind(py).get_item(file_path)? else {
+        return Ok(declarations);
+    };
     if local.is_none() {
         return Ok(declarations);
     }
@@ -252,32 +323,15 @@ fn path_declarations<'py>(
 #[pyfunction]
 #[pyo3(signature = (*, sql, file_path, context))]
 fn expand_sql_with_spans<'py>(
-    sql: &Bound<'py, PyAny>,
+    sql: &str,
     file_path: &Bound<'py, PyAny>,
     context: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
-    let py: Python<'py> = sql.py();
-    let arguments: Bound<'py, PyDict> = keywords(
-        py,
-        &[
-            ("sql", sql.clone()),
-            ("file_path", file_path.clone()),
-            ("effective_vars", context.getattr("effective_vars")?),
-            ("loaded_macros", context.getattr("loaded_macros")?),
-            ("macro_context", context.getattr("macro_context")?),
-            ("declarations", path_declarations(context, file_path)?),
-            (
-                "declaration_resolver",
-                context.getattr("declaration_resolver")?,
-            ),
-            ("value_renderer", context.getattr("value_renderer")?),
-            (
-                "collection_rendering",
-                context.getattr("collection_rendering")?,
-            ),
-        ],
-    )?;
-    authored_sql_with_spans(&Request::new("expand_sql_with_spans", Some(&arguments))?)
+    let inputs: SqlExpansionInputs = SqlExpansionInputs::from_record(context)?;
+    expansion_tuple(
+        file_path.py(),
+        &expand_with_inputs(&inputs, sql, file_path)?,
+    )
 }
 
 /// Replace SQL interpolation tokens, returning the span of every substitution.

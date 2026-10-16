@@ -138,10 +138,41 @@ pub(crate) fn resolve_schema_actions<'py>(
     PyTuple::new(py, actions)
 }
 
+/// The warning inputs of one model's plan decisions.
+pub(crate) fn warning_inputs(
+    model_name: &Bound<'_, PyAny>,
+    materialization: &Bound<'_, PyAny>,
+    (schema_actions, on_schema_change, type_enforcement): (
+        &Bound<'_, PyAny>,
+        &Bound<'_, PyAny>,
+        &Bound<'_, PyAny>,
+    ),
+) -> PyResult<WarningInputs> {
+    Ok(WarningInputs {
+        model_name: text(model_name)?,
+        materialization: materialization_type(Some(&text(materialization)?)),
+        has_schema_actions: schema_actions.is_truthy()?,
+        on_schema_change: schema_policy(on_schema_change)?,
+        type_enforcement: type_enforcement.is_truthy()?,
+    })
+}
+
+/// The `PlanWarning`s of one model's warning inputs and change result.
+pub(crate) fn model_warning_records<'py>(
+    model_name: &Bound<'py, PyAny>,
+    inputs: &WarningInputs,
+    change_result: &Bound<'py, PyAny>,
+) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    model_warnings(inputs, &change_facts(change_result)?)
+        .into_iter()
+        .map(|row| plan_warning(model_name, row))
+        .collect()
+}
+
 /// Warnings for one model from its change detection and plan decisions.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-pub(crate) fn build_model_warnings<'py>(
+fn build_model_warnings<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
@@ -162,21 +193,19 @@ pub(crate) fn build_model_warnings<'py>(
         ),
     )?;
     let model_name: Bound<'py, PyAny> = arguments.value("model_name")?;
-    let inputs = WarningInputs {
-        model_name: text(&model_name)?,
-        materialization: materialization_type(Some(&text(
-            &arguments.value("materialization_type")?,
-        )?)),
-        has_schema_actions: arguments.flag("schema_actions")?,
-        on_schema_change: schema_policy(&arguments.value("on_schema_change")?)?,
-        type_enforcement: arguments.flag("type_enforcement")?,
-    };
-    let rows = model_warnings(&inputs, &change_facts(&arguments.value("change_result")?)?);
-    let warnings: Vec<Bound<'py, PyAny>> = rows
-        .into_iter()
-        .map(|row| plan_warning(&model_name, row))
-        .collect::<PyResult<_>>()?;
-    PyTuple::new(py, warnings)
+    let inputs: WarningInputs = warning_inputs(
+        &model_name,
+        &arguments.value("materialization_type")?,
+        (
+            &arguments.value("schema_actions")?,
+            &arguments.value("on_schema_change")?,
+            &arguments.value("type_enforcement")?,
+        ),
+    )?;
+    PyTuple::new(
+        py,
+        model_warning_records(&model_name, &inputs, &arguments.value("change_result")?)?,
+    )
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

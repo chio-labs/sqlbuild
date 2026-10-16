@@ -2,6 +2,8 @@
 
 use crate::bindings::_helpers::planner_phases::constants::MISSING_UPSTREAM_CODE;
 use crate::bindings::_helpers::planner_phases::objects::{frozenset, native, planner_error};
+use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::planner_phases::runtime::warehouse_field;
 use crate::bindings::_helpers::planner_warehouse::source_tables::check_selected_source_tables_exist;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
@@ -16,7 +18,7 @@ pub(crate) fn check_selected_scope_buildability<'py>(
     deferral: &Bound<'py, PyAny>,
 ) -> PyResult<()> {
     let py = runtime.py();
-    let project = runtime.getattr("project")?;
+    let project = runtime_field(runtime, |runtime| &runtime.project)?;
     let selected_scope = scopes.getattr("selected_scope")?;
     let mut external_seeds: Vec<_> = Vec::new();
     for seed in project.getattr("seeds")?.try_iter()? {
@@ -31,7 +33,10 @@ pub(crate) fn check_selected_scope_buildability<'py>(
         &[
             ("selected_keys", selected_scope.getattr("selected_keys")?),
             ("upstream_deps", selected_scope.getattr("upstream_deps")?),
-            ("snapshot", warehouse.getattr("snapshot")?),
+            (
+                "snapshot",
+                warehouse_field(warehouse, |warehouse| &warehouse.snapshot)?,
+            ),
             (
                 "deferred_relations",
                 deferral.getattr("deferred_relations")?,
@@ -65,10 +70,10 @@ pub(crate) fn check_selected_scope_buildability<'py>(
     check_selected_source_tables_exist(
         &project,
         (
-            &runtime.getattr("adapter")?,
-            &runtime.getattr("connection")?,
+            &runtime_field(runtime, |runtime| &runtime.adapter)?,
+            &runtime_field(runtime, |runtime| &runtime.connection)?,
         ),
         &selected_scope,
-        &warehouse.getattr("inspection_relations")?,
+        &warehouse_field(warehouse, |warehouse| &warehouse.inspection_relations)?,
     )
 }

@@ -3,7 +3,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
 
-use pyo3::prelude::Py;
+use pyo3::prelude::{Bound, Py};
 use pyo3::pyclass;
 use pyo3::types::{PyAny, PyDict};
 use sqlbuild_analysis::planner_fixtures::models::{
@@ -55,4 +55,54 @@ pub(crate) struct RelationFixturePlanningContext {
 pub(crate) struct ExpectedTypes<'a> {
     pub(crate) overlay: Vec<(FixtureKey, Vec<(String, String)>)>,
     pub(crate) base: &'a HashMap<FixtureKey, Vec<(String, String)>>,
+}
+
+/// One model's resolved plan decisions, assembled into its `ModelPlanEntry`.
+#[derive(Debug)]
+pub(crate) struct ModelEntryDecisions<'py> {
+    pub(crate) model: Bound<'py, PyAny>,
+    pub(crate) adapter: Bound<'py, PyAny>,
+    pub(crate) snapshot: Bound<'py, PyAny>,
+    pub(crate) change_result: Bound<'py, PyAny>,
+    pub(crate) action: Bound<'py, PyAny>,
+    pub(crate) reason: Bound<'py, PyAny>,
+    pub(crate) materialization_type: Bound<'py, PyAny>,
+    pub(crate) resolved_sql: Bound<'py, PyAny>,
+    pub(crate) sql_analysis_enabled: bool,
+    pub(crate) hooks: (Bound<'py, PyAny>, Bound<'py, PyAny>),
+    pub(crate) cursor_column: Bound<'py, PyAny>,
+    pub(crate) cursor_input_relations: Bound<'py, PyAny>,
+    pub(crate) runtime_owned_cursor_bounds: bool,
+    pub(crate) cursor_bounds: Bound<'py, PyAny>,
+    pub(crate) microbatch_range: Bound<'py, PyAny>,
+    pub(crate) empty_cursor_inputs: Bound<'py, PyAny>,
+    pub(crate) waiting_on_empty_inputs: bool,
+    pub(crate) backfill: Bound<'py, PyAny>,
+    pub(crate) cursor_overrides: (Bound<'py, PyAny>, Bound<'py, PyAny>),
+    pub(crate) cursor_configs: (Bound<'py, PyAny>, Bound<'py, PyAny>),
+    pub(crate) invocation_time: Bound<'py, PyAny>,
+}
+
+/// The project lookups that resolve one model's cursor inputs.
+#[derive(Debug)]
+pub(crate) struct CursorInputLookups<'py> {
+    pub(crate) models_by_name: Bound<'py, PyAny>,
+    pub(crate) functions_by_name: Bound<'py, PyAny>,
+    pub(crate) source_map: Bound<'py, PyAny>,
+    pub(crate) source_warehouse_columns: Bound<'py, PyAny>,
+    pub(crate) model_locations: Bound<'py, PyAny>,
+    pub(crate) seed_locations: Bound<'py, PyAny>,
+    pub(crate) runtime_cursor_producer_names: Bound<'py, PyAny>,
+}
+
+/// The relations and lineage that render and schedule selected audits.
+#[derive(Debug)]
+pub(crate) struct AuditPlanning<'py> {
+    pub(crate) model_locations: Bound<'py, PyAny>,
+    pub(crate) seed_locations: Bound<'py, PyAny>,
+    pub(crate) source_map: Bound<'py, PyAny>,
+    pub(crate) adapter: Bound<'py, PyAny>,
+    pub(crate) model_materializations: Bound<'py, PyAny>,
+    pub(crate) lineage_upstream_deps: Bound<'py, PyAny>,
+    pub(crate) lineage_downstream_deps: Bound<'py, PyAny>,
 }

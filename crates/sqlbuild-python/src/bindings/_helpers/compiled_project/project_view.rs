@@ -250,6 +250,11 @@ impl NativeProjectView {
         ))
     }
 
+    /// The compiled project this view projects.
+    pub(crate) fn owner(&self) -> &Py<NativeCompiledProject> {
+        &self.owner
+    }
+
     fn with_fields(owner: Py<NativeCompiledProject>, fields: ProjectFields) -> Self {
         Self {
             owner,

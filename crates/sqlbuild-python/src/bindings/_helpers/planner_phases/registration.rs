@@ -4,6 +4,8 @@ use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult};
 use pyo3::wrap_pyfunction;
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<super::models::PlannerRuntime>()?;
+    module.add_class::<super::models::PlannerWarehouseState>()?;
     module.add_function(wrap_pyfunction!(
         super::scopes::resolve_planner_scopes,
         module
@@ -13,23 +15,11 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module
     )?)?;
     module.add_function(wrap_pyfunction!(
-        super::identities::detect_stale_warning_changes,
+        super::identities::detect_stale_warning_changes_of,
         module
     )?)?;
     module.add_function(wrap_pyfunction!(
         super::buildability::check_selected_scope_buildability,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
-        super::execution_changes::prune_planner_execution_scope,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
-        super::execution_changes::reconcile_execution_changes,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
-        super::execution_changes::build_planner_entry_results,
         module
     )?)?;
     module.add_function(wrap_pyfunction!(

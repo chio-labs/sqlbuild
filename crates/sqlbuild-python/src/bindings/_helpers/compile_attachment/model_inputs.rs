@@ -2,7 +2,7 @@
 
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
-use pyo3::types::{PyCFunction, PyDict, PyDictMethods, PyFrozenSet, PyList, PyString, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple};
 use sqlbuild_analysis::assembly::project::main::sql_analysis_opt_out_help::sql_analysis_opt_out_help;
 
 use crate::bindings::_helpers::attachments::cursor_intrinsics::reserved_cursor_markers;
@@ -11,9 +11,13 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::compiled_project::loop_classes::model_loop_classes;
+use crate::bindings::_helpers::compiled_project::model_input_view::NativeModelInput;
+use crate::bindings::_helpers::compiled_project::model_loop::NativeModelLoop;
+use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::model_config::contract_classes::contract_classes;
 use crate::bindings::_helpers::model_config::unicode_environment::unicode_environment;
-use crate::bindings::_helpers::render::declaration_values::constant_declaration_sql;
+use crate::bindings::_helpers::render::declaration_values::ConstantRendering;
 use crate::bindings::_helpers::render::macro_expansion_result::macro_expansion_classes;
 
 use crate::bindings::_helpers::native_host::host;
@@ -51,31 +55,15 @@ fn opt_out_help(py: Python<'_>, model_owned: bool) -> PyResult<Bound<'_, PyAny>>
     Ok(PyString::new(py, &sql_analysis_opt_out_help(model_owned)).into_any())
 }
 
-/// The host the loop calls back into: `constant_text(*, declaration, file_path)`.
-fn loop_host<'py>(context: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = context.py();
-    let context: Py<PyAny> = context.clone().unbind();
-    let constant_text = move |arguments: &Bound<'_, PyTuple>,
-                              keywords: Option<&Bound<'_, PyDict>>|
-          -> PyResult<Py<PyAny>> {
-        let py: Python<'_> = arguments.py();
-        let context: &Bound<'_, PyAny> = context.bind(py);
-        let passed: Bound<'_, PyDict> =
-            keywords.map_or_else(|| PyDict::new(py), |keywords| keywords.clone());
-        let file_path: Bound<'_, PyAny> = passed.as_any().get_item("file_path")?;
-        let rendered: String = constant_declaration_sql(
-            &passed.as_any().get_item("declaration")?,
-            &context.getattr("value_renderer")?,
-            (&context.getattr("collection_rendering")?, Some(&file_path)),
-        )?;
-        Ok(PyString::new(py, &rendered).into_any().unbind())
-    };
-    let keywords: Bound<'py, PyDict> = PyDict::new(py);
-    keywords.set_item(
-        "constant_text",
-        PyCFunction::new_closure(py, None, None, constant_text)?,
-    )?;
-    imported(py, "types", "SimpleNamespace")?.call((), Some(&keywords))
+/// The adapter's constant rendering every model, source and hook expansion shares.
+fn constant_rendering<'py>(context: &Bound<'py, PyAny>) -> PyResult<Bound<'py, ConstantRendering>> {
+    Bound::new(
+        context.py(),
+        ConstantRendering::new(
+            context.getattr("value_renderer")?.unbind(),
+            context.getattr("collection_rendering")?.unbind(),
+        ),
+    )
 }
 
 fn macro_inputs<'py>(context: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
@@ -283,14 +271,16 @@ pub(crate) fn build_model_inputs<'py>(
                 project_config_path.str()?,
             ),
         ))?;
-    let files: Bound<'py, PyList> = PyList::new(
-        py,
-        discovered_inputs
-            .getattr("model_files")?
-            .try_iter()?
-            .collect::<PyResult<Vec<_>>>()?,
+    let files: Vec<Py<NativeModelFile>> = discovered_inputs
+        .getattr("model_files")?
+        .try_iter()?
+        .map(|file| file?.extract())
+        .collect::<PyResult<_>>()?;
+    let inputs: Vec<Bound<'py, NativeModelInput>> = NativeModelLoop::run(
+        native_loop.cast::<NativeModelLoop>()?,
+        native_project.cast::<NativeCompiledProject>()?.clone(),
+        constant_rendering(context)?,
+        files,
     )?;
-    let inputs: Bound<'py, PyAny> =
-        native_loop.call_method1("run", (native_project, loop_host(context)?, files))?;
-    PyTuple::new(py, inputs.try_iter()?.collect::<PyResult<Vec<_>>>()?)
+    PyTuple::new(py, inputs)
 }

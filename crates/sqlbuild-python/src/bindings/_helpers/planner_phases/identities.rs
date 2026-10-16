@@ -76,9 +76,9 @@ fn reusable_model_names(
     Ok(names)
 }
 
-#[pyfunction]
+#[pyfunction(name = "detect_stale_warning_changes")]
 #[pyo3(signature = (**options))]
-pub(crate) fn detect_stale_warning_changes<'py>(
+pub(crate) fn detect_stale_warning_changes_of<'py>(
     py: pyo3::Python<'py>,
     options: Option<Bound<'py, KeywordDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -97,12 +97,22 @@ pub(crate) fn detect_stale_warning_changes<'py>(
             &[],
         ),
     )?;
-    let project = &args.value("project")?;
-    let scopes = &args.value("scopes")?;
-    let snapshot = &args.value("snapshot")?;
-    let identities = &args.value("identities")?;
-    let execution_changes = &args.value("execution_changes")?;
+    detect_stale_warning_changes(
+        (&args.value("project")?, &args.value("scopes")?),
+        &args.value("snapshot")?,
+        (
+            &args.value("identities")?,
+            &args.value("execution_changes")?,
+        ),
+    )
+}
 
+/// Changes of stale-warning models whose identities differ from the execution identities.
+pub(crate) fn detect_stale_warning_changes<'py>(
+    (project, scopes): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    snapshot: &Bound<'py, PyAny>,
+    (identities, execution_changes): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+) -> PyResult<Bound<'py, PyAny>> {
     let py = project.py();
     let reusable = reusable_model_names(
         identities,

@@ -1,55 +1,31 @@
-//! Execution-scope pruning, write-hash reconciliation and plan entry construction.
+//! Write-hash reconciliation and plan entry construction.
 
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::planner_entries::model_entries::plan_entries;
+use crate::bindings::_helpers::planner_entries::models::{PlanEntriesRequest, RelationsRequest};
+use crate::bindings::_helpers::planner_entries::relations::planner_relations_context;
+use crate::bindings::_helpers::planner_phases::models::{ChangeReconciliation, ModelEntryResults};
 use crate::bindings::_helpers::planner_phases::objects::native;
+use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::planner_phases::runtime::warehouse_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
-use pyo3::pyfunction;
-use pyo3::types::PyDict as KeywordDict;
-use pyo3::types::{PyFrozenSet, PyTuple};
+use pyo3::types::PyFrozenSet;
 
-#[pyfunction]
-#[pyo3(signature = (*, scopes, resolved_actions))]
-pub(crate) fn prune_planner_execution_scope<'py>(
-    scopes: &Bound<'py, PyAny>,
-    resolved_actions: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let py = scopes.py();
-    let inspection = scopes.getattr("inspection_scope")?;
-    native(
-        py,
-        RecordId::PlannerScopePruningResult,
-        &[
-            ("inspection_scope", inspection.clone()),
-            ("execution_scope", inspection),
-            ("resolved_actions", resolved_actions.clone()),
-            ("pruned_direct_model_names", PyTuple::empty(py).into_any()),
-            (
-                "direct_identity_stale_model_names",
-                PyFrozenSet::empty(py)?.into_any(),
-            ),
-        ],
-    )
-}
-
-#[pyfunction]
-#[pyo3(signature = (*, warehouse, identities, pruning, changes))]
+/// The execution scope's changes with honest write hashes, and the actions merged from them.
 pub(crate) fn reconcile_execution_changes<'py>(
-    warehouse: &Bound<'py, PyAny>,
+    (execution_scope, snapshot): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
     identities: &Bound<'py, PyAny>,
-    pruning: &Bound<'py, PyAny>,
+    resolved_actions: &Bound<'py, PyAny>,
     changes: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let py = warehouse.py();
+) -> PyResult<ChangeReconciliation<'py>> {
+    let py = execution_scope.py();
     let honest = native(
         py,
         NativeAttr::WithHonestModelWriteHashes,
         &[
-            ("scope", pruning.getattr("execution_scope")?),
-            ("snapshot", warehouse.getattr("snapshot")?),
+            ("scope", execution_scope.clone()),
+            ("snapshot", snapshot.clone()),
             ("changes", changes.clone()),
             (
                 "version_identities",
@@ -61,15 +37,14 @@ pub(crate) fn reconcile_execution_changes<'py>(
         py,
         NativeAttr::MergeRecomputedModelChanges,
         &[
-            ("resolved_actions", pruning.getattr("resolved_actions")?),
+            ("resolved_actions", resolved_actions.clone()),
             ("changes", honest.clone()),
         ],
     )?;
-    native(
-        py,
-        RecordId::PlannerChangeReconciliation,
-        &[("changes", honest), ("resolved_actions", resolved)],
-    )
+    Ok(ChangeReconciliation {
+        changes: honest,
+        resolved_actions: resolved,
+    })
 }
 
 fn config_or<'py>(
@@ -87,64 +62,29 @@ fn config_or<'py>(
     Ok(value)
 }
 
-#[pyfunction]
-#[pyo3(signature = (**options))]
+/// Model plan entries for the pruned execution scope, with the freshness and override inputs they need.
 pub(crate) fn build_planner_entry_results<'py>(
-    py: pyo3::Python<'py>,
-    options: Option<Bound<'py, KeywordDict>>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let args = KeywordArguments::read(
-        py,
-        "build_planner_entry_results",
-        options,
-        (
-            &[
-                "runtime",
-                "warehouse",
-                "identities",
-                "overrides",
-                "policies",
-                "deferral",
-                "pruning",
-                "reconciliation",
-                "source_freshness",
-            ],
-            &[],
-        ),
-    )?;
-    let runtime = &args.value("runtime")?;
-    let warehouse = &args.value("warehouse")?;
-    let identities = &args.value("identities")?;
-    let overrides = &args.value("overrides")?;
-    let policies = &args.value("policies")?;
-    let deferral = &args.value("deferral")?;
-    let pruning = &args.value("pruning")?;
-    let reconciliation = &args.value("reconciliation")?;
-    let source_freshness = &args.value("source_freshness")?;
-
-    let _ = (identities, policies);
+    (runtime, warehouse): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    (overrides, deferral): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    (execution_scope, reconciliation): (&Bound<'py, PyAny>, &ChangeReconciliation<'py>),
+    source_freshness: &Bound<'py, PyAny>,
+) -> PyResult<ModelEntryResults<'py>> {
     let py = runtime.py();
-    let project = runtime.getattr("project")?;
-    let config = runtime.getattr("project_config")?;
-    let execution_scope = pruning.getattr("execution_scope")?;
-    let relations = call_with(
-        &registry::native(py, NativeAttr::BuildPlannerRelationsContext)?,
-        &[
-            ("project", project.clone()),
-            ("adapter", runtime.getattr("adapter")?),
-            ("connection", runtime.getattr("connection")?),
-            ("scope", execution_scope.clone()),
-            ("deferral", deferral.clone()),
-            ("project_config", config.clone()),
-            ("local_config", runtime.getattr("local_config")?),
-            (
-                "known_source_columns",
-                warehouse
-                    .getattr("inspection_relations")?
-                    .getattr("source_warehouse_columns")?,
-            ),
-        ],
-    )?;
+    let project = runtime_field(runtime, |runtime| &runtime.project)?;
+    let config = runtime_field(runtime, |runtime| &runtime.project_config)?;
+    let relations = planner_relations_context(RelationsRequest {
+        project: project.clone(),
+        adapter: runtime_field(runtime, |runtime| &runtime.adapter)?,
+        connection: runtime_field(runtime, |runtime| &runtime.connection)?,
+        scope: execution_scope.clone(),
+        deferral: deferral.clone(),
+        project_config: config.clone(),
+        local_config: runtime_field(runtime, |runtime| &runtime.local_config)?,
+        known_source_columns: warehouse
+            .getattr("inspection_relations")?
+            .getattr("source_warehouse_columns")?,
+        relation_keys: py.None().into_bound(py),
+    })?;
     let propagation = source_freshness.getattr("propagation")?;
     let blocked = if propagation.is_none() {
         PyFrozenSet::empty(py)?.into_any()
@@ -190,7 +130,10 @@ pub(crate) fn build_planner_entry_results<'py>(
                 "start_cursor_config",
                 config_or(&config, &["cursors", "start"], none())?,
             ),
-            ("invocation_time", runtime.getattr("invocation_time")?),
+            (
+                "invocation_time",
+                runtime_field(runtime, |runtime| &runtime.invocation_time)?,
+            ),
             ("max_microbatches", max_microbatches),
             (
                 "max_microbatches_is_override",
@@ -202,26 +145,15 @@ pub(crate) fn build_planner_entry_results<'py>(
             ("microbatch_limit_action", limit_action),
         ],
     )?;
-    let entries = call_with(
-        &registry::native(py, NativeAttr::BuildPlanEntries)?,
-        &[
-            ("project", project),
-            ("adapter", runtime.getattr("adapter")?),
-            ("scope", execution_scope),
-            ("snapshot", warehouse.getattr("snapshot")?),
-            ("relations", relations),
-            (
-                "resolved_actions",
-                reconciliation.getattr("resolved_actions")?,
-            ),
-            ("cursor_overrides", overrides.getattr("cursor_overrides")?),
-            ("full_refresh", overrides.getattr("full_refresh")?),
-            ("build_inputs", build_inputs),
-        ],
-    )?;
-    native(
-        py,
-        RecordId::PlannerEntryResults,
-        &[("model_entry_results", entries)],
-    )
+    plan_entries(PlanEntriesRequest {
+        project,
+        adapter: runtime_field(runtime, |runtime| &runtime.adapter)?,
+        scope: execution_scope.clone(),
+        snapshot: warehouse_field(warehouse, |warehouse| &warehouse.snapshot)?,
+        relations,
+        resolved_models: reconciliation.resolved_actions.getattr("models")?,
+        cursor_overrides: overrides.getattr("cursor_overrides")?,
+        full_refresh: overrides.getattr("full_refresh")?.is_truthy()?,
+        build_inputs,
+    })
 }

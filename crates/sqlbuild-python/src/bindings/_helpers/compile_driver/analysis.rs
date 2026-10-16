@@ -131,8 +131,10 @@ pub(crate) fn analyze<'py>(
     let selection: &Bound<'py, PyAny> = &options.analysis_selection;
     let enabled: bool = !(selection.getattr("select")?.is_truthy()?
         || selection.getattr("exclude")?.is_truthy()?);
-    let manager: Bound<'py, PyAny> = Bound::new(py, EarlySqlLint::new(py, enabled)?)?.into_any();
-    within(&manager, |early_lint| analyzed(py, &options, early_lint))
+    let early_lint: Bound<'py, EarlySqlLint> = Bound::new(py, EarlySqlLint::new(enabled))?;
+    let analysis: PyResult<Bound<'py, PyAny>> = analyzed(py, &options, &early_lint);
+    let _ = early_lint.borrow().stop(py);
+    analysis
 }
 
 /// The analysis phases sharing the command options, status line and early SQL lint.
@@ -140,7 +142,7 @@ struct Driver<'a, 'py> {
     py: Python<'py>,
     options: &'a AnalysisOptions<'py>,
     status: Status<'py>,
-    early_lint: &'a Bound<'py, PyAny>,
+    early_lint: &'a Bound<'py, EarlySqlLint>,
     select: Bound<'py, PyAny>,
     exclude: Bound<'py, PyAny>,
 }
@@ -156,7 +158,7 @@ struct ContractPhase<'py> {
 fn analyzed<'py>(
     py: Python<'py>,
     options: &AnalysisOptions<'py>,
-    early_lint: &Bound<'py, PyAny>,
+    early_lint: &Bound<'py, EarlySqlLint>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let driver: Driver<'_, 'py> = Driver {
         py,
@@ -180,7 +182,7 @@ fn analyzed<'py>(
     let graph_failed: bool = any_error(&project.getattr("diagnostics")?)?;
     let mut early_lint_wait_ms: Bound<'py, PyAny> = 0_i64.into_pyobject(py)?.into_any();
     if graph_failed {
-        early_lint_wait_ms = early_lint.call_method0("stop")?;
+        early_lint_wait_ms = early_lint.borrow().stop(py)?.into_pyobject(py)?.into_any();
     }
     let (lineage, lineage_ms): (Bound<'py, PyAny>, u64) = driver.lineage(&graph, &dialect)?;
     let contracts: ContractPhase<'py> = driver.contracts(&project, &dialect)?;
@@ -208,7 +210,7 @@ fn analyzed<'py>(
             (&core_diagnostics, &selected_keys),
             &lint_dialect,
         )?;
-        early_lint_wait_ms = early_lint.call_method0("stop")?;
+        early_lint_wait_ms = early_lint.borrow().stop(py)?.into_pyobject(py)?.into_any();
         result
     };
     let diagnostics: Bound<'py, PyTuple> =
@@ -483,11 +485,7 @@ impl<'py> Driver<'_, 'py> {
                 ("project_dir", project_dir.clone()),
                 ("dialect", lint_dialect.clone()),
                 ("selected_keys", selected),
-                ("prepared_sql", self.early_lint.getattr("preparation")?),
-                (
-                    "expansion_reuse",
-                    self.early_lint.getattr("expansion_reuse")?,
-                ),
+                ("early_lint", self.early_lint.clone().into_any()),
                 ("no_sql_analysis", options.no_sql_validation.clone()),
             ],
         )?;

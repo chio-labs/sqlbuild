@@ -7,11 +7,10 @@ use pyo3::{IntoPyObject, pyfunction};
 
 use sqlbuild_analysis::planner_strategy::main::microbatch_lookback::microbatch_lookback;
 use sqlbuild_analysis::planner_strategy::main::table_type_ddl::table_type_ddl;
-use sqlbuild_analysis::planner_strategy::models::LookbackConfig;
+use sqlbuild_analysis::planner_strategy::models::{CursorTypeCheck, LookbackConfig};
 
 use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
 use crate::bindings::_helpers::model_config::config_values::{
     config_bool, config_cursor_bound, config_int, config_str, config_string_tuple,
@@ -23,13 +22,16 @@ use crate::bindings::_helpers::planner_strategy::constants::{
     CUSTOM_MATERIALIZATION, DDL_SEPARATOR, ENFORCED_CONTRACT, MICROBATCH_MODE,
 };
 use crate::bindings::_helpers::planner_strategy::cursor_inputs::model_values;
-use crate::bindings::_helpers::planner_strategy::cursor_types::check_cursor_type_consistency;
+use crate::bindings::_helpers::planner_strategy::cursor_types::{
+    cursor_type_warning_record, warehouse_column_types,
+};
 use crate::bindings::_helpers::planner_strategy::microbatch_limits::{replay_grain, unknown_grain};
 use crate::bindings::_helpers::planner_strategy::microbatches::microbatch_limit_config;
+use crate::bindings::_helpers::planner_strategy::models::ModelEntryDecisions;
 use crate::bindings::_helpers::planner_strategy::strategy::{
-    build_model_warnings, resolve_schema_actions,
+    model_warning_records, resolve_schema_actions, warning_inputs,
 };
-use crate::bindings::_helpers::planner_strategy::values::{input_error, text};
+use crate::bindings::_helpers::planner_strategy::values::{input_error, optional_string, text};
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -56,25 +58,6 @@ const STRING_FIELDS: [(&str, &str); 15] = [
 ];
 /// Model config keys copied as optional strings that complete the snapshot settings.
 const SNAPSHOT_POLICY_FIELDS: [&str; 2] = ["snapshot_full_refresh", "snapshot_schema_change"];
-/// Plan decisions passed through to the entry unchanged.
-const PASSED_FIELDS: [&str; 16] = [
-    "action",
-    "reason",
-    "materialization_type",
-    "resolved_sql",
-    "cursor_column",
-    "cursor_bounds",
-    "empty_cursor_inputs",
-    "waiting_on_empty_inputs",
-    "cursor_input_relations",
-    "microbatch_range",
-    "start_cursor_override",
-    "end_cursor_override",
-    "future_cursor_config",
-    "start_cursor_config",
-    "invocation_time",
-    "backfill",
-];
 /// Change-detection facts copied to the entry.
 const CHANGE_FIELDS: [&str; 8] = [
     "fingerprint_metadata_json",
@@ -232,29 +215,29 @@ pub(crate) fn extract_seed_columns<'py>(seed: &Bound<'py, PyAny>) -> PyResult<Bo
 
 /// The adapter-rendered logical DDL of one plan action.
 fn logical_ddl<'py>(
-    request: &Request<'_, 'py>,
+    request: &ModelEntryDecisions<'py>,
     (unique_key, merge_exclude): (&Bound<'py, PyTuple>, &Bound<'py, PyTuple>),
     (warehouse_columns, cursor_bounds): (&Bound<'py, PyAny>, Bound<'py, PyAny>),
 ) -> PyResult<String> {
-    let py: Python<'py> = request.py();
-    let adapter: Bound<'py, PyAny> = request.get("adapter")?;
-    let model: Bound<'py, PyAny> = request.get("model")?;
-    let destination: Bound<'py, PyAny> = model_reads::destination(&model)?;
+    let py: Python<'py> = request.model.py();
+    let adapter: &Bound<'py, PyAny> = &request.adapter;
+    let model: &Bound<'py, PyAny> = &request.model;
+    let destination: Bound<'py, PyAny> = model_reads::destination(model)?;
     let qualified: Bound<'py, PyAny> = destination.getattr("qualified_name")?;
     let qualified: Bound<'py, PyAny> = if qualified.is_truthy()? {
         qualified
     } else {
         destination.getattr("name")?
     };
-    let sql: Bound<'py, PyAny> = request.get("resolved_sql")?;
+    let sql: Bound<'py, PyAny> = request.resolved_sql.clone();
     let mut pairs: Vec<(&str, Bound<'py, PyAny>)> = vec![("destination", qualified), ("sql", sql)];
-    let cursor_column: Bound<'py, PyAny> = request.get("cursor_column")?;
-    let method: &str = match text(&request.get("action")?)?.as_str() {
+    let cursor_column: Bound<'py, PyAny> = request.cursor_column.clone();
+    let method: &str = match text(&request.action)?.as_str() {
         "create_view" => "render_create_view_as",
         "create_table" => "render_create_table_as",
         "incremental_append" => "render_append",
         "incremental_delete_insert" if !cursor_column.is_none() && !cursor_bounds.is_none() => {
-            let values: Bound<'py, PyAny> = model_values(&model)?;
+            let values: Bound<'py, PyAny> = model_values(model)?;
             let start = sentinel_to_token(&cursor_bounds.getattr("start")?)?;
             let end = sentinel_to_token(&cursor_bounds.getattr("end")?)?;
             pairs.push(("cursor_column", cursor_column));
@@ -331,59 +314,42 @@ fn custom_fields<'py>(
 
 /// The model's base warnings followed by its cursor type warning.
 fn model_warnings<'py>(
-    request: &Request<'_, 'py>,
+    request: &ModelEntryDecisions<'py>,
     (schema_actions, policy): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
     (enforcement, warehouse_columns): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<Bound<'py, PyTuple>> {
-    let py: Python<'py> = request.py();
-    let model: Bound<'py, PyAny> = request.get("model")?;
-    let name: Bound<'py, PyAny> = model_reads::name_object(&model)?;
-    let mut warnings: Vec<Bound<'py, PyAny>> = build_model_warnings(
-        py,
-        Some(keywords(
-            py,
-            &[
-                ("model_name", name.clone()),
-                ("materialization_type", request.get("materialization_type")?),
-                ("change_result", request.get("change_result")?),
-                ("schema_actions", schema_actions.clone()),
-                ("on_schema_change", policy.clone()),
-                ("type_enforcement", enforcement.clone()),
-            ],
-        )?),
-    )?
-    .try_iter()?
-    .collect::<PyResult<_>>()?;
-    let cursor_warning: Option<Bound<'py, PyAny>> = check_cursor_type_consistency(
-        py,
-        Some(keywords(
-            py,
-            &[
-                ("model_name", name),
-                ("cursor_column", request.get("cursor_column")?),
-                (
-                    "cursor_type",
-                    or_none(py, config_str(&model_values(&model)?, "cursor_type")?),
-                ),
-                ("warehouse_columns", warehouse_columns.clone()),
-                ("sql_analysis_enabled", request.get("sql_analysis_enabled")?),
-            ],
-        )?),
+    let py: Python<'py> = request.model.py();
+    let model: &Bound<'py, PyAny> = &request.model;
+    let name: Bound<'py, PyAny> = model_reads::name_object(model)?;
+    let inputs = warning_inputs(
+        &name,
+        &request.materialization_type,
+        (schema_actions, policy, enforcement),
     )?;
-    if let Some(cursor_warning) = cursor_warning.filter(|warning| !warning.is_none()) {
+    let mut warnings: Vec<Bound<'py, PyAny>> =
+        model_warning_records(&name, &inputs, &request.change_result)?;
+    let check = CursorTypeCheck {
+        model_name: text(&name)?,
+        cursor_column: optional_string(&request.cursor_column)?,
+        cursor_type: optional_string(&or_none(
+            py,
+            config_str(&model_values(model)?, "cursor_type")?,
+        ))?,
+        warehouse_columns: warehouse_column_types(warehouse_columns)?,
+        sql_analysis_enabled: request.sql_analysis_enabled,
+    };
+    if let Some(cursor_warning) = cursor_type_warning_record(&name, &check)? {
         warnings.push(cursor_warning);
     }
     PyTuple::new(py, warnings)
 }
 
 /// The cursor bounds the logical DDL renders: placeholders for runtime-owned windows, else the batch range or cursor bounds.
-fn ddl_cursor_bounds<'py>(request: &Request<'_, 'py>) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = request.py();
-    let microbatch_range: Bound<'py, PyAny> = request.get("microbatch_range")?;
+fn ddl_cursor_bounds<'py>(request: &ModelEntryDecisions<'py>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = request.model.py();
+    let microbatch_range: &Bound<'py, PyAny> = &request.microbatch_range;
     Ok(
-        if request.get("runtime_owned_cursor_bounds")?.is_truthy()?
-            && !request.get("cursor_column")?.is_none()
-        {
+        if request.runtime_owned_cursor_bounds && !request.cursor_column.is_none() {
             let sentinel: Bound<'py, PyAny> = host::entry(py, ExecutorHost::BoundSentinel)?;
             call_with(
                 &registry::class(py, RecordId::CursorBounds)?,
@@ -395,19 +361,19 @@ fn ddl_cursor_bounds<'py>(request: &Request<'_, 'py>) -> PyResult<Bound<'py, PyA
         } else if microbatch_range.is_truthy()? {
             microbatch_range.clone()
         } else {
-            request.get("cursor_bounds")?
+            request.cursor_bounds.clone()
         },
     )
 }
 
 /// Copy the model's authored strategy, cursor, batch and snapshot settings onto the entry.
 fn config_fields<'py>(
-    request: &Request<'_, 'py>,
+    request: &ModelEntryDecisions<'py>,
     values: &Bound<'py, PyAny>,
     entry: &Bound<'py, PyDict>,
 ) -> PyResult<()> {
-    let py: Python<'py> = request.py();
-    let model: Bound<'py, PyAny> = request.get("model")?;
+    let py: Python<'py> = request.model.py();
+    let model: &Bound<'py, PyAny> = &request.model;
     for (key, field) in STRING_FIELDS {
         entry.set_item(field, or_none(py, config_str(values, key)?))?;
     }
@@ -433,9 +399,9 @@ fn config_fields<'py>(
                 read("microbatch_strategy")?,
                 read("cursor_grain")?,
             ),
-            &request.get("cursor_input_relations")?,
+            &request.cursor_input_relations,
         )?;
-        lookback_of(&model, grain)?
+        lookback_of(model, grain)?
     } else {
         config_str(values, "lookback")?
             .map(|value| text(&value))
@@ -489,28 +455,62 @@ fn contract_fields<'py>(
     Ok(())
 }
 
-/// Build a model plan entry and its warnings from resolved plan decisions, keeping the Python dataclasses.
-#[pyfunction]
-#[pyo3(signature = (**request))]
+/// Set the plan decisions passed through to the entry unchanged.
+fn passed_fields<'py>(
+    request: &ModelEntryDecisions<'py>,
+    entry: &Bound<'py, PyDict>,
+) -> PyResult<()> {
+    let py: Python<'py> = request.model.py();
+    let flag = |value: bool| PyBool::new(py, value).to_owned().into_any();
+    let fields: [(&str, Bound<'py, PyAny>); 16] = [
+        ("action", request.action.clone()),
+        ("reason", request.reason.clone()),
+        ("materialization_type", request.materialization_type.clone()),
+        ("resolved_sql", request.resolved_sql.clone()),
+        ("cursor_column", request.cursor_column.clone()),
+        ("cursor_bounds", request.cursor_bounds.clone()),
+        ("empty_cursor_inputs", request.empty_cursor_inputs.clone()),
+        (
+            "waiting_on_empty_inputs",
+            flag(request.waiting_on_empty_inputs),
+        ),
+        (
+            "cursor_input_relations",
+            request.cursor_input_relations.clone(),
+        ),
+        ("microbatch_range", request.microbatch_range.clone()),
+        ("start_cursor_override", request.cursor_overrides.0.clone()),
+        ("end_cursor_override", request.cursor_overrides.1.clone()),
+        ("future_cursor_config", request.cursor_configs.0.clone()),
+        ("start_cursor_config", request.cursor_configs.1.clone()),
+        ("invocation_time", request.invocation_time.clone()),
+        ("backfill", request.backfill.clone()),
+    ];
+    for (field, value) in fields {
+        entry.set_item(field, value)?;
+    }
+    Ok(())
+}
+
+/// Build a model plan entry and its warnings from resolved plan decisions.
 pub(crate) fn assemble_model_plan_entry<'py>(
-    request: Option<&Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyTuple>> {
-    let request = Request::new("assemble_model_plan_entry", request)?;
-    let py: Python<'py> = request.py();
-    let model: Bound<'py, PyAny> = request.get("model")?;
-    let values: Bound<'py, PyAny> = model_values(&model)?;
-    let change: Bound<'py, PyAny> = request.get("change_result")?;
-    let snapshot: Bound<'py, PyAny> = request.get("snapshot")?;
-    let name: Bound<'py, PyAny> = model_reads::name_object(&model)?;
-    let policy: Bound<'py, PyAny> = on_schema_change(&model)?;
+    request: &ModelEntryDecisions<'py>,
+) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyTuple>)> {
+    let py: Python<'py> = request.model.py();
+    let model: &Bound<'py, PyAny> = &request.model;
+    let values: Bound<'py, PyAny> = model_values(model)?;
+    let change: &Bound<'py, PyAny> = &request.change_result;
+    let snapshot: &Bound<'py, PyAny> = &request.snapshot;
+    let name: Bound<'py, PyAny> = model_reads::name_object(model)?;
+    let policy: Bound<'py, PyAny> = on_schema_change(model)?;
     let schema_actions: Bound<'py, PyAny> =
         resolve_schema_actions(&change.getattr("schema_findings")?, &policy)?.into_any();
-    let enforcement: Bound<'py, PyAny> = type_enforcement(&model)?;
+    let enforcement: Bound<'py, PyAny> = type_enforcement(model)?;
     let warehouse_columns: Bound<'py, PyAny> = snapshot
         .getattr("existing_columns")?
         .call_method1("get", (&name, PyTuple::empty(py)))?;
     let warnings: Bound<'py, PyTuple> = model_warnings(
-        &request,
+        request,
         (&schema_actions, &policy),
         (&enforcement, &warehouse_columns),
     )?;
@@ -523,33 +523,30 @@ pub(crate) fn assemble_model_plan_entry<'py>(
         .getattr("value")?
         .getattr("value")?;
     let ddl: String = logical_ddl(
-        &request,
+        request,
         (&unique_key, &merge_exclude),
-        (&warehouse_columns, ddl_cursor_bounds(&request)?),
+        (&warehouse_columns, ddl_cursor_bounds(request)?),
     )?;
     let entry: Bound<'py, PyDict> = PyDict::new(py);
-    entry.set_item("key", model_reads::model_key(&model)?)?;
+    entry.set_item("key", model_reads::model_key(model)?)?;
     entry.set_item("name", &name)?;
     entry.set_item("relative_path", model.getattr("relative_path")?)?;
-    entry.set_item("destination", model_reads::destination(&model)?)?;
-    entry.set_item("fingerprint_query_sql", model_reads::query_sql(&model)?)?;
+    entry.set_item("destination", model_reads::destination(model)?)?;
+    entry.set_item("fingerprint_query_sql", model_reads::query_sql(model)?)?;
     entry.set_item("logical_ddl", table_type_ddl(&ddl, &text(&table_type)?))?;
-    for field in PASSED_FIELDS {
-        entry.set_item(field, request.get(field)?)?;
-    }
+    passed_fields(request, &entry)?;
     for field in CHANGE_FIELDS {
         entry.set_item(field, change.getattr(field)?)?;
     }
-    config_fields(&request, &values, &entry)?;
+    config_fields(request, &values, &entry)?;
     entry.set_item("unique_key", unique_key)?;
     entry.set_item("merge_exclude_columns", merge_exclude)?;
     entry.set_item("table_type", table_type)?;
     entry.set_item("on_schema_change", policy)?;
     entry.set_item("type_enforcement", enforcement)?;
-    contract_fields(&model, &values, &entry)?;
-    for field in ["pre_hooks", "post_hooks"] {
-        entry.set_item(field, request.get(field)?)?;
-    }
+    contract_fields(model, &values, &entry)?;
+    entry.set_item("pre_hooks", &request.hooks.0)?;
+    entry.set_item("post_hooks", &request.hooks.1)?;
     let fingerprint: Bound<'py, PyAny> = snapshot
         .getattr("fingerprints")?
         .getattr("models")?
@@ -565,10 +562,10 @@ pub(crate) fn assemble_model_plan_entry<'py>(
     entry.set_item("schema_actions", schema_actions)?;
     custom_fields(
         &values,
-        text(&request.get("materialization_type")?)? == CUSTOM_MATERIALIZATION,
+        text(&request.materialization_type)? == CUSTOM_MATERIALIZATION,
         &entry,
     )?;
     let plan_entry: Bound<'py, PyAny> =
         registry::class(py, RecordId::ModelPlanEntry)?.call((), Some(&entry))?;
-    PyTuple::new(py, [plan_entry, warnings.into_any()])
+    Ok((plan_entry, warnings))
 }

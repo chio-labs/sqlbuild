@@ -1,7 +1,7 @@
 //! Model cursor orchestration over live warehouse snapshot facts.
 
 use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::model_config::config_values::{
     config_cursor_bound, config_str as authored_config_str,
 };
@@ -12,12 +12,12 @@ use crate::bindings::_helpers::planner_resolution::constants::CURSOR_START;
 use crate::bindings::_helpers::planner_resolution::cursor_policies::{
     future_cursor_config, start_cursor_config,
 };
+use crate::bindings::_helpers::planner_resolution::models::ModelSqlRequest;
 use crate::bindings::_helpers::planner_resolution::values::string;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::PyDict;
-use pyo3::{IntoPyObject, PyErr, pyfunction, wrap_pyfunction};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::{IntoPyObject, PyErr};
 
 fn config<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
     let values: Bound<'py, PyAny> = model.getattr("config")?.getattr("values")?;
@@ -65,35 +65,16 @@ fn history_redirected(model: &Bound<'_, PyAny>, snapshot: &Bound<'_, PyAny>) -> 
         && target.ne(model_reads::destination(model)?.getattr("qualified_name")?)?)
 }
 
-#[pyfunction]
-#[pyo3(signature = (**kwargs))]
+/// One model's cursor bounds from its snapshot, overrides and cursor policies; `None` when unbounded by a full refresh.
 pub(crate) fn compute_model_cursor_bounds<'py>(
-    py: Python<'py>,
-    kwargs: Option<Bound<'py, PyDict>>,
+    request: &ModelSqlRequest<'py>,
+    context: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let args = KeywordArguments::read(
-        py,
-        "compute_model_cursor_bounds",
-        kwargs,
-        (
-            &[
-                "model",
-                "snapshot",
-                "backfill",
-                "full_refresh",
-                "start_cursor_override",
-                "end_cursor_override",
-                "runtime_cursor_producer_names",
-                "context",
-            ],
-            &["replaces_relation"],
-        ),
-    )?;
-    let model = args.value("model")?;
+    let model = request.model.clone();
+    let py = model.py();
     if !config(&model, "materialized")?.eq("incremental")? || config(&model, "cursor")?.is_none() {
         return Ok(py.None().into_bound(py));
     }
-    let context = args.value("context")?;
     let incremental_mode = config(&model, "incremental_mode")?;
     let future_config = future_cursor_config(&model, &context.getattr("future_cursor_config")?)?;
     let start_config = start_cursor_config(&model, &context.getattr("start_cursor_config")?)?;
@@ -102,8 +83,7 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
     }
     let cursor_type = config(&model, "cursor_type")?;
     let cursor_grain = config(&model, "cursor_grain")?;
-    let start_override = args.value("start_cursor_override")?;
-    let end_override = args.value("end_cursor_override")?;
+    let (start_override, end_override) = request.cursor_overrides.clone();
     let bounded = call_with(
         &registry::native(py, NativeAttr::ResolveBoundedCursorOverride)?,
         &[
@@ -116,7 +96,7 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
     if !bounded.is_none() {
         return Ok(bounded);
     }
-    let snapshot = args.value("snapshot")?;
+    let snapshot = &request.snapshot;
     let mut cursor_snapshot = snapshot
         .getattr("cursor_snapshots")?
         .call_method1("get", (model_reads::name_object(&model)?,))?;
@@ -124,7 +104,7 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
         &registry::native(py, NativeAttr::ResolveCursorInputRoles)?,
         &[("model", model.clone())],
     )?;
-    let producers = args.value("runtime_cursor_producer_names")?;
+    let producers = context.getattr("runtime_cursor_producer_names")?;
     let mut runtime_owned = false;
     for name in roles.getattr("watermark_inputs")?.try_iter()? {
         if producers.contains(name?)? {
@@ -132,8 +112,8 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
             break;
         }
     }
-    let full_refresh = args.flag("full_refresh")?;
-    let replaces = args.flag("replaces_relation")?;
+    let full_refresh = request.full_refresh;
+    let replaces = request.replaces_relation;
     if !full_refresh && !runtime_owned && !cursor_snapshot.is_none() {
         let empty = call_with(
             &registry::native(py, NativeAttr::CursorInputsWithoutRows)?,
@@ -142,7 +122,7 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
         .getattr("input_names")?;
         if empty.is_truthy()?
             && replaces
-            && (destination_exists(&model, &snapshot)?
+            && (destination_exists(&model, snapshot)?
                 || history_redirected(&model, &cursor_snapshot)?)
         {
             let refusal = call_with(
@@ -206,7 +186,7 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
             &[("cursor_snapshot", cursor_snapshot)],
         )?;
     }
-    let backfill = args.value("backfill")?;
+    let backfill = &request.backfill;
     let duration = if backfill.getattr("action")?.eq("bounded")? {
         backfill.getattr("duration")?
     } else {
@@ -263,8 +243,4 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
             ("input_evidence", cursor_snapshot.getattr("input_evidence")?),
         ],
     )
-}
-
-pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(compute_model_cursor_bounds, module)?)
 }

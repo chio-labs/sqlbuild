@@ -77,7 +77,10 @@ fn setting_text(value: &Bound<'_, PyAny>) -> PyResult<SettingText> {
 /// Render `<purpose>, set this in <file>:` followed by the exact TOML section and key.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn setting_help<'py>(py: Python<'py>, options: Option<Bound<'py, PyDict>>) -> PyResult<String> {
+pub(crate) fn setting_help<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<String> {
     let arguments: KeywordArguments<'py> = KeywordArguments::read(
         py,
         "setting_help",

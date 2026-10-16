@@ -5,6 +5,9 @@ use crate::bindings::_helpers::native_host::models::{HostEdge, HostEntry, HostId
 /// One executor entry of `sqlbuild._native_host`, indexing `ENTRIES`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ExecutorHost {
+    ProjectRelation,
+    ProjectRelationIndex,
+    RelationName,
     CostResourceContext,
     RunCostSummary,
     CostCapability,
@@ -166,6 +169,21 @@ pub(crate) enum ExecutorHost {
 
 /// Every executor entry, in `ExecutorHost` order.
 pub(crate) const ENTRIES: &[HostEntry] = &[
+    HostEntry {
+        name: "ProjectRelation",
+        kind: HostKind::Class,
+        edge: HostEdge::Executor,
+    },
+    HostEntry {
+        name: "ProjectRelationIndex",
+        kind: HostKind::Class,
+        edge: HostEdge::Executor,
+    },
+    HostEntry {
+        name: "RelationName",
+        kind: HostKind::Class,
+        edge: HostEdge::Executor,
+    },
     HostEntry {
         name: "CostResourceContext",
         kind: HostKind::Class,

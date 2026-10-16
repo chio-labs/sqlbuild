@@ -1,21 +1,22 @@
 //! Gather live candidate evidence without changing adapter inspection ownership.
 
 use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_migrations::column_objects::{
     config, definition_hash, lower, native,
 };
-use crate::bindings::_helpers::planner_migrations::models::ColumnCandidate;
+use crate::bindings::_helpers::planner_migrations::models::{
+    ColumnCandidate, ColumnMigrationInputs, MigrationPhase,
+};
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
 
 pub(super) fn candidates<'py>(
-    args: &KeywordArguments<'py>,
+    (phase, columns): (&MigrationPhase<'py>, &ColumnMigrationInputs<'py>),
     dialect: &Bound<'py, PyAny>,
 ) -> PyResult<Vec<ColumnCandidate<'py>>> {
-    let scope = args.value("scope")?;
-    let snapshot = args.value("snapshot")?;
+    let scope = phase.scope.clone();
+    let snapshot = phase.snapshot.clone();
     let py = scope.py();
     let mut result: Vec<ColumnCandidate<'py>> = Vec::new();
     for key in scope.getattr("execution_order")?.try_iter()? {
@@ -36,7 +37,7 @@ pub(super) fn candidates<'py>(
             continue;
         }
         let name = model_reads::name_object(&model)?;
-        if args.value("full_refresh_model_names")?.contains(&name)?
+        if columns.full_refresh_model_names.contains(&name)?
             || !snapshot.getattr("existing_relations")?.contains(&name)?
         {
             continue;

@@ -3,7 +3,7 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanningContext;
 use crate::bindings::_helpers::sql_test_glue::authored_ctes::prefixed_ctes;
 use crate::bindings::_helpers::sql_test_glue::fixture_validation::validated_fixtures;
@@ -92,16 +92,8 @@ pub(super) fn validate<'py>(
     if indexes.is_empty() {
         return Ok((tests.to_vec(), Default::default()));
     }
-    let chains = resolve_sql_test_model_chains(
-        py,
-        Some(keywords(
-            py,
-            &[
-                ("project", inputs.0.clone()),
-                ("tests", PyTuple::new(py, model_tests)?.into_any()),
-            ],
-        )?),
-    )?;
+    let chains =
+        resolve_sql_test_model_chains(inputs.0, &PyTuple::new(py, model_tests)?.into_any())?;
     let chains: Vec<Bound<'py, PyAny>> = chains.extract()?;
     if chains.len() != indexes.len() {
         return Err(pyo3::exceptions::PyValueError::new_err(

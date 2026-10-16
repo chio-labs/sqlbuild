@@ -83,6 +83,10 @@ from sqlbuild.cli.compile_reuse._helpers.provider_settings import (
 )
 from sqlbuild.cli.compile_reuse._helpers.startup_inputs import startup_inputs as startup_inputs
 from sqlbuild.cli.compile_reuse.models import CompileReuseRequest as CompileReuseRequest
+from sqlbuild.compiler.auditing.types import AuditEvaluationMode as AuditEvaluationMode
+from sqlbuild.compiler.auditing.types import AuditOutcome as AuditOutcome
+from sqlbuild.compiler.auditing.types import AuditSeverity as AuditSeverity
+from sqlbuild.compiler.auditing.types import ThresholdOperator as ThresholdOperator
 from sqlbuild.compiler.compile._helpers.diagnostics.python_resources import (
     python_resource_rows as python_resource_rows,
 )
@@ -98,6 +102,10 @@ from sqlbuild.compiler.compile._helpers.render.user_macros import (
 from sqlbuild.compiler.compile._helpers.render.user_macros import (
     macro_invocation_context as macro_invocation_context,
 )
+from sqlbuild.compiler.compile.types import AttachedAuditTargetKind as AttachedAuditTargetKind
+from sqlbuild.compiler.compile.types import CompiledResourceType as CompiledResourceType
+from sqlbuild.compiler.compile.types import FunctionLanguage as FunctionLanguage
+from sqlbuild.compiler.compile.types import SqlTestMode as SqlTestMode
 from sqlbuild.compiler.discovery._helpers.filesystem.command_output_sinks import (
     discover_command_output_sink_functions as discover_command_output_sink_functions,
 )
@@ -172,10 +180,14 @@ from sqlbuild.compiler.python_nodes.main._hook_identities import (
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind as PythonNodeKind
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus as PythonNodeStatus
+from sqlbuild.compiler.references.models import ProjectRelation as ProjectRelation
+from sqlbuild.compiler.references.models import ProjectRelationIndex as ProjectRelationIndex
+from sqlbuild.compiler.references.models import RelationName as RelationName
 from sqlbuild.cost.models import CostResourceContext as CostResourceContext
 from sqlbuild.cost.models import RunCostSummary as RunCostSummary
 from sqlbuild.cost.types import CostCapability as CostCapability
 from sqlbuild.cost.types import CostStatus as CostStatus
+from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError as CursorAlgebraError
 from sqlbuild.cursor_algebra.types import BoundSentinel as BoundSentinel
 from sqlbuild.diagnostics._helpers.process_resources import (
     read_process_resources as read_process_resources,
@@ -189,6 +201,7 @@ from sqlbuild.diagnostics.main.process_resource_reporting import (
 )
 from sqlbuild.diagnostics.models import ProcessResourceUsage as ProcessResourceUsage
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError as ExecutorInputError
+from sqlbuild.errors.contracts.exceptions import SharedInputError as SharedInputError
 from sqlbuild.executor.auditing.main._current_audit_result_projection import (
     current_audit_result_projection as current_audit_result_projection,
 )

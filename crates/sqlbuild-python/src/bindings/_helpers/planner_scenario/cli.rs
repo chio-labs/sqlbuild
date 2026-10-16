@@ -4,6 +4,7 @@ use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_GRAPH_VALIDATION;
 use crate::bindings::_helpers::planner_scenario::graph::plan_scenario_graph;
+use crate::bindings::_helpers::planner_scenario::models::ScenarioRelations;
 use crate::bindings::_helpers::planner_scenario::relations::build_scenario_relation_plan;
 use crate::bindings::_helpers::planner_scenario::values::string;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
@@ -82,21 +83,14 @@ pub(crate) fn build_cli_scenario_plan<'py>(
         ],
     )?;
     let (database, schema) = namespace(&project, &graph)?;
-    let relation_args = PyDict::new(py);
-    for (name, value) in [
-        ("project", project.clone()),
-        ("graph_plan", graph.clone()),
-        ("relation_map", map),
-        (
-            "render_qualified_name",
-            adapter.getattr("render_qualified_name")?,
-        ),
-        ("database", database),
-        ("schema", schema),
-    ] {
-        relation_args.set_item(name, value)?;
-    }
-    let relations = build_scenario_relation_plan(py, Some(relation_args))?;
+    let relations = build_scenario_relation_plan(&ScenarioRelations {
+        project: project.clone(),
+        graph_plan: graph.clone(),
+        relation_map: map,
+        render_qualified_name: adapter.getattr("render_qualified_name")?,
+        database,
+        schema,
+    })?;
     let result = call_with(
         &registry::native(py, NativeAttr::BuildScenarioExecutionPlan)?,
         &[

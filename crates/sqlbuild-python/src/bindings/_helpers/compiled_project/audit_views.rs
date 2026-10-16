@@ -392,3 +392,21 @@ audit_getters!(NativeCompiledAudit, {
         })
     }
 });
+
+/// A native audit view's reference rows, or `None` for a hand-built audit record.
+pub(crate) fn audit_reference_rows(
+    audit: &Bound<'_, PyAny>,
+) -> PyResult<Option<Vec<ReferenceRow>>> {
+    let py: Python<'_> = audit.py();
+    let (owner, index): (&Py<NativeCompiledProject>, usize) =
+        if let Ok(view) = audit.cast::<NativeCompiledAudit>() {
+            (&view.get().owner, view.get().index)
+        } else if let Ok(view) = audit.cast::<NativeAuditInput>() {
+            (&view.get().owner, view.get().index)
+        } else {
+            return Ok(None);
+        };
+    read_audit(owner, index, py, |record, _| {
+        Ok(Some(record.attached.references.clone()))
+    })
+}

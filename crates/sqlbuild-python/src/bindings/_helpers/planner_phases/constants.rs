@@ -12,14 +12,3 @@ pub(crate) const MISSING_UPSTREAM_CODE: &str = "S301";
 pub(crate) const RETENTION_DECREASE: &str = "decrease";
 pub(crate) const RETENTION_INCREASE: &str = "increase";
 pub(crate) const RETENTION_MATCH: &str = "match";
-/// The required inputs of plan output assembly.
-pub(crate) const PLAN_OUTPUT_INPUTS: &[&str] = &[
-    "project",
-    "adapter",
-    "scope",
-    "snapshot",
-    "relations",
-    "changes",
-    "model_entry_results",
-    "reload_sources",
-];

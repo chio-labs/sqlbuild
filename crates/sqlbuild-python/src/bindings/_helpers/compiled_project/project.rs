@@ -55,6 +55,7 @@ use crate::bindings::_helpers::compiled_project::source_views::{
     AttachedSource, NativeCompiledSource, NativeSourceInput, SourceNamespace, SourceRecord,
 };
 use crate::bindings::_helpers::compiled_project::values::{object_value, plain_value};
+use crate::bindings::_helpers::render::declaration_values::ConstantRendering;
 
 pub(crate) const CONTRACT_KEY: &str = "contract";
 const INPUT_CLASSES_UNSET: &str = "no model loop recorded inputs into this project";
@@ -133,8 +134,8 @@ pub(crate) struct NativeCompiledProject {
     functions: Vec<FunctionRecord>,
     /// Each singular, then model-, source- and seed-attached, audit in attachment order.
     audits: Vec<AuditRecord>,
-    /// The model loop and its host, which attach the project's other resources.
-    attachment: Option<(Py<NativeModelLoop>, Py<PyAny>)>,
+    /// The model loop and its constant rendering, which attach the project's other resources.
+    attachment: Option<(Py<NativeModelLoop>, Py<ConstantRendering>)>,
 }
 
 impl NativeCompiledProject {
@@ -229,19 +230,22 @@ impl NativeCompiledProject {
         Ok(owners)
     }
 
-    /// The kept model loop and its host.
-    fn attachment_loop(&self, py: Python<'_>) -> PyResult<(Py<NativeModelLoop>, Py<PyAny>)> {
+    /// The kept model loop and its constant rendering.
+    fn attachment_loop(
+        &self,
+        py: Python<'_>,
+    ) -> PyResult<(Py<NativeModelLoop>, Py<ConstantRendering>)> {
         match &self.attachment {
             Some((model_loop, host)) => Ok((model_loop.clone_ref(py), host.clone_ref(py))),
             None => Err(PyRuntimeError::new_err(ATTACHMENT_LOOP_UNSET)),
         }
     }
 
-    /// Keep the model loop and its host for attaching the project's other resources.
+    /// Keep the model loop and its constant rendering for attaching the project's other resources.
     pub(crate) fn keep_attachment_loop(
         &mut self,
         model_loop: Py<NativeModelLoop>,
-        host: Py<PyAny>,
+        host: Py<ConstantRendering>,
     ) {
         self.attachment = Some((model_loop, host));
     }

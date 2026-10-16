@@ -30,8 +30,6 @@ use crate::bindings::_helpers::sqltext::declaration_references::declaration_scan
 use crate::bindings::_helpers::sqltext::static_sql::{InterpolationSources, interpolated};
 
 const MACRO_TOKEN: char = '@';
-const FILE_PATH_ARGUMENT: &str = "file_path";
-const CONSTANT_TEXT_CALLBACK: &str = "constant_text";
 const NATIVE_CONTEXTS_ATTRIBUTE: &str = "native_contexts";
 const GENERIC_DIALECT: &str = "generic";
 const EXPRESSION_STATEMENTS: [&str; 3] = ["select", "with", "values"];
@@ -226,15 +224,6 @@ pub(crate) fn expanded_authored_sql<'py>(
     let mut argument_references: Vec<ReferenceRow> = Vec::new();
     let mut expanded_sql: String = interpolated_sql.clone();
     if !references.is_empty() || stop.is_some() {
-        let file_keyword: Bound<'py, PyDict> = PyDict::new(py);
-        file_keyword.set_item(
-            FILE_PATH_ARGUMENT,
-            context.classes.path_class.call1((file_path,))?,
-        )?;
-        let render_constant: Bound<'py, PyAny> = context.classes.partial.call(
-            (context.host.getattr(CONSTANT_TEXT_CALLBACK)?,),
-            Some(&file_keyword),
-        )?;
         let classes: ExpansionClasses<'py> = ExpansionClasses {
             usage_record: context.classes.usage_record.clone(),
             compile_error: context.classes.compile_error.clone(),
@@ -249,7 +238,7 @@ pub(crate) fn expanded_authored_sql<'py>(
                 relationship_visibility: false,
                 path: file_path,
             },
-            render_constant: &render_constant,
+            rendering: context.host.get(),
             classes: &classes,
         })?;
         expanded_sql = expanded.spliced.sql;

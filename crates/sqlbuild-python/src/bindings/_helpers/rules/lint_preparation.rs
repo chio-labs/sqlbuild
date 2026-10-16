@@ -1,18 +1,47 @@
-//! Native lint expansion orchestration around the existing user-macro boundary.
+//! One authored body expanded and prepared for native SQL lint, as a `LintBody`.
 
-use pyo3::prelude::{Bound, IntoPyObject, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::prelude::{Bound, IntoPyObject, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
-use pyo3::types::{PyDict, PyDictMethods, PyList, PyTuple};
-use sqlbuild_rules::lint_text::main::dependency_sites::dependency_sites;
-use sqlbuild_rules::lint_text::models::InterpolationSite;
+use pyo3::types::{PyBool, PyDict, PyTuple};
+use sqlbuild_rules::lint_text::models::{ExpansionSpan, LintSqlBody};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, keywords,
-};
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::compile_attachment::sql_expansion_context::SqlExpansionInputs;
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
-use crate::bindings::_helpers::rules::lint_headers::{lint_body_ranges, lint_file_role};
-use crate::bindings::_helpers::rules::lint_stop::check_stop;
+use crate::bindings::_helpers::rules::lint_pipeline::{
+    BodyRole, SingleBody, SingleBodyRequest, prepare_single_body,
+};
+
+/// `ExpansionSpan` objects of one pass.
+fn span_objects<'py>(
+    class: &Bound<'py, PyAny>,
+    spans: &[ExpansionSpan],
+) -> PyResult<Bound<'py, PyTuple>> {
+    let mut objects: Vec<Bound<'py, PyAny>> = Vec::with_capacity(spans.len());
+    for span in spans {
+        objects.push(class.call1((
+            span.source_start,
+            span.source_end,
+            span.output_start,
+            span.output_end,
+        ))?);
+    }
+    PyTuple::new(class.py(), objects)
+}
+
+/// `ExpansionSpan` tuples for each pass.
+fn pass_objects<'py>(
+    py: Python<'py>,
+    passes: &[Vec<ExpansionSpan>],
+) -> PyResult<Bound<'py, PyTuple>> {
+    let class: Bound<'py, PyAny> = registry::class(py, RecordId::ExpansionSpan)?;
+    let passes: Vec<Bound<'py, PyTuple>> = passes
+        .iter()
+        .map(|spans| span_objects(&class, spans))
+        .collect::<PyResult<_>>()?;
+    PyTuple::new(py, passes)
+}
 
 /// Expand a single body and finish its native SQL preparation.
 #[pyfunction]
@@ -21,22 +50,9 @@ pub(crate) fn prepare_lint_body<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let pending = expand_lint_body(py, options)?;
-    let prepared =
-        registry::native(py, NativeAttr::PrepareLintSql)?.call1((pending.getattr("request")?,))?;
-    finish_body(&pending, &prepared)
-}
-
-/// Expand authored SQL while retaining source offsets and pre-expansion substitutions.
-#[pyfunction]
-#[pyo3(signature = (**options))]
-pub(crate) fn expand_lint_body<'py>(
-    py: Python<'py>,
-    options: Option<Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let args = KeywordArguments::read(
+    let arguments: KeywordArguments<'py> = KeywordArguments::read(
         py,
-        "expand_lint_body",
+        "prepare_lint_body",
         options,
         (
             &[
@@ -47,451 +63,67 @@ pub(crate) fn expand_lint_body<'py>(
                 "context",
                 "dialect",
             ],
-            &[
-                "external_identifiers",
-                "allows_ceremonial_select",
-                "allows_dynamic_output_star",
-                "compiled_expansion",
-            ],
-        ),
-    )?;
-    let (mut start, mut end): (usize, usize) = args.value("body_range")?.extract()?;
-    let body = args.value("contents")?.get_item(pyo3::types::PySlice::new(
-        py,
-        start as isize,
-        end as isize,
-        1,
-    ))?;
-    let mut input = body.clone();
-    let mut sites = PyTuple::empty(py).into_any();
-    let role = args.value("role")?;
-    let kind = role.getattr("declaration_kind")?;
-    let in_project = role.getattr("in_project")?.is_truthy()?;
-    let neutralizer = if in_project && kind.eq("audit")? {
-        Some(NativeAttr::NeutralizeLintAuditParameters)
-    } else if role.getattr("in_hook_directory")?.is_truthy()?
-        || (in_project && kind.eq("sql_hook")?)
-    {
-        Some(NativeAttr::NeutralizeLintContextInterpolation)
-    } else {
-        None
-    };
-    if let Some(neutralizer) = neutralizer {
-        let neutralized = registry::native(py, neutralizer)?.call1((&body,))?;
-        input = neutralized.get_item(0)?;
-        sites = site_objects(&neutralized.get_item(1)?)?;
-    }
-    let compiled = args.value("compiled_expansion")?;
-    let expanded;
-    let passes;
-    if !compiled.is_none()
-        && body
-            .call_method0("strip")?
-            .eq(compiled.getattr("authored_sql")?)?
-    {
-        start += body.len()? - body.call_method0("lstrip")?.len()?;
-        input = compiled.getattr("authored_sql")?;
-        end = start + input.len()?;
-        expanded = compiled.getattr("expanded_sql")?;
-        passes = compiled.getattr("passes")?;
-    } else if !input.extract::<String>()?.contains('@')
-        && !input.extract::<String>()?.contains("${")
-    {
-        expanded = input.clone();
-        passes = PyTuple::empty(py).into_any();
-    } else {
-        let value = call_with(
-            &registry::native(py, NativeAttr::ExpandSqlWithSpans)?,
-            &[
-                ("sql", input.clone()),
-                ("file_path", args.value("file_path")?),
-                ("context", args.value("context")?),
-            ],
-        )
-        .map_err(|error| expansion_error(py, &args, error))?;
-        expanded = value.get_item(0)?;
-        passes = value.get_item(1)?;
-    }
-    let mut prior_sites: Vec<Bound<'py, PyAny>> = Vec::new();
-    for site in sites.try_iter()? {
-        prior_sites.push(site?.getattr("neutralized_start")?);
-    }
-    let request = keywords(
-        py,
-        &[
-            ("expanded", expanded.clone()),
-            ("before_expansion", input.clone()),
-            ("prior_sites", PyList::new(py, prior_sites)?.into_any()),
-            ("dialect", args.value("dialect")?),
-        ],
-    )?;
-    let external = if args.passed("external_identifiers")? {
-        args.value("external_identifiers")?
-    } else {
-        PyTuple::empty(py).into_any()
-    };
-    call_with(
-        &registry::class(py, RecordId::PendingLintBody)?,
-        &[
-            ("file_path", args.value("file_path")?),
-            ("body_start", start.into_pyobject(py)?.into_any()),
-            ("body_end", end.into_pyobject(py)?.into_any()),
-            ("expansion_input", input),
-            ("expanded", expanded),
-            ("expansion_passes", passes),
-            ("pre_expansion_sites", sites),
-            ("external_identifiers", external),
-            (
-                "allows_ceremonial_select",
-                args.value_or_false("allows_ceremonial_select")?,
-            ),
-            (
-                "allows_dynamic_output_star",
-                args.value_or_false("allows_dynamic_output_star")?,
-            ),
-            (
-                "allows_empty_fixture_star",
-                false.into_pyobject(py)?.to_owned().into_any(),
-            ),
-            ("request", request.into_any()),
-        ],
-    )
-}
-
-fn expansion_error(py: Python<'_>, args: &KeywordArguments<'_>, error: PyErr) -> PyErr {
-    let wrapped = (|| -> PyResult<Option<PyErr>> {
-        if !error
-            .value(py)
-            .is_instance(&registry::error(py, ErrorId::CompileInput)?)?
-        {
-            return Ok(None);
-        }
-        let message = format!(
-            "{} could not be expanded, so its SQL cannot be linted: {}",
-            args.value("file_path")?.str()?,
-            error.value(py).str()?
-        );
-        Ok(Some(PyErr::from_value(
-            registry::error(py, ErrorId::ProjectCompile)?.call1((message,))?,
-        )))
-    })();
-    match wrapped {
-        Ok(Some(wrapped)) => {
-            wrapped.set_cause(py, Some(error));
-            wrapped
-        }
-        Ok(None) => error,
-        Err(wrapping_error) => wrapping_error,
-    }
-}
-
-fn site_objects<'py>(sites: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let class = registry::class(sites.py(), RecordId::InterpolationSite)?;
-    let values: Vec<Bound<'py, PyAny>> = sites
-        .try_iter()?
-        .map(|site| class.call1(site?.cast_into::<PyTuple>()?))
-        .collect::<PyResult<_>>()?;
-    Ok(PyTuple::new(sites.py(), values)?.into_any())
-}
-
-fn sentinel_spans<'py>(sites: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let py = sites.py();
-    let mut spans: Vec<Bound<'py, PyAny>> = Vec::new();
-    for site in sites.try_iter()? {
-        let site = site?;
-        spans.push(call_with(
-            &registry::class(py, RecordId::ExpansionSpan)?,
-            &[
-                ("source_start", site.getattr("original_start")?),
-                ("source_end", site.getattr("original_end")?),
-                ("output_start", site.getattr("neutralized_start")?),
-                ("output_end", site.getattr("neutralized_end")?),
-            ],
-        )?);
-    }
-    Ok(PyTuple::new(py, spans)?.into_any())
-}
-
-fn finish_body<'py>(
-    pending: &Bound<'py, PyAny>,
-    prepared: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let py = pending.py();
-    if prepared.is_none() {
-        return Err(PyErr::from_value(
-            registry::error(py, ErrorId::NativeLint)?.call1((format!(
-                "{} could not be prepared for native SQL lint",
-                pending.getattr("file_path")?.str()?
-            ),))?,
-        ));
-    }
-    let sites = site_objects(&prepared.get_item(1)?)?;
-    let native_sites: Vec<InterpolationSite> = sites
-        .try_iter()?
-        .map(|site| {
-            let site = site?;
-            Ok(InterpolationSite {
-                sentinel: site.getattr("sentinel")?.extract()?,
-                original_text: site.getattr("original_text")?.extract()?,
-                original_start: site.getattr("original_start")?.extract()?,
-                original_end: site.getattr("original_end")?.extract()?,
-                neutralized_start: site.getattr("neutralized_start")?.extract()?,
-                neutralized_end: site.getattr("neutralized_end")?.extract()?,
-            })
-        })
-        .collect::<PyResult<_>>()?;
-    let dependencies = dependency_sites(&native_sites)
-        .map_err(crate::bindings::_helpers::boundary::panics::value_error)?;
-    let mut passes: Vec<Bound<'py, PyAny>> =
-        vec![sentinel_spans(&pending.getattr("pre_expansion_sites")?)?];
-    passes.extend(
-        pending
-            .getattr("expansion_passes")?
-            .try_iter()?
-            .collect::<PyResult<Vec<_>>>()?,
-    );
-    passes.push(sentinel_spans(&sites)?);
-    let values = keywords(
-        py,
-        &[
-            ("lint_text", prepared.get_item(0)?),
-            ("passes", PyTuple::new(py, passes)?.into_any()),
-            (
-                "dependency_identifiers",
-                PyTuple::new(py, dependencies.identifiers)?.into_any(),
-            ),
-            (
-                "externally_referenced_ctes",
-                PyTuple::new(py, prepared.get_item(2)?.extract::<Vec<String>>()?)?.into_any(),
-            ),
-            (
-                "dependency_relations",
-                PyTuple::new(py, dependencies.relations)?.into_any(),
-            ),
-        ],
-    )?;
-    for name in [
-        "file_path",
-        "body_start",
-        "body_end",
-        "external_identifiers",
-        "allows_ceremonial_select",
-        "allows_dynamic_output_star",
-        "allows_empty_fixture_star",
-    ] {
-        values.set_item(name, pending.getattr(name)?)?;
-    }
-    registry::class(py, RecordId::LintBody)?.call((), Some(&values))
-}
-
-fn prepare_batch<'py>(
-    py: Python<'py>,
-    pending: &[Bound<'py, PyAny>],
-) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    if pending.is_empty() {
-        return Ok(Vec::new());
-    }
-    let requests: Vec<Bound<'py, PyAny>> = pending
-        .iter()
-        .map(|body| body.getattr("request"))
-        .collect::<PyResult<_>>()?;
-    let results = registry::native(py, NativeAttr::PrepareLintSqlBatch)?
-        .call1((PyList::new(py, requests)?,))?;
-    let mut prepared: Vec<Bound<'py, PyAny>> = Vec::new();
-    for (body, result) in pending.iter().zip(results.try_iter()?) {
-        let result = result?;
-        prepared.push(if result.get_item(0)?.is_truthy()? {
-            result.get_item(1)?
-        } else {
-            registry::native(py, NativeAttr::PrepareLintSql)?.call1((body.getattr("request")?,))?
-        });
-    }
-    if prepared.len() != pending.len() || results.len()? != pending.len() {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "native preparation batch length mismatch",
-        ));
-    }
-    Ok(prepared)
-}
-
-/// Expand each file body in order, preserving the first expansion failure with its partial work.
-#[pyfunction]
-#[pyo3(signature = (**options))]
-pub(crate) fn expand_file_bodies<'py>(
-    py: Python<'py>,
-    options: Option<Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let args = KeywordArguments::read(
-        py,
-        "expand_file_bodies",
-        options,
-        (
-            &[
-                "file_path",
-                "contents",
-                "headers",
-                "context",
-                "dialect",
-                "project_dir",
-                "relative_path",
-                "dynamic_output_paths",
-                "compiled_expansions",
-            ],
             &[],
         ),
     )?;
-    check_stop(py)?;
-    let path = args.value("file_path")?;
-    let role = lint_file_role(
-        &path,
-        &args.value("project_dir")?,
-        Some(args.value("relative_path")?),
-    )?;
-    let dynamic = args.value("dynamic_output_paths")?;
-    let dynamic_star = dynamic.is_truthy()? && dynamic.contains(path.call_method0("resolve")?)?;
-    let expansions = args.value("compiled_expansions")?;
-    let compiled = if expansions.is_truthy()? {
-        expansions.call_method1("get", (&path,))?
-    } else {
-        py.None().into_bound(py)
-    };
-    let external = call_with(
-        &registry::native(py, NativeAttr::ExternalIdentifiersForHeaders)?,
-        &[
-            ("contents", args.value("contents")?),
-            ("headers", args.value("headers")?),
-        ],
-    )?;
-    let mut ceremonial = false;
-    for header in args.value("headers")?.try_iter()? {
-        let kind = header?.getattr("kind")?;
-        if kind.eq("TEST")? || kind.eq("SCENARIO")? {
-            ceremonial = true;
-            break;
-        }
-    }
-    let mut bodies: Vec<Bound<'py, PyAny>> = Vec::new();
-    let mut failure = py.None().into_bound(py);
-    let expansion = (|| -> PyResult<()> {
-        let ranges = lint_body_ranges(
-            py,
-            Some(keywords(
-                py,
-                &[
-                    ("contents", args.value("contents")?),
-                    ("headers", args.value("headers")?),
-                    ("file_path", path.clone()),
-                    ("project_dir", args.value("project_dir")?),
-                    ("role", role.clone()),
-                ],
-            )?),
-        )?;
-        for range in ranges.try_iter()? {
-            let pending = expand_lint_body(
-                py,
-                Some(keywords(
-                    py,
-                    &[
-                        ("role", role.clone()),
-                        ("file_path", path.clone()),
-                        ("contents", args.value("contents")?),
-                        ("body_range", range?),
-                        ("context", args.value("context")?),
-                        ("dialect", args.value("dialect")?),
-                        ("external_identifiers", external.clone()),
-                        (
-                            "allows_ceremonial_select",
-                            ceremonial.into_pyobject(py)?.to_owned().into_any(),
-                        ),
-                        (
-                            "allows_dynamic_output_star",
-                            dynamic_star.into_pyobject(py)?.to_owned().into_any(),
-                        ),
-                        ("compiled_expansion", compiled.clone()),
-                    ],
-                )?),
-            )?;
-            let changes = keywords(
-                py,
-                &[(
-                    "allows_empty_fixture_star",
-                    ceremonial.into_pyobject(py)?.to_owned().into_any(),
-                )],
-            )?;
-            bodies.push(
-                py.import("dataclasses")?
-                    .getattr("replace")?
-                    .call((pending,), Some(&changes))?,
-            );
-        }
-        Ok(())
-    })();
-    if let Err(error) = expansion {
-        if !error
-            .value(py)
-            .is_instance(&registry::error(py, ErrorId::ProjectCompile)?)?
-        {
-            return Err(error);
-        }
-        failure = error.value(py).clone().into_any();
-    }
+    let role: Bound<'py, PyAny> = arguments.value("role")?;
+    let file_path: Bound<'py, PyAny> = arguments.value("file_path")?;
+    let contents: String = arguments.value("contents")?.extract()?;
+    let dialect: String = arguments.value("dialect")?.extract()?;
+    let kind: Option<String> = role.getattr("declaration_kind")?.extract()?;
+    let prepared: SingleBody = prepare_single_body(&SingleBodyRequest {
+        context: &SqlExpansionInputs::from_record(&arguments.value("context")?)?,
+        file_path: &file_path,
+        contents: &contents,
+        range: arguments.value("body_range")?.extract()?,
+        role: BodyRole {
+            kind: kind.as_deref(),
+            in_project: role.getattr("in_project")?.is_truthy()?,
+            in_hook_directory: role.getattr("in_hook_directory")?.is_truthy()?,
+        },
+        dialect: &dialect,
+    })?;
+    let body: &LintSqlBody = &prepared.body;
+    let flag = |value: bool| PyBool::new(py, value).to_owned().into_any();
     call_with(
-        &registry::class(py, RecordId::ExpandedLintFile)?,
+        &registry::class(py, RecordId::LintBody)?,
         &[
-            ("file_path", path),
-            ("bodies", PyTuple::new(py, bodies)?.into_any()),
-            ("failure", failure),
-        ],
-    )
-}
-
-/// Batch SQL preparation, then publish bodies or failures in the original file order.
-#[pyfunction]
-#[pyo3(signature = (*, expanded_files, dialect, skip_unexpandable))]
-pub(crate) fn prepare_expanded_files<'py>(
-    expanded_files: &Bound<'py, PyAny>,
-    dialect: &str,
-    skip_unexpandable: bool,
-) -> PyResult<Bound<'py, PyAny>> {
-    let _ = dialect;
-    let py = expanded_files.py();
-    check_stop(py)?;
-    let files: Vec<Bound<'py, PyAny>> = expanded_files.try_iter()?.collect::<PyResult<_>>()?;
-    let mut pending: Vec<Bound<'py, PyAny>> = Vec::new();
-    for file in &files {
-        pending.extend(
-            file.getattr("bodies")?
-                .try_iter()?
-                .collect::<PyResult<Vec<_>>>()?,
-        );
-    }
-    let prepared = prepare_batch(py, &pending)?;
-    let mut bodies: Vec<Bound<'py, PyAny>> = Vec::new();
-    let unexpandable = PyDict::new(py);
-    let mut position = 0;
-    for file in files {
-        let mut file_bodies: Vec<Bound<'py, PyAny>> = Vec::new();
-        for body in file.getattr("bodies")?.try_iter()? {
-            file_bodies.push(finish_body(&body?, &prepared[position])?);
-            position += 1;
-        }
-        let failure = file.getattr("failure")?;
-        if failure.is_none() {
-            bodies.extend(file_bodies);
-        } else if skip_unexpandable {
-            let path = file.getattr("file_path")?;
-            let message: String = failure.str()?.extract()?;
-            let prefix = format!("{} ", path.str()?);
-            unexpandable.set_item(path, message.strip_prefix(&prefix).unwrap_or(&message))?;
-        } else {
-            return Err(PyErr::from_value(failure));
-        }
-    }
-    call_with(
-        &registry::class(py, RecordId::PreparedLintFiles)?,
-        &[
-            ("bodies", PyTuple::new(py, bodies)?.into_any()),
-            ("unexpandable", unexpandable.into_any()),
+            ("file_path", file_path.clone()),
+            ("body_start", body.body_start.into_pyobject(py)?.into_any()),
+            ("body_end", prepared.body_end.into_pyobject(py)?.into_any()),
+            (
+                "lint_text",
+                body.lint_text.clone().into_pyobject(py)?.into_any(),
+            ),
+            ("passes", pass_objects(py, &body.passes)?.into_any()),
+            (
+                "external_identifiers",
+                PyTuple::new(py, &body.external_identifiers)?.into_any(),
+            ),
+            (
+                "dependency_identifiers",
+                PyTuple::new(py, &body.dependency_identifiers)?.into_any(),
+            ),
+            (
+                "externally_referenced_ctes",
+                PyTuple::new(py, &body.externally_referenced_ctes)?.into_any(),
+            ),
+            (
+                "dependency_relations",
+                PyTuple::new(py, &prepared.dependency_relations)?.into_any(),
+            ),
+            (
+                "allows_ceremonial_select",
+                flag(body.allows_ceremonial_select),
+            ),
+            (
+                "allows_dynamic_output_star",
+                flag(body.allows_dynamic_output_star),
+            ),
+            (
+                "allows_empty_fixture_star",
+                flag(body.allows_empty_fixture_star),
+            ),
         ],
     )
 }

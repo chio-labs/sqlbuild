@@ -6,10 +6,12 @@ use sqlbuild_config::project::main::unsupported_target_warehouse::unsupported_ta
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
 use crate::bindings::_helpers::records::registry;
+use pyo3::IntoPyObjectExt;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 const LOCAL_CONFIG_FILENAME: &str = "sqlbuild_local.toml";
 const SQL_ANALYSIS_KEY: &str = "sql_analysis";
@@ -143,13 +145,11 @@ fn reject_unsupported_target_warehouses(config: &ProjectConfiguration<'_, '_>) -
     let Some(group) = first_configured_group(config.local_config)? else {
         return Ok(());
     };
-    let adapter_name: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-        &[
-            ("project_config", config.project_config.clone()),
-            ("local_config", config.local_config.clone()),
-        ],
-    )?;
+    let adapter_name: Bound<'_, PyAny> = resolve_effective_adapter_name(
+        &config.project_config.clone(),
+        &config.local_config.clone(),
+    )
+    .and_then(|value| value.into_bound_py_any(py))?;
     if session_warehouse_support(py, &adapter_name, config.project_dir)? {
         return Ok(());
     }

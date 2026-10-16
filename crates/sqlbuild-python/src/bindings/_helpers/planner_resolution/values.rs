@@ -1,8 +1,8 @@
 //! Boundary calls shared by reference and source resolution.
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
+use crate::bindings::_helpers::planner_resolution::models::CursorFiltering;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyString;
 use sqlbuild_sqltext::resolution::main::cursor_subquery::cursor_subquery;
@@ -21,34 +21,33 @@ pub(super) fn method<'py>(
 }
 
 pub(super) fn cursor_wrap(
-    arguments: &KeywordArguments<'_>,
+    adapter: &Bound<'_, PyAny>,
+    filtering: &CursorFiltering<'_>,
     relation: String,
-    name: &str,
-    inject_alias: bool,
+    (name, inject_alias): (&str, bool),
 ) -> PyResult<String> {
-    let bounds = arguments.value("cursor_bounds")?;
+    let bounds = &filtering.bounds;
     if bounds.is_none() {
         return Ok(relation);
     }
-    let column: Option<String> = arguments
-        .value("cursor_filter_inputs")?
+    let column: Option<String> = filtering
+        .filter_inputs
         .call_method1("get", (name,))?
         .extract()?;
     let Some(column) = column else {
         return Ok(relation);
     };
-    let adapter = arguments.value("adapter")?;
     let py = adapter.py();
-    let cursor_type = arguments.value("cursor_type")?;
+    let cursor_type = &filtering.cursor_type;
     let literal = |bound: &str| -> PyResult<String> {
-        let token = call_with(
-            &registry::native(py, NativeAttr::CursorSentinelToToken)?,
-            &[("sentinel", bounds.getattr(bound)?)],
-        )?;
+        let token = sentinel_to_token(&bounds.getattr(bound)?)?;
         method(
-            &adapter,
+            adapter,
             "render_cursor_bound_literal",
-            &[("value", token), ("cursor_type", cursor_type.clone())],
+            &[
+                ("value", string(py, &token)),
+                ("cursor_type", cursor_type.clone()),
+            ],
         )?
         .extract()
     };
@@ -64,9 +63,21 @@ pub(super) fn cursor_wrap(
             column: &column,
             start: &start,
             end: &end,
-            lower_inclusive: arguments.value("lower_bound_inclusive")?.is_truthy()?,
+            lower_inclusive: filtering.lower_bound_inclusive,
             typed: !cursor_type.is_none(),
         },
         alias,
     ))
+}
+
+/// The cursor filtering of a keyword-argument resolution request.
+pub(super) fn filtering_of<'py>(
+    arguments: &KeywordArguments<'py>,
+) -> PyResult<CursorFiltering<'py>> {
+    Ok(CursorFiltering {
+        bounds: arguments.value("cursor_bounds")?,
+        filter_inputs: arguments.value("cursor_filter_inputs")?,
+        cursor_type: arguments.value("cursor_type")?,
+        lower_bound_inclusive: arguments.value("lower_bound_inclusive")?.is_truthy()?,
+    })
 }

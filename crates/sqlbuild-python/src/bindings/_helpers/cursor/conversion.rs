@@ -18,10 +18,11 @@ use crate::bindings::_helpers::cursor::values::{
     DATETIME_MODULE, civil_date, local_date_time, naive_date_time, plain_date, replaced,
     timedelta_micros,
 };
+use crate::bindings::_helpers::native_host::facade::FacadeHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
-const EXCEPTIONS_MODULE: &str = "sqlbuild.cursor_algebra.exceptions";
 /// Cursor grain names, finest first.
 pub(crate) const GRAIN_NAMES: [(&str, Grain); 6] = [
     ("second", Grain::Second),
@@ -34,8 +35,7 @@ pub(crate) const GRAIN_NAMES: [(&str, Grain); 6] = [
 
 /// `CursorAlgebraError(message)`.
 pub(crate) fn algebra_error(py: Python<'_>, message: &str) -> PyErr {
-    match imported(py, EXCEPTIONS_MODULE, "CursorAlgebraError")
-        .and_then(|class| class.call1((message,)))
+    match host::entry(py, FacadeHost::CursorAlgebraError).and_then(|class| class.call1((message,)))
     {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,

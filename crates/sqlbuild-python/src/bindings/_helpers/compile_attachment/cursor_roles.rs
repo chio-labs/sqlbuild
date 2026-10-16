@@ -5,6 +5,7 @@ use pyo3::pyfunction;
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString};
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::compiled_project::model_input_view::input_reference_rows;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -84,8 +85,8 @@ pub(crate) fn resolve_cursor_input_roles<'py>(
         Err(_) => {
             let cursor: Bound<'py, PyAny> = values.call_method1("get", ("cursor",))?;
             if cursor.is_instance_of::<PyString>() {
-                for reference in model.getattr("references")?.try_iter()? {
-                    filter.set_item(reference?.getattr("ref_name")?, &cursor)?;
+                for (_, name, _, _) in input_reference_rows(model)? {
+                    filter.set_item(name, &cursor)?;
                 }
             }
             if !rolling {

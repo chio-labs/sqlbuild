@@ -105,9 +105,7 @@ fn model_header_column_locations(
 }
 
 /// A header syntax error's detail, help and file line (when `header_line` is known).
-#[pyfunction]
-#[pyo3(signature = (error, header, header_line))]
-fn model_header_failure(
+pub(crate) fn header_failure(
     error: &str,
     header: &str,
     header_line: Option<usize>,
@@ -122,6 +120,16 @@ fn model_header_failure(
         (Some(nesting), None) => (error.to_owned(), Some(nesting.help), None),
         (None, _) => (error.to_owned(), None, None),
     }
+}
+
+/// A header syntax error's detail, help and file line (when `header_line` is known).
+#[pyfunction]
+fn model_header_failure(
+    error: &str,
+    header: &str,
+    header_line: Option<usize>,
+) -> (String, Option<String>, Option<usize>) {
+    header_failure(error, header, header_line)
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

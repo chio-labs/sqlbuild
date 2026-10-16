@@ -5,6 +5,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_entries::values::{
     native, planner_model, planner_type, string,
 };
+use crate::bindings::_helpers::planner_resolution::models::ModelSqlRequest;
+use crate::bindings::_helpers::planner_resolution::orchestration::{Resolution, resolve_model_sql};
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -208,32 +210,27 @@ fn clone_model_entries<'py>(
                     ),
                 ],
             )?;
-            native(
-                py,
-                NativeAttr::ResolveModelSql,
-                &[
-                    ("adapter", adapter.clone()),
-                    ("model", model.clone()),
-                    ("snapshot", native(py, RecordId::WarehouseSnapshot, &[])?),
-                    ("context", context),
-                    (
-                        "backfill",
-                        native(
-                            py,
-                            RecordId::BackfillResult,
-                            &[(
-                                "action",
-                                planner_type(py, RecordId::BackfillAction, "FORWARD_ONLY")?,
-                            )],
-                        )?,
-                    ),
-                    ("full_refresh", PyBool::new(py, false).to_owned().into_any()),
-                    (
-                        "cursor_overrides",
-                        native(py, RecordId::CursorOverridePair, &[])?,
-                    ),
-                ],
-            )?
+            let sql = resolve_model_sql(
+                &Resolution::of_context(adapter.clone(), &context, py.None().into_bound(py))?,
+                &context,
+                &ModelSqlRequest {
+                    model: model.clone(),
+                    snapshot: native(py, RecordId::WarehouseSnapshot, &[])?,
+                    backfill: native(
+                        py,
+                        RecordId::BackfillResult,
+                        &[(
+                            "action",
+                            planner_type(py, RecordId::BackfillAction, "FORWARD_ONLY")?,
+                        )],
+                    )?,
+                    full_refresh: false,
+                    cursor_overrides: (py.None().into_bound(py), py.None().into_bound(py)),
+                    replaces_relation: false,
+                    full_rebuild_cause: None,
+                },
+            )?;
+            string(py, &sql)
         } else {
             string(py, "")
         };

@@ -1,7 +1,10 @@
 //! Source contract validation and adapter-controlled projection rendering.
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
-use crate::bindings::_helpers::planner_resolution::values::{cursor_wrap, method, string};
+use crate::bindings::_helpers::planner_resolution::models::CursorFiltering;
+use crate::bindings::_helpers::planner_resolution::values::{
+    cursor_wrap, filtering_of, method, string,
+};
 use crate::bindings::_helpers::planner_strategy::values::input_error;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
@@ -245,16 +248,19 @@ fn render_source_read_relation(
     render_source_relation(source_entry, Some(adapter))
 }
 
-fn resolve_one(args: &KeywordArguments<'_>, name: &str, original: &str) -> PyResult<String> {
-    let entry = args.value("source_map")?.call_method1("get", (name,))?;
+fn resolve_one(
+    (source_map, warehouse_columns): (&Bound<'_, PyAny>, &Bound<'_, PyAny>),
+    adapter: &Bound<'_, PyAny>,
+    filtering: &CursorFiltering<'_>,
+    (name, original): (&str, &str),
+) -> PyResult<String> {
+    let entry = source_map.call_method1("get", (name,))?;
     if entry.is_none() {
         return Ok(original.to_owned());
     }
-    let adapter = args.value("adapter")?;
+    let adapter = adapter.clone();
     let mut relation = render_source_read_relation(&adapter, &entry)?;
-    let columns = args
-        .value("source_warehouse_columns")?
-        .call_method1("get", (name,))?;
+    let columns = warehouse_columns.call_method1("get", (name,))?;
     let expression = !entry.getattr("expression")?.is_none();
     if columns.is_truthy()?
         && (!expression
@@ -274,12 +280,12 @@ fn resolve_one(args: &KeywordArguments<'_>, name: &str, original: &str) -> PyRes
     if entry.getattr("type_enforcement")?.is_truthy()? {
         relation = cast_source(&entry, &columns, &adapter, relation)?;
     }
-    cursor_wrap(args, relation, name, false)
+    cursor_wrap(&adapter, filtering, relation, (name, false))
 }
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-pub(crate) fn resolve_source_references(
+fn resolve_source_references(
     py: Python<'_>,
     kwargs: Option<Bound<'_, PyDict>>,
 ) -> PyResult<String> {
@@ -302,19 +308,40 @@ pub(crate) fn resolve_source_references(
             &[],
         ),
     )?;
-    let sql: String = args.value("query_sql")?.extract()?;
-    let aliases = args
-        .value("adapter")?
+    resolve_sources(
+        &args.value("query_sql")?.extract::<String>()?,
+        (
+            &args.value("source_map")?,
+            &args.value("source_warehouse_columns")?,
+        ),
+        &args.value("adapter")?,
+        &filtering_of(&args)?,
+    )
+}
+
+/// `__source` references replaced with their read relations, cursor inputs filtered; `lookups` holds the source map and warehouse columns.
+pub(crate) fn resolve_sources(
+    sql: &str,
+    lookups: (&Bound<'_, PyAny>, &Bound<'_, PyAny>),
+    adapter: &Bound<'_, PyAny>,
+    filtering: &CursorFiltering<'_>,
+) -> PyResult<String> {
+    let aliases = adapter
         .call_method0("requires_derived_table_aliases")?
         .is_truthy()?;
     let mut output = String::new();
     let mut last = 0;
-    for span in reference_spans(&sql, "source") {
-        let mut relation = resolve_one(&args, &span.name, &sql[span.start..span.end])?;
+    for span in reference_spans(sql, "source") {
+        let mut relation = resolve_one(
+            lookups,
+            adapter,
+            filtering,
+            (&span.name, &sql[span.start..span.end]),
+        )?;
         output.push_str(sql.get(last..span.start).unwrap_or_default());
         last = span.end;
         if aliases && relation.trim_start().starts_with('(') {
-            let (end, alias) = source_alias(&sql, span.end, &span.name);
+            let (end, alias) = source_alias(sql, span.end, &span.name);
             relation.push_str(&format!(" AS {alias}"));
             last = end;
         }

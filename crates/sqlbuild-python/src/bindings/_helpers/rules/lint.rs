@@ -39,31 +39,6 @@ fn prepare_lint_sql(
     .map_err(value_error)
 }
 
-/// Prepare many bodies in one detached call; `false` marks a body to prepare again individually.
-#[pyfunction]
-fn prepare_lint_sql_batch(
-    py: Python<'_>,
-    requests: Vec<LintPreparationRequest>,
-) -> PyResult<Vec<(bool, Option<sqlbuild_rules::sql_lint::types::PreparedSql>)>> {
-    py.compiler_detach(|| {
-        Ok(requests
-            .iter()
-            .map(|request| {
-                sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic(|| {
-                    sqlbuild_rules::sql_lint::main::preparation::prepare(
-                        &request.expanded,
-                        &request.before_expansion,
-                        &request.prior_sites,
-                        &request.dialect,
-                    )
-                })
-                .map_or((false, None), |prepared| (true, prepared))
-            })
-            .collect())
-    })
-    .map_err(value_error)
-}
-
 #[pyfunction]
 fn lint_backtick_identifiers(dialect: &str) -> PyResult<bool> {
     compiler_guard(|| {
@@ -96,7 +71,6 @@ fn format_sql_batch_json(py: Python<'_>, request_json: &str) -> PyResult<String>
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(lint_sql_json, module)?)?;
     module.add_function(wrap_pyfunction!(prepare_lint_sql, module)?)?;
-    module.add_function(wrap_pyfunction!(prepare_lint_sql_batch, module)?)?;
     module.add_function(wrap_pyfunction!(lint_backtick_identifiers, module)?)?;
     module.add_function(wrap_pyfunction!(lint_sql_batch_json, module)?)?;
     module.add_function(wrap_pyfunction!(format_sql_json, module)?)?;

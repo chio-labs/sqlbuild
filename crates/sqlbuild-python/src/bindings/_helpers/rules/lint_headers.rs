@@ -1,12 +1,15 @@
-//! Route lint bodies through the existing native declaration and header scanners.
+//! The path-derived role of one lint input.
 
-use pyo3::prelude::{Bound, IntoPyObject, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
-use pyo3::types::PyDict;
+use pyo3::types::PyBool;
+use sqlbuild_rules::lint_text::main::named_declaration_role_kind::named_declaration_role_kind;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
+
+const HOOKS_FOLDER: &str = "hooks";
 
 /// Classify a lint path, retaining the caller's supplied relative path when available.
 #[pyfunction]
@@ -17,73 +20,34 @@ pub(crate) fn lint_file_role<'py>(
     relative_path: Option<Bound<'py, PyAny>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = file_path.py();
-    let relative = if let Some(relative) = relative_path {
-        relative
-    } else {
-        if !file_path
-            .call_method1("is_relative_to", (project_dir,))?
-            .is_truthy()?
-        {
-            return registry::class(py, RecordId::LintFileRole)?.call0();
+    let relative: Bound<'py, PyAny> = match relative_path {
+        Some(relative) => relative,
+        None => {
+            if !file_path
+                .call_method1("is_relative_to", (project_dir,))?
+                .is_truthy()?
+            {
+                return registry::class(py, RecordId::LintFileRole)?.call0();
+            }
+            file_path.call_method1("relative_to", (project_dir,))?
         }
-        file_path.call_method1("relative_to", (project_dir,))?
+    };
+    let parts: Vec<String> = relative.getattr("parts")?.extract()?;
+    let kind: Bound<'py, PyAny> = match named_declaration_role_kind(&parts) {
+        Some(kind) => registry::class(py, RecordId::DeclarationKind)?.call1((kind,))?,
+        None => py.None().into_bound(py),
     };
     call_with(
         &registry::class(py, RecordId::LintFileRole)?,
         &[
-            (
-                "declaration_kind",
-                call_with(
-                    &registry::native(py, NativeAttr::NamedDeclarationRoleKind)?,
-                    &[("relative_path", relative.clone())],
-                )?,
-            ),
-            ("in_project", true.into_pyobject(py)?.to_owned().into_any()),
+            ("declaration_kind", kind),
+            ("in_project", PyBool::new(py, true).to_owned().into_any()),
             (
                 "in_hook_directory",
-                relative.call_method1("is_relative_to", ("hooks",))?,
+                PyBool::new(py, parts.first().is_some_and(|part| part == HOOKS_FOLDER))
+                    .to_owned()
+                    .into_any(),
             ),
-        ],
-    )
-}
-
-/// Use audit measurement ranges when present, otherwise the native SQL header boundaries.
-#[pyfunction]
-#[pyo3(signature = (**options))]
-pub(crate) fn lint_body_ranges<'py>(
-    py: Python<'py>,
-    options: Option<Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let args = KeywordArguments::read(
-        py,
-        "lint_body_ranges",
-        options,
-        (
-            &["contents", "headers", "file_path", "project_dir"],
-            &["role"],
-        ),
-    )?;
-    let mut role = args.value("role")?;
-    if role.is_none() {
-        role = lint_file_role(&args.value("file_path")?, &args.value("project_dir")?, None)?;
-    }
-    let kind = role.getattr("declaration_kind")?;
-    if role.getattr("in_project")?.is_truthy()?
-        && (kind.eq("audit")? || kind.eq("singular_audit")?)
-    {
-        let ranges = call_with(
-            &registry::native(py, NativeAttr::MeasurementBodyRanges)?,
-            &[("contents", args.value("contents")?)],
-        )?;
-        if ranges.is_truthy()? {
-            return Ok(ranges);
-        }
-    }
-    call_with(
-        &registry::native(py, NativeAttr::SqlBodyRanges)?,
-        &[
-            ("contents", args.value("contents")?),
-            ("headers", args.value("headers")?),
         ],
     )
 }

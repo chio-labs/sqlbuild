@@ -4,7 +4,6 @@ import logging
 import threading
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence, Set
-from concurrent.futures import Executor, Future
 from contextlib import AbstractContextManager
 from contextvars import Token
 from dataclasses import Field
@@ -12,7 +11,6 @@ from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 from pathlib import Path, PurePath
-from threading import Event
 from types import TracebackType
 from typing import Any, ClassVar, Literal, Protocol, Self, TextIO, TypedDict, overload
 
@@ -254,11 +252,6 @@ def plan_compiled_sql_test_artifacts(
     adapter: BaseAdapter,
     sql_analysis_enabled: bool,
 ) -> tuple[NativeSqlTestArtifact, ...]: ...
-def resolve_sql_test_model_chains(
-    *,
-    project: CompiledProjectView,
-    tests: tuple[CompiledSqlTest, ...],
-) -> tuple[tuple[str, ...], ...]: ...
 def sql_test_plan_error_messages(*, warnings: tuple[PlanWarning, ...]) -> tuple[str, ...]: ...
 
 STAGE_CAPTURE_OMITTED_ATTRIBUTES: dict[str, frozenset[str]]
@@ -1110,16 +1103,6 @@ class DirectModelVersionIdentities(NativeRecord):
     ) -> None: ...
     def __replace__(self, **changes: Any) -> DirectModelVersionIdentities: ...
 
-class PlannerModelEntryResults(NativeRecord):
-    """Model plan-entry phase output."""
-
-    entries: tuple[ModelPlanEntry, ...]
-    warnings: tuple[PlanWarning, ...]
-    def __init__(
-        self, entries: tuple[ModelPlanEntry, ...], warnings: tuple[PlanWarning, ...] = ...
-    ) -> None: ...
-    def __replace__(self, **changes: Any) -> PlannerModelEntryResults: ...
-
 class SchemaAction(NativeRecord):
     """One concrete schema change action to apply to a target table."""
 
@@ -1335,7 +1318,7 @@ class PlanProviderUsage(NativeRecord):
     ) -> None: ...
     def __replace__(self, **changes: Any) -> PlanProviderUsage: ...
 
-class PlannerRuntime(NativeRecord):
+class PlannerRuntime:
     """Resolved execution environment shared by planner phases."""
 
     project: CompiledProjectView
@@ -1347,6 +1330,7 @@ class PlannerRuntime(NativeRecord):
     invocation_time: datetime
     def __init__(
         self,
+        *,
         project: CompiledProjectView,
         adapter: BaseAdapter,
         connection: Any,
@@ -1355,7 +1339,6 @@ class PlannerRuntime(NativeRecord):
         on_progress: Callable[[str], None] | None = ...,
         invocation_time: datetime = ...,
     ) -> None: ...
-    def __replace__(self, **changes: Any) -> PlannerRuntime: ...
 
 class PlannerScopeResolution(NativeRecord):
     """Resolved planner scopes for one plan build."""
@@ -1371,7 +1354,7 @@ class PlannerScopeResolution(NativeRecord):
     ) -> None: ...
     def __replace__(self, **changes: Any) -> PlannerScopeResolution: ...
 
-class PlannerWarehouseState(NativeRecord):
+class PlannerWarehouseState:
     """Warehouse snapshot and inspection relations gathered once per plan."""
 
     snapshot: WarehouseSnapshot
@@ -1385,6 +1368,7 @@ class PlannerWarehouseState(NativeRecord):
     migration_fingerprints: MigrationFingerprintCache
     def __init__(
         self,
+        *,
         snapshot: WarehouseSnapshot,
         inspection_relations: PlannerRelationsContext,
         migration_entries: tuple[ModelMigrationPlanEntry, ...] = ...,
@@ -1395,7 +1379,6 @@ class PlannerWarehouseState(NativeRecord):
         old_name_views: tuple[OldNameView, ...] = ...,
         migration_fingerprints: MigrationFingerprintCache = ...,
     ) -> None: ...
-    def __replace__(self, **changes: Any) -> PlannerWarehouseState: ...
 
 class ModelMigrationRequest(NativeRecord):
     """One destination model whose data should come from an earlier relation."""
@@ -1452,50 +1435,6 @@ class MigrationCompatibilityResult(NativeRecord):
     def __init__(self, status: MigrationCompatibility, findings: tuple[str, ...] = ...) -> None: ...
     def __replace__(self, **changes: Any) -> MigrationCompatibilityResult: ...
 
-class ModelMigrationPlanning(NativeRecord):
-    """Migration decisions plus the warehouse snapshot as it will look after moves."""
-
-    snapshot: WarehouseSnapshot
-    entries: tuple[ModelMigrationPlanEntry, ...]
-    warnings: tuple[PlanWarning, ...]
-    def __init__(
-        self,
-        snapshot: WarehouseSnapshot,
-        entries: tuple[ModelMigrationPlanEntry, ...] = ...,
-        warnings: tuple[PlanWarning, ...] = ...,
-    ) -> None: ...
-    def __replace__(self, **changes: Any) -> ModelMigrationPlanning: ...
-
-class OldNameViewPlanning(NativeRecord):
-    """Old-name steps for this build plus every compatibility view still recorded."""
-
-    entries: tuple[OldNameViewPlanEntry, ...]
-    views: tuple[OldNameView, ...]
-    warnings: tuple[PlanWarning, ...]
-    def __init__(
-        self,
-        entries: tuple[OldNameViewPlanEntry, ...] = ...,
-        views: tuple[OldNameView, ...] = ...,
-        warnings: tuple[PlanWarning, ...] = ...,
-    ) -> None: ...
-    def __replace__(self, **changes: Any) -> OldNameViewPlanning: ...
-
-class ColumnMigrationPlanning(NativeRecord):
-    """Column rename decisions plus the warehouse snapshot as it will look after renames."""
-
-    snapshot: WarehouseSnapshot
-    entries: tuple[ColumnMigrationPlanEntry, ...]
-    hints: tuple[ColumnRenameHint, ...]
-    warnings: tuple[PlanWarning, ...]
-    def __init__(
-        self,
-        snapshot: WarehouseSnapshot,
-        entries: tuple[ColumnMigrationPlanEntry, ...] = ...,
-        hints: tuple[ColumnRenameHint, ...] = ...,
-        warnings: tuple[PlanWarning, ...] = ...,
-    ) -> None: ...
-    def __replace__(self, **changes: Any) -> ColumnMigrationPlanning: ...
-
 class PlannerIdentityContext(NativeRecord):
     """Expected version identities for inspection and stale-warning scopes."""
 
@@ -1507,41 +1446,6 @@ class PlannerIdentityContext(NativeRecord):
         stale_warning_identities: DirectModelVersionIdentities,
     ) -> None: ...
     def __replace__(self, **changes: Any) -> PlannerIdentityContext: ...
-
-class PlannerScopePruningResult(NativeRecord):
-    """Scope pruning outcome with pruned scopes, actions, and staleness state."""
-
-    inspection_scope: PlannerScope
-    execution_scope: PlannerScope
-    resolved_actions: PlannerResolvedActions
-    pruned_direct_model_names: tuple[str, ...]
-    direct_identity_stale_model_names: frozenset[str]
-    def __init__(
-        self,
-        inspection_scope: PlannerScope,
-        execution_scope: PlannerScope,
-        resolved_actions: PlannerResolvedActions,
-        pruned_direct_model_names: tuple[str, ...],
-        direct_identity_stale_model_names: frozenset[str],
-    ) -> None: ...
-    def __replace__(self, **changes: Any) -> PlannerScopePruningResult: ...
-
-class PlannerChangeReconciliation(NativeRecord):
-    """Write-hash-honest changes merged back into resolved actions."""
-
-    changes: PlannerChangeResults
-    resolved_actions: PlannerResolvedActions
-    def __init__(
-        self, changes: PlannerChangeResults, resolved_actions: PlannerResolvedActions
-    ) -> None: ...
-    def __replace__(self, **changes: Any) -> PlannerChangeReconciliation: ...
-
-class PlannerEntryResults(NativeRecord):
-    """Model plan entries for one plan build."""
-
-    model_entry_results: PlannerModelEntryResults
-    def __init__(self, model_entry_results: PlannerModelEntryResults) -> None: ...
-    def __replace__(self, **changes: Any) -> PlannerEntryResults: ...
 
 class NativeModelInput:
     @property
@@ -2129,18 +2033,6 @@ class NativeCompiledProject:
 
 def compiled_model_record(model: CompiledModelView) -> CompiledModel: ...
 def compiled_audit_record(audit: CompiledAuditView) -> CompiledAudit: ...
-def compute_model_cursor_bounds(
-    *,
-    model: CompiledModelView,
-    snapshot: WarehouseSnapshot,
-    backfill: BackfillResult,
-    full_refresh: bool,
-    start_cursor_override: str | None,
-    end_cursor_override: str | None,
-    runtime_cursor_producer_names: frozenset[str],
-    context: ModelPlanContext,
-    replaces_relation: bool = False,
-) -> CursorBounds | None: ...
 def compute_cursor_bounds(
     *,
     cursor_snapshot: ModelCursorSnapshot,
@@ -2396,14 +2288,6 @@ def compile_facts(*, project: CompiledProjectView, project_dir: Path) -> Compile
 def lint_file_role(
     *, file_path: Path, project_dir: Path, relative_path: PurePath | None = None
 ) -> LintFileRole: ...
-def lint_body_ranges(
-    *,
-    contents: str,
-    headers: tuple[HeaderSpan, ...],
-    file_path: Path,
-    project_dir: Path,
-    role: LintFileRole | None = None,
-) -> tuple[tuple[int, int], ...]: ...
 def prepare_lint_body(
     *,
     role: LintFileRole,
@@ -2412,39 +2296,7 @@ def prepare_lint_body(
     body_range: tuple[int, int],
     context: SqlExpansionContext,
     dialect: str,
-    external_identifiers: tuple[str, ...] = (),
-    allows_ceremonial_select: bool = False,
-    allows_dynamic_output_star: bool = False,
-    compiled_expansion: CompiledSqlExpansion | None = None,
 ) -> LintBody: ...
-def expand_lint_body(
-    *,
-    role: LintFileRole,
-    file_path: Path,
-    contents: str,
-    body_range: tuple[int, int],
-    context: SqlExpansionContext,
-    dialect: str,
-    external_identifiers: tuple[str, ...] = (),
-    allows_ceremonial_select: bool = False,
-    allows_dynamic_output_star: bool = False,
-    compiled_expansion: CompiledSqlExpansion | None = None,
-) -> PendingLintBody: ...
-def expand_file_bodies(
-    *,
-    file_path: Path,
-    contents: str,
-    headers: tuple[HeaderSpan, ...],
-    context: SqlExpansionContext,
-    dialect: str,
-    project_dir: Path,
-    relative_path: Path,
-    dynamic_output_paths: frozenset[Path],
-    compiled_expansions: dict[Path, CompiledSqlExpansion] | None,
-) -> ExpandedLintFile: ...
-def prepare_expanded_files(
-    *, expanded_files: tuple[ExpandedLintFile, ...], dialect: str, skip_unexpandable: bool
-) -> PreparedLintFiles: ...
 def plan_rule_fixes(
     *,
     project_dir: Path,
@@ -4140,9 +3992,6 @@ def lint_sql_batch_json(request_json: str) -> str: ...
 def prepare_lint_sql(
     request: LintPreparationRequest,
 ) -> tuple[str, list[tuple[str, int, int, int, int, str]], list[str]] | None: ...
-def prepare_lint_sql_batch(
-    requests: list[LintPreparationRequest],
-) -> list[tuple[bool, tuple[str, list[tuple[str, int, int, int, int, str]], list[str]] | None]]: ...
 def lint_backtick_identifiers(dialect: str) -> bool: ...
 def neutralize_lint_interpolation(
     body: str, dialect: str, for_formatting: bool = False
@@ -4863,12 +4712,6 @@ class ProcessResourceTracker:
     ) -> None: ...
     def finish(self) -> ProcessResourceUsage: ...
 
-class LintStopScope:
-    def __enter__(self) -> None: ...
-    def __exit__(self, *exception: object) -> bool: ...
-
-def lint_stop_scope(stop: Event, /) -> LintStopScope: ...
-def active_lint_stop() -> Event | None: ...
 def error_code(*, error: BaseException, fallback_code: str) -> str: ...
 def error_help(error: BaseException, /) -> str | None: ...
 def error_message(error: BaseException, /) -> str: ...
@@ -6683,18 +6526,6 @@ def apply_maximum_start_policy(
     policy: MaximumStartPolicyInputs,
     has_start_override: bool,
 ) -> CursorBounds: ...
-def build_plan_output(
-    *,
-    project: CompiledProjectView,
-    adapter: BaseAdapter,
-    scope: PlannerScope,
-    snapshot: WarehouseSnapshot,
-    relations: PlannerRelationsContext,
-    changes: PlannerChangeResults,
-    model_entry_results: PlannerModelEntryResults,
-    reload_sources: bool,
-    extras: PlanOutputExtras | None = None,
-) -> PlanOutput: ...
 def plan_function(
     *,
     function: CompiledFunctionView,
@@ -6903,18 +6734,6 @@ def build_planner_relations_context(
     known_source_columns: dict[str, tuple[ColumnInfo, ...]] | None = None,
     relation_keys: frozenset[CompiledObjectKey] | None = None,
 ) -> PlannerRelationsContext: ...
-def build_plan_entries(
-    *,
-    project: CompiledProjectView,
-    adapter: BaseAdapter,
-    scope: PlannerScope,
-    snapshot: WarehouseSnapshot,
-    relations: PlannerRelationsContext,
-    resolved_actions: PlannerResolvedActions,
-    cursor_overrides: CursorOverrides | None,
-    full_refresh: bool,
-    build_inputs: PlanEntryBuildInputs | None = None,
-) -> PlannerModelEntryResults: ...
 def build_model_materializations(
     model_entries: tuple[ModelPlanEntry, ...], /
 ) -> dict[str, str]: ...
@@ -7064,22 +6883,9 @@ def evaluate_rules(
     project_dir: Path,
     dialect: str,
     selected_keys: frozenset[CompiledObjectKey] | None = None,
-    prepared_sql: PreparedSqlLint | None = None,
-    expansion_reuse: SqlExpansionReuse | None = None,
+    early_lint: EarlySqlLint | None = None,
     no_sql_analysis: bool = False,
 ) -> RulesRunResult: ...
-def prepare_sql_rules(
-    *, inputs: CompileInputsView, executor: Executor, dialect: str, stop: Event
-) -> PreparedSqlLint | None: ...
-def prepare_early_sql_lint(
-    *,
-    project_dir: Path,
-    config: LintConfig,
-    discovered_inputs: DiscoveredProjectInputs,
-    static_declaration_scope: DeclarationScopeBuild | None,
-    compiled_expansions: dict[Path, CompiledSqlExpansion],
-    stop: Event,
-) -> PreparedSqlLintResult: ...
 def custom_rule_test_evidence(
     *, rule: Rule, project_dir: Path
 ) -> list[tuple[str, int, int, str]]: ...
@@ -7096,8 +6902,7 @@ def run_rules(
     project_dir: Path,
     dialect: str,
     selected_keys: frozenset[CompiledObjectKey] | None = None,
-    prepared_sql: PreparedSqlLint | None = None,
-    expansion_reuse: SqlExpansionReuse | None = None,
+    early_lint: EarlySqlLint | None = None,
     no_sql_analysis: bool = False,
 ) -> RulesRunResult: ...
 def rules_bulk_cache_path(*, project_dir: Path, file_name: str) -> Path: ...
@@ -7115,15 +6920,8 @@ def run_planned_sql_rules(
     graph: ProjectGraph,
     discovered_inputs: DiscoveredProjectInputs,
     dialect: str,
-    prepared_sql: PreparedSqlLint | None,
-    expansion_reuse: SqlExpansionReuse | None,
+    early_lint: EarlySqlLint | None,
 ) -> SqlRulesEvaluation: ...
-def sql_lint_preparation(
-    *, inputs: CompileInputsView, dialect: str
-) -> tuple[Path, tuple[str, ...], LintConfig] | None: ...
-def early_lint_expansions(
-    model_inputs: tuple[ModelInput, ...],
-) -> dict[Path, CompiledSqlExpansion]: ...
 
 class EarlySqlLint:
     """Own speculative SQL checks for one compilation invocation."""
@@ -7131,14 +6929,13 @@ class EarlySqlLint:
     def __init__(self, *, enabled: bool) -> None: ...
     @property
     def enabled(self) -> bool: ...
-    @property
-    def preparation(self) -> PreparedSqlLint | None: ...
-    @property
-    def expansion_reuse(self) -> SqlExpansionReuse | None: ...
     def __enter__(self) -> EarlySqlLint: ...
     def __exit__(self, *exception: object) -> None: ...
     def start(self, *, inputs: CompileInputsView, dialect: str) -> None: ...
     def stop(self) -> int: ...
+
+class PreparedSqlLint:
+    """One early SQL lint running on a native thread, for one project and SQL rule codes."""
 
 def with_duplicate_literal_hints(
     *, findings: tuple[Finding, ...], project_dir: Path
@@ -7170,16 +6967,12 @@ def lint_native_headers(
 def format_native_headers(
     *, contents: str, file_path: Path, config: LintConfig
 ) -> tuple[str, tuple[LintViolation, ...]]: ...
-def prepare_native_header_cache(*, files: dict[Path, str]) -> None: ...
 def safe_format_files(
     *, files: dict[Path, str], config: LintConfig
 ) -> tuple[dict[Path, str], dict[Path, str]]: ...
 def reject_unparseable_header_rewrites(
     *, updated: dict[Path, str], config: LintConfig, faults: list[LintViolation]
 ) -> tuple[dict[Path, str], list[LintViolation]]: ...
-def external_identifiers_for_headers(
-    *, contents: str, headers: tuple[HeaderSpan, ...]
-) -> tuple[str, ...]: ...
 def prepare_model_header_tokens(headers: Sequence[str], /) -> None: ...
 def parse_header_values(
     *,
@@ -7276,14 +7069,6 @@ def migration_destination_fingerprints(
 ) -> dict[str, tuple[str, ...]]: ...
 def stored_migration_fingerprint(fingerprint: Fingerprint) -> str | None: ...
 def declared_column_aliases(model: CompiledModelView) -> tuple[tuple[str, str], ...]: ...
-def plan_old_name_views(
-    *,
-    runtime: PlannerRuntime,
-    scope: PlannerScope,
-    snapshot: WarehouseSnapshot,
-    migration_entries: tuple[ModelMigrationPlanEntry, ...],
-    column_entries: tuple[ColumnMigrationPlanEntry, ...],
-) -> OldNameViewPlanning: ...
 def manual_migration_requests(*, scope: PlannerScope) -> tuple[ModelMigrationRequest, ...]: ...
 def discover_model_migrations(
     *,
@@ -7306,15 +7091,6 @@ def decide_model_migration(
     state: MigrationStateInspection,
     snapshots_config: SnapshotsConfig,
 ) -> tuple[ModelMigrationPlanEntry, Fingerprint | None, bool]: ...
-def plan_model_migrations(
-    *,
-    runtime: PlannerRuntime,
-    scope: PlannerScope,
-    snapshot: WarehouseSnapshot,
-    overrides: PlannerOverrides,
-    deferral: DeferralInputs,
-    fingerprints: MigrationFingerprintCache,
-) -> ModelMigrationPlanning: ...
 def plan_column_migrations(
     *,
     runtime: PlannerRuntime,
@@ -7325,7 +7101,7 @@ def plan_column_migrations(
     overrides: PlannerOverrides,
     deferral: DeferralInputs,
     source_columns: Mapping[str, tuple[ColumnInfo, ...]],
-) -> ColumnMigrationPlanning: ...
+) -> None: ...
 def old_name_schemas_to_read(*, snapshot: WarehouseSnapshot, needed: set[str]) -> set[str]: ...
 def old_name_claim_message(*, model_name: str, view: OldNameView, now: datetime) -> str: ...
 def old_name_claim_errors(
@@ -7438,33 +7214,6 @@ def resolve_microbatch_lookback(
     *, model: CompiledModelView, effective_grain: str | None = None
 ) -> str | None: ...
 def extract_seed_columns(seed: CompiledSeedView) -> tuple[ColumnInfo, ...]: ...
-def assemble_model_plan_entry(
-    *,
-    model: CompiledModelView,
-    adapter: BaseAdapter,
-    snapshot: WarehouseSnapshot,
-    change_result: ChangeDetectionResult,
-    action: PlanAction,
-    reason: PlanReason,
-    materialization_type: MaterializationType,
-    resolved_sql: str,
-    sql_analysis_enabled: bool,
-    pre_hooks: object,
-    post_hooks: object,
-    cursor_column: str | None,
-    cursor_input_relations: tuple[CursorInputRelation, ...],
-    runtime_owned_cursor_bounds: bool,
-    cursor_bounds: CursorBounds | None,
-    microbatch_range: CursorBounds | None,
-    empty_cursor_inputs: tuple[str, ...],
-    waiting_on_empty_inputs: bool,
-    backfill: BackfillResult,
-    start_cursor_override: str | None,
-    end_cursor_override: str | None,
-    future_cursor_config: FutureCursorsConfig | None,
-    start_cursor_config: StartCursorsConfig | None,
-    invocation_time: datetime | None,
-) -> tuple[ModelPlanEntry, tuple[PlanWarning, ...]]: ...
 def plan_audit(
     *,
     audit: CompiledAuditView,
@@ -7836,28 +7585,6 @@ def check_selected_scope_buildability(
     warehouse: PlannerWarehouseState,
     deferral: DeferralInputs,
 ) -> None: ...
-def prune_planner_execution_scope(
-    *, scopes: PlannerScopeResolution, resolved_actions: PlannerResolvedActions
-) -> PlannerScopePruningResult: ...
-def reconcile_execution_changes(
-    *,
-    warehouse: PlannerWarehouseState,
-    identities: PlannerIdentityContext,
-    pruning: PlannerScopePruningResult,
-    changes: PlannerChangeResults,
-) -> PlannerChangeReconciliation: ...
-def build_planner_entry_results(
-    *,
-    runtime: PlannerRuntime,
-    warehouse: PlannerWarehouseState,
-    identities: PlannerIdentityContext,
-    overrides: PlannerOverrides,
-    policies: PlannerPolicies,
-    deferral: DeferralInputs,
-    pruning: PlannerScopePruningResult,
-    reconciliation: PlannerChangeReconciliation,
-    source_freshness: DirectSourceFreshnessPlanningResult,
-) -> PlannerEntryResults: ...
 def resolve_model_full_refresh(*, model: CompiledModelView, cli_full_refresh: bool) -> bool: ...
 def effectively_full_refreshed_model_names(
     *, project: CompiledProjectView, cli_full_refresh: bool
@@ -10842,61 +10569,6 @@ class LintBody(NativeRecord):
         dependency_relations: tuple[tuple[str, str], ...] = ...,
     ) -> None: ...
 
-class PendingLintBody(NativeRecord):
-    """One expanded authored body awaiting its native lexical preparation."""
-
-    file_path: Path
-    body_start: int
-    body_end: int
-    expansion_input: str
-    expanded: str
-    expansion_passes: tuple[tuple[ExpansionSpan, ...], ...]
-    pre_expansion_sites: tuple[InterpolationSite, ...]
-    external_identifiers: tuple[str, ...]
-    allows_ceremonial_select: bool
-    allows_dynamic_output_star: bool
-    allows_empty_fixture_star: bool
-    request: NativeLintPreparationRequest
-    def __init__(
-        self,
-        file_path: Path,
-        body_start: int,
-        body_end: int,
-        expansion_input: str,
-        expanded: str,
-        expansion_passes: tuple[tuple[ExpansionSpan, ...], ...],
-        pre_expansion_sites: tuple[InterpolationSite, ...],
-        external_identifiers: tuple[str, ...],
-        allows_ceremonial_select: bool,
-        allows_dynamic_output_star: bool,
-        allows_empty_fixture_star: bool,
-        request: NativeLintPreparationRequest,
-    ) -> None: ...
-
-class ExpandedLintFile(NativeRecord):
-    """The expanded bodies of one file, up to the first body that could not be expanded."""
-
-    file_path: Path
-    bodies: tuple[PendingLintBody, ...]
-    failure: ProjectCompileError | None
-    def __init__(
-        self,
-        file_path: Path,
-        bodies: tuple[PendingLintBody, ...],
-        failure: ProjectCompileError | None,
-    ) -> None: ...
-
-class PreparedLintFiles(NativeRecord):
-    """Lint bodies of every expandable file, and why the skipped files could not expand."""
-
-    bodies: tuple[LintBody, ...]
-    unexpandable: dict[Path, str]
-    def __init__(
-        self,
-        bodies: tuple[LintBody, ...],
-        unexpandable: dict[Path, str],
-    ) -> None: ...
-
 class LintEdit(NativeRecord):
     """One deterministic authored-source edit proposed by a lint rule."""
 
@@ -13143,41 +12815,6 @@ class SqlTestRulesConfig(NativeRecord):
     def __init__(
         self,
         pipeline_directory: str = ...,
-    ) -> None: ...
-
-class PreparedSqlLintResult(NativeRecord):
-    """Reusable expansion context and completed preliminary SQL checks."""
-
-    result: LintRunResult
-    context: SqlExpansionContext
-    def __init__(
-        self,
-        result: LintRunResult,
-        context: SqlExpansionContext,
-    ) -> None: ...
-
-class SqlExpansionReuse(NativeRecord):
-    """Compiler declaration scope for post-assembly SQL checks; assembly still runs its macros."""
-
-    discovered_inputs: DiscoveredProjectInputs
-    declaration_scope: DeclarationScopeBuild
-    def __init__(
-        self,
-        discovered_inputs: DiscoveredProjectInputs,
-        declaration_scope: DeclarationScopeBuild,
-    ) -> None: ...
-
-class PreparedSqlLint(NativeRecord):
-    """Process-local SQL checks started after compiler expansion has completed."""
-
-    codes: tuple[str, ...]
-    future: Future[PreparedSqlLintResult]
-    project_dir: Path | None
-    def __init__(
-        self,
-        codes: tuple[str, ...],
-        future: Future[PreparedSqlLintResult],
-        project_dir: Path | None = ...,
     ) -> None: ...
 
 class SqlRulesEvaluation(NativeRecord):

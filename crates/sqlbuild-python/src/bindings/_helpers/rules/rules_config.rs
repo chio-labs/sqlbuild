@@ -1,6 +1,6 @@
 //! Rules configuration loaded natively and returned as the Python configuration models.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
@@ -241,20 +241,50 @@ fn rules_error(py: Python<'_>, class: ErrorId, message: String, help: Option<Str
 #[pyfunction]
 #[pyo3(signature = (*, project_dir))]
 pub(crate) fn load_rules_config(py: Python<'_>, project_dir: PathBuf) -> PyResult<Py<PyAny>> {
+    let config: RulesConfig = match rules_config_of(&project_dir)? {
+        Ok(config) => config,
+        Err(invalid) => return Err(invalid.into_pyerr(py)),
+    };
+    Ok(config_object(py, &config)?.unbind())
+}
+
+/// Why a project's rules configuration is invalid.
+pub(crate) enum InvalidRulesConfig {
+    /// The configuration could not be read: a `RulesError`.
+    Unreadable(String),
+    /// It allows exceptions it may not: a `RulesConfigError` with help.
+    Forbidden { message: String, help: String },
+}
+
+impl InvalidRulesConfig {
+    fn into_pyerr(self, py: Python<'_>) -> PyErr {
+        match self {
+            Self::Unreadable(message) => rules_error(py, ErrorId::Rules, message, None),
+            Self::Forbidden { message, help } => {
+                rules_error(py, ErrorId::RulesConfig, message, Some(help))
+            }
+        }
+    }
+}
+
+/// The project's validated rules configuration, or why it is invalid.
+pub(crate) fn rules_config_of(
+    project_dir: &Path,
+) -> PyResult<Result<RulesConfig, InvalidRulesConfig>> {
     let project_dir: PathBuf = project_dir
         .canonicalize()
-        .or_else(|_| std::path::absolute(&project_dir))?;
-    let config: RulesConfig = compiler_guard(|| Ok(load_config(&project_dir)))?
-        .map_err(|message| rules_error(py, ErrorId::Rules, message, None))?;
+        .or_else(|_| std::path::absolute(project_dir))?;
+    let config: RulesConfig = match compiler_guard(|| Ok(load_config(&project_dir)))? {
+        Ok(config) => config,
+        Err(message) => return Ok(Err(InvalidRulesConfig::Unreadable(message))),
+    };
     if let Some(error) = forbidden_exceptions(&config) {
-        return Err(rules_error(
-            py,
-            ErrorId::RulesConfig,
-            error.message,
-            Some(error.help),
-        ));
+        return Ok(Err(InvalidRulesConfig::Forbidden {
+            message: error.message,
+            help: error.help,
+        }));
     }
-    Ok(config_object(py, &config)?.unbind())
+    Ok(Ok(config))
 }
 
 /// The project's rules configuration, or `None` when it is invalid and the rules phase reports it.

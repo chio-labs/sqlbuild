@@ -34,6 +34,7 @@ use sqlbuild_render::macro_calls::main::macro_call_names::macro_call_names;
 use sqlbuild_sqltext::compiler::models::DeclarationReferenceStop;
 use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
 use sqlbuild_sqltext::sql_references::models::{ReferenceExtraction, SqlReference};
+use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 use crate::bindings::_helpers::cache::sql_test_scan_store::SqlTestScanStore;
 use crate::bindings::_helpers::compiled_project::model_loop::{
@@ -662,8 +663,10 @@ impl<'py> TestScope<'_, 'py> {
                 scenario: false,
             })
             .collect();
-        let classified: Vec<SqlTestClassification> =
-            extract_sql_tests(&requests, &self.model_loop.syntax).map_err(|failure| {
+        let syntax: &LexicalSyntax = &self.model_loop.syntax;
+        let classified: Vec<SqlTestClassification> = py
+            .detach(|| extract_sql_tests(&requests, syntax))
+            .map_err(|failure| {
                 let test: &ExpandedTest<'_, 'py> = &tests[pending[failure.index]];
                 self.located(&failure, test.file, (test.block, &test.sql))
             })?;

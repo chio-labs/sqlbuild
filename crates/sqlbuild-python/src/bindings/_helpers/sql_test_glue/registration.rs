@@ -7,15 +7,11 @@ use crate::bindings::_helpers::sql_test_glue::{authored_ctes, compiled_tests, pl
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(
-        super::plan_assembly::assemble_sql_test_plans,
+        super::plan_assembly::plan_sql_tests,
         module
     )?)?;
     module.add_function(wrap_pyfunction!(
         super::plan_driver::plan_sql_tests_natively,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
-        super::plan_driver::resolve_sql_test_model_chains,
         module
     )?)?;
     module.add_function(wrap_pyfunction!(

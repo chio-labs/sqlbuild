@@ -1,11 +1,11 @@
 //! A `CompiledModel` for a model input built outside the native compile-input stage.
 
+use crate::bindings::_helpers::native_host::facade::FacadeHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyList, PyString, PyTuple};
-
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 
 type Object<'py> = Bound<'py, PyAny>;
 
@@ -17,7 +17,6 @@ pub(crate) fn compiled_model<'py>(
     macro_deps: &Object<'py>,
 ) -> PyResult<Object<'py>> {
     let py: Python<'py> = model_input.py();
-    let types = py.import(COMPILE_TYPES_MODULE)?;
     let model_file: Object<'py> = model_input.getattr("model_file")?;
     let model_name: Object<'py> = model_file.getattr("file_path")?.getattr("stem")?;
     let none: Object<'py> = py.None().into_bound(py);
@@ -68,7 +67,7 @@ pub(crate) fn compiled_model<'py>(
         inferred = proof.getattr("fixed_columns")?;
         has_star = true_object(py);
     }
-    let resource_type: Object<'py> = types.getattr("CompiledResourceType")?;
+    let resource_type: Object<'py> = host::entry(py, FacadeHost::CompiledResourceType)?;
     let key_class: Object<'py> = registry::class(py, RecordId::CompiledObjectKey)?;
     let mut dependency_keys: Vec<Object<'py>> = Vec::new();
     for dependency in deps.try_iter()? {
@@ -253,11 +252,10 @@ fn located<'py>(
     };
     let located: Object<'py> = registry::native(py, NativeAttr::LocateModelBindingDiagnostics)?
         .call1((PyList::new(py, rows)?, texts, expansion_row))?;
-    let types = py.import(COMPILE_TYPES_MODULE)?;
     let diagnostic_class: Object<'py> = registry::class(py, RecordId::CompilerDiagnostic)?;
     let location_class: Object<'py> = registry::class(py, RecordId::SourceLocation)?;
     let phase: Object<'py> = registry::class(py, RecordId::DiagnosticPhase)?.getattr("COMPILE")?;
-    let model: Object<'py> = types.getattr("CompiledResourceType")?.getattr("MODEL")?;
+    let model: Object<'py> = host::entry(py, FacadeHost::CompiledResourceType)?.getattr("MODEL")?;
     let name: Object<'py> = model_file.getattr("file_path")?.getattr("stem")?;
     let mut built: Vec<Object<'py>> = Vec::new();
     for row in located.try_iter()? {

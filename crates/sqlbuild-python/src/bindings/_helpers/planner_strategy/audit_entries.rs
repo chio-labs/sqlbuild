@@ -15,24 +15,25 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::planner_strategy::constants::{
     AUDIT_TYPES_MODULE, COMPILE_TYPES_MODULE, MODEL_ATTACHMENT, SOURCE_ATTACHMENT,
 };
+use crate::bindings::_helpers::planner_strategy::models::AuditPlanning;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
 /// Render and validate one audit query with the supplied adapter callbacks.
 fn render_query<'py>(
-    request: &Request<'_, 'py>,
+    request: &AuditPlanning<'py>,
     sql: Bound<'py, PyAny>,
     context: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let py = request.py();
+    let py = sql.py();
     let resolved = call_with(
         &registry::native(py, NativeAttr::RenderAuditSql)?,
         &[
             ("unresolved_sql", sql),
-            ("model_locations", request.get("model_locations")?),
-            ("seed_locations", request.get("seed_locations")?),
-            ("source_map", request.get("source_map")?),
-            ("adapter", request.get("adapter")?),
+            ("model_locations", request.model_locations.clone()),
+            ("seed_locations", request.seed_locations.clone()),
+            ("source_map", request.source_map.clone()),
+            ("adapter", request.adapter.clone()),
         ],
     )?;
     call_with(
@@ -62,15 +63,36 @@ fn audit_enum<'py>(
 }
 
 /// Build an audit entry while retaining the public Python plan dataclass.
-#[pyfunction]
+#[pyfunction(name = "plan_audit")]
 #[pyo3(signature = (**request))]
-pub(crate) fn plan_audit<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn plan_audit_of<'py>(
+    request: Option<&Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyAny>> {
     let request = Request::new("plan_audit", request)?;
-    let py = request.py();
-    let audit = request.get("audit")?;
+    plan_audit(
+        &request.get("audit")?,
+        &AuditPlanning {
+            model_locations: request.get("model_locations")?,
+            seed_locations: request.get("seed_locations")?,
+            source_map: request.get("source_map")?,
+            adapter: request.get("adapter")?,
+            model_materializations: request.get("model_materializations")?,
+            lineage_upstream_deps: request.get("lineage_upstream_deps")?,
+            lineage_downstream_deps: request.get("lineage_downstream_deps")?,
+        },
+    )
+}
+
+/// One audit's plan entry, rendered against the planning relations.
+fn plan_audit<'py>(
+    audit: &Bound<'py, PyAny>,
+    request: &AuditPlanning<'py>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = audit.py();
+    let audit = audit.clone();
     let name: String = audit.getattr("name")?.extract()?;
     let resolved = render_query(
-        &request,
+        request,
         audit.getattr("sql_body")?,
         &format!("audit '{name}' planned SQL"),
     )?;
@@ -79,19 +101,19 @@ pub(crate) fn plan_audit<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<
         py.None().into_bound(py)
     } else {
         render_query(
-            &request,
+            request,
             evidence,
             &format!("audit '{name}' planned evidence SQL"),
         )?
     };
     let attachment: Bound<'_, PyTuple> =
-        resolve_attachment_kind(&audit, &request.get("lineage_downstream_deps")?)?;
+        resolve_attachment_kind(&audit, &request.lineage_downstream_deps)?;
     let kind = attachment.get_item(0)?;
     let target = attachment.get_item(1)?;
     let kind_text: String = kind.extract()?;
     let materialization = if kind_text == MODEL_ATTACHMENT && !target.is_none() {
         request
-            .get("model_materializations")?
+            .model_materializations
             .call_method1("get", (&target,))?
     } else {
         py.None().into_bound(py)
@@ -146,7 +168,7 @@ pub(crate) fn plan_audit<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<
             "reads_outside_target_lineage",
             PyBool::new(
                 py,
-                reads_outside_target_lineage(&audit, &request.get("lineage_upstream_deps")?)?,
+                reads_outside_target_lineage(&audit, &request.lineage_upstream_deps)?,
             )
             .to_owned()
             .into_any(),
@@ -210,24 +232,17 @@ pub(crate) fn build_selected_audit_entries<'py>(
     }
     let lineage = registry::native(py, NativeAttr::ProjectLineageViews)?.call1((project,))?;
     let relations = request.get("relations")?;
-    let arguments = PyDict::new(py);
-    for field in ["model_locations", "seed_locations"] {
-        arguments.set_item(field, relations.getattr(field)?)?;
-    }
-    arguments.set_item("source_map", relations.getattr("source_read_map")?)?;
-    arguments.set_item("adapter", request.get("adapter")?)?;
-    arguments.set_item(
-        "model_materializations",
-        request.get("model_materializations")?,
-    )?;
-    arguments.set_item("lineage_upstream_deps", lineage.getattr("upstream_deps")?)?;
-    arguments.set_item(
-        "lineage_downstream_deps",
-        lineage.getattr("downstream_deps")?,
-    )?;
+    let planning = AuditPlanning {
+        model_locations: relations.getattr("model_locations")?,
+        seed_locations: relations.getattr("seed_locations")?,
+        source_map: relations.getattr("source_read_map")?,
+        adapter: request.get("adapter")?,
+        model_materializations: request.get("model_materializations")?,
+        lineage_upstream_deps: lineage.getattr("upstream_deps")?,
+        lineage_downstream_deps: lineage.getattr("downstream_deps")?,
+    };
     for audit in selected {
-        arguments.set_item("audit", audit)?;
-        entries.append(plan_audit(Some(&arguments))?)?;
+        entries.append(plan_audit(&audit, &planning)?)?;
     }
     Ok(entries)
 }
