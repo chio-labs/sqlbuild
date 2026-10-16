@@ -12,6 +12,7 @@ use crate::bindings::_helpers::compile_driver::compile_timings::{
     record_compile_cpu_timing, record_compile_timing,
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::compiled_project::model_input_view::attached_schema;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
@@ -120,13 +121,11 @@ fn dynamic_families_by_table<'py>(inputs: &Bound<'py, PyAny>) -> PyResult<Bound<
         if !contract.eq(&enforced)? {
             continue;
         }
-        let schema_entry: Bound<'py, PyAny> = model_input.getattr("schema_entry")?;
-        if schema_entry.is_none() {
+        let Some(schema) = attached_schema(&model_input)? else {
             continue;
-        }
-        let dynamic_columns: Bound<'py, PyAny> = schema_entry.getattr("dynamic_columns")?;
-        if dynamic_columns.is_truthy()? {
-            families.set_item(schema_entry.getattr("name")?, dynamic_columns)?;
+        };
+        if schema.dynamic_columns.is_truthy()? {
+            families.set_item(schema.name, schema.dynamic_columns)?;
         }
     }
     Ok(families)

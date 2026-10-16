@@ -14,6 +14,8 @@ use sqlbuild_analysis::semantic_checks::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::compiled_project::audit_views::audit_reference_rows;
+use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::models::ProjectCatalog;
@@ -162,7 +164,10 @@ fn audit_input(
         contents: Arc::from(file.getattr("contents")?.extract::<String>()?),
         bodies,
         opts_out: opts_out(&block.getattr("header_values")?)?,
-        relations: relations(&audit.getattr("references")?, reference_class)?,
+        relations: match audit_reference_rows(audit)? {
+            Some(rows) => row_relations(rows),
+            None => relations(&audit.getattr("references")?, reference_class)?,
+        },
     })
 }
 
@@ -253,6 +258,29 @@ fn opts_out(values: &Bound<'_, PyAny>) -> PyResult<bool> {
         .is(PyBool::new(values.py(), false)))
 }
 
+/// `sorted(binding_relation_names(...))` of a native view's reference rows.
+fn row_relations(rows: Vec<ReferenceRow>) -> Vec<String> {
+    let mut names: Vec<String> = rows
+        .into_iter()
+        .filter_map(|(kind, name, _, _)| relation_name(&kind, name))
+        .collect();
+    names.sort_unstable();
+    names.dedup();
+    names
+}
+
+/// The binding relation a reference of `kind` to `name` reads, or `None` for a UDF call.
+fn relation_name(kind: &str, name: String) -> Option<String> {
+    if kind == UDF_KIND {
+        return None;
+    }
+    Some(if kind == TABLE_FUNCTION_KIND {
+        format!("{TABLE_FUNCTION_STUB_PREFIX}{name}")
+    } else {
+        name
+    })
+}
+
 /// `sorted(binding_relation_names(...))` of the `CompileSqlReference`s among `references`.
 fn relations(
     references: &Bound<'_, PyAny>,
@@ -265,15 +293,10 @@ fn relations(
             continue;
         }
         let kind: String = reference.getattr("ref_kind")?.str()?.extract()?;
-        let name: String = reference.getattr("ref_name")?.extract()?;
-        if kind == UDF_KIND {
-            continue;
-        }
-        names.push(if kind == TABLE_FUNCTION_KIND {
-            format!("{TABLE_FUNCTION_STUB_PREFIX}{name}")
-        } else {
-            name
-        });
+        names.extend(relation_name(
+            &kind,
+            reference.getattr("ref_name")?.extract()?,
+        ));
     }
     names.sort_unstable();
     names.dedup();

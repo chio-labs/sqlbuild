@@ -453,6 +453,7 @@ pub(crate) struct AttachedSchema<'py> {
     pub(crate) name: Bound<'py, PyAny>,
     pub(crate) columns: Bound<'py, PyAny>,
     pub(crate) dynamic_columns: Bound<'py, PyAny>,
+    pub(crate) type_enforcement: bool,
 }
 
 /// The attached schema of `model_input`; a native input answers without building its entry.
@@ -473,6 +474,7 @@ pub(crate) fn attached_schema<'py>(
                     .getattr("stem")?,
                 columns: schema.columns.bind(py).clone().into_any(),
                 dynamic_columns: schema.dynamic_columns.bind(py).clone().into_any(),
+                type_enforcement: schema.type_enforcement,
             }))
         });
     }
@@ -484,6 +486,7 @@ pub(crate) fn attached_schema<'py>(
         name: entry.getattr("name")?,
         columns: entry.getattr("columns")?,
         dynamic_columns: entry.getattr("dynamic_columns")?,
+        type_enforcement: entry.getattr("type_enforcement")?.is_truthy()?,
     }))
 }
 
