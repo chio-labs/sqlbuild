@@ -6,6 +6,9 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple}
 use sqlbuild_analysis::assembly::analysis_session::main::native_dialect::native_dialect;
 
 use crate::bindings::_helpers::analysis::binding_catalog::{BindingCatalog, ignores_quoted_case};
+use crate::bindings::_helpers::analysis_session::model_analyses::{
+    ModelAnalyses, ModelAnalysisRequest, analyze_models,
+};
 use crate::bindings::_helpers::compile_driver::analysis_cache::analysis_cache_context;
 use crate::bindings::_helpers::compile_driver::assembly::AssemblyRequest;
 use crate::bindings::_helpers::compile_driver::compile_timings::{
@@ -30,8 +33,8 @@ pub(crate) struct AnalysisContext<'py> {
     pub(crate) nullability: Bound<'py, PyAny>,
     pub(crate) complete_schemas: Bound<'py, PyAny>,
     pub(crate) dynamic_families: Bound<'py, PyAny>,
-    /// The `NativeModelAnalyses`, or `None` when no model was analysed.
-    pub(crate) analyses: Bound<'py, PyAny>,
+    /// The model analyses, or `None` when SQL analysis does not run.
+    pub(crate) analyses: Option<ModelAnalyses<'py>>,
 }
 
 /// Whether `model_input` is selected for analysis by `names` (`None` selects every model).
@@ -90,7 +93,7 @@ pub(crate) fn analysis_context<'py>(
         nullability,
         complete_schemas,
         dynamic_families,
-        analyses: py.None().into_bound(py),
+        analyses: None,
     };
     if context.sql_analysis_enabled.is_truthy()? {
         record_expression_shapes(inputs, &context)?;
@@ -324,10 +327,10 @@ fn record_expression_shapes<'py>(
 fn model_analyses<'py>(
     request: &AssemblyRequest,
     context: &AnalysisContext<'py>,
-) -> PyResult<Bound<'py, PyAny>> {
+) -> PyResult<Option<ModelAnalyses<'py>>> {
     let py: Python<'py> = context.profile.py();
     if !context.sql_analysis_enabled.is_truthy()? {
-        return Ok(py.None().into_bound(py));
+        return Ok(None);
     }
     let inputs: &Bound<'py, PyAny> = request.inputs.bind(py);
     let names: &Bound<'py, PyAny> = request.analysis_model_names.bind(py);
@@ -346,8 +349,6 @@ fn model_analyses<'py>(
     };
     record_compile_timing("model_analysis_ms", || {
         record_compile_cpu_timing(py, "model_analysis_cpu_ms", || {
-            let (known_functions, known_types): (Bound<'py, PyAny>, Bound<'py, PyAny>) =
-                declared_names(inputs, &context.column_types)?;
             let mut model_inputs: Vec<Bound<'py, PyAny>> = Vec::new();
             for model_input in inputs.getattr("model_inputs")?.try_iter()? {
                 let model_input: Bound<'py, PyAny> = model_input?;
@@ -357,29 +358,17 @@ fn model_analyses<'py>(
                     model_inputs.push(model_input);
                 }
             }
-            let analysis_request: Bound<'py, PyAny> = call_with(
-                &registry::class(py, RecordId::NativeModelAnalysisRequest)?,
-                &[
-                    ("known_functions", known_functions),
-                    ("known_types", known_types),
-                    ("model_inputs", PyTuple::new(py, model_inputs)?.into_any()),
-                    ("column_nullability_by_table", context.nullability.clone()),
-                    ("column_types_by_table", context.column_types.clone()),
-                    ("inference_profile", context.profile.clone()),
-                    ("allow_compact_analysis", flags.0.clone()),
-                    ("rich_type_inference", flags.1.clone()),
-                    ("analysis_cache", cache.clone()),
-                    ("complete_binding_schemas", context.complete_schemas.clone()),
-                    (
-                        "dynamic_families_by_table",
-                        context.dynamic_families.clone(),
-                    ),
-                ],
-            )?;
-            call_with(
-                &registry::native(py, NativeAttr::AnalyzeNativeModelSql)?,
-                &[("request", analysis_request)],
-            )
+            analyze_models(&ModelAnalysisRequest {
+                model_inputs,
+                profile: context.profile.clone(),
+                column_types: context.column_types.clone(),
+                nullability: context.nullability.clone(),
+                complete_schemas: context.complete_schemas.clone(),
+                dynamic_families: context.dynamic_families.clone(),
+                rich_type_inference: rich,
+                cache,
+            })
+            .map(Some)
         })
     })
 }

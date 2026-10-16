@@ -10,12 +10,9 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-import sqlbuild._native as native_module
 from sqlbuild._native import (
     ColumnLineageMode,
     InferredNullability,
-    NativeModelAnalysisRequest,
-    analyze_native_model_sql,
     assemble_project,
 )
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
@@ -27,7 +24,6 @@ from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import
     CyclicAnalysisTestCase,
     CyclicCompileTestCase,
     GeneratedAnalysisTestCase,
-    InternalFailureTestCase,
     SharedAnalysisTestCase,
     StandalonePivotProofTestCase,
 )
@@ -36,17 +32,15 @@ from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
     NativeAnalysisRuns,
     NativePivotProofs,
     RecordingNullabilityRule,
-    adapter_rule_request,
+    adapter_rule_project,
     analyse_natively,
     compile_inputs,
     compiled_project_view,
     custom_nullability_rule,
-    duplicate_analysed_model_names,
     generated_analysis_files,
     native_pivot_proofs,
     pivot_project_files,
     shared_analysis_files,
-    started_sessions,
 )
 from tests.integration.src.sqlbuild.compiler.helpers import (
     golden_differences,
@@ -251,7 +245,6 @@ def test_given_equal_model_queries_when_analysing_natively_then_shares_and_cache
             regions=test_case.regions, inexact_regions=test_case.inexact_regions
         ),
     )
-    sessions: list[Any] = started_sessions(monkeypatch=monkeypatch)
     runs: NativeAnalysisRuns = NativeAnalysisRuns()
 
     _ = [
@@ -266,7 +259,7 @@ def test_given_equal_model_queries_when_analysing_natively_then_shares_and_cache
         for dialect in test_case.dialects
     ]
 
-    uncached: list[Any] = sessions[2::3]
+    uncached: list[Any] = runs.sessions
     shared: int = sum(session.sharing[0] for session in uncached)
 
     assert (
@@ -310,7 +303,6 @@ def test_given_cyclic_models_when_analysing_natively_then_session_answers_and_ca
     inputs: CompileInputsView = compile_inputs(
         project_dir=tmp_path / "project", files=test_case.files
     )
-    sessions: list[Any] = started_sessions(monkeypatch=monkeypatch)
     runs: NativeAnalysisRuns = NativeAnalysisRuns()
 
     _ = [
@@ -334,8 +326,8 @@ def test_given_cyclic_models_when_analysing_natively_then_session_answers_and_ca
     assert mismatches(inputs=runs.names, expected=runs.uncached, actual=runs.cached) == []
     assert (
         runs.analysed_models,
-        len(sessions) // 3,
-        None in sessions,
+        len(runs.sessions),
+        None in runs.sessions,
     ) == (
         test_case.expected_analysed,
         len(test_case.dialects) * len(test_case.lineage_modes),
@@ -379,36 +371,6 @@ def test_given_cyclic_project_when_compiling_then_native_output_is_complete_and_
         test_case.expected_exit_code,
         test_case.expected_compiled,
     )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        InternalFailureTestCase(
-            description="two analysed models sharing a name break the session's invariant",
-            files=_ORDERS_PROJECT,
-            expected_message=(
-                "NativeCompilerError: native model analysis: two analysed models share a name"
-            ),
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_internal_native_failure_when_assembling_then_raises_without_python_analysis(
-    test_case: InternalFailureTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    inputs: CompileInputsView = compile_inputs(
-        project_dir=tmp_path / "project", files=test_case.files
-    )
-    duplicate_analysed_model_names(monkeypatch=monkeypatch)
-
-    with pytest.raises(native_module.NativeCompilerError) as raised:
-        _ = assemble_project(
-            inputs=inputs,
-            inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="duckdb"),
-        )
-
-    assert str(raised.value) == test_case.expected_message
 
 
 @pytest.mark.parametrize(
@@ -483,14 +445,14 @@ def test_given_unanalysed_pivot_model_when_assembling_then_native_proves_it_with
     ids=lambda case: case.description,
 )
 def test_given_adapter_nullability_rule_when_analysing_natively_then_rule_is_called_back(
-    test_case: AdapterRuleCallbackTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    test_case: AdapterRuleCallbackTestCase, tmp_path: Path
 ) -> None:
     rule: RecordingNullabilityRule = RecordingNullabilityRule(raised=test_case.raised)
-    request: NativeModelAnalysisRequest = adapter_rule_request(
-        test_case=test_case, rule=rule, tmp_path=tmp_path, monkeypatch=monkeypatch
-    )
+    inputs, profile = adapter_rule_project(test_case=test_case, rule=rule, tmp_path=tmp_path)
 
-    assert analyze_native_model_sql(request=request).positions
+    project: CompiledProjectView = assemble_project(inputs=inputs, inference_profile=profile)
+
+    assert any(model.inferred_columns for model in project.models)
     assert len(rule.calls) >= test_case.expected_minimum_calls, test_case.description
     assert all(
         isinstance(value, InferredNullability)
@@ -512,15 +474,13 @@ def test_given_adapter_nullability_rule_when_analysing_natively_then_rule_is_cal
     ids=lambda case: case.description,
 )
 def test_given_failing_adapter_nullability_rule_when_analysing_natively_then_its_error_raises(
-    test_case: AdapterRuleCallbackTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    test_case: AdapterRuleCallbackTestCase, tmp_path: Path
 ) -> None:
     rule: RecordingNullabilityRule = RecordingNullabilityRule(raised=test_case.raised)
-    request: NativeModelAnalysisRequest = adapter_rule_request(
-        test_case=test_case, rule=rule, tmp_path=tmp_path, monkeypatch=monkeypatch
-    )
+    inputs, profile = adapter_rule_project(test_case=test_case, rule=rule, tmp_path=tmp_path)
 
     with pytest.raises(LookupError, match="adapter rule failed"):
-        _ = analyze_native_model_sql(request=request)
+        _ = assemble_project(inputs=inputs, inference_profile=profile)
 
     assert len(rule.calls) >= test_case.expected_minimum_calls, test_case.description
 

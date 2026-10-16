@@ -1,8 +1,10 @@
 //! Each compiled model of an assembled project, with its syntax checks and analysis fallback.
 
+use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyList, PyString, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PyFrozenSetMethods, PyList, PyString, PyTuple};
 
+use crate::bindings::_helpers::analysis_session::model_analyses::ModelAnalyses;
 use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_sql;
 use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
 use crate::bindings::_helpers::compile_driver::assembly_analysis::{
@@ -114,23 +116,26 @@ fn compiled_model<'py>(
     let mut session_analysis: Bound<'py, PyAny> = py.None().into_bound(py);
     let mut fallback: Bound<'py, PyAny> = py.None().into_bound(py);
     if request.sql_analysis_enabled {
-        let analyses: &Bound<'py, PyAny> = &context.analyses;
-        let position: Bound<'py, PyAny> = if analyses.is_none() {
-            py.None().into_bound(py)
-        } else {
-            analyses
-                .getattr("positions")?
-                .call_method1("get", (&model_name,))?
+        let analysed = match &context.analyses {
+            Some(analyses) => analyses
+                .positions
+                .get_item(&model_name)?
+                .map(|position| (analyses, position)),
+            None => None,
         };
-        if analyses.is_none() || position.is_none() {
+        let Some((analyses, position)) = analysed else {
             return Err(NativeCompilerError::new_err(format!(
                 "{NATIVE_FAILURE_PREFIX}native model analysis: the session returned no \
                  analysis for model '{}'",
                 model_name.str()?
             )));
-        }
-        session_analysis = PyTuple::new(py, [analyses.getattr("session")?, position])?.into_any();
-        if !analyses.getattr("succeeded")?.contains(&model_name)? {
+        };
+        let session: Bound<'py, PyAny> = analyses.session.as_ref().map_or_else(
+            || py.None().into_bound(py),
+            |session| session.clone().into_any(),
+        );
+        session_analysis = PyTuple::new(py, [session, position])?.into_any();
+        if !analyses.succeeded.contains(&model_name)? {
             if validates {
                 stages
                     .validate_sql
@@ -219,16 +224,15 @@ fn fallback_columns<'py>(
 /// `_project_binding_diagnostics`: every analysed model's located binding diagnostics.
 pub(crate) fn project_binding_diagnostics<'py>(
     models: &Bound<'py, PyTuple>,
-    analyses: &Bound<'py, PyAny>,
+    analyses: Option<&ModelAnalyses<'py>>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let mut diagnostics: Vec<Bound<'py, PyAny>> = Vec::new();
-    if analyses.is_none() {
+    let Some(analyses) = analyses else {
         return Ok(diagnostics);
-    }
-    let positions: Bound<'py, PyAny> = analyses.getattr("positions")?;
+    };
     for model in models.as_any().try_iter()? {
         let model: Bound<'py, PyAny> = model?;
-        if positions.contains(model.getattr("name")?)? {
+        if analyses.positions.contains(model.getattr("name")?)? {
             for diagnostic in model.getattr("binding_diagnostics")?.try_iter()? {
                 diagnostics.push(diagnostic?);
             }
@@ -238,24 +242,22 @@ pub(crate) fn project_binding_diagnostics<'py>(
 }
 
 /// `_binding_rows`: each analysed model's raw binding rows by model name.
-pub(crate) fn binding_rows<'py>(analyses: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
-    let py: Python<'py> = analyses.py();
+pub(crate) fn binding_rows<'py>(
+    py: Python<'py>,
+    analyses: Option<&ModelAnalyses<'py>>,
+) -> PyResult<Bound<'py, PyDict>> {
     let rows_by_name: Bound<'py, PyDict> = PyDict::new(py);
-    if analyses.is_none() {
+    let Some(session) = analyses.and_then(|analyses| analyses.session.as_ref()) else {
         return Ok(rows_by_name);
-    }
-    let session: Bound<'py, PyAny> = analyses.getattr("session")?;
-    if session.is_none() {
-        return Ok(rows_by_name);
-    }
-    let rows: Bound<'py, PyAny> = session.call_method0("binding_rows")?;
-    for item in analyses
-        .getattr("positions")?
-        .call_method0("items")?
-        .try_iter()?
+    };
+    let rows = session.borrow().binding_rows();
+    for (name, position) in analyses
+        .map(|analyses| analyses.positions.iter())
+        .into_iter()
+        .flatten()
     {
-        let item: Bound<'py, PyAny> = item?;
-        rows_by_name.set_item(item.get_item(0)?, rows.get_item(item.get_item(1)?)?)?;
+        let position: usize = position.extract()?;
+        rows_by_name.set_item(name, rows.get(position).into_pyobject(py)?)?;
     }
     Ok(rows_by_name)
 }

@@ -11,14 +11,12 @@ from pathlib import Path
 
 import pytest
 
-import sqlbuild._native as native_module
-from sqlbuild._native import NativeColumnQuery, NativeModelAnalyses, infer_native_query_columns
+from sqlbuild._native import NativeColumnQuery, infer_native_query_columns
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import (
     FallbackColumnsTestCase,
-    MissingSessionAnalysisTestCase,
     NormalizationRejectionTestCase,
     TableFunctionColumnsTestCase,
 )
@@ -109,40 +107,6 @@ def test_given_table_function_when_compiling_then_body_columns_match_declaration
         error = str(raised)
 
     assert error == test_case.expected_error
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        MissingSessionAnalysisTestCase(
-            description="a requested model the session left unanalysed",
-            expected_message=(
-                "NativeCompilerError: native model analysis: the session returned no analysis "
-                "for model 'orders'"
-            ),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_session_without_model_analysis_when_assembling_then_raises_native_compiler_error(
-    test_case: MissingSessionAnalysisTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(
-        native_module,
-        "analyze_native_model_sql",
-        lambda request: NativeModelAnalyses(positions={}, succeeded=frozenset(), session=None),
-    )
-
-    with pytest.raises(native_module.NativeCompilerError) as raised:
-        _ = compiled_project(
-            project_dir=tmp_path,
-            files={
-                "sqlbuild_project.toml": _PROJECT,
-                "models/orders.sql": _HEADER + "SELECT 1 AS a",
-            },
-        )
-
-    assert str(raised.value) == test_case.expected_message
 
 
 @pytest.mark.parametrize(

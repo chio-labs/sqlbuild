@@ -76,11 +76,14 @@ pub(crate) fn assembled_project<'py>(
     let inputs: &Bound<'py, PyAny> = request.inputs.bind(py);
     let names: &Bound<'py, PyAny> = request.analysis_model_names.bind(py);
     let context: AnalysisContext<'py> = analysis_context(py, request)?;
-    let native_session: Bound<'py, PyAny> = if context.analyses.is_none() {
-        py.None().into_bound(py)
-    } else {
-        context.analyses.getattr("session")?
-    };
+    let native_session: Bound<'py, PyAny> = context
+        .analyses
+        .as_ref()
+        .and_then(|analyses| analyses.session.as_ref())
+        .map_or_else(
+            || py.None().into_bound(py),
+            |session| session.clone().into_any(),
+        );
     let native: Bound<'py, PyAny> = native_project_facts(inputs, &context, names, &native_session)?;
     let resources: Bound<'py, PyAny> = native.getattr("resources")?;
     let scope_index: Bound<'py, PyAny> = scope_index_with_compile_usages(inputs)?;
@@ -95,7 +98,7 @@ pub(crate) fn assembled_project<'py>(
         &target_values,
     )?;
     let project: Bound<'py, PyAny> = project_view(inputs, &fields, &models)?;
-    let binding_results: Bound<'py, PyDict> = binding_rows(&context.analyses)?;
+    let binding_results: Bound<'py, PyDict> = binding_rows(py, context.analyses.as_ref())?;
     call_with(
         &registry::native(py, NativeAttr::CompleteSemanticProject)?,
         &[
@@ -265,7 +268,10 @@ fn project_fields<'py>(
         .getattr("diagnostics")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
-    diagnostics.extend(project_binding_diagnostics(models, &context.analyses)?);
+    diagnostics.extend(project_binding_diagnostics(
+        models,
+        context.analyses.as_ref(),
+    )?);
     fields.set_item("diagnostics", PyTuple::new(py, diagnostics)?)?;
     fields.set_item(
         "external_sql_reference_resolver",

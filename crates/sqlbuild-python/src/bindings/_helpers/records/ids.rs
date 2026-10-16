@@ -343,8 +343,6 @@ native_ids! {
         MovePreview => "MovePreview",
         NamedSqlHookEntry => "NamedSqlHookEntry",
         NativeColumnQuery => "NativeColumnQuery",
-        NativeModelAnalyses => "NativeModelAnalyses",
-        NativeModelAnalysisRequest => "NativeModelAnalysisRequest",
         NativeModelConfigInputs => "NativeModelConfigInputs",
         NativeModelConfigSession => "NativeModelConfigSession",
         NativePivotTables => "NativePivotTables",
@@ -662,7 +660,6 @@ native_ids! {
     /// A native function, class or value native code reaches through the module.
     pub(crate) enum NativeAttr {
         AnalyzeCompileProject => "analyze_compile_project",
-        AnalyzeNativeModelSql => "analyze_native_model_sql",
         ApplyCommandWarehouse => "apply_command_warehouse",
         ApplyConfiguredMicrobatchLimits => "apply_configured_microbatch_limits",
         ApplyDeferredLocations => "apply_deferred_locations",
@@ -1133,7 +1130,6 @@ native_ids! {
         SqlTestScanCache => "SqlTestScanCache",
         SqlValueValidationError => "SqlValueValidationError",
         StandalonePivotModels => "standalone_pivot_models",
-        StartModelAnalysisSession => "start_model_analysis_session",
         StaticSqlTestPlanningDiagnostics => "static_sql_test_planning_diagnostics",
         StoredOldNameViewColumns => "stored_old_name_view_columns",
         TerminalEventIndex => "TerminalEventIndex",

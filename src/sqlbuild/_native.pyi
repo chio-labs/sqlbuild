@@ -5364,12 +5364,6 @@ def locate_model_binding_diagnostics(
 class NativeModelAnalysisSession:
     @property
     def fact_models(self) -> list[str]: ...
-    def run(
-        self,
-    ) -> tuple[list[tuple[str, list[tuple[str, str]]]], list[str]]: ...
-    def finish(
-        self,
-    ) -> tuple[list[tuple[str, list[tuple[str, str]]]], list[str], list[bool]]: ...
     def binding_rows(self) -> list[list[_AnalysisDiagnosticRow]]: ...
     def outcome_rows(self, index: int) -> tuple[Any, Any]: ...
     def prove_dynamic_contracts(
@@ -5380,13 +5374,6 @@ class NativeModelAnalysisSession:
     @property
     def cache_stats(self) -> tuple[int, int, int, str | None] | None: ...
 
-def start_model_analysis_session(
-    catalog: object,
-    request: tuple[object, ...],
-    cache: tuple[str, str] | None = None,
-    adapter_rules: tuple[Mapping[str, Callable[..., object]], type] | None = None,
-) -> NativeModelAnalysisSession: ...
-def analyze_native_model_sql(*, request: Any) -> Any: ...
 def session_outcome_analysis(
     *, session: Any, position: int, placeholders: dict[str, str] | None
 ) -> Any: ...
@@ -9972,48 +9959,6 @@ class ConfigValueTypeError(ValueError):
     key: Any
     expected: Any
     actual_type: Any
-
-class NativeModelAnalysisRequest(NativeRecord):
-    """The Python model analysis's arguments plus the facts dynamic pivot proofs need."""
-
-    known_functions: tuple[str, ...]
-    known_types: tuple[str, ...]
-    model_inputs: tuple[ModelInput, ...]
-    column_nullability_by_table: dict[str, dict[str, InferredNullability]]
-    column_types_by_table: dict[str, dict[str, str]]
-    inference_profile: ExpressionInferenceProfile
-    allow_compact_analysis: bool
-    rich_type_inference: bool
-    analysis_cache: AnalysisCacheContext | None
-    complete_binding_schemas: dict[str, dict[str, str]]
-    dynamic_families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]]
-    def __init__(
-        self,
-        known_functions: tuple[str, ...],
-        known_types: tuple[str, ...],
-        model_inputs: tuple[ModelInput, ...],
-        column_nullability_by_table: dict[str, dict[str, InferredNullability]],
-        column_types_by_table: dict[str, dict[str, str]],
-        inference_profile: ExpressionInferenceProfile,
-        allow_compact_analysis: bool,
-        rich_type_inference: bool,
-        analysis_cache: AnalysisCacheContext | None,
-        complete_binding_schemas: dict[str, dict[str, str]],
-        dynamic_families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]],
-    ) -> None: ...
-
-class NativeModelAnalyses(NativeRecord):
-    """Each analysed model's position in the finished session that keeps its outcome."""
-
-    positions: dict[str, int]
-    succeeded: frozenset[str]
-    session: Any | None
-    def __init__(
-        self,
-        positions: dict[str, int],
-        succeeded: frozenset[str],
-        session: Any | None,
-    ) -> None: ...
 
 class NativePivotTables(NativeRecord):
     """The relation facts Python's dynamic pivot proofs read, for proofs outside a session."""

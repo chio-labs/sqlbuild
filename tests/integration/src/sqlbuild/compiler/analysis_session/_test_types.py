@@ -29,15 +29,6 @@ class GeneratedAnalysisTestCase:
 
 
 @dataclass(frozen=True)
-class InternalFailureTestCase:
-    """A project whose native analysis fails internally, and the error the compile raises."""
-
-    description: str
-    files: dict[str, str]
-    expected_message: str
-
-
-@dataclass(frozen=True)
 class CyclicAnalysisTestCase:
     """Models that `ref` each other, which the native session analyses in one unordered wave."""
 
@@ -133,14 +124,6 @@ class TableFunctionColumnsTestCase:
     returns: str
     body_sql: str
     expected_error: str | None
-
-
-@dataclass(frozen=True)
-class MissingSessionAnalysisTestCase:
-    """A broken invariant: the session returns no analysis for a model it was asked about."""
-
-    description: str
-    expected_message: str
 
 
 @dataclass(frozen=True)
