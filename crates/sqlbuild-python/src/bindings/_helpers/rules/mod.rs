@@ -1,5 +1,6 @@
 pub(crate) mod builtin_catalogue;
 pub(crate) mod catalogue;
+pub(crate) mod config_json;
 pub(crate) mod constants;
 pub(crate) mod custom_evaluation;
 pub(crate) mod custom_host_observation;

@@ -12,6 +12,7 @@ use sqlbuild_rules::rule_results::models::RuleFinding;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::records::fields::field as record_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::fact_replay::project_models;
@@ -22,7 +23,7 @@ const PATHLIB_MODULE: &str = "pathlib";
 const CTYPES_MODULE: &str = "ctypes";
 
 fn integer(object: &Bound<'_, PyAny>, field: &str) -> PyResult<i64> {
-    object.getattr(field)?.extract()
+    record_field(object, field)?.extract()
 }
 
 fn python_finding<'py>(py: Python<'py>, finding: RuleFinding) -> PyResult<Bound<'py, PyAny>> {
@@ -51,23 +52,26 @@ fn python_finding<'py>(py: Python<'py>, finding: RuleFinding) -> PyResult<Bound<
 /// Finalize the combined SQL, built-in and custom findings of one planned rules run.
 #[pyfunction]
 #[pyo3(signature = (*, plan, sql_result, result))]
-fn finish_rule_run<'py>(
+pub(crate) fn finish_rule_run<'py>(
     plan: &Bound<'py, PyAny>,
     sql_result: &Bound<'py, PyAny>,
     result: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = plan.py();
     let mut evaluated_codes: Vec<String> = Vec::new();
-    for rule in plan.getattr("selected")?.try_iter()? {
-        evaluated_codes.push(rule?.getattr("code")?.extract()?);
+    for rule in record_field(plan, "selected")?.try_iter()? {
+        evaluated_codes.push(record_field(&rule?, "code")?.extract()?);
     }
     let mut combined: Vec<Bound<'py, PyAny>> = Vec::new();
-    for findings in [sql_result.getattr("findings")?, result.getattr("findings")?] {
+    for findings in [
+        record_field(sql_result, "findings")?,
+        record_field(result, "findings")?,
+    ] {
         combined.extend(findings.try_iter()?.collect::<PyResult<Vec<_>>>()?);
     }
     let finalized: Vec<RuleFinding> = finalize_rule_findings_rows(
-        &plan.getattr("config")?,
-        &plan.getattr("project_dir")?,
+        &record_field(plan, "config")?,
+        &record_field(plan, "project_dir")?,
         evaluated_codes,
         combined,
     )?
@@ -81,7 +85,7 @@ fn finish_rule_run<'py>(
         .map(|finding| finding.path.clone())
         .collect();
     let mut unevaluated_models: i64 = 0;
-    for model in project_models(&plan.getattr("project")?)? {
+    for model in project_models(&record_field(plan, "project")?)? {
         unevaluated_models += i64::from(unevaluated.contains(&model.posix));
     }
     let findings: Vec<Bound<'py, PyAny>> = grouped
@@ -110,13 +114,13 @@ fn finish_rule_run<'py>(
                 (integer(sql_result, "sql_ms")? + integer(result, "built_in_ms")?)
                     .into_bound_py_any(py)?,
             ),
-            ("custom_ms", result.getattr("custom_ms")?),
-            ("custom_cpu_ms", result.getattr("custom_cpu_ms")?),
+            ("custom_ms", record_field(result, "custom_ms")?),
+            ("custom_cpu_ms", record_field(result, "custom_cpu_ms")?),
             ("cache_hits", total("cache_hits")?),
             ("cache_misses", total("cache_misses")?),
             (
                 "skipped_type_proof_rules",
-                plan.getattr("skipped_type_proof_rules")?,
+                record_field(plan, "skipped_type_proof_rules")?,
             ),
         ],
     )

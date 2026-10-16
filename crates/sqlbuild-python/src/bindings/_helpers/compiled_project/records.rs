@@ -463,6 +463,9 @@ fn hand_built_project<'py>(
 pub(crate) fn compiled_project_facts<'py>(
     project: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, NativeCompiledProject>> {
+    if let Ok(view) = project.downcast::<NativeProjectView>() {
+        return Ok(view.get().owner().bind(project.py()).clone());
+    }
     let retained: Bound<'py, PyAny> = project.getattr("native_project")?;
     if !retained.is_none() {
         return Ok(retained.downcast_into()?);

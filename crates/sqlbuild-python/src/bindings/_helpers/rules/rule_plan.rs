@@ -3,11 +3,14 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyFrozenSet, PySet, PySetMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_rules::project_tree::main::pure_path_posix::pure_path_posix;
+use std::path::Path;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::{field, replaced};
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::catalogue::{
@@ -15,21 +18,21 @@ use crate::bindings::_helpers::rules::catalogue::{
     verify_custom_rules,
 };
 use crate::bindings::_helpers::rules::constants::TYPE_PROOF_RULE_CODES;
-use crate::bindings::_helpers::rules::fact_replay::project_models;
+use crate::bindings::_helpers::rules::fact_replay::{project_attribute, project_models};
 use crate::bindings::_helpers::rules::rule_run::freed_memory_released;
 
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const DATACLASSES_MODULE: &str = "dataclasses";
-const PATHLIB_MODULE: &str = "pathlib";
+const MODEL_RESOURCE_TYPE: &str = "model";
 
 /// Build the catalogue and select the rules, project slice and settings one run evaluates.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn plan_rule_run<'py>(options: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn plan_rule_run<'py>(
+    options: Option<&Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyAny>> {
     let options = Request::new("plan_rule_run", options)?;
     let py: Python<'py> = options.py();
     let graph: Bound<'py, PyAny> = options.get("graph")?;
-    let project: Bound<'py, PyAny> = graph.getattr("project")?;
+    let project: Bound<'py, PyAny> = field(&graph, "project")?;
     freed_memory_released(py);
     let effective_config: Bound<'py, PyAny> =
         resolved_ignore_selectors(&options.get("config")?, &project)?;
@@ -53,14 +56,11 @@ fn plan_rule_run<'py>(options: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'p
     )?;
     let mut skipped_type_proof_rules: Vec<Bound<'py, PyAny>> = Vec::new();
     if options.get("no_sql_analysis")?.is_truthy()?
-        || !project
-            .getattr("settings")?
-            .getattr("sql_analysis")?
-            .is_truthy()?
+        || !field(&project_attribute(&project, "settings")?, "sql_analysis")?.is_truthy()?
     {
         let mut kept: Vec<Bound<'py, PyAny>> = Vec::with_capacity(selected.len());
         for rule in selected {
-            let code: Bound<'py, PyAny> = rule.getattr("code")?;
+            let code: Bound<'py, PyAny> = field(&rule, "code")?;
             if TYPE_PROOF_RULE_CODES.contains(&code.extract::<String>()?.as_str()) {
                 skipped_type_proof_rules.push(code);
             } else {
@@ -71,7 +71,7 @@ fn plan_rule_run<'py>(options: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'p
     }
     let mut custom_rules: Vec<Bound<'py, PyAny>> = Vec::new();
     for rule in &selected {
-        if rule.getattr("custom")?.is_truthy()? {
+        if field(rule, "custom")?.is_truthy()? {
             custom_rules.push(rule.clone());
         }
     }
@@ -86,19 +86,16 @@ fn plan_rule_run<'py>(options: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'p
     };
     let mut codes: Vec<Bound<'py, PyAny>> = Vec::with_capacity(selected.len());
     for rule in &selected {
-        codes.push(rule.getattr("code")?);
+        codes.push(field(rule, "code")?);
     }
     let selection_config: Bound<'py, PyAny> =
         selection_rules_config(&effective_config, model_paths.as_ref(), &selected_project)?;
-    let selected_config: Bound<'py, PyAny> = imported(py, DATACLASSES_MODULE, "replace")?.call(
-        (selection_config,),
-        Some(&keywords(
-            py,
-            &[
-                ("select", PyTuple::new(py, codes)?.into_any()),
-                ("ignore", PyTuple::empty(py).into_any()),
-            ],
-        )?),
+    let selected_config: Bound<'py, PyAny> = replaced(
+        &selection_config,
+        &[
+            ("select", PyTuple::new(py, codes)?.into_any()),
+            ("ignore", PyTuple::empty(py).into_any()),
+        ],
     )?;
     call_with(
         &registry::class(py, RecordId::RuleRunPlan)?,
@@ -131,17 +128,15 @@ fn selected_model_paths<'py>(
     if selected_keys.is_none() {
         return Ok(None);
     }
-    let model_type: Bound<'py, PyAny> =
-        imported(py, COMPILE_TYPES_MODULE, "CompiledResourceType")?.getattr("MODEL")?;
     let names: Bound<'py, PySet> = PySet::empty(py)?;
     for key in selected_keys.try_iter()? {
         let key: Bound<'py, PyAny> = key?;
-        if key.getattr("resource_type")?.is(&model_type) {
-            names.add(key.getattr("name")?)?;
+        if field(&key, "resource_type")?.eq(MODEL_RESOURCE_TYPE)? {
+            names.add(field(&key, "name")?)?;
         }
     }
     let paths: Bound<'py, PySet> = PySet::empty(py)?;
-    for model in project_models(&graph.getattr("project")?)? {
+    for model in project_models(&field(graph, "project")?)? {
         if names.contains(&model.name)? {
             paths.add(model.posix)?;
         }
@@ -180,43 +175,38 @@ fn selection_rules_config<'py>(
     let Some(model_paths) = model_paths else {
         return Ok(config.clone());
     };
-    let path_class: Bound<'py, PyAny> = imported(py, PATHLIB_MODULE, "Path")?;
     let model_names: Bound<'py, PySet> = PySet::empty(py)?;
     for model in project_models(project)? {
         model_names.add(model.name)?;
     }
     let mut rule_exceptions: Vec<Bound<'py, PyAny>> = Vec::new();
-    for entry in config.getattr("rule_exceptions")?.try_iter()? {
+    for entry in field(config, "rule_exceptions")?.try_iter()? {
         let entry: Bound<'py, PyAny> = entry?;
-        let path: Bound<'py, PyAny> = path_class
-            .call1((entry.getattr("path")?,))?
-            .call_method0("as_posix")?;
+        let path: String = field(&entry, "path")?.extract()?;
+        let path: String = String::from_utf8_lossy(&pure_path_posix(Path::new(&path))).into_owned();
         if model_paths.contains(path)? {
             rule_exceptions.push(entry);
         }
     }
     let mut graph_edge_exceptions: Vec<Bound<'py, PyAny>> = Vec::new();
-    for entry in config.getattr("graph_edge_exceptions")?.try_iter()? {
+    for entry in field(config, "graph_edge_exceptions")?.try_iter()? {
         let entry: Bound<'py, PyAny> = entry?;
-        if model_names.contains(entry.getattr("consumer")?)? {
+        if model_names.contains(field(&entry, "consumer")?)? {
             graph_edge_exceptions.push(entry);
         }
     }
-    imported(py, DATACLASSES_MODULE, "replace")?.call(
-        (config,),
-        Some(&keywords(
-            py,
-            &[
-                (
-                    "rule_exceptions",
-                    PyTuple::new(py, rule_exceptions)?.into_any(),
-                ),
-                (
-                    "graph_edge_exceptions",
-                    PyTuple::new(py, graph_edge_exceptions)?.into_any(),
-                ),
-            ],
-        )?),
+    replaced(
+        config,
+        &[
+            (
+                "rule_exceptions",
+                PyTuple::new(py, rule_exceptions)?.into_any(),
+            ),
+            (
+                "graph_edge_exceptions",
+                PyTuple::new(py, graph_edge_exceptions)?.into_any(),
+            ),
+        ],
     )
 }
 

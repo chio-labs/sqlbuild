@@ -95,7 +95,9 @@ fn posix(path: &Path) -> String {
 /// Run the planned SQL rules on the caller while built-in rules evaluate natively.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn run_planned_sql_rules<'py>(options: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn run_planned_sql_rules<'py>(
+    options: Option<&Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyAny>> {
     let options = Request::new("run_planned_sql_rules", options)?;
     let py: Python<'py> = options.py();
     let plan: Bound<'py, PyAny> = options.get("plan")?;

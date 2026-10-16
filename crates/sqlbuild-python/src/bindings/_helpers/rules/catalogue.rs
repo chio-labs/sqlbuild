@@ -1,6 +1,6 @@
 //! The validated rule catalogue, the active rules it selects and resolved ignore selectors.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -16,10 +16,13 @@ use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::{field as record_field, path_posix, replaced};
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::builtin_catalogue::builtin_rules;
+use crate::bindings::_helpers::rules::config_json::asdict_json;
 use crate::bindings::_helpers::rules::custom_rule_evidence::verify_custom_rules as verify_rule_sources;
+use crate::bindings::_helpers::rules::fact_replay::{project_attribute, project_models};
 use crate::bindings::_helpers::rules::selection::{rules_error, selected_rule_codes};
 
 const DATACLASSES_MODULE: &str = "dataclasses";
@@ -32,6 +35,11 @@ const BUILTIN_CHECK_MESSAGE: &str = "built-in rules execute only through the nat
 /// The Python rules configuration as the native configuration model.
 pub(crate) fn native_rules_config(config: &Bound<'_, PyAny>) -> PyResult<RulesConfig> {
     let py: Python<'_> = config.py();
+    if let Some(fields) = asdict_json(config)? {
+        return serde_json::from_value(fields).map_err(|error| {
+            rules_error(py, &format!("invalid rules configuration: {error}"), None)
+        });
+    }
     let fields: Bound<'_, PyAny> = imported(py, DATACLASSES_MODULE, "asdict")?.call1((config,))?;
     let encoded: String = imported(py, JSON_MODULE, "dumps")?
         .call(
@@ -50,15 +58,15 @@ pub(crate) fn native_rules_config(config: &Bound<'_, PyAny>) -> PyResult<RulesCo
 pub(crate) fn references_custom_rules(config: &Bound<'_, PyAny>) -> PyResult<bool> {
     let mut selectors: Vec<String> = Vec::new();
     for field in ["select", "ignore", "rule_options"] {
-        for selector in config.getattr(field)?.try_iter()? {
+        for selector in record_field(config, field)?.try_iter()? {
             selectors.push(selector?.extract()?);
         }
     }
-    for entry in config.getattr("rule_exceptions")?.try_iter()? {
-        selectors.push(entry?.getattr("rule")?.extract()?);
+    for entry in record_field(config, "rule_exceptions")?.try_iter()? {
+        selectors.push(record_field(&entry?, "rule")?.extract()?);
     }
-    for entry in config.getattr("rule_ignores")?.try_iter()? {
-        for rule in entry?.getattr("rules")?.try_iter()? {
+    for entry in record_field(config, "rule_ignores")?.try_iter()? {
+        for rule in record_field(&entry?, "rules")?.try_iter()? {
             selectors.push(rule?.extract()?);
         }
     }
@@ -113,18 +121,17 @@ fn option_value(value: &Bound<'_, PyAny>) -> PyResult<OptionValue> {
 }
 
 fn optional_integer(option: &Bound<'_, PyAny>, field: &str) -> PyResult<Option<i64>> {
-    option.getattr(field)?.extract()
+    record_field(option, field)?.extract()
 }
 
 fn option_spec(option: &Bound<'_, PyAny>) -> PyResult<OptionSpec> {
-    let item_type: Bound<'_, PyAny> = option.getattr("item_type")?;
+    let item_type: Bound<'_, PyAny> = record_field(option, "item_type")?;
     Ok(OptionSpec {
-        name: option.getattr("name")?.extract()?,
-        description: option.getattr("description")?.extract()?,
-        value_type: option_kind(&option.getattr("value_type")?)?,
-        default: option_value(&option.getattr("default")?)?,
-        choices: option
-            .getattr("choices")?
+        name: record_field(option, "name")?.extract()?,
+        description: record_field(option, "description")?.extract()?,
+        value_type: option_kind(&record_field(option, "value_type")?)?,
+        default: option_value(&record_field(option, "default")?)?,
+        choices: record_field(option, "choices")?
             .try_iter()?
             .map(|choice| option_value(&choice?))
             .collect::<PyResult<_>>()?,
@@ -141,9 +148,8 @@ fn option_spec(option: &Bound<'_, PyAny>) -> PyResult<OptionSpec> {
 
 fn catalogue_rule(rule: &Bound<'_, PyAny>) -> PyResult<CatalogueRule> {
     Ok(CatalogueRule {
-        code: rule.getattr("code")?.extract()?,
-        options: rule
-            .getattr("options")?
+        code: record_field(rule, "code")?.extract()?,
+        options: record_field(rule, "options")?
             .try_iter()?
             .map(|option| option_spec(&option?))
             .collect::<PyResult<_>>()?,
@@ -154,7 +160,7 @@ fn configured_options(
     config: &Bound<'_, PyAny>,
 ) -> PyResult<BTreeMap<String, BTreeMap<String, OptionValue>>> {
     let mut configured: BTreeMap<String, BTreeMap<String, OptionValue>> = BTreeMap::new();
-    let options: Bound<'_, PyDict> = config.getattr("rule_options")?.cast_into::<PyDict>()?;
+    let options: Bound<'_, PyDict> = record_field(config, "rule_options")?.cast_into::<PyDict>()?;
     for (code, values) in options.iter() {
         let values: Bound<'_, PyDict> = values.cast_into::<PyDict>()?;
         let mut entries: BTreeMap<String, OptionValue> = BTreeMap::new();
@@ -243,7 +249,7 @@ pub(crate) fn select_rules<'py>(
     };
     let mut by_code: BTreeMap<String, Bound<'py, PyAny>> = BTreeMap::new();
     for rule in catalogue {
-        by_code.insert(rule.getattr("code")?.extract()?, rule.clone());
+        by_code.insert(record_field(rule, "code")?.extract()?, rule.clone());
     }
     selected_rule_codes(config, &payloads)?
         .into_iter()
@@ -299,24 +305,38 @@ fn select_catalogue_rules<'py>(
     )
 }
 
-fn resource_paths<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
-    let paths: Bound<'py, PyDict> = PyDict::new(project.py());
+/// Each model, function, seed and source key's relative path as POSIX text.
+fn resource_paths(project: &Bound<'_, PyAny>) -> PyResult<HashMap<(String, String), String>> {
+    let mut paths: HashMap<(String, String), String> = HashMap::new();
+    for model in project_models(project)? {
+        paths.insert(model.key, model.posix);
+    }
     for (collection, file) in [
-        ("models", None),
         ("functions", None),
         ("seeds", Some("seed_file")),
         ("sources", Some("source_file")),
     ] {
-        for resource in project.getattr(collection)?.try_iter()? {
-            let resource: Bound<'py, PyAny> = resource?;
-            let owner: Bound<'py, PyAny> = match file {
-                Some(file) => resource.getattr(file)?,
+        for resource in project_attribute(project, collection)?.try_iter()? {
+            let resource: Bound<'_, PyAny> = resource?;
+            let owner: Bound<'_, PyAny> = match file {
+                Some(file) => record_field(&resource, file)?,
                 None => resource.clone(),
             };
-            paths.set_item(resource.getattr("key")?, owner.getattr("relative_path")?)?;
+            paths.insert(
+                object_key(&record_field(&resource, "key")?)?,
+                path_posix(&record_field(&owner, "relative_path")?)?,
+            );
         }
     }
     Ok(paths)
+}
+
+/// `(resource type, name)` of a `CompiledObjectKey`.
+fn object_key(key: &Bound<'_, PyAny>) -> PyResult<(String, String)> {
+    Ok((
+        record_field(key, "resource_type")?.str()?.extract()?,
+        record_field(key, "name")?.extract()?,
+    ))
 }
 
 /// `config` with every selector-scoped rule ignore resolved into deterministic finding paths.
@@ -325,23 +345,21 @@ pub(crate) fn resolved_ignore_selectors<'py>(
     project: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = config.py();
-    let ignores: Vec<Bound<'py, PyAny>> = config
-        .getattr("rule_ignores")?
+    let ignores: Vec<Bound<'py, PyAny>> = record_field(config, "rule_ignores")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
     let mut scoped: bool = false;
     for ignore in &ignores {
-        scoped |= ignore.getattr("selectors")?.is_truthy()?;
+        scoped |= record_field(ignore, "selectors")?.is_truthy()?;
     }
     if !scoped {
         return Ok(config.clone());
     }
-    let replace: Bound<'py, PyAny> = imported(py, DATACLASSES_MODULE, "replace")?;
     let scope: Bound<'py, PyAny> = registry::native(py, NativeAttr::BuildPlannerScope)?;
-    let path_by_key: Bound<'py, PyDict> = resource_paths(project)?;
+    let path_by_key: HashMap<(String, String), String> = resource_paths(project)?;
     let mut resolved: Vec<Bound<'py, PyAny>> = Vec::with_capacity(ignores.len());
     for ignore in ignores {
-        let selectors: Bound<'py, PyAny> = ignore.getattr("selectors")?;
+        let selectors: Bound<'py, PyAny> = record_field(&ignore, "selectors")?;
         if !selectors.is_truthy()? {
             resolved.push(ignore);
             continue;
@@ -351,9 +369,9 @@ pub(crate) fn resolved_ignore_selectors<'py>(
             &[("project", project.clone()), ("select", selectors.clone())],
         )?;
         let mut selector_paths: BTreeSet<String> = BTreeSet::new();
-        for key in selected.getattr("selected_keys")?.try_iter()? {
-            if let Some(path) = path_by_key.get_item(key?)? {
-                selector_paths.insert(path.call_method0("as_posix")?.extract()?);
+        for key in record_field(&selected, "selected_keys")?.try_iter()? {
+            if let Some(path) = path_by_key.get(&object_key(&key?)?) {
+                selector_paths.insert(path.clone());
             }
         }
         if selector_paths.is_empty() {
@@ -367,26 +385,20 @@ pub(crate) fn resolved_ignore_selectors<'py>(
                 None,
             ));
         }
-        for path in ignore.getattr("paths")?.try_iter()? {
+        for path in record_field(&ignore, "paths")?.try_iter()? {
             selector_paths.insert(path?.extract()?);
         }
-        resolved.push(replace.call(
-            (ignore,),
-            Some(&keywords(
-                py,
-                &[
-                    ("paths", PyTuple::new(py, selector_paths)?.into_any()),
-                    ("selectors", PyTuple::empty(py).into_any()),
-                ],
-            )?),
+        resolved.push(replaced(
+            &ignore,
+            &[
+                ("paths", PyTuple::new(py, selector_paths)?.into_any()),
+                ("selectors", PyTuple::empty(py).into_any()),
+            ],
         )?);
     }
-    replace.call(
-        (config,),
-        Some(&keywords(
-            py,
-            &[("rule_ignores", PyTuple::new(py, resolved)?.into_any())],
-        )?),
+    replaced(
+        config,
+        &[("rule_ignores", PyTuple::new(py, resolved)?.into_any())],
     )
 }
 

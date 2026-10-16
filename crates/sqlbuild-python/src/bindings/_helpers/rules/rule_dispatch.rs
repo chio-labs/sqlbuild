@@ -1,6 +1,6 @@
 //! Run built-in, SQL and custom rule phases on their threads and combine their findings.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
@@ -11,21 +11,32 @@ use pyo3::exceptions::{PyKeyboardInterrupt, PyRuntimeError};
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyDict, PyFrozenSet, PyTuple};
+use pyo3::types::{PyDict, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::cache::native_store::current_code_identity;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::python_calls::{
+    KeywordArguments, call_with, keywords,
+};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::rules::catalogue::{
+    resolved_ignore_selectors, rule_catalogue, select_rules,
+};
 use crate::bindings::_helpers::rules::constants::TYPE_PROOF_RULE_CODES;
 use crate::bindings::_helpers::rules::custom_evaluation::{
     CustomRun, evaluate_custom_rules_cached, outcome,
 };
 use crate::bindings::_helpers::rules::custom_hosts::HostCancel;
 use crate::bindings::_helpers::rules::custom_rule_evidence::verify_custom_rules;
+use crate::bindings::_helpers::rules::rows::finalize_rule_findings_rows;
+use crate::bindings::_helpers::rules::rule_plan::plan_rule_run;
+use crate::bindings::_helpers::rules::rule_run::finish_rule_run;
+use crate::bindings::_helpers::rules::selection::{rule_selected, selected_rule_codes};
+use crate::bindings::_helpers::rules::sql_rules::run_planned_sql_rules;
 
 const CUSTOM_THREAD: &str = "sqlbuild-custom-rules";
 const GENERIC_DIALECT: &str = "generic";
@@ -121,32 +132,18 @@ fn evaluate_project_rules<'py>(
     let project_dir: Bound<'py, PyAny> = arguments.value("project_dir")?;
     let dialect: String = dialect_argument(&arguments)?;
     let verify_determinism: bool = arguments.flag("verify_determinism")?;
-    let effective: Bound<'py, PyAny> = call_with(
-        &native(py, NativeAttr::ResolveRuleIgnoreSelectors)?,
-        &[("config", config), ("project", project.clone())],
-    )?;
-    let catalogue: Bound<'py, PyAny> = call_with(
-        &native(py, NativeAttr::BuildRuleCatalogue)?,
-        &[
-            ("config", effective.clone()),
-            ("project_dir", project_dir.clone()),
-        ],
-    )?;
+    let effective: Bound<'py, PyAny> = resolved_ignore_selectors(&config, &project)?;
+    let rules: Vec<Bound<'py, PyAny>> = rule_catalogue(&effective, &project_dir, true)?;
     let mut custom: bool = false;
-    for rule in catalogue.try_iter()? {
-        custom = custom || rule?.getattr("custom")?.is_truthy()?;
+    for rule in &rules {
+        custom = custom || field(rule, "custom")?.is_truthy()?;
     }
     if custom {
-        let rules: Bound<'py, PyAny> = call_with(
-            &native(py, NativeAttr::SelectCatalogueRules)?,
-            &[
-                ("catalogue", catalogue.clone()),
-                ("config", effective.clone()),
-                ("project_dir", project_dir.clone()),
-            ],
-        )?;
-        verify_custom_rules(&rules, &project_dir)?;
+        let selected: Vec<Bound<'py, PyAny>> =
+            select_rules(&rules, &effective, &project_dir, None)?;
+        verify_custom_rules(PyTuple::new(py, selected)?.as_any(), &project_dir)?;
     }
+    let catalogue: Bound<'py, PyAny> = PyTuple::new(py, rules)?.into_any();
     let run: NativeRun<'py> = NativeRun {
         project,
         config: effective,
@@ -232,8 +229,8 @@ pub(crate) fn evaluate_rules<'py>(
         KeywordArguments::read(py, "evaluate_rules", options, EVALUATE_RULES_OPTIONS)?;
     let graph: Bound<'py, PyAny> = arguments.value("graph")?;
     let dialect: Bound<'py, PyAny> = arguments.value("dialect")?;
-    let plan: Bound<'py, PyAny> = call_with(
-        &native(py, NativeAttr::PlanRuleRun)?,
+    let plan: Bound<'py, PyAny> = plan_rule_run(Some(&keywords(
+        py,
         &[
             ("graph", graph.clone()),
             ("config", arguments.value("config")?),
@@ -244,18 +241,18 @@ pub(crate) fn evaluate_rules<'py>(
                 arguments.value_or_false("no_sql_analysis")?,
             ),
         ],
-    )?;
+    )?))?;
     let run: NativeRun<'py> = NativeRun {
-        project: plan.getattr("project")?,
-        config: plan.getattr("config")?,
-        project_dir: plan.getattr("project_dir")?,
-        catalogue: plan.getattr("catalogue")?,
+        project: field(&plan, "project")?,
+        config: field(&plan, "config")?,
+        project_dir: field(&plan, "project_dir")?,
+        catalogue: field(&plan, "catalogue")?,
         dialect: dialect.extract()?,
         verify_determinism: false,
         initial_findings: None,
         cancel: HostCancel::default(),
     };
-    let payloads: Bound<'py, PyAny> = plan.getattr("custom_payloads")?;
+    let payloads: Bound<'py, PyAny> = field(&plan, "custom_payloads")?;
     let custom: Option<CustomHandle> = start_custom_rules(&run, &payloads)?;
     let native_run: [Py<PyAny>; 5] = [
         run.project.clone().unbind(),
@@ -287,8 +284,8 @@ pub(crate) fn evaluate_rules<'py>(
             .map(Bound::unbind)
         })
     })?;
-    let sql_result: PyResult<Bound<'py, PyAny>> = call_with(
-        &native(py, NativeAttr::RunPlannedSqlRules)?,
+    let sql_result: PyResult<Bound<'py, PyAny>> = run_planned_sql_rules(Some(&keywords(
+        py,
         &[
             ("plan", plan.clone()),
             ("graph", graph),
@@ -296,19 +293,12 @@ pub(crate) fn evaluate_rules<'py>(
             ("dialect", dialect),
             ("early_lint", arguments.value("early_lint")?),
         ],
-    );
+    )?));
     cancel_on_interrupt(py, &sql_result, &run.cancel);
     let result: PyResult<Bound<'py, PyAny>> = joined(py, native_thread, &run.cancel);
     let sql_result: Bound<'py, PyAny> = sql_result?;
     let result: Bound<'py, PyAny> = result?;
-    call_with(
-        &native(py, NativeAttr::FinishRuleRun)?,
-        &[
-            ("plan", plan),
-            ("sql_result", sql_result),
-            ("result", result),
-        ],
-    )
+    finish_rule_run(&plan, &sql_result, &result)
 }
 
 /// Evaluate built-in rules natively while custom rules run beside them.
@@ -341,38 +331,33 @@ fn evaluate_native<'py>(
     };
     let native_result: Bound<'py, PyAny> = evaluated?;
     let custom: Bound<'py, PyAny> = custom?;
-    let mut findings: Bound<'py, PyAny> = PyTuple::new(
-        py,
-        native_result
-            .getattr("findings")?
-            .try_iter()?
-            .chain(custom.getattr("findings")?.try_iter()?)
-            .collect::<PyResult<Vec<_>>>()?,
-    )?
-    .into_any();
-    if !defer_suppressions {
-        findings = call_with(
-            &native(py, NativeAttr::FinalizeRuleFindingsRows)?,
-            &[
-                ("config", run.config.clone()),
-                ("project_dir", run.project_dir.clone()),
-                ("evaluated_codes", native_result.getattr("selected_codes")?),
-                ("findings", findings),
-            ],
-        )?;
-    }
-    let reused: bool = native_result.getattr("reused")?.is_truthy()?;
-    let native_hits: i64 = native_result.getattr("cache_hits")?.extract()?;
-    let native_misses: i64 = native_result.getattr("cache_misses")?.extract()?;
-    let custom_hits: i64 = custom.getattr("cache_hits")?.extract()?;
-    let custom_misses: i64 = custom.getattr("cache_misses")?.extract()?;
+    let combined: Vec<Bound<'py, PyAny>> = field(&native_result, "findings")?
+        .try_iter()?
+        .chain(field(&custom, "findings")?.try_iter()?)
+        .collect::<PyResult<Vec<_>>>()?;
+    let findings: Bound<'py, PyAny> = if defer_suppressions {
+        PyTuple::new(py, combined)?.into_any()
+    } else {
+        finalize_rule_findings_rows(
+            &run.config,
+            &run.project_dir,
+            field(&native_result, "selected_codes")?.extract()?,
+            combined,
+        )?
+        .into_any()
+    };
+    let reused: bool = field(&native_result, "reused")?.is_truthy()?;
+    let native_hits: i64 = field(&native_result, "cache_hits")?.extract()?;
+    let native_misses: i64 = field(&native_result, "cache_misses")?.extract()?;
+    let custom_hits: i64 = field(&custom, "cache_hits")?.extract()?;
+    let custom_misses: i64 = field(&custom, "cache_misses")?.extract()?;
     call_with(
         &registry::class(py, RecordId::RulesResult)?,
         &[
             ("findings", findings),
             (
                 "evaluated_models",
-                native_result.getattr("evaluated_models")?,
+                field(&native_result, "evaluated_models")?,
             ),
             (
                 "cache_hits",
@@ -392,11 +377,11 @@ fn evaluate_native<'py>(
                 if reused {
                     0.into_bound_py_any(py)?
                 } else {
-                    native_result.getattr("built_in_ms")?
+                    field(&native_result, "built_in_ms")?
                 },
             ),
-            ("custom_ms", custom.getattr("custom_ms")?),
-            ("custom_cpu_ms", custom.getattr("custom_cpu_ms")?),
+            ("custom_ms", field(&custom, "custom_ms")?),
+            ("custom_cpu_ms", field(&custom, "custom_cpu_ms")?),
         ],
     )
 }
@@ -419,15 +404,7 @@ fn native_request<'py>(
     };
     let mut include_type_proof: bool = false;
     for code in TYPE_PROOF_RULE_CODES {
-        include_type_proof = include_type_proof
-            || call_with(
-                &native(py, NativeAttr::RuleSelected)?,
-                &[
-                    ("config", run.config.clone()),
-                    ("code", pyo3::types::PyString::new(py, code).into_any()),
-                ],
-            )?
-            .is_truthy()?;
+        include_type_proof = include_type_proof || rule_selected(&run.config, code)?;
     }
     let request: Bound<'py, PyAny> = call_with(
         &native(py, NativeAttr::BuildRulesRequest)?,
@@ -461,34 +438,22 @@ fn start_custom_rules(
     if !payloads.is_truthy()? {
         return Ok(None);
     }
-    let selected: Bound<'_, PyFrozenSet> = PyFrozenSet::new(
-        py,
-        call_with(
-            &native(py, NativeAttr::SelectedRuleCodes)?,
-            &[
-                ("config", run.config.clone()),
-                ("custom_payloads", payloads.clone()),
-            ],
-        )?
-        .try_iter()?
-        .collect::<PyResult<Vec<_>>>()?,
-    )?;
+    let selected: HashSet<String> = selected_rule_codes(&run.config, payloads)?
+        .into_iter()
+        .collect();
     let mut rules: Vec<Py<PyAny>> = Vec::new();
     for rule in run.catalogue.try_iter()? {
         let rule: Bound<'_, PyAny> = rule?;
-        if rule.getattr("custom")?.is_truthy()? && selected.contains(rule.getattr("code")?)? {
+        if field(&rule, "custom")?.is_truthy()?
+            && selected.contains(&field(&rule, "code")?.extract::<String>()?)
+        {
             rules.push(rule.unbind());
         }
     }
     if rules.is_empty() {
         return Ok(None);
     }
-    if run
-        .config
-        .getattr("cache")?
-        .getattr("enabled")?
-        .is_truthy()?
-    {
+    if field(&field(&run.config, "cache")?, "enabled")?.is_truthy()? {
         let _identity: String = current_code_identity(py)?;
     }
     let mut fingerprints: HashMap<String, String> = HashMap::new();

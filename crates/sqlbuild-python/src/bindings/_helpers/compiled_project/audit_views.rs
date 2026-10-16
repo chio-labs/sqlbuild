@@ -232,7 +232,7 @@ macro_rules! audit_getters {
             }
 
             #[getter]
-            fn attached_target_name(&self, py: Python<'_>) -> PyResult<Option<String>> {
+            pub(crate) fn attached_target_name(&self, py: Python<'_>) -> PyResult<Option<String>> {
                 read_audit(&self.owner, self.index, py, |audit, _| {
                     Ok(audit.attached.target.as_ref().map(|target| target.name.clone()))
                 })

@@ -2,33 +2,33 @@
 
 use pyo3::exceptions::PyOSError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult};
-use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
+use pyo3::types::{PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
+use std::path::PathBuf;
+
+use sqlbuild_core::text::main::python_splitlines::python_splitlines;
 use sqlbuild_rules::rule_results::main::duplicate_literal_hints::duplicate_literal_hints;
 use sqlbuild_rules::rule_results::main::format_result::format_result;
 use sqlbuild_rules::rule_results::main::format_rules_progress::format_rules_progress;
 use sqlbuild_rules::rule_results::main::format_skipped_rules::format_skipped_rules;
 use sqlbuild_rules::rule_results::models::{ResultCounts, RuleFinding};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::fields::{field, path_posix, replaced};
 
-const DATACLASSES_MODULE: &str = "dataclasses";
 const UTF8: &str = "utf-8";
 
 pub(crate) fn rule_finding(finding: &Bound<'_, PyAny>) -> PyResult<RuleFinding> {
     Ok(RuleFinding {
-        code: finding.getattr("code")?.extract()?,
-        path: finding
-            .getattr("path")?
-            .call_method0("as_posix")?
-            .extract()?,
-        line: finding.getattr("line")?.extract()?,
-        column: finding.getattr("column")?.extract()?,
-        message: finding.getattr("message")?.extract()?,
-        remediation: finding.getattr("remediation")?.extract()?,
-        unevaluated: finding.getattr("unevaluated")?.is_truthy()?,
-        affected_rules: finding.getattr("affected_rules")?.extract()?,
-        fixable: finding.getattr("fixable")?.is_truthy()?,
+        code: field(finding, "code")?.extract()?,
+        path: path_posix(&field(finding, "path")?)?,
+        line: field(finding, "line")?.extract()?,
+        column: field(finding, "column")?.extract()?,
+        message: field(finding, "message")?.extract()?,
+        remediation: field(finding, "remediation")?.extract()?,
+        unevaluated: field(finding, "unevaluated")?.is_truthy()?,
+        affected_rules: field(finding, "affected_rules")?.extract()?,
+        fixable: field(finding, "fixable")?.is_truthy()?,
     })
 }
 
@@ -47,13 +47,13 @@ pub(crate) fn format_rules_result(
     json_output: bool,
 ) -> PyResult<String> {
     let counts = ResultCounts {
-        evaluated_models: result.getattr("evaluated_models")?.extract()?,
-        unevaluated_resources: result.getattr("unevaluated_resources")?.extract()?,
-        cache_hits: result.getattr("cache_hits")?.extract()?,
-        cache_misses: result.getattr("cache_misses")?.extract()?,
+        evaluated_models: field(result, "evaluated_models")?.extract()?,
+        unevaluated_resources: field(result, "unevaluated_resources")?.extract()?,
+        cache_hits: field(result, "cache_hits")?.extract()?,
+        cache_misses: field(result, "cache_misses")?.extract()?,
     };
     Ok(format_result(
-        &rule_findings(&result.getattr("findings")?)?,
+        &rule_findings(&field(result, "findings")?)?,
         counts,
         json_output,
     ))
@@ -66,15 +66,15 @@ pub(crate) fn rules_progress(
     note_skipped_rules: bool,
 ) -> PyResult<String> {
     let skipped: Option<Vec<String>> = if note_skipped_rules {
-        Some(result.getattr("skipped_type_proof_rules")?.extract()?)
+        Some(field(result, "skipped_type_proof_rules")?.extract()?)
     } else {
         None
     };
     Ok(format_rules_progress(
         elapsed_seconds,
         (
-            result.getattr("built_in_ms")?.extract()?,
-            result.getattr("custom_ms")?.extract()?,
+            field(result, "built_in_ms")?.extract()?,
+            field(result, "custom_ms")?.extract()?,
         ),
         skipped.as_deref(),
     ))
@@ -90,6 +90,16 @@ pub(crate) fn format_skipped_type_proof_rules(codes: Vec<String>) -> Option<Stri
 /// The authored lines of one finding's file; an unreadable file has none.
 fn file_lines(project_dir: &Bound<'_, PyAny>, path: &str) -> PyResult<Vec<String>> {
     let py = project_dir.py();
+    let root: PathBuf = project_dir.extract()?;
+    let Ok(bytes) = std::fs::read(root.join(path)) else {
+        return Ok(Vec::new());
+    };
+    if let Ok(text) = std::str::from_utf8(&bytes) {
+        return Ok(python_splitlines(text)
+            .into_iter()
+            .map(str::to_owned)
+            .collect());
+    }
     let file: Bound<'_, PyAny> = project_dir.div(path)?;
     let read: PyResult<Bound<'_, PyAny>> = call_with(
         &file.getattr("read_text")?,
@@ -117,15 +127,13 @@ fn with_duplicate_literal_hints<'py>(
         .collect::<PyResult<_>>()?;
     let hinted: Vec<Option<String>> =
         duplicate_literal_hints::<PyErr>(&rows, |path| file_lines(project_dir, path))?;
-    let replace: Bound<'py, PyAny> = imported(py, DATACLASSES_MODULE, "replace")?;
     let mut output: Vec<Bound<'py, PyAny>> = Vec::with_capacity(originals.len());
     for (finding, remediation) in originals.into_iter().zip(hinted) {
         output.push(match remediation {
-            Some(remediation) => {
-                let keywords: Bound<'py, PyDict> = PyDict::new(py);
-                keywords.set_item("remediation", remediation)?;
-                replace.call((finding,), Some(&keywords))?
-            }
+            Some(remediation) => replaced(
+                &finding,
+                &[("remediation", PyString::new(py, &remediation).into_any())],
+            )?,
             None => finding,
         });
     }

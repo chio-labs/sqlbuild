@@ -9,8 +9,10 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_rules::rules::main::selected_codes::selected_codes_json;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::records::fields::field as record_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::rules::config_json::{asdict_json, dumped_json};
 use crate::bindings::_helpers::rules::constants::RULES_NATIVE_API_VERSION;
 
 const DATACLASSES_MODULE: &str = "dataclasses";
@@ -25,6 +27,16 @@ pub(crate) fn selected_rule_codes(
     custom_payloads: &Bound<'_, PyAny>,
 ) -> PyResult<Vec<String>> {
     let py: Python<'_> = config.py();
+    if let (Some(config), Some(custom_rules)) =
+        (asdict_json(config)?, dumped_json(custom_payloads)?)
+    {
+        let request: serde_json::Value = serde_json::json!({
+            "config": config,
+            "custom_rules": custom_rules,
+            "version": RULES_NATIVE_API_VERSION,
+        });
+        return selected_codes(py, &request.to_string());
+    }
     let request: Bound<'_, PyDict> = PyDict::new(py);
     request.set_item("version", RULES_NATIVE_API_VERSION)?;
     request.set_item(
@@ -52,7 +64,12 @@ pub(crate) fn selected_rule_codes(
         }
         Err(error) => return Err(error),
     };
-    let selected: Result<String, String> = compiler_guard(|| Ok(selected_codes_json(&encoded)))?;
+    selected_codes(py, &encoded)
+}
+
+/// The rule codes the native engine selects for one encoded selection request.
+fn selected_codes(py: Python<'_>, encoded: &str) -> PyResult<Vec<String>> {
+    let selected: Result<String, String> = compiler_guard(|| Ok(selected_codes_json(encoded)))?;
     let codes: String = selected.map_err(|message| rules_error(py, &message, None))?;
     serde_json::from_str::<Vec<String>>(&codes).map_err(|_| {
         rules_error(
@@ -66,9 +83,9 @@ pub(crate) fn selected_rule_codes(
 /// Whether `code` is selected and not ignored by the configuration's prefixes.
 #[pyfunction]
 #[pyo3(signature = (*, config, code))]
-fn rule_selected(config: &Bound<'_, PyAny>, code: &str) -> PyResult<bool> {
+pub(crate) fn rule_selected(config: &Bound<'_, PyAny>, code: &str) -> PyResult<bool> {
     let matches = |field: &str| -> PyResult<bool> {
-        for selector in config.getattr(field)?.try_iter()? {
+        for selector in record_field(config, field)?.try_iter()? {
             let selector: String = selector?.extract()?;
             if code.starts_with(&selector) {
                 return Ok(true);

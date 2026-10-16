@@ -6,16 +6,24 @@ use std::path::PathBuf;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::{Bound, IntoPyObject, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::pyfunction;
-use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyList, PyListMethods, PyTuple};
+use pyo3::types::{
+    PyDict, PyDictMethods, PyFrozenSet, PyList, PyListMethods, PyString, PyStringMethods, PyTuple,
+};
+use sqlbuild_core::text::main::python_strip::python_strip;
 use sqlbuild_rules::fix_verification::main::refusal::refusal;
 use sqlbuild_rules::fix_verification::main::with_edits::with_edits;
 use sqlbuild_rules::fix_verification::models::{FixEdit, FixEligibility};
 
 use crate::bindings::_helpers::compile_attachment::sql_expansion_context::SqlExpansionInputs;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
+use crate::bindings::_helpers::compile_driver::python_calls::{
+    KeywordArguments, call_with, keywords,
+};
+use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::fields::{field, replaced};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::constants::SAFE_RULE_FIX_CODES;
 use crate::bindings::_helpers::rules::fix_facts::compile_facts;
@@ -109,11 +117,9 @@ impl<'py> FixSession<'py> {
     fn run(&mut self) -> PyResult<Bound<'py, PyAny>> {
         let py = self.original.py();
         let mut current = self.original.copy()?;
-        let paths: Vec<Bound<'py, PyAny>> = self
-            .inputs
-            .getattr("model_files")?
+        let paths: Vec<Bound<'py, PyAny>> = field(&self.inputs, "model_files")?
             .try_iter()?
-            .map(|model| model?.getattr("file_path"))
+            .map(|model| model_file_path(&model?))
             .collect::<PyResult<_>>()?;
         let model_paths = PyFrozenSet::new(py, paths)?;
         let mut seen: BTreeSet<FixState> = BTreeSet::new();
@@ -204,15 +210,14 @@ impl<'py> FixSession<'py> {
         let mut pending: Vec<Bound<'py, PyAny>> = Vec::new();
         let mut remaining: Vec<Bound<'py, PyAny>> = Vec::new();
         for violation in violations {
-            if !violation
-                .getattr("code")?
+            if !field(&violation, "code")?
                 .extract::<String>()?
                 .starts_with("SQBRSQL")
             {
                 continue;
             }
             let reason = self.refusal(&violation, model_paths)?;
-            let edit = violation.getattr("fix")?;
+            let edit = field(&violation, "fix")?;
             if reason.is_some() || edit.is_none() {
                 remaining.push(report(
                     &violation,
@@ -227,7 +232,7 @@ impl<'py> FixSession<'py> {
                 )?);
                 continue;
             }
-            let path = edit.getattr("file_path")?;
+            let path = field(&edit, "file_path")?;
             let chosen = if let Some(chosen) = edits.get_item(&path)? {
                 chosen.cast_into::<PyList>()?
             } else {
@@ -235,12 +240,12 @@ impl<'py> FixSession<'py> {
                 edits.set_item(&path, &chosen)?;
                 chosen
             };
-            let start: usize = edit.getattr("start")?.extract()?;
-            let end: usize = edit.getattr("end")?.extract()?;
+            let start: usize = field(&edit, "start")?.extract()?;
+            let end: usize = field(&edit, "end")?.extract()?;
             let mut overlaps = false;
             for other in chosen.iter() {
-                if start < other.getattr("end")?.extract::<usize>()?
-                    && other.getattr("start")?.extract::<usize>()? < end
+                if start < field(&other, "end")?.extract::<usize>()?
+                    && field(&other, "start")?.extract::<usize>()? < end
                 {
                     overlaps = true;
                     break;
@@ -259,20 +264,20 @@ impl<'py> FixSession<'py> {
         violation: &Bound<'py, PyAny>,
         model_paths: &Bound<'py, PyAny>,
     ) -> PyResult<Option<String>> {
-        let code = violation.getattr("code")?;
-        let path = violation.getattr("file_path")?;
-        let has_fix = !violation.getattr("fix")?.is_none();
+        let code = field(violation, "code")?;
+        let path = field(violation, "file_path")?;
+        let has_fix = !field(violation, "fix")?.is_none();
         let facts = FixEligibility {
             model_body: model_paths.contains(&path)?,
             has_fix,
             safe_code: SAFE_RULE_FIX_CODES.contains(&code.extract::<String>()?.as_str()),
             conditionless_join: code.eq("SQBRSQL003")?,
-            snowflake: self.config.getattr("dialect")?.eq("snowflake")?,
+            snowflake: field(&self.config, "dialect")?.eq("snowflake")?,
         };
         if let Some(reason) = refusal(&facts) {
             return Ok(Some(reason.to_owned()));
         }
-        let unavailable = violation.getattr("fix_unavailable_reason")?;
+        let unavailable = field(violation, "fix_unavailable_reason")?;
         if !unavailable.is_none() || !has_fix {
             return unavailable.extract();
         }
@@ -317,7 +322,7 @@ impl<'py> FixSession<'py> {
         let mut reports: Vec<Bound<'py, PyAny>> = Vec::new();
         for report in self.reports.iter().chain(pending) {
             reports.push(
-                if let Some(reason) = self.blocked.get_item(report.getattr("file_path")?)? {
+                if let Some(reason) = self.blocked.get_item(field(report, "file_path")?)? {
                     refused(report, &reason.extract::<String>()?)?
                 } else {
                     report.clone()
@@ -369,12 +374,16 @@ impl<'py> FixSession<'py> {
         if let Some(baseline) = &self.baseline {
             return Ok(baseline.clone());
         }
-        let baseline = call_with(
-            &registry::native(self.inputs.py(), NativeAttr::BuildCompiledProject)?,
-            &[
-                ("discovered_inputs", self.inputs.clone()),
-                ("adapter", self.adapter.clone()),
-            ],
+        let py = self.inputs.py();
+        let baseline = build_compiled_project(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("discovered_inputs", self.inputs.clone()),
+                    ("adapter", self.adapter.clone()),
+                ],
+            )?),
         )?;
         self.baseline = Some(baseline.clone());
         Ok(baseline)
@@ -411,12 +420,15 @@ impl<'py> FixSession<'py> {
         if self.baseline_facts.is_none() {
             self.baseline_facts = Some(compile_facts(py, &baseline, &self.project_dir)?);
         }
-        let compiled = call_with(
-            &registry::native(py, NativeAttr::BuildCompiledProject)?,
-            &[
-                ("discovered_inputs", updated_inputs(&self.inputs, files)?),
-                ("adapter", self.adapter.clone()),
-            ],
+        let compiled = build_compiled_project(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("discovered_inputs", updated_inputs(&self.inputs, files)?),
+                    ("adapter", self.adapter.clone()),
+                ],
+            )?),
         )?;
         let mut edited: Vec<Bound<'py, PyAny>> = Vec::new();
         for (path, text) in files.iter() {
@@ -465,8 +477,8 @@ impl<'py> FixSession<'py> {
         let affected = self.blocked.copy()?;
         let mut reports: Vec<Bound<'py, PyAny>> = Vec::new();
         for report in &self.reports {
-            if report.getattr("status")?.eq("applied")? {
-                affected.set_item(report.getattr("file_path")?, py.None())?;
+            if field(report, "status")?.eq("applied")? {
+                affected.set_item(field(report, "file_path")?, py.None())?;
             }
             reports.push(refused(report, reason)?);
         }
@@ -483,13 +495,61 @@ fn replace<'py>(
     object: &Bound<'py, PyAny>,
     changes: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    let kwargs =
-        crate::bindings::_helpers::compile_driver::python_calls::keywords(object.py(), changes)?;
-    object
-        .py()
-        .import("dataclasses")?
-        .getattr("replace")?
-        .call((object,), Some(&kwargs))
+    replaced(object, changes)
+}
+
+/// A discovered model file's contents, read in place from a native model file.
+fn model_contents<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    match model.cast::<NativeModelFile>() {
+        Ok(native) => Ok(native.get().texts(model.py()).1.clone().into_any()),
+        Err(_) => model.getattr("contents"),
+    }
+}
+
+/// A discovered model file's path, read in place from a native model file.
+fn model_file_path<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    match model.cast::<NativeModelFile>() {
+        Ok(native) => Ok(native.get().paths(model.py()).0.clone()),
+        Err(_) => model.getattr("file_path"),
+    }
+}
+
+/// `model` with its edited text and the query `text` holds where the old query started.
+fn edited_model<'py>(
+    model: &Bound<'py, PyAny>,
+    text: Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = model.py();
+    let Ok(native) = model.cast::<NativeModelFile>() else {
+        let current = model.getattr("contents")?;
+        let start = current.call_method1("index", (model.getattr("query_sql")?,))?;
+        let query = text
+            .get_item(pyo3::types::PySlice::new(
+                py,
+                start.extract()?,
+                isize::MAX,
+                1,
+            ))?
+            .call_method0("strip")?;
+        return model.call_method1("with_text", (text, query));
+    };
+    let native: &NativeModelFile = native.get();
+    let (query_sql, contents) = native.texts(py);
+    let contents: String = contents.to_str()?.to_owned();
+    let Some(offset) = contents.find(query_sql.to_str()?) else {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "substring not found",
+        ));
+    };
+    let start: usize = contents[..offset].chars().count();
+    let text: Bound<'py, PyString> = text.cast_into::<PyString>()?;
+    let edited: String = text.to_str()?.to_owned();
+    let tail: &str = edited
+        .char_indices()
+        .nth(start)
+        .map_or("", |(index, _)| &edited[index..]);
+    let query: Bound<'py, PyString> = PyString::new(py, python_strip(tail));
+    Ok(Bound::new(py, native.with_text(py, text.unbind(), query.unbind()))?.into_any())
 }
 
 fn updated_inputs<'py>(
@@ -498,22 +558,13 @@ fn updated_inputs<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = inputs.py();
     let mut models: Vec<Bound<'py, PyAny>> = Vec::new();
-    for model in inputs.getattr("model_files")?.try_iter()? {
+    for model in field(inputs, "model_files")?.try_iter()? {
         let model = model?;
-        let current = model.getattr("contents")?;
-        if let Some(text) = files.get_item(model.getattr("file_path")?)?
+        let current = model_contents(&model)?;
+        if let Some(text) = files.get_item(model_file_path(&model)?)?
             && !text.eq(&current)?
         {
-            let start = current.call_method1("index", (model.getattr("query_sql")?,))?;
-            let query = text
-                .get_item(pyo3::types::PySlice::new(
-                    py,
-                    start.extract()?,
-                    isize::MAX,
-                    1,
-                ))?
-                .call_method0("strip")?;
-            models.push(model.call_method1("with_text", (text, query))?);
+            models.push(edited_model(&model, text)?);
         } else {
             models.push(model);
         }
@@ -538,9 +589,9 @@ fn edited_files<'py>(
             .map(|edit| {
                 let edit = edit?;
                 Ok(FixEdit {
-                    start: edit.getattr("start")?.extract()?,
-                    end: edit.getattr("end")?.extract()?,
-                    replacement: edit.getattr("replacement")?.extract()?,
+                    start: field(&edit, "start")?.extract()?,
+                    end: field(&edit, "end")?.extract()?,
+                    replacement: field(&edit, "replacement")?.extract()?,
                 })
             })
             .collect::<PyResult<_>>()?;
@@ -565,7 +616,7 @@ fn failing_edits<'py>(
     for (path, _) in edits.iter() {
         resolved.set_item(path.call_method0("resolve")?, path)?;
     }
-    for (path, reason) in verdict.getattr("failing")?.cast_into::<PyDict>()?.iter() {
+    for (path, reason) in field(verdict, "failing")?.cast_into::<PyDict>()?.iter() {
         if let Some(original) = resolved.get_item(path)? {
             result.set_item(original, reason)?;
         }
@@ -608,9 +659,9 @@ fn report<'py>(
     call_with(
         &registry::class(py, RecordId::RuleFixResult)?,
         &[
-            ("file_path", source.getattr("file_path")?),
-            ("code", source.getattr("code")?),
-            ("line", source.getattr("line")?),
+            ("file_path", field(source, "file_path")?),
+            ("code", field(source, "code")?),
+            ("line", field(source, "line")?),
             ("status", status.into_pyobject(py)?.into_any()),
             ("reason", reason.into_pyobject(py)?.into_any()),
         ],
@@ -618,7 +669,7 @@ fn report<'py>(
 }
 
 fn refused<'py>(report: &Bound<'py, PyAny>, reason: &str) -> PyResult<Bound<'py, PyAny>> {
-    if !report.getattr("status")?.eq("applied")? {
+    if !field(report, "status")?.eq("applied")? {
         return Ok(report.clone());
     }
     replace(
@@ -691,6 +742,5 @@ fn result<'py>(
 
 /// Whether a fix verdict proved every edit: nothing failed and nothing was unattributed.
 fn verified(verdict: &Bound<'_, PyAny>) -> PyResult<bool> {
-    Ok(!verdict.getattr("failing")?.is_truthy()?
-        && !verdict.getattr("unattributed")?.is_truthy()?)
+    Ok(!field(verdict, "failing")?.is_truthy()? && !field(verdict, "unattributed")?.is_truthy()?)
 }

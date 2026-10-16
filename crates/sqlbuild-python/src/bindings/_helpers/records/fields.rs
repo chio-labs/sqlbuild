@@ -5,9 +5,11 @@ use pyo3::exceptions::{PyAttributeError, PyRuntimeError, PyTypeError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::pyclass::CompareOp;
 use pyo3::types::{
-    PyBool, PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple, PyTupleMethods, PyType,
-    PyTypeMethods,
+    PyBool, PyDict, PyDictMethods, PyFrozenSet, PyString, PyStringMethods, PyTuple, PyTupleMethods,
+    PyType, PyTypeMethods,
 };
+
+use sqlbuild_rules::project_tree::main::pure_path_posix::pure_path_posix;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::native_host::host;
@@ -51,6 +53,28 @@ pub(crate) fn field<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Boun
         }
     }
     value.getattr(name)
+}
+
+/// `dataclasses.replace(value, **changes)`: a native record is rebuilt from its own values.
+pub(crate) fn replaced<'py>(
+    value: &Bound<'py, PyAny>,
+    changes: &[(&str, Bound<'py, PyAny>)],
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = value.py();
+    let keywords: Bound<'py, PyDict> = PyDict::new(py);
+    for (name, changed) in changes {
+        keywords.set_item(*name, changed)?;
+    }
+    let Ok(record) = value.cast::<NativeRecord>() else {
+        return imported(py, "dataclasses", "replace")?.call((value,), Some(&keywords));
+    };
+    let record: &NativeRecord = record.get();
+    for (field, current) in record.spec.fields.iter().zip(&record.values) {
+        if !keywords.contains(field.name)? {
+            keywords.set_item(field.name, current.bind(py))?;
+        }
+    }
+    value.get_type().call((), Some(&keywords))
 }
 
 /// Field values bound from `args` and `kwargs` as a dataclass `__init__` binds them.
@@ -233,4 +257,10 @@ pub(crate) fn store_cached(
         cached.push((name, value.clone_ref(py)));
     }
     Ok(())
+}
+
+/// `path.as_posix()` of a `pathlib` path, spelled natively from its text.
+pub(crate) fn path_posix(path: &Bound<'_, PyAny>) -> PyResult<String> {
+    let text: String = path.str()?.to_string_lossy().into_owned();
+    Ok(String::from_utf8_lossy(&pure_path_posix(std::path::Path::new(&text))).into_owned())
 }

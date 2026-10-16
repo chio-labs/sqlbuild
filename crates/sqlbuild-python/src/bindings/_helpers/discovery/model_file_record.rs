@@ -232,7 +232,12 @@ impl NativeModelFile {
     }
 
     /// This file with edited contents and query, as `dataclasses.replace` would make it.
-    fn with_text(&self, py: Python<'_>, contents: Py<PyString>, query_sql: Py<PyString>) -> Self {
+    pub(crate) fn with_text(
+        &self,
+        py: Python<'_>,
+        contents: Py<PyString>,
+        query_sql: Py<PyString>,
+    ) -> Self {
         Self {
             file_path: self.file_path.clone_ref(py),
             relative_path: self.relative_path.clone_ref(py),
