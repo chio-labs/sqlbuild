@@ -170,7 +170,7 @@ fn plan_warnings<'py>(
 /// Warn for selected models stale through changed upstreams outside the run set.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn build_stale_out_of_selection_warnings<'py>(
+pub(crate) fn build_stale_out_of_selection_warnings<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {

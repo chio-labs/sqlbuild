@@ -64,7 +64,7 @@ fn hook_version_hashes<'py>(hook_functions: &Bound<'py, PyAny>) -> PyResult<Boun
 /// Current direct model identities from code and upstream identities.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn build_direct_model_version_identities<'py>(
+pub(crate) fn build_direct_model_version_identities<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -201,7 +201,7 @@ fn build_direct_model_version_identities<'py>(
 /// Planned write hashes replaced by hashes based on upstreams available this run.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn with_honest_model_write_hashes<'py>(
+pub(crate) fn with_honest_model_write_hashes<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -354,7 +354,7 @@ fn with_honest_model_write_hashes<'py>(
 /// Resolved actions with recomputed model changes patched in where available.
 #[pyfunction]
 #[pyo3(signature = (*, resolved_actions, changes))]
-fn merge_recomputed_model_changes<'py>(
+pub(crate) fn merge_recomputed_model_changes<'py>(
     resolved_actions: &Bound<'py, PyAny>,
     changes: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {

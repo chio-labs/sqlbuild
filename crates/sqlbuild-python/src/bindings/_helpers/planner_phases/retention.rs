@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_phases::constants::{
@@ -14,7 +15,7 @@ use crate::bindings::_helpers::planner_phases::objects::{
     planner_model, replace, sorted_names, text, tuple,
 };
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
@@ -39,15 +40,7 @@ pub(crate) fn effective_target_config<'py>(
     if project_config.is_none() || local_config.is_none() || target_name.is_none() {
         return native(py, RecordId::TargetConfig, &[]);
     }
-    native(
-        py,
-        NativeAttr::ResolveTargetConfig,
-        &[
-            ("project_config", project_config),
-            ("local_config", local_config),
-            ("target_name", target_name),
-        ],
-    )
+    resolve_target_config(py, &project_config, &local_config, &target_name)
 }
 
 /// A deterministic identifier-fitted conversion copy name.

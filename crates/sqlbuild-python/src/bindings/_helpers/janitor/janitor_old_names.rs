@@ -9,19 +9,21 @@ use sqlbuild_analysis::janitor_planning::main::old_name_request_matches::old_nam
 
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::janitor::janitor_facts::{
     SchemaRelations, Warehouse, model_destinations,
 };
 use crate::bindings::_helpers::janitor::janitor_keys::{
     Folded, Key, SchemaKey, optional, record, sorted_schemas, text, tuple,
 };
+use crate::bindings::_helpers::state_rows::migration_io::{
+    read_histories as read_view_histories, stored_columns_binding,
+};
 
 const IS_COMPATIBILITY_VIEW: ExecutorHost = ExecutorHost::IsCompatibilityView;
-const READ_HISTORIES: NativeAttr = NativeAttr::ReadOldNameViewHistories;
-const STORED_COLUMNS: NativeAttr = NativeAttr::StoredOldNameViewColumns;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::MIGRATION_TABLE_NAME;
 use sqlbuild_core::constants::OLD_NAME_VIEW_TABLE_NAME;
@@ -74,17 +76,15 @@ fn read_histories<'py>(
         if !names.contains(OLD_NAME_VIEW_TABLE_NAME) || !names.contains(MIGRATION_TABLE_NAME) {
             continue;
         }
-        let stored_columns: Bound<'py, PyAny> = call_with(
-            &registry::native(py, STORED_COLUMNS)?,
-            &[
-                ("adapter", warehouse.adapter.clone()),
-                ("connection", warehouse.connection.clone()),
-                ("database", optional(py, database.as_deref())?),
-                ("schema", text(py, &schema)),
-            ],
-        )?;
-        let read: Bound<'py, PyAny> = call_with(
-            &registry::native(py, READ_HISTORIES)?,
+        let stored_columns: Bound<'py, PyAny> = stored_columns_binding(
+            &warehouse.adapter,
+            &warehouse.connection,
+            optional(py, database.as_deref())?,
+            text(py, &schema),
+        )?
+        .into_any();
+        let read = read_view_histories(Some(&keywords(
+            py,
             &[
                 ("connection", warehouse.connection.clone()),
                 ("execute", warehouse.adapter.getattr("execute")?),
@@ -96,7 +96,7 @@ fn read_histories<'py>(
                     warehouse.adapter.getattr("render_qualified_name")?,
                 ),
             ],
-        )?;
+        )?))?;
         for history in read.try_iter()? {
             histories.push(history?);
         }

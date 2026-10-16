@@ -1,7 +1,7 @@
 //! Planner scope Python boundary models.
 
-mod loaders;
+pub(crate) mod loaders;
 pub(crate) mod registration;
-mod scope;
-mod sources;
+pub(crate) mod scope;
+pub(crate) mod sources;
 mod values;

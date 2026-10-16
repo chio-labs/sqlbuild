@@ -291,7 +291,7 @@ fn unreadable_table(py: Python<'_>, qualified_name: &str, error: PyErr) -> PyErr
 /// The latest fingerprint per node identity, read with the adapter-rendered latest-row SQL.
 #[pyfunction]
 #[pyo3(signature = (**request))]
-fn read_latest_fingerprints<'py>(
+pub(crate) fn read_latest_fingerprints<'py>(
     request: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let request = Request::new("read_latest_fingerprints", request)?;

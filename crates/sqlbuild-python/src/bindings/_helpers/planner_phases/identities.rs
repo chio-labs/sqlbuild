@@ -1,6 +1,9 @@
 //! Expected version identities and stale-warning change detection.
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::planner_phases::contexts::class_field;
+use crate::bindings::_helpers::planner_phases::models::PlannerIdentityContext;
+use crate::bindings::_helpers::planner_phases::models::PlannerScopeResolution;
 use crate::bindings::_helpers::planner_phases::objects::{frozenset, native, replace};
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use pyo3::IntoPyObject;
@@ -34,20 +37,26 @@ pub(crate) fn build_planner_identity_context<'py>(
     scopes: &Bound<'py, PyAny>,
     include_stale_warning_identities: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let identities = version_identities(project, scopes.getattr("inspection_scope")?)?;
+    let identities = version_identities(
+        project,
+        class_field(scopes, |s: &PlannerScopeResolution| &s.inspection_scope)?,
+    )?;
     let stale = if include_stale_warning_identities {
-        version_identities(project, scopes.getattr("stale_warning_scope")?)?
+        version_identities(
+            project,
+            class_field(scopes, |s: &PlannerScopeResolution| &s.stale_warning_scope)?,
+        )?
     } else {
         identities.clone()
     };
-    native(
+    Ok(Bound::new(
         project.py(),
-        RecordId::PlannerIdentityContext,
-        &[
-            ("version_identities", identities),
-            ("stale_warning_identities", stale),
-        ],
-    )
+        PlannerIdentityContext {
+            version_identities: identities.unbind(),
+            stale_warning_identities: stale.unbind(),
+        },
+    )?
+    .into_any())
 }
 
 fn reusable_model_names(
@@ -59,8 +68,12 @@ fn reusable_model_names(
     if !query_change_tracking {
         return Ok(names);
     }
-    let execution = identities.getattr("version_identities")?;
-    let stale = identities.getattr("stale_warning_identities")?;
+    let execution = class_field(identities, |i: &PlannerIdentityContext| {
+        &i.version_identities
+    })?;
+    let stale = class_field(identities, |i: &PlannerIdentityContext| {
+        &i.stale_warning_identities
+    })?;
     for name in execution_changes.getattr("models")?.try_iter()? {
         let name = name?;
         let same = |field: &str| -> PyResult<bool> {
@@ -122,7 +135,7 @@ pub(crate) fn detect_stale_warning_changes<'py>(
             .getattr("query_change_tracking")?
             .is_truthy()?,
     )?;
-    let stale_scope = scopes.getattr("stale_warning_scope")?;
+    let stale_scope = class_field(scopes, |s: &PlannerScopeResolution| &s.stale_warning_scope)?;
     let mut remaining: Vec<_> = Vec::new();
     for key in stale_scope
         .getattr("all_keys")?
@@ -136,7 +149,9 @@ pub(crate) fn detect_stale_warning_changes<'py>(
             remaining.push(key);
         }
     }
-    let stale_identities = identities.getattr("stale_warning_identities")?;
+    let stale_identities = class_field(identities, |i: &PlannerIdentityContext| {
+        &i.stale_warning_identities
+    })?;
     let remaining_changes = native(
         py,
         NativeAttr::DetectModelChangesInScope,

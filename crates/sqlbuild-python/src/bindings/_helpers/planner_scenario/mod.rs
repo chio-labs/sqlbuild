@@ -4,7 +4,7 @@ pub(crate) mod artifacts;
 mod cli;
 mod constants;
 mod entries;
-mod execution;
+pub(crate) mod execution;
 mod fixtures;
 mod graph;
 mod models;

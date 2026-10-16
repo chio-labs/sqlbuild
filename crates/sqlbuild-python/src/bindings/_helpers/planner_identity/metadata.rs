@@ -456,7 +456,7 @@ fn build_version_identity_metadata_json<'py>(
 /// Deterministic non-query model fingerprint metadata JSON.
 #[pyfunction]
 #[pyo3(signature = (*, model, function_local_hashes = None, hook_version_hashes = None))]
-fn build_model_version_identity_metadata_json<'py>(
+pub(crate) fn build_model_version_identity_metadata_json<'py>(
     model: &Bound<'py, PyAny>,
     function_local_hashes: Option<Bound<'py, PyAny>>,
     hook_version_hashes: Option<Bound<'py, PyAny>>,
@@ -478,7 +478,7 @@ fn declared_columns_hash(model: &Bound<'_, PyAny>) -> PyResult<String> {
 /// Local-only semantic hashes of functions by name.
 #[pyfunction]
 #[pyo3(signature = (*, functions, dialect))]
-fn build_function_local_hashes<'py>(
+pub(crate) fn build_function_local_hashes<'py>(
     functions: &Bound<'py, PyAny>,
     dialect: Option<&str>,
 ) -> PyResult<Bound<'py, PyDict>> {
@@ -487,13 +487,15 @@ fn build_function_local_hashes<'py>(
 
 /// Stable function definition text used for change fingerprints.
 #[pyfunction]
-fn build_compiled_function_fingerprint_sql(function: &Bound<'_, PyAny>) -> PyResult<String> {
+pub(crate) fn build_compiled_function_fingerprint_sql(
+    function: &Bound<'_, PyAny>,
+) -> PyResult<String> {
     compiled_function_fingerprint_sql(function)
 }
 
 /// `(identity_hash, metadata_json)` for one compiled seed.
 #[pyfunction]
-fn build_seed_identity(seed: &Bound<'_, PyAny>) -> PyResult<(String, String)> {
+pub(crate) fn build_seed_identity(seed: &Bound<'_, PyAny>) -> PyResult<(String, String)> {
     seed_identity(seed)
 }
 

@@ -1,13 +1,20 @@
 //! `PlanOutput` assembly from planned model entries, seeds, sources, functions, audits and tests.
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::planner_entries::model_entries::scope_overlaps;
 use crate::bindings::_helpers::planner_entries::models::PlanOutputInputs;
 use crate::bindings::_helpers::planner_entries::values::{
     error_of, native, none, planner_model, planner_type, string,
 };
+use crate::bindings::_helpers::planner_phases::objects::object;
+use crate::bindings::_helpers::planner_resolution::orchestration::resolve_function_sql;
+use crate::bindings::_helpers::planner_scope::loaders::upstream_loader_dependency_names;
+use crate::bindings::_helpers::planner_scope::sources::build_source_load_entries;
+use crate::bindings::_helpers::planner_strategy::audit_entries::build_selected_audit_entries;
 use crate::bindings::_helpers::planner_strategy::fixture_context::planning_context;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::planner_strategy::model_entries::extract_seed_columns;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::models::SqlTestAssembly;
 use crate::bindings::_helpers::sql_test_glue::plan_assembly::assemble_sql_test_plans;
@@ -119,14 +126,7 @@ fn seed_entries<'py>(
                     "file_path",
                     seed.getattr("seed_file")?.getattr("file_path")?,
                 ),
-                (
-                    "columns",
-                    native(
-                        py,
-                        NativeAttr::ExtractSeedColumns,
-                        &[("seed", seed.clone())],
-                    )?,
-                ),
+                ("columns", object(py, extract_seed_columns(&seed)?)?),
                 (
                     "csv_settings",
                     seed.getattr("schema_entry")?.getattr("csv_settings")?,
@@ -290,13 +290,9 @@ fn require_intermediate_loader_targets<'py>(
         else {
             continue;
         };
-        let dependencies = native(
+        let dependencies = object(
             py,
-            NativeAttr::UpstreamLoaderDependencyNames,
-            &[
-                ("loader_function", loader_function),
-                ("loader_functions", loader_functions.clone()),
-            ],
+            upstream_loader_dependency_names(&loader_function, &loader_functions)?,
         )?;
         for dependency_name in dependencies.try_iter()? {
             let dependency_name = dependency_name?;
@@ -343,28 +339,30 @@ pub(super) fn function_entry<'py>(
     ),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = function.py();
-    let body_sql = native(
+    let body_sql = resolve_function_sql(
         py,
-        NativeAttr::ResolveFunctionSql,
-        &[
-            ("adapter", adapter.clone()),
-            ("function", function.clone()),
-            ("model_locations", relations.getattr("model_locations")?),
-            ("seed_locations", relations.getattr("seed_locations")?),
-            (
-                "function_locations",
-                relations.getattr("function_locations")?,
-            ),
-            ("source_map", relations.getattr("source_read_map")?),
-            (
-                "source_warehouse_columns",
-                relations.getattr("source_warehouse_columns")?,
-            ),
-            (
-                "star_exclude_keyword",
-                relations.getattr("star_exclude_keyword")?,
-            ),
-        ],
+        Some(keywords(
+            py,
+            &[
+                ("adapter", adapter.clone()),
+                ("function", function.clone()),
+                ("model_locations", relations.getattr("model_locations")?),
+                ("seed_locations", relations.getattr("seed_locations")?),
+                (
+                    "function_locations",
+                    relations.getattr("function_locations")?,
+                ),
+                ("source_map", relations.getattr("source_read_map")?),
+                (
+                    "source_warehouse_columns",
+                    relations.getattr("source_warehouse_columns")?,
+                ),
+                (
+                    "star_exclude_keyword",
+                    relations.getattr("star_exclude_keyword")?,
+                ),
+            ],
+        )?),
     )?;
     let field = |name: &str| function.getattr(name);
     planner_model(
@@ -565,15 +563,14 @@ pub(crate) fn plan_output_fields<'py>(
     let execution_order = scope.getattr("execution_order")?;
     let source_map = relations.getattr("source_map")?;
     let seeds = seed_entries(&project, &snapshot, &selected_keys, &extras)?;
-    let source_load_entries = native(
+    let source_load_entries = object(
         py,
-        NativeAttr::BuildSourceLoadEntries,
-        &[
-            ("execution_order", execution_order.clone()),
-            ("selected_keys", selected_keys.clone()),
-            ("source_map", source_map.clone()),
-            ("is_reload", reload_sources),
-        ],
+        build_source_load_entries(
+            &execution_order,
+            &selected_keys,
+            source_map.downcast::<PyDict>()?,
+            reload_sources.is_truthy()?,
+        )?,
     )?;
     require_intermediate_loader_targets(&project, &snapshot, &source_map, &source_load_entries)?;
     let functions = function_entries(
@@ -589,16 +586,18 @@ pub(crate) fn plan_output_fields<'py>(
             entry.getattr("materialization_type")?,
         )?;
     }
-    let audit_entries = native(
+    let audit_entries = object(
         py,
-        NativeAttr::BuildSelectedAuditEntries,
-        &[
-            ("project", project.clone()),
-            ("adapter", adapter.clone()),
-            ("scope", scope.clone()),
-            ("relations", relations.clone()),
-            ("model_materializations", materializations.into_any()),
-        ],
+        build_selected_audit_entries(Some(&keywords(
+            py,
+            &[
+                ("project", project.clone()),
+                ("adapter", adapter.clone()),
+                ("scope", scope.clone()),
+                ("relations", relations.clone()),
+                ("model_materializations", materializations.into_any()),
+            ],
+        )?))?,
     )?;
     let selection = scope.getattr("sql_test_selection")?;
     let mut planned = extras.getattr("planned_sql_tests")?;
@@ -717,7 +716,7 @@ fn plan_function<'py>(
 /// Plan SQL tests selected by name or overlapping one selection into a reusable result.
 #[pyfunction]
 #[pyo3(signature = (*, project, adapter, selected_keys, sql_test_selection))]
-fn plan_selected_sql_tests<'py>(
+pub(crate) fn plan_selected_sql_tests<'py>(
     project: &Bound<'py, PyAny>,
     adapter: &Bound<'py, PyAny>,
     selected_keys: &Bound<'py, PyAny>,

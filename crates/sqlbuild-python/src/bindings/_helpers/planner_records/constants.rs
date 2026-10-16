@@ -52,21 +52,6 @@ const R_PLANNER_SCOPE: RecordSpec = RecordSpec {
         ),
     ],
 };
-const R_PLANNER_RELATIONS_CONTEXT: RecordSpec = RecordSpec {
-    name: "PlannerRelationsContext",
-    doc: "Resolved relation and source inputs for plan entry construction.",
-    fields: &[
-        FieldSpec::required("model_locations"),
-        FieldSpec::required("seed_locations"),
-        FieldSpec::required("function_locations"),
-        FieldSpec::required("source_map"),
-        FieldSpec::required("source_read_map"),
-        FieldSpec::required("python_source_read_map"),
-        FieldSpec::required("source_warehouse_columns"),
-        FieldSpec::required("star_exclude_keyword"),
-        FieldSpec::new("listed_source_names", FieldDefault::EmptyFrozenset),
-    ],
-};
 const R_SQL_TEST_ASSERTION_STEP: RecordSpec = RecordSpec {
     name: "SqlTestAssertionStep",
     doc: "One zero-row assertion step in a SQL-native unit test.",
@@ -935,7 +920,6 @@ pub(crate) const PLANNER_RECORDS: &[RecordSpec] = &[
     R_PATH_SELECTOR,
     R_SQL_TEST_SELECTION,
     R_PLANNER_SCOPE,
-    R_PLANNER_RELATIONS_CONTEXT,
     R_SQL_TEST_ASSERTION_STEP,
     R_PLANNER_SELECTION,
     R_PLANNER_OVERRIDES,
@@ -1158,55 +1142,12 @@ const R_UNIT_TEST_SELECTOR_SPLIT: RecordSpec = RecordSpec {
         FieldSpec::required("sql_test_selection"),
     ],
 };
-const R_MODEL_PLAN_CONTEXT: RecordSpec = RecordSpec {
-    name: "ModelPlanContext",
-    doc: "Relation lookups and source columns for building one model plan entry.",
-    fields: &[
-        FieldSpec::required("model_locations"),
-        FieldSpec::required("models_by_name"),
-        FieldSpec::required("seed_locations"),
-        FieldSpec::required("function_locations"),
-        FieldSpec::required("source_map"),
-        FieldSpec::required("source_warehouse_columns"),
-        FieldSpec::required("star_exclude_keyword"),
-        FieldSpec::new("functions_by_name", FieldDefault::EmptyDict),
-        FieldSpec::new(
-            "runtime_cursor_producer_names",
-            FieldDefault::EmptyFrozenset,
-        ),
-        FieldSpec::new("future_cursor_config", FieldDefault::None),
-        FieldSpec::new("start_cursor_config", FieldDefault::None),
-        FieldSpec::new("invocation_time", FieldDefault::None),
-    ],
-};
 const R_CURSOR_OVERRIDE_PAIR: RecordSpec = RecordSpec {
     name: "CursorOverridePair",
     doc: "Resolved per-model cursor start/end overrides for plan entry construction.",
     fields: &[
         FieldSpec::new("start_cursor_override", FieldDefault::None),
         FieldSpec::new("end_cursor_override", FieldDefault::None),
-    ],
-};
-const R_PLAN_ENTRY_BUILD_INPUTS: RecordSpec = RecordSpec {
-    name: "PlanEntryBuildInputs",
-    doc: "Blocked models and cursor overrides for plan entry building.",
-    fields: &[
-        FieldSpec::new(
-            "source_freshness_blocked_model_names",
-            FieldDefault::EmptyFrozenset,
-        ),
-        FieldSpec::new("external_blocked_model_names", FieldDefault::EmptyFrozenset),
-        FieldSpec::new("start_cursor_override", FieldDefault::None),
-        FieldSpec::new("end_cursor_override", FieldDefault::None),
-        FieldSpec::new("future_cursor_config", FieldDefault::None),
-        FieldSpec::new("start_cursor_config", FieldDefault::None),
-        FieldSpec::new("invocation_time", FieldDefault::None),
-        FieldSpec::new("max_microbatches", FieldDefault::None),
-        FieldSpec::new("max_microbatches_is_override", FieldDefault::False),
-        FieldSpec::new(
-            "microbatch_limit_action",
-            FieldDefault::NativeMember(RecordId::MicrobatchLimitAction, "ERROR"),
-        ),
     ],
 };
 const R_FUNCTION_CHANGE_RESULT: RecordSpec = RecordSpec {
@@ -1394,62 +1335,6 @@ const R_PLAN_PROVIDER_USAGE: RecordSpec = RecordSpec {
         FieldSpec::new("annotation_module", FieldDefault::None),
     ],
 };
-const R_PLANNER_SCOPE_RESOLUTION: RecordSpec = RecordSpec {
-    name: "PlannerScopeResolution",
-    doc: "Resolved planner scopes for one plan build.",
-    fields: &[
-        FieldSpec::required("selected_scope"),
-        FieldSpec::required("stale_warning_scope"),
-        FieldSpec::required("inspection_scope"),
-    ],
-};
-const R_MODEL_MIGRATION_REQUEST: RecordSpec = RecordSpec {
-    name: "ModelMigrationRequest",
-    doc: "One destination model whose data should come from an earlier relation.",
-    fields: &[
-        FieldSpec::required("model"),
-        FieldSpec::required("discovery"),
-        FieldSpec::new("raw_origin", FieldDefault::None),
-        FieldSpec::new("origin_location", FieldDefault::None),
-        FieldSpec::new("origin_model", FieldDefault::None),
-        FieldSpec::new("force", FieldDefault::False),
-        FieldSpec::new("identity_only", FieldDefault::False),
-    ],
-};
-const R_MODEL_MIGRATION_DECLARATION: RecordSpec = RecordSpec {
-    name: "ModelMigrationDeclaration",
-    doc: "One project model's explicit migrate_from, resolved to a relation.",
-    fields: &[
-        FieldSpec::required("model_name"),
-        FieldSpec::required("origin_location"),
-        FieldSpec::required("origin_model"),
-    ],
-};
-const R_MODEL_MIGRATION_DISCOVERY: RecordSpec = RecordSpec {
-    name: "ModelMigrationDiscovery",
-    doc: "Manual and automatically discovered migration requests for one plan.",
-    fields: &[
-        FieldSpec::new("requests", FieldDefault::EmptyTuple),
-        FieldSpec::new("warnings", FieldDefault::EmptyTuple),
-        FieldSpec::new("destination_fingerprints", FieldDefault::EmptyDict),
-    ],
-};
-const R_MIGRATION_COMPATIBILITY_RESULT: RecordSpec = RecordSpec {
-    name: "MigrationCompatibilityResult",
-    doc: "Compatibility status plus human-readable blocking findings.",
-    fields: &[
-        FieldSpec::required("status"),
-        FieldSpec::new("findings", FieldDefault::EmptyTuple),
-    ],
-};
-const R_PLANNER_IDENTITY_CONTEXT: RecordSpec = RecordSpec {
-    name: "PlannerIdentityContext",
-    doc: "Expected version identities for inspection and stale-warning scopes.",
-    fields: &[
-        FieldSpec::required("version_identities"),
-        FieldSpec::required("stale_warning_identities"),
-    ],
-};
 
 /// Planner value records, in registration order.
 pub(crate) const PLANNER_VALUE_RECORDS: &[RecordSpec] = &[
@@ -1469,9 +1354,7 @@ pub(crate) const PLANNER_VALUE_RECORDS: &[RecordSpec] = &[
     R_BACKFILL_RESULT,
     R_CHANGE_DETECTION_RESULT,
     R_UNIT_TEST_SELECTOR_SPLIT,
-    R_MODEL_PLAN_CONTEXT,
     R_CURSOR_OVERRIDE_PAIR,
-    R_PLAN_ENTRY_BUILD_INPUTS,
     R_FUNCTION_CHANGE_RESULT,
     R_PLANNER_CHANGE_RESULTS,
     R_RESOLVED_MODEL_ACTION,
@@ -1490,12 +1373,6 @@ pub(crate) const PLANNER_VALUE_RECORDS: &[RecordSpec] = &[
     R_SCENARIO_ARTIFACT_IDENTITY,
     R_SCENARIO_ARTIFACT_NAME,
     R_PLAN_PROVIDER_USAGE,
-    R_PLANNER_SCOPE_RESOLUTION,
-    R_MODEL_MIGRATION_REQUEST,
-    R_MODEL_MIGRATION_DECLARATION,
-    R_MODEL_MIGRATION_DISCOVERY,
-    R_MIGRATION_COMPATIBILITY_RESULT,
-    R_PLANNER_IDENTITY_CONTEXT,
 ];
 
 /// Planner string enums, in declaration order.

@@ -165,7 +165,7 @@ struct DiscoveryRequest {
 /// Load all raw project inputs from disk before semantic resolution.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn discover_project_inputs<'py>(
+pub(crate) fn discover_project_inputs<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

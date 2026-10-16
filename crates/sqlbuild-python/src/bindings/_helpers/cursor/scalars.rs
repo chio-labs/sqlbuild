@@ -187,7 +187,7 @@ pub(crate) fn as_scalar<'py>(
 /// One cursor scalar, preserving date-ness and timestamp offsets.
 #[pyfunction(name = "cursor_parse")]
 #[pyo3(signature = (*, raw, cursor_type))]
-fn parse<'py>(
+pub(crate) fn parse<'py>(
     raw: &Bound<'py, PyAny>,
     cursor_type: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -248,7 +248,7 @@ fn sentinel_from_token<'py>(token: &Bound<'py, PyAny>) -> PyResult<Option<Bound<
 /// `-1`, `0` or `1` as `left` orders against `right`.
 #[pyfunction(name = "cursor_compare")]
 #[pyo3(signature = (*, left, right))]
-fn compare_values(left: &Bound<'_, PyAny>, right: &Bound<'_, PyAny>) -> PyResult<i8> {
+pub(crate) fn compare_values(left: &Bound<'_, PyAny>, right: &Bound<'_, PyAny>) -> PyResult<i8> {
     let session: CursorSession<'_> = CursorSession::new(left.py())?;
     let (left, right): (Scalar, Scalar) = (session.scalar(left)?, session.scalar(right)?);
     Ok(match session.checked(compare(&left, &right, &session))? {

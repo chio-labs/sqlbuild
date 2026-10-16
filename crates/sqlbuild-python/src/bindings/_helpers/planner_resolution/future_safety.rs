@@ -18,7 +18,7 @@ use std::cmp::Ordering;
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn resolve_future_cursor_safety<'py>(
+pub(crate) fn resolve_future_cursor_safety<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

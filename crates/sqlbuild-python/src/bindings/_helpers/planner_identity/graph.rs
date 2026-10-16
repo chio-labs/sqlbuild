@@ -80,7 +80,9 @@ fn hook_label(hook_name: &str, kind: &str) -> String {
 
 /// Execution-order edges from lineage and woven SQL test nodes.
 #[pyfunction]
-fn build_execution_upstream_deps<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+pub(crate) fn build_execution_upstream_deps<'py>(
+    project: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = project.py();
     let upstream: Bound<'py, PyDict> = PyDict::new(py);
     for collection in ["models", "sources", "seeds", "functions"] {
@@ -162,7 +164,9 @@ fn build_execution_upstream_deps<'py>(project: &Bound<'py, PyAny>) -> PyResult<B
 
 /// Human-readable origins for execution edges injected beyond pure lineage.
 #[pyfunction]
-fn build_execution_edge_origins<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+pub(crate) fn build_execution_edge_origins<'py>(
+    project: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = project.py();
     let origins: Bound<'py, PyDict> = PyDict::new(py);
     for test in project.getattr("sql_tests")?.try_iter()? {
@@ -219,7 +223,9 @@ fn build_execution_edge_origins<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bo
 
 /// Downstream edges keyed by upstream key, each list sorted by `(resource_type, name)`.
 #[pyfunction]
-fn build_downstream_deps<'py>(upstream: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+pub(crate) fn build_downstream_deps<'py>(
+    upstream: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = upstream.py();
     let result: Bound<'py, PyDict> = PyDict::new(py);
     for (key, sources) in inverted(upstream)?.iter() {
@@ -265,7 +271,7 @@ fn edge_origins<'py>(
 /// All keys in stable dependency order using Kahn's algorithm.
 #[pyfunction]
 #[pyo3(signature = (*, upstream, injected_edge_origins = None))]
-fn topologically_order_keys<'py>(
+pub(crate) fn topologically_order_keys<'py>(
     upstream: &Bound<'py, PyAny>,
     injected_edge_origins: Option<Bound<'py, PyAny>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
@@ -327,7 +333,7 @@ fn missing_rows<'py>(
 /// Upstream deps of selected keys that exist neither in scope nor in the warehouse.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn check_buildability<'py>(
+pub(crate) fn check_buildability<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
@@ -386,7 +392,7 @@ fn check_buildability<'py>(
 /// Describe missing upstream keys, naming the audit when only an audit read requires one.
 #[pyfunction]
 #[pyo3(signature = (*, missing, edge_origins))]
-fn missing_upstream_message<'py>(
+pub(crate) fn missing_upstream_message<'py>(
     missing: &Bound<'py, PyAny>,
     edge_origins: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyString>> {

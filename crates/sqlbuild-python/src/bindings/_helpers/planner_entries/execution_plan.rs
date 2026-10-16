@@ -13,13 +13,16 @@ use crate::bindings::_helpers::planner_entries::test_planning::{
 };
 use crate::bindings::_helpers::planner_entries::values::{COMPILE_TYPES, native, replaced};
 use crate::bindings::_helpers::planner_phases::buildability::check_selected_scope_buildability;
+use crate::bindings::_helpers::planner_phases::contexts::class_field;
 use crate::bindings::_helpers::planner_phases::execution_changes::{
     build_planner_entry_results, reconcile_execution_changes,
 };
 use crate::bindings::_helpers::planner_phases::identities::{
     build_planner_identity_context, detect_stale_warning_changes,
 };
+use crate::bindings::_helpers::planner_phases::models::PlannerIdentityContext;
 use crate::bindings::_helpers::planner_phases::models::PlannerRuntime;
+use crate::bindings::_helpers::planner_phases::models::PlannerScopeResolution;
 use crate::bindings::_helpers::planner_phases::output_assembly::{
     add_plan_metadata, add_plan_warnings, add_storage_policies, base_plan_output,
 };
@@ -46,7 +49,7 @@ fn scopes_and_cursor_overrides<'py>(
         &args.value("selection")?,
         &args.value("policies")?,
     )?;
-    let selected = scopes.getattr("selected_scope")?;
+    let selected = class_field(&scopes, |s: &PlannerScopeResolution| &s.selected_scope)?;
     let models_by_name = selected.getattr("models_by_name")?;
     let model_type = imported(py, COMPILE_TYPES, "CompiledResourceType")?.getattr("MODEL")?;
     let mut models: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -73,9 +76,15 @@ fn change_results<'py>(
     policies: &Bound<'py, PyAny>,
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let py = project.py();
-    let versions = identities.getattr("version_identities")?;
+    let versions = class_field(identities, |i: &PlannerIdentityContext| {
+        &i.version_identities
+    })?;
     let changes = detect_changes(
-        (project, &scopes.getattr("inspection_scope")?, snapshot),
+        (
+            project,
+            &class_field(scopes, |s: &PlannerScopeResolution| &s.inspection_scope)?,
+            snapshot,
+        ),
         overrides.getattr("full_refresh")?.is_truthy()?,
         (
             versions.getattr("model_version_hashes")?,
@@ -123,7 +132,7 @@ fn planned_output<'py>(
         overrides,
         &policies,
     )?;
-    let inspection_scope = scopes.getattr("inspection_scope")?;
+    let inspection_scope = class_field(scopes, |s: &PlannerScopeResolution| &s.inspection_scope)?;
     let resolved_actions = resolve_model_actions(&inspection_scope, &changes)?;
     let source_freshness = build_planner_source_freshness_result(
         (&project, &inspection_scope),
@@ -174,7 +183,7 @@ fn planned_output<'py>(
 /// Build the execution plan for one selection against live warehouse state.
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn build_execution_plan<'py>(
+pub(crate) fn build_execution_plan<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -212,7 +221,7 @@ fn build_execution_plan<'py>(
     )?
     .into_any();
     let (scopes, overrides) = scopes_and_cursor_overrides(&args)?;
-    let inspection = scopes.getattr("inspection_scope")?;
+    let inspection = class_field(&scopes, |s: &PlannerScopeResolution| &s.inspection_scope)?;
     let test_planning = start_planning(
         py,
         PlanningRequest {

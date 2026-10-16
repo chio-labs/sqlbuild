@@ -15,15 +15,24 @@ use sqlbuild_core::freshness_text::main::render_freshness_text::render_freshness
 use sqlbuild_core::freshness_text::models::FreshnessSourceResult;
 
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
+use crate::bindings::_helpers::command_runtime::connection::resolve_project_connection_config;
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::project::build_project_graph;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::freshness::freshness_observe::{PreviousState, observe_freshness};
 use crate::bindings::_helpers::freshness::observation::Observer;
 use crate::bindings::_helpers::freshness::state_io::{StateRead, read_latest};
+use crate::bindings::_helpers::planner_selection::selectors::{
+    expand_project_upstream_keys, select_project_graph,
+};
+use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
 
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
+use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::SOURCE_FRESHNESS_TABLE_NAME as STATE_TABLE_NAME;
 const STALE_REQUIRES_STATE_MESSAGE: &str = "freshness --fail-on-stale requires --state";
@@ -72,17 +81,11 @@ fn source_names_for_keys(
     let py: Python<'_> = graph.py();
     let source_type: Bound<'_, PyAny> =
         imported(py, COMPILE_TYPES_MODULE, "CompiledResourceType")?.getattr("SOURCE")?;
-    let expand: Bound<'_, PyAny> = registry::native(py, NativeAttr::ExpandProjectUpstreamKeys)?;
     let upstream_deps: Bound<'_, PyAny> = graph.getattr("upstream_deps")?;
     for key in keys.try_iter()? {
         let key: Bound<'_, PyAny> = key?;
-        let upstream: Bound<'_, PyAny> = expand.call(
-            (),
-            Some(&keywords(
-                py,
-                &[("key", &key), ("upstream_deps", &upstream_deps)],
-            )?),
-        )?;
+        let upstream: Bound<'_, PyAny> =
+            expand_project_upstream_keys(key.clone(), &upstream_deps)?.into_any();
         for candidate in std::iter::once(Ok(key.clone())).chain(upstream.try_iter()?) {
             let candidate: Bound<'_, PyAny> = candidate?;
             if candidate.getattr("resource_type")?.eq(&source_type)? {
@@ -99,13 +102,7 @@ fn graph_keys<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = graph.py();
     let empty: Bound<'py, PyAny> = PyTuple::empty(py).into_any();
-    registry::native(py, NativeAttr::SelectProjectGraph)?.call(
-        (),
-        Some(&keywords(
-            py,
-            &[("graph", graph), ("select", selectors), ("exclude", &empty)],
-        )?),
-    )
+    Ok(select_project_graph(graph, selectors, &empty)?.into_any())
 }
 
 /// Selected source names, sorted: selected or all keys and their upstream sources, minus excluded.
@@ -206,19 +203,18 @@ fn observe(
     names: &[String],
 ) -> PyResult<Vec<FreshnessSourceResult>> {
     let py: Python<'_> = adapter.py();
-    let connection_config: Bound<'_, PyAny> =
-        registry::native(py, NativeAttr::ResolveProjectConnectionConfig)?.call(
-            (),
-            Some(&keywords(
-                py,
-                &[
-                    ("discovered_inputs", discovered),
-                    ("project_dir", project_dir),
-                    ("selected_target", &request.getattr("selected_target")?),
-                    ("cli_vars", &request.getattr("cli_vars")?),
-                ],
-            )?),
-        )?;
+    let connection_config: Bound<'_, PyAny> = resolve_project_connection_config(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", discovered),
+                ("project_dir", project_dir),
+                ("selected_target", &request.getattr("selected_target")?),
+                ("cli_vars", &request.getattr("cli_vars")?),
+            ],
+        )?),
+    )?;
     let connection: Bound<'_, PyAny> = adapter.call_method1("connect", (connection_config,))?;
     let observed = (|| {
         let project: Bound<'_, PyAny> = graph.getattr("project")?;
@@ -258,11 +254,12 @@ fn write_json_output(
     payload: &str,
     (json_output, json_output_path): (bool, &Bound<'_, PyAny>),
 ) -> PyResult<()> {
-    let options: Bound<'_, PyDict> = keywords(py, &[("json_output_path", json_output_path)])?;
-    options.set_item("payload", format!("{payload}\n"))?;
-    options.set_item("json_output", json_output)?;
-    registry::native(py, NativeAttr::WriteExecutionJsonOutput)?.call((), Some(&options))?;
-    Ok(())
+    write_execution_json_output(
+        py,
+        PyString::new(py, &format!("{payload}\n")).into_any(),
+        json_output,
+        json_output_path.clone(),
+    )
 }
 
 /// Run one `sqb freshness` request.
@@ -281,36 +278,19 @@ fn run_freshness_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult
         directory if !directory.is_none() => directory,
         _ => py.import("pathlib")?.getattr("Path")?.call_method0("cwd")?,
     };
-    let discovered: Bound<'_, PyAny> = registry::native(py, NativeAttr::DiscoverProjectInputs)?
-        .call((), Some(&keywords(py, &[("project_dir", &project_dir)])?))?;
+    let discovered: Bound<'_, PyAny> =
+        discover_project_inputs(py, Some(keywords(py, &[("project_dir", &project_dir)])?))?;
     let select: Bound<'_, PyAny> = request.getattr("select")?;
     let exclude: Bound<'_, PyAny> = request.getattr("exclude")?;
-    registry::native(py, NativeAttr::RejectUnitTestSelectors)?.call(
-        (),
-        Some(&keywords(
-            py,
-            &[
-                ("select", &select),
-                ("exclude", &exclude),
-                ("discovered_inputs", &discovered),
-            ],
-        )?),
+    reject_unit_test_selectors(&select, &exclude, &discovered)?;
+    let adapter_name: Bound<'_, PyAny> = resolve_effective_adapter_name(
+        &discovered.getattr("project_config")?,
+        &discovered.getattr("local_config")?,
     )?;
-    let adapter_name: Bound<'_, PyAny> =
-        registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?.call(
-            (),
-            Some(&keywords(
-                py,
-                &[
-                    ("project_config", &discovered.getattr("project_config")?),
-                    ("local_config", &discovered.getattr("local_config")?),
-                ],
-            )?),
-        )?;
     let adapter: Bound<'_, PyAny> = resolve_cli_adapter(&adapter_name, &project_dir)?;
-    let graph: Bound<'_, PyAny> = registry::native(py, NativeAttr::BuildProjectGraph)?.call(
-        (),
-        Some(&keywords(
+    let graph: Bound<'_, PyAny> = build_project_graph(
+        py,
+        Some(keywords(
             py,
             &[
                 ("discovered_inputs", &discovered),

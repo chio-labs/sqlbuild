@@ -164,7 +164,7 @@ fn split_unit_test_selectors<'py>(
 /// Raise when a selector names a unit test; return the unchanged resource selectors.
 #[pyfunction]
 #[pyo3(signature = (*, select, exclude, discovered_inputs))]
-fn reject_unit_test_selectors<'py>(
+pub(crate) fn reject_unit_test_selectors<'py>(
     select: &Bound<'py, PyAny>,
     exclude: &Bound<'py, PyAny>,
     discovered_inputs: &Bound<'py, PyAny>,

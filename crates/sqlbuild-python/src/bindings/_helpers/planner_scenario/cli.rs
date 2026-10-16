@@ -1,13 +1,18 @@
 //! Assemble CLI scenario plans while retaining adapter and executor boundaries.
 
 use crate::bindings::_helpers::analysis::model_reads;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::planner_phases::objects::object;
+use crate::bindings::_helpers::planner_scenario::artifacts::build_scenario_hash_index;
+use crate::bindings::_helpers::planner_scenario::artifacts::build_scenario_relation_map;
 use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_GRAPH_VALIDATION;
+use crate::bindings::_helpers::planner_scenario::execution::build_scenario_execution_plan;
 use crate::bindings::_helpers::planner_scenario::graph::plan_scenario_graph;
 use crate::bindings::_helpers::planner_scenario::models::ScenarioRelations;
 use crate::bindings::_helpers::planner_scenario::relations::build_scenario_relation_plan;
 use crate::bindings::_helpers::planner_scenario::values::string;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
@@ -38,16 +43,22 @@ pub(crate) fn build_cli_scenario_plan<'py>(
     let adapter = args.value("adapter")?;
     let (graph, warnings) = plan_scenario_graph(&scenario, &project, true, None)?;
     raise_for_warnings(warnings.as_any())?;
-    let hashes = call_with(
-        &registry::native(py, NativeAttr::BuildScenarioHashIndex)?,
-        &[
-            ("project_name", args.value("project_name")?),
-            ("scenarios", project.getattr("sql_scenarios")?),
-            (
-                "run_namespace",
-                project.getattr("scenario")?.getattr("run_namespace")?,
-            ),
-        ],
+    let hashes = object(
+        py,
+        build_scenario_hash_index(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("project_name", args.value("project_name")?),
+                    ("scenarios", project.getattr("sql_scenarios")?),
+                    (
+                        "run_namespace",
+                        project.getattr("scenario")?.getattr("run_namespace")?,
+                    ),
+                ],
+            )?),
+        )?,
     )?;
     let mut identities: Vec<Bound<'py, PyAny>> = Vec::new();
     for (field, kind) in [
@@ -70,17 +81,20 @@ pub(crate) fn build_cli_scenario_plan<'py>(
             )?);
         }
     }
-    let map = call_with(
-        &registry::native(py, NativeAttr::BuildScenarioRelationMap)?,
-        &[
-            ("scenario_name", scenario.getattr("name")?),
-            ("hash_prefix", hashes.get_item(scenario.getattr("name")?)?),
-            ("artifacts", PyTuple::new(py, identities)?.into_any()),
-            (
-                "identifier_limit",
-                adapter.call_method0("maximum_identifier_length")?,
-            ),
-        ],
+    let map = build_scenario_relation_map(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("scenario_name", scenario.getattr("name")?),
+                ("hash_prefix", hashes.get_item(scenario.getattr("name")?)?),
+                ("artifacts", PyTuple::new(py, identities)?.into_any()),
+                (
+                    "identifier_limit",
+                    adapter.call_method0("maximum_identifier_length")?,
+                ),
+            ],
+        )?),
     )?;
     let (database, schema) = namespace(&project, &graph)?;
     let relations = build_scenario_relation_plan(&ScenarioRelations {
@@ -91,19 +105,22 @@ pub(crate) fn build_cli_scenario_plan<'py>(
         database,
         schema,
     })?;
-    let result = call_with(
-        &registry::native(py, NativeAttr::BuildScenarioExecutionPlan)?,
-        &[
-            ("scenario", scenario),
-            ("project", project),
-            ("adapter", adapter),
-            ("graph_plan", graph),
-            ("relation_plan", relations),
-            (
-                "source_lexical_syntax",
-                args.value("source_lexical_syntax")?,
-            ),
-        ],
+    let result = build_scenario_execution_plan(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("scenario", scenario),
+                ("project", project),
+                ("adapter", adapter),
+                ("graph_plan", graph),
+                ("relation_plan", relations),
+                (
+                    "source_lexical_syntax",
+                    args.value("source_lexical_syntax")?,
+                ),
+            ],
+        )?),
     )?;
     raise_for_warnings(&result.get_item(1)?)?;
     result.get_item(0)

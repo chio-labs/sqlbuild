@@ -1,23 +1,25 @@
 //! Fingerprint cache callbacks around native one-to-one migration matching.
 
 use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::planner_migrations::models::{
+    FingerprintInputs, ModelMigrationRequest,
+};
+use pyo3::IntoPyObject;
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
-use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::planner_migrations::main::match_migrations::match_migrations;
 use sqlbuild_analysis::planner_migrations::models::MigrationCandidate;
 use std::collections::{BTreeMap, BTreeSet};
 
 fn variants<'py>(
-    py: Python<'py>,
-    arguments: &KeywordArguments<'py>,
+    inputs: &FingerprintInputs<'py>,
     model: &Bound<'py, PyAny>,
     maps: Bound<'py, PyAny>,
 ) -> PyResult<Vec<String>> {
     let name = model_reads::name_object(model)?;
-    let metadata = arguments.value("metadata_jsons")?.get_item(name)?;
-    let cache = arguments.value("fingerprints")?.getattr("fingerprint")?;
+    let metadata = inputs.metadata_jsons.get_item(name)?;
+    let cache = inputs.fingerprints.getattr("fingerprint")?;
     let mut hashes: Vec<String> = Vec::new();
     for map in maps.try_iter()? {
         let hash: Option<String> = call_with(
@@ -26,7 +28,7 @@ fn variants<'py>(
                 ("query_sql", model_reads::query_sql(model)?),
                 ("metadata_json", metadata.clone()),
                 ("ref_identities", map?),
-                ("dialect", arguments.value("dialect")?),
+                ("dialect", inputs.dialect.clone()),
             ],
         )?
         .extract()?;
@@ -36,105 +38,62 @@ fn variants<'py>(
             hashes.push(hash);
         }
     }
-    let _ = py;
     Ok(hashes)
 }
 
-#[pyfunction]
-#[pyo3(signature = (**options))]
-fn match_migration_fingerprints<'py>(
-    py: Python<'py>,
-    options: Option<Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyTuple>> {
-    let arguments = KeywordArguments::read(
-        py,
-        "match_migration_fingerprints",
-        options,
-        (
-            &[
-                "models",
-                "new_names",
-                "seed_variants",
-                "candidates",
-                "metadata_jsons",
-                "dialect",
-                "fingerprints",
-            ],
-            &[],
-        ),
-    )?;
-    let new_names: BTreeSet<String> = arguments.value("new_names")?.extract()?;
-    let mut models: BTreeMap<String, Bound<'py, PyAny>> = BTreeMap::new();
+/// The fingerprint variants tried, the matched candidate per new model, and ambiguous names.
+pub(super) fn match_migration_fingerprints<'py>(
+    (models, new_names): (&[Bound<'py, PyAny>], BTreeSet<String>),
+    seed_variants: &Bound<'py, PyAny>,
+    candidates: &Bound<'py, PyAny>,
+    inputs: &FingerprintInputs<'py>,
+) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyDict>, Bound<'py, PyAny>)> {
+    let py = seed_variants.py();
+    let mut by_name: BTreeMap<String, Bound<'py, PyAny>> = BTreeMap::new();
     let mut names: Vec<String> = Vec::new();
-    for model in arguments.value("models")?.try_iter()? {
-        let model = model?;
-        let name: String = model_reads::model_name(&model)?;
+    for model in models {
+        let name: String = model_reads::model_name(model)?;
         if new_names.contains(&name) {
             names.push(name.clone());
         }
-        models.insert(name, model);
+        by_name.insert(name, model.clone());
     }
-    let original: Vec<Bound<'py, PyAny>> = arguments
-        .value("candidates")?
-        .try_iter()?
-        .collect::<PyResult<_>>()?;
-    let mut candidates: Vec<MigrationCandidate> = Vec::new();
+    let original: Vec<Bound<'py, PyAny>> = candidates.try_iter()?.collect::<PyResult<_>>()?;
+    let mut fingerprints: Vec<MigrationCandidate> = Vec::new();
     for candidate in &original {
-        candidates.push(MigrationCandidate {
+        fingerprints.push(MigrationCandidate {
             name: candidate.getattr("node_name")?.extract()?,
             fingerprint: stored_migration_fingerprint(candidate)?.unwrap_or_default(),
         });
     }
-    let seeds: Vec<BTreeMap<String, String>> = arguments.value("seed_variants")?.extract()?;
-    let matched = match_migrations(&names, &seeds, &candidates, |name, maps| {
-        variants(
-            py,
-            &arguments,
-            &models[name],
-            PyTuple::new(py, maps)?.into_any(),
-        )
+    let seeds: Vec<BTreeMap<String, String>> = seed_variants.extract()?;
+    let matched = match_migrations(&names, &seeds, &fingerprints, |name, maps| {
+        variants(inputs, &by_name[name], PyTuple::new(py, maps)?.into_any())
     })?;
     let matches = PyDict::new(py);
     for (name, index) in matched.matches {
         matches.set_item(name, &original[index])?;
     }
-    PyTuple::new(
-        py,
-        [
-            PyTuple::new(py, matched.variants)?.into_any(),
-            matches.into_any(),
-            matched.ambiguous.into_pyobject(py)?.into_any(),
-        ],
-    )
+    Ok((
+        PyTuple::new(py, matched.variants)?.into_any(),
+        matches,
+        matched.ambiguous.into_pyobject(py)?.into_any(),
+    ))
 }
 
-#[pyfunction]
-#[pyo3(signature = (**options))]
-fn migration_destination_fingerprints<'py>(
-    py: Python<'py>,
-    options: Option<Bound<'py, PyDict>>,
+/// The fingerprint variants of each requested destination model with metadata.
+pub(super) fn migration_destination_fingerprints<'py>(
+    requests: &[ModelMigrationRequest<'py>],
+    variant_maps: &Bound<'py, PyAny>,
+    inputs: &FingerprintInputs<'py>,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let arguments = KeywordArguments::read(
-        py,
-        "migration_destination_fingerprints",
-        options,
-        (
-            &[
-                "requests",
-                "variants",
-                "metadata_jsons",
-                "dialect",
-                "fingerprints",
-            ],
-            &[],
-        ),
-    )?;
+    let py = variant_maps.py();
     let result = PyDict::new(py);
-    for request in arguments.value("requests")?.try_iter()? {
-        let model = request?.getattr("model")?;
-        let name = model_reads::name_object(&model)?;
-        if arguments
-            .value("metadata_jsons")?
+    for request in requests {
+        let model = &request.model;
+        let name = model_reads::name_object(model)?;
+        if inputs
+            .metadata_jsons
             .call_method1("get", (&name,))?
             .is_none()
         {
@@ -142,26 +101,16 @@ fn migration_destination_fingerprints<'py>(
         }
         result.set_item(
             name,
-            PyTuple::new(
-                py,
-                variants(py, &arguments, &model, arguments.value("variants")?)?,
-            )?,
+            PyTuple::new(py, variants(inputs, model, variant_maps.clone())?)?,
         )?;
     }
     Ok(result)
 }
 
-#[pyfunction]
-fn stored_migration_fingerprint(fingerprint: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
+/// The migration fingerprint stored in a model fingerprint's metadata.
+pub(super) fn stored_migration_fingerprint(
+    fingerprint: &Bound<'_, PyAny>,
+) -> PyResult<Option<String>> {
     let metadata: String = fingerprint.getattr("metadata_json")?.extract()?;
     Ok(sqlbuild_analysis::planner_migrations::main::stored_migration_fingerprint::stored_migration_fingerprint(&metadata))
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(match_migration_fingerprints, module)?)?;
-    module.add_function(wrap_pyfunction!(
-        migration_destination_fingerprints,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(stored_migration_fingerprint, module)?)
 }

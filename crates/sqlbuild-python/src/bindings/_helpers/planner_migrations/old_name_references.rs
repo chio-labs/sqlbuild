@@ -1,11 +1,15 @@
 //! Diagnose literal references to compatibility-only old names.
 
+use crate::bindings::_helpers::analysis::explicit_references::hard_coded_relation_remedy;
+use crate::bindings::_helpers::analysis::explicit_references::old_name_reference_message;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::planner_migrations::column_objects::{native, text};
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::planner_phases::objects::object;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::references::relations::match_project_relation;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyStringMethods, PyTuple};
 
@@ -83,11 +87,7 @@ pub(super) fn errors<'py>(
     for literal in literals.try_iter()? {
         let literal = literal?;
         let relation = literal.getattr("relation")?;
-        let matched = native(
-            py,
-            NativeAttr::MatchProjectRelation,
-            &[("index", index.clone()), ("relation", relation.clone())],
-        )?;
+        let matched = object(py, match_project_relation(&index, &relation, None, None)?)?;
         if matched.is_none() || matched.getattr("compatibility_for")?.is_none() {
             continue;
         }
@@ -98,26 +98,21 @@ pub(super) fn errors<'py>(
                 parts.push(part.extract()?);
             }
         }
-        let message: String = native(
+        let message: String = object(
             py,
-            NativeAttr::OldNameReferenceMessage,
-            &[
-                ("owner_label", literal.getattr("owner_label")?),
-                ("written", text(py, &parts.join("."))),
-                ("method", literal.getattr("method")?),
-                ("model_name", matched.getattr("compatibility_for")?),
-            ],
+            old_name_reference_message(
+                &literal.getattr("owner_label")?.extract::<String>()?,
+                &parts.join("."),
+                &literal.getattr("method")?.extract::<String>()?,
+                &matched.getattr("compatibility_for")?.extract::<String>()?,
+            ),
         )?
         .extract()?;
-        let remedy: String = native(
-            py,
-            NativeAttr::HardCodedRelationRemedy,
-            &[
-                ("owner_kind", literal.getattr("owner_kind")?),
-                ("ref", matched.getattr("ref")?),
-            ],
-        )?
-        .extract()?;
+        let remedy: String = hard_coded_relation_remedy(
+            &literal.getattr("owner_kind")?.extract::<String>()?,
+            &matched.getattr("ref")?,
+            None,
+        )?;
         let path = literal
             .getattr("relative_path")?
             .str()?

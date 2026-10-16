@@ -4,7 +4,6 @@ from types import SimpleNamespace
 
 import pytest
 
-import sqlbuild._native as native_module
 from sqlbuild._native import (
     ChangeDetectionResult,
     ChangeKind,
@@ -69,7 +68,6 @@ def test_given_execution_change_when_checking_reuse_then_requires_equivalent_sem
         model_version_hashes={"orders": test_case.stale_warning_hash},
     )
 
-    monkeypatch.setattr(native_module, "detect_model_changes_in_scope", lambda **_: {})
     stale_scope: PlannerScope = PlannerScope(
         upstream_deps={},
         downstream_deps={},
@@ -81,7 +79,10 @@ def test_given_execution_change_when_checking_reuse_then_requires_equivalent_sem
 
     reused: PlannerChangeResults = detect_stale_warning_changes(
         project=SimpleNamespace(
-            settings=SimpleNamespace(query_change_tracking=test_case.query_change_tracking)
+            settings=SimpleNamespace(query_change_tracking=test_case.query_change_tracking),
+            functions=(),
+            hook_functions=(),
+            sql_analysis_dialect="duckdb",
         ),
         scopes=PlannerScopeResolution(
             selected_scope=stale_scope,

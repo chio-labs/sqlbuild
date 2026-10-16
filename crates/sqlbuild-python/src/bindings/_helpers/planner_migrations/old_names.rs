@@ -16,7 +16,7 @@ use sqlbuild_analysis::planner_migrations::main::{
 };
 
 #[pyfunction]
-fn declared_column_aliases<'py>(
+pub(crate) fn declared_column_aliases<'py>(
     py: Python<'py>,
     model: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
@@ -36,7 +36,7 @@ fn declared_column_aliases<'py>(
 
 #[pyfunction]
 #[pyo3(signature = (*, snapshot, needed))]
-fn old_name_schemas_to_read<'py>(
+pub(crate) fn old_name_schemas_to_read<'py>(
     py: Python<'py>,
     snapshot: &Bound<'py, PyAny>,
     needed: &Bound<'py, PyAny>,
@@ -97,7 +97,7 @@ fn claim_message(model: &str, view: &Bound<'_, PyAny>, now: &Bound<'_, PyAny>) -
 
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn old_name_claim_errors<'py>(
+pub(crate) fn old_name_claim_errors<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
@@ -155,7 +155,7 @@ fn old_name_claim_errors<'py>(
 
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn old_name_view_skip_reason<'py>(
+pub(crate) fn old_name_view_skip_reason<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Option<String>> {

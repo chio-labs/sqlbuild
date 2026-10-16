@@ -1,10 +1,18 @@
 //! Assemble scenario execution plans through existing planner and adapter APIs.
 
 use crate::bindings::_helpers::analysis::model_reads;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::compiled_project::loop_classes::by_attribute;
+use crate::bindings::_helpers::compiled_project::records::compiled_model_record;
+use crate::bindings::_helpers::planner_entries::model_entries::plan_model;
+use crate::bindings::_helpers::planner_entries::models::ModelPlanContext;
+use crate::bindings::_helpers::planner_identity::graph::build_execution_upstream_deps;
+use crate::bindings::_helpers::planner_identity::graph::topologically_order_keys;
+use crate::bindings::_helpers::planner_phases::objects::object;
+use crate::bindings::_helpers::planner_resolution::locations::build_function_locations;
 use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_INVALID_FIXTURE;
 use crate::bindings::_helpers::planner_scenario::{
     entries::{function_entry, seed_entries},
@@ -15,10 +23,10 @@ use crate::bindings::_helpers::planner_scenario::{
 };
 use crate::bindings::_helpers::planner_strategy::fixture_completion::complete_fixtures as complete_relation_fixtures;
 use crate::bindings::_helpers::planner_strategy::fixture_context::planning_context;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
-use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
+use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PyTuple};
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
@@ -75,14 +83,9 @@ pub(crate) fn build_scenario_execution_plan<'py>(
     };
     let models = by_attribute(&project.getattr("models")?, "name")?;
     let functions = by_attribute(&project.getattr("functions")?, "key")?;
-    let locations = registry::native(py, NativeAttr::BuildFunctionLocations)?
-        .call1((project.getattr("functions")?,))?;
-    let upstream =
-        registry::native(py, NativeAttr::BuildExecutionUpstreamDeps)?.call1((&project,))?;
-    let ordered = call_with(
-        &registry::native(py, NativeAttr::TopologicallyOrderKeys)?,
-        &[("upstream", upstream)],
-    )?;
+    let locations = build_function_locations(&project.getattr("functions")?)?.into_any();
+    let upstream = build_execution_upstream_deps(&project)?.into_any();
+    let ordered = object(py, topologically_order_keys(&upstream, None)?)?;
     let mut model_keys: Vec<Bound<'py, PyAny>> = Vec::new();
     for key in ordered.try_iter()? {
         let key = key?;
@@ -126,33 +129,39 @@ pub(crate) fn build_scenario_execution_plan<'py>(
             &model_reads::query_sql(&model)?.extract::<String>()?,
             &context.relations,
         )?;
-        let record = registry::native(py, NativeAttr::CompiledModelRecord)?.call1((&model,))?;
+        let record = compiled_model_record(&model)?;
         let changes = PyDict::new(py);
         changes.set_item("destination", destination)?;
         changes.set_item("query_sql", query)?;
         let model = imported(py, "dataclasses", "replace")?.call((record,), Some(&changes))?;
         let model_context = model_context(&project, &context, (&models, &locations, &columns))?;
-        let result = call_with(
-            &registry::native(py, NativeAttr::PlanModel)?,
-            &[
-                ("model", model),
-                ("snapshot", snapshot.clone()),
-                ("adapter", context.adapter.clone()),
-                ("context", model_context),
-                (
-                    "sql_analysis_enabled",
-                    PyBool::new(py, analysis).to_owned().into_any(),
-                ),
-                (
-                    "query_change_tracking",
-                    PyBool::new(py, false).to_owned().into_any(),
-                ),
-                ("full_refresh", PyBool::new(py, true).to_owned().into_any()),
-                (
-                    "cursor_overrides",
-                    registry::class(py, RecordId::CursorOverridePair)?.call0()?,
-                ),
-            ],
+        let result = object(
+            py,
+            plan_model(
+                py,
+                Some(keywords(
+                    py,
+                    &[
+                        ("model", model),
+                        ("snapshot", snapshot.clone()),
+                        ("adapter", context.adapter.clone()),
+                        ("context", model_context),
+                        (
+                            "sql_analysis_enabled",
+                            PyBool::new(py, analysis).to_owned().into_any(),
+                        ),
+                        (
+                            "query_change_tracking",
+                            PyBool::new(py, false).to_owned().into_any(),
+                        ),
+                        ("full_refresh", PyBool::new(py, true).to_owned().into_any()),
+                        (
+                            "cursor_overrides",
+                            registry::class(py, RecordId::CursorOverridePair)?.call0()?,
+                        ),
+                    ],
+                )?),
+            )?,
         )?;
         entries.push(result.get_item(0)?);
         for warning in result.get_item(1)?.try_iter()? {
@@ -250,31 +259,30 @@ fn model_context<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let (models, locations, columns) = inputs;
     let py = project.py();
-    call_with(
-        &registry::class(py, RecordId::ModelPlanContext)?,
-        &[
-            (
-                "model_locations",
-                context.relations.getattr("model_locations")?,
-            ),
-            ("models_by_name", models.clone().into_any()),
-            (
-                "functions_by_name",
-                by_attribute(&project.getattr("functions")?, "name")?.into_any(),
-            ),
-            (
-                "seed_locations",
-                context.relations.getattr("seed_locations")?,
-            ),
-            ("function_locations", locations.clone()),
-            ("source_map", context.relations.getattr("source_map")?),
-            ("source_warehouse_columns", columns.clone()),
-            (
-                "star_exclude_keyword",
-                context.adapter.call_method0("star_exclude_keyword")?,
-            ),
-        ],
-    )
+    let none = || py.None();
+    Ok(Bound::new(
+        py,
+        ModelPlanContext {
+            model_locations: context.relations.getattr("model_locations")?.unbind(),
+            models_by_name: models.clone().into_any().unbind(),
+            functions_by_name: by_attribute(&project.getattr("functions")?, "name")?
+                .into_any()
+                .unbind(),
+            seed_locations: context.relations.getattr("seed_locations")?.unbind(),
+            function_locations: locations.clone().unbind(),
+            source_map: context.relations.getattr("source_map")?.unbind(),
+            source_warehouse_columns: columns.clone().unbind(),
+            star_exclude_keyword: context
+                .adapter
+                .call_method0("star_exclude_keyword")?
+                .unbind(),
+            runtime_cursor_producer_names: PyFrozenSet::empty(py)?.into_any().unbind(),
+            future_cursor_config: none(),
+            start_cursor_config: none(),
+            invocation_time: none(),
+        },
+    )?
+    .into_any())
 }
 
 fn expectations<'py>(

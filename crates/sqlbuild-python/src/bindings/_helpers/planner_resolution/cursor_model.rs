@@ -1,20 +1,33 @@
 //! Model cursor orchestration over live warehouse snapshot facts.
 
 use crate::bindings::_helpers::analysis::model_reads;
+use crate::bindings::_helpers::compile_attachment::cursor_roles::resolve_cursor_input_roles;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::model_config::config_values::{
     config_cursor_bound, config_str as authored_config_str,
 };
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::plan_output::display::resolve_bounded_cursor_override;
+use crate::bindings::_helpers::planner_entries::models::ModelPlanContext;
+use crate::bindings::_helpers::planner_phases::contexts::class_field;
+use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_resolution::constants::CURSOR_START;
+use crate::bindings::_helpers::planner_resolution::cursor_bounds::compute_cursor_bounds;
 use crate::bindings::_helpers::planner_resolution::cursor_policies::{
     future_cursor_config, start_cursor_config,
 };
+use crate::bindings::_helpers::planner_resolution::cursor_windows::cursor_inputs_without_rows;
+use crate::bindings::_helpers::planner_resolution::cursor_windows::empty_cursor_window;
+use crate::bindings::_helpers::planner_resolution::cursor_windows::empty_input_rebuild_refusal;
+use crate::bindings::_helpers::planner_resolution::cursor_windows::unreadable_cursor_inputs_error;
+use crate::bindings::_helpers::planner_resolution::cursor_windows::without_destination_cursor;
+use crate::bindings::_helpers::planner_resolution::future_safety::resolve_future_cursor_safety;
 use crate::bindings::_helpers::planner_resolution::models::ModelSqlRequest;
 use crate::bindings::_helpers::planner_resolution::values::string;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::{IntoPyObject, PyErr};
@@ -76,22 +89,28 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
         return Ok(py.None().into_bound(py));
     }
     let incremental_mode = config(&model, "incremental_mode")?;
-    let future_config = future_cursor_config(&model, &context.getattr("future_cursor_config")?)?;
-    let start_config = start_cursor_config(&model, &context.getattr("start_cursor_config")?)?;
+    let future_config = future_cursor_config(
+        &model,
+        &class_field(context, |c: &ModelPlanContext| &c.future_cursor_config)?,
+    )?;
+    let start_config = start_cursor_config(
+        &model,
+        &class_field(context, |c: &ModelPlanContext| &c.start_cursor_config)?,
+    )?;
     if incremental_mode.eq("microbatch")? {
         return unbounded(py);
     }
     let cursor_type = config(&model, "cursor_type")?;
     let cursor_grain = config(&model, "cursor_grain")?;
     let (start_override, end_override) = request.cursor_overrides.clone();
-    let bounded = call_with(
-        &registry::native(py, NativeAttr::ResolveBoundedCursorOverride)?,
-        &[
-            ("start_cursor_override", start_override.clone()),
-            ("end_cursor_override", end_override.clone()),
-            ("cursor_type", cursor_type.clone()),
-            ("cursor_grain", cursor_grain.clone()),
-        ],
+    let bounded = object(
+        py,
+        resolve_bounded_cursor_override(
+            &start_override,
+            &end_override,
+            &cursor_type,
+            &cursor_grain,
+        )?,
     )?;
     if !bounded.is_none() {
         return Ok(bounded);
@@ -100,11 +119,10 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
     let mut cursor_snapshot = snapshot
         .getattr("cursor_snapshots")?
         .call_method1("get", (model_reads::name_object(&model)?,))?;
-    let roles = call_with(
-        &registry::native(py, NativeAttr::ResolveCursorInputRoles)?,
-        &[("model", model.clone())],
-    )?;
-    let producers = context.getattr("runtime_cursor_producer_names")?;
+    let roles = resolve_cursor_input_roles(&model)?;
+    let producers = class_field(context, |c: &ModelPlanContext| {
+        &c.runtime_cursor_producer_names
+    })?;
     let mut runtime_owned = false;
     for name in roles.getattr("watermark_inputs")?.try_iter()? {
         if producers.contains(name?)? {
@@ -115,23 +133,19 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
     let full_refresh = request.full_refresh;
     let replaces = request.replaces_relation;
     if !full_refresh && !runtime_owned && !cursor_snapshot.is_none() {
-        let empty = call_with(
-            &registry::native(py, NativeAttr::CursorInputsWithoutRows)?,
-            &[("cursor_snapshot", cursor_snapshot.clone())],
-        )?
-        .getattr("input_names")?;
+        let empty = cursor_inputs_without_rows(&cursor_snapshot)?.getattr("input_names")?;
         if empty.is_truthy()?
             && replaces
             && (destination_exists(&model, snapshot)?
                 || history_redirected(&model, &cursor_snapshot)?)
         {
-            let refusal = call_with(
-                &registry::native(py, NativeAttr::EmptyInputRebuildRefusal)?,
-                &[
-                    ("model_name", model_reads::name_object(&model)?),
-                    ("input_names", empty.clone()),
-                    ("cursor_type", cursor_type.clone()),
-                ],
+            let refusal = object(
+                py,
+                empty_input_rebuild_refusal(
+                    &model_reads::name_object(&model)?.extract::<String>()?,
+                    empty.extract::<Vec<String>>()?,
+                    cursor_type.extract::<Option<String>>()?.as_deref(),
+                ),
             )?;
             return Err(PyErr::from_value(call_with(
                 &registry::error(py, ErrorId::PlannerInput)?,
@@ -143,13 +157,7 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
             )?));
         }
         if empty.is_truthy()? {
-            return call_with(
-                &registry::native(py, NativeAttr::EmptyCursorWindow)?,
-                &[
-                    ("cursor_type", cursor_type),
-                    ("cursor_start", config(&model, "cursor_start")?),
-                ],
-            );
+            return empty_cursor_window(&cursor_type, &config(&model, "cursor_start")?);
         }
         if !cursor_snapshot
             .getattr("watermarks_available")?
@@ -161,13 +169,11 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
             } else {
                 cursor_snapshot.getattr("unavailable_watermark_tags")?
             };
-            return Err(PyErr::from_value(call_with(
-                &registry::native(py, NativeAttr::UnreadableCursorInputsError)?,
-                &[
-                    ("model_name", model_reads::name_object(&model)?),
-                    ("cursor_type", cursor_type),
-                    ("input_names", names),
-                ],
+            return Err(PyErr::from_value(unreadable_cursor_inputs_error(
+                py,
+                &model_reads::name_object(&model)?.extract::<String>()?,
+                cursor_type.extract::<Option<String>>()?.as_deref(),
+                names.extract::<Vec<String>>()?,
             )?));
         }
     }
@@ -181,10 +187,7 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
         return Ok(py.None().into_bound(py));
     }
     if replaces {
-        cursor_snapshot = call_with(
-            &registry::native(py, NativeAttr::WithoutDestinationCursor)?,
-            &[("cursor_snapshot", cursor_snapshot)],
-        )?;
+        cursor_snapshot = without_destination_cursor(&cursor_snapshot)?;
     }
     let backfill = &request.backfill;
     let duration = if backfill.getattr("action")?.eq("bounded")? {
@@ -196,7 +199,10 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
         &registry::class(py, RecordId::MaximumStartPolicyInputs)?,
         &[
             ("config", start_config),
-            ("invocation_time", context.getattr("invocation_time")?),
+            (
+                "invocation_time",
+                class_field(context, |c: &ModelPlanContext| &c.invocation_time)?,
+            ),
             (
                 "incremental_strategy",
                 config(&model, "incremental_strategy")?,
@@ -204,43 +210,52 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
             ("incremental_mode", incremental_mode),
         ],
     )?;
-    let bounds = call_with(
-        &registry::native(py, NativeAttr::ComputeCursorBounds)?,
-        &[
-            ("cursor_snapshot", cursor_snapshot.clone()),
-            ("cursor_type", cursor_type.clone()),
-            ("cursor_start", config(&model, "cursor_start")?),
-            ("lookback", config(&model, "lookback")?),
-            ("backfill_duration", duration),
-            ("start_cursor_override", start_override.clone()),
-            ("end_cursor_override", end_override.clone()),
-            (
-                "is_microbatch",
-                false.into_pyobject(py)?.to_owned().into_any(),
-            ),
-            ("cursor_grain", cursor_grain.clone()),
-            ("maximum_start_policy", policy),
-        ],
+    let bounds = compute_cursor_bounds(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("cursor_snapshot", cursor_snapshot.clone()),
+                ("cursor_type", cursor_type.clone()),
+                ("cursor_start", config(&model, "cursor_start")?),
+                ("lookback", config(&model, "lookback")?),
+                ("backfill_duration", duration),
+                ("start_cursor_override", start_override.clone()),
+                ("end_cursor_override", end_override.clone()),
+                (
+                    "is_microbatch",
+                    false.into_pyobject(py)?.to_owned().into_any(),
+                ),
+                ("cursor_grain", cursor_grain.clone()),
+                ("maximum_start_policy", policy),
+            ],
+        )?),
     )?;
     if bounds.is_none() {
         return Ok(bounds);
     }
-    call_with(
-        &registry::native(py, NativeAttr::ResolveFutureCursorSafety)?,
-        &[
-            ("bounds", bounds),
-            ("cursor_type", cursor_type),
-            ("cursor_grain", cursor_grain),
-            ("config", future_config),
-            ("invocation_time", context.getattr("invocation_time")?),
-            (
-                "has_complete_override",
-                (!start_override.is_none() && !end_override.is_none())
-                    .into_pyobject(py)?
-                    .to_owned()
-                    .into_any(),
-            ),
-            ("input_evidence", cursor_snapshot.getattr("input_evidence")?),
-        ],
+    resolve_future_cursor_safety(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("bounds", bounds),
+                ("cursor_type", cursor_type),
+                ("cursor_grain", cursor_grain),
+                ("config", future_config),
+                (
+                    "invocation_time",
+                    class_field(context, |c: &ModelPlanContext| &c.invocation_time)?,
+                ),
+                (
+                    "has_complete_override",
+                    (!start_override.is_none() && !end_override.is_none())
+                        .into_pyobject(py)?
+                        .to_owned()
+                        .into_any(),
+                ),
+                ("input_evidence", cursor_snapshot.getattr("input_evidence")?),
+            ],
+        )?),
     )
 }

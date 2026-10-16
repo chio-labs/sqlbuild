@@ -41,7 +41,7 @@ fn decide_empty_cursor_inputs<'py>(
 
 #[pyfunction]
 #[pyo3(signature = (*, cursor_snapshot))]
-fn cursor_inputs_without_rows<'py>(
+pub(crate) fn cursor_inputs_without_rows<'py>(
     cursor_snapshot: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     if cursor_snapshot
@@ -74,7 +74,7 @@ fn cursor_inputs_without_rows<'py>(
 
 #[pyfunction]
 #[pyo3(signature = (*, cursor_type, cursor_start))]
-fn empty_cursor_window<'py>(
+pub(crate) fn empty_cursor_window<'py>(
     cursor_type: &Bound<'py, PyAny>,
     cursor_start: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -117,7 +117,7 @@ fn cursor_window_override_flags(cursor_type: Option<&str>) -> String {
 
 #[pyfunction]
 #[pyo3(signature = (*, model_name, input_names, cursor_type))]
-fn empty_input_rebuild_refusal(
+pub(crate) fn empty_input_rebuild_refusal(
     model_name: &str,
     input_names: Vec<String>,
     cursor_type: Option<&str>,
@@ -136,7 +136,7 @@ fn empty_input_rebuild_refusal(
 
 #[pyfunction]
 #[pyo3(signature = (*, model_name, cursor_type, input_names))]
-fn unreadable_cursor_inputs_error<'py>(
+pub(crate) fn unreadable_cursor_inputs_error<'py>(
     py: Python<'py>,
     model_name: &str,
     cursor_type: Option<&str>,
@@ -172,7 +172,7 @@ fn unreadable_cursor_inputs_error<'py>(
 
 #[pyfunction]
 #[pyo3(signature = (*, cursor_snapshot))]
-fn without_destination_cursor<'py>(
+pub(crate) fn without_destination_cursor<'py>(
     cursor_snapshot: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = cursor_snapshot.py();
@@ -185,7 +185,7 @@ fn without_destination_cursor<'py>(
 
 #[pyfunction]
 #[pyo3(signature = (*, cursor_type, downstream_grain, cursor_input_grains, microbatch_strategy=None))]
-fn resolve_effective_timestamp_grain<'py>(
+pub(crate) fn resolve_effective_timestamp_grain<'py>(
     cursor_type: &Bound<'py, PyAny>,
     downstream_grain: &Bound<'py, PyAny>,
     cursor_input_grains: &Bound<'py, PyAny>,
@@ -220,7 +220,7 @@ fn resolve_effective_timestamp_grain<'py>(
 
 #[pyfunction]
 #[pyo3(signature = (*, cursor_snapshot, cursor_type, effective_grain))]
-fn normalize_cursor_snapshot_grain<'py>(
+pub(crate) fn normalize_cursor_snapshot_grain<'py>(
     cursor_snapshot: &Bound<'py, PyAny>,
     cursor_type: &Bound<'py, PyAny>,
     effective_grain: &Bound<'py, PyAny>,

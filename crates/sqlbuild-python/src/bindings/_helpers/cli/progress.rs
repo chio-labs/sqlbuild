@@ -314,7 +314,7 @@ fn context_variable(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 
 /// Return the projector installed for the current CLI invocation.
 #[pyfunction]
-fn current_native_progress_projector(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
+pub(crate) fn current_native_progress_projector(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     context_variable(py)?.call_method0("get")
 }
 

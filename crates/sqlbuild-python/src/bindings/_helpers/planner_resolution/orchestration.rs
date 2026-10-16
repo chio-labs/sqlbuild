@@ -9,6 +9,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
+use crate::bindings::_helpers::planner_entries::models::ModelPlanContext;
+use crate::bindings::_helpers::planner_phases::contexts::class_field;
 use crate::bindings::_helpers::planner_resolution::cursor_model::compute_model_cursor_bounds;
 use crate::bindings::_helpers::planner_resolution::models::{CursorFiltering, ModelSqlRequest};
 use crate::bindings::_helpers::planner_resolution::refs::{
@@ -43,11 +45,13 @@ impl<'py> Resolution<'py> {
         Ok(Self {
             adapter,
             external,
-            source_map: context.getattr("source_map")?,
-            source_warehouse_columns: context.getattr("source_warehouse_columns")?,
-            model_locations: context.getattr("model_locations")?,
-            seed_locations: context.getattr("seed_locations")?,
-            function_locations: context.getattr("function_locations")?,
+            source_map: class_field(context, |c: &ModelPlanContext| &c.source_map)?,
+            source_warehouse_columns: class_field(context, |c: &ModelPlanContext| {
+                &c.source_warehouse_columns
+            })?,
+            model_locations: class_field(context, |c: &ModelPlanContext| &c.model_locations)?,
+            seed_locations: class_field(context, |c: &ModelPlanContext| &c.seed_locations)?,
+            function_locations: class_field(context, |c: &ModelPlanContext| &c.function_locations)?,
         })
     }
 
@@ -277,7 +281,7 @@ fn unresolved_bounds_error(py: Python<'_>, name: &str, cause: Option<&str>) -> P
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn resolve_function_sql<'py>(
+pub(crate) fn resolve_function_sql<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

@@ -241,7 +241,7 @@ fn cast_source(
 
 #[pyfunction]
 #[pyo3(signature = (*, adapter, source_entry))]
-fn render_source_read_relation(
+pub(crate) fn render_source_read_relation(
     adapter: &Bound<'_, PyAny>,
     source_entry: &Bound<'_, PyAny>,
 ) -> PyResult<String> {

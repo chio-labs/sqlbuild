@@ -1,5 +1,10 @@
 //! Assemble audit plan dataclasses using native rendering and scheduling.
 
+use crate::bindings::_helpers::attachments::reference_markers::assert_no_unresolved_sql_markers;
+use crate::bindings::_helpers::auditing::render::render_audit_sql;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::graph::views::project_lineage_views;
+use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_strategy::audits::{
     reads_outside_target_lineage, resolve_attachment_kind, resolve_effective_run_scope,
 };
@@ -16,7 +21,7 @@ use crate::bindings::_helpers::planner_strategy::constants::{
     AUDIT_TYPES_MODULE, COMPILE_TYPES_MODULE, MODEL_ATTACHMENT, SOURCE_ATTACHMENT,
 };
 use crate::bindings::_helpers::planner_strategy::models::AuditPlanning;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
 /// Render and validate one audit query with the supplied adapter callbacks.
@@ -26,22 +31,22 @@ fn render_query<'py>(
     context: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = sql.py();
-    let resolved = call_with(
-        &registry::native(py, NativeAttr::RenderAuditSql)?,
-        &[
-            ("unresolved_sql", sql),
-            ("model_locations", request.model_locations.clone()),
-            ("seed_locations", request.seed_locations.clone()),
-            ("source_map", request.source_map.clone()),
-            ("adapter", request.adapter.clone()),
-        ],
+    let resolved = object(
+        py,
+        render_audit_sql(Some(&keywords(
+            py,
+            &[
+                ("unresolved_sql", sql),
+                ("model_locations", request.model_locations.clone()),
+                ("seed_locations", request.seed_locations.clone()),
+                ("source_map", request.source_map.clone()),
+                ("adapter", request.adapter.clone()),
+            ],
+        )?))?,
     )?;
-    call_with(
-        &registry::native(py, NativeAttr::AssertNoUnresolvedSqlMarkers)?,
-        &[
-            ("sql", resolved.clone()),
-            ("context", PyString::new(py, context).into_any()),
-        ],
+    object(
+        py,
+        assert_no_unresolved_sql_markers(py, resolved.downcast::<PyString>()?, context)?,
     )?;
     Ok(resolved)
 }
@@ -230,7 +235,7 @@ pub(crate) fn build_selected_audit_entries<'py>(
     if selected.is_empty() {
         return Ok(entries);
     }
-    let lineage = registry::native(py, NativeAttr::ProjectLineageViews)?.call1((project,))?;
+    let lineage = project_lineage_views(py, &project)?;
     let relations = request.get("relations")?;
     let planning = AuditPlanning {
         model_locations: relations.getattr("model_locations")?,

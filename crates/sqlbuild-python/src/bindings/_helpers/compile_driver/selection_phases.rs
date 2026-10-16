@@ -211,7 +211,7 @@ fn deferred_locations<'py>(
 /// Run canonical compile, selector, and relation phases without build planning.
 #[pyfunction]
 #[pyo3(signature = (**request))]
-fn compile_static_command_context<'py>(
+pub(crate) fn compile_static_command_context<'py>(
     request: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let request: Request<'_, 'py> = Request::new("compile_static_command_context", request)?;

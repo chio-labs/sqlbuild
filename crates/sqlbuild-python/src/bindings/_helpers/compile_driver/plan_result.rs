@@ -1,5 +1,12 @@
 //! Plan a compiled project over an open warehouse connection, and open that connection.
 
+use crate::bindings::_helpers::compile_driver::deferral::build_deferred_locations;
+use crate::bindings::_helpers::compile_driver::deferral::gather_deferred_relations;
+use crate::bindings::_helpers::compile_driver::deferral::resolve_deferred_target_config;
+use crate::bindings::_helpers::compile_driver::pipeline_entries::build_project_graph_from_compiled_project;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::compile_driver::python_plan_entries::python_read_source_names_for;
+use crate::bindings::_helpers::planner_phases::objects::object;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet};
@@ -50,20 +57,23 @@ pub(crate) fn pipeline_result<'py>(
         .getattr("resolve_python_run_selectors")?
         .is_truthy()?
     {
-        let graph: Bound<'py, PyAny> = call_with(
-            &registry::native(py, NativeAttr::BuildProjectGraphFromCompiledProject)?,
-            &[("project", project.clone())],
+        let graph: Bound<'py, PyAny> = build_project_graph_from_compiled_project(
+            py,
+            Some(keywords(py, &[("project", project.clone())])?),
         )?;
         run_selection =
             run_selection_from_inputs((select.extract()?, exclude.extract()?), &graph, discovered)?;
         selected_sql_keys = run_selection.getattr("sql_keys")?;
         selected_python_node_names = run_selection.getattr("python_node_names")?;
-        python_read_source_names = call_with(
-            &registry::native(py, NativeAttr::PythonReadSourceNamesFor)?,
-            &[
-                ("discovered_inputs", discovered.clone()),
-                ("python_node_names", selected_python_node_names.clone()),
-            ],
+        python_read_source_names = python_read_source_names_for(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("discovered_inputs", discovered.clone()),
+                    ("python_node_names", selected_python_node_names.clone()),
+                ],
+            )?),
         )?;
     }
     let selection: Bound<'py, PyAny> = call_with(
@@ -179,41 +189,56 @@ fn deferral<'py>(
         return Ok((py.None().into_bound(py), py.None().into_bound(py)));
     }
     let adapter: &Bound<'py, PyAny> = inputs.adapter;
-    let target_config: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveDeferredTargetConfig)?,
-        &[
-            ("discovered_inputs", inputs.discovered_inputs.clone()),
-            ("defer_to", defer_to.clone()),
-            (
-                "current_target_name",
-                project.getattr("effective_target_name")?,
-            ),
-        ],
+    let target_config: Bound<'py, PyAny> = resolve_deferred_target_config(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", inputs.discovered_inputs.clone()),
+                ("defer_to", defer_to.clone()),
+                (
+                    "current_target_name",
+                    project.getattr("effective_target_name")?,
+                ),
+            ],
+        )?),
     )?;
-    let locations: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildDeferredLocations)?,
-        &[
-            ("project", project.clone()),
-            ("deferred_target_config", target_config),
-            ("effective_vars", project.getattr("effective_vars")?),
-            ("default_schema", adapter.call_method0("default_schema")?),
-            (
-                "default_database",
-                adapter.call_method0("default_database")?,
-            ),
-            (
-                "render_qualified_name",
-                adapter.getattr("render_qualified_name")?,
-            ),
-        ],
+    let locations: Bound<'py, PyAny> = object(
+        py,
+        build_deferred_locations(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("project", project.clone()),
+                    ("deferred_target_config", target_config),
+                    ("effective_vars", project.getattr("effective_vars")?),
+                    ("default_schema", adapter.call_method0("default_schema")?),
+                    (
+                        "default_database",
+                        adapter.call_method0("default_database")?,
+                    ),
+                    (
+                        "render_qualified_name",
+                        adapter.getattr("render_qualified_name")?,
+                    ),
+                ],
+            )?),
+        )?,
     )?;
-    let relations: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::GatherDeferredRelations)?,
-        &[
-            ("adapter", adapter.clone()),
-            ("connection", inputs.connection.clone()),
-            ("deferred_locations", locations.clone()),
-        ],
+    let relations: Bound<'py, PyAny> = object(
+        py,
+        gather_deferred_relations(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("adapter", adapter.clone()),
+                    ("connection", inputs.connection.clone()),
+                    ("deferred_locations", locations.clone()),
+                ],
+            )?),
+        )?,
     )?;
     Ok((locations, relations))
 }

@@ -256,32 +256,6 @@ def sql_test_plan_error_messages(*, warnings: tuple[PlanWarning, ...]) -> tuple[
 
 STAGE_CAPTURE_OMITTED_ATTRIBUTES: dict[str, frozenset[str]]
 
-def migration_planning_database(*, runtime: PlannerRuntime) -> str | None: ...
-def migration_project_schemas(*, runtime: PlannerRuntime) -> set[str]: ...
-def migration_missing_origin_policy(*, runtime: PlannerRuntime) -> MissingMigrationOriginPolicy: ...
-def migration_require_same_database(
-    *, state: MigrationStateInspection, location: CompiledRelationLocation
-) -> None: ...
-def migration_resolve_origin(
-    *, request: ModelMigrationRequest, runtime: PlannerRuntime, state: MigrationStateInspection
-) -> tuple[CompiledRelationLocation, str | None]: ...
-def migration_promotion(
-    *, runtime: PlannerRuntime, decision: MigrationDecision
-) -> MigrationPromotion: ...
-def migration_with_execution(
-    *, runtime: PlannerRuntime, model: CompiledModelView, entry: ModelMigrationPlanEntry
-) -> ModelMigrationPlanEntry: ...
-def migration_redirected_cursor_snapshots(
-    *,
-    runtime: PlannerRuntime,
-    scope: PlannerScope,
-    existing_relations: dict[str, RelationInfo],
-    target_relations: dict[str, str],
-    overrides: PlannerOverrides,
-    deferral: DeferralInputs,
-    origin_cursor_columns: dict[str, str] | None = None,
-) -> dict[str, ModelCursorSnapshot]: ...
-
 class CompileInputReads:
     """Environment, settings, and run-identity reads observed during one compile."""
 
@@ -980,7 +954,7 @@ class UnitTestSelectorSplit(NativeRecord):
     ) -> None: ...
     def __replace__(self, **changes: Any) -> UnitTestSelectorSplit: ...
 
-class ModelPlanContext(NativeRecord):
+class ModelPlanContext:
     """Relation lookups and source columns for building one model plan entry."""
 
     model_locations: dict[str, CompiledRelationLocation]
@@ -997,6 +971,7 @@ class ModelPlanContext(NativeRecord):
     invocation_time: datetime | None
     def __init__(
         self,
+        *,
         model_locations: dict[str, CompiledRelationLocation],
         models_by_name: dict[str, CompiledModelView],
         seed_locations: dict[str, CompiledRelationLocation],
@@ -1010,7 +985,6 @@ class ModelPlanContext(NativeRecord):
         start_cursor_config: StartCursorsConfig | None = ...,
         invocation_time: datetime | None = ...,
     ) -> None: ...
-    def __replace__(self, **changes: Any) -> ModelPlanContext: ...
 
 class CursorOverridePair(NativeRecord):
     """Resolved per-model cursor start/end overrides for plan entry construction."""
@@ -1022,7 +996,7 @@ class CursorOverridePair(NativeRecord):
     ) -> None: ...
     def __replace__(self, **changes: Any) -> CursorOverridePair: ...
 
-class PlanEntryBuildInputs(NativeRecord):
+class PlanEntryBuildInputs:
     """Blocked models and cursor overrides for plan entry building."""
 
     source_freshness_blocked_model_names: frozenset[str]
@@ -1037,6 +1011,7 @@ class PlanEntryBuildInputs(NativeRecord):
     microbatch_limit_action: MicrobatchLimitAction
     def __init__(
         self,
+        *,
         source_freshness_blocked_model_names: frozenset[str] = ...,
         external_blocked_model_names: frozenset[str] = ...,
         start_cursor_override: str | None = ...,
@@ -1048,7 +1023,6 @@ class PlanEntryBuildInputs(NativeRecord):
         max_microbatches_is_override: bool = ...,
         microbatch_limit_action: MicrobatchLimitAction = ...,
     ) -> None: ...
-    def __replace__(self, **changes: Any) -> PlanEntryBuildInputs: ...
 
 class FunctionChangeResult(NativeRecord):
     """Per-function output from change detection."""
@@ -1340,7 +1314,7 @@ class PlannerRuntime:
         invocation_time: datetime = ...,
     ) -> None: ...
 
-class PlannerScopeResolution(NativeRecord):
+class PlannerScopeResolution:
     """Resolved planner scopes for one plan build."""
 
     selected_scope: PlannerScope
@@ -1348,11 +1322,11 @@ class PlannerScopeResolution(NativeRecord):
     inspection_scope: PlannerScope
     def __init__(
         self,
+        *,
         selected_scope: PlannerScope,
         stale_warning_scope: PlannerScope,
         inspection_scope: PlannerScope,
     ) -> None: ...
-    def __replace__(self, **changes: Any) -> PlannerScopeResolution: ...
 
 class PlannerWarehouseState:
     """Warehouse snapshot and inspection relations gathered once per plan."""
@@ -1380,72 +1354,17 @@ class PlannerWarehouseState:
         migration_fingerprints: MigrationFingerprintCache = ...,
     ) -> None: ...
 
-class ModelMigrationRequest(NativeRecord):
-    """One destination model whose data should come from an earlier relation."""
-
-    model: CompiledModelView
-    discovery: MigrationDiscovery
-    raw_origin: str | None
-    origin_location: CompiledRelationLocation | None
-    origin_model: str | None
-    force: bool
-    identity_only: bool
-    def __init__(
-        self,
-        model: CompiledModelView,
-        discovery: MigrationDiscovery,
-        raw_origin: str | None = ...,
-        origin_location: CompiledRelationLocation | None = ...,
-        origin_model: str | None = ...,
-        force: bool = ...,
-        identity_only: bool = ...,
-    ) -> None: ...
-    def __replace__(self, **changes: Any) -> ModelMigrationRequest: ...
-
-class ModelMigrationDeclaration(NativeRecord):
-    """One project model's explicit migrate_from, resolved to a relation."""
-
-    model_name: str
-    origin_location: CompiledRelationLocation
-    origin_model: str | None
-    def __init__(
-        self, model_name: str, origin_location: CompiledRelationLocation, origin_model: str | None
-    ) -> None: ...
-    def __replace__(self, **changes: Any) -> ModelMigrationDeclaration: ...
-
-class ModelMigrationDiscovery(NativeRecord):
-    """Manual and automatically discovered migration requests for one plan."""
-
-    requests: tuple[ModelMigrationRequest, ...]
-    warnings: tuple[PlanWarning, ...]
-    destination_fingerprints: dict[str, tuple[str, ...]]
-    def __init__(
-        self,
-        requests: tuple[ModelMigrationRequest, ...] = ...,
-        warnings: tuple[PlanWarning, ...] = ...,
-        destination_fingerprints: dict[str, tuple[str, ...]] = ...,
-    ) -> None: ...
-    def __replace__(self, **changes: Any) -> ModelMigrationDiscovery: ...
-
-class MigrationCompatibilityResult(NativeRecord):
-    """Compatibility status plus human-readable blocking findings."""
-
-    status: MigrationCompatibility
-    findings: tuple[str, ...]
-    def __init__(self, status: MigrationCompatibility, findings: tuple[str, ...] = ...) -> None: ...
-    def __replace__(self, **changes: Any) -> MigrationCompatibilityResult: ...
-
-class PlannerIdentityContext(NativeRecord):
+class PlannerIdentityContext:
     """Expected version identities for inspection and stale-warning scopes."""
 
     version_identities: DirectModelVersionIdentities
     stale_warning_identities: DirectModelVersionIdentities
     def __init__(
         self,
+        *,
         version_identities: DirectModelVersionIdentities,
         stale_warning_identities: DirectModelVersionIdentities,
     ) -> None: ...
-    def __replace__(self, **changes: Any) -> PlannerIdentityContext: ...
 
 class NativeModelInput:
     @property
@@ -7027,15 +6946,6 @@ def build_migration_fingerprint(
     *, query_sql: str, metadata_json: str, ref_identities: Mapping[str, str], dialect: str | None
 ) -> str | None: ...
 def migration_fingerprint_ref_names(*, query_sql: str, metadata_json: str) -> frozenset[str]: ...
-def check_migration_compatibility(
-    *,
-    model: CompiledModelView,
-    origin_relation: RelationInfo,
-    origin_columns: tuple[ColumnInfo, ...],
-    sql_analysis_enabled: bool,
-    column_dialect: str | None,
-    snapshots_config: SnapshotsConfig,
-) -> MigrationCompatibilityResult: ...
 def migration_incremental_blocking_findings(
     *,
     model: CompiledModelView,
@@ -7049,48 +6959,7 @@ def migration_snapshot_blocking_findings(
     dialect: str | None,
     snapshots_config: SnapshotsConfig,
 ) -> tuple[str, ...]: ...
-def match_migration_fingerprints(
-    *,
-    models: tuple[CompiledModelView, ...],
-    new_names: frozenset[str],
-    seed_variants: tuple[dict[str, str], ...],
-    candidates: tuple[Fingerprint, ...],
-    metadata_jsons: dict[str, str],
-    dialect: str | None,
-    fingerprints: MigrationFingerprintCache,
-) -> tuple[tuple[dict[str, str], ...], dict[str, Fingerprint], dict[str, str]]: ...
-def migration_destination_fingerprints(
-    *,
-    requests: tuple[ModelMigrationRequest, ...],
-    variants: tuple[dict[str, str], ...],
-    metadata_jsons: dict[str, str],
-    dialect: str | None,
-    fingerprints: MigrationFingerprintCache,
-) -> dict[str, tuple[str, ...]]: ...
-def stored_migration_fingerprint(fingerprint: Fingerprint) -> str | None: ...
 def declared_column_aliases(model: CompiledModelView) -> tuple[tuple[str, str], ...]: ...
-def manual_migration_requests(*, scope: PlannerScope) -> tuple[ModelMigrationRequest, ...]: ...
-def discover_model_migrations(
-    *,
-    runtime: PlannerRuntime,
-    scope: PlannerScope,
-    snapshot: WarehouseSnapshot,
-    manual_requests: tuple[ModelMigrationRequest, ...],
-    declarations: tuple[ModelMigrationDeclaration, ...],
-    state: MigrationStateInspection,
-    project_schemas: set[str],
-    fingerprints: MigrationFingerprintCache,
-) -> ModelMigrationDiscovery: ...
-def decide_model_migration(
-    *,
-    runtime: PlannerRuntime,
-    request: ModelMigrationRequest,
-    origin: CompiledRelationLocation,
-    origin_model: str | None,
-    snapshot: WarehouseSnapshot,
-    state: MigrationStateInspection,
-    snapshots_config: SnapshotsConfig,
-) -> tuple[ModelMigrationPlanEntry, Fingerprint | None, bool]: ...
 def plan_column_migrations(
     *,
     runtime: PlannerRuntime,
@@ -12300,7 +12169,7 @@ class PlannerScope(NativeRecord):
         sql_test_selection: SqlTestSelection = ...,
     ) -> None: ...
 
-class PlannerRelationsContext(NativeRecord):
+class PlannerRelationsContext:
     """Resolved relation and source inputs for plan entry construction."""
 
     model_locations: dict[str, CompiledRelationLocation]
@@ -12314,6 +12183,7 @@ class PlannerRelationsContext(NativeRecord):
     listed_source_names: frozenset[str]
     def __init__(
         self,
+        *,
         model_locations: dict[str, CompiledRelationLocation],
         seed_locations: dict[str, CompiledRelationLocation],
         function_locations: dict[str, CompiledRelationLocation],

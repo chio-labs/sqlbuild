@@ -36,7 +36,7 @@ type Object<'py> = Bound<'py, PyAny>;
 /// `source_binding_diagnostics(*, project, columns, profile, selected_keys)`.
 #[pyfunction]
 #[pyo3(signature = (**request))]
-fn source_binding_diagnostics<'py>(
+pub(crate) fn source_binding_diagnostics<'py>(
     request: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let request = Request::new("source_binding_diagnostics", request)?;

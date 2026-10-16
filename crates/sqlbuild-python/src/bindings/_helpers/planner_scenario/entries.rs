@@ -1,14 +1,19 @@
 //! Existing seed and function plan dataclass construction.
 
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::compiled_project::loop_classes::by_attribute;
+use crate::bindings::_helpers::planner_identity::metadata::build_compiled_function_fingerprint_sql;
+use crate::bindings::_helpers::planner_resolution::orchestration::resolve_function_sql;
 use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_UNKNOWN_SEED;
 use crate::bindings::_helpers::planner_scenario::{
     models::SqlContext, sql::required_target, values::error,
 };
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::planner_strategy::model_entries::extract_seed_columns;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
+use pyo3::types::PyString;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
 pub(super) fn seed_entries<'py>(
@@ -51,10 +56,7 @@ pub(super) fn seed_entries<'py>(
                     "file_path",
                     seed.getattr("seed_file")?.getattr("file_path")?,
                 ),
-                (
-                    "columns",
-                    registry::native(py, NativeAttr::ExtractSeedColumns)?.call1((&seed,))?,
-                ),
+                ("columns", extract_seed_columns(&seed)?.into_any()),
                 (
                     "csv_settings",
                     seed.getattr("schema_entry")?.getattr("csv_settings")?,
@@ -72,27 +74,30 @@ pub(super) fn function_entry<'py>(
     warehouse_columns: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = function.py();
-    let body = call_with(
-        &registry::native(py, NativeAttr::ResolveFunctionSql)?,
-        &[
-            ("adapter", context.adapter.clone()),
-            ("function", function.clone()),
-            (
-                "model_locations",
-                context.relations.getattr("model_locations")?,
-            ),
-            (
-                "seed_locations",
-                context.relations.getattr("seed_locations")?,
-            ),
-            ("function_locations", locations.clone()),
-            ("source_map", context.relations.getattr("source_map")?),
-            ("source_warehouse_columns", warehouse_columns.clone()),
-            (
-                "star_exclude_keyword",
-                context.adapter.call_method0("star_exclude_keyword")?,
-            ),
-        ],
+    let body = resolve_function_sql(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("adapter", context.adapter.clone()),
+                ("function", function.clone()),
+                (
+                    "model_locations",
+                    context.relations.getattr("model_locations")?,
+                ),
+                (
+                    "seed_locations",
+                    context.relations.getattr("seed_locations")?,
+                ),
+                ("function_locations", locations.clone()),
+                ("source_map", context.relations.getattr("source_map")?),
+                ("source_warehouse_columns", warehouse_columns.clone()),
+                (
+                    "star_exclude_keyword",
+                    context.adapter.call_method0("star_exclude_keyword")?,
+                ),
+            ],
+        )?),
     )?;
     let mut fields: Vec<(&str, Bound<'py, PyAny>)> = Vec::new();
     for name in [
@@ -108,8 +113,7 @@ pub(super) fn function_entry<'py>(
     fields.push(("body_sql", body));
     fields.push((
         "fingerprint_query_sql",
-        registry::native(py, NativeAttr::BuildCompiledFunctionFingerprintSql)?
-            .call1((function,))?,
+        PyString::new(py, &build_compiled_function_fingerprint_sql(function)?).into_any(),
     ));
     for name in [
         "fingerprint_destination",

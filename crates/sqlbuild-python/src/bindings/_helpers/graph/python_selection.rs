@@ -143,7 +143,7 @@ fn resolve_python_node_selection<'py>(
 /// The Python node names `sqb check` exclude tokens name, skipping tokens that match nothing.
 #[pyfunction]
 #[pyo3(signature = (*, graph, exclude))]
-fn resolve_python_check_excludes<'py>(
+pub(crate) fn resolve_python_check_excludes<'py>(
     graph: &Bound<'py, PyAny>,
     exclude: Vec<String>,
 ) -> PyResult<Bound<'py, PyFrozenSet>> {

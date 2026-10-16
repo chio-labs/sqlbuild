@@ -10,6 +10,7 @@ from sqlbuild._native import (
     CompiledRelationLocation,
     CompileModelConfig,
     ModelPlanContext,
+    SourceEntry,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
@@ -34,16 +35,21 @@ def build_cursor_intrinsic_model(*, config_values: dict[str, object]) -> Compile
     )
 
 
-def build_empty_model_plan_context() -> ModelPlanContext:
-    """Build an empty model-resolution context."""
+def build_empty_model_plan_context(
+    *,
+    model_locations: dict[str, CompiledRelationLocation] | None = None,
+    seed_locations: dict[str, CompiledRelationLocation] | None = None,
+    source_map: dict[str, SourceEntry] | None = None,
+) -> ModelPlanContext:
+    """Build a model-resolution context with only the given relations."""
 
     return ModelPlanContext(
-        model_locations={},
+        model_locations=model_locations or {},
         models_by_name={},
         functions_by_name={},
-        seed_locations={},
+        seed_locations=seed_locations or {},
         function_locations={},
-        source_map={},
+        source_map=source_map or {},
         source_warehouse_columns={},
         star_exclude_keyword="EXCLUDE",
     )

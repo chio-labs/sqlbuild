@@ -4,9 +4,11 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, within,
 };
+use crate::bindings::_helpers::freshness::state_io::write_source_freshness_records;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
@@ -185,7 +187,6 @@ fn write_records<'py>(
 ) -> PyResult<()> {
     let py: Python<'py> = adapter.py();
     let cost_context: Bound<'py, PyAny> = registry::native(py, NativeAttr::CostContext)?;
-    let write: Bound<'py, PyAny> = registry::native(py, NativeAttr::WriteSourceFreshnessRecords)?;
     for ((database, schema), records) in grouped {
         let mut by_source: Vec<(Bound<'py, PyAny>, Vec<Bound<'py, PyAny>>)> = Vec::new();
         for record in records {
@@ -215,16 +216,19 @@ fn write_records<'py>(
                 ],
             )?;
             within(&scope, |_| {
-                call_with(
-                    &write,
-                    &[
-                        ("connection", connection.clone()),
-                        ("execute", adapter.getattr("execute")?),
-                        ("database", database.clone()),
-                        ("schema", schema.clone()),
-                        ("records", PyTuple::new(py, &source_records)?.into_any()),
-                        ("renderers", renderers(adapter)?),
-                    ],
+                write_source_freshness_records(
+                    py,
+                    Some(keywords(
+                        py,
+                        &[
+                            ("connection", connection.clone()),
+                            ("execute", adapter.getattr("execute")?),
+                            ("database", database.clone()),
+                            ("schema", schema.clone()),
+                            ("records", PyTuple::new(py, &source_records)?.into_any()),
+                            ("renderers", renderers(adapter)?),
+                        ],
+                    )?),
                 )
             })?;
         }

@@ -36,7 +36,7 @@ fn read_shape(shape: &Bound<'_, PyAny>) -> PyResult<QueryShape> {
 /// Named projections of one plain SELECT, or None when unknowable.
 #[pyfunction]
 #[pyo3(signature = (*, query_sql, dialect))]
-fn parse_query_shape<'py>(
+pub(crate) fn parse_query_shape<'py>(
     py: Python<'py>,
     query_sql: &str,
     dialect: Option<&str>,
@@ -125,7 +125,10 @@ pub(crate) fn explain(
 /// Whether output renaming explains the whole query change.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn renames_explain_change(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<bool> {
+pub(crate) fn renames_explain_change(
+    py: Python<'_>,
+    options: Option<Bound<'_, PyDict>>,
+) -> PyResult<bool> {
     let arguments = KeywordArguments::read(
         py,
         "renames_explain_change",

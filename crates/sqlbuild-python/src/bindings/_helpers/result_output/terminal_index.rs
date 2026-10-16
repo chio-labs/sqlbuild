@@ -287,7 +287,7 @@ impl TerminalEventClaim {
 
 /// Return the terminal event index installed for this invocation.
 #[pyfunction]
-fn current_terminal_event_index(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
+pub(crate) fn current_terminal_event_index(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     context_variable(py)?.call_method0("get")
 }
 

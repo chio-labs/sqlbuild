@@ -7,9 +7,8 @@ use crate::bindings::_helpers::planner_migrations::column_objects::replace;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::PyBool;
-use pyo3::{pyfunction, wrap_pyfunction};
 
 fn label<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let qualified = location.getattr("qualified_name")?;
@@ -20,8 +19,6 @@ fn label<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     }
 }
 
-#[pyfunction]
-#[pyo3(signature = (*, runtime, decision))]
 fn migration_promotion<'py>(
     runtime: &Bound<'py, PyAny>,
     decision: &Bound<'py, PyAny>,
@@ -40,9 +37,8 @@ fn migration_promotion<'py>(
     promotion.getattr("RENAME")
 }
 
-#[pyfunction]
-#[pyo3(signature = (*, runtime, model, entry))]
-fn migration_with_execution<'py>(
+/// The migration entry with the adapter's staging, transfer and promotion choices.
+pub(super) fn migration_with_execution<'py>(
     runtime: &Bound<'py, PyAny>,
     model: &Bound<'py, PyAny>,
     entry: &Bound<'py, PyAny>,
@@ -90,9 +86,4 @@ fn migration_with_execution<'py>(
             ),
         ],
     )
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(migration_promotion, module)?)?;
-    module.add_function(wrap_pyfunction!(migration_with_execution, module)?)
 }

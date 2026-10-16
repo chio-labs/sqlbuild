@@ -1,14 +1,13 @@
 //! The planner runtime and warehouse state: built from keyword arguments and read by planner phases.
 
-use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
+use crate::bindings::_helpers::planner_warehouse::fingerprint_cache::MigrationFingerprintCache;
+use pyo3::prelude::{Bound, Py, PyAny, PyResult, Python};
 use pyo3::pymethods;
 use pyo3::types::{PyDict, PyTuple};
 
 use crate::bindings::_helpers::build_command::support::utc_now;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_phases::models::{PlannerRuntime, PlannerWarehouseState};
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 
 #[pymethods]
 impl PlannerRuntime {
@@ -97,9 +96,7 @@ impl PlannerWarehouseState {
             migration_fingerprints: if args.passed("migration_fingerprints")? {
                 args.value("migration_fingerprints")?.unbind()
             } else {
-                registry::native(py, NativeAttr::MigrationFingerprintCache)?
-                    .call0()?
-                    .unbind()
+                Py::new(py, MigrationFingerprintCache::open(py, None)?)?.into_any()
             },
         })
     }

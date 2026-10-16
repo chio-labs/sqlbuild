@@ -5,8 +5,13 @@ use crate::bindings::_helpers::model_config::config_values::config_str as author
 use crate::bindings::_helpers::planner_entries::values::{
     boolean, native, none, planner_model, planner_type, string,
 };
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::planner_identity::graph::{
+    build_downstream_deps, build_execution_upstream_deps,
+};
+use crate::bindings::_helpers::planner_phases::full_refresh::resolve_model_full_refresh;
+use crate::bindings::_helpers::planner_phases::objects::object;
+use crate::bindings::_helpers::planner_strategy::strategy::materialization_of;
+use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyFrozenSet, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -46,18 +51,10 @@ fn display_entry<'py>(
     full_refresh: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = model.py();
-    let materialization_type = native(
+    let materialization_type = materialization_of(model)?;
+    let effective = object(
         py,
-        NativeAttr::GetMaterializationType,
-        &[("model", model.clone())],
-    )?;
-    let effective = native(
-        py,
-        NativeAttr::ResolveModelFullRefresh,
-        &[
-            ("model", model.clone()),
-            ("cli_full_refresh", boolean(py, full_refresh)?),
-        ],
+        resolve_model_full_refresh(model, boolean(py, full_refresh)?.is_truthy()?)?,
     )?
     .is_truthy()?;
     let query_sql = model_reads::query_sql(model)?;
@@ -151,9 +148,8 @@ fn build_display_only_sqlbuild_plan<'py>(
         .iter()
         .map(|entry| entry.getattr("key"))
         .collect::<PyResult<_>>()?;
-    let upstream =
-        registry::native(py, NativeAttr::BuildExecutionUpstreamDeps)?.call1((project,))?;
-    let downstream = registry::native(py, NativeAttr::BuildDownstreamDeps)?.call1((&upstream,))?;
+    let upstream = build_execution_upstream_deps(project)?.into_any();
+    let downstream = build_downstream_deps(&upstream)?.into_any();
     planner_model(
         py,
         RecordId::PlanOutput,

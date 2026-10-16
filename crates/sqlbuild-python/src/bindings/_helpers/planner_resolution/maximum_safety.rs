@@ -1,7 +1,11 @@
 //! Maximum automatic-start recovery and evidence boundary.
 
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
+use crate::bindings::_helpers::cursor::scalars::render_value;
+use crate::bindings::_helpers::planner_phases::objects::object;
+use crate::bindings::_helpers::planner_resolution::cursor_bounds::apply_typed_cursor_replay_policy;
 use crate::bindings::_helpers::planner_resolution::cursor_bounds::{
     optional_scalar, required_scalar, scalars,
 };
@@ -9,7 +13,7 @@ use crate::bindings::_helpers::planner_resolution::cursor_safety::{
     horizon, replace, safety_duration, safety_error, timestamp_bound, utc_clock,
 };
 use crate::bindings::_helpers::planner_resolution::values::string;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
@@ -23,7 +27,7 @@ use std::cmp::Ordering;
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn maximum_allowed_start<'py>(
+pub(crate) fn maximum_allowed_start<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<String> {
@@ -64,7 +68,7 @@ fn maximum_allowed_start<'py>(
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn apply_maximum_start_policy<'py>(
+pub(crate) fn apply_maximum_start_policy<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -171,10 +175,7 @@ fn apply_maximum_start_policy<'py>(
         ] {
             replay.push((key, args.value(key)?));
         }
-        call_with(
-            &registry::native(py, NativeAttr::ApplyTypedCursorReplayPolicy)?,
-            &replay,
-        )?
+        apply_typed_cursor_replay_policy(py, Some(keywords(py, &replay)?))?
     } else {
         bounds.getattr("start")?
     };
@@ -247,11 +248,7 @@ fn apply_maximum_start_policy<'py>(
 }
 
 fn rendered(value: &Bound<'_, PyAny>) -> PyResult<String> {
-    call_with(
-        &registry::native(value.py(), NativeAttr::CursorRender)?,
-        &[("value", value.clone())],
-    )?
-    .extract()
+    object(value.py(), render_value(value)?)?.extract()
 }
 
 /// The message of an automatic start that exceeds its horizon.

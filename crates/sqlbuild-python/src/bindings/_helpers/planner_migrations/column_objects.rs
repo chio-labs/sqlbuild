@@ -3,7 +3,9 @@
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
-use crate::bindings::_helpers::records::ids::{NativeAttr, NativeItem, RecordId};
+use crate::bindings::_helpers::planner_identity::hashing::model_definition_hash;
+use crate::bindings::_helpers::planner_phases::objects::object;
+use crate::bindings::_helpers::records::ids::{NativeItem, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString};
@@ -54,13 +56,16 @@ pub(super) fn definition_hash<'py>(
     model: &Bound<'py, PyAny>,
     snapshot: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    native(
+    object(
         model.py(),
-        NativeAttr::ModelDefinitionHash,
-        &[
-            ("model_name", model_reads::name_object(model)?),
-            ("query_sql", model_reads::query_sql(model)?),
-            ("dialect", snapshot.getattr("column_dialect")?),
-        ],
+        model_definition_hash(
+            model.py(),
+            &model_reads::name_object(model)?.extract::<String>()?,
+            &model_reads::query_sql(model)?.extract::<String>()?,
+            snapshot
+                .getattr("column_dialect")?
+                .extract::<Option<String>>()?
+                .as_deref(),
+        )?,
     )
 }

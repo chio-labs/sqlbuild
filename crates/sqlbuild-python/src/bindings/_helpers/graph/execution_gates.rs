@@ -118,7 +118,10 @@ fn model_python_hook_names<'py>(
 
 /// The compiled graph key a typed model, source or seed reference names.
 #[pyfunction]
-fn sql_ref_key<'py>(py: Python<'py>, reference: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn sql_ref_key<'py>(
+    py: Python<'py>,
+    reference: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
     let resource_type: Bound<'py, PyAny> = py
         .import(COMPILE_TYPES_MODULE)?
         .getattr("CompiledResourceType")?

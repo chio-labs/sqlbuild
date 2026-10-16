@@ -8,6 +8,7 @@ use pyo3::types::PyBool;
 use sqlbuild_analysis::janitor_planning::constants::UNTRACKED_QUERY_DIFF_REASON;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::fingerprints::storage_io::read_latest_fingerprints;
 use crate::bindings::_helpers::janitor::janitor_keys::{
     Folded, Key, SchemaKey, dedupe_schema_keys, folded_schema, integer, optional, record,
     sorted_schemas, text, tuple,
@@ -16,13 +17,10 @@ use crate::bindings::_helpers::janitor::janitor_keys::{
 const QUERY_ARTIFACT_LIFECYCLE: ExecutorHost = ExecutorHost::QueryDiffArtifactLifecycle;
 const RELATION_LOOKUP: AdapterHost = AdapterHost::BuildRelationLookup;
 const LOG_DEBUG_EVENT: ExecutorHost = ExecutorHost::LogDebugEvent;
-const READ_LATEST_FINGERPRINTS: NativeAttr = NativeAttr::ReadLatestFingerprints;
 const EXECUTION_LOGGER: &str = "sqlbuild.execution";
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::FINGERPRINT_TABLE_NAME;
 use sqlbuild_core::constants::SOURCE_FRESHNESS_TABLE_NAME;
 
@@ -295,8 +293,8 @@ fn tracked_relation_keys(
             &lookup,
             (database.as_deref(), schema, FINGERPRINT_TABLE_NAME),
         )?;
-        let read: PyResult<Bound<'_, PyAny>> = call_with(
-            &registry::native(py, READ_LATEST_FINGERPRINTS)?,
+        let read: PyResult<Bound<'_, PyAny>> = read_latest_fingerprints(Some(&keywords(
+            py,
             &[
                 ("connection", warehouse.connection.clone()),
                 ("execute", warehouse.adapter.getattr("execute")?),
@@ -317,7 +315,7 @@ fn tracked_relation_keys(
                         .getattr("render_read_latest_fingerprints_sql")?,
                 ),
             ],
-        );
+        )?));
         let fingerprint_set: Bound<'_, PyAny> = match read {
             Ok(set) => set,
             Err(error) if error.is_instance_of::<PyException>(py) => {

@@ -1,12 +1,10 @@
 //! Project inherited fingerprints and live relation facts before normal planning.
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::planner_migrations::column_objects::native;
 use crate::bindings::_helpers::planner_migrations::column_objects::{config, replace};
 use crate::bindings::_helpers::planner_migrations::models::MigrationPhase;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods};
 
@@ -89,16 +87,10 @@ pub(super) fn overlay<'py>(
         .getattr("cursor_snapshots")?
         .cast_into::<PyDict>()?
         .copy()?;
-    let gathered = call_with(
-        &registry::native(py, NativeAttr::MigrationRedirectedCursorSnapshots)?,
-        &[
-            ("runtime", runtime),
-            ("scope", phase.scope.clone()),
-            ("existing_relations", relations.clone().into_any()),
-            ("target_relations", redirected.into_any()),
-            ("overrides", phase.overrides.clone()),
-            ("deferral", phase.deferral.clone()),
-        ],
+    let gathered = super::planning_boundary::redirected_cursor_snapshots(
+        phase,
+        (relations.clone().into_any(), redirected.into_any()),
+        None,
     )?;
     cursors.call_method1("update", (gathered,))?;
     replace(

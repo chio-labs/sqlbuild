@@ -30,7 +30,7 @@ fn qualified<'py>(mapping: &Bound<'py, PyAny>, name: &str) -> PyResult<Option<Bo
 /// Render audit SQL from unresolved markers, applying relation overrides first.
 #[pyfunction]
 #[pyo3(signature = (**request))]
-fn render_audit_sql(request: Option<&Bound<'_, PyDict>>) -> PyResult<String> {
+pub(crate) fn render_audit_sql(request: Option<&Bound<'_, PyDict>>) -> PyResult<String> {
     let request = Request::new("render_audit_sql", request)?;
     let sql: String = request.get("unresolved_sql")?.extract()?;
     let models: Bound<'_, PyAny> = request.get("model_locations")?;

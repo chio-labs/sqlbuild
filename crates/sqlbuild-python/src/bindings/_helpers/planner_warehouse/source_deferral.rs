@@ -1,16 +1,18 @@
 //! Source read deferral for managed source loaders.
 
 use crate::bindings::_helpers::analysis::model_reads;
+use crate::bindings::_helpers::authored_values::project_vars::render_project_var_text;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::objects::{
-    native, optional_text, planner_error, replace, text,
+    optional_text, planner_error, replace, text,
 };
 use crate::bindings::_helpers::planner_warehouse::constants::{
     MODEL_HOOK_CONFIG_KEYS, SQL_HOOK_ENTRY,
 };
-use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
@@ -128,14 +130,11 @@ fn resolve_target<'py>(
     local_config: &Bound<'py, PyAny>,
     target_name: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    native(
+    resolve_target_config(
         project_config.py(),
-        NativeAttr::ResolveTargetConfig,
-        &[
-            ("project_config", project_config.clone()),
-            ("local_config", local_config.clone()),
-            ("target_name", target_name),
-        ],
+        project_config,
+        local_config,
+        &target_name,
     )
 }
 
@@ -192,16 +191,13 @@ fn target_field<'py>(
                 return Ok(None);
             }
             Ok(Some(
-                native(
+                object(
                     py,
-                    NativeAttr::RenderProjectVarText,
-                    &[
-                        ("value", effective_vars.get_item(name)?),
-                        (
-                            "label",
-                            text(py, &format!("source deferral variable '${{{name}}}'")),
-                        ),
-                    ],
+                    render_project_var_text(
+                        &effective_vars.get_item(name)?,
+                        &text(py, &format!("source deferral variable '${{{name}}}'"))
+                            .extract::<String>()?,
+                    )?,
                 )?
                 .extract()?,
             ))

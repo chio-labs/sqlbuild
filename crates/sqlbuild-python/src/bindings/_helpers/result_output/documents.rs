@@ -785,7 +785,7 @@ fn degraded_document(
 /// Write execution JSON to stdout or a requested side-channel file.
 #[pyfunction]
 #[pyo3(signature = (*, payload, json_output, json_output_path))]
-fn write_execution_json_output(
+pub(crate) fn write_execution_json_output(
     py: Python<'_>,
     payload: Bound<'_, PyAny>,
     json_output: bool,

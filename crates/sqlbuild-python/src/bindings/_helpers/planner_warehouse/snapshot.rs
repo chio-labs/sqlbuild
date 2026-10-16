@@ -3,18 +3,24 @@
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::fingerprints::latest_rows::select_latest_fingerprints;
+use crate::bindings::_helpers::fingerprints::storage_io::read_latest_fingerprints;
+use crate::bindings::_helpers::graph::algorithms::transitive_closure_many;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::planner_identity::graph::build_execution_upstream_deps;
 use crate::bindings::_helpers::planner_phases::full_refresh::effectively_full_refreshed_model_names;
+use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::objects::{
     by_name, frozenset, model_key, native, text, tuple,
 };
+use crate::bindings::_helpers::planner_scope::loaders::build_upstream_intermediate_source_map;
 use crate::bindings::_helpers::planner_warehouse::constants::{
     ACTIVE_CATALOG, FUNCTION_NODE_TYPES, METADATA_NAME_FILTER_LIMIT, MIGRATE_FROM_CONFIG_KEY,
     RELATIONS_MAIN_COLUMNS, RELATIONS_MAIN_LIST,
 };
 use crate::bindings::_helpers::planner_warehouse::cursors::{CursorInputs, cursor_snapshots};
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
@@ -84,19 +90,8 @@ fn relevant_state_keys<'py>(
     if selected.is_none() {
         return Ok(selected.clone());
     }
-    let deps = registry::native(py, NativeAttr::BuildExecutionUpstreamDeps)?.call1((project,))?;
-    native(
-        py,
-        NativeAttr::TransitiveClosureMany,
-        &[
-            ("starts", selected.clone()),
-            ("edges", deps),
-            (
-                "include_starts",
-                true.into_pyobject(py)?.to_owned().into_any(),
-            ),
-        ],
-    )
+    let deps = build_execution_upstream_deps(project)?.into_any();
+    object(py, transitive_closure_many(selected, &deps, true, None)?)
 }
 
 fn resolve_database<'py>(
@@ -210,13 +205,9 @@ fn metadata_name_filter(
                 names.insert(source_table_name(&entry)?);
             }
         }
-        let intermediate = native(
+        let intermediate = object(
             py,
-            NativeAttr::BuildUpstreamIntermediateSourceMap,
-            &[
-                ("project", project.clone()),
-                ("selected_keys", selected.clone()),
-            ],
+            build_upstream_intermediate_source_map(project, selected)?,
         )?;
         for entry in intermediate.call_method0("values")?.try_iter()? {
             names.insert(source_table_name(&entry?)?);
@@ -522,9 +513,8 @@ fn gather_fingerprints<'py>(
     )?;
     for schema in schemas {
         let schema_lower = lower(&text(py, schema))?;
-        let mut set = native(
+        let mut set = read_latest_fingerprints(Some(&keywords(
             py,
-            NativeAttr::ReadLatestFingerprints,
             &[
                 ("connection", request.connection.clone()),
                 ("execute", request.execute.clone()),
@@ -558,7 +548,7 @@ fn gather_fingerprints<'py>(
                 ),
                 ("filtered_node_types", filtered_types.clone()),
             ],
-        )?;
+        )?))?;
         if read_unfiltered {
             let by_identity = set.getattr("fingerprints_by_identity")?;
             let values: Vec<Bound<'py, PyAny>> = if by_identity.is_none() {
@@ -571,14 +561,11 @@ fn gather_fingerprints<'py>(
             };
             unfiltered.set_item(&schema_lower, tuple(py, values)?)?;
             if node_names.is_some() {
-                set = native(
+                set = select_latest_fingerprints(
                     py,
-                    NativeAttr::SelectLatestFingerprints,
-                    &[
-                        ("fingerprint_set", set),
-                        ("node_names", node_names_value.clone()),
-                        ("filtered_node_types", filtered_types.clone()),
-                    ],
+                    &set,
+                    node_names_value.extract::<Vec<String>>()?,
+                    filtered_types.extract::<Vec<String>>()?,
                 )?;
             }
         }

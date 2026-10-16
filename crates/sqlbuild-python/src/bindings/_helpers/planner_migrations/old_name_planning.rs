@@ -1,14 +1,15 @@
 //! Old-name planning orchestration over existing live state inspection.
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::planner_migrations::column_objects::native;
 use crate::bindings::_helpers::planner_migrations::models::{MigrationPhase, OldNameViewPlanning};
 use crate::bindings::_helpers::planner_migrations::old_name_objects::recorded_view;
+use crate::bindings::_helpers::planner_migrations::old_names::old_name_claim_errors;
+use crate::bindings::_helpers::planner_migrations::old_names::old_name_schemas_to_read;
+use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PySet, PySetMethods, PyTuple};
 
@@ -52,19 +53,14 @@ fn schemas<'py>(
         }
     }
     if include_project {
-        let project = native(
-            py,
-            NativeAttr::MigrationProjectSchemas,
-            &[("runtime", runtime)],
-        )?;
+        let project = super::planning_origin::project_schemas(&runtime)?;
         for schema in project.try_iter()? {
             needed.add(schema?)?;
         }
     }
-    native(
+    object(
         py,
-        NativeAttr::OldNameSchemasToRead,
-        &[("snapshot", snapshot), ("needed", needed.into_any())],
+        old_name_schemas_to_read(py, &snapshot, &needed.into_any())?,
     )
 }
 
@@ -95,27 +91,7 @@ pub(crate) fn plan_old_name_views<'py>(
             selected.push(item);
         }
     }
-    let state = call_with(
-        &registry::native(py, NativeAttr::MigrationStateInspection)?,
-        &[
-            (
-                "adapter",
-                runtime_field(&runtime, |runtime| &runtime.adapter)?,
-            ),
-            (
-                "connection",
-                runtime_field(&runtime, |runtime| &runtime.connection)?,
-            ),
-            (
-                "database",
-                native(
-                    py,
-                    NativeAttr::MigrationPlanningDatabase,
-                    &[("runtime", runtime.clone())],
-                )?,
-            ),
-        ],
-    )?;
+    let state = super::state_inspection::inspection(&runtime, None)?;
     let needed = schemas((phase, moves.0), &selected)?;
     if needed.is_truthy()? {
         call_with(
@@ -164,18 +140,23 @@ pub(crate) fn plan_old_name_views<'py>(
         }
     }
     let entries = PyTuple::new(py, entries)?.into_any();
-    let claims = native(
+    let claims = object(
         py,
-        NativeAttr::OldNameClaimErrors,
-        &[
-            ("selected", PyTuple::new(py, selected)?.into_any()),
-            ("snapshot", phase.snapshot.clone()),
-            ("views", views.clone()),
-            (
-                "now",
-                runtime_field(&runtime, |runtime| &runtime.invocation_time)?,
-            ),
-        ],
+        old_name_claim_errors(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("selected", PyTuple::new(py, selected)?.into_any()),
+                    ("snapshot", phase.snapshot.clone()),
+                    ("views", views.clone()),
+                    (
+                        "now",
+                        runtime_field(&runtime, |runtime| &runtime.invocation_time)?,
+                    ),
+                ],
+            )?),
+        )?,
     )?;
     let mut warnings: Vec<Bound<'py, PyAny>> = claims.try_iter()?.collect::<PyResult<_>>()?;
     warnings.extend(super::old_name_references::errors(

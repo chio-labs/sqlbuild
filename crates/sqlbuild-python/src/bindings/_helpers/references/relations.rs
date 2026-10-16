@@ -70,7 +70,7 @@ fn parts_compatible(left: Option<&str>, right: Option<&str>) -> bool {
 /// The project relation `relation` names, resolving missing qualifiers from the defaults.
 #[pyfunction]
 #[pyo3(signature = (*, index, relation, default_database = None, default_schema = None))]
-fn match_project_relation<'py>(
+pub(crate) fn match_project_relation<'py>(
     index: &Bound<'py, PyAny>,
     relation: &Bound<'py, PyAny>,
     default_database: Option<String>,

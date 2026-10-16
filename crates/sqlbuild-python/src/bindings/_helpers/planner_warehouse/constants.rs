@@ -2,7 +2,7 @@
 
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 
 pub(crate) const RELATIONS_MAIN_LIST: AdapterHost = AdapterHost::ListRelationsForInspection;
 pub(crate) const RELATIONS_MAIN_COLUMNS: AdapterHost = AdapterHost::GetColumnsForInspection;
@@ -14,10 +14,6 @@ pub(crate) const QUERY_RECORD: AdapterHost = AdapterHost::InspectionQueryRecord;
 pub(crate) const COLUMN_INFO: AdapterHost = AdapterHost::ColumnInfo;
 pub(crate) const RELATION_LOOKUP: AdapterHost = AdapterHost::RelationLookup;
 pub(crate) const LOG_DEBUG_EVENT: ExecutorHost = ExecutorHost::LogDebugEvent;
-pub(crate) const CURSOR_POLICIES: NativeAttr = NativeAttr::ResolveStartCursorConfig;
-pub(crate) const MAXIMUM_START: NativeAttr = NativeAttr::MaximumAllowedStart;
-pub(crate) const RENDER_SOURCE_READ: NativeAttr = NativeAttr::RenderSourceReadRelation;
-pub(crate) const YAML_ENTRY_LINE: NativeAttr = NativeAttr::YamlEntryLine;
 pub(crate) const RUN_SCOPE: ExecutorHost = ExecutorHost::RunScope;
 pub(crate) const SQL_HOOK_ENTRY: RecordId = RecordId::SqlHookEntry;
 pub(crate) const CURSOR_ALGEBRA_ERROR: (&str, &str) =

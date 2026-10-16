@@ -47,7 +47,7 @@ fn shared_error(py: Python<'_>, message: String) -> PyErr {
 /// Return adapter-qualified runtime relations required by selected Python nodes.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn build_python_relation_targets<'py>(
+pub(crate) fn build_python_relation_targets<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyDict>> {
@@ -80,7 +80,7 @@ fn build_python_relation_targets<'py>(
 /// Return every planned project relation for hard-coded name warnings, or None when off.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn build_project_relation_targets<'py>(
+pub(crate) fn build_project_relation_targets<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Option<Bound<'py, PyDict>>> {

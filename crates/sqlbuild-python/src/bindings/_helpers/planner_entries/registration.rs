@@ -1,8 +1,11 @@
 //! Register plan entry and plan output assembly entry points.
 
-use pyo3::prelude::{Bound, PyModule, PyResult};
+use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult};
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<super::models::PlannerRelationsContext>()?;
+    module.add_class::<super::models::ModelPlanContext>()?;
+    module.add_class::<super::models::PlanEntryBuildInputs>()?;
     super::clone_plans::register(module)?;
     super::command_plans::register(module)?;
     super::display_plan::register(module)?;

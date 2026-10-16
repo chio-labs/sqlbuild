@@ -8,7 +8,9 @@ use crate::bindings::_helpers::planner_migrations::models::{
     ColumnMigrationInputs, MigrationPhase,
 };
 use crate::bindings::_helpers::planner_migrations::old_name_planning::plan_old_name_views as plan_old_name_migration_views;
+use crate::bindings::_helpers::planner_phases::contexts::class_field;
 use crate::bindings::_helpers::planner_phases::full_refresh::effectively_full_refreshed_model_names;
+use crate::bindings::_helpers::planner_phases::models::PlannerScopeResolution;
 use crate::bindings::_helpers::planner_phases::models::PlannerWarehouseState;
 use crate::bindings::_helpers::planner_phases::objects::native;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
@@ -46,7 +48,7 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
     .into_bound(py)
     .into_any();
     progress(runtime, "Inspecting warehouse state...")?;
-    let selected_scope = scopes.getattr("selected_scope")?;
+    let selected_scope = class_field(scopes, |s: &PlannerScopeResolution| &s.selected_scope)?;
     let full_refresh: bool = overrides.getattr("full_refresh")?.extract()?;
     let config = runtime_field(runtime, |runtime| &runtime.project_config)?;
     let cursor_scope = native(
@@ -76,8 +78,7 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
     let adapter = runtime_field(runtime, |runtime| &runtime.adapter)?;
     let stale_keys = pyo3::types::PyFrozenSet::new(
         py,
-        scopes
-            .getattr("stale_warning_scope")?
+        class_field(scopes, |s: &PlannerScopeResolution| &s.stale_warning_scope)?
             .getattr("all_keys")?
             .call_method0("values")?
             .try_iter()?
@@ -109,7 +110,7 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
         project: project.clone(),
         adapter: adapter.clone(),
         connection: runtime_field(runtime, |runtime| &runtime.connection)?,
-        scope: scopes.getattr("inspection_scope")?,
+        scope: class_field(scopes, |s: &PlannerScopeResolution| &s.inspection_scope)?,
         deferral: deferral.clone(),
         project_config: config,
         local_config: runtime_field(runtime, |runtime| &runtime.local_config)?,
