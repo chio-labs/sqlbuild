@@ -173,7 +173,7 @@ fn validate_audit_case(
     Ok(())
 }
 
-/// `@hook(reads=...)` as distinct resource references in first-seen order.
+/// `@hook(reads=...)` references in first-seen order; a leading invalid `None` is tolerated.
 #[pyfunction]
 fn normalize_hook_reads<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = value.py();
@@ -183,7 +183,6 @@ fn normalize_hook_reads<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
     } else {
         value.try_iter()?.collect::<PyResult<_>>()?
     };
-    // Only the first non-reference item is checked, and a `None` there is tolerated, as before.
     for item in &reads {
         if !item.is_instance(&reference)? {
             if item.is_none() {

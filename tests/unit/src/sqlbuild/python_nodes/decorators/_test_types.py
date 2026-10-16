@@ -60,5 +60,5 @@ class FactoryDecoratorErrorTestCase:
 class HookReadsTestCase:
     description: str
     reads: object
-    expected_reads: tuple[str, ...] | None
-    expected_error: str | None = None
+    expected_reads: tuple[str, ...] = ()
+    expected_error: str = ""
