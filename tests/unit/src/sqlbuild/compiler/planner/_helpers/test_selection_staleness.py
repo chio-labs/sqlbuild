@@ -11,6 +11,7 @@ from sqlbuild._native import (
     ChangeKind,
     CompiledObjectKey,
     CompiledProject,
+    CompiledResourceType,
     DirectModelVersionIdentities,
     DirectSourceFreshnessPlanningResult,
     Fingerprint,
@@ -30,7 +31,6 @@ from sqlbuild._native import (
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
-    CompiledResourceType,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     CompleteModelChangesWorkTestCase,

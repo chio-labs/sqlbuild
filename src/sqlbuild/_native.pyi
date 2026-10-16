@@ -53,7 +53,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
-    CompiledResourceType,
     CompiledSeedView,
     CompiledSourceView,
     ExternalSqlReferenceResolver,
@@ -10480,6 +10479,17 @@ class DiagnosticSeverity(StrEnum):
     ERROR = "error"
     WARNING = "warning"
     INFO = "info"
+
+class CompiledResourceType(StrEnum):
+    MODEL = "model"
+    SOURCE = "source"
+    SEED = "seed"
+    UDF = "udf"
+    TABLE_FN = "table_fn"
+    DBT_REF = "dbt_ref"
+    AUDIT = "audit"
+    SQL_TEST = "sql_test"
+    SQL_SCENARIO = "sql_scenario"
 
 class InferredNullability(StrEnum):
     """Conservative nullability state inferred for an output column."""

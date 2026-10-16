@@ -12,7 +12,6 @@ use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const UTF8: &str = "utf-8";
 
 /// The repository the edits apply to and how they apply.
@@ -35,7 +34,7 @@ pub(crate) fn write_contracts<'py>(
     let models: Bound<'py, PyDict> = by_name(&native_field(&project, "models")?)?;
     let sources: Bound<'py, PyDict> = by_name(&native_field(&project, "sources")?)?;
     let model_type: Bound<'py, PyAny> =
-        imported(py, COMPILE_TYPES_MODULE, "CompiledResourceType")?.getattr("MODEL")?;
+        registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
     let updates: Bound<'py, PyDict> = PyDict::new(py);
     let updated_evidence: Bound<'py, PyList> = PyList::empty(py);
     for evidence in native_field(&result, "evidence")?.try_iter()? {

@@ -9,6 +9,7 @@ from sqlbuild._native import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompiledSeed,
     CompiledSource,
     CompiledSqlScenario,
@@ -35,7 +36,6 @@ from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledProjectView,
-    CompiledResourceType,
     FunctionLanguage,
 )
 from tests.unit.src.sqlbuild.compiler.graph.helpers import project_graph_from_indexes

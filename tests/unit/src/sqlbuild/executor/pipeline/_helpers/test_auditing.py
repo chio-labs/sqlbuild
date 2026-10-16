@@ -22,6 +22,7 @@ from sqlbuild._native import (
     AuditPlanEntry,
     AuditProgressReporter,
     CompiledObjectKey,
+    CompiledResourceType,
     CostContext,
     PlanOutput,
     StatementLedgerEntry,
@@ -37,7 +38,7 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledResourceType
+from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.pipeline._helpers import auditing

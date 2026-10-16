@@ -9,7 +9,6 @@ use pyo3::types::PyString;
 
 pub(super) const MICROBATCH_CONCURRENCY_MESSAGE: &str =
     "batch_concurrency > 1 requires concurrent microbatches; selected model(s): ";
-pub(super) const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
 
 /// `sqlbuild._native.name(**pairs)`.
 pub(super) fn native<'py>(

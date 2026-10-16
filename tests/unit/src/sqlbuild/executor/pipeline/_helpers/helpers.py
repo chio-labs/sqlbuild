@@ -13,6 +13,7 @@ from sqlbuild._native import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompiledSqlScenario,
     CompilePipelineResult,
     DiscoveredSqlScenarioFile,
@@ -34,7 +35,6 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.scenario.constants import SCENARIO_LOCAL_JSONL_INVALID

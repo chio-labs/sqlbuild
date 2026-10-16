@@ -10,13 +10,13 @@ from sqlbuild._native import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompileModelConfig,
     Fingerprint,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
-    CompiledResourceType,
 )
 
 

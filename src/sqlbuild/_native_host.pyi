@@ -103,7 +103,6 @@ from sqlbuild.compiler.compile._helpers.render.user_macros import (
     macro_invocation_context as macro_invocation_context,
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind as AttachedAuditTargetKind
-from sqlbuild.compiler.compile.types import CompiledResourceType as CompiledResourceType
 from sqlbuild.compiler.compile.types import FunctionLanguage as FunctionLanguage
 from sqlbuild.compiler.compile.types import SqlTestMode as SqlTestMode
 from sqlbuild.compiler.discovery._helpers.filesystem.command_output_sinks import (

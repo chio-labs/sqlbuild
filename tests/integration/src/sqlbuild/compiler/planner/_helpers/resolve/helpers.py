@@ -14,6 +14,7 @@ from sqlbuild._native import (
     CompiledModel,
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompileModelConfig,
     CompileSqlReference,
     CursorOverridePair,
@@ -32,7 +33,6 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
-    CompiledResourceType,
 )
 
 

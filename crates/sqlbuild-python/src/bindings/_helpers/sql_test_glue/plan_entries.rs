@@ -3,28 +3,23 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyListMethods, PyTuple};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::planner_strategy::constants::MODEL_REFERENCE_KIND;
 use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanningContext;
-use crate::bindings::_helpers::sql_test_glue::constants::COMPILE_TYPES;
 use crate::bindings::_helpers::sql_test_glue::constants::{TABLE_FN, UDF};
 use crate::bindings::_helpers::sql_test_glue::plan_values::model_payload;
 use sqlbuild_analysis::compiler::main::missing_expected_columns::missing_expected_columns;
 
-use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::authored_ctes::prefixed_ctes;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 fn prefixed_names<'py>(test: &Bound<'py, PyAny>, prefix: &str) -> PyResult<Bound<'py, PyAny>> {
     let py = test.py();
     let mut names: Vec<String> = if model_payload(test)? {
-        prefixed_ctes(
-            &native_field(test, "payload")?.getattr("authored_ctes")?,
-            prefix,
-        )?
-        .keys()
-        .extract()?
+        prefixed_ctes(&native_field(&test, "payload")?.getattr("authored_ctes")?, prefix)?
+            .keys()
+            .extract()?
     } else {
         Vec::new()
     };
@@ -41,7 +36,7 @@ fn function_deps<'py>(
     let py = test.py();
     let deps = PyDict::new(py);
     if model_payload(test)? {
-        let names: Vec<String> = native_field(plan, "model_names")?.extract()?;
+        let names: Vec<String> = native_field(&plan, "model_names")?.extract()?;
         let mocked: std::collections::HashSet<String> =
             inputs.0.extract::<Vec<String>>()?.into_iter().collect();
         let models = inputs.1;
@@ -51,9 +46,7 @@ fn function_deps<'py>(
             };
             for dep in native_field(&model, "deps")?.try_iter()? {
                 let dep = dep?;
-                let resource: String = native_field(&dep, "resource_type")?
-                    .getattr("value")?
-                    .extract()?;
+                let resource: String = native_field(&dep, "resource_type")?.getattr("value")?.extract()?;
                 if resource != UDF && resource != TABLE_FN {
                     continue;
                 }
@@ -66,17 +59,15 @@ fn function_deps<'py>(
             }
         }
     } else {
-        let payload = native_field(test, "payload")?;
-        let mode: String = native_field(&payload, "mode")?
-            .getattr("value")?
-            .extract()?;
+        let payload = native_field(&test, "payload")?;
+        let mode: String = native_field(&payload, "mode")?.getattr("value")?.extract()?;
         if mode == UDF || mode == TABLE_FN {
             let names: std::collections::HashSet<String> = payload
                 .getattr("tested_resource_names")?
                 .extract::<Vec<String>>()?
                 .into_iter()
                 .collect();
-            for function in native_field(project, "functions")?.try_iter()? {
+            for function in native_field(&project, "functions")?.try_iter()? {
                 let function = function?;
                 let key = native_field(&function, "key")?;
                 if key
@@ -133,8 +124,8 @@ pub(super) fn entry<'py>(
         "function_deps",
         function_deps(test, plan, inputs.0, (&mocks, inputs.1))?,
     )?;
-    fields.set_item("chain", native_field(plan, "chain")?)?;
-    fields.set_item("assertions", native_field(plan, "assertions")?)?;
+    fields.set_item("chain", native_field(&plan, "chain")?)?;
+    fields.set_item("assertions", native_field(&plan, "assertions")?)?;
     fields.set_item("sql_analysis_enabled", analysis)?;
     registry::class(py, RecordId::SqlTestPlanEntry)?.call((), Some(&fields))
 }
@@ -149,8 +140,8 @@ pub(super) fn expected_diagnostics(
         return Ok(result);
     };
     let py = test.py();
-    let resource_types = imported(py, COMPILE_TYPES, "CompiledResourceType")?;
-    for step in native_field(plan, "chain")?.try_iter()? {
+    let resource_types = registry::class(py, RecordId::CompiledResourceType)?;
+    for step in native_field(&plan, "chain")?.try_iter()? {
         let step = step?;
         let name = native_field(&step, "model_name")?;
         let model_name: String = name.extract()?;
@@ -178,7 +169,7 @@ pub(super) fn expected_diagnostics(
         )?;
         result.push(format!(
             "SQL test '{}': {}: {}",
-            native_field(test, "name")?.extract::<String>()?,
+            native_field(&test, "name")?.extract::<String>()?,
             location,
             message
         ));

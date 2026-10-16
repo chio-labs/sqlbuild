@@ -8,6 +8,7 @@ import pytest
 
 from sqlbuild._native import (
     CompiledObjectKey,
+    CompiledResourceType,
     DiscoveredProjectInputs,
     SqlHookEntry,
     assemble_project,
@@ -18,7 +19,6 @@ from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledProjectView,
-    CompiledResourceType,
     CompiledSeedView,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (

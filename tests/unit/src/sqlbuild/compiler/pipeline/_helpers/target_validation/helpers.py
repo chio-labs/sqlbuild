@@ -10,10 +10,11 @@ from sqlbuild._native import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompileModelConfig,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledProjectView
 
 
 class ConservativeCustomAdapter(BaseAdapter):

@@ -7,11 +7,11 @@ from pathlib import Path
 from sqlbuild._native import (
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     SeedCsvSettings,
     SeedPlanEntry,
 )
 from sqlbuild.adapter.contract.models import ColumnInfo
-from sqlbuild.compiler.compile.types import CompiledResourceType
 
 
 def build_seed_plan_entry(*, seed_name: str, file_path: Path) -> SeedPlanEntry:

@@ -29,7 +29,6 @@ use crate::bindings::_helpers::rules::results::{format_rules_result, rules_progr
 use crate::bindings::_helpers::rules::rule_dispatch::evaluate_rules;
 use crate::bindings::_helpers::rules::rules_config::load_rules_config;
 
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const GENERIC_DIALECT: &str = "generic";
 
 /// The current build's phase timing tracker, when one is recording.
@@ -150,7 +149,7 @@ fn reject_compile_errors(
     let py: Python<'_> = project.py();
     let plan_sql_tests: bool = options.getattr("plan_sql_tests")?.is_truthy()?;
     let sql_test: Bound<'_, PyAny> =
-        imported(py, COMPILE_TYPES_MODULE, "CompiledResourceType")?.getattr("SQL_TEST")?;
+        registry::class(py, RecordId::CompiledResourceType)?.getattr("SQL_TEST")?;
     let mut errors: Vec<Bound<'_, PyAny>> = Vec::new();
     for diagnostic in project.getattr("diagnostics")?.try_iter()? {
         let diagnostic: Bound<'_, PyAny> = diagnostic?;

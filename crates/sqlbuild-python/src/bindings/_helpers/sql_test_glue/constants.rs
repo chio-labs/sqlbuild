@@ -3,7 +3,6 @@
 pub(super) const UDF: &str = "udf";
 pub(super) const TABLE_FN: &str = "table_fn";
 pub(super) const ERROR_SEVERITY: &str = "error";
-pub(super) const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
 pub(super) const FIXTURE_PREFIXES: [(&str, &str); 4] = [
     ("model", "__ref__"),
     ("source", "__source__"),

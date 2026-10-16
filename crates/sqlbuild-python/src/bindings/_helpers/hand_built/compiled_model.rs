@@ -1,12 +1,10 @@
 //! A `CompiledModel` for a model input built outside the native compile-input stage.
 
-use crate::bindings::_helpers::native_host::facade::FacadeHost;
-use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyList, PyString, PyTuple};
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 type Object<'py> = Bound<'py, PyAny>;
 
@@ -18,7 +16,7 @@ pub(crate) fn compiled_model<'py>(
     macro_deps: &Object<'py>,
 ) -> PyResult<Object<'py>> {
     let py: Python<'py> = model_input.py();
-    let model_file: Object<'py> = native_field(model_input, "model_file")?;
+    let model_file: Object<'py> = native_field(&model_input, "model_file")?;
     let model_name: Object<'py> = native_field(&model_file, "file_path")?.getattr("stem")?;
     let none: Object<'py> = py.None().into_bound(py);
     let mut inferred: Object<'py> = none.clone();
@@ -28,8 +26,8 @@ pub(crate) fn compiled_model<'py>(
     let mut diagnostics: Object<'py> = PyTuple::empty(py).into_any();
     let mut validated: Object<'py> = false_object(py);
     let mut proof: Object<'py> = registry::native(py, NativeAttr::DynamicContractProof)?
-        .call1((native_field(analysis, "standalone_proof")?,))?;
-    let session: Object<'py> = native_field(analysis, "session")?;
+        .call1((native_field(&analysis, "standalone_proof")?,))?;
+    let session: Object<'py> = native_field(&analysis, "session")?;
     if !session.is_none() {
         let (session, position): (Object<'py>, Object<'py>) = session.extract()?;
         let arguments: Bound<'py, PyDict> = PyDict::new(py);
@@ -45,7 +43,7 @@ pub(crate) fn compiled_model<'py>(
             has_star = native_field(&result, "has_star")?;
             star_resolved = native_field(&result, "star_resolved")?;
         } else {
-            inferred = fallback_columns(&native_field(analysis, "fallback")?)?;
+            inferred = fallback_columns(&native_field(&analysis, "fallback")?)?;
         }
         let session_proof: Object<'py> = native_field(&outcome, "dynamic_column_contract")?;
         if session_proof.is_truthy()? {
@@ -68,7 +66,7 @@ pub(crate) fn compiled_model<'py>(
         inferred = native_field(&proof, "fixed_columns")?;
         has_star = true_object(py);
     }
-    let resource_type: Object<'py> = host::entry(py, FacadeHost::CompiledResourceType)?;
+    let resource_type: Object<'py> = registry::class(py, RecordId::CompiledResourceType)?;
     let key_class: Object<'py> = registry::class(py, RecordId::CompiledObjectKey)?;
     let mut dependency_keys: Vec<Object<'py>> = Vec::new();
     for dependency in deps.try_iter()? {
@@ -81,7 +79,7 @@ pub(crate) fn compiled_model<'py>(
             ],
         )?);
     }
-    let config: Object<'py> = native_field(model_input, "config")?;
+    let config: Object<'py> = native_field(&model_input, "config")?;
     let key: Object<'py> = call(
         &key_class,
         &[
@@ -96,20 +94,17 @@ pub(crate) fn compiled_model<'py>(
             ("deps", PyTuple::new(py, dependency_keys)?.into_any()),
             ("name", model_name.clone()),
             ("relative_path", native_field(&model_file, "relative_path")?),
-            ("query_sql", native_field(model_input, "query_sql")?),
+            ("query_sql", native_field(&model_input, "query_sql")?),
             ("config", config.clone()),
             ("destination", destination(&config, &model_name)?),
-            ("references", native_field(model_input, "references")?),
-            ("schema_entry", native_field(model_input, "schema_entry")?),
+            ("references", native_field(&model_input, "references")?),
+            ("schema_entry", native_field(&model_input, "schema_entry")?),
             ("inferred_columns", inferred),
             ("fast_lineage_columns", lineage),
             ("fast_lineage_has_star", has_star),
             ("fast_lineage_star_resolved", star_resolved),
             ("authored_sql", native_field(&model_file, "contents")?),
-            (
-                "authored_query_sql",
-                native_field(&model_file, "query_sql")?,
-            ),
+            ("authored_query_sql", native_field(&model_file, "query_sql")?),
             (
                 "output_column_locations",
                 native_field(&model_file, "output_column_locations")?,
@@ -121,19 +116,19 @@ pub(crate) fn compiled_model<'py>(
             ("macro_deps", macro_deps.clone()),
             (
                 "enum_declarations",
-                native_field(model_input, "enum_declarations")?,
+                native_field(&model_input, "enum_declarations")?,
             ),
             (
                 "constant_declarations",
-                native_field(model_input, "constant_declarations")?,
+                native_field(&model_input, "constant_declarations")?,
             ),
-            ("enum_columns", native_field(model_input, "enum_columns")?),
+            ("enum_columns", native_field(&model_input, "enum_columns")?),
             ("binding_diagnostics", diagnostics),
             ("binding_validated", validated),
             ("dynamic_column_contract", proof),
             (
                 "rejected_sql_analysis_opt_out",
-                native_field(model_input, "rejected_sql_analysis_opt_out")?,
+                native_field(&model_input, "rejected_sql_analysis_opt_out")?,
             ),
         ],
     )
@@ -150,7 +145,7 @@ fn true_object(py: Python<'_>) -> Object<'_> {
 /// A model's configured physical and logical destination.
 fn destination<'py>(config: &Object<'py>, model_name: &Object<'py>) -> PyResult<Object<'py>> {
     let py: Python<'py> = config.py();
-    let values: Object<'py> = native_field(config, "values")?;
+    let values: Object<'py> = native_field(&config, "values")?;
     let text = |key: &str| -> PyResult<Option<Object<'py>>> {
         let value: Object<'py> = values.call_method1("get", (key,))?;
         Ok(value.is_instance_of::<PyString>().then_some(value))
@@ -166,11 +161,8 @@ fn destination<'py>(config: &Object<'py>, model_name: &Object<'py>) -> PyResult<
             ("schema", text("schema")?.unwrap_or_else(|| none.clone())),
             ("name", text("alias")?.unwrap_or_else(|| model_name.clone())),
             ("qualified_name", none.clone()),
-            ("logical_schema", native_field(config, "logical_schema")?),
-            (
-                "logical_database",
-                native_field(config, "logical_database")?,
-            ),
+            ("logical_schema", native_field(&config, "logical_schema")?),
+            ("logical_database", native_field(&config, "logical_database")?),
         ],
     )
 }
@@ -208,7 +200,7 @@ fn located<'py>(
     if !diagnostics.is_truthy()? {
         return Ok(PyTuple::empty(py).into_any());
     }
-    let model_file: Object<'py> = native_field(model_input, "model_file")?;
+    let model_file: Object<'py> = native_field(&model_input, "model_file")?;
     let path: Object<'py> = native_field(&model_file, "relative_path")?;
     let mut rows: Vec<Object<'py>> = Vec::new();
     for item in diagnostics.try_iter()? {
@@ -230,7 +222,7 @@ fn located<'py>(
         ],
     )?
     .into_any();
-    let expansion: Object<'py> = native_field(model_input, "sql_expansion")?;
+    let expansion: Object<'py> = native_field(&model_input, "sql_expansion")?;
     let expansion_row: Object<'py> = if expansion.is_none() {
         expansion
     } else {
@@ -262,7 +254,8 @@ fn located<'py>(
     let diagnostic_class: Object<'py> = registry::class(py, RecordId::CompilerDiagnostic)?;
     let location_class: Object<'py> = registry::class(py, RecordId::SourceLocation)?;
     let phase: Object<'py> = registry::class(py, RecordId::DiagnosticPhase)?.getattr("COMPILE")?;
-    let model: Object<'py> = host::entry(py, FacadeHost::CompiledResourceType)?.getattr("MODEL")?;
+    let model: Object<'py> =
+        registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
     let name: Object<'py> = native_field(&model_file, "file_path")?.getattr("stem")?;
     let mut built: Vec<Object<'py>> = Vec::new();
     for row in located.try_iter()? {

@@ -7,6 +7,7 @@ from typing import cast
 from sqlbuild._native import (
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     MaterializationType,
     ModelPlanEntry,
     PlanAction,
@@ -21,7 +22,6 @@ from sqlbuild._native import (
     ScenarioRelationPlan,
     SeedPlanEntry,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCaptureRunResult,
     ScenarioSnapshotColumn,

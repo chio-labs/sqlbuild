@@ -13,6 +13,7 @@ from sqlbuild._native import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompileModelConfig,
     FunctionArgument,
     FunctionPlanEntry,
@@ -40,7 +41,6 @@ from sqlbuild.compiler.auditing.types import (
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
-    CompiledResourceType,
     FunctionLanguage,
 )
 from sqlbuild.executor.build.models import (

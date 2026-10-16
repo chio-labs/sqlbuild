@@ -10,6 +10,7 @@ from sqlbuild._native import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompiledSqlTest,
     CompileModelConfig,
     CompileSqlTestCte,
@@ -20,7 +21,6 @@ from sqlbuild._native import (
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
-    CompiledResourceType,
 )
 from tests.integration.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     ExecuteChainTestCase,

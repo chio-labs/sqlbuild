@@ -7,9 +7,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PySet, PySetMethods, PyTup
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_state::freshness::main::configuration_error::configuration_error;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::freshness::exception_types::SourceFreshnessObservationError;
 use crate::bindings::_helpers::freshness::observation::{
     Observer, observation_record, observation_source, observe_adapter_batch, observe_configured,
@@ -26,7 +24,6 @@ use crate::bindings::_helpers::state_rows::freshness::{age_policy, equivalent};
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 const ADAPTER_STRATEGY: &str = "adapter";
-const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
 const NO_CONFIG_MESSAGE: &str = "no freshness config and adapter metadata unavailable";
 
 /// The message of an `AdapterUserError` or a source freshness observation error, if it is one.
@@ -306,7 +303,7 @@ fn downstream_models<'py>(
         &[
             (
                 "resource_type",
-                imported(py, COMPILE_TYPES, "CompiledResourceType")?.getattr("SOURCE")?,
+                registry::class(py, RecordId::CompiledResourceType)?.getattr("SOURCE")?,
             ),
             ("name", source_name.clone()),
         ],

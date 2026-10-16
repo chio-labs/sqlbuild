@@ -6,8 +6,6 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
 use crate::bindings::_helpers::attachments::cursor_intrinsics::validated_model_cursor_sql;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
-use crate::bindings::_helpers::native_host::facade::FacadeHost;
-use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::declaration_values::declaration_scope_resolver;
@@ -144,7 +142,7 @@ pub(crate) fn compiled_sql_scenarios<'py>(
     let scenario_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledSqlScenario)?;
     let key_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledObjectKey)?;
     let resource_type: Bound<'py, PyAny> =
-        host::entry(py, FacadeHost::CompiledResourceType)?.getattr("SQL_SCENARIO")?;
+        registry::class(py, RecordId::CompiledResourceType)?.getattr("SQL_SCENARIO")?;
     let mut scenarios: Vec<Bound<'py, PyAny>> = Vec::new();
     for scenario_input in inputs.getattr("scenario_inputs")?.try_iter()? {
         let scenario_input: Bound<'py, PyAny> = scenario_input?;

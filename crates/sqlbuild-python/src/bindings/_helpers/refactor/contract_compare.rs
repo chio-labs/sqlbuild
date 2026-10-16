@@ -14,7 +14,6 @@ use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::type_system::equality::types_equal as native_types_equal;
 
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const MODEL_RESOURCE: &str = "model";
 const SOURCE_RESOURCE: &str = "source";
@@ -118,9 +117,7 @@ fn column_infos<'py>(
 }
 
 fn resource_type<'py>(py: Python<'py>, value: &str) -> PyResult<Bound<'py, PyAny>> {
-    py.import(COMPILE_TYPES_MODULE)?
-        .getattr("CompiledResourceType")?
-        .call1((value,))
+    registry::class(py, RecordId::CompiledResourceType)?.call1((value,))
 }
 
 /// The evidence a model's authored contract offers, before inspection.

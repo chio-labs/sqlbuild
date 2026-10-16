@@ -9,6 +9,7 @@ from sqlbuild._native import (
     ChainStep,
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     MaterializationType,
     ModelPlanEntry,
     PlanAction,
@@ -23,7 +24,6 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome

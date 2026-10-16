@@ -13,6 +13,7 @@ from sqlbuild._native import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompileModelConfig,
     DeferralInputs,
     Fingerprint,
@@ -25,7 +26,7 @@ from sqlbuild._native import (
     plan_column_migrations,
 )
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView
 from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations._test_types import (
     UnfingerprintableCandidateTestCase,
 )

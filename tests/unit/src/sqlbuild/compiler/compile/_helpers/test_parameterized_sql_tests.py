@@ -9,6 +9,7 @@ import pytest
 
 from sqlbuild._native import (
     CompiledObjectKey,
+    CompiledResourceType,
     CompiledSqlTest,
     SqlLogicalType,
     SqlValue,
@@ -21,7 +22,6 @@ from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapt
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
-    CompiledResourceType,
     TypedSqlValueRenderer,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (

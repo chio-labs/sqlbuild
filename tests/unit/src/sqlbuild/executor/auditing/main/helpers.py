@@ -9,6 +9,7 @@ from typing import Any, cast
 from sqlbuild._native import (
     AuditPlanEntry,
     CompiledObjectKey,
+    CompiledResourceType,
     MeasurementThresholdBound,
     MeasurementThresholds,
 )
@@ -20,7 +21,6 @@ from sqlbuild.compiler.auditing.types import (
     AuditSeverity,
     ThresholdOperator,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.auditing.main._execute import execute_audit
 from sqlbuild.executor.auditing.main._execute_reporting_errors import (
     execute_audit_reporting_errors,

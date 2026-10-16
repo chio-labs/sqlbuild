@@ -6,12 +6,12 @@ import pytest
 
 from sqlbuild._native import (
     CompiledObjectKey,
+    CompiledResourceType,
     PythonNodeGraph,
     PythonSqlRunLifecyclePlan,
     PythonSqlRunSelection,
     build_python_sql_run_lifecycle,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from tests.unit.src.sqlbuild.compiler.python_nodes._helpers._test_types import (
     PythonSqlRunLifecycleTestCase,
 )

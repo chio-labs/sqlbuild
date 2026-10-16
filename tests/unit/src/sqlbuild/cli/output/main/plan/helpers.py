@@ -10,6 +10,7 @@ from sqlbuild._native import (
     ColumnRenameHint,
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     CursorBounds,
     CursorInputRelation,
     DiscoveredProviderUsage,
@@ -32,7 +33,7 @@ from sqlbuild._native import (
     TableTypePlanEntry,
     WarningSeverity,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
+from sqlbuild.compiler.compile.types import FunctionLanguage
 
 
 def build_model_entry(

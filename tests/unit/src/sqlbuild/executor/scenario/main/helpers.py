@@ -7,6 +7,7 @@ from typing import Any, ClassVar
 from sqlbuild._native import (
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     MaterializationType,
     ModelPlanEntry,
     PlanAction,
@@ -23,7 +24,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo, QueryResult, RelationInfo
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 
 

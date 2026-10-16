@@ -8,12 +8,13 @@ from sqlbuild._native import (
     CompiledModel,
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompileModelConfig,
     ModelPlanContext,
     SourceEntry,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView
 
 
 def build_cursor_intrinsic_model(*, config_values: dict[str, object]) -> CompiledModelView:

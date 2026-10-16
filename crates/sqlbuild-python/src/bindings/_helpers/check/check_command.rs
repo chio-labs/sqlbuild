@@ -36,7 +36,7 @@ use crate::bindings::_helpers::check::check_results::{
     check_result_text, results_json, write_results,
 };
 use crate::bindings::_helpers::command_runtime::invocation::resolve_reported_command_invocation;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::compile_outputs::runtime_target::write_python_check_runtime_target;
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::graph::python_selection::python_node_names;
@@ -48,7 +48,6 @@ use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::result_output::event_writer::ExecutionEventWriter;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
-const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
 const GRAPH_OPERATOR_CODE: &str = "C681";
 const GRAPH_OPERATOR_MESSAGE: &str = "sqb check selectors do not support graph operators; \
     select checks directly without '+', '~', or path-between expansion";
@@ -202,7 +201,7 @@ fn compile_pipeline<'py>(
     let loaders: Bound<'py, PyFrozenSet> = PyFrozenSet::new(py, loaders)?;
     let key_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledObjectKey)?;
     let source_type: Bound<'py, PyAny> =
-        imported(py, COMPILE_TYPES, "CompiledResourceType")?.getattr("SOURCE")?;
+        registry::class(py, RecordId::CompiledResourceType)?.getattr("SOURCE")?;
     let mut keys: Vec<Bound<'py, PyAny>> = Vec::new();
     for reference in required_refs.try_iter()? {
         keys.push(sql_ref_key(py, &reference?)?);

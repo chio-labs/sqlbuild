@@ -203,7 +203,7 @@ pub(crate) fn audit_is_selected(
             .call1((kind,))?
             .getattr("value")?;
         let resource_type =
-            imported(py, COMPILE_TYPES_MODULE, "CompiledResourceType")?.call1((target_value,))?;
+            registry::class(py, RecordId::CompiledResourceType)?.call1((target_value,))?;
         let key = call_with(
             &registry::class(py, RecordId::CompiledObjectKey)?,
             &[("resource_type", resource_type), ("name", name)],

@@ -6,6 +6,7 @@ from typing import ClassVar
 from sqlbuild._native import (
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     FunctionPlanEntry,
     MaterializationType,
     ModelPlanEntry,
@@ -19,7 +20,7 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
-from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
+from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 

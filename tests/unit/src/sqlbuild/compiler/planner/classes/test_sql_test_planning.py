@@ -6,13 +6,13 @@ import pytest
 
 from sqlbuild._native import (
     CompiledObjectKey,
+    CompiledResourceType,
     PlannedSqlTests,
     PlannerInputError,
     SqlTestPlanning,
     SqlTestSelection,
     start_sql_test_planning,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from tests.unit.src.sqlbuild.compiler.planner.classes._test_types import (
     BackgroundSqlTestPlanningTestCase,
 )

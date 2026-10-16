@@ -8,7 +8,7 @@ from scripts.cold_compile_performance.constants import (
     VARIED_WINDOW_NODE_FRAGMENT,
 )
 from scripts.cold_compile_performance.models import VariedProjectStatistics
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild._native import CompiledResourceType
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 
 _UDF_REFERENCE: re.Pattern[str] = re.compile(r'__udf\("([a-zA-Z0-9_]+)"\)')

@@ -9,6 +9,7 @@ from sqlbuild._native import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompileModelConfig,
     DynamicColumnContractProof,
     InferredColumn,
@@ -20,7 +21,7 @@ from sqlbuild._native import (
     SettingsConfig,
     SourceLocation,
 )
-from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledProjectView
 
 
 def make_contract_project(

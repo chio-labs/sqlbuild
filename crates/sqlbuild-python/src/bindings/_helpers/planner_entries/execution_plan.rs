@@ -2,7 +2,7 @@
 
 use crate::bindings::_helpers::build_command::support::utc_now;
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, within,
+    KeywordArguments, call_with, within,
 };
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
@@ -11,7 +11,7 @@ use crate::bindings::_helpers::planner_changes::detect::detect_changes;
 use crate::bindings::_helpers::planner_entries::test_planning::{
     PlanningRequest, SqlTestPlanning, start_planning,
 };
-use crate::bindings::_helpers::planner_entries::values::{COMPILE_TYPES, native, replaced};
+use crate::bindings::_helpers::planner_entries::values::{native, replaced};
 use crate::bindings::_helpers::planner_phases::buildability::check_selected_scope_buildability;
 use crate::bindings::_helpers::planner_phases::contexts::class_field;
 use crate::bindings::_helpers::planner_phases::execution_changes::{
@@ -31,12 +31,13 @@ use crate::bindings::_helpers::planner_phases::scopes::resolve_planner_scopes;
 use crate::bindings::_helpers::planner_phases::warehouse_state::gather_planner_warehouse_state;
 use crate::bindings::_helpers::planner_resolution::cursor_overrides::type_cursor_overrides;
 use crate::bindings::_helpers::planner_warehouse::source_freshness::build_planner_source_freshness_result;
-use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::PyDict;
 use pyo3::{pyfunction, wrap_pyfunction};
 use std::time::Instant;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const INSPECTION_CATALOG: AdapterHost = AdapterHost::OpenInspectionCatalog;
 /// Selected scopes, and the overrides with cursor overrides typed for the selected models.
@@ -52,14 +53,12 @@ fn scopes_and_cursor_overrides<'py>(
     )?;
     let selected = class_field(&scopes, |s: &PlannerScopeResolution| &s.selected_scope)?;
     let models_by_name = native_field(&selected, "models_by_name")?;
-    let model_type = imported(py, COMPILE_TYPES, "CompiledResourceType")?.getattr("MODEL")?;
+    let model_type = registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
     let mut models: Vec<Bound<'py, PyAny>> = Vec::new();
     for key in native_field(&selected, "selected_keys")?.try_iter()? {
         let key = key?;
         let name = native_field(&key, "name")?;
-        if native_field(&key, "resource_type")?.eq(&model_type)?
-            && models_by_name.contains(&name)?
-        {
+        if native_field(&key, "resource_type")?.eq(&model_type)? && models_by_name.contains(&name)? {
             models.push(models_by_name.get_item(&name)?);
         }
     }
@@ -88,13 +87,13 @@ fn change_results<'py>(
             &class_field(scopes, |s: &PlannerScopeResolution| &s.inspection_scope)?,
             snapshot,
         ),
-        native_field(overrides, "full_refresh")?.is_truthy()?,
+        native_field(&overrides, "full_refresh")?.is_truthy()?,
         (
             native_field(&versions, "model_version_hashes")?,
             native_field(&versions, "model_metadata_jsons")?,
         ),
     )?;
-    if !native_field(policies, "selection_diagnostics")?.is_truthy()? {
+    if !native_field(&policies, "selection_diagnostics")?.is_truthy()? {
         let empty = native(
             py,
             RecordId::PlannerChangeResults,

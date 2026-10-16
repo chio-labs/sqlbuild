@@ -63,6 +63,7 @@ native_ids! {
         ColumnLineageConfidence => "ColumnLineageConfidence",
         ColumnLineageEdge => "ColumnLineageEdge",
         ColumnLineageMode => "ColumnLineageMode",
+        CompiledResourceType => "CompiledResourceType",
         ColumnLineageSource => "ColumnLineageSource",
         ColumnMigrationDecision => "ColumnMigrationDecision",
         ColumnMigrationEvent => "ColumnMigrationEvent",

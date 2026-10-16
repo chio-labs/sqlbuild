@@ -13,6 +13,7 @@ from sqlbuild._native import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompiledSeed,
     CompiledSource,
     CompileModelConfig,
@@ -43,7 +44,6 @@ from sqlbuild.compiler.auditing.types import (
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
-    CompiledResourceType,
     CompiledSeedView,
     CompiledSourceView,
 )

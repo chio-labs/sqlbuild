@@ -79,6 +79,21 @@ const E_COLUMN_LINEAGE_CONFIDENCE: EnumSpec = EnumSpec {
         ("UNKNOWN", "unknown"),
     ],
 };
+const E_COMPILED_RESOURCE_TYPE: EnumSpec = EnumSpec {
+    name: "CompiledResourceType",
+    doc: "",
+    members: &[
+        ("MODEL", "model"),
+        ("SOURCE", "source"),
+        ("SEED", "seed"),
+        ("UDF", "udf"),
+        ("TABLE_FN", "table_fn"),
+        ("DBT_REF", "dbt_ref"),
+        ("AUDIT", "audit"),
+        ("SQL_TEST", "sql_test"),
+        ("SQL_SCENARIO", "sql_scenario"),
+    ],
+};
 const E_INFERRED_NULLABILITY: EnumSpec = EnumSpec {
     name: "InferredNullability",
     doc: "Conservative nullability state inferred for an output column.",
@@ -725,6 +740,7 @@ pub(crate) const COMPILER_ENUMS: &[EnumSpec] = &[
     E_COLUMN_LINEAGE_CONFIDENCE,
     E_COLUMN_LINEAGE_MODE,
     E_INFERRED_NULLABILITY,
+    E_COMPILED_RESOURCE_TYPE,
     E_POLYGLOT_ANALYSIS_DIALECT,
     E_MIGRATION_DISCOVERY,
     E_MIGRATION_COMPATIBILITY,

@@ -16,6 +16,7 @@ from sqlbuild._native import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompiledSeed,
     CompiledSource,
     CompileModelConfig,
@@ -36,7 +37,6 @@ from sqlbuild.adapter.contract.models import (
 from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
-    CompiledResourceType,
     CompiledSourceView,
 )
 from sqlbuild.executor.janitor_events.constants import JANITOR_EVENTS_TABLE_NAME

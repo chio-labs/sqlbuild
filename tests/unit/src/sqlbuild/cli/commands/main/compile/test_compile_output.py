@@ -8,6 +8,7 @@ import pytest
 
 from sqlbuild._native import (
     CompiledObjectKey,
+    CompiledResourceType,
     CompileLineageMode,
     CompileModelConfig,
     ProjectColumnLineage,
@@ -19,7 +20,7 @@ from sqlbuild._native import (
     format_compile_text,
     project_with,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileJsonExecutionLayersTestCase,
     CompileJsonLargeIntegerTestCase,

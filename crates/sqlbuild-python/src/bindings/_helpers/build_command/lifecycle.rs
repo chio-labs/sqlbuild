@@ -22,7 +22,6 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
-const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
 const SUCCESS_STATUS: &str = "success";
 
 /// The cursor window and output settings the Python lifecycle runs with.
@@ -323,7 +322,7 @@ fn lifecycle_plan<'py>(
         &[("selection", selection), ("python_graph", graph.clone())],
     )?;
     let source_type: Bound<'py, PyAny> =
-        imported(py, COMPILE_TYPES, "CompiledResourceType")?.getattr("SOURCE")?;
+        registry::class(py, RecordId::CompiledResourceType)?.getattr("SOURCE")?;
     let key_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledObjectKey)?;
     let mut keys: Vec<Bound<'py, PyAny>> = Vec::new();
     for name in native_field(&plan, "ingress_loader_names")?.try_iter()? {

@@ -14,14 +14,11 @@ use sqlbuild_analysis::diff_selection::models::DiffGraph;
 
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, imported, keywords,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, keywords};
 use crate::bindings::_helpers::graph::views::project_lineage_views;
 use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
-
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 
 /// Indexes of the `CompiledObjectKey`s a diff graph names, assigned on first sight.
 struct KeyIndexes<'py> {
@@ -163,7 +160,7 @@ fn diff_model_names<'py>(
     let selected: HashSet<usize> = resolve_diff_selection(&graph, (&select, &exclude))
         .map_err(|error| selector_error(py, error))?;
     let model_type: Bound<'py, PyAny> =
-        imported(py, COMPILE_TYPES_MODULE, "CompiledResourceType")?.getattr("MODEL")?;
+        registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
     let mut names: Vec<Bound<'py, PyAny>> = Vec::new();
     for model in project.getattr("models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;

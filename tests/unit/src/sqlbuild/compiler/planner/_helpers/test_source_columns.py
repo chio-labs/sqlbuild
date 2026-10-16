@@ -9,6 +9,7 @@ import pytest
 from sqlbuild._native import (
     CompiledObjectKey,
     CompiledProject,
+    CompiledResourceType,
     CursorInputRelation,
     PlannerInputError,
     PlannerRelationsContext,
@@ -28,7 +29,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
-    CompiledResourceType,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     CursorRuntimeOwnershipTestCase,

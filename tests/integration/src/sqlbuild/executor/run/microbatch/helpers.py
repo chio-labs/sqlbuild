@@ -13,6 +13,7 @@ from sqlbuild._native import (
     AuditPlanEntry,
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     CursorBounds,
     CursorInputRelation,
     DiscoveredHookFunction,
@@ -28,7 +29,6 @@ from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.run._helpers.materializations.microbatch import execute_microbatch_entry
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import resolve_runtime_cursor_bounds
 from sqlbuild.executor.run.models import (

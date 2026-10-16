@@ -7,13 +7,13 @@ import pytest
 from sqlbuild._native import (
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     MaterializationType,
     ModelPlanEntry,
     PlanAction,
     PlanOutput,
     PlanReason,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.pipeline._helpers.graph_width import runnable_graph_width
 from sqlbuild.executor.pipeline._helpers.schema_preparation import prepare_build_schemas
 from tests.unit.src.sqlbuild.executor.pipeline.main._test_types import (

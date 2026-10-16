@@ -1,8 +1,8 @@
 //! Per-model plan entries from resolved change results and warehouse snapshot facts.
 
 use crate::bindings::_helpers::analysis::model_reads;
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::discovery::guidance::microbatch_guidance;
 use crate::bindings::_helpers::planner_changes::actions::replaces_incremental_relation;
 use crate::bindings::_helpers::planner_changes::detect::detect_model_changes;
@@ -10,8 +10,7 @@ use crate::bindings::_helpers::planner_entries::models::{
     ModelPlanContext, PlanEntriesRequest, PlanEntryBuildInputs, PlannerRelationsContext,
 };
 use crate::bindings::_helpers::planner_entries::values::{
-    COMPILE_TYPES, MICROBATCH_CONCURRENCY_MESSAGE, error_of, native, none, planner_type, replaced,
-    string,
+    MICROBATCH_CONCURRENCY_MESSAGE, error_of, native, none, planner_type, replaced, string,
 };
 use crate::bindings::_helpers::planner_phases::contexts::class_field;
 use crate::bindings::_helpers::planner_phases::full_refresh::{
@@ -225,7 +224,7 @@ fn check_binding_diagnostics<'py>(
     selected_keys: &Bound<'py, PyAny>,
 ) -> PyResult<()> {
     let py = project.py();
-    let sql_test = imported(py, COMPILE_TYPES, "CompiledResourceType")?.getattr("SQL_TEST")?;
+    let sql_test = registry::class(py, RecordId::CompiledResourceType)?.getattr("SQL_TEST")?;
     let mut errors: Vec<Bound<'py, PyAny>> = Vec::new();
     for diagnostic in native_field(project, "diagnostics")?.try_iter()? {
         let diagnostic = diagnostic?;

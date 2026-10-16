@@ -9,7 +9,6 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyTuple};
 use sqlbuild_analysis::lineage::models::{LineageColumn, LineageSource};
 
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const LOGGING_MODULE: &str = "logging";
 const LINEAGE_LOGGER: &str = "sqlbuild.lineage";
 
@@ -35,9 +34,7 @@ pub(crate) struct LineageClasses<'py> {
 
 impl<'py> LineageClasses<'py> {
     pub(crate) fn new(py: Python<'py>) -> PyResult<Self> {
-        let resource_type: Bound<'py, PyAny> = py
-            .import(COMPILE_TYPES_MODULE)?
-            .getattr("CompiledResourceType")?;
+        let resource_type: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledResourceType)?;
         let nullability: Bound<'py, PyAny> = registry::class(py, RecordId::InferredNullability)?;
         Ok(Self {
             qualified_column: registry::class(py, RecordId::QualifiedLineageColumn)?,

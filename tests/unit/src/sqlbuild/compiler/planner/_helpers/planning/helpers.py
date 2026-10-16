@@ -9,6 +9,7 @@ from sqlbuild._native import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompileModelConfig,
     LocalConfig,
     PlannerRelationsContext,
@@ -28,7 +29,6 @@ from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
-    CompiledResourceType,
 )
 
 

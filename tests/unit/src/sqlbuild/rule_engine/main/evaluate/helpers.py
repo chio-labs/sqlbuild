@@ -7,6 +7,7 @@ from sqlbuild._native import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompileModelConfig,
     CompileSqlReference,
     EnumDeclaration,
@@ -15,7 +16,6 @@ from sqlbuild._native import (
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
-    CompiledResourceType,
 )
 
 _ENUM_DECLARATION: EnumDeclaration = EnumDeclaration(

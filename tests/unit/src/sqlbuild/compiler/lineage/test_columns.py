@@ -11,6 +11,7 @@ from sqlbuild._native import (
     ColumnTransformKind,
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
+    CompiledResourceType,
     ModelColumnLineage,
     ProjectColumnLineage,
     compiled_model_record,
@@ -18,7 +19,6 @@ from sqlbuild._native import (
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
-    CompiledResourceType,
 )
 from tests.unit.src.sqlbuild.compiler.lineage._test_types import (
     ColumnLineageAnalyzerTestCase,

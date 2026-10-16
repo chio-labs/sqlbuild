@@ -7,6 +7,7 @@ from sqlbuild._native import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompiledSource,
     DiscoveredSourceFile,
     MaterializationType,
@@ -19,7 +20,7 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledProjectView
 
 
 class RelationTargetTestAdapter(BaseAdapter):

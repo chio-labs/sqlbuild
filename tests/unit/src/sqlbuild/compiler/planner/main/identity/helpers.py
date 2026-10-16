@@ -8,6 +8,7 @@ from sqlbuild._native import (
     CompiledModel,
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompileModelConfig,
     DirectModelVersionIdentities,
     FunctionArgument,
@@ -23,7 +24,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
-    CompiledResourceType,
     FunctionLanguage,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import build_compiled_function

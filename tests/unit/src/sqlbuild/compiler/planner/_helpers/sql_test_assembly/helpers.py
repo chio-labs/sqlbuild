@@ -14,6 +14,7 @@ from sqlbuild._native import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompiledSqlTest,
     CompileModelConfig,
     CompileSqlTestCte,
@@ -42,7 +43,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
-    CompiledResourceType,
 )
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (

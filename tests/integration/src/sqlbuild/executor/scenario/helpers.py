@@ -6,6 +6,7 @@ from typing import Any
 from sqlbuild._native import (
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     DiscoveredHookFunction,
     MaterializationType,
     ModelPlanEntry,
@@ -20,7 +21,6 @@ from sqlbuild._native import (
     ScenarioRelationMap,
     ScenarioRelationPlan,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.run.models import HookContext
 
 SCENARIO_NAME: str = "revenue__customer_refund"

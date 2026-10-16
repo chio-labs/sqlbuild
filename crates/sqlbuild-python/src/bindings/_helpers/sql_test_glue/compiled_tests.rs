@@ -5,14 +5,13 @@ use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
-use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::assembly::{
     AssemblyRequest, AssemblyRow, DiagnosticRow, FactsRow, assemble_compiled_sql_tests,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 /// Fields a direct-logic compiled payload copies from its input payload, in order.
 const DIRECT_PAYLOAD_FIELDS: [&str; 5] = [
     "mode",
@@ -61,10 +60,9 @@ struct Classes<'py> {
 
 impl<'py> Classes<'py> {
     fn new(py: Python<'py>) -> PyResult<Self> {
-        let types: Bound<'py, PyModule> = py.import(COMPILE_TYPES_MODULE)?;
         Ok(Self {
             direct_input: registry::class(py, RecordId::CompileDirectLogicSqlTestInputPayload)?,
-            resource_type: native_field(&types, "CompiledResourceType")?,
+            resource_type: registry::class(py, RecordId::CompiledResourceType)?,
             phase: registry::class(py, RecordId::DiagnosticPhase)?.getattr("COMPILE")?,
             severity: registry::class(py, RecordId::DiagnosticSeverity)?.getattr("ERROR")?,
             assembly: registry::class(py, RecordId::NativeSqlTestAssembly)?,
@@ -130,9 +128,9 @@ fn compiled_payload<'py>(
             copied(payload, &DIRECT_PAYLOAD_FIELDS)?,
         )?;
         let resource_type: Bound<'py, PyAny> = classes.model(RecordId::CompiledSqlTestResource)?;
-        let mode: Bound<'py, PyAny> = native_field(payload, "mode")?;
+        let mode: Bound<'py, PyAny> = native_field(&payload, "mode")?;
         let mut resources: Vec<Bound<'py, PyAny>> = Vec::new();
-        for name in native_field(payload, "tested_resource_names")?.try_iter()? {
+        for name in native_field(&payload, "tested_resource_names")?.try_iter()? {
             resources.push(keyword_call(
                 &resource_type,
                 vec![("kind", mode.clone()), ("name", name?)],
@@ -164,8 +162,7 @@ fn keyed_diagnostic<'py>(
     (line, column, end_line, end_column, message, help): DiagnosticRow,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = classes.py();
-    let path: Bound<'py, PyAny> =
-        native_field(test_input, "test_file")?.getattr("relative_path")?;
+    let path: Bound<'py, PyAny> = native_field(&test_input, "test_file")?.getattr("relative_path")?;
     let key: Bound<'py, PyTuple> = PyTuple::new(
         py,
         [
@@ -214,41 +211,31 @@ fn compiled_test<'py>(
         .iter()
         .map(|(resource_type, dep)| classes.object_key(resource_type, dep))
         .collect::<PyResult<_>>()?;
-    let (payload, payload_fields) =
-        compiled_payload(classes, &native_field(test_input, "payload")?)?;
-    let test_file: Bound<'py, PyAny> = native_field(test_input, "test_file")?;
-    let test_block: Bound<'py, PyAny> = native_field(test_input, "test_block")?;
+    let (payload, payload_fields) = compiled_payload(classes, &native_field(&test_input, "payload")?)?;
+    let test_file: Bound<'py, PyAny> = native_field(&test_input, "test_file")?;
+    let test_block: Bound<'py, PyAny> = native_field(&test_input, "test_block")?;
     let mut fields: Vec<(&str, Bound<'py, PyAny>)> = vec![
         ("key", classes.object_key("sql_test", &name)?),
         ("scope_deps", PyTuple::new(py, scope_deps)?.into_any()),
         ("name", text(py, &name)),
         ("test_file", test_file.clone()),
         ("test_block", test_block.clone()),
-        ("sql_body", native_field(test_input, "sql_body")?),
-        ("mode", native_field(test_input, "mode")?),
+        ("sql_body", native_field(&test_input, "sql_body")?),
+        ("mode", native_field(&test_input, "mode")?),
         ("payload", payload),
         ("source_path", native_field(&test_file, "relative_path")?),
-        (
-            "ownership_root",
-            native_field(&test_file, "ownership_root")?,
-        ),
+        ("ownership_root", native_field(&test_file, "ownership_root")?),
         ("block_index", native_field(&test_block, "test_index")?),
         ("explicit_name", native_field(&test_block, "name")?),
-        ("parent_name", native_field(test_input, "parent_name")?),
-        ("case_name", native_field(test_input, "case_name")?),
-        ("case_index", native_field(test_input, "case_index")?),
+        ("parent_name", native_field(&test_input, "parent_name")?),
+        ("case_name", native_field(&test_input, "case_name")?),
+        ("case_index", native_field(&test_input, "case_index")?),
         (
             "case_fingerprint",
             case_fingerprint.into_pyobject(py)?.into_any(),
         ),
-        (
-            "parameter_schema",
-            native_field(test_input, "parameter_schema")?,
-        ),
-        (
-            "parameter_values",
-            native_field(test_input, "parameter_values")?,
-        ),
+        ("parameter_schema", native_field(&test_input, "parameter_schema")?),
+        ("parameter_values", native_field(&test_input, "parameter_values")?),
         (
             "target_model_names",
             PyTuple::new(py, target_model_names)?.into_any(),
@@ -297,9 +284,9 @@ pub(crate) fn assemble_native_sql_tests<'py>(
     py: Python<'py>,
     inputs: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
-    let test_inputs: Vec<Bound<'py, PyAny>> = native_field(inputs, "test_inputs")?.extract()?;
+    let test_inputs: Vec<Bound<'py, PyAny>> = native_field(&inputs, "test_inputs")?.extract()?;
     let request = AssemblyRequest {
-        model_inputs: native_field(inputs, "model_inputs")?.extract()?,
+        model_inputs: native_field(&inputs, "model_inputs")?.extract()?,
         test_inputs: test_inputs.clone(),
         lexical_syntax: inputs
             .getattr("sql_lexical_syntax")?
