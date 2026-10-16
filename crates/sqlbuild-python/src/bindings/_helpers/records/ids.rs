@@ -1042,7 +1042,6 @@ native_ids! {
         PrepareLintSql => "prepare_lint_sql",
         PrepareLintSqlBatch => "prepare_lint_sql_batch",
         PrepareModelHeaderTokens => "prepare_model_header_tokens",
-        PrepareNativeHeaderCache => "prepare_native_header_cache",
         PrepareSqlRules => "prepare_sql_rules",
         PreparedCompileArtifacts => "PreparedCompileArtifacts",
         ProjectLineageViews => "project_lineage_views",

@@ -23,6 +23,7 @@ pub(crate) mod lint_preparation;
 pub(crate) mod lint_sql_bodies;
 pub(crate) mod lint_stop;
 pub(crate) mod lint_text;
+pub(crate) mod native_header_parser;
 pub(crate) mod project_tree_queries;
 pub(crate) mod registration;
 pub(crate) mod relation_keys;

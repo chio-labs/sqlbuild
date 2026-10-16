@@ -100,10 +100,6 @@ fn apply_fixes<'py>(
         return Ok((updated, faults));
     }
     let current: Bound<'py, PyDict> = overlaid(files, &updated)?;
-    call_with(
-        &native(py, NativeAttr::PrepareNativeHeaderCache)?,
-        &[("files", current.clone().into_any())],
-    )?;
     for (path, contents) in sorted_items(&current)? {
         let result: Bound<'py, PyAny> = call_with(
             &native(py, NativeAttr::FormatNativeHeaders)?,

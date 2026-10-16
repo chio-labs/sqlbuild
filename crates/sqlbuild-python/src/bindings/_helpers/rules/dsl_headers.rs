@@ -1,10 +1,6 @@
 //! DSL header scanning, header lint rules and header formatting fixes over Python lint models.
 
-use std::cell::RefCell;
-
-use pyo3::prelude::{
-    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
-};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_rules::dsl_headers::constants::RULE_HEADER_PARSE;
@@ -15,108 +11,23 @@ use sqlbuild_rules::dsl_headers::main::measurement_body_ranges::measurement_body
 use sqlbuild_rules::dsl_headers::main::scan_headers::scan_headers as scan;
 use sqlbuild_rules::dsl_headers::main::sql_body_ranges::sql_body_ranges as body_ranges;
 use sqlbuild_rules::dsl_headers::models::{
-    HeaderRulesConfig, HeaderSeverity, HeaderSpan, HeaderViolation, ParseFailure, ParseOutcome,
+    HeaderRulesConfig, HeaderSeverity, HeaderSpan, HeaderViolation, ParseOutcome,
 };
 use sqlbuild_rules::dsl_headers::types::HeaderParser;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::rules::native_header_parser::{
+    NativeHeaderParser, map_keys, map_value,
+};
+use sqlbuild_sqltext::compiler::models::AuthoredValue;
 
-const PATHLIB_MODULE: &str = "pathlib";
-const SENTINEL_PATH: &str = "<lint>";
 const ENGINE: &str = "sqlbuild";
 const LINE_FEED: &str = "\n";
 const CARRIAGE_RETURN_LINE_FEED: &str = "\r\n";
 const FUNCTION_KIND: &str = "FUNCTION";
-
-/// Header values parsed by `parse_header_values`, with Python's error classes.
-struct PyHeaderParser<'py> {
-    parse: Bound<'py, PyAny>,
-    path: Bound<'py, PyAny>,
-    syntax_error: Bound<'py, PyAny>,
-    discovery_error: Bound<'py, PyAny>,
-    /// The header syntax error of the last rejected parse.
-    rejected: RefCell<Option<PyErr>>,
-}
-
-impl<'py> PyHeaderParser<'py> {
-    fn new(py: Python<'py>) -> PyResult<Self> {
-        Ok(Self {
-            parse: registry::native(py, NativeAttr::ParseHeaderValues)?,
-            path: imported(py, PATHLIB_MODULE, "Path")?.call1((SENTINEL_PATH,))?,
-            syntax_error: registry::error(py, ErrorId::ModelSqlParse)?,
-            discovery_error: registry::error(py, ErrorId::Discovery)?,
-            rejected: RefCell::new(None),
-        })
-    }
-
-    fn failure(&self, error: &PyErr) -> PyResult<ParseFailure> {
-        let py: Python<'py> = self.parse.py();
-        let value: Bound<'py, PyAny> = error.value(py).clone().into_any();
-        let help: Option<String> = if value.is_instance(&self.discovery_error)? {
-            value.getattr("help")?.extract()?
-        } else {
-            None
-        };
-        Ok(ParseFailure {
-            message: value.str()?.extract()?,
-            help,
-        })
-    }
-}
-
-impl<'py> HeaderParser for PyHeaderParser<'py> {
-    type Values = Bound<'py, PyAny>;
-    type Error = PyErr;
-
-    fn parse(&self, kind: &str, inner: &str) -> ParseOutcome<Self::Values, Self::Error> {
-        let py: Python<'py> = self.parse.py();
-        let parsed: PyResult<Bound<'py, PyAny>> = call_with(
-            &self.parse,
-            &[
-                ("header", PyString::new(py, inner).into_any()),
-                ("file_path", self.path.clone()),
-                ("statement_name", PyString::new(py, kind).into_any()),
-                ("header_line", py.None().into_bound(py)),
-            ],
-        );
-        let error: PyErr = match parsed {
-            Ok(values) => return ParseOutcome::Parsed(values),
-            Err(error) => error,
-        };
-        let failure: ParseFailure = match self.failure(&error) {
-            Ok(failure) => failure,
-            Err(failed) => {
-                return ParseOutcome::Raised(
-                    failed,
-                    ParseFailure {
-                        message: String::new(),
-                        help: None,
-                    },
-                );
-            }
-        };
-        if error.is_instance(py, &self.syntax_error) {
-            self.rejected.replace(Some(error));
-            ParseOutcome::Rejected(failure)
-        } else {
-            ParseOutcome::Raised(error, failure)
-        }
-    }
-
-    fn description(&self, values: &Self::Values) -> PyResult<Option<String>> {
-        let description: Bound<'py, PyAny> = values.call_method1("get", ("description",))?;
-        if description.is_instance_of::<PyString>() {
-            return description.extract().map(Some);
-        }
-        Ok(None)
-    }
-
-    fn same(&self, left: &Self::Values, right: &Self::Values) -> PyResult<bool> {
-        left.eq(right)
-    }
-}
+const ARGUMENTS_KEY: &str = "arguments";
 
 /// The models and enums header results are built as.
 struct LintClasses<'py> {
@@ -251,7 +162,7 @@ fn header_violations<'py>(
     headers: &[HeaderSpan],
     config: &Bound<'py, PyAny>,
 ) -> PyResult<Vec<HeaderViolation>> {
-    let parser: PyHeaderParser<'py> = PyHeaderParser::new(config.py())?;
+    let parser: NativeHeaderParser<'py> = NativeHeaderParser::new(config.py());
     lint_headers(contents, headers, rules_config(config)?, &parser)
 }
 
@@ -279,7 +190,7 @@ fn format_native_headers<'py>(
     config: &Bound<'py, PyAny>,
 ) -> PyResult<(String, Bound<'py, PyTuple>)> {
     let py: Python<'py> = contents.py();
-    let parser: PyHeaderParser<'py> = PyHeaderParser::new(py)?;
+    let parser: NativeHeaderParser<'py> = NativeHeaderParser::new(py);
     let (formatted, faults) = format_headers(&text(contents)?, rules_config(config)?, &parser)?;
     let classes: LintClasses<'py> = LintClasses::new(py)?;
     Ok((
@@ -301,25 +212,6 @@ fn parse_faults<'py>(
             .filter(|violation| violation.code == RULE_HEADER_PARSE)
             .collect();
     classes.violations(file_path, violations)
-}
-
-/// Batch parse formatter-owned headers before per-file formatting and linting.
-#[pyfunction]
-#[pyo3(signature = (*, files))]
-fn prepare_native_header_cache(files: &Bound<'_, PyDict>) -> PyResult<()> {
-    let mut headers: Vec<String> = Vec::new();
-    for contents in files.values() {
-        let contents: Vec<char> = text(&contents)?;
-        for header in scan(&contents, false) {
-            headers.push(
-                inner_header_text(&contents[header.start..header.end])
-                    .iter()
-                    .collect(),
-            );
-        }
-    }
-    registry::native(files.py(), NativeAttr::PrepareModelHeaderTokens)?.call1((headers,))?;
-    Ok(())
 }
 
 /// Parse-safe files, and every file's authored newline convention.
@@ -389,7 +281,7 @@ fn external_identifiers_for_headers<'py>(
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = contents.py();
     let text: Vec<char> = text(contents)?;
-    let parser: PyHeaderParser<'py> = PyHeaderParser::new(py)?;
+    let parser: NativeHeaderParser<'py> = NativeHeaderParser::new(py);
     for header in spans(headers)? {
         if header.kind != FUNCTION_KIND {
             continue;
@@ -397,22 +289,21 @@ fn external_identifiers_for_headers<'py>(
         let inner: String = inner_header_text(&text[header.start..header.end])
             .iter()
             .collect();
-        let values: Bound<'py, PyAny> = match parser.parse(&header.kind, &inner) {
+        let values: AuthoredValue = match parser.parse(&header.kind, &inner) {
             ParseOutcome::Parsed(values) => values,
-            ParseOutcome::Rejected(_) => {
-                return Err(parser.rejected.take().unwrap_or_else(|| PyErr::fetch(py)));
-            }
+            ParseOutcome::Rejected(_) => return Err(parser.rejected_error()),
             ParseOutcome::Raised(error, _) => return Err(error),
         };
-        let arguments: Bound<'py, PyAny> = values.call_method1("get", ("arguments",))?;
-        let Ok(arguments) = arguments.downcast::<PyDict>() else {
+        let Some(arguments) = map_value(&values, ARGUMENTS_KEY) else {
             continue;
         };
-        let mut names: Vec<String> = arguments
-            .keys()
-            .iter()
-            .map(|name| name.str()?.call_method0("lower")?.extract())
-            .collect::<PyResult<_>>()?;
+        if !matches!(arguments, AuthoredValue::Map(_)) {
+            continue;
+        }
+        let mut names: Vec<String> = map_keys(arguments)
+            .into_iter()
+            .map(str::to_lowercase)
+            .collect();
         names.sort_unstable();
         return PyTuple::new(py, names);
     }
@@ -425,7 +316,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(measurement_body_ranges, module)?)?;
     module.add_function(wrap_pyfunction!(lint_native_headers, module)?)?;
     module.add_function(wrap_pyfunction!(format_native_headers, module)?)?;
-    module.add_function(wrap_pyfunction!(prepare_native_header_cache, module)?)?;
     module.add_function(wrap_pyfunction!(safe_format_files, module)?)?;
     module.add_function(wrap_pyfunction!(
         reject_unparseable_header_rewrites,
