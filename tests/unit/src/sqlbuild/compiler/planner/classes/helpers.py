@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib.metadata
 import json
 import sqlite3
-from collections.abc import Mapping
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -13,7 +13,6 @@ import pytest
 import sqlbuild._native as native_module
 from sqlbuild._native import (
     FixtureColumnInference,
-    build_migration_fingerprint,
     infer_fixture_column_facts,
 )
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
@@ -29,30 +28,6 @@ PLAIN_METADATA: str = json.dumps(
     {"model_name": "daily_orders", "config": {"materialized": "table"}}
 )
 DATABASE_GLOB: str = "migration-fingerprints-v*/migration-fingerprints.sqlite3"
-
-
-def count_fingerprint_computations(monkeypatch: pytest.MonkeyPatch) -> list[int]:
-    """Count every fingerprint computed instead of reused."""
-
-    computations: list[int] = []
-
-    def counting(
-        *,
-        query_sql: str,
-        metadata_json: str,
-        ref_identities: Mapping[str, str],
-        dialect: str | None,
-    ) -> str | None:
-        computations.append(1)
-        return build_migration_fingerprint(
-            query_sql=query_sql,
-            metadata_json=metadata_json,
-            ref_identities=ref_identities,
-            dialect=dialect,
-        )
-
-    monkeypatch.setattr(native_module, "build_migration_fingerprint", counting)
-    return computations
 
 
 def keep_cache(root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -129,3 +104,14 @@ def count_fixture_inferences(monkeypatch: pytest.MonkeyPatch) -> list[int]:
 
     monkeypatch.setattr(native_module, "infer_fixture_column_facts", counting)
     return inferences
+
+
+class SqlTestsProject:
+    """A project whose SQL tests are read through a callback each time planning asks for them."""
+
+    def __init__(self, read_tests: Callable[[], tuple[object, ...]]) -> None:
+        self._read_tests: Callable[[], tuple[object, ...]] = read_tests
+
+    @property
+    def sql_tests(self) -> tuple[object, ...]:
+        return self._read_tests()

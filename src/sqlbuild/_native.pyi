@@ -311,31 +311,6 @@ type ProofRow = tuple[
 
 type QueryColumnsMode = Literal["batch", "reanalysis", "parse", "legacy"]
 
-type CtePairRow = tuple[str, str]
-
-type NativeChainStepRow = tuple[
-    str,
-    str,
-    str | None,
-    list[CtePairRow],
-    str | None,
-    list[str] | None,
-    list[CtePairRow],
-]
-
-type NativeAssertionStepRow = tuple[str, str, list[CtePairRow], str | None]
-
-type NativePlanWarningRow = tuple[str | None, str, str]
-
-type NativeSqlTestPlanRow = tuple[
-    str | None,
-    list[NativeChainStepRow],
-    list[NativeAssertionStepRow],
-    list[str],
-    list[NativePlanWarningRow],
-    list[str],
-]
-
 type SqlTestAssemblyFailureKind = Literal["input", "internal", "decimal_overflow"]
 
 type ProjectProvider = Provider
@@ -3931,6 +3906,8 @@ def simplify_fixture_null_projections(*, sql: str, relation: Any) -> str: ...
 def is_empty_fixture_query(sql: str) -> bool: ...
 def fixture_read_cache_info(*, reset: bool = False) -> tuple[int, int]: ...
 def fixture_planning_work_info(*, reset: bool = False) -> tuple[int, int]: ...
+def planner_identity_work_info(*, reset: bool = False) -> tuple[int, dict[str, int]]: ...
+def migration_fingerprint_work_info(*, reset: bool = False) -> tuple[int, int]: ...
 def build_relation_fixture_context(
     *, project: CompiledProjectView, models_by_name: dict[str, CompiledModelView] | None = None
 ) -> RelationFixturePlanningContext: ...
@@ -6020,10 +5997,6 @@ def render_janitor_completion(
 ) -> str: ...
 
 # Native analysis: SQL test planning glue.
-def plan_compiled_sql_tests(
-    request: NativeSqlTestPlanningRequest, /
-) -> tuple[list[NativeSqlTestPlanRow], int, int]: ...
-def resolve_compiled_sql_test_chains(request: NativeSqlTestChainRequest, /) -> list[list[str]]: ...
 def assemble_native_sql_tests(
     *, inputs: CompileInputsView
 ) -> tuple[NativeSqlTestAssembly, ...]: ...
@@ -10240,50 +10213,6 @@ class ManualLocation(NativeRecord):
         line: int | None,
         column: int | None,
         reason: str,
-    ) -> None: ...
-
-class NativeSqlTestPlanningRequest(NativeRecord):
-    """Compiled models and tests to plan, with the adapter facts native planning cannot derive."""
-
-    models: tuple[CompiledModelView, ...]
-    rendered_model_sql: dict[int, str]
-    functions: tuple[tuple[str, str, str, str, str], ...]
-    tests: tuple[CompiledSqlTest, ...]
-    rendered_test_overrides: dict[int, dict[str, str]]
-    sql_analysis_enabled: bool
-    sql_analysis_dialect: str | None
-    set_difference_operator: str
-    requires_derived_table_aliases: bool
-    lexical_syntax: dict[str, object]
-    render_sql: bool
-    include_plan: bool
-    def __init__(
-        self,
-        models: tuple[CompiledModelView, ...],
-        rendered_model_sql: dict[int, str],
-        functions: tuple[tuple[str, str, str, str, str], ...],
-        tests: tuple[CompiledSqlTest, ...],
-        rendered_test_overrides: dict[int, dict[str, str]],
-        sql_analysis_enabled: bool,
-        sql_analysis_dialect: str | None,
-        set_difference_operator: str,
-        requires_derived_table_aliases: bool,
-        lexical_syntax: dict[str, object],
-        render_sql: bool,
-        include_plan: bool,
-    ) -> None: ...
-
-class NativeSqlTestChainRequest(NativeRecord):
-    """Compiled models and the tests whose unmocked model chains to resolve."""
-
-    models: tuple[CompiledModelView, ...]
-    tests: tuple[CompiledSqlTest, ...]
-    lexical_syntax: dict[str, object]
-    def __init__(
-        self,
-        models: tuple[CompiledModelView, ...],
-        tests: tuple[CompiledSqlTest, ...],
-        lexical_syntax: dict[str, object],
     ) -> None: ...
 
 class NativeSqlTestFailure(NativeRecord):

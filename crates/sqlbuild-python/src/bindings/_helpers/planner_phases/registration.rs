@@ -17,6 +17,10 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module
     )?)?;
     module.add_function(wrap_pyfunction!(
+        super::identities::planner_identity_work_info,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
         super::identities::detect_stale_warning_changes_of,
         module
     )?)?;

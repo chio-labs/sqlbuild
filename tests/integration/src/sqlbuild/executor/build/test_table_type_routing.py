@@ -8,7 +8,6 @@ from pathlib import Path
 import duckdb
 import pytest
 
-import sqlbuild._native as planner_assembly_module
 import sqlbuild.executor.build.classes.build_scheduler as build_scheduler_module
 from tests.integration.src.sqlbuild.executor.build._test_types import TableTypeRoutingTestCase
 from tests.integration.src.sqlbuild.executor.build.helpers import (
@@ -77,11 +76,7 @@ def test_given_table_type_drift_when_building_then_only_carried_over_tables_conv
     with duckdb.connect(str(tmp_path / "demo.duckdb")) as setup:
         setup.execute(_NEW_ORDER_SQL)
     conversions: list[tuple[str, int]] = []
-    monkeypatch.setattr(
-        planner_assembly_module,
-        "plan_table_types",
-        drift_for_models(model_names=("customer_totals", "orders")),
-    )
+    drift_for_models(model_names=("customer_totals", "orders"), monkeypatch=monkeypatch)
     monkeypatch.setattr(
         build_scheduler_module,
         "apply_table_type_conversion",
@@ -125,11 +120,7 @@ def test_given_failing_table_type_conversion_when_building_then_model_fails_with
     with duckdb.connect(str(tmp_path / "demo.duckdb")) as setup:
         setup.execute(_NEW_ORDER_SQL)
     conversions: list[tuple[str, int]] = []
-    monkeypatch.setattr(
-        planner_assembly_module,
-        "plan_table_types",
-        drift_for_models(model_names=("customer_totals", "orders")),
-    )
+    drift_for_models(model_names=("customer_totals", "orders"), monkeypatch=monkeypatch)
     monkeypatch.setattr(
         build_scheduler_module,
         "apply_table_type_conversion",

@@ -2,8 +2,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::{FromPyObject, pyfunction, wrap_pyfunction};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use sqlbuild_analysis::compiler::main::sql_test_chains::resolve_sql_test_chains;
 use sqlbuild_analysis::compiler::main::sql_test_glue::plan_sql_test_batch;
 use sqlbuild_analysis::compiler::main::sql_test_plan_errors::sql_test_plan_error_messages;
@@ -22,9 +21,9 @@ use crate::bindings::types::CompilerDetach;
 const MODEL_RESOURCE_TYPE: &str = "model";
 const PLANNING_WORKERS: usize = 4;
 
-type CtePair = (String, String);
+pub(crate) type CtePair = (String, String);
 /// `(model, SQL, expected SQL, lifted CTEs, body, expected columns, expected lifted CTEs)`.
-type ChainRow = (
+pub(crate) type ChainRow = (
     String,
     String,
     Option<String>,
@@ -34,11 +33,11 @@ type ChainRow = (
     Vec<CtePair>,
 );
 /// `(name, resolved SQL, lifted CTEs, comparison body)`.
-type AssertionRow = (String, String, Vec<CtePair>, Option<String>);
+pub(crate) type AssertionRow = (String, String, Vec<CtePair>, Option<String>);
 /// `(model, severity, message)`.
-type WarningRow = (Option<String>, &'static str, String);
+pub(crate) type WarningRow = (Option<String>, &'static str, String);
 /// `(SQL, chain, assertions, model names, warnings, distinct error messages)`.
-type PlanRow = (
+pub(crate) type PlanRow = (
     Option<String>,
     Vec<ChainRow>,
     Vec<AssertionRow>,
@@ -47,50 +46,32 @@ type PlanRow = (
     Vec<String>,
 );
 
-/// The Python planning request: compiled models and tests, with the adapter's facts.
-#[derive(FromPyObject)]
+/// The planning request: compiled models and tests, with the adapter's facts.
 pub(crate) struct PlanningRequest<'py> {
-    #[pyo3(attribute)]
-    models: Vec<Bound<'py, PyAny>>,
+    pub(crate) models: Vec<Bound<'py, PyAny>>,
     /// Cursor-rendered SQL by model index, for models whose SQL uses cursor intrinsics.
-    #[pyo3(attribute)]
-    rendered_model_sql: HashMap<usize, String>,
-    #[pyo3(attribute)]
-    functions: Vec<(String, String, String, String, String)>,
-    #[pyo3(attribute)]
-    tests: Vec<Bound<'py, PyAny>>,
+    pub(crate) rendered_model_sql: HashMap<usize, String>,
+    pub(crate) functions: Vec<(String, String, String, String, String)>,
+    pub(crate) tests: Vec<Bound<'py, PyAny>>,
     /// Cursor-rendered model query overrides by test index, replacing the test's own.
-    #[pyo3(attribute)]
-    rendered_test_overrides: HashMap<usize, BTreeMap<String, String>>,
-    #[pyo3(attribute)]
-    sql_analysis_enabled: bool,
-    #[pyo3(attribute)]
-    sql_analysis_dialect: Option<String>,
-    #[pyo3(attribute)]
-    set_difference_operator: String,
-    #[pyo3(attribute)]
-    requires_derived_table_aliases: bool,
-    #[pyo3(attribute)]
-    lexical_syntax: LexicalSyntaxInput,
-    #[pyo3(attribute)]
-    render_sql: bool,
-    #[pyo3(attribute)]
-    include_plan: bool,
+    pub(crate) rendered_test_overrides: HashMap<usize, BTreeMap<String, String>>,
+    pub(crate) sql_analysis_enabled: bool,
+    pub(crate) sql_analysis_dialect: Option<String>,
+    pub(crate) set_difference_operator: String,
+    pub(crate) requires_derived_table_aliases: bool,
+    pub(crate) lexical_syntax: LexicalSyntaxInput,
+    pub(crate) render_sql: bool,
+    pub(crate) include_plan: bool,
 }
 
-/// The Python chain request: compiled models and the tests whose chains to resolve.
-#[derive(FromPyObject)]
+/// The chain request: compiled models and the tests whose chains to resolve.
 pub(crate) struct ChainRequest<'py> {
-    #[pyo3(attribute)]
-    models: Vec<Bound<'py, PyAny>>,
-    #[pyo3(attribute)]
-    tests: Vec<Bound<'py, PyAny>>,
-    #[pyo3(attribute)]
-    lexical_syntax: LexicalSyntaxInput,
+    pub(crate) models: Vec<Bound<'py, PyAny>>,
+    pub(crate) tests: Vec<Bound<'py, PyAny>>,
+    pub(crate) lexical_syntax: LexicalSyntaxInput,
 }
 
 /// Each test's ordered unmocked model chain; direct-logic tests have none.
-#[pyfunction]
 pub(crate) fn resolve_compiled_sql_test_chains(
     py: Python<'_>,
     request: ChainRequest<'_>,
@@ -118,7 +99,6 @@ pub(crate) fn resolve_compiled_sql_test_chains(
 }
 
 /// Plan SQL tests in one batch and return each plan with its distinct error messages.
-#[pyfunction]
 pub(crate) fn plan_compiled_sql_tests(
     py: Python<'_>,
     request: PlanningRequest<'_>,
@@ -297,10 +277,4 @@ fn assertion_row(step: SqlTestAssertionStep) -> AssertionRow {
         step.lifted_ctes,
         step.comparison_body_sql,
     )
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(plan_compiled_sql_tests, module)?)?;
-    module.add_function(wrap_pyfunction!(resolve_compiled_sql_test_chains, module)?)?;
-    Ok(())
 }

@@ -3,6 +3,7 @@
 pub(crate) mod constants;
 pub(crate) mod cursors;
 pub(crate) mod fingerprint_cache;
+pub(crate) mod models;
 pub(crate) mod registration;
 pub(crate) mod semantic_sources;
 pub(crate) mod snapshot;

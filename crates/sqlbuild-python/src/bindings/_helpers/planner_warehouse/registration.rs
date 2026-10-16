@@ -6,6 +6,10 @@ use pyo3::wrap_pyfunction;
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<super::fingerprint_cache::MigrationFingerprintCache>()?;
     module.add_function(wrap_pyfunction!(
+        super::fingerprint_cache::migration_fingerprint_work_info,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
         super::snapshot::gather_warehouse_snapshot,
         module
     )?)?;

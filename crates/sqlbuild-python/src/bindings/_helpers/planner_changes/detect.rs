@@ -236,7 +236,7 @@ pub(crate) fn detect_model_changes<'py>(
     )
 }
 
-fn scope_model_changes<'py>(
+pub(crate) fn scope_model_changes<'py>(
     (project, scope, snapshot): (&Bound<'py, PyAny>, &Bound<'py, PyAny>, &Bound<'py, PyAny>),
     query_change_tracking: Option<bool>,
     (version_hashes, metadata_jsons): (Bound<'py, PyAny>, Bound<'py, PyAny>),

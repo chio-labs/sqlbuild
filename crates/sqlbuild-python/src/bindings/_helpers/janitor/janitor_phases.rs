@@ -8,6 +8,9 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods};
 
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
+use crate::bindings::_helpers::cli::progress_reporters::{
+    ConnectionProgressReporter, PlanningProgressReporter,
+};
 use crate::bindings::_helpers::command_runtime::invocation::resolve_adapter_connection_context;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
 use crate::bindings::_helpers::janitor::janitor_facts::Warehouse;
@@ -16,9 +19,9 @@ use crate::bindings::_helpers::janitor::janitor_planning::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
+use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const UNKNOWN_VIEW_CODE: &str = "C503";
 const UNKNOWN_VIEW_HELP: &str =
@@ -43,7 +46,7 @@ fn stdout(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 }
 
 fn use_color(invocation: &Bound<'_, PyAny>) -> PyResult<bool> {
-    native_field(invocation, "use_color")?.extract()
+    native_field(&invocation, "use_color")?.extract()
 }
 
 /// `OperationLifecycle(operation_kind=..., operation_name=...)`.
@@ -60,30 +63,23 @@ pub(crate) fn compile_janitor_project<'py>(
 ) -> PyResult<JanitorCompiled<'py>> {
     let py: Python<'py> = invocation.py();
     let context: Bound<'py, PyAny> = resolve_adapter_connection_context(
-        &native_field(invocation, "discovered_inputs")?,
-        &native_field(invocation, "effective_project_dir")?,
+        &native_field(&invocation, "discovered_inputs")?,
+        &native_field(&invocation, "effective_project_dir")?,
         (
-            native_field(invocation, "selected_target")?,
+            native_field(&invocation, "selected_target")?,
             py.None().into_bound(py),
         ),
         true,
     )?;
     let started: Instant = Instant::now();
-    let status: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::PlanningProgressReporter)?,
-        &[
-            ("stream", stdout(py)?),
-            (
-                "use_color",
-                PyBool::new(py, use_color(invocation)?)
-                    .to_owned()
-                    .into_any(),
-            ),
-        ],
-    )?;
-    let as_target: Bound<'py, PyAny> = native_field(invocation, "as_target")?;
+    let status: Bound<'py, PyAny> = Bound::new(
+        py,
+        PlanningProgressReporter::new(py, &stdout(py)?, use_color(invocation)?)?,
+    )?
+    .into_any();
+    let as_target: Bound<'py, PyAny> = native_field(&invocation, "as_target")?;
     let target: Bound<'py, PyAny> = if as_target.is_none() {
-        native_field(invocation, "selected_target")?
+        native_field(&invocation, "selected_target")?
     } else {
         as_target
     };
@@ -97,14 +93,11 @@ pub(crate) fn compile_janitor_project<'py>(
                     &[
                         (
                             "discovered_inputs",
-                            native_field(invocation, "discovered_inputs")?,
+                            native_field(&invocation, "discovered_inputs")?,
                         ),
                         ("adapter", native_field(&context, "adapter")?),
                         ("selected_target", target),
-                        (
-                            "resolved_connection",
-                            native_field(&context, "connection_config")?,
-                        ),
+                        ("resolved_connection", native_field(&context, "connection_config")?),
                     ],
                 )?),
             )?;
@@ -139,19 +132,26 @@ pub(crate) fn connect_janitor_warehouse<'py>(
     compiled: &JanitorCompiled<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = invocation.py();
-    let progress: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
-        &[
-            ("adapter_name", compiled.adapter_name.clone()),
-            ("stream", stdout(py)?),
-            (
-                "use_color",
-                PyBool::new(py, use_color(invocation)?)
-                    .to_owned()
-                    .into_any(),
-            ),
-        ],
-    )?;
+    let progress: Bound<'py, PyAny> = Bound::new(
+        py,
+        ConnectionProgressReporter::new(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("adapter_name", compiled.adapter_name.clone()),
+                    ("stream", stdout(py)?),
+                    (
+                        "use_color",
+                        PyBool::new(py, use_color(invocation)?)
+                            .to_owned()
+                            .into_any(),
+                    ),
+                ],
+            )?),
+        )?,
+    )?
+    .into_any();
     let started: Instant = Instant::now();
     progress.call_method1("on_connection_start", (1,))?;
     let connected: PyResult<Bound<'py, PyAny>> = within(
@@ -184,9 +184,7 @@ pub(crate) fn close_janitor_warehouse(
 }
 
 fn candidate_count(plan: &Bound<'_, PyAny>) -> PyResult<usize> {
-    let mut count: usize = native_field(plan, "old_name_views")?
-        .getattr("drops")?
-        .len()?;
+    let mut count: usize = native_field(&plan, "old_name_views")?.getattr("drops")?.len()?;
     for field in CANDIDATE_FIELDS {
         count += plan.getattr(field)?.len()?;
     }
@@ -234,9 +232,8 @@ pub(crate) fn build_janitor_execution_plan<'py>(
                     },
                 ),
                 &JanitorSettings {
-                    retention_days: native_field(settings, "retention_days")?.extract()?,
-                    delete_tracked_only: native_field(&janitor, "delete_tracked_only")?
-                        .is_truthy()?,
+                    retention_days: native_field(&settings, "retention_days")?.extract()?,
+                    delete_tracked_only: native_field(&janitor, "delete_tracked_only")?.is_truthy()?,
                     exclude_patterns: native_field(&janitor, "exclude_patterns")?.extract()?,
                     direct_mode: true,
                     state_history_versions: settings

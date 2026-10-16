@@ -1,5 +1,7 @@
 //! Plan output fields gathered across the plan phases before the output is built once.
 
+use std::collections::BTreeMap;
+
 use pyo3::prelude::{Bound, Py, PyAny};
 use pyo3::pyclass;
 
@@ -67,4 +69,12 @@ pub(crate) struct PlannerScopeResolution {
 pub(crate) struct PlannerIdentityContext {
     pub(crate) version_identities: Py<PyAny>,
     pub(crate) stale_warning_identities: Py<PyAny>,
+}
+
+/// Planner identity work since the last reset, for work-count tests.
+#[pyclass]
+#[derive(Debug, Default)]
+pub(crate) struct IdentityWork {
+    pub(crate) identity_builds: u64,
+    pub(crate) stale_detections: BTreeMap<String, u64>,
 }

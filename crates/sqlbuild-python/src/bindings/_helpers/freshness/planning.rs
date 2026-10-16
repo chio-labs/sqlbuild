@@ -10,6 +10,7 @@ use sqlbuild_state::freshness::main::configuration_error::configuration_error;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::freshness::exception_types::SourceFreshnessObservationError;
 use crate::bindings::_helpers::freshness::observation::{
     Observer, observation_record, observation_source, observe_adapter_batch, observe_configured,
     strategy, unknown,
@@ -19,10 +20,10 @@ use crate::bindings::_helpers::freshness::support::text;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_identity::graph::build_downstream_model_name_closure;
-use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::freshness::{age_policy, equivalent};
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const ADAPTER_STRATEGY: &str = "adapter";
 const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
@@ -34,10 +35,7 @@ fn handled_message<'py>(py: Python<'py>, error: &PyErr) -> PyResult<Option<Bound
     if value.is_instance(&host::entry(py, AdapterHost::AdapterUserError)?)? {
         return native_field(&value, "message").map(Some);
     }
-    if value.is_instance(&registry::native(
-        py,
-        NativeAttr::SourceFreshnessObservationError,
-    )?)? {
+    if error.is_instance_of::<SourceFreshnessObservationError>(py) {
         return Ok(Some(value.str()?.into_any()));
     }
     Ok(None)
@@ -56,9 +54,9 @@ fn previous_records<'py>(
     let py: Python<'py> = adapter.py();
     let read: StateRead<'py> = StateRead {
         connection: connection.clone(),
-        execute: native_field(adapter, "execute")?,
+        execute: native_field(&adapter, "execute")?,
         render_qualified_name: arguments.value("render_qualified_name")?,
-        render_read_latest_sql: native_field(adapter, "render_read_latest_source_freshness_sql")?,
+        render_read_latest_sql: native_field(&adapter, "render_read_latest_source_freshness_sql")?,
     };
     let database: Bound<'py, PyAny> = arguments.value("state_database")?;
     let exists_by_schema: Bound<'py, PyAny> = arguments.value("state_table_exists_by_schema")?;
@@ -70,10 +68,7 @@ fn previous_records<'py>(
             .is_truthy()?;
         let previous: Bound<'py, PyAny> =
             read_latest(&read, (&database, &schema), exists, source_names)?;
-        for (identity, candidate) in native_field(&previous, "records")?
-            .downcast::<PyDict>()?
-            .iter()
-        {
+        for (identity, candidate) in native_field(&previous, "records")?.downcast::<PyDict>()?.iter() {
             let replace: bool = match merged.get_item(&identity)? {
                 None => true,
                 Some(current) => candidate
@@ -127,7 +122,7 @@ fn adapter_batch<'py>(
     };
     let unknown_sources: Bound<'py, PyDict> = PyDict::new(py);
     for source in sources {
-        let name: Bound<'py, PyAny> = native_field(source, "name")?;
+        let name: Bound<'py, PyAny> = native_field(&source, "name")?;
         unknown_sources.set_item(&name, unknown(&name, ("ERROR", message.clone()))?)?;
     }
     call_with(
@@ -176,7 +171,7 @@ pub(crate) fn build_direct_source_freshness_planning_result<'py>(
         if arguments.value("filter_previous_to_sources")?.is_truthy()? {
             let mut names: Vec<String> = sources
                 .iter()
-                .map(|source| native_field(source, "name")?.extract())
+                .map(|source| native_field(&source, "name")?.extract())
                 .collect::<PyResult<_>>()?;
             names.sort();
             Some(names)
@@ -192,10 +187,10 @@ pub(crate) fn build_direct_source_freshness_planning_result<'py>(
     let observed_sources: Bound<'py, PyDict> = PyDict::new(py);
     let mut adapter_sources: Vec<Bound<'py, PyAny>> = Vec::new();
     for source in &sources {
-        if native_field(source, "managed")?.is_truthy()? {
+        if native_field(&source, "managed")?.is_truthy()? {
             continue;
         }
-        let name: Bound<'py, PyAny> = native_field(source, "name")?;
+        let name: Bound<'py, PyAny> = native_field(&source, "name")?;
         let Some(observed) = observation_source(&observer.adapter, source)? else {
             unknown_sources.set_item(
                 &name,
@@ -327,13 +322,13 @@ pub(crate) fn build_direct_source_freshness_propagation_result<'py>(
     scope: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = scope.py();
-    let downstream_deps: Bound<'py, PyAny> = native_field(scope, "downstream_deps")?;
+    let downstream_deps: Bound<'py, PyAny> = native_field(&scope, "downstream_deps")?;
     let changed: Bound<'py, PyDict> = PyDict::new(py);
     let unknown_sources: Bound<'py, PyDict> = PyDict::new(py);
     let errors: Bound<'py, PyDict> = PyDict::new(py);
     let stale: Bound<'py, PySet> = PySet::empty(py)?;
     let blocked: Bound<'py, PySet> = PySet::empty(py)?;
-    for identity in native_field(source_freshness, "changed_identities")?.try_iter()? {
+    for identity in native_field(&source_freshness, "changed_identities")?.try_iter()? {
         let identity: Bound<'py, PyAny> = identity?;
         let models: Bound<'py, PyFrozenSet> =
             downstream_models(&native_field(&identity, "source_name")?, &downstream_deps)?;

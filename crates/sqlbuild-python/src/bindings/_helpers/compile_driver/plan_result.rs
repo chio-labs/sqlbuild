@@ -5,7 +5,10 @@ use crate::bindings::_helpers::compile_driver::deferral::gather_deferred_relatio
 use crate::bindings::_helpers::compile_driver::deferral::resolve_deferred_target_config;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::build_project_graph_from_compiled_project;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compile_driver::python_plan_entries::python_read_source_names_for;
+use crate::bindings::_helpers::compile_driver::python_plan_entries::{
+    build_python_run_plan_outputs, python_read_source_names_for,
+};
+use crate::bindings::_helpers::planner_entries::execution_plan::build_execution_plan;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -17,7 +20,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, 
 use crate::bindings::_helpers::graph::python_node_graph::run_selection_from_inputs;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
 const SINGLE_CONNECTION: i64 = 1;
@@ -122,32 +125,38 @@ pub(crate) fn pipeline_result<'py>(
             ],
         )?,
     )?;
-    let plan_output: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildExecutionPlan)?,
-        &[
-            ("project", project.clone()),
-            ("adapter", inputs.adapter.clone()),
-            ("connection", inputs.connection.clone()),
-            ("selection", selection),
-            ("overrides", overrides),
-            ("deferral", deferral),
-            ("policies", policies),
-            ("on_progress", on_progress.clone()),
-            ("project_config", discovered.getattr("project_config")?),
-            ("local_config", discovered.getattr("local_config")?),
-        ],
+    let plan_output: Bound<'py, PyAny> = build_execution_plan(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("project", project.clone()),
+                ("adapter", inputs.adapter.clone()),
+                ("connection", inputs.connection.clone()),
+                ("selection", selection),
+                ("overrides", overrides),
+                ("deferral", deferral),
+                ("policies", policies),
+                ("on_progress", on_progress.clone()),
+                ("project_config", discovered.getattr("project_config")?),
+                ("local_config", discovered.getattr("local_config")?),
+            ],
+        )?),
     )?;
     let custom_materializations: Bound<'py, PyAny> =
         host::entry(py, UserCodeHost::LoadCustomMaterializations)?
             .call1((discovered.getattr("materialization_files")?,))?;
-    let python_outputs: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildPythonRunPlanOutputs)?,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("plan_output", plan_output),
-            ("run_selection", run_selection),
-            ("selected_python_node_names", selected_python_node_names),
-        ],
+    let python_outputs: Bound<'py, PyAny> = build_python_run_plan_outputs(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", discovered.clone()),
+                ("plan_output", plan_output),
+                ("run_selection", run_selection),
+                ("selected_python_node_names", selected_python_node_names),
+            ],
+        )?),
     )?;
     call_with(
         &registry::class(py, RecordId::CompilePipelineResult)?,

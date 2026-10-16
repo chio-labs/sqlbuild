@@ -17,7 +17,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::native_threads::exit_signal::signal_interpreter_exit;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::planner_entries::plan_output::plan_selected_sql_tests;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
 const TEST_PLANNING_THREAD: &str = "sqlbuild-test-planning";
@@ -158,19 +159,13 @@ pub(crate) struct PlanningRequest {
     pub(crate) sql_test_selection: Py<PyAny>,
 }
 
-/// `plan_selected_sql_tests(**request)`, looked up on the module so tests can replace it.
+/// Plan the request's selected SQL tests.
 fn plan(py: Python<'_>, request: &PlanningRequest) -> Planned {
-    call_with(
-        &registry::native(py, NativeAttr::PlanSelectedSqlTests)?,
-        &[
-            ("project", request.project.bind(py).clone()),
-            ("adapter", request.adapter.bind(py).clone()),
-            ("selected_keys", request.selected_keys.bind(py).clone()),
-            (
-                "sql_test_selection",
-                request.sql_test_selection.bind(py).clone(),
-            ),
-        ],
+    plan_selected_sql_tests(
+        request.project.bind(py),
+        request.adapter.bind(py),
+        request.selected_keys.bind(py),
+        request.sql_test_selection.bind(py),
     )
     .map(Bound::unbind)
 }

@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-from collections import Counter
 from dataclasses import replace
 from typing import Any
-from unittest.mock import Mock
 
 import pytest
 
-import sqlbuild._native as identity_planning
 from sqlbuild._native import (
     BackfillAction,
     CursorBounds,
@@ -29,6 +26,7 @@ from sqlbuild._native import (
     WarningSeverity,
     compiled_model_record,
     format_plan,
+    planner_identity_work_info,
     project_with,
 )
 from sqlbuild.adapter.contract.types import BuiltinAdapter
@@ -84,7 +82,6 @@ def test_given_selected_model_when_planning_then_each_required_model_is_change_d
     test_case: PlannerChangeDetectionWorkTestCase,
     adapter: DuckDbAdapter,
     connection: Any,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     connection.execute("CREATE TABLE staging.stg_orders AS SELECT 1 AS order_id")
     project: CompiledProjectView = build_project_from_test_case(
@@ -114,14 +111,7 @@ def test_given_selected_model_when_planning_then_each_required_model_is_change_d
             query_change_tracking=test_case.query_change_tracking,
         ),
     )
-    stale_detector: Mock = Mock(wraps=identity_planning.detect_model_changes_in_scope)
-    monkeypatch.setattr(identity_planning, "detect_model_changes_in_scope", stale_detector)
-    identity_builder: Mock = Mock(wraps=identity_planning.build_direct_model_version_identities)
-    monkeypatch.setattr(
-        identity_planning,
-        "build_direct_model_version_identities",
-        identity_builder,
-    )
+    planner_identity_work_info(reset=True)
 
     plan: PlanOutput = build_execution_plan_from_kwargs(
         project=project,
@@ -131,11 +121,9 @@ def test_given_selected_model_when_planning_then_each_required_model_is_change_d
         selection_diagnostics=test_case.selection_diagnostics,
     )
 
-    stale_calls: Counter[str] = Counter()
-    for call in stale_detector.call_args_list:
-        stale_calls.update(key.name for key in call.kwargs["scope"].selected_keys)
-    assert dict(stale_calls) == test_case.expected_stale_detection_calls
-    assert identity_builder.call_count == test_case.expected_identity_builds
+    identity_builds, stale_detections = planner_identity_work_info()
+    assert stale_detections == test_case.expected_stale_detection_calls
+    assert identity_builds == test_case.expected_identity_builds
     assert len(plan.warnings) == test_case.expected_warning_count
 
 

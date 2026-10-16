@@ -209,33 +209,6 @@ const R_MANUAL_LOCATION: RecordSpec = RecordSpec {
         FieldSpec::required("reason"),
     ],
 };
-const R_NATIVE_SQL_TEST_PLANNING_REQUEST: RecordSpec = RecordSpec {
-    name: "NativeSqlTestPlanningRequest",
-    doc: "Compiled models and tests to plan, with the adapter facts native planning cannot derive.",
-    fields: &[
-        FieldSpec::required("models"),
-        FieldSpec::required("rendered_model_sql"),
-        FieldSpec::required("functions"),
-        FieldSpec::required("tests"),
-        FieldSpec::required("rendered_test_overrides"),
-        FieldSpec::required("sql_analysis_enabled"),
-        FieldSpec::required("sql_analysis_dialect"),
-        FieldSpec::required("set_difference_operator"),
-        FieldSpec::required("requires_derived_table_aliases"),
-        FieldSpec::required("lexical_syntax"),
-        FieldSpec::required("render_sql"),
-        FieldSpec::required("include_plan"),
-    ],
-};
-const R_NATIVE_SQL_TEST_CHAIN_REQUEST: RecordSpec = RecordSpec {
-    name: "NativeSqlTestChainRequest",
-    doc: "Compiled models and the tests whose unmocked model chains to resolve.",
-    fields: &[
-        FieldSpec::required("models"),
-        FieldSpec::required("tests"),
-        FieldSpec::required("lexical_syntax"),
-    ],
-};
 const R_NATIVE_SQL_TEST_FAILURE: RecordSpec = RecordSpec {
     name: "NativeSqlTestFailure",
     doc: "The error one test's assembly raises: its kind and message.",
@@ -936,8 +909,6 @@ pub(crate) const COMPILER_RECORDS: &[RecordSpec] = &[
     R_MODEL_COLUMN_LINEAGE,
     R_REFACTOR_PROJECT,
     R_MANUAL_LOCATION,
-    R_NATIVE_SQL_TEST_PLANNING_REQUEST,
-    R_NATIVE_SQL_TEST_CHAIN_REQUEST,
     R_NATIVE_SQL_TEST_FAILURE,
     R_NATIVE_SQL_TEST_ASSEMBLY,
     R_HEADER_SPAN,

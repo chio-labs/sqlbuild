@@ -11,15 +11,15 @@ from tests.integration.src.sqlbuild.cli.commands.main.model_migrations._test_typ
 )
 from tests.integration.src.sqlbuild.cli.commands.main.model_migrations.helpers import (
     CliRun,
-    FingerprintComputation,
     build_each,
+    fingerprint_work,
     load_raw_orders,
     models_with_stored_migration_fingerprints,
     original_order_models,
     plan_json,
     planned_migrations,
-    record_fingerprint_computations,
     renamed_order_models,
+    reset_fingerprint_work,
     run_sqb,
     write_project,
 )
@@ -58,17 +58,17 @@ def test_given_project_state_when_planning_then_fingerprints_only_migration_cand
     test_case: MigrationFingerprintWorkTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     load_raw_orders(project_dir=tmp_path, first_day=1, last_day=5)
     build_each(project_dir=tmp_path, model_sets=test_case.prior_models, capsys=capsys)
     write_project(project_dir=tmp_path, models=test_case.models())
-    computed: list[FingerprintComputation] = record_fingerprint_computations(monkeypatch)
+    reset_fingerprint_work()
 
     migrations: int = len(planned_migrations(plan_json(project_dir=tmp_path, capsys=capsys)))
 
     assert migrations == test_case.expected_migrations
-    assert len(computed) == len(set(computed)) == test_case.expected_computations
+    computations, distinct = fingerprint_work()
+    assert computations == distinct == test_case.expected_computations
 
 
 @pytest.mark.parametrize(
@@ -117,19 +117,19 @@ def test_given_project_state_when_building_then_stores_fingerprints_computed_onc
     test_case: MigrationFingerprintWorkTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     load_raw_orders(project_dir=tmp_path, first_day=1, last_day=5)
     build_each(project_dir=tmp_path, model_sets=test_case.prior_models, capsys=capsys)
     write_project(project_dir=tmp_path, models=test_case.models())
     migrations: int = len(planned_migrations(plan_json(project_dir=tmp_path, capsys=capsys)))
-    computed: list[FingerprintComputation] = record_fingerprint_computations(monkeypatch)
+    reset_fingerprint_work()
 
     result: CliRun = run_sqb(project_dir=tmp_path, args=test_case.command, capsys=capsys)
 
     assert result.exit_code == 0, result.output
     assert migrations == test_case.expected_migrations
-    assert len(computed) == len(set(computed)) == test_case.expected_computations
+    computations, distinct = fingerprint_work()
+    assert computations == distinct == test_case.expected_computations
     assert models_with_stored_migration_fingerprints(tmp_path) == (test_case.expected_stored_models)
 
 

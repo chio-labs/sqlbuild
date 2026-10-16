@@ -4,30 +4,22 @@ import threading
 
 import pytest
 
-import sqlbuild._native as native_module
 from sqlbuild._native import (
     CompiledObjectKey,
     PlannedSqlTests,
     PlannerInputError,
-    PlanWarning,
     SqlTestPlanning,
     SqlTestSelection,
-    WarningSeverity,
     start_sql_test_planning,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from tests.unit.src.sqlbuild.compiler.planner.classes._test_types import (
     BackgroundSqlTestPlanningTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.planner.classes.helpers import SqlTestsProject
 
 _KEYS: frozenset[CompiledObjectKey] = frozenset(
     {CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders")}
-)
-_PLANNED: PlannedSqlTests = PlannedSqlTests(
-    selected_keys=_KEYS,
-    warnings=(
-        PlanWarning(model_name="orders", severity=WarningSeverity.WARNING, message="planned"),
-    ),
 )
 
 
@@ -35,47 +27,10 @@ _PLANNED: PlannedSqlTests = PlannedSqlTests(
     "test_case",
     [
         BackgroundSqlTestPlanningTestCase(
-            description="enabled planning returns the background result",
+            description="enabled planning reads the project's SQL tests once",
             enabled=True,
             expected_planner_calls=1,
         ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_enabled_planning_when_joining_then_returns_planned_tests(
-    test_case: BackgroundSqlTestPlanningTestCase, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    calls: list[frozenset[CompiledObjectKey]] = []
-
-    def plan(
-        *,
-        project: object,
-        adapter: object,
-        selected_keys: frozenset[CompiledObjectKey],
-        sql_test_selection: SqlTestSelection,
-    ) -> PlannedSqlTests:
-        del project, adapter, sql_test_selection
-        calls.append(selected_keys)
-        return _PLANNED
-
-    monkeypatch.setattr(native_module, "plan_selected_sql_tests", plan)
-
-    planning: SqlTestPlanning = start_sql_test_planning(
-        sql_test_selection=SqlTestSelection(),
-        project=object(),  # ty: ignore[invalid-argument-type]
-        adapter=object(),  # ty: ignore[invalid-argument-type]
-        selected_keys=_KEYS,
-        enabled=test_case.enabled,
-    )
-    result: PlannedSqlTests = planning.result()
-
-    assert result == _PLANNED
-    assert calls == [_KEYS] * test_case.expected_planner_calls
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
         BackgroundSqlTestPlanningTestCase(
             description="disabled planning never plans and returns no tests",
             enabled=False,
@@ -84,27 +39,18 @@ def test_given_enabled_planning_when_joining_then_returns_planned_tests(
     ],
     ids=lambda case: case.description,
 )
-def test_given_disabled_planning_when_joining_then_returns_empty_tests(
-    test_case: BackgroundSqlTestPlanningTestCase, monkeypatch: pytest.MonkeyPatch
+def test_given_planning_when_joining_then_returns_planned_tests(
+    test_case: BackgroundSqlTestPlanningTestCase,
 ) -> None:
-    calls: list[frozenset[CompiledObjectKey]] = []
+    reads: list[int] = []
 
-    def plan(
-        *,
-        project: object,
-        adapter: object,
-        selected_keys: frozenset[CompiledObjectKey],
-        sql_test_selection: SqlTestSelection,
-    ) -> PlannedSqlTests:
-        del project, adapter, sql_test_selection
-        calls.append(selected_keys)
-        return _PLANNED
-
-    monkeypatch.setattr(native_module, "plan_selected_sql_tests", plan)
+    def read_tests() -> tuple[object, ...]:
+        reads.append(1)
+        return ()
 
     planning: SqlTestPlanning = start_sql_test_planning(
         sql_test_selection=SqlTestSelection(),
-        project=object(),  # ty: ignore[invalid-argument-type]
+        project=SqlTestsProject(read_tests),  # ty: ignore[invalid-argument-type]
         adapter=object(),  # ty: ignore[invalid-argument-type]
         selected_keys=_KEYS,
         enabled=test_case.enabled,
@@ -112,7 +58,7 @@ def test_given_disabled_planning_when_joining_then_returns_empty_tests(
     result: PlannedSqlTests = planning.result()
 
     assert result == PlannedSqlTests(selected_keys=_KEYS)
-    assert len(calls) == test_case.expected_planner_calls
+    assert len(reads) == test_case.expected_planner_calls
 
 
 @pytest.mark.parametrize(
@@ -128,23 +74,14 @@ def test_given_disabled_planning_when_joining_then_returns_empty_tests(
     ids=lambda case: case.description,
 )
 def test_given_failing_planning_when_joining_then_raises_original_error(
-    test_case: BackgroundSqlTestPlanningTestCase, monkeypatch: pytest.MonkeyPatch
+    test_case: BackgroundSqlTestPlanningTestCase,
 ) -> None:
-    def plan(
-        *,
-        project: object,
-        adapter: object,
-        selected_keys: frozenset[CompiledObjectKey],
-        sql_test_selection: SqlTestSelection,
-    ) -> PlannedSqlTests:
-        del project, adapter, selected_keys, sql_test_selection
+    def read_tests() -> tuple[object, ...]:
         raise PlannerInputError(str(test_case.expected_error))
-
-    monkeypatch.setattr(native_module, "plan_selected_sql_tests", plan)
 
     planning: SqlTestPlanning = start_sql_test_planning(
         sql_test_selection=SqlTestSelection(),
-        project=object(),  # ty: ignore[invalid-argument-type]
+        project=SqlTestsProject(read_tests),  # ty: ignore[invalid-argument-type]
         adapter=object(),  # ty: ignore[invalid-argument-type]
         selected_keys=_KEYS,
         enabled=test_case.enabled,
@@ -165,28 +102,21 @@ def test_given_failing_planning_when_joining_then_raises_original_error(
     ids=lambda case: case.description,
 )
 def test_given_running_planning_when_listing_threads_then_no_python_worker_blocks_exit(
-    test_case: BackgroundSqlTestPlanningTestCase, monkeypatch: pytest.MonkeyPatch
+    test_case: BackgroundSqlTestPlanningTestCase,
 ) -> None:
     started: threading.Event = threading.Event()
     release: threading.Event = threading.Event()
+    reads: list[int] = []
 
-    def plan(
-        *,
-        project: object,
-        adapter: object,
-        selected_keys: frozenset[CompiledObjectKey],
-        sql_test_selection: SqlTestSelection,
-    ) -> PlannedSqlTests:
-        del project, adapter, sql_test_selection
+    def read_tests() -> tuple[object, ...]:
+        reads.append(1)
         started.set()
         release.wait(timeout=5)
-        return PlannedSqlTests(selected_keys=selected_keys)
-
-    monkeypatch.setattr(native_module, "plan_selected_sql_tests", plan)
+        return ()
 
     planning: SqlTestPlanning = start_sql_test_planning(
         sql_test_selection=SqlTestSelection(),
-        project=object(),  # ty: ignore[invalid-argument-type]
+        project=SqlTestsProject(read_tests),  # ty: ignore[invalid-argument-type]
         adapter=object(),  # ty: ignore[invalid-argument-type]
         selected_keys=_KEYS,
         enabled=test_case.enabled,
@@ -199,4 +129,4 @@ def test_given_running_planning_when_listing_threads_then_no_python_worker_block
     planning.result()
 
     assert daemon_by_name.get("sqlbuild-test-planning", True) is True
-    assert test_case.expected_planner_calls == 1
+    assert len(reads) == test_case.expected_planner_calls

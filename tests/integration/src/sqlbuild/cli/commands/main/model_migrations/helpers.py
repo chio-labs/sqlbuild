@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import dedent
@@ -13,8 +13,7 @@ import duckdb
 import pytest
 from _pytest.capture import CaptureResult
 
-import sqlbuild._native as fingerprint_cache_module
-from sqlbuild._native import FINGERPRINT_TABLE_NAME
+from sqlbuild._native import FINGERPRINT_TABLE_NAME, migration_fingerprint_work_info
 from sqlbuild._native import run_cli as main
 from sqlbuild.adapter.contract.models import MigrationStagePlan
 from sqlbuild.adapter.contract.types import MigrationTransfer
@@ -750,34 +749,16 @@ def state_tables(*, project_dir: Path, schema: str) -> tuple[str, ...]:
     )
 
 
-type FingerprintComputation = tuple[str, str, tuple[tuple[str, str], ...], str | None]
+def fingerprint_work() -> tuple[int, int]:
+    """Return migration fingerprints computed and distinct requests since the last reset."""
+
+    return migration_fingerprint_work_info()
 
 
-def record_fingerprint_computations(
-    monkeypatch: pytest.MonkeyPatch,
-) -> list[FingerprintComputation]:
-    """Record every migration fingerprint the planner actually computes."""
+def reset_fingerprint_work() -> None:
+    """Forget migration fingerprint work recorded so far in this process."""
 
-    computed: list[FingerprintComputation] = []
-    original: Callable[..., str | None] = fingerprint_cache_module.build_migration_fingerprint
-
-    def recording(
-        *,
-        query_sql: str,
-        metadata_json: str,
-        ref_identities: Mapping[str, str],
-        dialect: str | None,
-    ) -> str | None:
-        computed.append((query_sql, metadata_json, tuple(sorted(ref_identities.items())), dialect))
-        return original(
-            query_sql=query_sql,
-            metadata_json=metadata_json,
-            ref_identities=ref_identities,
-            dialect=dialect,
-        )
-
-    monkeypatch.setattr(fingerprint_cache_module, "build_migration_fingerprint", recording)
-    return computed
+    migration_fingerprint_work_info(reset=True)
 
 
 def models_with_stored_migration_fingerprints(project_dir: Path) -> tuple[str, ...]:

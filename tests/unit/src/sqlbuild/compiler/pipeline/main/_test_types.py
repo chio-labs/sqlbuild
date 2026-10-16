@@ -35,7 +35,9 @@ class PlanWorkTestCase:
 @dataclass(frozen=True)
 class PipelinePhaseTimingTestCase:
     description: str
-    clock_values: tuple[float, ...]
+    compile_seconds: float
+    connection_seconds: float
+    rules_seconds: float
     expected_compile_seconds: float
     expected_planning_seconds: float
     expected_total_seconds: float

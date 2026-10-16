@@ -35,15 +35,27 @@ pub(crate) fn build_migration_fingerprint(
         let (key, value): (String, String) = item?.extract()?;
         identities.insert(key, value);
     }
-    let sql: String = arguments.value("query_sql")?.extract()?;
-    let metadata: String = arguments.value("metadata_json")?.extract()?;
     let dialect: Option<String> = arguments.value("dialect")?.extract()?;
-    migration_fingerprint::migration_fingerprint(
-        &sql,
-        &metadata,
+    fingerprint(
+        &arguments.value("query_sql")?.extract::<String>()?,
+        &arguments.value("metadata_json")?.extract::<String>()?,
         &identities,
+        dialect.as_deref(),
+    )
+}
+
+/// The migration fingerprint of SQL and metadata through rename identities, `generic` by default.
+pub(crate) fn fingerprint(
+    sql: &str,
+    metadata: &str,
+    identities: &BTreeMap<String, String>,
+    dialect: Option<&str>,
+) -> PyResult<Option<String>> {
+    migration_fingerprint::migration_fingerprint(
+        sql,
+        metadata,
+        identities,
         dialect
-            .as_deref()
             .filter(|value| !value.is_empty())
             .unwrap_or("generic"),
     )

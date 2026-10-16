@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import ANY, Mock
+from unittest.mock import ANY
 
 import pytest
 
@@ -49,8 +49,6 @@ def test_given_project_when_compiling_then_native_seams_answer(
 ) -> None:
     prepared_project: Path = tmp_path / "orders"
     prepare_compile_reuse_project(project_dir=prepared_project)
-    native_sql_test_planning: Mock = Mock(wraps=native_module.plan_compiled_sql_tests)
-    monkeypatch.setattr(native_module, "plan_compiled_sql_tests", native_sql_test_planning)
     native_run, native_seams = seam_recording_compile(
         project_dir=prepared_project, monkeypatch=monkeypatch, capsys=capsys
     )
@@ -58,7 +56,6 @@ def test_given_project_when_compiling_then_native_seams_answer(
     assert native_run.returncode == 0, native_run.stderr
     assert native_run.compiled
     assert native_seams == test_case.expected_native_returns
-    planned_counts: list[int] = []
     for seams in (native_seams,):
         assert isinstance(seams["build_project_column_lineage"][0], ProjectColumnLineage)
         assert isinstance(seams["infer_native_expression_source_shapes"][0], tuple)
@@ -70,14 +67,10 @@ def test_given_project_when_compiling_then_native_seams_answer(
         assert isinstance(planned_artifacts, tuple)
         assert planned_artifacts
         assert all(isinstance(artifact, NativeSqlTestArtifact) for artifact in planned_artifacts)
-        planned_counts.append(len(planned_artifacts))
         completed: object = seams["complete_semantic_project"][0]
         assert isinstance(completed, native_module.NativeProjectView)
         assert any(model.inferred_columns for model in completed.models)
         assert isinstance(seams["evaluate_model_contracts"][0], ContractValidationResult)
-    assert [
-        len(call.args[0].tests) for call in native_sql_test_planning.call_args_list
-    ] == planned_counts
 
 
 if __name__ == "__main__":

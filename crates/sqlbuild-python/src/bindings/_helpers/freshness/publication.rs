@@ -8,12 +8,13 @@ use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, within,
 };
+use crate::bindings::_helpers::cost_telemetry::context::CostContext;
 use crate::bindings::_helpers::freshness::state_io::write_source_freshness_records;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// Observed records grouped by `(database, schema)` in first-seen order.
 type RecordsByLocation<'py> = Vec<(
@@ -27,7 +28,7 @@ fn successful_model_names<'py>(result: &Bound<'py, PyAny>) -> PyResult<Vec<Bound
     let success: Bound<'py, PyAny> =
         host::entry(py, ExecutorHost::ExecutionStatus)?.getattr("SUCCESS")?;
     let mut names: Vec<Bound<'py, PyAny>> = Vec::new();
-    for model_result in native_field(result, "model_results")?.try_iter()? {
+    for model_result in native_field(&result, "model_results")?.try_iter()? {
         let model_result: Bound<'py, PyAny> = model_result?;
         let status: Bound<'py, PyAny> = native_field(&model_result, "status")?;
         let value: Bound<'py, PyAny> = status.getattr_opt("value")?.unwrap_or(status);
@@ -105,12 +106,12 @@ fn eligible_records<'py>(
     run_id: &Bound<'py, PyAny>,
 ) -> PyResult<RecordsByLocation<'py>> {
     let py: Python<'py> = plan.py();
-    let freshness: Bound<'py, PyAny> = native_field(plan, "source_freshness")?;
+    let freshness: Bound<'py, PyAny> = native_field(&plan, "source_freshness")?;
     if freshness.is_none() || native_field(&freshness, "propagation")?.is_none() {
         return Ok(Vec::new());
     }
     let entries_by_name: Bound<'py, PyDict> = PyDict::new(py);
-    for entry in native_field(plan, "model_entries")?.try_iter()? {
+    for entry in native_field(&plan, "model_entries")?.try_iter()? {
         let entry: Bound<'py, PyAny> = entry?;
         entries_by_name.set_item(native_field(&entry, "name")?, entry)?;
     }
@@ -158,23 +159,23 @@ fn renderers<'py>(adapter: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         &[
             (
                 "render_qualified_name",
-                native_field(adapter, "render_qualified_name")?,
+                native_field(&adapter, "render_qualified_name")?,
             ),
             (
                 "render_framework_type",
-                native_field(adapter, "render_framework_type")?,
+                native_field(&adapter, "render_framework_type")?,
             ),
             (
                 "render_insert_records_sql",
-                native_field(adapter, "render_insert_source_freshness_records_sql")?,
+                native_field(&adapter, "render_insert_source_freshness_records_sql")?,
             ),
             (
                 "render_create_table_sql",
-                native_field(adapter, "render_create_source_freshness_table_sql")?,
+                native_field(&adapter, "render_create_source_freshness_table_sql")?,
             ),
             (
                 "render_create_index_sqls",
-                native_field(adapter, "render_create_source_freshness_index_sqls")?,
+                native_field(&adapter, "render_create_source_freshness_index_sqls")?,
             ),
         ],
     )
@@ -187,11 +188,10 @@ fn write_records<'py>(
     grouped: &RecordsByLocation<'py>,
 ) -> PyResult<()> {
     let py: Python<'py> = adapter.py();
-    let cost_context: Bound<'py, PyAny> = registry::native(py, NativeAttr::CostContext)?;
     for ((database, schema), records) in grouped {
         let mut by_source: Vec<(Bound<'py, PyAny>, Vec<Bound<'py, PyAny>>)> = Vec::new();
         for record in records {
-            let source_name: Bound<'py, PyAny> = native_field(record, "source_name")?;
+            let source_name: Bound<'py, PyAny> = native_field(&record, "source_name")?;
             let mut position: Option<usize> = None;
             for (index, (known, _)) in by_source.iter().enumerate() {
                 if known.eq(&source_name)? {
@@ -205,17 +205,24 @@ fn write_records<'py>(
             }
         }
         for (source_name, source_records) in by_source {
-            let scope: Bound<'py, PyAny> = call_with(
-                &native_field(&cost_context, "resource_scope")?,
-                &[
-                    ("resource_type", PyString::new(py, "source").into_any()),
-                    ("resource_name", source_name),
-                    (
-                        "phase",
-                        PyString::new(py, "freshness_finalization").into_any(),
-                    ),
-                ],
-            )?;
+            let scope: Bound<'py, PyAny> = Bound::new(
+                py,
+                CostContext::resource_scope(
+                    py,
+                    Some(keywords(
+                        py,
+                        &[
+                            ("resource_type", PyString::new(py, "source").into_any()),
+                            ("resource_name", source_name),
+                            (
+                                "phase",
+                                PyString::new(py, "freshness_finalization").into_any(),
+                            ),
+                        ],
+                    )?),
+                )?,
+            )?
+            .into_any();
             within(&scope, |_| {
                 write_source_freshness_records(
                     py,
@@ -223,7 +230,7 @@ fn write_records<'py>(
                         py,
                         &[
                             ("connection", connection.clone()),
-                            ("execute", native_field(adapter, "execute")?),
+                            ("execute", native_field(&adapter, "execute")?),
                             ("database", database.clone()),
                             ("schema", schema.clone()),
                             ("records", PyTuple::new(py, &source_records)?.into_any()),

@@ -4,6 +4,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
 
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet};
 use pyo3::{pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_analysis::planner_fixtures::main::fixture_schema::fixture_schema;
@@ -24,8 +25,8 @@ use crate::bindings::_helpers::planner_strategy::models::{
 };
 use crate::bindings::_helpers::planner_strategy::types::{FixtureKey, FixtureRelationInput};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
+
+static FIXTURE_READS: PyOnceLock<Py<FixtureReadCacheHost>> = PyOnceLock::new();
 
 /// Count one batch resolution of SQL-test model chains.
 pub(crate) fn count_chain_resolution(py: Python<'_>) -> PyResult<()> {
@@ -33,8 +34,12 @@ pub(crate) fn count_chain_resolution(py: Python<'_>) -> PyResult<()> {
     Ok(())
 }
 
-fn work_counts(py: Python<'_>) -> PyResult<Bound<'_, FixtureReadCacheHost>> {
-    Ok(registry::native(py, NativeAttr::FixtureReadCache)?.cast_into::<FixtureReadCacheHost>()?)
+/// The extension-wide fixture read cache and planning work counters.
+pub(crate) fn work_counts(py: Python<'_>) -> PyResult<Bound<'_, FixtureReadCacheHost>> {
+    Ok(FIXTURE_READS
+        .get_or_try_init(py, || Py::new(py, FixtureReadCacheHost::default()))?
+        .bind(py)
+        .clone())
 }
 
 /// The planning context of a project, over its models or the given name-to-model map.
@@ -48,7 +53,7 @@ pub(crate) fn planning_context(
         Some(models) => models,
         None => {
             let models = PyDict::new(py);
-            for model in native_field(project, "models")?.try_iter()? {
+            for model in native_field(&project, "models")?.try_iter()? {
                 let model = model?;
                 models.set_item(model_reads::name_object(&model)?, &model)?;
             }

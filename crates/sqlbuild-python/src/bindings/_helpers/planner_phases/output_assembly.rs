@@ -17,16 +17,16 @@ use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::objects::{
     native, replace, sorted_names, strings, text, tuple,
 };
-use crate::bindings::_helpers::planner_phases::retention::plan_retention;
+use crate::bindings::_helpers::planner_phases::retention::{plan_retention, plan_table_types};
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::planner_phases::runtime::warehouse_field;
 use crate::bindings::_helpers::planner_warehouse::source_freshness::source_freshness_unknown_warnings;
-use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 fn concat<'py>(py: Python<'py>, parts: &[Bound<'py, PyAny>]) -> PyResult<Bound<'py, PyAny>> {
     let mut items: Vec<_> = Vec::new();
@@ -112,16 +112,13 @@ pub(crate) fn base_plan_output<'py>(
             changes: reconciliation.changes.clone(),
             model_entries: entries.entries,
             model_warnings: entries.warnings,
-            reload_sources: native_field(overrides, "reload_sources")?,
+            reload_sources: native_field(&overrides, "reload_sources")?,
             extras,
         })?,
         metadata: Vec::new(),
     };
     output.set("source_freshness", source_freshness.clone());
-    output.set(
-        "cursor_overrides",
-        native_field(overrides, "cursor_overrides")?,
-    );
+    output.set("cursor_overrides", native_field(&overrides, "cursor_overrides")?);
     Ok(output)
 }
 
@@ -228,15 +225,7 @@ pub(crate) fn add_storage_policies<'py>(
         ],
     )?;
     let selected = class_field(scopes, |s: &PlannerScopeResolution| &s.selected_scope)?;
-    let table_types = native(
-        py,
-        NativeAttr::PlanTableTypes,
-        &[
-            ("runtime", runtime.clone()),
-            ("warehouse", warehouse.clone()),
-            ("scope", selected.clone()),
-        ],
-    )?;
+    let table_types = plan_table_types(runtime, warehouse, &selected)?;
     let retention = plan_retention(runtime, warehouse, &selected)?;
     output.set("model_entries", entries);
     output.set("migration_entries", migration_entries);
@@ -266,7 +255,7 @@ pub(crate) fn add_plan_warnings<'py>(
         let warnings = concat(py, &[output.field("warnings")?, freshness])?;
         output.set("warnings", warnings);
     }
-    if !native_field(policies, "selection_diagnostics")?.is_truthy()? {
+    if !native_field(&policies, "selection_diagnostics")?.is_truthy()? {
         return Ok(output);
     }
     let stale = object(
@@ -336,7 +325,7 @@ fn age_names<'py>(statuses: &Bound<'py, PyAny>, wanted: &str) -> PyResult<Bound<
 
 fn freshness_metadata<'py>(source_freshness: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py = source_freshness.py();
-    let propagation = native_field(source_freshness, "propagation")?;
+    let propagation = native_field(&source_freshness, "propagation")?;
     let propagated = |field: &str| -> PyResult<Bound<'py, PyAny>> {
         if propagation.is_none() {
             return tuple(py, Vec::new());
@@ -352,32 +341,29 @@ fn freshness_metadata<'py>(source_freshness: &Bound<'py, PyAny>) -> PyResult<Bou
         let unknown = unknown?;
         let detail = PyDict::new(py);
         detail.set_item("source_name", native_field(&unknown, "source_name")?)?;
-        detail.set_item(
-            "reason",
-            native_field(&unknown, "reason")?.getattr("value")?,
-        )?;
+        detail.set_item("reason", native_field(&unknown, "reason")?.getattr("value")?)?;
         detail.set_item("message", native_field(&unknown, "message")?)?;
         details.push(detail.into_any());
     }
-    let statuses = native_field(source_freshness, "age_statuses")?;
+    let statuses = native_field(&source_freshness, "age_statuses")?;
     let metadata = PyDict::new(py);
     metadata.set_item(
         "observed_source_names",
-        source_names(&native_field(source_freshness, "observed_records")?)?,
+        source_names(&native_field(&source_freshness, "observed_records")?)?,
     )?;
     metadata.set_item(
         "changed_source_names",
-        source_names(&native_field(source_freshness, "changed_identities")?)?,
+        source_names(&native_field(&source_freshness, "changed_identities")?)?,
     )?;
     metadata.set_item(
         "unchanged_source_names",
-        source_names(&native_field(source_freshness, "unchanged_identities")?)?,
+        source_names(&native_field(&source_freshness, "unchanged_identities")?)?,
     )?;
     metadata.set_item(
         "unknown_source_names",
         sorted_names(
             py,
-            strings(&native_field(source_freshness, "unknown_source_names")?)?,
+            strings(&native_field(&source_freshness, "unknown_source_names")?)?,
         )?,
     )?;
     metadata.set_item("unknown_source_details", tuple(py, details)?)?;
@@ -397,7 +383,7 @@ pub(crate) fn add_plan_metadata<'py>(
     let py = source_freshness.py();
     let diagnostics = PyDict::new(py);
     diagnostics.set_item("mode", text(py, "direct"))?;
-    diagnostics.set_item("enabled", native_field(policies, "selection_diagnostics")?)?;
+    diagnostics.set_item("enabled", native_field(&policies, "selection_diagnostics")?)?;
     output.metadata.push((
         "direct_source_freshness",
         freshness_metadata(source_freshness)?,

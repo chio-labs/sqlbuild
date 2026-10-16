@@ -3,7 +3,7 @@
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult};
 use pyo3::wrap_pyfunction;
 
-use crate::bindings::_helpers::sql_test_glue::{authored_ctes, compiled_tests, planning};
+use crate::bindings::_helpers::sql_test_glue::{authored_ctes, compiled_tests};
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(
@@ -23,6 +23,5 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module
     )?)?;
     authored_ctes::register(module)?;
-    planning::register(module)?;
     compiled_tests::register(module)
 }

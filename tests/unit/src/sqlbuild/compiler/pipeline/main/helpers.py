@@ -17,6 +17,7 @@ from sqlbuild._native import (
     SourceEntry,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 
 
@@ -87,3 +88,30 @@ def build_plan_output_with_model(name: str = "orders") -> PlanOutput:
         model_entries=(entry,),
         selected_keys=frozenset((entry.key,)),
     )
+
+
+class ManualClock:
+    """A monotonic clock that only moves when a test advances it."""
+
+    def __init__(self) -> None:
+        self.now: float = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+
+class SlowConnectionDuckDbAdapter(DuckDbAdapter):
+    """An in-memory DuckDB adapter whose connections take `connection_seconds` on a manual clock."""
+
+    def __init__(self, *, clock: ManualClock, connection_seconds: float) -> None:
+        super().__init__()
+        self._clock: ManualClock = clock
+        self._connection_seconds: float = connection_seconds
+
+    def connect(self, config: dict[str, Any]) -> Any:
+        del config
+        self._clock.advance(self._connection_seconds)
+        return super().connect({})
