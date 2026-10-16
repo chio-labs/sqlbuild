@@ -13,3 +13,7 @@ pub(crate) const MODEL_REFERENCE: &str = "ref";
 pub(crate) const SEED_REFERENCE: &str = "seed";
 pub(crate) const SOURCE_REFERENCE: &str = "source";
 pub(crate) const DDL_SEPARATOR: &str = ";\n\n";
+/// The lineage confidence whose reads fixtures must provide.
+pub(crate) const HIGH_CONFIDENCE: &str = "high";
+/// The lineage transform kind that passes an input column's type through.
+pub(crate) const DIRECT_TRANSFORM: &str = "direct";

@@ -22,9 +22,11 @@ use sqlbuild_analysis::planner_changes::models::{
     SchemaFindingRow,
 };
 
+use crate::bindings::_helpers::analysis::model_reads::{inferred_rows, star_flags};
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::compiled_project::compiled_model_view::InferredRow;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
@@ -542,26 +544,11 @@ fn model_schema_findings<'py>(
             dynamic = Some(families);
         }
     }
-    let inferred: Option<Vec<(String, Option<String>)>> = {
-        let columns: Bound<'py, PyAny> = model.getattr("inferred_columns")?;
-        if columns.is_none() {
-            None
-        } else {
-            let mut items: Vec<(String, Option<String>)> = Vec::new();
-            for column in columns.try_iter()? {
-                let column: Bound<'py, PyAny> = column?;
-                items.push((
-                    column.getattr("name")?.extract()?,
-                    column.getattr("type")?.extract()?,
-                ));
-            }
-            Some(items)
-        }
-    };
+    let inferred: Option<Vec<(String, Option<String>)>> = inferred_rows(model)?.map(typed_names);
     if yml.is_empty() && inferred.as_ref().is_none_or(Vec::is_empty) {
         return Ok(Vec::new());
     }
-    let inferred_schema_complete: bool = !model.getattr("fast_lineage_has_star")?.is_truthy()?;
+    let inferred_schema_complete: bool = !star_flags(model)?.0;
     schema_findings_of(
         SchemaColumns {
             yml,
@@ -571,6 +558,14 @@ fn model_schema_findings<'py>(
         (type_enforcement, inferred_schema_complete),
         (dynamic, dialect),
     )
+}
+
+fn typed_names(rows: Vec<InferredRow>) -> Vec<(String, Option<String>)> {
+    let mut columns: Vec<(String, Option<String>)> = Vec::with_capacity(rows.len());
+    for (name, column_type, _) in rows {
+        columns.push((name, column_type));
+    }
+    columns
 }
 
 fn column_pairs(columns: &Bound<'_, PyAny>) -> PyResult<Vec<(String, String)>> {

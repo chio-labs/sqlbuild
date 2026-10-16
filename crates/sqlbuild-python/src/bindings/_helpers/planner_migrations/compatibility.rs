@@ -1,5 +1,6 @@
 //! Convert existing planner contracts for origin compatibility checks.
 
+use crate::bindings::_helpers::analysis::model_reads::inferred_rows;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -166,7 +167,7 @@ fn check_migration_compatibility<'py>(
         ],
     )?;
     let schema = model.getattr("schema_entry")?;
-    let mut has_columns = model.getattr("inferred_columns")?.is_truthy()?;
+    let mut has_columns = inferred_rows(&model)?.is_some_and(|rows| !rows.is_empty());
     if !schema.is_none() {
         for column in schema.getattr("columns")?.try_iter()? {
             has_columns |= !column?.getattr("type")?.is_none();

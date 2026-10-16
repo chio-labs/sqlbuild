@@ -1,5 +1,6 @@
 //! Materialize column decisions from native proofs and live evidence.
 
+use crate::bindings::_helpers::analysis::model_reads::inferred_rows;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
@@ -52,11 +53,8 @@ pub(super) fn decide<'py>(
             outputs.push(projection?.getattr("key")?.extract::<String>()?);
         }
     } else {
-        let inferred = candidate.model.getattr("inferred_columns")?;
-        if !inferred.is_none() {
-            for column in inferred.try_iter()? {
-                outputs.push(lower(&column?.getattr("name")?)?);
-            }
+        for (name, _, _) in inferred_rows(&candidate.model)?.unwrap_or_default() {
+            outputs.push(name.to_lowercase());
         }
     }
     let relation = host::entry(py, ExecutorHost::MigrationRelationForLocation)?

@@ -9,9 +9,10 @@ use sqlbuild_analysis::planner_fixtures::models::{
     FixtureTypeModel, FixtureTypeProjection, FixtureTypeRead, FixtureTypeState,
 };
 
-use crate::bindings::_helpers::planner_strategy::fixture_values::folded;
-use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
+use sqlbuild_core::text::main::python_casefold::python_casefold;
+
+use crate::bindings::_helpers::analysis::model_reads::lineage_facts;
+use crate::bindings::_helpers::planner_strategy::constants::DIRECT_TRANSFORM;
 
 #[pyfunction]
 #[pyo3(signature = (*, base_expected_types, ordered_model_names, model_map))]
@@ -77,30 +78,20 @@ pub(crate) fn expected_fixture_types<'py>(
 }
 
 fn projections(model: &Bound<'_, PyAny>) -> PyResult<Vec<FixtureTypeProjection>> {
-    let lineage = model.getattr("fast_lineage_columns")?;
     let mut projections: Vec<FixtureTypeProjection> = Vec::new();
-    if lineage.is_none() {
-        return Ok(projections);
-    }
-    let direct = registry::class(model.py(), RecordId::ColumnTransformKind)?.getattr("DIRECT")?;
-    for column in lineage.try_iter()? {
-        let column = column?;
-        if !column.getattr("transform_kind")?.eq(&direct)? {
+    for (output_column, transform, _, sources) in lineage_facts(model)?.unwrap_or_default() {
+        if transform != DIRECT_TRANSFORM {
             continue;
         }
-        let mut upstream: Vec<FixtureTypeRead> = Vec::new();
-        for source in column.getattr("upstream_columns")?.try_iter()? {
-            let source = source?;
+        let mut upstream: Vec<FixtureTypeRead> = Vec::with_capacity(sources.len());
+        for (resource_type, resource_name, column_name) in sources {
             upstream.push(FixtureTypeRead {
-                key: (
-                    source.getattr("resource_type")?.extract()?,
-                    source.getattr("resource_name")?.extract()?,
-                ),
-                column: folded(&source.getattr("column_name")?)?,
+                key: (resource_type, resource_name),
+                column: python_casefold(&column_name),
             });
         }
         projections.push(FixtureTypeProjection {
-            output_column: folded(&column.getattr("output_column")?)?,
+            output_column: python_casefold(&output_column),
             upstream,
         });
     }

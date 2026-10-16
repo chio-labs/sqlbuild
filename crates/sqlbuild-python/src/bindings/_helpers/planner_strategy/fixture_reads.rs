@@ -13,10 +13,12 @@ use sqlbuild_analysis::required_columns::models::ColumnRead;
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 use std::collections::{HashMap, HashSet};
 
+use crate::bindings::_helpers::analysis::model_reads::{lineage_facts, proven_inputs, star_flags};
 use crate::bindings::_helpers::boundary::panics::value_error;
+use crate::bindings::_helpers::planner_strategy::constants::HIGH_CONFIDENCE;
 use crate::bindings::_helpers::planner_strategy::fixture_values::columns;
 use crate::bindings::_helpers::planner_strategy::models::FixtureReadCacheHost;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 
@@ -118,26 +120,15 @@ pub(crate) fn required_fixture_columns<'py>(
 
 fn lineage_reads(model: &Bound<'_, PyAny>) -> PyResult<Vec<ColumnRead>> {
     let mut reads: Vec<ColumnRead> = Vec::new();
-    let facts = model.getattr("fast_lineage_columns")?;
-    if facts.is_none() {
-        return Ok(reads);
-    }
-    for fact in facts.try_iter()? {
-        let fact = fact?;
-        if !fact.getattr("confidence")?.eq(registry::class(
-            model.py(),
-            RecordId::ColumnLineageConfidence,
-        )?
-        .getattr("HIGH")?)?
-        {
+    for (_, _, confidence, sources) in lineage_facts(model)?.unwrap_or_default() {
+        if confidence != HIGH_CONFIDENCE {
             continue;
         }
-        for source in fact.getattr("upstream_columns")?.try_iter()? {
-            let source = source?;
+        for (resource_type, resource_name, column_name) in sources {
             reads.push(ColumnRead {
-                resource_type: source.getattr("resource_type")?.extract()?,
-                resource_name: source.getattr("resource_name")?.extract()?,
-                column_name: source.getattr("column_name")?.extract()?,
+                resource_type,
+                resource_name,
+                column_name,
             });
         }
     }
@@ -149,16 +140,14 @@ fn model_stars(
     schema: &[FixtureStarRelation],
     adapter: &Bound<'_, PyAny>,
 ) -> PyResult<Vec<(String, String)>> {
-    if !model.getattr("fast_lineage_has_star")?.is_truthy()? {
+    if !star_flags(model)?.0 {
         return Ok(Vec::new());
     }
     let mut deps: Vec<(String, String)> = Vec::new();
-    for dependency in model.getattr("deps")?.try_iter()? {
-        let dependency = dependency?;
-        let key = (
-            dependency.getattr("resource_type")?.extract::<String>()?,
-            dependency.getattr("name")?.extract::<String>()?,
-        );
+    for key in model
+        .getattr("dep_rows")?
+        .extract::<Vec<(String, String)>>()?
+    {
         if schema.iter().any(|relation| relation.key == key) {
             deps.push(key);
         }
@@ -175,13 +164,7 @@ fn model_stars(
             });
         }
     }
-    let contract = model.getattr("dynamic_column_contract")?;
-    let inputs: Option<Vec<String>> =
-        if !contract.is_none() && contract.getattr("output_proven")?.is_truthy()? {
-            Some(contract.getattr("input_relations")?.extract()?)
-        } else {
-            None
-        };
+    let inputs: Option<Vec<String>> = proven_inputs(model)?;
     let dialect: Option<String> =
         if inputs.is_none() && selected.iter().any(|relation| !relation.columns.is_empty()) {
             adapter

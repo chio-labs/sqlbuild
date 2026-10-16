@@ -309,6 +309,25 @@ impl NativeCompiledModel {
         &self.overlay.poisoned
     }
 
+    /// The kept lineage rows with their transform and confidence codes, or `None`.
+    pub(crate) fn lineage_rows(&self, py: Python<'_>) -> PyResult<Option<Vec<LineageRow>>> {
+        self.compiled(py, |compiled, _| {
+            Ok(compiled.analysis.lineage_rows().map(<[LineageRow]>::to_vec))
+        })
+    }
+
+    /// The input relations of a dynamic pivot proof that proved its outputs, else `None`.
+    pub(crate) fn proven_inputs(&self, py: Python<'_>) -> PyResult<Option<Vec<String>>> {
+        self.compiled(py, |compiled, _| {
+            Ok(compiled
+                .analysis
+                .proof
+                .as_ref()
+                .filter(|proof| proof.output_proven)
+                .map(|proof| proof.input_relations.clone()))
+        })
+    }
+
     fn model_file_attribute(&self, py: Python<'_>, name: &str) -> PyResult<Py<PyAny>> {
         self.read(py, |record, py| {
             Ok(record.model_file.bind(py).getattr(name)?.unbind())
