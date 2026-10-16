@@ -20,6 +20,7 @@ use sqlbuild_rules::rule_catalogue::models::{FingerprintRule, OptionText, RuleTe
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::fields::field as record_field;
 use crate::bindings::_helpers::rules::catalogue::{
     native_rules_config, references_custom_rules, rule_catalogue, select_rules, verify_custom_rules,
 };
@@ -36,8 +37,8 @@ const SKILL_PATHS: [&str; 3] = [
 const SKILL_LOCK_DIRECTORY: &str = "sqlbuild-rules-skill-locks";
 const FRESH_SKILL: &str = "fresh";
 
-fn text_field(object: &Bound<'_, PyAny>, field: &str) -> PyResult<String> {
-    object.getattr(field)?.extract()
+fn text_field(object: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
+    record_field(object, name)?.extract()
 }
 
 fn repr_text(value: &Bound<'_, PyAny>) -> PyResult<String> {
@@ -48,17 +49,16 @@ fn repr_text(value: &Bound<'_, PyAny>) -> PyResult<String> {
 fn rule_text(rule: &Bound<'_, PyAny>, config: Option<&Bound<'_, PyAny>>) -> PyResult<RuleText> {
     let code: String = text_field(rule, "code")?;
     let configured: Option<Bound<'_, PyAny>> = match config {
-        Some(config) => config
-            .getattr("rule_options")?
+        Some(config) => record_field(config, "rule_options")?
             .cast_into::<PyDict>()?
             .get_item(&code)?,
         None => None,
     };
     let mut options: Vec<OptionText> = Vec::new();
-    for option in rule.getattr("options")?.try_iter()? {
+    for option in record_field(rule, "options")?.try_iter()? {
         let option: Bound<'_, PyAny> = option?;
         let name: String = text_field(&option, "name")?;
-        let default: Bound<'_, PyAny> = option.getattr("default")?;
+        let default: Bound<'_, PyAny> = record_field(&option, "default")?;
         let effective: Bound<'_, PyAny> = match &configured {
             Some(values) => values.call_method1("get", (&name, &default))?,
             None => default.clone(),
@@ -70,16 +70,16 @@ fn rule_text(rule: &Bound<'_, PyAny>, config: Option<&Bound<'_, PyAny>>) -> PyRe
             effective_repr: repr_text(&effective)?,
         });
     }
-    let guidance: Bound<'_, PyAny> = rule.getattr("guidance")?;
+    let guidance: Bound<'_, PyAny> = record_field(rule, "guidance")?;
     Ok(RuleText {
         code,
         family: text_field(rule, "family")?,
         slug: text_field(rule, "slug")?,
         message: text_field(rule, "message")?,
         remediation: text_field(rule, "remediation")?,
-        enabled_by_default: rule.getattr("enabled_by_default")?.is_truthy()?,
-        custom: rule.getattr("custom")?.is_truthy()?,
-        source: rule.getattr("source")?.extract()?,
+        enabled_by_default: record_field(rule, "enabled_by_default")?.is_truthy()?,
+        custom: record_field(rule, "custom")?.is_truthy()?,
+        source: record_field(rule, "source")?.extract()?,
         options,
         good_example: if guidance.is_none() {
             None
@@ -103,14 +103,14 @@ fn fingerprint_rule(
     rule: &Bound<'_, PyAny>,
     project_dir: &Bound<'_, PyAny>,
 ) -> PyResult<FingerprintRule> {
-    let custom: bool = rule.getattr("custom")?.is_truthy()?;
+    let custom: bool = record_field(rule, "custom")?.is_truthy()?;
     Ok(FingerprintRule {
         code: text_field(rule, "code")?,
         family: text_field(rule, "family")?,
         slug: text_field(rule, "slug")?,
         message: text_field(rule, "message")?,
         remediation: text_field(rule, "remediation")?,
-        source: rule.getattr("source")?.extract()?,
+        source: record_field(rule, "source")?.extract()?,
         implementation_hash: if custom {
             custom_rule_implementation_fingerprint(rule, project_dir, None)?
         } else {
@@ -130,7 +130,7 @@ fn render_skills(
     let rules = select_rules(&catalogue, config, project_dir, None)?;
     let mut custom_selected: bool = false;
     for rule in &rules {
-        custom_selected |= rule.getattr("custom")?.is_truthy()?;
+        custom_selected |= record_field(rule, "custom")?.is_truthy()?;
     }
     if custom_selected {
         verify_custom_rules(&rules, project_dir)?;

@@ -9,7 +9,7 @@ use pyo3::prelude::{
     Bound, IntoPyObject, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyRef, PyResult,
     Python,
 };
-use pyo3::types::{PyBytes, PyDict, PyString, PyTuple};
+use pyo3::types::{PyBytes, PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_core::text::main::python_splitlines::python_splitlines;
 use sqlbuild_rules::rule_cache::main::file_rule_key::file_rule_key;
@@ -22,12 +22,14 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::compiled_project::compiled_model_view::{
     NativeCompiledModel, SqlRuleInputs, SqlRuleKey,
 };
+use crate::bindings::_helpers::records::fields::field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::constants::SAFE_RULE_FIX_CODES;
 use crate::bindings::_helpers::rules::early_sql_lint::{
     EarlyLintResult, EarlySqlLint, PreparedSqlLint, sql_lint_settings, sql_rule_cache_path,
 };
+use crate::bindings::_helpers::rules::fact_replay::project_attribute;
 use crate::bindings::_helpers::rules::lint_expansion::{
     LintExpansionSources, lint_expansion_inputs,
 };
@@ -55,7 +57,7 @@ const UTF8: &str = "utf-8";
 fn sql_rule_codes(rules: &[Bound<'_, PyAny>]) -> PyResult<Vec<String>> {
     let mut codes: Vec<String> = Vec::new();
     for rule in rules {
-        let code: String = rule.getattr("code")?.extract()?;
+        let code: String = field(rule, "code")?.extract()?;
         if code.starts_with(SQL_RULE_PREFIX) {
             codes.push(code);
         }
@@ -102,38 +104,39 @@ pub(crate) fn run_planned_sql_rules<'py>(
     let py: Python<'py> = options.py();
     let plan: Bound<'py, PyAny> = options.get("plan")?;
     let graph: Bound<'py, PyAny> = options.get("graph")?;
-    let effective_config: Bound<'py, PyAny> = plan.getattr("effective_config")?;
+    let effective_config: Bound<'py, PyAny> = field(&plan, "effective_config")?;
     let mut native_rules: Vec<Bound<'py, PyAny>> = Vec::new();
-    for rule in plan.getattr("selected")?.try_iter()? {
+    for rule in field(&plan, "selected")?.try_iter()? {
         let rule: Bound<'py, PyAny> = rule?;
-        if !rule.getattr("custom")?.is_truthy()? {
+        if !field(&rule, "custom")?.is_truthy()? {
             native_rules.push(rule);
         }
     }
     let codes: Vec<String> = sql_rule_codes(&native_rules)?;
-    let thresholds: Bound<'py, PyAny> = effective_config.getattr("thresholds")?;
+    let thresholds: Bound<'py, PyDict> =
+        field(&effective_config, "thresholds")?.cast_into::<PyDict>()?;
     let dialect: String = options.get("dialect")?.extract()?;
     let settings: LintSettings = sql_lint_settings(
         &dialect,
         &codes,
-        |key| thresholds.call_method1("get", (key,))?.extract(),
+        |key| match thresholds.get_item(key)? {
+            Some(value) => value.extract(),
+            None => Ok(None),
+        },
         (
-            project_relation_keys(&graph.getattr("project")?)?,
-            effective_config.getattr("allow_exceptions")?.is_truthy()?,
+            project_relation_keys(&field(&graph, "project")?)?,
+            field(&effective_config, "allow_exceptions")?.is_truthy()?,
         ),
     )?;
     let early_lint: Bound<'py, PyAny> = options.get("early_lint")?;
     let run = SqlRun {
         codes: &codes,
-        project_dir: plan.getattr("project_dir")?.extract()?,
+        project_dir: field(&plan, "project_dir")?.extract()?,
         discovered_inputs: options.get("discovered_inputs")?,
-        project: plan.getattr("project")?,
+        project: field(&plan, "project")?,
         settings,
-        model_selection: !plan.getattr("model_paths")?.is_none(),
-        cache_enabled: effective_config
-            .getattr("cache")?
-            .getattr("enabled")?
-            .is_truthy()?,
+        model_selection: !field(&plan, "model_paths")?.is_none(),
+        cache_enabled: field(&field(&effective_config, "cache")?, "enabled")?.is_truthy()?,
         early_lint: if early_lint.is_none() {
             None
         } else {
@@ -204,14 +207,10 @@ fn sql_rule_models<'py>(
     keyed: bool,
 ) -> PyResult<Vec<SqlRuleModel<'py>>> {
     let mut models: Vec<SqlRuleModel<'py>> = Vec::new();
-    if !project
-        .getattr("settings")?
-        .getattr("sql_analysis")?
-        .is_truthy()?
-    {
+    if !field(&project_attribute(project, "settings")?, "sql_analysis")?.is_truthy()? {
         return Ok(models);
     }
-    for model in project.getattr("models")?.try_iter()? {
+    for model in project_attribute(project, "models")?.try_iter()? {
         let Some(entry) = sql_rule_model(model?, keyed)? else {
             continue;
         };
@@ -375,7 +374,7 @@ fn evaluated_sql_rules(
     let compiled: HashMap<PathBuf, CompiledSource> = project_sql_expansions(&run.project)?;
     if !run.model_selection {
         let mut model_paths: HashSet<PathBuf> = HashSet::new();
-        for model in run.project.getattr("models")?.try_iter()? {
+        for model in project_attribute(&run.project, "models")?.try_iter()? {
             model_paths.insert(project_dir.join(model_posix_path(&model?)?));
         }
         let files: Vec<LintFile> = match prepared_result(run, py) {

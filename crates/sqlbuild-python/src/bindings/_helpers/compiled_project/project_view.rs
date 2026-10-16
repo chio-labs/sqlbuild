@@ -256,6 +256,7 @@ impl NativeProjectView {
             "settings" => &self.fields.compiler.settings,
             "sql_scenarios" => &self.fields.compiler.sql_scenarios,
             "scope_index" => &self.fields.compiler.scope_index,
+            "diagnostics" => &self.fields.compiler.diagnostics,
             "sources" => &self.fields.compiler.sources,
             "seeds" => &self.fields.compiler.seeds,
             "functions" => &self.fields.compiler.functions,

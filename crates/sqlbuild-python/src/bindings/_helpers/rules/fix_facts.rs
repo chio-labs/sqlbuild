@@ -5,8 +5,10 @@ use pyo3::pyfunction;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::fields::field as record_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::rules::fact_replay::project_attribute;
 
 /// Index a compilation by model key and diagnostic owner without changing its fact views.
 #[pyfunction]
@@ -31,7 +33,7 @@ pub(crate) fn compile_facts<'py>(
     }
     let diagnostics = PyDict::new(py);
     let counter = py.import("collections")?.getattr("Counter")?;
-    for diagnostic in project.getattr("diagnostics")?.try_iter()? {
+    for diagnostic in project_attribute(project, "diagnostics")?.try_iter()? {
         let diagnostic = diagnostic?;
         let owner = diagnostic_owner(&diagnostic, &paths_by_name, project_dir)?;
         let counts = if let Some(counts) = diagnostics.get_item(&owner)? {
@@ -44,10 +46,10 @@ pub(crate) fn compile_facts<'py>(
         let identity = PyTuple::new(
             py,
             [
-                diagnostic.getattr("code")?,
-                text_or_empty(&diagnostic.getattr("resource_type")?)?,
-                text_or_empty(&diagnostic.getattr("resource_name")?)?,
-                diagnostic.getattr("message")?,
+                record_field(&diagnostic, "code")?,
+                text_or_empty(&record_field(&diagnostic, "resource_type")?)?,
+                text_or_empty(&record_field(&diagnostic, "resource_name")?)?,
+                record_field(&diagnostic, "message")?,
             ],
         )?;
         let count: i64 = counts.get_item(&identity)?.extract()?;
@@ -68,19 +70,19 @@ fn diagnostic_owner<'py>(
     paths_by_name: &Bound<'py, PyDict>,
     project_dir: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let resource_type = diagnostic.getattr("resource_type")?;
+    let resource_type = record_field(diagnostic, "resource_type")?;
     if resource_type.eq("model")?
-        && let Some(path) = paths_by_name.get_item(diagnostic.getattr("resource_name")?)?
+        && let Some(path) = paths_by_name.get_item(record_field(diagnostic, "resource_name")?)?
     {
         return Ok(path);
     }
-    let mut path = diagnostic.getattr("path")?;
+    let mut path = record_field(diagnostic, "path")?;
     if !path.is_truthy()? {
-        let location = diagnostic.getattr("location")?;
+        let location = record_field(diagnostic, "location")?;
         path = if location.is_none() {
             location
         } else {
-            location.getattr("path")?
+            record_field(&location, "path")?
         };
     }
     if path.is_none() {
