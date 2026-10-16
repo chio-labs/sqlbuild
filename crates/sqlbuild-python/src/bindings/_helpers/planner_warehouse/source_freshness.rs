@@ -1,5 +1,6 @@
 //! Direct planner source freshness observation and the warnings for unknown freshness.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 use crate::bindings::_helpers::freshness::planning::{
@@ -93,7 +94,7 @@ fn state_schemas(
             if model.is_none() {
                 continue;
             }
-            let schema = model.getattr("destination")?.getattr("schema")?;
+            let schema = model_reads::destination(&model)?.getattr("schema")?;
             if !schema.is_none() {
                 schemas.insert(schema.extract()?);
             }

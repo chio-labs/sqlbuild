@@ -1,5 +1,6 @@
 //! Per-model plan entries from resolved change results and warehouse snapshot facts.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, imported, keywords,
 };
@@ -239,8 +240,11 @@ fn plan_model_from_change<'py>(
     } else {
         cursor_bounds
     };
-    let warnings =
-        with_cursor_safety_warnings(&assembled.get_item(1)?, &model.getattr("name")?, &bounds)?;
+    let warnings = with_cursor_safety_warnings(
+        &assembled.get_item(1)?,
+        &model_reads::name_object(model)?,
+        &bounds,
+    )?;
     Ok((assembled.get_item(0)?, warnings))
 }
 

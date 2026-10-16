@@ -1,5 +1,6 @@
 //! Host column migration planning while Python owns warehouse inspection.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::planner_migrations::column_objects::native;
 use crate::bindings::_helpers::planner_migrations::column_objects::replace;
@@ -63,7 +64,7 @@ fn plan_column_migrations<'py>(
     )?;
     let schemas = PySet::empty(py)?;
     for candidate in &candidates {
-        let schema = candidate.model.getattr("destination")?.getattr("schema")?;
+        let schema = model_reads::destination(&candidate.model)?.getattr("schema")?;
         if !schema.is_none() {
             schemas.add(schema)?;
         }
@@ -92,7 +93,7 @@ fn plan_column_migrations<'py>(
         )?;
         let physical = args
             .value("physical_relations")?
-            .call_method1("get", (candidate.model.getattr("name")?,))?;
+            .call_method1("get", (model_reads::name_object(&candidate.model)?,))?;
         let checked = super::column_entries::checked(&runtime, candidate, decided, &physical)?;
         for hint in super::column_entries::hints(candidate, &checked.entries)?.try_iter()? {
             hints.push(hint?);

@@ -1,5 +1,6 @@
 //! Model cursor orchestration over live warehouse snapshot facts.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::model_config::config_values::{
     config_cursor_bound, config_str as authored_config_str,
@@ -42,11 +43,11 @@ fn unbounded(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 fn destination_exists(model: &Bound<'_, PyAny>, snapshot: &Bound<'_, PyAny>) -> PyResult<bool> {
     let relation = snapshot
         .getattr("existing_relations")?
-        .call_method1("get", (model.getattr("name")?,))?;
+        .call_method1("get", (model_reads::name_object(model)?,))?;
     if relation.is_none() {
         return Ok(false);
     }
-    let destination = model.getattr("destination")?;
+    let destination = model_reads::destination(model)?;
     let key = call_with(
         &host::entry(model.py(), AdapterHost::RelationLookup)?.getattr("key")?,
         &[
@@ -61,7 +62,7 @@ fn destination_exists(model: &Bound<'_, PyAny>, snapshot: &Bound<'_, PyAny>) -> 
 fn history_redirected(model: &Bound<'_, PyAny>, snapshot: &Bound<'_, PyAny>) -> PyResult<bool> {
     let target = snapshot.getattr("target_relation")?;
     Ok(!target.is_none()
-        && target.ne(model.getattr("destination")?.getattr("qualified_name")?)?)
+        && target.ne(model_reads::destination(model)?.getattr("qualified_name")?)?)
 }
 
 #[pyfunction]
@@ -118,7 +119,7 @@ fn compute_model_cursor_bounds<'py>(
     let snapshot = args.value("snapshot")?;
     let mut cursor_snapshot = snapshot
         .getattr("cursor_snapshots")?
-        .call_method1("get", (model.getattr("name")?,))?;
+        .call_method1("get", (model_reads::name_object(&model)?,))?;
     let roles = call_with(
         &registry::native(py, NativeAttr::ResolveCursorInputRoles)?,
         &[("model", model.clone())],
@@ -147,7 +148,7 @@ fn compute_model_cursor_bounds<'py>(
             let refusal = call_with(
                 &registry::native(py, NativeAttr::EmptyInputRebuildRefusal)?,
                 &[
-                    ("model_name", model.getattr("name")?),
+                    ("model_name", model_reads::name_object(&model)?),
                     ("input_names", empty.clone()),
                     ("cursor_type", cursor_type.clone()),
                 ],
@@ -183,7 +184,7 @@ fn compute_model_cursor_bounds<'py>(
             return Err(PyErr::from_value(call_with(
                 &registry::native(py, NativeAttr::UnreadableCursorInputsError)?,
                 &[
-                    ("model_name", model.getattr("name")?),
+                    ("model_name", model_reads::name_object(&model)?),
                     ("cursor_type", cursor_type),
                     ("input_names", names),
                 ],

@@ -1,5 +1,6 @@
 //! Plan output assembly: storage policies, warnings and direct-mode metadata.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::planner_phases::objects::{
@@ -188,7 +189,7 @@ pub(crate) fn with_storage_policies<'py>(
         let models = PyDict::new(py);
         for model in runtime.getattr("project")?.getattr("models")?.try_iter()? {
             let model = model?;
-            models.set_item(model.getattr("name")?, model)?;
+            models.set_item(model_reads::name_object(&model)?, model)?;
         }
         entries = native(
             py,

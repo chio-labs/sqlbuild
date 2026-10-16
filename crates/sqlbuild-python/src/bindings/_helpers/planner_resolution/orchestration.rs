@@ -1,5 +1,6 @@
 //! Model, function and SQL-hook orchestration through adapter-owned rendering.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
@@ -205,7 +206,7 @@ pub(crate) fn resolve_model_sql<'py>(
     )?;
     let inclusive = append_cursor_inclusive(&model)?;
     let mut sql = resolution.resolve(
-        model.getattr("query_sql")?,
+        model_reads::query_sql(&model)?,
         &[
             ("cursor_bounds", bounds.clone()),
             ("cursor_filter_inputs", roles.getattr("filter_inputs")?),
@@ -217,7 +218,7 @@ pub(crate) fn resolve_model_sql<'py>(
         &registry::native(py, NativeAttr::ResolveCursorIntrinsics)?,
         &[("sql", sql.clone())],
     )?;
-    let name: String = model.getattr("name")?.extract()?;
+    let name: String = model_reads::model_name(&model)?;
     if intrinsics.get_item(1)?.is_truthy()? {
         if bounds.is_none() {
             let cause = args.value("full_rebuild_cause")?;
@@ -359,7 +360,7 @@ pub(crate) fn resolve_model_hook_entries<'py>(
         external: external_sql_reference_resolver,
     };
     let values = model.getattr("config")?.getattr("values")?;
-    let name: String = model.getattr("name")?.extract()?;
+    let name: String = model_reads::model_name(model)?;
     let mut hooks: Vec<Bound<'py, PyAny>> = Vec::new();
     for key in ["pre_hooks", "post_hooks"] {
         hooks.push(resolution.hook(

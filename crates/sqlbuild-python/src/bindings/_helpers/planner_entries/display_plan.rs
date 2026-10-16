@@ -1,5 +1,6 @@
 //! Display-only plans for external plan surfaces when warehouse planning cannot resolve.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::planner_entries::values::{
     boolean, native, none, planner_model, planner_type, string,
@@ -59,7 +60,7 @@ fn display_entry<'py>(
         ],
     )?
     .is_truthy()?;
-    let query_sql = model.getattr("query_sql")?;
+    let query_sql = model_reads::query_sql(model)?;
     let custom_name = if materialization_type.eq(CUSTOM)? {
         config(model, "materialized")?
     } else {
@@ -69,8 +70,8 @@ fn display_entry<'py>(
         py,
         RecordId::ModelPlanEntry,
         &[
-            ("key", model.getattr("key")?),
-            ("name", model.getattr("name")?),
+            ("key", model_reads::model_key(model)?),
+            ("name", model_reads::name_object(model)?),
             ("relative_path", model.getattr("relative_path")?),
             (
                 "action",
@@ -93,7 +94,7 @@ fn display_entry<'py>(
                     },
                 )?,
             ),
-            ("destination", model.getattr("destination")?),
+            ("destination", model_reads::destination(model)?),
             ("fingerprint_query_sql", query_sql.clone()),
             ("resolved_sql", query_sql),
             ("logical_ddl", string(py, "")),
@@ -142,7 +143,7 @@ fn build_display_only_sqlbuild_plan<'py>(
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
     for model in project.getattr("models")?.try_iter()? {
         let model = model?;
-        if selected.contains(model.getattr("name")?)? {
+        if selected.contains(model_reads::name_object(&model)?)? {
             entries.push(display_entry(&model, full_refresh)?);
         }
     }

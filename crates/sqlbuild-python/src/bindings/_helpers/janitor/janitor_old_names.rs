@@ -7,6 +7,7 @@ use pyo3::types::{PyDict, PyDictMethods};
 use sqlbuild_analysis::janitor_planning::main::migration_origin_keys::migration_origin_keys;
 use sqlbuild_analysis::janitor_planning::main::old_name_request_matches::old_name_request_matches;
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::janitor::janitor_facts::{
     SchemaRelations, Warehouse, model_destinations,
@@ -228,7 +229,7 @@ fn project_destinations<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
     let py: Python<'py> = project.py();
     let destinations: Bound<'py, PyDict> = PyDict::new(py);
     for (key, model) in model_destinations(project)? {
-        destinations.set_item(key.to_python(py)?, model.getattr("name")?)?;
+        destinations.set_item(key.to_python(py)?, model_reads::name_object(&model)?)?;
     }
     Ok(destinations)
 }
@@ -369,7 +370,7 @@ pub(crate) fn pending_migration_origins(
         if listed.contains(&destination.folded()) {
             continue;
         }
-        let model_name: String = model.getattr("name")?.extract()?;
+        let model_name: String = model_reads::model_name(&model)?;
         for origin in migration_origin_keys(&raw, destination.database.as_deref(), &schemas) {
             let folded: Folded = Key {
                 database: origin.database,

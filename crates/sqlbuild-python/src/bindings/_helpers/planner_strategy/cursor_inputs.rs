@@ -7,6 +7,7 @@ use pyo3::types::{PyBool, PyDict, PyFrozenSet, PyString, PyTuple};
 use sqlbuild_analysis::planner_strategy::main::cursor_input_column::cursor_input_column_failure;
 use sqlbuild_analysis::planner_strategy::models::{CursorInputColumnCheck, CursorInputColumnOwner};
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_attachment::cursor_roles::resolve_cursor_input_roles;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
@@ -74,7 +75,7 @@ pub(crate) fn reject_unexposed_cursor_input_columns<'py>(
     let functions_by_name = or_empty(request.optional("functions_by_name")?, py)?;
     let source_map = or_empty(request.optional("source_map")?, py)?;
     let warehouse_columns: Bound<'py, PyAny> = request.get("source_warehouse_columns")?;
-    let model_name: String = text(&model.getattr("name")?)?;
+    let model_name: String = model_reads::model_name(&model)?;
     for role in ["filter_inputs", "watermark_inputs"] {
         for item in roles.getattr(role)?.call_method0("items")?.try_iter()? {
             let (input_name, column): (String, String) = item?.extract()?;

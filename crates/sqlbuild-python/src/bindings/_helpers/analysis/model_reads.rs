@@ -192,3 +192,48 @@ pub(crate) fn proven_inputs(model: &Bound<'_, PyAny>) -> PyResult<Option<Vec<Str
     }
     proof.getattr("input_relations")?.extract().map(Some)
 }
+
+/// The model's name.
+pub(crate) fn model_name(model: &Bound<'_, PyAny>) -> PyResult<String> {
+    if let Ok(view) = model.downcast::<NativeCompiledModel>() {
+        return view.get().name(model.py());
+    }
+    model.getattr("name")?.extract()
+}
+
+/// The model's compiled query SQL.
+pub(crate) fn query_sql<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    if let Ok(view) = model.downcast::<NativeCompiledModel>() {
+        return Ok(view
+            .get()
+            .query_sql(model.py())?
+            .into_bound(model.py())
+            .into_any());
+    }
+    model.getattr("query_sql")
+}
+
+/// The model's `CompiledObjectKey`.
+pub(crate) fn model_key<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    if let Ok(view) = model.downcast::<NativeCompiledModel>() {
+        return Ok(view.get().key(model.py())?.into_bound(model.py()));
+    }
+    model.getattr("key")
+}
+
+/// The model's destination `CompiledRelationLocation`.
+pub(crate) fn destination<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    if let Ok(view) = model.downcast::<NativeCompiledModel>() {
+        return Ok(view.get().destination(model.py())?.into_bound(model.py()));
+    }
+    model.getattr("destination")
+}
+
+/// The model's name as a Python string.
+pub(crate) fn name_object<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    if let Ok(view) = model.downcast::<NativeCompiledModel>() {
+        let name: String = view.get().name(model.py())?;
+        return Ok(pyo3::types::PyString::new(model.py(), &name).into_any());
+    }
+    model.getattr("name")
+}

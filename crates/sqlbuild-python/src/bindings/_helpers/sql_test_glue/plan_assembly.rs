@@ -3,6 +3,7 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -74,7 +75,7 @@ pub(crate) fn assemble_sql_test_plans<'py>(
     let models = PyDict::new(py);
     for model in project.getattr("models")?.try_iter()? {
         let model = model?;
-        models.set_item(model.getattr("name")?, model)?;
+        models.set_item(model_reads::name_object(&model)?, model)?;
     }
     let result_class = registry::class(py, RecordId::SqlTestPlanResult)?;
     let mut results: Vec<Bound<'py, PyAny>> = Vec::new();

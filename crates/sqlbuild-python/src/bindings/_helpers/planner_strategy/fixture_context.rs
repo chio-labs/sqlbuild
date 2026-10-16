@@ -5,6 +5,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::planner_fixtures::main::fixture_schema::fixture_schema;
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::planner_strategy::fixture_metadata::model_fixture_metadata;
 use crate::bindings::_helpers::planner_strategy::fixture_values::{columns, metadata, record};
 use crate::bindings::_helpers::records::ids::RecordId;
@@ -22,7 +23,7 @@ pub(crate) fn build_relation_fixture_context<'py>(
             let models = PyDict::new(py);
             for model in project.getattr("models")?.try_iter()? {
                 let model = model?;
-                models.set_item(model.getattr("name")?, &model)?;
+                models.set_item(model_reads::name_object(&model)?, &model)?;
             }
             models
         }

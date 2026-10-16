@@ -12,6 +12,7 @@ use sqlbuild_analysis::diff_selection::errors::SelectorError;
 use sqlbuild_analysis::diff_selection::main::resolve_diff_selection::resolve_diff_selection;
 use sqlbuild_analysis::diff_selection::models::DiffGraph;
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
@@ -165,13 +166,13 @@ fn diff_model_names<'py>(
     let mut names: Vec<Bound<'py, PyAny>> = Vec::new();
     for model in project.getattr("models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
-        let key: Bound<'py, PyAny> = model.getattr("key")?;
+        let key: Bound<'py, PyAny> = model_reads::model_key(&model)?;
         let chosen: bool = match keys.indexes.get_item(&key)? {
             Some(index) => selected.contains(&index.extract::<usize>()?),
             None => false,
         };
         if chosen && key.getattr("resource_type")?.eq(&model_type)? {
-            names.push(model.getattr("name")?);
+            names.push(model_reads::name_object(&model)?);
         }
     }
     PyTuple::new(py, names)

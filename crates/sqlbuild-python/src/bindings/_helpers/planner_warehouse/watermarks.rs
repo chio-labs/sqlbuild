@@ -1,5 +1,6 @@
 //! Validate reliable watermark column contracts before warehouse inspection.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::planner_phases::objects::{config_str, planner_error, text};
 use crate::bindings::_helpers::planner_warehouse::constants::{
     CURSOR_TYPE_INTEGER, CURSOR_TYPE_TIMESTAMP, WATERMARK_CONTRACT_CODE,
@@ -62,7 +63,7 @@ pub(crate) fn validate_watermark_column<'py>(
     let py = model.py();
     let kind = reference.getattr("ref_kind")?;
     let ref_name: String = reference.getattr("ref_name")?.extract()?;
-    let model_name: String = model.getattr("name")?.extract()?;
+    let model_name: String = model_reads::model_name(model)?;
     let lowered =
         |value: &str| -> PyResult<String> { text(py, value).call_method0("lower")?.extract() };
     let (names, types) = if kind.eq("ref")? {

@@ -1,5 +1,6 @@
 //! Complete missing source metadata in bounded, database-grouped batches.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::host;
@@ -192,7 +193,7 @@ pub(crate) fn semantic_source_columns<'py>(
             .getattr("config")?
             .getattr("values")?
             .call_method1("get", ("sql_analysis",))?;
-        if !selected_keys.contains(model.getattr("key")?)?
+        if !selected_keys.contains(model_reads::model_key(&model)?)?
             || analysis.is(pyo3::types::PyBool::new(py, false))
         {
             continue;

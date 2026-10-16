@@ -1,5 +1,6 @@
 //! Convert existing planner contracts for origin compatibility checks.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::analysis::model_reads::inferred_rows;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
@@ -136,9 +137,12 @@ fn check_migration_compatibility<'py>(
         );
     }
     let relations = PyDict::new(py);
-    relations.set_item(model.getattr("name")?, relation)?;
+    relations.set_item(model_reads::name_object(&model)?, relation)?;
     let columns = PyDict::new(py);
-    columns.set_item(model.getattr("name")?, arguments.value("origin_columns")?)?;
+    columns.set_item(
+        model_reads::name_object(&model)?,
+        arguments.value("origin_columns")?,
+    )?;
     let snapshot = call_with(
         &registry::class(py, RecordId::WarehouseSnapshot)?,
         &[

@@ -1,5 +1,6 @@
 //! Migration identity binding with unchanged metadata and hash format.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -101,7 +102,7 @@ fn with_migration_fingerprints<'py>(
         let fingerprint = call_with(
             &cache.getattr("fingerprint")?,
             &[
-                ("query_sql", model.getattr("query_sql")?),
+                ("query_sql", model_reads::query_sql(&model)?),
                 ("metadata_json", metadata),
                 ("ref_identities", PyDict::new(py).into_any()),
                 ("dialect", arguments.value("dialect")?),

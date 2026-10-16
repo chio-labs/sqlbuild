@@ -1,5 +1,6 @@
 //! Plan-entry cursor windows: overrides, planner-owned bounds and microbatch ranges.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
@@ -353,7 +354,7 @@ fn model_cursor_snapshot<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     snapshot
         .getattr("cursor_snapshots")?
-        .call_method1("get", (model.getattr("name")?,))
+        .call_method1("get", (model_reads::name_object(model)?,))
 }
 
 fn without_destination<'py>(cursor_snapshot: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -566,7 +567,7 @@ pub(crate) fn model_cursor_overrides<'py>(
         }
     }
     let session = CursorSession::new(py)?;
-    let name = model.getattr("name")?.str()?;
+    let name = model_reads::name_object(model)?.str()?;
     let cursor_start = config_bound(model, "cursor_start")?;
     let cursor_end = config_bound(model, "cursor_end")?;
     if !resolved_start.is_none()

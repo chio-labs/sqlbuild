@@ -10,6 +10,7 @@ use sqlbuild_analysis::planner_changes::main::origin_reference_names::origin_ref
 use sqlbuild_analysis::planner_changes::models::{NameSpan, RenameCandidate};
 use sqlbuild_rules::lint_text::main::neutralize_interpolation::neutralize_interpolation;
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
@@ -240,7 +241,7 @@ fn changed_referencing_query(
     let dialect: Option<String> = snapshot.getattr("column_dialect")?.extract()?;
     for model in selected {
         let recorded: Bound<'_, PyAny> =
-            recorded_models.call_method1("get", (model.getattr("name")?,))?;
+            recorded_models.call_method1("get", (model_reads::name_object(&model)?,))?;
         if recorded.is_none() {
             continue;
         }
@@ -254,9 +255,9 @@ fn changed_referencing_query(
         if references_models
             && model_query_hash(
                 py,
-                &model.getattr("name")?.extract::<String>()?,
+                &model_reads::model_name(&model)?,
                 (
-                    &model.getattr("query_sql")?.extract::<String>()?,
+                    &model_reads::query_sql(&model)?.extract::<String>()?,
                     dialect.as_deref(),
                 ),
             )? != recorded.getattr("definition_hash")?.extract::<String>()?

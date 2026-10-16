@@ -1,5 +1,6 @@
 //! Detect how each selected model and function changed since its recorded build.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::planner_changes::results::native_enum;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -275,7 +276,7 @@ fn scope_model_changes<'py>(
         if model.is_none() {
             continue;
         }
-        let name: Bound<'py, PyAny> = model.getattr("name")?;
+        let name: Bound<'py, PyAny> = model_reads::name_object(&model)?;
         let expected: (Option<String>, Option<String>) = (
             lookup(&version_hashes, &name)?,
             lookup(&metadata_jsons, &name)?,
@@ -299,7 +300,7 @@ pub(crate) fn model_change<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = model.py();
     let snapshot: &Bound<'py, PyAny> = &pass.snapshot;
-    let model_name: Bound<'py, PyAny> = model.getattr("name")?;
+    let model_name: Bound<'py, PyAny> = model_reads::name_object(model)?;
     let columns_hash: String = model_declared_columns_hash(model)?;
     let base_metadata: String = match expected_metadata_json.filter(|text| !text.is_empty()) {
         Some(text) => text,
@@ -339,7 +340,7 @@ pub(crate) fn model_change<'py>(
             py,
             &model_name.extract::<String>()?,
             (
-                &model.getattr("query_sql")?.extract::<String>()?,
+                &model_reads::query_sql(model)?.extract::<String>()?,
                 dialect.extract::<Option<String>>()?.as_deref(),
             ),
         )?)
@@ -383,7 +384,7 @@ pub(crate) fn model_change<'py>(
     let renames: Bound<'py, PyAny> = snapshot.getattr("reference_renames")?;
     let origins: Option<Vec<(String, String)>> = match (&compiled_query_hash, &recorded) {
         (Some(_), Some(recorded)) if definition_changed && renames.is_truthy()? => origin_names(
-            (model.getattr("query_sql")?.extract()?, &fingerprint),
+            (model_reads::query_sql(model)?.extract()?, &fingerprint),
             &renames,
             (&recorded.definition_hash, &dialect),
         )?,
@@ -497,7 +498,7 @@ fn log_query_check(
         &log_sql,
         &[
             ("logger", logger.clone()),
-            ("sql", model.getattr("query_sql")?),
+            ("sql", model_reads::query_sql(model)?),
             ("action", text("compiled_query")),
         ],
     )?;

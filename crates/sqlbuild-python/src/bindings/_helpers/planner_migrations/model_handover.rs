@@ -1,5 +1,6 @@
 //! Adapt immutable migration fingerprints without changing their persisted representation.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::planner_migrations::column_objects::{native, replace, text};
 use crate::bindings::_helpers::planner_migrations::constants::MIGRATION_MODEL_NAME_METADATA_KEY;
@@ -17,7 +18,7 @@ pub(super) fn applies(
     let own = snapshot
         .getattr("fingerprints")?
         .getattr("models")?
-        .call_method1("get", (model.getattr("name")?,))?;
+        .call_method1("get", (model_reads::name_object(model)?,))?;
     Ok(own.is_none()
         || presumed_utc(&own.getattr("ts")?)? < presumed_utc(&event.getattr("created_at")?)?)
 }
@@ -44,18 +45,18 @@ pub(super) fn handover<'py>(
     if let Ok(payload) = payload.cast::<PyDict>()
         && payload.contains(key)?
     {
-        payload.set_item(key, model.getattr("name")?)?;
+        payload.set_item(key, model_reads::name_object(model)?)?;
         let kwargs = PyDict::new(py);
         kwargs.set_item("sort_keys", true)?;
         kwargs.set_item("separators", (",", ":"))?;
         kwargs.set_item("default", imported(py, "builtins", "str")?)?;
         metadata = json.getattr("dumps")?.call((payload,), Some(&kwargs))?;
     }
-    let destination = model.getattr("destination")?;
+    let destination = model_reads::destination(model)?;
     replace(
         fingerprint,
         &[
-            ("node_name", model.getattr("name")?),
+            ("node_name", model_reads::name_object(model)?),
             ("target_database", destination.getattr("database")?),
             ("target_schema", destination.getattr("schema")?),
             ("target_name", destination.getattr("name")?),
@@ -89,14 +90,14 @@ pub(super) fn equivalent<'py>(
     replace(
         &handover,
         &[
-            ("definition", model.getattr("query_sql")?),
+            ("definition", model_reads::query_sql(model)?),
             (
                 "definition_hash",
                 native(
                     py,
                     NativeAttr::ComputeQueryHash,
                     &[
-                        ("query_sql", model.getattr("query_sql")?),
+                        ("query_sql", model_reads::query_sql(model)?),
                         ("dialect", dialect.clone()),
                     ],
                 )?,

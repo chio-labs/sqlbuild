@@ -1,5 +1,6 @@
 //! Per-model full-refresh resolution and full-rebuild refusals.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::planner_phases::constants::FULL_REFRESH_DISABLED_REBUILD_CODE;
 use crate::bindings::_helpers::planner_phases::objects::{frozenset, planner_error, strings};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
@@ -40,7 +41,7 @@ pub(crate) fn effectively_full_refreshed_model_names<'py>(
     for model in project.getattr("models")?.try_iter()? {
         let model = model?;
         if resolve_model_full_refresh(&model, cli_full_refresh)? {
-            names.push(model.getattr("name")?);
+            names.push(model_reads::name_object(&model)?);
         }
     }
     frozenset(project.py(), &names)
@@ -80,7 +81,7 @@ pub(crate) fn check_full_rebuild_allowed(
     {
         return Ok(());
     }
-    let name: String = model.getattr("name")?.extract()?;
+    let name: String = model_reads::model_name(model)?;
     Err(planner_error(
         py,
         &format!(

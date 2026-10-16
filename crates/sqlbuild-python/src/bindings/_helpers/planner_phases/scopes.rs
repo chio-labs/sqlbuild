@@ -1,5 +1,6 @@
 //! Resolve the selected, stale-warning and inspection scopes of one plan.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::planner_phases::objects::{native, replace, tuple};
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use pyo3::IntoPyObject;
@@ -66,7 +67,7 @@ pub(crate) fn resolve_planner_scopes<'py>(
     }
     let models = PyDict::new(py);
     for (name, model) in full.getattr("models_by_name")?.downcast::<PyDict>()?.iter() {
-        if stale_keys.contains(model.getattr("key")?)? {
+        if stale_keys.contains(model_reads::model_key(&model)?)? {
             models.set_item(name, model)?;
         }
     }

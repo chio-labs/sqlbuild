@@ -1,5 +1,6 @@
 //! Gather live candidate evidence without changing adapter inspection ownership.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_migrations::column_objects::{
     config, definition_hash, lower, native,
@@ -34,7 +35,7 @@ pub(super) fn candidates<'py>(
         if !materialized.eq("incremental")? && !materialized.eq("snapshot")? {
             continue;
         }
-        let name = model.getattr("name")?;
+        let name = model_reads::name_object(&model)?;
         if args.value("full_refresh_model_names")?.contains(&name)?
             || !snapshot.getattr("existing_relations")?.contains(&name)?
         {
@@ -86,7 +87,7 @@ pub(super) fn candidates<'py>(
             py,
             NativeAttr::ParseQueryShape,
             &[
-                ("query_sql", model.getattr("query_sql")?),
+                ("query_sql", model_reads::query_sql(&model)?),
                 ("dialect", dialect.clone()),
             ],
         )?;

@@ -1,5 +1,6 @@
 //! Assemble CLI scenario plans while retaining adapter and executor boundaries.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_GRAPH_VALIDATION;
 use crate::bindings::_helpers::planner_scenario::graph::plan_scenario_graph;
@@ -122,12 +123,12 @@ fn namespace<'py>(
     let models = PyDict::new(py);
     for model in project.getattr("models")?.try_iter()? {
         let model = model?;
-        models.set_item(model.getattr("name")?, model)?;
+        models.set_item(model_reads::name_object(&model)?, model)?;
     }
     for field in ["target_model_names", "model_names"] {
         for name in graph.getattr(field)?.try_iter()? {
             if let Some(model) = models.get_item(name?)? {
-                let destination = model.getattr("destination")?;
+                let destination = model_reads::destination(&model)?;
                 return Ok((
                     destination.getattr("database")?,
                     destination.getattr("schema")?,

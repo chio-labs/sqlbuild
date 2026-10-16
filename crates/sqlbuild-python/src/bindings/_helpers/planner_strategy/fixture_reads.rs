@@ -13,6 +13,7 @@ use sqlbuild_analysis::required_columns::models::ColumnRead;
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 use std::collections::{HashMap, HashSet};
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::analysis::model_reads::{lineage_facts, proven_inputs, star_flags};
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::planner_strategy::constants::HIGH_CONFIDENCE;
@@ -79,7 +80,7 @@ pub(crate) fn required_fixture_columns<'py>(
         models.push(FixtureReadModel {
             name,
             key: FixtureReadKey {
-                sql: model.getattr("query_sql")?.extract()?,
+                sql: model_reads::query_sql(&model)?.extract()?,
                 references,
                 dialect: dialect.clone(),
             },
@@ -174,7 +175,7 @@ fn model_stars(
         } else {
             None
         };
-    let sql: String = model.getattr("query_sql")?.extract()?;
+    let sql: String = model_reads::query_sql(model)?.extract()?;
     model
         .py()
         .compiler_detach(|| {

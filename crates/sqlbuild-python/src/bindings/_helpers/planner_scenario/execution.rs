@@ -1,5 +1,6 @@
 //! Assemble scenario execution plans through existing planner and adapter APIs.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
@@ -116,11 +117,11 @@ pub(crate) fn build_scenario_execution_plan<'py>(
         let destination = required_target(
             &context.relations,
             "model_locations",
-            &model.getattr("name")?.extract::<String>()?,
+            &model_reads::model_name(&model)?,
             "model",
         )?;
         let query = resolve_model_dbt_refs(
-            &model.getattr("query_sql")?.extract::<String>()?,
+            &model_reads::query_sql(&model)?.extract::<String>()?,
             &context.relations,
         )?;
         let record = registry::native(py, NativeAttr::CompiledModelRecord)?.call1((&model,))?;

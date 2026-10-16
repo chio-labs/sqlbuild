@@ -8,6 +8,7 @@ use sqlbuild_cursor::algebra::main::compare::compare;
 use sqlbuild_cursor::algebra::main::floor_to_grain::floor_to_grain;
 use sqlbuild_cursor::algebra::models::{Grain, Scalar};
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::attachments::cursor_intrinsics::{
     compile_input_error, resolve_cursor_intrinsics,
 };
@@ -86,7 +87,7 @@ pub(super) fn declared_window_cursor_models<'py>(
     let py = test.py();
     let mut cursor_models: Vec<Bound<'py, PyAny>> = Vec::new();
     for model in chain_models {
-        if uses_cursor_intrinsics(py, &model.getattr("query_sql")?.extract::<String>()?)? {
+        if uses_cursor_intrinsics(py, &model_reads::query_sql(&model)?.extract::<String>()?)? {
             cursor_models.push(model);
         }
     }
@@ -255,7 +256,7 @@ fn model_cursor<'py>(model: &Bound<'py, PyAny>) -> PyResult<ModelCursor<'py>> {
         _ => None,
     };
     Ok(ModelCursor {
-        name: model.getattr("name")?.extract()?,
+        name: model_reads::name_object(model)?.extract()?,
         cursor_type,
         type_name,
         grain,
