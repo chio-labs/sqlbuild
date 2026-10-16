@@ -75,7 +75,7 @@ pub(crate) fn graph_key(key: &Bound<'_, PyAny>) -> PyResult<GraphKey> {
 /// Fingerprint a model query for change detection, naming the model when it cannot.
 #[pyfunction]
 #[pyo3(signature = (*, model_name, query_sql, dialect))]
-fn model_definition_hash(
+pub(crate) fn model_definition_hash(
     py: Python<'_>,
     model_name: &str,
     query_sql: &str,

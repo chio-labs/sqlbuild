@@ -50,7 +50,7 @@ fn neighbours<'py>(
 /// Keys within `max_depth` edges of any start, plus the starts when requested.
 #[pyfunction]
 #[pyo3(signature = (*, starts, edges, include_starts, max_depth = None))]
-fn transitive_closure_many<'py>(
+pub(crate) fn transitive_closure_many<'py>(
     starts: &Bound<'py, PyAny>,
     edges: &Bound<'py, PyAny>,
     include_starts: bool,

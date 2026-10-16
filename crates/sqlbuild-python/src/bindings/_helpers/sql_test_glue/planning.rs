@@ -48,7 +48,7 @@ type PlanRow = (
 
 /// The Python planning request: compiled models and tests, with the adapter's facts.
 #[derive(FromPyObject)]
-struct PlanningRequest<'py> {
+pub(crate) struct PlanningRequest<'py> {
     #[pyo3(attribute)]
     models: Vec<Bound<'py, PyAny>>,
     /// Cursor-rendered SQL by model index, for models whose SQL uses cursor intrinsics.
@@ -79,7 +79,7 @@ struct PlanningRequest<'py> {
 
 /// The Python chain request: compiled models and the tests whose chains to resolve.
 #[derive(FromPyObject)]
-struct ChainRequest<'py> {
+pub(crate) struct ChainRequest<'py> {
     #[pyo3(attribute)]
     models: Vec<Bound<'py, PyAny>>,
     #[pyo3(attribute)]
@@ -90,7 +90,7 @@ struct ChainRequest<'py> {
 
 /// Each test's ordered unmocked model chain; direct-logic tests have none.
 #[pyfunction]
-fn resolve_compiled_sql_test_chains(
+pub(crate) fn resolve_compiled_sql_test_chains(
     py: Python<'_>,
     request: ChainRequest<'_>,
 ) -> PyResult<Vec<Vec<String>>> {
@@ -118,7 +118,7 @@ fn resolve_compiled_sql_test_chains(
 
 /// Plan SQL tests in one batch and return each plan with its distinct error messages.
 #[pyfunction]
-fn plan_compiled_sql_tests(
+pub(crate) fn plan_compiled_sql_tests(
     py: Python<'_>,
     request: PlanningRequest<'_>,
 ) -> PyResult<(Vec<PlanRow>, u64, u64)> {

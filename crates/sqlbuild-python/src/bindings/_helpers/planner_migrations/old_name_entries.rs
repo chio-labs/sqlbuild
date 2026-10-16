@@ -1,14 +1,18 @@
 //! Assemble new and resumed old-name view steps from recorded facts.
 
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::planner_migrations::column_objects::{model, native, text};
+use crate::bindings::_helpers::planner_migrations::column_objects::{model, text};
 use crate::bindings::_helpers::planner_migrations::constants::{PENDING_ARCHIVE, PENDING_VIEW};
 use crate::bindings::_helpers::planner_migrations::models::OldNamePlanner;
 use crate::bindings::_helpers::planner_migrations::old_name_objects::{
     expires, location, relation, retention, stores_history,
 };
+use crate::bindings::_helpers::planner_migrations::old_names::declared_column_aliases;
+use crate::bindings::_helpers::planner_migrations::old_names::old_name_view_skip_reason;
+use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyBool, PyList, PyTuple};
@@ -136,26 +140,31 @@ impl<'py> OldNamePlanner<'py> {
         tracked: Bound<'py, PyAny>,
         retention: &Bound<'py, PyAny>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        native(
+        object(
             self.runtime.py(),
-            NativeAttr::OldNameViewSkipReason,
-            &[
-                ("origin", origin.clone()),
-                ("origin_tracked", tracked),
-                ("retention", retention.clone()),
-                (
-                    "models",
-                    PyTuple::new(self.runtime.py(), &self.models)?.into_any(),
-                ),
-                ("views", self.views.clone()),
-            ],
+            old_name_view_skip_reason(
+                self.runtime.py(),
+                Some(keywords(
+                    self.runtime.py(),
+                    &[
+                        ("origin", origin.clone()),
+                        ("origin_tracked", tracked),
+                        ("retention", retention.clone()),
+                        (
+                            "models",
+                            PyTuple::new(self.runtime.py(), &self.models)?.into_any(),
+                        ),
+                        ("views", self.views.clone()),
+                    ],
+                )?),
+            )?,
         )
     }
 
     fn aliases(&self, item: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         let py = self.runtime.py();
         if !stores_history(item)? {
-            return registry::native(py, NativeAttr::DeclaredColumnAliases)?.call1((item,));
+            return Ok(declared_column_aliases(py, item)?.into_any());
         }
         let mut aliases: Vec<Bound<'py, PyTuple>> = Vec::new();
         for entry in self.columns.try_iter()? {

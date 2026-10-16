@@ -1,7 +1,9 @@
 //! Model migration orchestration over Python-owned live inspection.
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
-use crate::bindings::_helpers::planner_migrations::column_objects::{config, native, replace};
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::planner_changes::renames::plan_reference_renames;
+use crate::bindings::_helpers::planner_migrations::column_objects::{config, replace};
 use crate::bindings::_helpers::planner_migrations::discovery::discover_model_migrations;
 use crate::bindings::_helpers::planner_migrations::models::{
     DiscoveryRequest, MigrationDecisionRequest, MigrationPhase, ModelMigrationDeclaration,
@@ -10,8 +12,9 @@ use crate::bindings::_helpers::planner_migrations::models::{
 use crate::bindings::_helpers::planner_migrations::planning_origin::{
     require_same_database, resolve_origin,
 };
+use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{
@@ -223,17 +226,22 @@ fn finish<'py>(
     } else {
         super::model_overlay::overlay(phase, state, &entries, &handovers)?
     };
-    let reference_renames = native(
+    let reference_renames = object(
         py,
-        NativeAttr::PlanReferenceRenames,
-        &[
-            ("runtime", runtime),
-            ("scope", scope),
-            ("snapshot", snapshot),
-            ("state", state.clone()),
-            ("schemas", schemas.clone()),
-            ("planned", planned.into_any()),
-        ],
+        plan_reference_renames(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("runtime", runtime),
+                    ("scope", scope),
+                    ("snapshot", snapshot),
+                    ("state", state.clone()),
+                    ("schemas", schemas.clone()),
+                    ("planned", planned.into_any()),
+                ],
+            )?),
+        )?,
     )?;
     let mut fields = vec![("reference_renames", reference_renames)];
     if !entries.is_empty() {

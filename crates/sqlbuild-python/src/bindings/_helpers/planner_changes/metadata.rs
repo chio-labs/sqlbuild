@@ -35,7 +35,7 @@ fn with_declared_columns_hash(metadata_json: &str, declared_columns_hash: &str) 
 
 /// Fingerprint metadata JSON without the declared-columns hash key, if present.
 #[pyfunction]
-fn without_declared_columns_hash(metadata_json: &str) -> String {
+pub(crate) fn without_declared_columns_hash(metadata_json: &str) -> String {
     without_hash(metadata_json)
 }
 

@@ -84,7 +84,7 @@ pub(crate) fn compile_analysis_selection<'py>(
 /// Build a static dependency graph for an already-compiled project.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn build_project_graph_from_compiled_project<'py>(
+pub(crate) fn build_project_graph_from_compiled_project<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -136,7 +136,7 @@ fn plan_has_executable_work<'py>(
 /// Wrap a focused command projection in the established pipeline envelope.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn build_static_pipeline_result<'py>(
+pub(crate) fn build_static_pipeline_result<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

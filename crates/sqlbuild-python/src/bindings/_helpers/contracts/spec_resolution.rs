@@ -309,7 +309,7 @@ fn family_accepts(family: &Bound<'_, PyAny>, column_name: &str) -> PyResult<bool
 /// Return declared dynamic families accepting a physical column name.
 #[pyfunction]
 #[pyo3(signature = (*, families, column_name))]
-fn matching_dynamic_families<'py>(
+pub(crate) fn matching_dynamic_families<'py>(
     families: &Bound<'py, PyAny>,
     column_name: &str,
 ) -> PyResult<Bound<'py, PyTuple>> {

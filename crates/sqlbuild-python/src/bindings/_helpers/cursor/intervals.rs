@@ -63,7 +63,7 @@ pub(crate) fn interval_validation(
 /// The canonical partition containing an observed physical value.
 #[pyfunction(name = "cursor_observed_partition")]
 #[pyo3(signature = (*, value, grain))]
-fn partition<'py>(
+pub(crate) fn partition<'py>(
     value: &Bound<'py, PyAny>,
     grain: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {

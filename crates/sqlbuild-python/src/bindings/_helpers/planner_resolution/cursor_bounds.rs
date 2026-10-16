@@ -1,12 +1,14 @@
 //! Snapshot conversion and cursor window policy boundary.
 
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::cursor::conversion::{CursorSession, algebra_error};
 use crate::bindings::_helpers::cursor::scalars::try_parse;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::planner_resolution::maximum_safety::apply_maximum_start_policy;
 use crate::bindings::_helpers::planner_resolution::values::string;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::PyDict;
@@ -114,7 +116,7 @@ fn read_policy<'py>(
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn apply_typed_cursor_replay_policy<'py>(
+pub(crate) fn apply_typed_cursor_replay_policy<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -168,7 +170,7 @@ pub(super) fn required_scalar<'py>(
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn compute_cursor_bounds<'py>(
+pub(crate) fn compute_cursor_bounds<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -257,10 +259,7 @@ fn compute_cursor_bounds<'py>(
                 .into_any(),
         ),
     ]);
-    let replayed = call_with(
-        &registry::native(py, NativeAttr::ApplyTypedCursorReplayPolicy)?,
-        &replay_args,
-    )?;
+    let replayed = apply_typed_cursor_replay_policy(py, Some(keywords(py, &replay_args)?))?;
     let bounds = call_with(
         &bounds_class,
         &[("start", replayed), ("end", session.python_scalar(&end)?)],
@@ -292,10 +291,7 @@ fn compute_cursor_bounds<'py>(
     ] {
         policy_args.push((key, args.value(key)?));
     }
-    call_with(
-        &registry::native(py, NativeAttr::ApplyMaximumStartPolicy)?,
-        &policy_args,
-    )
+    apply_maximum_start_policy(py, Some(keywords(py, &policy_args)?))
 }
 
 pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

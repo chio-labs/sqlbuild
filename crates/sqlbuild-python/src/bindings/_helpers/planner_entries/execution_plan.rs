@@ -183,7 +183,7 @@ fn planned_output<'py>(
 /// Build the execution plan for one selection against live warehouse state.
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn build_execution_plan<'py>(
+pub(crate) fn build_execution_plan<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

@@ -279,7 +279,7 @@ pub(crate) fn project_connection_config<'py>(
 /// Resolve the project connection; offline modes pass `require_connection=False`.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn resolve_project_connection_config<'py>(
+pub(crate) fn resolve_project_connection_config<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

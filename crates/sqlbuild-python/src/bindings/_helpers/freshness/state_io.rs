@@ -261,7 +261,7 @@ fn execute_sql(
 /// Append source freshness rows, creating the table once if needed.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn write_source_freshness_records<'py>(
+pub(crate) fn write_source_freshness_records<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<()> {

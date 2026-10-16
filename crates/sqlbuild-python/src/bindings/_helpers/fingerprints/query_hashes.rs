@@ -27,7 +27,11 @@ fn query_fingerprint_error(py: Python<'_>, message: String) -> PyErr {
 /// The persisted SHA-256 fingerprint of the query's canonical token stream.
 #[pyfunction]
 #[pyo3(signature = (*, query_sql, dialect))]
-fn compute_query_hash(py: Python<'_>, query_sql: &str, dialect: Option<&str>) -> PyResult<String> {
+pub(crate) fn compute_query_hash(
+    py: Python<'_>,
+    query_sql: &str,
+    dialect: Option<&str>,
+) -> PyResult<String> {
     py.compiler_detach(|| compiler_query_fingerprint(query_sql, dialect))
         .map_err(|error| query_fingerprint_error(py, error))
 }

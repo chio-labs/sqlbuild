@@ -71,7 +71,7 @@ fn py_bool(py: Python<'_>, value: bool) -> Bound<'_, PyAny> {
 /// Build one compiled project with adapter defaults and target validation applied.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn build_compiled_project<'py>(
+pub(crate) fn build_compiled_project<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -318,7 +318,7 @@ fn build_project_graph_with_analysis_selection<'py>(
 /// Build the static dependency graph for a compiled project.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn build_project_graph<'py>(
+pub(crate) fn build_project_graph<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

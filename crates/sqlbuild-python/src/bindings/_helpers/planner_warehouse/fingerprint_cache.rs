@@ -3,7 +3,10 @@
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
-use crate::bindings::_helpers::planner_phases::objects::{native, optional_text, text};
+use crate::bindings::_helpers::planner_changes::metadata::without_declared_columns_hash;
+use crate::bindings::_helpers::planner_migrations::fingerprint::migration_fingerprint_ref_names;
+use crate::bindings::_helpers::planner_phases::objects::object;
+use crate::bindings::_helpers::planner_phases::objects::{optional_text, text};
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 use pyo3::exceptions::{PyOSError, PyValueError};
@@ -276,20 +279,14 @@ impl MigrationFingerprintCache {
         let metadata_json: String = args.value("metadata_json")?.extract()?;
         let ref_identities = &args.value("ref_identities")?;
         let dialect: Option<String> = args.value("dialect")?.extract()?;
-        let metadata_json: String = registry::native(py, NativeAttr::WithoutDeclaredColumnsHash)?
-            .call1((metadata_json,))?
-            .extract()?;
+        let metadata_json: String = without_declared_columns_hash(&metadata_json);
         let definition = (query_sql.clone(), metadata_json.clone());
         let names = match self.ref_names.get(&definition) {
             Some(names) => names.clone(),
             None => {
-                let found = native(
+                let found = object(
                     py,
-                    NativeAttr::MigrationFingerprintRefNames,
-                    &[
-                        ("query_sql", text(py, &query_sql)),
-                        ("metadata_json", text(py, &metadata_json)),
-                    ],
+                    migration_fingerprint_ref_names(py, &query_sql, &metadata_json)?,
                 )?;
                 let mut names: Vec<String> = found
                     .try_iter()?
@@ -319,9 +316,8 @@ impl MigrationFingerprintCache {
                 for (name, identity) in &key.3 {
                     pyo3::types::PyDictMethods::set_item(&identities, name, identity)?;
                 }
-                let computed: Option<String> = native(
-                    py,
-                    NativeAttr::BuildMigrationFingerprint,
+                let computed: Option<String> = call_with(
+                    &registry::native(py, NativeAttr::BuildMigrationFingerprint)?,
                     &[
                         ("query_sql", text(py, &key.0)),
                         ("metadata_json", text(py, &key.1)),

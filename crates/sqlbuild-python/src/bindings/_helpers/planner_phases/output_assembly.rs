@@ -2,17 +2,22 @@
 
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::planner_entries::models::PlanOutputInputs;
 use crate::bindings::_helpers::planner_entries::plan_output::plan_output_fields;
+use crate::bindings::_helpers::planner_identity::staleness::build_stale_out_of_selection_warnings;
+use crate::bindings::_helpers::planner_migrations::fingerprint::with_migration_fingerprints;
 use crate::bindings::_helpers::planner_phases::contexts::class_field;
 use crate::bindings::_helpers::planner_phases::models::PlannerIdentityContext;
 use crate::bindings::_helpers::planner_phases::models::PlannerScopeResolution;
 use crate::bindings::_helpers::planner_phases::models::{
     ChangeReconciliation, ModelEntryResults, PlanOutputFields,
 };
+use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::objects::{
     native, replace, sorted_names, strings, text, tuple,
 };
+use crate::bindings::_helpers::planner_phases::retention::plan_retention;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::planner_phases::runtime::warehouse_field;
 use crate::bindings::_helpers::planner_warehouse::source_freshness::source_freshness_unknown_warnings;
@@ -175,23 +180,30 @@ pub(crate) fn add_storage_policies<'py>(
             let model = model?;
             models.set_item(model_reads::name_object(&model)?, model)?;
         }
-        entries = native(
+        entries = object(
             py,
-            NativeAttr::WithMigrationFingerprints,
-            &[
-                ("entries", entries),
-                ("models_by_name", models.into_any()),
-                (
-                    "fingerprints",
-                    warehouse_field(warehouse, |warehouse| &warehouse.migration_fingerprints)?,
-                ),
-                (
-                    "dialect",
-                    runtime
-                        .getattr("adapter")?
-                        .call_method0("sql_analysis_dialect")?,
-                ),
-            ],
+            with_migration_fingerprints(
+                py,
+                Some(keywords(
+                    py,
+                    &[
+                        ("entries", entries),
+                        ("models_by_name", models.into_any()),
+                        (
+                            "fingerprints",
+                            warehouse_field(warehouse, |warehouse| {
+                                &warehouse.migration_fingerprints
+                            })?,
+                        ),
+                        (
+                            "dialect",
+                            runtime
+                                .getattr("adapter")?
+                                .call_method0("sql_analysis_dialect")?,
+                        ),
+                    ],
+                )?),
+            )?,
         )?;
     }
     let entries = with_column_rename_hints(
@@ -212,13 +224,16 @@ pub(crate) fn add_storage_policies<'py>(
         ],
     )?;
     let selected = class_field(scopes, |s: &PlannerScopeResolution| &s.selected_scope)?;
-    let storage = [
-        ("runtime", runtime.clone()),
-        ("warehouse", warehouse.clone()),
-        ("scope", selected),
-    ];
-    let table_types = native(py, NativeAttr::PlanTableTypes, &storage)?;
-    let retention = native(py, NativeAttr::PlanRetention, &storage)?;
+    let table_types = native(
+        py,
+        NativeAttr::PlanTableTypes,
+        &[
+            ("runtime", runtime.clone()),
+            ("warehouse", warehouse.clone()),
+            ("scope", selected.clone()),
+        ],
+    )?;
+    let retention = plan_retention(runtime, warehouse, &selected)?;
     output.set("model_entries", entries);
     output.set("migration_entries", migration_entries);
     output.set("column_migration_entries", column_entries);
@@ -250,39 +265,44 @@ pub(crate) fn add_plan_warnings<'py>(
     if !policies.getattr("selection_diagnostics")?.is_truthy()? {
         return Ok(output);
     }
-    let stale = native(
+    let stale = object(
         py,
-        NativeAttr::BuildStaleOutOfSelectionWarnings,
-        &[
-            (
-                "original_scope",
-                class_field(scopes, |s: &PlannerScopeResolution| &s.stale_warning_scope)?,
-            ),
-            (
-                "execution_scope",
-                class_field(scopes, |s: &PlannerScopeResolution| &s.inspection_scope)?,
-            ),
-            ("changes", stale_warning_changes.clone()),
-            (
-                "snapshot",
-                warehouse_field(warehouse, |warehouse| &warehouse.snapshot)?,
-            ),
-            (
-                "version_identities",
-                class_field(identities, |i: &PlannerIdentityContext| {
-                    &i.stale_warning_identities
-                })?,
-            ),
-            ("source_freshness", source_freshness.clone()),
-            (
-                "include_sources",
-                PyBool::new(py, false).to_owned().into_any(),
-            ),
-            (
-                "model_changes_complete",
-                PyBool::new(py, true).to_owned().into_any(),
-            ),
-        ],
+        build_stale_out_of_selection_warnings(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    (
+                        "original_scope",
+                        class_field(scopes, |s: &PlannerScopeResolution| &s.stale_warning_scope)?,
+                    ),
+                    (
+                        "execution_scope",
+                        class_field(scopes, |s: &PlannerScopeResolution| &s.inspection_scope)?,
+                    ),
+                    ("changes", stale_warning_changes.clone()),
+                    (
+                        "snapshot",
+                        warehouse_field(warehouse, |warehouse| &warehouse.snapshot)?,
+                    ),
+                    (
+                        "version_identities",
+                        class_field(identities, |i: &PlannerIdentityContext| {
+                            &i.stale_warning_identities
+                        })?,
+                    ),
+                    ("source_freshness", source_freshness.clone()),
+                    (
+                        "include_sources",
+                        PyBool::new(py, false).to_owned().into_any(),
+                    ),
+                    (
+                        "model_changes_complete",
+                        PyBool::new(py, true).to_owned().into_any(),
+                    ),
+                ],
+            )?),
+        )?,
     )?;
     if stale.is_truthy()? {
         let warnings = concat(py, &[output.field("warnings")?, stale])?;

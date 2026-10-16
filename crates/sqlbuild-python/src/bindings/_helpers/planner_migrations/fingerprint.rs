@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 /// Hash normalized SQL and non-storage metadata through rename identities.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn build_migration_fingerprint(
+pub(crate) fn build_migration_fingerprint(
     py: Python<'_>,
     options: Option<Bound<'_, PyDict>>,
 ) -> PyResult<Option<String>> {
@@ -52,7 +52,7 @@ fn build_migration_fingerprint(
 /// Every name whose rename identity can change the migration fingerprint.
 #[pyfunction]
 #[pyo3(signature = (*, query_sql, metadata_json))]
-fn migration_fingerprint_ref_names<'py>(
+pub(crate) fn migration_fingerprint_ref_names<'py>(
     py: Python<'py>,
     query_sql: &str,
     metadata_json: &str,
@@ -73,7 +73,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
 /// Attach persisted migration identities through the existing cache boundary.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn with_migration_fingerprints<'py>(
+pub(crate) fn with_migration_fingerprints<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {

@@ -7,8 +7,7 @@ use crate::bindings::_helpers::planner_resolution::models::CursorFiltering;
 use crate::bindings::_helpers::planner_resolution::values::{
     cursor_wrap, filtering_of, method, string,
 };
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::sqltext::code_scanner::SqlCodeScanner;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
@@ -137,8 +136,7 @@ fn resolve_function_calls(
     if spans.is_empty() {
         return Ok(query_sql.to_owned());
     }
-    let scanner_type = registry::native(py, NativeAttr::SqlCodeScanner)?;
-    let scan = scanner_type.call1((query_sql, py.None(), "SQL reference resolution"))?;
+    let scan = SqlCodeScanner::new(query_sql, None, "SQL reference resolution".to_owned());
     let mut output = String::new();
     let mut last = 0;
     let mut code_index = 0;
@@ -146,9 +144,7 @@ fn resolve_function_calls(
         if table {
             let start = query_sql[..span.start].chars().count();
             while code_index < start {
-                let end: Option<usize> = scan
-                    .call_method1("non_code_end", (code_index,))?
-                    .extract()?;
+                let end: Option<usize> = scan.non_code_end(py, code_index)?;
                 code_index = end.unwrap_or(code_index + 1);
             }
             if code_index > start {
@@ -175,10 +171,8 @@ fn resolve_function_calls(
         } else {
             "SQL UDF call"
         };
-        let scanner = scanner_type.call1((query_sql, py.None(), context))?;
-        let end: usize = scanner
-            .call_method1("matching_paren", (query_sql[..suffix].chars().count(),))?
-            .extract()?;
+        let scanner = SqlCodeScanner::new(query_sql, None, context.to_owned());
+        let end: usize = scanner.matching_paren(py, query_sql[..suffix].chars().count())?;
         let end = query_sql
             .char_indices()
             .nth(end + 1)
@@ -203,9 +197,7 @@ fn resolve_function_calls(
     if table {
         let length = query_sql.chars().count();
         while code_index < length {
-            let end: Option<usize> = scan
-                .call_method1("non_code_end", (code_index,))?
-                .extract()?;
+            let end: Option<usize> = scan.non_code_end(py, code_index)?;
             code_index = end.unwrap_or(code_index + 1);
         }
     }
@@ -235,7 +227,7 @@ pub(crate) fn resolve_table_function_references(
 
 #[pyfunction]
 #[pyo3(signature = (*, model_locations, seed_locations, deferred_locations, selected_keys))]
-fn apply_deferred_locations<'py>(
+pub(crate) fn apply_deferred_locations<'py>(
     model_locations: &Bound<'py, PyDict>,
     seed_locations: &Bound<'py, PyDict>,
     deferred_locations: &Bound<'py, PyDict>,

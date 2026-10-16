@@ -1,9 +1,10 @@
 //! Model renames that downstream `__ref` names may have been rewritten for.
 
+use crate::bindings::_helpers::fingerprints::query_hashes::compute_query_hash;
 use std::collections::BTreeSet;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PySet, PySetMethods, PyString, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PySet, PySetMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use sqlbuild_analysis::planner_changes::main::origin_reference_names::origin_reference_names;
@@ -16,7 +17,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::planner_identity::hashing::model_query_hash;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
 const GENERIC_DIALECT: &str = "generic";
@@ -47,16 +48,9 @@ pub(crate) fn origin_names(
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| GENERIC_DIALECT.to_owned());
     let mut spans = |names: &BTreeSet<String>| ref_name_spans(&query_sql, &dialect_name, names);
-    let compute_hash: Bound<'_, PyAny> = registry::native(py, NativeAttr::ComputeQueryHash)?;
+    let dialect_option: Option<String> = dialect.extract()?;
     let mut query_hash = |text: &str| -> PyResult<String> {
-        call_with(
-            &compute_hash,
-            &[
-                ("query_sql", PyString::new(py, text).into_any()),
-                ("dialect", dialect.clone()),
-            ],
-        )?
-        .extract()
+        compute_query_hash(py, text, dialect_option.as_deref())
     };
     origin_reference_names(
         (&query_sql, recorded_hash),
@@ -143,7 +137,7 @@ fn origin_reference_names_of<'py>(
 /// This plan's renames plus recorded renames, read only when a selected query that references models changed.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn plan_reference_renames<'py>(
+pub(crate) fn plan_reference_renames<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {

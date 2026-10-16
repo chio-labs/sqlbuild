@@ -1,5 +1,7 @@
 //! Read-only warehouse evidence gathered once for all model migrations in one plan.
 
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::fingerprints::storage_io::read_latest_fingerprints;
 use std::collections::{HashMap, HashSet};
 
 use pyo3::prelude::{
@@ -18,8 +20,6 @@ use crate::bindings::_helpers::planner_migrations::constants::{
     GET_COLUMNS_FOR_INSPECTION, LIST_RELATIONS_FOR_INSPECTION,
 };
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::constants::{COLUMN_KIND, MODEL_KIND, OLD_NAME_KIND};
 use crate::bindings::_helpers::state_rows::migration_io::{read_events, stored_old_name_columns};
 use crate::bindings::_helpers::state_rows::migration_objects::layout;
@@ -175,8 +175,8 @@ impl MigrationStateInspection {
             .call_method1("get", (key,))?;
         let latest: Bound<'py, PyAny> = if known.is_none() {
             let adapter: &Bound<'py, PyAny> = self.adapter.bind(py);
-            let fingerprint_set: Bound<'py, PyAny> = call_with(
-                &registry::native(py, NativeAttr::ReadLatestFingerprints)?,
+            let fingerprint_set: Bound<'py, PyAny> = read_latest_fingerprints(Some(&keywords(
+                py,
                 &[
                     ("connection", self.connection.bind(py).clone()),
                     ("execute", adapter.getattr("execute")?),
@@ -192,7 +192,7 @@ impl MigrationStateInspection {
                         adapter.getattr("render_read_latest_fingerprints_sql")?,
                     ),
                 ],
-            )?;
+            )?))?;
             let by_identity: Bound<'py, PyAny> =
                 fingerprint_set.getattr("fingerprints_by_identity")?;
             if by_identity.is_truthy()? {

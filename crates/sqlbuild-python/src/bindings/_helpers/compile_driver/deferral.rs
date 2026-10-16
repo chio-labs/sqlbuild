@@ -29,7 +29,7 @@ struct DeferredNaming<'py> {
 /// Build physical locations for all models and seeds under a deferred target.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn build_deferred_locations<'py>(
+pub(crate) fn build_deferred_locations<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyDict>> {
@@ -186,7 +186,7 @@ fn planner_error(py: Python<'_>, message: String) -> PyErr {
 /// Validate and resolve the deferred target config.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn resolve_deferred_target_config<'py>(
+pub(crate) fn resolve_deferred_target_config<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -233,7 +233,7 @@ fn deferred_target_config<'py>(
 /// Gather existing relations from the deferred target's relation-location schemas.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn gather_deferred_relations<'py>(
+pub(crate) fn gather_deferred_relations<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyDict>> {

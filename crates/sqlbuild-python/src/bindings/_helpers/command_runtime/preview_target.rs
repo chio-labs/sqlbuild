@@ -19,7 +19,7 @@ fn target_names(config: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
 /// Fail clearly when `--as` names a target that is not configured.
 #[pyfunction]
 #[pyo3(signature = (*, discovered_inputs, as_target, command_name))]
-fn validate_preview_target(
+pub(crate) fn validate_preview_target(
     py: Python<'_>,
     discovered_inputs: Bound<'_, PyAny>,
     as_target: Option<String>,

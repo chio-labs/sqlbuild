@@ -1,5 +1,7 @@
 //! `sqb janitor` phases: compile, connect, inspect and plan, clean up and close.
 
+use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use std::time::Instant;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
@@ -87,17 +89,20 @@ pub(crate) fn compile_janitor_project<'py>(
     let project: Bound<'py, PyAny> =
         within(&lifecycle(py, ("project", "project_compile"))?, |_| {
             status.call_method1("on_progress", ("Compiling project...",))?;
-            let project: Bound<'py, PyAny> = call_with(
-                &registry::native(py, NativeAttr::BuildCompiledProject)?,
-                &[
-                    (
-                        "discovered_inputs",
-                        invocation.getattr("discovered_inputs")?,
-                    ),
-                    ("adapter", context.getattr("adapter")?),
-                    ("selected_target", target),
-                    ("resolved_connection", context.getattr("connection_config")?),
-                ],
+            let project: Bound<'py, PyAny> = build_compiled_project(
+                py,
+                Some(keywords(
+                    py,
+                    &[
+                        (
+                            "discovered_inputs",
+                            invocation.getattr("discovered_inputs")?,
+                        ),
+                        ("adapter", context.getattr("adapter")?),
+                        ("selected_target", target),
+                        ("resolved_connection", context.getattr("connection_config")?),
+                    ],
+                )?),
             )?;
             status.call_method1(
                 "on_progress",

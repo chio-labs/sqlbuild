@@ -222,7 +222,9 @@ fn read_state_events<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Boun
 /// The old-name view history of every recorded move in a schema that holds both state tables.
 #[pyfunction(name = "read_old_name_view_histories")]
 #[pyo3(signature = (**request))]
-fn read_histories<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py, PyTuple>> {
+pub(crate) fn read_histories<'py>(
+    request: Option<&Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyTuple>> {
     let request = Request::new("read_old_name_view_histories", request)?;
     let access: StateAccess<'py> = access(&request)?;
     let location = || -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
@@ -283,7 +285,7 @@ fn read_renames<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py
 /// The column names of one schema's old-name view state table.
 #[pyfunction(name = "stored_old_name_view_columns")]
 #[pyo3(signature = (*, adapter, connection, database, schema))]
-fn stored_columns_binding<'py>(
+pub(crate) fn stored_columns_binding<'py>(
     adapter: &Bound<'py, PyAny>,
     connection: &Bound<'py, PyAny>,
     database: Bound<'py, PyAny>,

@@ -48,7 +48,7 @@ fn sql_analysis_off_guidance(
 }
 
 #[pyfunction]
-fn microbatch_guidance() -> (String, String) {
+pub(crate) fn microbatch_guidance() -> (String, String) {
     concurrency_guidance()
 }
 

@@ -45,7 +45,7 @@ fn preview_json(value: &Bound<'_, PyAny>) -> PyResult<String> {
 /// One project var value as interpolated text; structured values are rejected.
 #[pyfunction]
 #[pyo3(signature = (*, value, label))]
-fn render_project_var_text(value: &Bound<'_, PyAny>, label: &str) -> PyResult<String> {
+pub(crate) fn render_project_var_text(value: &Bound<'_, PyAny>, label: &str) -> PyResult<String> {
     project_var_text(value, label)
 }
 

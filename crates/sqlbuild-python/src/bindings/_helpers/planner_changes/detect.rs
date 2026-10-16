@@ -1,6 +1,7 @@
 //! Detect how each selected model and function changed since its recorded build.
 
 use crate::bindings::_helpers::analysis::model_reads;
+use crate::bindings::_helpers::contracts::spec_resolution::matching_dynamic_families;
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::planner_changes::results::native_enum;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -42,7 +43,7 @@ use crate::bindings::_helpers::planner_identity::metadata::{
     compiled_function_fingerprint_sql, function_local_hashes, model_declared_columns_hash,
     model_version_identity_metadata_json,
 };
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::type_system::equality::types_equal as native_types_equal;
 
@@ -156,7 +157,7 @@ pub(crate) fn detect_changes<'py>(
 /// Selected model changes, without inspecting functions.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn detect_model_changes_in_scope<'py>(
+pub(crate) fn detect_model_changes_in_scope<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyDict>> {
@@ -190,7 +191,7 @@ fn detect_model_changes_in_scope<'py>(
 /// One model's change and backfill.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn detect_model_changes<'py>(
+pub(crate) fn detect_model_changes<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -594,23 +595,15 @@ fn schema_findings_of<'py>(
     (type_enforcement, inferred_schema_complete): (bool, bool),
     (dynamic, dialect): (Option<Bound<'py, PyAny>>, &Bound<'py, PyAny>),
 ) -> PyResult<Vec<SchemaFindingRow>> {
-    let py: Python<'py> = dialect.py();
+    let _py: Python<'py> = dialect.py();
     let dialect_name: Option<String> = dialect.extract()?;
     let mut types_equal =
         |left: &str, right: &str| -> PyResult<bool> { native_types_equal(dialect, left, right) };
-    let matching_function: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::MatchingDynamicFamilies)?;
     let mut single_family_type = |name: &str| -> PyResult<Option<String>> {
         let Some(families) = &dynamic else {
             return Ok(None);
         };
-        let matching: Bound<'py, PyAny> = call_with(
-            &matching_function,
-            &[
-                ("families", families.clone()),
-                ("column_name", PyString::new(py, name).into_any()),
-            ],
-        )?;
+        let matching = matching_dynamic_families(families, name)?;
         if matching.len()? != 1 {
             return Ok(None);
         }

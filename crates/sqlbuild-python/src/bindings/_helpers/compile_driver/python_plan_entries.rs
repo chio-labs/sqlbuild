@@ -1,5 +1,6 @@
 //! Display-ready Python plan entries and Python-aware selection warnings of a plan.
 
+use crate::bindings::_helpers::graph::python_lifecycle::build_python_sql_run_lifecycle;
 use std::collections::HashMap;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -15,7 +16,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
 const SKIPPED_UPSTREAM_CODE: &str = "P501";
@@ -68,7 +69,7 @@ fn node_graph<'py>(discovered: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>
 /// Return sources declared by the selected Python nodes and their Python upstreams.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn python_read_source_names_for<'py>(
+pub(crate) fn python_read_source_names_for<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -104,7 +105,7 @@ fn python_read_source_names_for<'py>(
 /// Attach python-aware selection warnings and plan entries to the plan output.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn build_python_run_plan_outputs<'py>(
+pub(crate) fn build_python_run_plan_outputs<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -161,10 +162,7 @@ fn build_python_run_plan_outputs<'py>(
             ("python_node_names", selected.clone()),
         ],
     )?;
-    let lifecycle: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildPythonSqlRunLifecycle)?,
-        &[("selection", selection), ("python_graph", graph.clone())],
-    )?;
+    let lifecycle: Bound<'py, PyAny> = build_python_sql_run_lifecycle(&selection, &graph)?;
     let entries: Bound<'py, PyTuple> = plan_entries(
         &lifecycle,
         (&graph, &kinds),

@@ -386,7 +386,7 @@ fn python_literal_sql_calls(
 /// How an owner of `owner_kind` should read `target` instead of naming its relation in SQL.
 #[pyfunction]
 #[pyo3(signature = (*, owner_kind, r#ref, upstream_loader_by_source = None))]
-fn hard_coded_relation_remedy(
+pub(crate) fn hard_coded_relation_remedy(
     owner_kind: &str,
     r#ref: &Bound<'_, PyAny>,
     upstream_loader_by_source: Option<&Bound<'_, PyAny>>,
@@ -407,7 +407,7 @@ fn hard_coded_relation_remedy(
 /// The P008 message for SQL naming a relation kept only as a compatibility view.
 #[pyfunction]
 #[pyo3(signature = (*, owner_label, written, method, model_name))]
-fn old_name_reference_message(
+pub(crate) fn old_name_reference_message(
     owner_label: &str,
     written: &str,
     method: &str,

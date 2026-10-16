@@ -281,7 +281,7 @@ fn unresolved_bounds_error(py: Python<'_>, name: &str, cause: Option<&str>) -> P
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn resolve_function_sql<'py>(
+pub(crate) fn resolve_function_sql<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

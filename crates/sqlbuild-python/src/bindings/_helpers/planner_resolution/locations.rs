@@ -14,17 +14,21 @@ fn locations<'py>(items: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
 }
 
 #[pyfunction]
-fn build_model_locations<'py>(models: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+pub(crate) fn build_model_locations<'py>(
+    models: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyDict>> {
     locations(models)
 }
 
 #[pyfunction]
-fn build_seed_locations<'py>(seeds: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+pub(crate) fn build_seed_locations<'py>(seeds: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     locations(seeds)
 }
 
 #[pyfunction]
-fn build_function_locations<'py>(functions: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+pub(crate) fn build_function_locations<'py>(
+    functions: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyDict>> {
     locations(functions)
 }
 

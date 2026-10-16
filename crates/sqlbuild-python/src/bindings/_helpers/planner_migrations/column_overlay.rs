@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::planner_migrations::column_objects::{
     config, definition_hash, lower, native, replace,
 };
@@ -9,7 +10,9 @@ use crate::bindings::_helpers::planner_migrations::models::ColumnCandidate;
 use crate::bindings::_helpers::planner_migrations::models::{
     ColumnMigrationInputs, MigrationPhase,
 };
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::planner_migrations::projections::renames_explain_change;
+use crate::bindings::_helpers::planner_phases::objects::object;
+use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
@@ -67,15 +70,20 @@ pub(super) fn overlay<'py>(
         if !candidate.fingerprint.is_none()
             && !candidate.previous.is_none()
             && !candidate.current.is_none()
-            && native(
+            && object(
                 py,
-                NativeAttr::RenamesExplainChange,
-                &[
-                    ("previous", candidate.previous.clone()),
-                    ("current", candidate.current.clone()),
-                    ("renames", renames.into_any()),
-                    ("input_columns", inputs.clone()),
-                ],
+                renames_explain_change(
+                    py,
+                    Some(keywords(
+                        py,
+                        &[
+                            ("previous", candidate.previous.clone()),
+                            ("current", candidate.current.clone()),
+                            ("renames", renames.into_any()),
+                            ("input_columns", inputs.clone()),
+                        ],
+                    )?),
+                )?,
             )?
             .is_truthy()?
         {

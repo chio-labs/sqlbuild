@@ -1,5 +1,17 @@
 //! `sqb check`: run the selected Python checks after their Python dependencies.
 
+use crate::bindings::_helpers::compile_driver::pipeline_entries::build_static_pipeline_result;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::compile_driver::relation_targets::build_project_relation_targets;
+use crate::bindings::_helpers::compile_driver::relation_targets::build_python_relation_targets;
+use crate::bindings::_helpers::compile_driver::selection_phases::compile_static_command_context;
+use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
+use crate::bindings::_helpers::graph::algorithms::transitive_closure_many;
+use crate::bindings::_helpers::graph::python_lifecycle::build_python_sql_run_lifecycle;
+use crate::bindings::_helpers::planner_entries::command_plans::build_relation_command_plan;
+use crate::bindings::_helpers::planner_phases::objects::object;
+use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
+use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
@@ -163,16 +175,14 @@ fn compile_pipeline<'py>(
         &graph.getattr("selected_sql_refs")?,
         &[("selected_names", check_names.clone().into_any())],
     )?;
-    let closure: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::TransitiveClosureMany)?,
-        &[
-            ("starts", check_names.clone().into_any()),
-            ("edges", graph.getattr("upstream_deps")?),
-            (
-                "include_starts",
-                PyBool::new(py, false).to_owned().into_any(),
-            ),
-        ],
+    let closure: Bound<'py, PyAny> = object(
+        py,
+        transitive_closure_many(
+            check_names.as_any(),
+            &graph.getattr("upstream_deps")?,
+            false,
+            None,
+        )?,
     )?;
     let loader_kind: Bound<'py, PyAny> =
         host::entry(py, UserCodeHost::PythonNodeKind)?.getattr("LOADER")?;
@@ -207,12 +217,9 @@ fn compile_pipeline<'py>(
         }
     }
     let keys: Bound<'py, PyAny> = PyFrozenSet::new(py, keys)?.into_any();
-    let resolver: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveExternalSqlReferenceResolver)?,
-        &[
-            ("project_dir", invocation.getattr("effective_project_dir")?),
-            ("discovered_inputs", discovered.clone()),
-        ],
+    let resolver: Bound<'py, PyAny> = resolve_external_sql_reference_resolver(
+        invocation.getattr("effective_project_dir")?,
+        discovered.clone(),
     )?;
     let options: Bound<'py, PyAny> = call_with(
         &registry::class(py, RecordId::CompilePipelineOptions)?,
@@ -227,8 +234,8 @@ fn compile_pipeline<'py>(
             ("external_sql_reference_resolver", resolver),
         ],
     )?;
-    let context: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::CompileStaticCommandContext)?,
+    let context: Bound<'py, PyAny> = compile_static_command_context(Some(&keywords(
+        py,
         &[
             ("discovered_inputs", discovered),
             ("adapter", invocation.getattr("adapter")?),
@@ -242,18 +249,18 @@ fn compile_pipeline<'py>(
                     .getattr("on_progress")?,
             ),
         ],
+    )?))?;
+    let plan_output: Bound<'py, PyAny> = build_relation_command_plan(
+        &context.getattr("project")?,
+        &context.getattr("scope")?,
+        &context.getattr("relations")?,
     )?;
-    let plan_output: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildRelationCommandPlan)?,
-        &[
-            ("project", context.getattr("project")?),
-            ("scope", context.getattr("scope")?),
-            ("relations", context.getattr("relations")?),
-        ],
-    )?;
-    call_with(
-        &registry::native(py, NativeAttr::BuildStaticPipelineResult)?,
-        &[("context", context), ("plan_output", plan_output)],
+    build_static_pipeline_result(
+        py,
+        Some(keywords(
+            py,
+            &[("context", context), ("plan_output", plan_output)],
+        )?),
     )
 }
 
@@ -275,15 +282,12 @@ fn python_selection<'py>(
     request: &Bound<'py, PyAny>,
     discovered: &Bound<'py, PyAny>,
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyFrozenSet>)> {
-    let py: Python<'py> = request.py();
+    let _py: Python<'py> = request.py();
     let python_graph: Bound<'py, PyAny> = python_node_graph(discovered)?;
-    call_with(
-        &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
-        &[
-            ("select", request.getattr("select")?),
-            ("exclude", request.getattr("exclude")?),
-            ("discovered_inputs", discovered.clone()),
-        ],
+    reject_unit_test_selectors(
+        &request.getattr("select")?,
+        &request.getattr("exclude")?,
+        discovered,
     )?;
     let check_names: Bound<'py, PyFrozenSet> = selected_check_names(request, &python_graph)?;
     Ok((python_graph, check_names))
@@ -314,27 +318,28 @@ fn prepare<'py>(
             ("python_node_names", PyFrozenSet::empty(py)?.into_any()),
         ],
     )?;
-    let lifecycle_plan: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildPythonSqlRunLifecycle)?,
-        &[
-            ("selection", selection),
-            ("python_graph", python_graph.clone()),
-        ],
-    )?;
+    let lifecycle_plan: Bound<'py, PyAny> =
+        build_python_sql_run_lifecycle(&selection, &python_graph)?;
     let relation_refs: Bound<'py, PyAny> = call_with(
         &python_graph.getattr("selected_sql_refs")?,
         &[("selected_names", check_names.clone().into_any())],
     )?;
     let project: Bound<'py, PyAny> = pipeline.getattr("project")?;
     let plan_output: Bound<'py, PyAny> = pipeline.getattr("plan_output")?;
-    let relation_targets: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildPythonRelationTargets)?,
-        &[
-            ("adapter", adapter.clone()),
-            ("project", project.clone()),
-            ("plan_output", plan_output.clone()),
-            ("required_refs", relation_refs.clone()),
-        ],
+    let relation_targets: Bound<'py, PyAny> = object(
+        py,
+        build_python_relation_targets(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("adapter", adapter.clone()),
+                    ("project", project.clone()),
+                    ("plan_output", plan_output.clone()),
+                    ("required_refs", relation_refs.clone()),
+                ],
+            )?),
+        )?,
     )?;
     Ok(Prepared {
         check_functions: PyTuple::new(py, check_functions)?.into_any(),
@@ -353,9 +358,15 @@ fn prepare<'py>(
                 ("effective_target_schema", "default_schema"),
             )?,
         ),
-        project_relations: call_with(
-            &registry::native(py, NativeAttr::BuildProjectRelationTargets)?,
-            &[("adapter", adapter), ("plan_output", plan_output)],
+        project_relations: object(
+            py,
+            build_project_relation_targets(
+                py,
+                Some(keywords(
+                    py,
+                    &[("adapter", adapter), ("plan_output", plan_output)],
+                )?),
+            )?,
         )?,
         python_graph,
         pipeline,
@@ -617,16 +628,14 @@ fn complete<'py>(
             .call_method1("__truediv__", ("target",))?,
         &tuple,
     )?;
-    call_with(
-        &registry::native(py, NativeAttr::WriteExecutionJsonOutput)?,
-        &[
-            (
-                "payload",
-                PyString::new(py, &results_json(results)?).into_any(),
-            ),
-            ("json_output", request.getattr("json_output")?),
-            ("json_output_path", request.getattr("json_output_path")?),
-        ],
+    object(
+        py,
+        write_execution_json_output(
+            py,
+            PyString::new(py, &results_json(results)?).into_any(),
+            request.getattr("json_output")?.is_truthy()?,
+            request.getattr("json_output_path")?,
+        )?,
     )?;
     Ok(check_exit_code(&texts))
 }

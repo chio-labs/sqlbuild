@@ -1,6 +1,7 @@
 //! Resolve scenario SQL through the shared native scanner and adapter callbacks.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_scenario::constants::{
     SCENARIO_PLAN_MISSING_RELATION_TARGET, SCENARIO_PLAN_UNRESOLVED_RELATION_MARKER,
 };
@@ -8,8 +9,7 @@ use crate::bindings::_helpers::planner_scenario::{
     models::SqlContext,
     values::{error, string},
 };
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::references::source_relations::render_source_relation;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyStringMethods};
@@ -46,7 +46,7 @@ pub(super) fn resolve_sql(
         result = replace_markers(&result, kind, Some(syntax.clone().into()), |name, marker| {
             let target = locations.call_method1("get", (name,))?;
             let target = if target.is_none() {target} else if kind == super::constants::SOURCE_MARKER {
-                call_with(&registry::native(py, NativeAttr::RenderSourceRelation)?, &[("entry", target), ("adapter", context.adapter.clone())])?
+                object(py, render_source_relation(&target, Some(&context.adapter.clone()).filter(|value| !value.is_none()))?)?
             } else {target.getattr("qualified_name")?};
             if target.is_none() {
                 let marker = string(py, marker).repr()?.to_str()?.to_owned();

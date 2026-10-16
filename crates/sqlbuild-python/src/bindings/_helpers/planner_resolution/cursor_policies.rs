@@ -93,7 +93,7 @@ fn resolve_future_cursor_config<'py>(
 /// Resolve automatic-start policy with model config taking precedence.
 #[pyfunction]
 #[pyo3(signature = (*, model, project_config))]
-fn resolve_start_cursor_config<'py>(
+pub(crate) fn resolve_start_cursor_config<'py>(
     model: &Bound<'py, PyAny>,
     project_config: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {

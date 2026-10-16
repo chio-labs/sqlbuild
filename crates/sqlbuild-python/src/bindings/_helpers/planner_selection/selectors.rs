@@ -119,7 +119,9 @@ fn view_graph(mappings: GraphViewMappings<'_, '_>) -> PyResult<NativeProjectGrap
 
 /// Parse one selector token into Python's `ParsedSelector` or `PathSelector`.
 #[pyfunction]
-fn parse_project_selector<'py>(raw: &Bound<'py, PyString>) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn parse_project_selector<'py>(
+    raw: &Bound<'py, PyString>,
+) -> PyResult<Bound<'py, PyAny>> {
     let carrier: Carrier<'py> = Carrier::single(raw)?;
     let parsed: ParsedSelector =
         parse_selector(&carrier.send(raw)?).map_err(|error| carrier.error(error))?;
@@ -129,7 +131,7 @@ fn parse_project_selector<'py>(raw: &Bound<'py, PyString>) -> PyResult<Bound<'py
 /// `--select` minus `--exclude` on a native graph, adding the functions selected models need.
 #[pyfunction]
 #[pyo3(signature = (*, graph, select, exclude))]
-fn resolve_graph_selection<'py>(
+pub(crate) fn resolve_graph_selection<'py>(
     graph: PyRef<'py, NativeProjectGraph>,
     select: &Bound<'py, PyAny>,
     exclude: &Bound<'py, PyAny>,
@@ -140,7 +142,7 @@ fn resolve_graph_selection<'py>(
 /// `--select` minus `--exclude` on a project graph, adding the functions selected models need.
 #[pyfunction]
 #[pyo3(signature = (*, graph, select, exclude))]
-fn select_project_graph<'py>(
+pub(crate) fn select_project_graph<'py>(
     graph: &Bound<'py, PyAny>,
     select: &Bound<'py, PyAny>,
     exclude: &Bound<'py, PyAny>,
@@ -234,7 +236,7 @@ fn match_project_selector<'py>(
 /// The upstream key closure of one compiled graph key.
 #[pyfunction]
 #[pyo3(signature = (*, key, upstream_deps))]
-fn expand_project_upstream_keys<'py>(
+pub(crate) fn expand_project_upstream_keys<'py>(
     key: Bound<'py, PyAny>,
     upstream_deps: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyFrozenSet>> {

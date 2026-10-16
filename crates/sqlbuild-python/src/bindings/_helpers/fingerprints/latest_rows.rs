@@ -56,7 +56,7 @@ pub(crate) fn fingerprint_set_from_rows<'py>(
 /// `select_latest_fingerprints`: an unfiltered latest read narrowed as a filtered read would be.
 #[pyfunction]
 #[pyo3(signature = (*, fingerprint_set, node_names, filtered_node_types = Vec::new()))]
-fn select_latest_fingerprints<'py>(
+pub(crate) fn select_latest_fingerprints<'py>(
     py: Python<'py>,
     fingerprint_set: &Bound<'py, PyAny>,
     node_names: Vec<String>,

@@ -35,7 +35,10 @@ fn format_execution_header(command: &str, target: Option<&str>, concurrency: i64
 /// Write an execution header for command progress output.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn write_execution_header(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<()> {
+pub(crate) fn write_execution_header(
+    py: Python<'_>,
+    options: Option<Bound<'_, PyDict>>,
+) -> PyResult<()> {
     let arguments: KeywordArguments<'_> =
         KeywordArguments::read(py, "write_execution_header", options, HEADER_OPTIONS)?;
     let command: String = arguments.value("command")?.extract()?;

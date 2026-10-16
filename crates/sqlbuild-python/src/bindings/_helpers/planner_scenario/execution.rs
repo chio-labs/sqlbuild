@@ -1,11 +1,18 @@
 //! Assemble scenario execution plans through existing planner and adapter APIs.
 
 use crate::bindings::_helpers::analysis::model_reads;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::compiled_project::loop_classes::by_attribute;
+use crate::bindings::_helpers::compiled_project::records::compiled_model_record;
+use crate::bindings::_helpers::planner_entries::model_entries::plan_model;
 use crate::bindings::_helpers::planner_entries::models::ModelPlanContext;
+use crate::bindings::_helpers::planner_identity::graph::build_execution_upstream_deps;
+use crate::bindings::_helpers::planner_identity::graph::topologically_order_keys;
+use crate::bindings::_helpers::planner_phases::objects::object;
+use crate::bindings::_helpers::planner_resolution::locations::build_function_locations;
 use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_INVALID_FIXTURE;
 use crate::bindings::_helpers::planner_scenario::{
     entries::{function_entry, seed_entries},
@@ -16,7 +23,7 @@ use crate::bindings::_helpers::planner_scenario::{
 };
 use crate::bindings::_helpers::planner_strategy::fixture_completion::complete_fixtures as complete_relation_fixtures;
 use crate::bindings::_helpers::planner_strategy::fixture_context::planning_context;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PyTuple};
@@ -76,14 +83,9 @@ pub(crate) fn build_scenario_execution_plan<'py>(
     };
     let models = by_attribute(&project.getattr("models")?, "name")?;
     let functions = by_attribute(&project.getattr("functions")?, "key")?;
-    let locations = registry::native(py, NativeAttr::BuildFunctionLocations)?
-        .call1((project.getattr("functions")?,))?;
-    let upstream =
-        registry::native(py, NativeAttr::BuildExecutionUpstreamDeps)?.call1((&project,))?;
-    let ordered = call_with(
-        &registry::native(py, NativeAttr::TopologicallyOrderKeys)?,
-        &[("upstream", upstream)],
-    )?;
+    let locations = build_function_locations(&project.getattr("functions")?)?.into_any();
+    let upstream = build_execution_upstream_deps(&project)?.into_any();
+    let ordered = object(py, topologically_order_keys(&upstream, None)?)?;
     let mut model_keys: Vec<Bound<'py, PyAny>> = Vec::new();
     for key in ordered.try_iter()? {
         let key = key?;
@@ -127,33 +129,39 @@ pub(crate) fn build_scenario_execution_plan<'py>(
             &model_reads::query_sql(&model)?.extract::<String>()?,
             &context.relations,
         )?;
-        let record = registry::native(py, NativeAttr::CompiledModelRecord)?.call1((&model,))?;
+        let record = compiled_model_record(&model)?;
         let changes = PyDict::new(py);
         changes.set_item("destination", destination)?;
         changes.set_item("query_sql", query)?;
         let model = imported(py, "dataclasses", "replace")?.call((record,), Some(&changes))?;
         let model_context = model_context(&project, &context, (&models, &locations, &columns))?;
-        let result = call_with(
-            &registry::native(py, NativeAttr::PlanModel)?,
-            &[
-                ("model", model),
-                ("snapshot", snapshot.clone()),
-                ("adapter", context.adapter.clone()),
-                ("context", model_context),
-                (
-                    "sql_analysis_enabled",
-                    PyBool::new(py, analysis).to_owned().into_any(),
-                ),
-                (
-                    "query_change_tracking",
-                    PyBool::new(py, false).to_owned().into_any(),
-                ),
-                ("full_refresh", PyBool::new(py, true).to_owned().into_any()),
-                (
-                    "cursor_overrides",
-                    registry::class(py, RecordId::CursorOverridePair)?.call0()?,
-                ),
-            ],
+        let result = object(
+            py,
+            plan_model(
+                py,
+                Some(keywords(
+                    py,
+                    &[
+                        ("model", model),
+                        ("snapshot", snapshot.clone()),
+                        ("adapter", context.adapter.clone()),
+                        ("context", model_context),
+                        (
+                            "sql_analysis_enabled",
+                            PyBool::new(py, analysis).to_owned().into_any(),
+                        ),
+                        (
+                            "query_change_tracking",
+                            PyBool::new(py, false).to_owned().into_any(),
+                        ),
+                        ("full_refresh", PyBool::new(py, true).to_owned().into_any()),
+                        (
+                            "cursor_overrides",
+                            registry::class(py, RecordId::CursorOverridePair)?.call0()?,
+                        ),
+                    ],
+                )?),
+            )?,
         )?;
         entries.push(result.get_item(0)?);
         for warning in result.get_item(1)?.try_iter()? {

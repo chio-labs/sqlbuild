@@ -1,8 +1,11 @@
 //! Per-model plan entries from resolved change results and warehouse snapshot facts.
 
 use crate::bindings::_helpers::analysis::model_reads;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::discovery::guidance::microbatch_guidance;
 use crate::bindings::_helpers::planner_changes::actions::replaces_incremental_relation;
+use crate::bindings::_helpers::planner_changes::detect::detect_model_changes;
 use crate::bindings::_helpers::planner_entries::models::{
     ModelPlanContext, PlanEntriesRequest, PlanEntryBuildInputs, PlannerRelationsContext,
 };
@@ -15,6 +18,7 @@ use crate::bindings::_helpers::planner_phases::full_refresh::{
     check_full_rebuild_allowed, describe_full_rebuild_cause, resolve_model_full_refresh,
 };
 use crate::bindings::_helpers::planner_phases::models::ModelEntryResults;
+use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_resolution::cursor_ranges::{
     CursorWindowInputs, config_str, cursor_safety_configs, empty_cursor_inputs, microbatch_range,
     model_cursor_overrides, plan_cursor_bounds,
@@ -24,6 +28,7 @@ use crate::bindings::_helpers::planner_resolution::models::ModelSqlRequest as Sq
 use crate::bindings::_helpers::planner_resolution::orchestration::{
     Resolution, model_hook_entries, resolve_model_sql,
 };
+use crate::bindings::_helpers::planner_strategy::cursor_inputs::runtime_cursor_producer_names;
 use crate::bindings::_helpers::planner_strategy::cursor_inputs::{
     build_cursor_input_relations, reject_unexposed_cursor_input_columns,
 };
@@ -37,8 +42,9 @@ use crate::bindings::_helpers::planner_strategy::strategy::{
     materialization_of, resolve_model_plan_action,
 };
 use crate::bindings::_helpers::planner_strategy::values::text;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::semantic_shapes::source_bindings::source_binding_diagnostics;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -228,23 +234,25 @@ fn check_binding_diagnostics<'py>(
             errors.push(diagnostic);
         }
     }
-    let bound = native(
+    let bound = object(
         py,
-        NativeAttr::SourceBindingDiagnostics,
-        &[
-            ("project", project.clone()),
-            (
-                "columns",
-                class_field(relations, |context: &PlannerRelationsContext| {
-                    &context.source_warehouse_columns
-                })?,
-            ),
-            (
-                "profile",
-                adapter.call_method0("expression_inference_profile")?,
-            ),
-            ("selected_keys", selected_keys.clone()),
-        ],
+        source_binding_diagnostics(Some(&keywords(
+            py,
+            &[
+                ("project", project.clone()),
+                (
+                    "columns",
+                    class_field(relations, |context: &PlannerRelationsContext| {
+                        &context.source_warehouse_columns
+                    })?,
+                ),
+                (
+                    "profile",
+                    adapter.call_method0("expression_inference_profile")?,
+                ),
+                ("selected_keys", selected_keys.clone()),
+            ],
+        )?))?,
     )?;
     for diagnostic in bound.try_iter()? {
         let diagnostic = diagnostic?;
@@ -307,7 +315,7 @@ fn check_microbatch_concurrency<'py>(
     }
     let settings = project.getattr("settings")?;
     if !configured.is_empty() && !settings.getattr("microbatch_concurrency")?.is_truthy()? {
-        let guidance = native(py, NativeAttr::MicrobatchGuidance, &[])?;
+        let guidance = object(py, microbatch_guidance())?;
         let prefix: &str = MICROBATCH_CONCURRENCY_MESSAGE;
         return Err(error_of(
             py,
@@ -408,13 +416,9 @@ pub(crate) fn plan_entries<'py>(
     let external_blocked = build.external_blocked_model_names.bind(py).clone();
     let start_override = build.start_cursor_override.bind(py).clone();
     let end_override = build.end_cursor_override.bind(py).clone();
-    let producers = native(
+    let producers = object(
         py,
-        NativeAttr::RuntimeCursorProducerNames,
-        &[
-            ("scope", scope.clone()),
-            ("source_map", relations_context.source_map.bind(py).clone()),
-        ],
+        runtime_cursor_producer_names(&scope, &relations_context.source_map.bind(py).clone())?,
     )?;
     let functions_by_name = PyDict::new(py);
     for function in project.getattr("functions")?.try_iter()? {
@@ -534,7 +538,7 @@ pub(crate) fn plan_entries<'py>(
 /// Detect changes and build a plan entry and warnings for a single model.
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn plan_model<'py>(
+pub(crate) fn plan_model<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
@@ -558,19 +562,21 @@ fn plan_model<'py>(
     )?;
     let model = args.value("model")?;
     let snapshot = args.value("snapshot")?;
-    let change_result = native(
+    let change_result = detect_model_changes(
         py,
-        NativeAttr::DetectModelChanges,
-        &[
-            ("model", model.clone()),
-            ("snapshot", snapshot.clone()),
-            ("sql_analysis_enabled", args.value("sql_analysis_enabled")?),
-            (
-                "query_change_tracking",
-                args.value("query_change_tracking")?,
-            ),
-            ("full_refresh", args.value("full_refresh")?),
-        ],
+        Some(keywords(
+            py,
+            &[
+                ("model", model.clone()),
+                ("snapshot", snapshot.clone()),
+                ("sql_analysis_enabled", args.value("sql_analysis_enabled")?),
+                (
+                    "query_change_tracking",
+                    args.value("query_change_tracking")?,
+                ),
+                ("full_refresh", args.value("full_refresh")?),
+            ],
+        )?),
     )?;
     let overrides = args.value("cursor_overrides")?;
     plan_model_from_change(&ModelPlanRequest {

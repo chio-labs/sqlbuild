@@ -91,7 +91,7 @@ pub(crate) fn inclusive_cursor_end(
 /// A fully bounded inclusive operator override as an executable interval.
 #[pyfunction]
 #[pyo3(signature = (*, start_cursor_override, end_cursor_override, cursor_type, cursor_grain))]
-fn resolve_bounded_cursor_override<'py>(
+pub(crate) fn resolve_bounded_cursor_override<'py>(
     start_cursor_override: &Bound<'py, PyAny>,
     end_cursor_override: &Bound<'py, PyAny>,
     cursor_type: &Bound<'py, PyAny>,

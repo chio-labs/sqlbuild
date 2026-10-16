@@ -1,10 +1,12 @@
 //! Resolve the selected, stale-warning and inspection scopes of one plan.
 
 use crate::bindings::_helpers::analysis::model_reads;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::graph::algorithms::transitive_closure_many;
 use crate::bindings::_helpers::planner_phases::models::PlannerScopeResolution;
-use crate::bindings::_helpers::planner_phases::objects::{native, replace, tuple};
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use pyo3::IntoPyObject;
+use crate::bindings::_helpers::planner_phases::objects::object;
+use crate::bindings::_helpers::planner_phases::objects::{replace, tuple};
+use crate::bindings::_helpers::planner_scope::scope::build_planner_scope;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
@@ -18,47 +20,48 @@ pub(crate) fn resolve_planner_scopes<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = project.py();
     let auto_load = policies.getattr("auto_load_sources")?;
-    let selected = native(
+    let selected = build_planner_scope(
         py,
-        NativeAttr::BuildPlannerScope,
-        &[
-            ("project", project.clone()),
-            ("select", selection.getattr("select")?),
-            ("exclude", selection.getattr("exclude")?),
-            ("auto_load_sources", auto_load.clone()),
-            ("selected_keys", selection.getattr("selected_keys")?),
-            (
-                "python_read_source_names",
-                selection.getattr("python_read_source_names")?,
-            ),
-            (
-                "sql_test_selection",
-                selection.getattr("sql_test_selection")?,
-            ),
-        ],
+        Some(keywords(
+            py,
+            &[
+                ("project", project.clone()),
+                ("select", selection.getattr("select")?),
+                ("exclude", selection.getattr("exclude")?),
+                ("auto_load_sources", auto_load.clone()),
+                ("selected_keys", selection.getattr("selected_keys")?),
+                (
+                    "python_read_source_names",
+                    selection.getattr("python_read_source_names")?,
+                ),
+                (
+                    "sql_test_selection",
+                    selection.getattr("sql_test_selection")?,
+                ),
+            ],
+        )?),
     )?;
     let empty = PyTuple::empty(py).into_any();
-    let full = native(
+    let full = build_planner_scope(
         py,
-        NativeAttr::BuildPlannerScope,
-        &[
-            ("project", project.clone()),
-            ("select", empty.clone()),
-            ("exclude", empty),
-            ("auto_load_sources", auto_load),
-        ],
+        Some(keywords(
+            py,
+            &[
+                ("project", project.clone()),
+                ("select", empty.clone()),
+                ("exclude", empty),
+                ("auto_load_sources", auto_load),
+            ],
+        )?),
     )?;
-    let stale_keys = native(
+    let stale_keys = object(
         py,
-        NativeAttr::TransitiveClosureMany,
-        &[
-            ("starts", selected.getattr("selected_keys")?),
-            ("edges", full.getattr("upstream_deps")?),
-            (
-                "include_starts",
-                true.into_pyobject(py)?.to_owned().into_any(),
-            ),
-        ],
+        transitive_closure_many(
+            &selected.getattr("selected_keys")?,
+            &full.getattr("upstream_deps")?,
+            true,
+            None,
+        )?,
     )?;
     let all_keys = PyDict::new(py);
     for (name, key) in full.getattr("all_keys")?.downcast::<PyDict>()?.iter() {

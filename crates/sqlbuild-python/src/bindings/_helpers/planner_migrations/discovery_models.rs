@@ -1,13 +1,12 @@
 //! Model ordering, selection and metadata at the migration discovery boundary.
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::graph::node_set::PyNodeSet;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
-use crate::bindings::_helpers::planner_migrations::column_objects::native;
+use crate::bindings::_helpers::planner_identity::metadata::build_function_local_hashes;
+use crate::bindings::_helpers::planner_identity::metadata::build_model_version_identity_metadata_json;
+use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PySet, PySetMethods};
 use sqlbuild_analysis::planner_migrations::main::discovery_order::discovery_order;
@@ -78,13 +77,15 @@ pub(super) fn metadata<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py = runtime.py();
     let project = runtime_field(runtime, |runtime| &runtime.project)?;
-    let functions = native(
+    let functions = object(
         py,
-        NativeAttr::BuildFunctionLocalHashes,
-        &[
-            ("functions", project.getattr("functions")?),
-            ("dialect", project.getattr("sql_analysis_dialect")?),
-        ],
+        build_function_local_hashes(
+            &project.getattr("functions")?,
+            project
+                .getattr("sql_analysis_dialect")?
+                .extract::<Option<String>>()?
+                .as_deref(),
+        )?,
     )?;
     let identities = host::entry(py, UserCodeHost::BuildHookIdentities)?
         .call1((project.getattr("hook_functions")?,))?;
@@ -100,13 +101,13 @@ pub(super) fn metadata<'py>(
     for item in models {
         result.set_item(
             item.getattr("name")?,
-            call_with(
-                &registry::native(py, NativeAttr::BuildModelVersionIdentityMetadataJson)?,
-                &[
-                    ("model", item.clone()),
-                    ("function_local_hashes", functions.clone()),
-                    ("hook_version_hashes", hooks.clone().into_any()),
-                ],
+            object(
+                py,
+                build_model_version_identity_metadata_json(
+                    item,
+                    functions.extract::<Option<Bound<PyAny>>>()?,
+                    hooks.clone().into_any().extract::<Option<Bound<PyAny>>>()?,
+                )?,
             )?,
         )?;
     }

@@ -32,7 +32,7 @@ fn projections(shape: &Bound<'_, PyAny>) -> PyResult<Vec<Projection>> {
 /// Unique automatic column renames whose full query change is explained.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn identical_renames<'py>(
+pub(crate) fn identical_renames<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
@@ -89,7 +89,7 @@ fn identical_renames<'py>(
 /// Explicit migration hints for newly added columns resembling removed live columns.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn rename_hints<'py>(
+pub(crate) fn rename_hints<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {

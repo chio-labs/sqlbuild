@@ -8,6 +8,7 @@ use crate::bindings::_helpers::records::ids::{ErrorId, NativeItem, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyFrozenSet, PyString, PyTuple};
+use pyo3::{BoundObject, IntoPyObject};
 
 /// A Python `str`.
 pub(crate) fn text<'py>(py: Python<'py>, value: &str) -> Bound<'py, PyAny> {
@@ -180,4 +181,13 @@ pub(crate) fn model_key<'py>(
             ("name", name.clone()),
         ],
     )
+}
+
+/// A native helper's Rust result as a Python object.
+pub(crate) fn object<'py, T>(py: Python<'py>, value: T) -> PyResult<Bound<'py, PyAny>>
+where
+    T: IntoPyObject<'py>,
+    PyErr: From<T::Error>,
+{
+    Ok(value.into_pyobject(py)?.into_bound().into_any())
 }

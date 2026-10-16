@@ -2,14 +2,30 @@
 
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
 use crate::bindings::_helpers::planner_entries::models::ModelPlanContext;
 use crate::bindings::_helpers::planner_entries::values::{
     native, planner_model, planner_type, string,
 };
+use crate::bindings::_helpers::planner_identity::graph::topologically_order_keys;
+use crate::bindings::_helpers::planner_identity::graph::{
+    build_downstream_deps, build_execution_upstream_deps,
+};
+use crate::bindings::_helpers::planner_identity::metadata::build_compiled_function_fingerprint_sql;
+use crate::bindings::_helpers::planner_phases::objects::object;
+use crate::bindings::_helpers::planner_resolution::locations::build_function_locations;
+use crate::bindings::_helpers::planner_resolution::locations::build_model_locations;
+use crate::bindings::_helpers::planner_resolution::locations::build_seed_locations;
 use crate::bindings::_helpers::planner_resolution::models::ModelSqlRequest;
+use crate::bindings::_helpers::planner_resolution::orchestration::resolve_function_sql;
 use crate::bindings::_helpers::planner_resolution::orchestration::{Resolution, resolve_model_sql};
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::planner_selection::selectors::resolve_graph_selection;
+use crate::bindings::_helpers::planner_strategy::strategy::materialization_of;
+use crate::bindings::_helpers::planner_warehouse::source_columns::gather_source_columns;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
+use pyo3::PyRef;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PySet, PySetMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -50,17 +66,17 @@ fn clone_plan_output<'py>(
     exclude: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = project.py();
-    let upstream =
-        registry::native(py, NativeAttr::BuildExecutionUpstreamDeps)?.call1((project,))?;
-    let downstream = registry::native(py, NativeAttr::BuildDownstreamDeps)?.call1((&upstream,))?;
-    let selected = native(
+    let upstream = build_execution_upstream_deps(project)?.into_any();
+    let downstream = build_downstream_deps(&upstream)?.into_any();
+    let selected = object(
         py,
-        NativeAttr::ResolveGraphSelection,
-        &[
-            ("graph", project.getattr("lineage_graph")?),
-            ("select", select.clone()),
-            ("exclude", exclude.clone()),
-        ],
+        resolve_graph_selection(
+            project
+                .getattr("lineage_graph")?
+                .extract::<PyRef<NativeProjectGraph>>()?,
+            select,
+            exclude,
+        )?,
     )?;
     planner_model(
         py,
@@ -68,11 +84,7 @@ fn clone_plan_output<'py>(
         &[
             (
                 "execution_order",
-                native(
-                    py,
-                    NativeAttr::TopologicallyOrderKeys,
-                    &[("upstream", upstream.clone())],
-                )?,
+                object(py, topologically_order_keys(&upstream, None)?)?,
             ),
             ("selected_keys", selected),
             ("upstream_deps", upstream),
@@ -96,34 +108,20 @@ fn clone_resolution<'py>(
     (adapter, connection): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<CloneResolution<'py>> {
     let py = project.py();
-    let model_locations = native(
+    let model_locations = object(py, build_model_locations(&project.getattr("models")?)?)?;
+    let seed_locations = object(py, build_seed_locations(&project.getattr("seeds")?)?)?;
+    let function_locations = object(
         py,
-        NativeAttr::BuildModelLocations,
-        &[("models", project.getattr("models")?)],
-    )?;
-    let seed_locations = native(
-        py,
-        NativeAttr::BuildSeedLocations,
-        &[("seeds", project.getattr("seeds")?)],
-    )?;
-    let function_locations = native(
-        py,
-        NativeAttr::BuildFunctionLocations,
-        &[("functions", project.getattr("functions")?)],
+        build_function_locations(&project.getattr("functions")?)?,
     )?;
     let source_map = PyDict::new(py);
     for source in source_project.getattr("sources")?.try_iter()? {
         let source = source?;
         source_map.set_item(source.getattr("name")?, source.getattr("source_entry")?)?;
     }
-    let source_warehouse_columns = native(
+    let source_warehouse_columns = object(
         py,
-        NativeAttr::GatherSourceColumns,
-        &[
-            ("project", source_project.clone()),
-            ("adapter", adapter.clone()),
-            ("connection", connection.clone()),
-        ],
+        gather_source_columns(source_project, adapter, connection, None)?,
     )?;
     Ok(CloneResolution {
         model_locations,
@@ -180,11 +178,7 @@ fn clone_model_entries<'py>(
         if !selected.contains(model_reads::model_key(&model)?)? || disabled_model(&model)? {
             continue;
         }
-        let materialization_type = native(
-            py,
-            NativeAttr::GetMaterializationType,
-            &[("model", model.clone())],
-        )?;
+        let materialization_type = materialization_of(&model)?;
         let resolved_sql = if materialization_type.eq(VIEW_MATERIALIZATION)? {
             let functions = PyDict::new(py);
             for function in project.getattr("functions")?.try_iter()? {
@@ -312,25 +306,27 @@ fn clone_function_entries<'py>(
         if !selected.contains(function.getattr("key")?)? {
             continue;
         }
-        let body_sql = native(
+        let body_sql = resolve_function_sql(
             py,
-            NativeAttr::ResolveFunctionSql,
-            &[
-                ("adapter", adapter.clone()),
-                ("function", function.clone()),
-                ("model_locations", resolution.model_locations.clone()),
-                ("seed_locations", resolution.seed_locations.clone()),
-                ("function_locations", resolution.function_locations.clone()),
-                ("source_map", resolution.source_map.clone()),
-                (
-                    "source_warehouse_columns",
-                    resolution.source_warehouse_columns.clone(),
-                ),
-                (
-                    "star_exclude_keyword",
-                    adapter.call_method0("star_exclude_keyword")?,
-                ),
-            ],
+            Some(keywords(
+                py,
+                &[
+                    ("adapter", adapter.clone()),
+                    ("function", function.clone()),
+                    ("model_locations", resolution.model_locations.clone()),
+                    ("seed_locations", resolution.seed_locations.clone()),
+                    ("function_locations", resolution.function_locations.clone()),
+                    ("source_map", resolution.source_map.clone()),
+                    (
+                        "source_warehouse_columns",
+                        resolution.source_warehouse_columns.clone(),
+                    ),
+                    (
+                        "star_exclude_keyword",
+                        adapter.call_method0("star_exclude_keyword")?,
+                    ),
+                ],
+            )?),
         )?;
         let field = |name: &str| function.getattr(name);
         let entry = planner_model(
@@ -346,11 +342,7 @@ fn clone_function_entries<'py>(
                 ("body_sql", body_sql),
                 (
                     "fingerprint_query_sql",
-                    native(
-                        py,
-                        NativeAttr::BuildCompiledFunctionFingerprintSql,
-                        &[("function", function.clone())],
-                    )?,
+                    object(py, build_compiled_function_fingerprint_sql(&function)?)?,
                 ),
                 ("fingerprint_destination", field("fingerprint_destination")?),
                 ("return_columns", field("return_columns")?),
@@ -415,11 +407,7 @@ fn origin_model_entries<'py>(
         if !selected_names.contains(model_reads::name_object(&model)?)? || disabled_model(&model)? {
             continue;
         }
-        let materialization_type = native(
-            py,
-            NativeAttr::GetMaterializationType,
-            &[("model", model.clone())],
-        )?;
+        let materialization_type = materialization_of(&model)?;
         entries.push(model_entry(&model, materialization_type, string(py, ""))?);
     }
     tuple_of(py, entries)

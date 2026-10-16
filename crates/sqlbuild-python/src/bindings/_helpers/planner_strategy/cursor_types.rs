@@ -44,7 +44,7 @@ fn log_parse_failure(py: Python<'_>, failure: &TypeParseFailure) -> PyResult<()>
 /// The `CursorType` a supported cross-adapter SQL type holds, or `None`.
 #[pyfunction]
 #[pyo3(signature = (sql_type))]
-fn classify_cursor_sql_type<'py>(
+pub(crate) fn classify_cursor_sql_type<'py>(
     py: Python<'py>,
     sql_type: &str,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {

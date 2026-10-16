@@ -2,11 +2,13 @@
 
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::analysis::model_reads::inferred_rows;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::planner_changes::detect::detect_model_changes;
 use crate::bindings::_helpers::planner_migrations::models::{
     CompatibilityCheck, MigrationCompatibilityResult,
 };
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -142,21 +144,24 @@ pub(super) fn check_migration_compatibility<'py>(
             ("column_dialect", check.column_dialect.clone()),
         ],
     )?;
-    let change = call_with(
-        &registry::native(py, NativeAttr::DetectModelChanges)?,
-        &[
-            ("model", model.clone()),
-            ("snapshot", snapshot),
-            ("sql_analysis_enabled", check.sql_analysis_enabled.clone()),
-            (
-                "query_change_tracking",
-                false.into_pyobject(py)?.to_owned().into_any(),
-            ),
-            (
-                "full_refresh",
-                false.into_pyobject(py)?.to_owned().into_any(),
-            ),
-        ],
+    let change = detect_model_changes(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("model", model.clone()),
+                ("snapshot", snapshot),
+                ("sql_analysis_enabled", check.sql_analysis_enabled.clone()),
+                (
+                    "query_change_tracking",
+                    false.into_pyobject(py)?.to_owned().into_any(),
+                ),
+                (
+                    "full_refresh",
+                    false.into_pyobject(py)?.to_owned().into_any(),
+                ),
+            ],
+        )?),
     )?;
     let schema = model.getattr("schema_entry")?;
     let mut has_columns = inferred_rows(&model)?.is_some_and(|rows| !rows.is_empty());

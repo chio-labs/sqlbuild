@@ -2,12 +2,12 @@
 
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::planner_migrations::column_objects::{
-    config, definition_hash, lower, native,
+    config, definition_hash, lower,
 };
 use crate::bindings::_helpers::planner_migrations::models::{
     ColumnCandidate, ColumnMigrationInputs, MigrationPhase,
 };
-use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::planner_migrations::projections::parse_query_shape;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
 
@@ -73,24 +73,18 @@ pub(super) fn candidates<'py>(
             by_name.set_item(lower(&column.getattr("name")?)?, column)?;
         }
         let previous = if changed {
-            native(
+            parse_query_shape(
                 py,
-                NativeAttr::ParseQueryShape,
-                &[
-                    ("query_sql", fingerprint.getattr("definition")?),
-                    ("dialect", dialect.clone()),
-                ],
+                &fingerprint.getattr("definition")?.extract::<String>()?,
+                dialect.extract::<Option<String>>()?.as_deref(),
             )?
         } else {
             py.None().into_bound(py)
         };
-        let current = native(
+        let current = parse_query_shape(
             py,
-            NativeAttr::ParseQueryShape,
-            &[
-                ("query_sql", model_reads::query_sql(&model)?),
-                ("dialect", dialect.clone()),
-            ],
+            &model_reads::query_sql(&model)?.extract::<String>()?,
+            dialect.extract::<Option<String>>()?.as_deref(),
         )?;
         result.push(ColumnCandidate {
             model,

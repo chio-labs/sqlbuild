@@ -1,13 +1,15 @@
 //! Old-name planning orchestration over existing live state inspection.
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::planner_migrations::column_objects::native;
 use crate::bindings::_helpers::planner_migrations::models::{MigrationPhase, OldNameViewPlanning};
 use crate::bindings::_helpers::planner_migrations::old_name_objects::recorded_view;
+use crate::bindings::_helpers::planner_migrations::old_names::old_name_claim_errors;
+use crate::bindings::_helpers::planner_migrations::old_names::old_name_schemas_to_read;
+use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PySet, PySetMethods, PyTuple};
 
@@ -56,10 +58,9 @@ fn schemas<'py>(
             needed.add(schema?)?;
         }
     }
-    native(
+    object(
         py,
-        NativeAttr::OldNameSchemasToRead,
-        &[("snapshot", snapshot), ("needed", needed.into_any())],
+        old_name_schemas_to_read(py, &snapshot, &needed.into_any())?,
     )
 }
 
@@ -139,18 +140,23 @@ pub(crate) fn plan_old_name_views<'py>(
         }
     }
     let entries = PyTuple::new(py, entries)?.into_any();
-    let claims = native(
+    let claims = object(
         py,
-        NativeAttr::OldNameClaimErrors,
-        &[
-            ("selected", PyTuple::new(py, selected)?.into_any()),
-            ("snapshot", phase.snapshot.clone()),
-            ("views", views.clone()),
-            (
-                "now",
-                runtime_field(&runtime, |runtime| &runtime.invocation_time)?,
-            ),
-        ],
+        old_name_claim_errors(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("selected", PyTuple::new(py, selected)?.into_any()),
+                    ("snapshot", phase.snapshot.clone()),
+                    ("views", views.clone()),
+                    (
+                        "now",
+                        runtime_field(&runtime, |runtime| &runtime.invocation_time)?,
+                    ),
+                ],
+            )?),
+        )?,
     )?;
     let mut warnings: Vec<Bound<'py, PyAny>> = claims.try_iter()?.collect::<PyResult<_>>()?;
     warnings.extend(super::old_name_references::errors(

@@ -1,18 +1,19 @@
 //! Write-hash reconciliation and plan entry construction.
 
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::planner_entries::contexts::default_microbatch_limit_action;
 use crate::bindings::_helpers::planner_entries::model_entries::plan_entries;
 use crate::bindings::_helpers::planner_entries::models::{
     PlanEntriesRequest, PlanEntryBuildInputs, RelationsRequest,
 };
 use crate::bindings::_helpers::planner_entries::relations::planner_relations_context;
+use crate::bindings::_helpers::planner_identity::identities::merge_recomputed_model_changes;
+use crate::bindings::_helpers::planner_identity::identities::with_honest_model_write_hashes;
 use crate::bindings::_helpers::planner_phases::contexts::class_field;
 use crate::bindings::_helpers::planner_phases::models::PlannerIdentityContext;
 use crate::bindings::_helpers::planner_phases::models::{ChangeReconciliation, ModelEntryResults};
-use crate::bindings::_helpers::planner_phases::objects::native;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::planner_phases::runtime::warehouse_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::PyFrozenSet;
 
@@ -24,29 +25,24 @@ pub(crate) fn reconcile_execution_changes<'py>(
     changes: &Bound<'py, PyAny>,
 ) -> PyResult<ChangeReconciliation<'py>> {
     let py = execution_scope.py();
-    let honest = native(
+    let honest = with_honest_model_write_hashes(
         py,
-        NativeAttr::WithHonestModelWriteHashes,
-        &[
-            ("scope", execution_scope.clone()),
-            ("snapshot", snapshot.clone()),
-            ("changes", changes.clone()),
-            (
-                "version_identities",
-                class_field(identities, |i: &PlannerIdentityContext| {
-                    &i.version_identities
-                })?,
-            ),
-        ],
+        Some(keywords(
+            py,
+            &[
+                ("scope", execution_scope.clone()),
+                ("snapshot", snapshot.clone()),
+                ("changes", changes.clone()),
+                (
+                    "version_identities",
+                    class_field(identities, |i: &PlannerIdentityContext| {
+                        &i.version_identities
+                    })?,
+                ),
+            ],
+        )?),
     )?;
-    let resolved = native(
-        py,
-        NativeAttr::MergeRecomputedModelChanges,
-        &[
-            ("resolved_actions", resolved_actions.clone()),
-            ("changes", honest.clone()),
-        ],
-    )?;
+    let resolved = merge_recomputed_model_changes(resolved_actions, &honest)?;
     Ok(ChangeReconciliation {
         changes: honest,
         resolved_actions: resolved,

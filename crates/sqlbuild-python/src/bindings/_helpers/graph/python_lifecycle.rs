@@ -15,7 +15,7 @@ const EXTERNAL_CONNECTION_MODE: &str = "external";
 /// `build_python_sql_run_lifecycle(*, selection, python_graph)`: a `PythonSqlRunLifecyclePlan`.
 #[pyfunction]
 #[pyo3(signature = (*, selection, python_graph))]
-fn build_python_sql_run_lifecycle<'py>(
+pub(crate) fn build_python_sql_run_lifecycle<'py>(
     selection: &Bound<'py, PyAny>,
     python_graph: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {

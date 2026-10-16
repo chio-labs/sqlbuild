@@ -25,7 +25,7 @@ pub(crate) struct SqlCodeScanner {
 impl SqlCodeScanner {
     #[new]
     #[pyo3(signature = (sql, syntax, context))]
-    fn new(sql: &str, syntax: Option<LexicalSyntaxInput>, context: String) -> Self {
+    pub(crate) fn new(sql: &str, syntax: Option<LexicalSyntaxInput>, context: String) -> Self {
         Self {
             scanner: code_scanner(sql, syntax.map(Into::into)),
             context,
@@ -33,12 +33,12 @@ impl SqlCodeScanner {
     }
 
     /// The end of the comment or quoted text at `index`, or `None` when code starts there.
-    fn non_code_end(&self, py: Python<'_>, index: usize) -> PyResult<Option<usize>> {
+    pub(crate) fn non_code_end(&self, py: Python<'_>, index: usize) -> PyResult<Option<usize>> {
         scanner_non_code_end(&self.scanner, index).map_err(|unclosed| self.error(py, unclosed))
     }
 
     /// The index of the parenthesis closing the one at `open`.
-    fn matching_paren(&self, py: Python<'_>, open: usize) -> PyResult<usize> {
+    pub(crate) fn matching_paren(&self, py: Python<'_>, open: usize) -> PyResult<usize> {
         scanner_matching_paren(&self.scanner, open).map_err(|unclosed| self.error(py, unclosed))
     }
 }

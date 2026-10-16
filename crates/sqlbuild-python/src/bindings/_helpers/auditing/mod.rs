@@ -1,5 +1,5 @@
 mod identity;
 mod measurement;
 pub(crate) mod registration;
-mod render;
+pub(crate) mod render;
 mod schema_audits;

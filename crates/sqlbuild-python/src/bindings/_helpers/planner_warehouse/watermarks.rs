@@ -1,12 +1,12 @@
 //! Validate reliable watermark column contracts before warehouse inspection.
 
 use crate::bindings::_helpers::analysis::model_reads;
+use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::objects::{config_str, planner_error, text};
+use crate::bindings::_helpers::planner_strategy::cursor_types::classify_cursor_sql_type;
 use crate::bindings::_helpers::planner_warehouse::constants::{
     CURSOR_TYPE_INTEGER, CURSOR_TYPE_TIMESTAMP, WATERMARK_CONTRACT_CODE,
 };
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult};
 use pyo3::pyfunction;
 use pyo3::types::{PyDict, PyDictMethods};
@@ -24,8 +24,10 @@ pub(crate) fn watermark_type_is_compatible(
     else {
         return Ok(true);
     };
-    let classified = registry::native(declared_type.py(), NativeAttr::ClassifyCursorSqlType)?
-        .call1((declared_type,))?;
+    let classified = object(
+        declared_type.py(),
+        classify_cursor_sql_type(declared_type.py(), &declared_type.extract::<String>()?)?,
+    )?;
     classified.eq(expected)
 }
 

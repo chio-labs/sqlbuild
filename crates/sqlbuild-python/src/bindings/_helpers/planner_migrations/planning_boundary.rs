@@ -1,13 +1,13 @@
 //! Assemble migration policy and redirected live cursor inspection requests.
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::planner_migrations::column_objects::native;
 use crate::bindings::_helpers::planner_migrations::models::MigrationPhase;
 use crate::bindings::_helpers::planner_phases::full_refresh::effectively_full_refreshed_model_names;
 use crate::bindings::_helpers::planner_phases::retention::effective_target_config;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::planner_warehouse::snapshot::gather_redirected_cursor_snapshots;
+use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 
 /// The target's policy for migration origins that no longer exist.
@@ -52,34 +52,37 @@ pub(super) fn redirected_cursor_snapshots<'py>(
         &project,
         overrides.getattr("full_refresh")?.is_truthy()?,
     )?;
-    call_with(
-        &registry::native(py, NativeAttr::GatherRedirectedCursorSnapshots)?,
-        &[
-            ("project", project),
-            (
-                "adapter",
-                runtime_field(runtime, |runtime| &runtime.adapter)?,
-            ),
-            (
-                "connection",
-                runtime_field(runtime, |runtime| &runtime.connection)?,
-            ),
-            ("existing_relations", existing_relations),
-            ("target_relations", target_relations),
-            ("cursor_scope", cursor_scope),
-            ("full_refresh_model_names", full_refresh),
-            (
-                "deferred_locations",
-                phase.deferral.getattr("deferred_locations")?,
-            ),
-            (
-                "on_progress",
-                runtime_field(runtime, |runtime| &runtime.on_progress)?,
-            ),
-            (
-                "origin_cursor_columns",
-                origin_cursor_columns.unwrap_or_else(|| py.None().into_bound(py)),
-            ),
-        ],
+    gather_redirected_cursor_snapshots(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("project", project),
+                (
+                    "adapter",
+                    runtime_field(runtime, |runtime| &runtime.adapter)?,
+                ),
+                (
+                    "connection",
+                    runtime_field(runtime, |runtime| &runtime.connection)?,
+                ),
+                ("existing_relations", existing_relations),
+                ("target_relations", target_relations),
+                ("cursor_scope", cursor_scope),
+                ("full_refresh_model_names", full_refresh),
+                (
+                    "deferred_locations",
+                    phase.deferral.getattr("deferred_locations")?,
+                ),
+                (
+                    "on_progress",
+                    runtime_field(runtime, |runtime| &runtime.on_progress)?,
+                ),
+                (
+                    "origin_cursor_columns",
+                    origin_cursor_columns.unwrap_or_else(|| py.None().into_bound(py)),
+                ),
+            ],
+        )?),
     )
 }

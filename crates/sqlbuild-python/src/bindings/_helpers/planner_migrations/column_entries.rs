@@ -3,16 +3,18 @@
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::analysis::model_reads::inferred_rows;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::column_candidates::declared_names;
-use crate::bindings::_helpers::planner_migrations::column_objects::{
-    lower, model, native, replace,
-};
+use crate::bindings::_helpers::planner_migrations::column_objects::{lower, model, replace};
+use crate::bindings::_helpers::planner_migrations::columns::identical_renames;
+use crate::bindings::_helpers::planner_migrations::columns::rename_hints;
 use crate::bindings::_helpers::planner_migrations::constants::{AUTOMATIC, DONE};
 use crate::bindings::_helpers::planner_migrations::models::{CheckedColumns, ColumnCandidate};
+use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::migration_projections::newest_column;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
@@ -33,16 +35,21 @@ pub(super) fn decide<'py>(
         pairs.push((origin, destination, "manual"));
     }
     if !candidate.previous.is_none() && !candidate.current.is_none() {
-        let detected = native(
+        let detected = object(
             py,
-            NativeAttr::IdenticalRenames,
-            &[
-                ("previous", candidate.previous.clone()),
-                ("current", candidate.current.clone()),
-                ("excluded", declared_names(candidate)?.into_any()),
-                ("declared", declared.into_any()),
-                ("input_columns", inputs.clone()),
-            ],
+            identical_renames(
+                py,
+                Some(keywords(
+                    py,
+                    &[
+                        ("previous", candidate.previous.clone()),
+                        ("current", candidate.current.clone()),
+                        ("excluded", declared_names(candidate)?.into_any()),
+                        ("declared", declared.into_any()),
+                        ("input_columns", inputs.clone()),
+                    ],
+                )?),
+            )?,
         )?;
         for pair in detected.try_iter()? {
             let pair = pair?;
@@ -226,18 +233,23 @@ pub(super) fn hints<'py>(
         claimed.set_item(lower(&entry.getattr("origin_column")?)?, py.None())?;
         claimed.set_item(lower(&entry.getattr("destination_column")?)?, py.None())?;
     }
-    native(
+    object(
         py,
-        NativeAttr::RenameHints,
-        &[
-            ("model_name", model_reads::name_object(&candidate.model)?),
-            ("previous", candidate.previous.clone()),
-            ("current", candidate.current.clone()),
-            ("excluded", excluded.call_method1("union", (claimed,))?),
-            (
-                "live_columns",
-                PyFrozenSet::new(py, candidate.warehouse.keys().iter())?.into_any(),
-            ),
-        ],
+        rename_hints(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("model_name", model_reads::name_object(&candidate.model)?),
+                    ("previous", candidate.previous.clone()),
+                    ("current", candidate.current.clone()),
+                    ("excluded", excluded.call_method1("union", (claimed,))?),
+                    (
+                        "live_columns",
+                        PyFrozenSet::new(py, candidate.warehouse.keys().iter())?.into_any(),
+                    ),
+                ],
+            )?),
+        )?,
     )
 }
