@@ -1,5 +1,6 @@
 //! Top-level planner orchestration producing an execution plan.
 
+use crate::bindings::_helpers::build_command::support::utc_now;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, within,
 };
@@ -18,9 +19,11 @@ use crate::bindings::_helpers::planner_phases::execution_changes::{
 use crate::bindings::_helpers::planner_phases::identities::{
     build_planner_identity_context, detect_stale_warning_changes,
 };
+use crate::bindings::_helpers::planner_phases::models::PlannerRuntime;
 use crate::bindings::_helpers::planner_phases::output_assembly::{
     add_plan_metadata, add_plan_warnings, add_storage_policies, base_plan_output,
 };
+use crate::bindings::_helpers::planner_phases::runtime::warehouse_field;
 use crate::bindings::_helpers::planner_phases::scopes::resolve_planner_scopes;
 use crate::bindings::_helpers::planner_phases::warehouse_state::gather_planner_warehouse_state;
 use crate::bindings::_helpers::planner_resolution::cursor_overrides::type_cursor_overrides;
@@ -113,7 +116,7 @@ fn planned_output<'py>(
         policies.getattr("selection_diagnostics")?.extract()?,
     )?;
     check_selected_scope_buildability(runtime, scopes, &warehouse, &deferral)?;
-    let snapshot = warehouse.getattr("snapshot")?;
+    let snapshot = warehouse_field(&warehouse, |warehouse| &warehouse.snapshot)?;
     let (changes, stale_warning_changes) = change_results(
         &project,
         (scopes, &snapshot, &identities),
@@ -125,7 +128,7 @@ fn planned_output<'py>(
     let source_freshness = build_planner_source_freshness_result(
         (&project, &inspection_scope),
         (&args.value("adapter")?, &args.value("connection")?),
-        &warehouse.getattr("inspection_relations")?,
+        &warehouse_field(&warehouse, |warehouse| &warehouse.inspection_relations)?,
         &snapshot.getattr("source_freshness_state_schemas")?,
     )?;
     let reconciliation = reconcile_execution_changes(
@@ -195,18 +198,19 @@ fn build_execution_plan<'py>(
     let project = args.value("project")?;
     let adapter = args.value("adapter")?;
     let connection = args.value("connection")?;
-    let runtime = native(
+    let runtime = Bound::new(
         py,
-        RecordId::PlannerRuntime,
-        &[
-            ("project", project.clone()),
-            ("adapter", adapter.clone()),
-            ("connection", connection.clone()),
-            ("project_config", args.value("project_config")?),
-            ("local_config", args.value("local_config")?),
-            ("on_progress", args.value("on_progress")?),
-        ],
-    )?;
+        PlannerRuntime {
+            project: project.clone().unbind(),
+            adapter: adapter.clone().unbind(),
+            connection: connection.clone().unbind(),
+            project_config: args.value("project_config")?.unbind(),
+            local_config: args.value("local_config")?.unbind(),
+            on_progress: args.value("on_progress")?.unbind(),
+            invocation_time: utc_now(py)?.unbind(),
+        },
+    )?
+    .into_any();
     let (scopes, overrides) = scopes_and_cursor_overrides(&args)?;
     let inspection = scopes.getattr("inspection_scope")?;
     let test_planning = start_planning(

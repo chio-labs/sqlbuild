@@ -4,6 +4,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::planner_migrations::column_objects::native;
 use crate::bindings::_helpers::planner_migrations::column_objects::{config, replace};
 use crate::bindings::_helpers::planner_migrations::models::MigrationPhase;
+use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
@@ -124,7 +125,10 @@ pub(super) fn overlay<'py>(
 }
 
 fn cursor_enabled(runtime: &Bound<'_, PyAny>, name: &Bound<'_, PyAny>) -> PyResult<bool> {
-    for item in runtime.getattr("project")?.getattr("models")?.try_iter()? {
+    for item in runtime_field(&runtime, |runtime| &runtime.project)?
+        .getattr("models")?
+        .try_iter()?
+    {
         let item = item?;
         if item.getattr("name")?.eq(name)? {
             return Ok(config(&item, "materialized")?.eq("incremental")?

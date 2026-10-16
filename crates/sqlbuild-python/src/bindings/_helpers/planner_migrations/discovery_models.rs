@@ -5,6 +5,7 @@ use crate::bindings::_helpers::graph::node_set::PyNodeSet;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::planner_migrations::column_objects::native;
+use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
@@ -16,7 +17,10 @@ use std::collections::BTreeMap;
 pub(super) fn ordered<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let mut models: BTreeMap<String, Bound<'py, PyAny>> = BTreeMap::new();
     let mut dependencies: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for item in runtime.getattr("project")?.getattr("models")?.try_iter()? {
+    for item in runtime_field(&runtime, |runtime| &runtime.project)?
+        .getattr("models")?
+        .try_iter()?
+    {
         let item = item?;
         let name: String = item.getattr("name")?.extract()?;
         let mut upstream: Vec<String> = Vec::new();
@@ -73,7 +77,7 @@ pub(super) fn metadata<'py>(
     models: &[Bound<'py, PyAny>],
 ) -> PyResult<Bound<'py, PyDict>> {
     let py = runtime.py();
-    let project = runtime.getattr("project")?;
+    let project = runtime_field(&runtime, |runtime| &runtime.project)?;
     let functions = native(
         py,
         NativeAttr::BuildFunctionLocalHashes,

@@ -1,9 +1,8 @@
 //! Layouts of the planner, migration, cursor and fingerprint value records hosted natively.
 
-use crate::bindings::_helpers::build_command::support::utc_now;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::record_behaviours::planner::forward_only_backfill;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::models::{EnumSpec, FieldDefault, FieldSpec, RecordSpec};
 
 const R_PARSED_SELECTOR: RecordSpec = RecordSpec {
@@ -1395,19 +1394,6 @@ const R_PLAN_PROVIDER_USAGE: RecordSpec = RecordSpec {
         FieldSpec::new("annotation_module", FieldDefault::None),
     ],
 };
-const R_PLANNER_RUNTIME: RecordSpec = RecordSpec {
-    name: "PlannerRuntime",
-    doc: "Resolved execution environment shared by planner phases.",
-    fields: &[
-        FieldSpec::required("project"),
-        FieldSpec::required("adapter"),
-        FieldSpec::required("connection"),
-        FieldSpec::new("project_config", FieldDefault::None),
-        FieldSpec::new("local_config", FieldDefault::None),
-        FieldSpec::new("on_progress", FieldDefault::None),
-        FieldSpec::new("invocation_time", FieldDefault::Factory(utc_now)),
-    ],
-};
 const R_PLANNER_SCOPE_RESOLUTION: RecordSpec = RecordSpec {
     name: "PlannerScopeResolution",
     doc: "Resolved planner scopes for one plan build.",
@@ -1415,24 +1401,6 @@ const R_PLANNER_SCOPE_RESOLUTION: RecordSpec = RecordSpec {
         FieldSpec::required("selected_scope"),
         FieldSpec::required("stale_warning_scope"),
         FieldSpec::required("inspection_scope"),
-    ],
-};
-const R_PLANNER_WAREHOUSE_STATE: RecordSpec = RecordSpec {
-    name: "PlannerWarehouseState",
-    doc: "Warehouse snapshot and inspection relations gathered once per plan.",
-    fields: &[
-        FieldSpec::required("snapshot"),
-        FieldSpec::required("inspection_relations"),
-        FieldSpec::new("migration_entries", FieldDefault::EmptyTuple),
-        FieldSpec::new("migration_warnings", FieldDefault::EmptyTuple),
-        FieldSpec::new("column_migration_entries", FieldDefault::EmptyTuple),
-        FieldSpec::new("column_rename_hints", FieldDefault::EmptyTuple),
-        FieldSpec::new("old_name_view_entries", FieldDefault::EmptyTuple),
-        FieldSpec::new("old_name_views", FieldDefault::EmptyTuple),
-        FieldSpec::new(
-            "migration_fingerprints",
-            FieldDefault::NativeClassCall(NativeAttr::MigrationFingerprintCache),
-        ),
     ],
 };
 const R_MODEL_MIGRATION_REQUEST: RecordSpec = RecordSpec {
@@ -1522,9 +1490,7 @@ pub(crate) const PLANNER_VALUE_RECORDS: &[RecordSpec] = &[
     R_SCENARIO_ARTIFACT_IDENTITY,
     R_SCENARIO_ARTIFACT_NAME,
     R_PLAN_PROVIDER_USAGE,
-    R_PLANNER_RUNTIME,
     R_PLANNER_SCOPE_RESOLUTION,
-    R_PLANNER_WAREHOUSE_STATE,
     R_MODEL_MIGRATION_REQUEST,
     R_MODEL_MIGRATION_DECLARATION,
     R_MODEL_MIGRATION_DISCOVERY,

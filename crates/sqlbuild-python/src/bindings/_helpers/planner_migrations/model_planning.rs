@@ -5,6 +5,7 @@ use crate::bindings::_helpers::planner_migrations::column_objects::{config, nati
 use crate::bindings::_helpers::planner_migrations::models::{
     MigrationPhase, ModelMigrationPlanning,
 };
+use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -118,8 +119,14 @@ pub(crate) fn plan_model_migrations<'py>(
     let state = call_with(
         &registry::native(py, NativeAttr::MigrationStateInspection)?,
         &[
-            ("adapter", runtime.getattr("adapter")?),
-            ("connection", runtime.getattr("connection")?),
+            (
+                "adapter",
+                runtime_field(&runtime, |runtime| &runtime.adapter)?,
+            ),
+            (
+                "connection",
+                runtime_field(&runtime, |runtime| &runtime.connection)?,
+            ),
             (
                 "database",
                 call_with(
@@ -144,7 +151,10 @@ fn discover<'py>(
     let scope = phase.scope.clone();
     let snapshot = phase.snapshot.clone();
     let mut declared_requests: Vec<Bound<'py, PyAny>> = Vec::new();
-    for item in runtime.getattr("project")?.getattr("models")?.try_iter()? {
+    for item in runtime_field(&runtime, |runtime| &runtime.project)?
+        .getattr("models")?
+        .try_iter()?
+    {
         if let Some(request) = declared(&item?)? {
             declared_requests.push(request);
         }
@@ -237,7 +247,7 @@ fn finish<'py>(
             &state.getattr("inspect_relations")?,
             &[("locations", PyTuple::new(py, origins)?.into_any())],
         )?;
-        let project_config = runtime.getattr("project_config")?;
+        let project_config = runtime_field(&runtime, |runtime| &runtime.project_config)?;
         let snapshots_config = if project_config.is_none() {
             registry::class(py, RecordId::SnapshotsConfig)?.call0()?
         } else {

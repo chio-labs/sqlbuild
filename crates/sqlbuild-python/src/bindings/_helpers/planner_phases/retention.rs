@@ -13,6 +13,7 @@ use crate::bindings::_helpers::planner_phases::objects::{
     construct, member, model_key_names, native, native_member, optional_text, planner_error,
     planner_model, replace, sorted_names, text, tuple,
 };
+use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObject;
@@ -30,8 +31,8 @@ pub(crate) fn effective_target_config<'py>(
     runtime: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = runtime.py();
-    let project_config = runtime.getattr("project_config")?;
-    let local_config = runtime.getattr("local_config")?;
+    let project_config = runtime_field(&runtime, |runtime| &runtime.project_config)?;
+    let local_config = runtime_field(&runtime, |runtime| &runtime.local_config)?;
     let target_name = runtime
         .getattr("project")?
         .getattr("effective_target_name")?;
@@ -64,7 +65,10 @@ fn selected_models<'py>(
         .into_iter()
         .collect();
     let mut models: Vec<_> = Vec::new();
-    for model in runtime.getattr("project")?.getattr("models")?.try_iter()? {
+    for model in runtime_field(&runtime, |runtime| &runtime.project)?
+        .getattr("models")?
+        .try_iter()?
+    {
         let model = model?;
         if names.contains(&model_reads::model_name(&model)?) {
             models.push(model);
@@ -119,7 +123,7 @@ pub(crate) fn plan_table_types<'py>(
     let relations = warehouse
         .getattr("snapshot")?
         .getattr("existing_relations")?;
-    let adapter = runtime.getattr("adapter")?;
+    let adapter = runtime_field(&runtime, |runtime| &runtime.adapter)?;
     let materialization = registry::class(py, RecordId::MaterializationType)?;
     let mut entries: Vec<_> = Vec::new();
     for model in models {
@@ -282,9 +286,12 @@ fn inspect<'py>(
     request: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &runtime.getattr("adapter")?.getattr("inspect_retention")?,
+        &runtime_field(&runtime, |runtime| &runtime.adapter)?.getattr("inspect_retention")?,
         &[
-            ("connection", runtime.getattr("connection")?),
+            (
+                "connection",
+                runtime_field(&runtime, |runtime| &runtime.connection)?,
+            ),
             ("request", request.clone()),
         ],
     )
@@ -463,7 +470,10 @@ fn bigquery_retention<'py>(
     }
     type Scope = (Option<String>, String);
     let mut managed: BTreeMap<Scope, Vec<Bound<'py, PyAny>>> = BTreeMap::new();
-    for model in runtime.getattr("project")?.getattr("models")?.try_iter()? {
+    for model in runtime_field(&runtime, |runtime| &runtime.project)?
+        .getattr("models")?
+        .try_iter()?
+    {
         let model = model?;
         let retention = model.getattr("config")?.getattr("time_travel_retention")?;
         let destination = model_reads::destination(&model)?;

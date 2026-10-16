@@ -10,6 +10,8 @@ use crate::bindings::_helpers::planner_phases::models::{
 use crate::bindings::_helpers::planner_phases::objects::{
     native, replace, sorted_names, strings, text, tuple,
 };
+use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::planner_phases::runtime::warehouse_field;
 use crate::bindings::_helpers::planner_warehouse::source_freshness::source_freshness_unknown_warnings;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -91,11 +93,11 @@ pub(crate) fn base_plan_output<'py>(
     )?;
     let mut output = PlanOutputFields {
         fields: plan_output_fields(PlanOutputInputs {
-            project: runtime.getattr("project")?,
-            adapter: runtime.getattr("adapter")?,
+            project: runtime_field(&runtime, |runtime| &runtime.project)?,
+            adapter: runtime_field(&runtime, |runtime| &runtime.adapter)?,
             scope: execution_scope.clone(),
-            snapshot: warehouse.getattr("snapshot")?,
-            relations: warehouse.getattr("inspection_relations")?,
+            snapshot: warehouse_field(&warehouse, |warehouse| &warehouse.snapshot)?,
+            relations: warehouse_field(&warehouse, |warehouse| &warehouse.inspection_relations)?,
             changes: reconciliation.changes.clone(),
             model_entries: entries.entries,
             model_warnings: entries.warnings,
@@ -161,7 +163,10 @@ pub(crate) fn add_storage_policies<'py>(
         .is_truthy()?
     {
         let models = PyDict::new(py);
-        for model in runtime.getattr("project")?.getattr("models")?.try_iter()? {
+        for model in runtime_field(&runtime, |runtime| &runtime.project)?
+            .getattr("models")?
+            .try_iter()?
+        {
             let model = model?;
             models.set_item(model_reads::name_object(&model)?, model)?;
         }
@@ -171,7 +176,10 @@ pub(crate) fn add_storage_policies<'py>(
             &[
                 ("entries", entries),
                 ("models_by_name", models.into_any()),
-                ("fingerprints", warehouse.getattr("migration_fingerprints")?),
+                (
+                    "fingerprints",
+                    warehouse_field(&warehouse, |warehouse| &warehouse.migration_fingerprints)?,
+                ),
                 (
                     "dialect",
                     runtime
@@ -181,15 +189,20 @@ pub(crate) fn add_storage_policies<'py>(
             ],
         )?;
     }
-    let entries = with_column_rename_hints(&entries, &warehouse.getattr("column_rename_hints")?)?;
-    let migration_entries = warehouse.getattr("migration_entries")?;
-    let column_entries = warehouse.getattr("column_migration_entries")?;
-    let old_name_entries = warehouse.getattr("old_name_view_entries")?;
-    let old_name_views = warehouse.getattr("old_name_views")?;
+    let entries = with_column_rename_hints(
+        &entries,
+        &warehouse_field(&warehouse, |warehouse| &warehouse.column_rename_hints)?,
+    )?;
+    let migration_entries = warehouse_field(&warehouse, |warehouse| &warehouse.migration_entries)?;
+    let column_entries =
+        warehouse_field(&warehouse, |warehouse| &warehouse.column_migration_entries)?;
+    let old_name_entries =
+        warehouse_field(&warehouse, |warehouse| &warehouse.old_name_view_entries)?;
+    let old_name_views = warehouse_field(&warehouse, |warehouse| &warehouse.old_name_views)?;
     let warnings = concat(
         py,
         &[
-            warehouse.getattr("migration_warnings")?,
+            warehouse_field(&warehouse, |warehouse| &warehouse.migration_warnings)?,
             output.field("warnings")?,
         ],
     )?;
@@ -239,7 +252,10 @@ pub(crate) fn add_plan_warnings<'py>(
             ("original_scope", scopes.getattr("stale_warning_scope")?),
             ("execution_scope", scopes.getattr("inspection_scope")?),
             ("changes", stale_warning_changes.clone()),
-            ("snapshot", warehouse.getattr("snapshot")?),
+            (
+                "snapshot",
+                warehouse_field(&warehouse, |warehouse| &warehouse.snapshot)?,
+            ),
             (
                 "version_identities",
                 identities.getattr("stale_warning_identities")?,

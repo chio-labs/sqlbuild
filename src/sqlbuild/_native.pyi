@@ -1318,7 +1318,7 @@ class PlanProviderUsage(NativeRecord):
     ) -> None: ...
     def __replace__(self, **changes: Any) -> PlanProviderUsage: ...
 
-class PlannerRuntime(NativeRecord):
+class PlannerRuntime:
     """Resolved execution environment shared by planner phases."""
 
     project: CompiledProjectView
@@ -1330,6 +1330,7 @@ class PlannerRuntime(NativeRecord):
     invocation_time: datetime
     def __init__(
         self,
+        *,
         project: CompiledProjectView,
         adapter: BaseAdapter,
         connection: Any,
@@ -1338,7 +1339,6 @@ class PlannerRuntime(NativeRecord):
         on_progress: Callable[[str], None] | None = ...,
         invocation_time: datetime = ...,
     ) -> None: ...
-    def __replace__(self, **changes: Any) -> PlannerRuntime: ...
 
 class PlannerScopeResolution(NativeRecord):
     """Resolved planner scopes for one plan build."""
@@ -1354,7 +1354,7 @@ class PlannerScopeResolution(NativeRecord):
     ) -> None: ...
     def __replace__(self, **changes: Any) -> PlannerScopeResolution: ...
 
-class PlannerWarehouseState(NativeRecord):
+class PlannerWarehouseState:
     """Warehouse snapshot and inspection relations gathered once per plan."""
 
     snapshot: WarehouseSnapshot
@@ -1368,6 +1368,7 @@ class PlannerWarehouseState(NativeRecord):
     migration_fingerprints: MigrationFingerprintCache
     def __init__(
         self,
+        *,
         snapshot: WarehouseSnapshot,
         inspection_relations: PlannerRelationsContext,
         migration_entries: tuple[ModelMigrationPlanEntry, ...] = ...,
@@ -1378,7 +1379,6 @@ class PlannerWarehouseState(NativeRecord):
         old_name_views: tuple[OldNameView, ...] = ...,
         migration_fingerprints: MigrationFingerprintCache = ...,
     ) -> None: ...
-    def __replace__(self, **changes: Any) -> PlannerWarehouseState: ...
 
 class ModelMigrationRequest(NativeRecord):
     """One destination model whose data should come from an earlier relation."""

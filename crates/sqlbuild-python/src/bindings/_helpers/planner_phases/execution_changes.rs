@@ -5,6 +5,8 @@ use crate::bindings::_helpers::planner_entries::models::{PlanEntriesRequest, Rel
 use crate::bindings::_helpers::planner_entries::relations::planner_relations_context;
 use crate::bindings::_helpers::planner_phases::models::{ChangeReconciliation, ModelEntryResults};
 use crate::bindings::_helpers::planner_phases::objects::native;
+use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::planner_phases::runtime::warehouse_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
@@ -68,16 +70,16 @@ pub(crate) fn build_planner_entry_results<'py>(
     source_freshness: &Bound<'py, PyAny>,
 ) -> PyResult<ModelEntryResults<'py>> {
     let py = runtime.py();
-    let project = runtime.getattr("project")?;
-    let config = runtime.getattr("project_config")?;
+    let project = runtime_field(&runtime, |runtime| &runtime.project)?;
+    let config = runtime_field(&runtime, |runtime| &runtime.project_config)?;
     let relations = planner_relations_context(RelationsRequest {
         project: project.clone(),
-        adapter: runtime.getattr("adapter")?,
-        connection: runtime.getattr("connection")?,
+        adapter: runtime_field(&runtime, |runtime| &runtime.adapter)?,
+        connection: runtime_field(&runtime, |runtime| &runtime.connection)?,
         scope: execution_scope.clone(),
         deferral: deferral.clone(),
         project_config: config.clone(),
-        local_config: runtime.getattr("local_config")?,
+        local_config: runtime_field(&runtime, |runtime| &runtime.local_config)?,
         known_source_columns: warehouse
             .getattr("inspection_relations")?
             .getattr("source_warehouse_columns")?,
@@ -128,7 +130,10 @@ pub(crate) fn build_planner_entry_results<'py>(
                 "start_cursor_config",
                 config_or(&config, &["cursors", "start"], none())?,
             ),
-            ("invocation_time", runtime.getattr("invocation_time")?),
+            (
+                "invocation_time",
+                runtime_field(&runtime, |runtime| &runtime.invocation_time)?,
+            ),
             ("max_microbatches", max_microbatches),
             (
                 "max_microbatches_is_override",
@@ -142,9 +147,9 @@ pub(crate) fn build_planner_entry_results<'py>(
     )?;
     plan_entries(PlanEntriesRequest {
         project,
-        adapter: runtime.getattr("adapter")?,
+        adapter: runtime_field(&runtime, |runtime| &runtime.adapter)?,
         scope: execution_scope.clone(),
-        snapshot: warehouse.getattr("snapshot")?,
+        snapshot: warehouse_field(&warehouse, |warehouse| &warehouse.snapshot)?,
         relations,
         resolved_models: reconciliation.resolved_actions.getattr("models")?,
         cursor_overrides: overrides.getattr("cursor_overrides")?,

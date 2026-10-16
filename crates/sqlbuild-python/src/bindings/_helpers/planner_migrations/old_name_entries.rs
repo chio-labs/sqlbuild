@@ -7,6 +7,7 @@ use crate::bindings::_helpers::planner_migrations::models::OldNamePlanner;
 use crate::bindings::_helpers::planner_migrations::old_name_objects::{
     expires, location, relation, retention, stores_history,
 };
+use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
@@ -21,7 +22,7 @@ impl<'py> OldNamePlanner<'py> {
     ) -> PyResult<Self> {
         let runtime = runtime.clone();
         let py = runtime.py();
-        let project_config = runtime.getattr("project_config")?;
+        let project_config = runtime_field(&runtime, |runtime| &runtime.project_config)?;
         let config = if project_config.is_none() {
             registry::class(py, RecordId::MigrationsConfig)?.call0()?
         } else {
@@ -33,7 +34,7 @@ impl<'py> OldNamePlanner<'py> {
             views,
             columns: columns.clone(),
             retention: config.getattr("old_name_views")?,
-            now: runtime.getattr("invocation_time")?,
+            now: runtime_field(&runtime, |runtime| &runtime.invocation_time)?,
             runtime,
         })
     }

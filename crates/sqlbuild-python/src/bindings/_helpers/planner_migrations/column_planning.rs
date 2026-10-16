@@ -7,6 +7,7 @@ use crate::bindings::_helpers::planner_migrations::known_input_columns::KnownInp
 use crate::bindings::_helpers::planner_migrations::models::{
     ColumnMigrationInputs, ColumnMigrationPlanning, MigrationPhase,
 };
+use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -63,7 +64,7 @@ pub(crate) fn plan_column_migrations<'py>(
     let py = phase.runtime.py();
     let runtime = phase.runtime.clone();
     let snapshot = phase.snapshot.clone();
-    let adapter = runtime.getattr("adapter")?;
+    let adapter = runtime_field(&runtime, |runtime| &runtime.adapter)?;
     let candidates = super::column_candidates::candidates(
         (phase, columns),
         &adapter.call_method0("sql_analysis_dialect")?,
@@ -84,7 +85,10 @@ pub(crate) fn plan_column_migrations<'py>(
         &registry::native(py, NativeAttr::MigrationStateInspection)?,
         &[
             ("adapter", adapter),
-            ("connection", runtime.getattr("connection")?),
+            (
+                "connection",
+                runtime_field(&runtime, |runtime| &runtime.connection)?,
+            ),
             ("database", database),
         ],
     )?;

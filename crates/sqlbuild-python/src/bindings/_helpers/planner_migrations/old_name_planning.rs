@@ -6,6 +6,7 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::column_objects::native;
 use crate::bindings::_helpers::planner_migrations::models::{MigrationPhase, OldNameViewPlanning};
 use crate::bindings::_helpers::planner_migrations::old_name_objects::recorded_view;
+use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
@@ -75,7 +76,7 @@ pub(crate) fn plan_old_name_views<'py>(
     let py = phase.runtime.py();
     let runtime = phase.runtime.clone();
     let scope = phase.scope.clone();
-    let project = runtime.getattr("project")?;
+    let project = runtime_field(&runtime, |runtime| &runtime.project)?;
     let models: Vec<Bound<'py, PyAny>> = project
         .getattr("models")?
         .try_iter()?
@@ -97,8 +98,14 @@ pub(crate) fn plan_old_name_views<'py>(
     let state = call_with(
         &registry::native(py, NativeAttr::MigrationStateInspection)?,
         &[
-            ("adapter", runtime.getattr("adapter")?),
-            ("connection", runtime.getattr("connection")?),
+            (
+                "adapter",
+                runtime_field(&runtime, |runtime| &runtime.adapter)?,
+            ),
+            (
+                "connection",
+                runtime_field(&runtime, |runtime| &runtime.connection)?,
+            ),
             (
                 "database",
                 native(
@@ -164,7 +171,10 @@ pub(crate) fn plan_old_name_views<'py>(
             ("selected", PyTuple::new(py, selected)?.into_any()),
             ("snapshot", phase.snapshot.clone()),
             ("views", views.clone()),
-            ("now", runtime.getattr("invocation_time")?),
+            (
+                "now",
+                runtime_field(&runtime, |runtime| &runtime.invocation_time)?,
+            ),
         ],
     )?;
     let mut warnings: Vec<Bound<'py, PyAny>> = claims.try_iter()?.collect::<PyResult<_>>()?;

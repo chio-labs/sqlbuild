@@ -4,6 +4,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::column_objects::replace;
+use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
@@ -25,7 +26,7 @@ fn migration_promotion<'py>(
     runtime: &Bound<'py, PyAny>,
     decision: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let adapter = runtime.getattr("adapter")?;
+    let adapter = runtime_field(&runtime, |runtime| &runtime.adapter)?;
     let promotion = registry::class(runtime.py(), RecordId::MigrationPromotion)?;
     if adapter
         .call_method0("supports_transactional_ddl")?
@@ -47,7 +48,7 @@ fn migration_with_execution<'py>(
     entry: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = runtime.py();
-    let adapter = runtime.getattr("adapter")?;
+    let adapter = runtime_field(&runtime, |runtime| &runtime.adapter)?;
     let transient = if adapter.getattr("adapter_name")?.eq("snowflake")? {
         PyBool::new(
             py,
