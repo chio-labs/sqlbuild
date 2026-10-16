@@ -11,6 +11,7 @@ use crate::bindings::_helpers::planner_entries::values::{
 use crate::bindings::_helpers::planner_phases::full_refresh::{
     check_full_rebuild_allowed, describe_full_rebuild_cause, resolve_model_full_refresh,
 };
+use crate::bindings::_helpers::planner_phases::models::ModelEntryResults;
 use crate::bindings::_helpers::planner_resolution::cursor_ranges::{
     CursorWindowInputs, config_str, cursor_safety_configs, empty_cursor_inputs, microbatch_range,
     model_cursor_overrides, plan_cursor_bounds,
@@ -36,7 +37,7 @@ use crate::bindings::_helpers::planner_strategy::values::text;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 const MICROBATCH_COMPLEXITY_CODE: &str = "MICROBATCH_CONCURRENCY_COMPLEXITY";
@@ -368,7 +369,9 @@ fn check_microbatch_concurrency<'py>(
 }
 
 /// Build model plan entries from snapshot and per-model resolved actions.
-pub(crate) fn plan_entries<'py>(request: PlanEntriesRequest<'py>) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn plan_entries<'py>(
+    request: PlanEntriesRequest<'py>,
+) -> PyResult<ModelEntryResults<'py>> {
     let PlanEntriesRequest {
         project,
         adapter,
@@ -527,14 +530,7 @@ pub(crate) fn plan_entries<'py>(request: PlanEntriesRequest<'py>) -> PyResult<Bo
     if let Some(warning) = check_microbatch_concurrency(&project, &adapter, &entries)? {
         warnings.push(warning);
     }
-    native(
-        py,
-        RecordId::PlannerModelEntryResults,
-        &[
-            ("entries", PyTuple::new(py, entries)?.into_any()),
-            ("warnings", PyTuple::new(py, warnings)?.into_any()),
-        ],
-    )
+    Ok(ModelEntryResults { entries, warnings })
 }
 
 /// Detect changes and build a plan entry and warnings for a single model.

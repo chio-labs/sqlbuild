@@ -13,7 +13,7 @@ use crate::bindings::_helpers::planner_entries::test_planning::{
 use crate::bindings::_helpers::planner_entries::values::{COMPILE_TYPES, native, replaced};
 use crate::bindings::_helpers::planner_phases::buildability::check_selected_scope_buildability;
 use crate::bindings::_helpers::planner_phases::execution_changes::{
-    build_planner_entry_results, prune_planner_execution_scope, reconcile_execution_changes,
+    build_planner_entry_results, reconcile_execution_changes,
 };
 use crate::bindings::_helpers::planner_phases::identities::{
     build_planner_identity_context, detect_stale_warning_changes,
@@ -128,28 +128,36 @@ fn planned_output<'py>(
         &warehouse.getattr("inspection_relations")?,
         &snapshot.getattr("source_freshness_state_schemas")?,
     )?;
-    let pruning = prune_planner_execution_scope(scopes, &resolved_actions)?;
-    let reconciliation = reconcile_execution_changes(&warehouse, &identities, &pruning, &changes)?;
+    let reconciliation = reconcile_execution_changes(
+        (&inspection_scope, &snapshot),
+        &identities,
+        &resolved_actions,
+        &changes,
+    )?;
     let entries = build_planner_entry_results(
         (runtime, &warehouse),
         (overrides, &deferral),
-        (&pruning, &reconciliation),
+        (&inspection_scope, &reconciliation),
         &source_freshness,
     )?;
     let planned_sql_tests = test_planning.result(py)?.into_bound(py);
     let output = base_plan_output(
         (runtime, &warehouse, &identities, overrides),
-        (&pruning, &reconciliation, &entries, &source_freshness),
+        (
+            &inspection_scope,
+            &reconciliation,
+            entries,
+            &source_freshness,
+        ),
         &planned_sql_tests,
     )?;
     let output = add_storage_policies(output, (runtime, &warehouse, scopes, &policies))?;
     let output = add_plan_warnings(
         output,
         (scopes, &warehouse, &identities, &stale_warning_changes),
-        (&pruning, &source_freshness, &policies),
+        (&source_freshness, &policies),
     )?;
-    let plan_output =
-        add_plan_metadata(output, &pruning, &source_freshness, &policies)?.build(py)?;
+    let plan_output = add_plan_metadata(output, &source_freshness, &policies)?.build(py)?;
     let on_progress = args.value("on_progress")?;
     if !on_progress.is_none() {
         on_progress.call1((format!(

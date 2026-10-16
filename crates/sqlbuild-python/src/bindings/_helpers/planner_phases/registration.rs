@@ -21,14 +21,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module
     )?)?;
     module.add_function(wrap_pyfunction!(
-        super::execution_changes::prune_planner_execution_scope,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
-        super::execution_changes::reconcile_execution_changes,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
         super::full_refresh::resolve_model_full_refresh,
         module
     )?)?;

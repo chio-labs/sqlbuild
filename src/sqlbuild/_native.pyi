@@ -1103,16 +1103,6 @@ class DirectModelVersionIdentities(NativeRecord):
     ) -> None: ...
     def __replace__(self, **changes: Any) -> DirectModelVersionIdentities: ...
 
-class PlannerModelEntryResults(NativeRecord):
-    """Model plan-entry phase output."""
-
-    entries: tuple[ModelPlanEntry, ...]
-    warnings: tuple[PlanWarning, ...]
-    def __init__(
-        self, entries: tuple[ModelPlanEntry, ...], warnings: tuple[PlanWarning, ...] = ...
-    ) -> None: ...
-    def __replace__(self, **changes: Any) -> PlannerModelEntryResults: ...
-
 class SchemaAction(NativeRecord):
     """One concrete schema change action to apply to a target table."""
 
@@ -1445,50 +1435,6 @@ class MigrationCompatibilityResult(NativeRecord):
     def __init__(self, status: MigrationCompatibility, findings: tuple[str, ...] = ...) -> None: ...
     def __replace__(self, **changes: Any) -> MigrationCompatibilityResult: ...
 
-class ModelMigrationPlanning(NativeRecord):
-    """Migration decisions plus the warehouse snapshot as it will look after moves."""
-
-    snapshot: WarehouseSnapshot
-    entries: tuple[ModelMigrationPlanEntry, ...]
-    warnings: tuple[PlanWarning, ...]
-    def __init__(
-        self,
-        snapshot: WarehouseSnapshot,
-        entries: tuple[ModelMigrationPlanEntry, ...] = ...,
-        warnings: tuple[PlanWarning, ...] = ...,
-    ) -> None: ...
-    def __replace__(self, **changes: Any) -> ModelMigrationPlanning: ...
-
-class OldNameViewPlanning(NativeRecord):
-    """Old-name steps for this build plus every compatibility view still recorded."""
-
-    entries: tuple[OldNameViewPlanEntry, ...]
-    views: tuple[OldNameView, ...]
-    warnings: tuple[PlanWarning, ...]
-    def __init__(
-        self,
-        entries: tuple[OldNameViewPlanEntry, ...] = ...,
-        views: tuple[OldNameView, ...] = ...,
-        warnings: tuple[PlanWarning, ...] = ...,
-    ) -> None: ...
-    def __replace__(self, **changes: Any) -> OldNameViewPlanning: ...
-
-class ColumnMigrationPlanning(NativeRecord):
-    """Column rename decisions plus the warehouse snapshot as it will look after renames."""
-
-    snapshot: WarehouseSnapshot
-    entries: tuple[ColumnMigrationPlanEntry, ...]
-    hints: tuple[ColumnRenameHint, ...]
-    warnings: tuple[PlanWarning, ...]
-    def __init__(
-        self,
-        snapshot: WarehouseSnapshot,
-        entries: tuple[ColumnMigrationPlanEntry, ...] = ...,
-        hints: tuple[ColumnRenameHint, ...] = ...,
-        warnings: tuple[PlanWarning, ...] = ...,
-    ) -> None: ...
-    def __replace__(self, **changes: Any) -> ColumnMigrationPlanning: ...
-
 class PlannerIdentityContext(NativeRecord):
     """Expected version identities for inspection and stale-warning scopes."""
 
@@ -1500,41 +1446,6 @@ class PlannerIdentityContext(NativeRecord):
         stale_warning_identities: DirectModelVersionIdentities,
     ) -> None: ...
     def __replace__(self, **changes: Any) -> PlannerIdentityContext: ...
-
-class PlannerScopePruningResult(NativeRecord):
-    """Scope pruning outcome with pruned scopes, actions, and staleness state."""
-
-    inspection_scope: PlannerScope
-    execution_scope: PlannerScope
-    resolved_actions: PlannerResolvedActions
-    pruned_direct_model_names: tuple[str, ...]
-    direct_identity_stale_model_names: frozenset[str]
-    def __init__(
-        self,
-        inspection_scope: PlannerScope,
-        execution_scope: PlannerScope,
-        resolved_actions: PlannerResolvedActions,
-        pruned_direct_model_names: tuple[str, ...],
-        direct_identity_stale_model_names: frozenset[str],
-    ) -> None: ...
-    def __replace__(self, **changes: Any) -> PlannerScopePruningResult: ...
-
-class PlannerChangeReconciliation(NativeRecord):
-    """Write-hash-honest changes merged back into resolved actions."""
-
-    changes: PlannerChangeResults
-    resolved_actions: PlannerResolvedActions
-    def __init__(
-        self, changes: PlannerChangeResults, resolved_actions: PlannerResolvedActions
-    ) -> None: ...
-    def __replace__(self, **changes: Any) -> PlannerChangeReconciliation: ...
-
-class PlannerEntryResults(NativeRecord):
-    """Model plan entries for one plan build."""
-
-    model_entry_results: PlannerModelEntryResults
-    def __init__(self, model_entry_results: PlannerModelEntryResults) -> None: ...
-    def __replace__(self, **changes: Any) -> PlannerEntryResults: ...
 
 class NativeModelInput:
     @property
@@ -6615,18 +6526,6 @@ def apply_maximum_start_policy(
     policy: MaximumStartPolicyInputs,
     has_start_override: bool,
 ) -> CursorBounds: ...
-def build_plan_output(
-    *,
-    project: CompiledProjectView,
-    adapter: BaseAdapter,
-    scope: PlannerScope,
-    snapshot: WarehouseSnapshot,
-    relations: PlannerRelationsContext,
-    changes: PlannerChangeResults,
-    model_entry_results: PlannerModelEntryResults,
-    reload_sources: bool,
-    extras: PlanOutputExtras | None = None,
-) -> PlanOutput: ...
 def plan_function(
     *,
     function: CompiledFunctionView,
@@ -7202,7 +7101,7 @@ def plan_column_migrations(
     overrides: PlannerOverrides,
     deferral: DeferralInputs,
     source_columns: Mapping[str, tuple[ColumnInfo, ...]],
-) -> ColumnMigrationPlanning: ...
+) -> None: ...
 def old_name_schemas_to_read(*, snapshot: WarehouseSnapshot, needed: set[str]) -> set[str]: ...
 def old_name_claim_message(*, model_name: str, view: OldNameView, now: datetime) -> str: ...
 def old_name_claim_errors(
@@ -7686,16 +7585,6 @@ def check_selected_scope_buildability(
     warehouse: PlannerWarehouseState,
     deferral: DeferralInputs,
 ) -> None: ...
-def prune_planner_execution_scope(
-    *, scopes: PlannerScopeResolution, resolved_actions: PlannerResolvedActions
-) -> PlannerScopePruningResult: ...
-def reconcile_execution_changes(
-    *,
-    warehouse: PlannerWarehouseState,
-    identities: PlannerIdentityContext,
-    pruning: PlannerScopePruningResult,
-    changes: PlannerChangeResults,
-) -> PlannerChangeReconciliation: ...
 def resolve_model_full_refresh(*, model: CompiledModelView, cli_full_refresh: bool) -> bool: ...
 def effectively_full_refreshed_model_names(
     *, project: CompiledProjectView, cli_full_refresh: bool

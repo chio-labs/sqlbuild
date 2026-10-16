@@ -29,3 +29,18 @@ pub(crate) struct PlanEntriesRequest<'py> {
     pub(crate) full_refresh: bool,
     pub(crate) build_inputs: Bound<'py, PyAny>,
 }
+
+/// What assembling the plan output's fields reads.
+#[derive(Debug)]
+pub(crate) struct PlanOutputInputs<'py> {
+    pub(crate) project: Bound<'py, PyAny>,
+    pub(crate) adapter: Bound<'py, PyAny>,
+    pub(crate) scope: Bound<'py, PyAny>,
+    pub(crate) snapshot: Bound<'py, PyAny>,
+    pub(crate) relations: Bound<'py, PyAny>,
+    pub(crate) changes: Bound<'py, PyAny>,
+    pub(crate) model_entries: Vec<Bound<'py, PyAny>>,
+    pub(crate) model_warnings: Vec<Bound<'py, PyAny>>,
+    pub(crate) reload_sources: Bound<'py, PyAny>,
+    pub(crate) extras: Bound<'py, PyAny>,
+}

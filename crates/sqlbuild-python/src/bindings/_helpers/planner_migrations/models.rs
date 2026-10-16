@@ -44,3 +44,28 @@ pub(crate) struct ColumnMigrationInputs<'py> {
     pub(crate) physical_relations: Bound<'py, PyAny>,
     pub(crate) source_columns: Bound<'py, PyAny>,
 }
+
+/// The snapshot after model migrations overlay it, with the planned entries and their warnings.
+#[derive(Debug)]
+pub(crate) struct ModelMigrationPlanning<'py> {
+    pub(crate) snapshot: Bound<'py, PyAny>,
+    pub(crate) entries: Vec<Bound<'py, PyAny>>,
+    pub(crate) warnings: Vec<Bound<'py, PyAny>>,
+}
+
+/// The snapshot after column renames overlay it, with the planned entries, rename hints and warnings.
+#[derive(Debug)]
+pub(crate) struct ColumnMigrationPlanning<'py> {
+    pub(crate) snapshot: Bound<'py, PyAny>,
+    pub(crate) entries: Vec<Bound<'py, PyAny>>,
+    pub(crate) hints: Vec<Bound<'py, PyAny>>,
+    pub(crate) warnings: Vec<Bound<'py, PyAny>>,
+}
+
+/// The old-name view steps, the recorded live views and the warnings they raise.
+#[derive(Debug)]
+pub(crate) struct OldNameViewPlanning<'py> {
+    pub(crate) entries: Bound<'py, PyAny>,
+    pub(crate) views: Bound<'py, PyAny>,
+    pub(crate) warnings: Vec<Bound<'py, PyAny>>,
+}

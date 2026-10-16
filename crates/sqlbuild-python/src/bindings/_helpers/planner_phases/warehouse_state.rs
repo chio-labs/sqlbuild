@@ -112,8 +112,7 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
         relation_keys: py.None().into_bound(py),
     })?;
     let physical = PyDict::new(py);
-    for entry in migrations.getattr("entries")?.try_iter()? {
-        let entry = entry?;
+    for entry in &migrations.entries {
         if entry
             .getattr("decision")?
             .getattr("moves_data")?
@@ -133,7 +132,7 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
     }
     let columns = plan_column_migrations(
         &MigrationPhase {
-            snapshot: migrations.getattr("snapshot")?,
+            snapshot: migrations.snapshot.clone(),
             ..phase
         },
         &ColumnMigrationInputs {
@@ -145,6 +144,8 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
             source_columns: inspection_relations.getattr("source_warehouse_columns")?,
         },
     )?;
+    let migration_entries = PyTuple::new(py, &migrations.entries)?.into_any();
+    let column_entries = PyTuple::new(py, &columns.entries)?.into_any();
     let old_names = plan_old_name_migration_views(
         &MigrationPhase {
             runtime: runtime.clone(),
@@ -153,10 +154,7 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
             overrides: overrides.clone(),
             deferral: deferral.clone(),
         },
-        (
-            &migrations.getattr("entries")?,
-            &columns.getattr("entries")?,
-        ),
+        (&migration_entries, &column_entries),
     )?;
     if !runtime.getattr("on_progress")?.is_none() {
         progress(
@@ -168,24 +166,24 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
         )?;
         progress(runtime, "Generating plan...")?;
     }
-    let mut warnings: Vec<_> = Vec::new();
-    for source in [&migrations, &columns, &old_names] {
-        for warning in source.getattr("warnings")?.try_iter()? {
-            warnings.push(warning?);
-        }
-    }
+    let mut warnings: Vec<_> = migrations.warnings;
+    warnings.extend(columns.warnings);
+    warnings.extend(old_names.warnings);
     native(
         py,
         RecordId::PlannerWarehouseState,
         &[
-            ("snapshot", columns.getattr("snapshot")?),
+            ("snapshot", columns.snapshot),
             ("inspection_relations", inspection_relations),
-            ("migration_entries", migrations.getattr("entries")?),
+            ("migration_entries", migration_entries),
             ("migration_warnings", PyTuple::new(py, warnings)?.into_any()),
-            ("column_migration_entries", columns.getattr("entries")?),
-            ("column_rename_hints", columns.getattr("hints")?),
-            ("old_name_view_entries", old_names.getattr("entries")?),
-            ("old_name_views", old_names.getattr("views")?),
+            ("column_migration_entries", column_entries),
+            (
+                "column_rename_hints",
+                PyTuple::new(py, columns.hints)?.into_any(),
+            ),
+            ("old_name_view_entries", old_names.entries),
+            ("old_name_views", old_names.views),
             ("migration_fingerprints", fingerprints),
         ],
     )

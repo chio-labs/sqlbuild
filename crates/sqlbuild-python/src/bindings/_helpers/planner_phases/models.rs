@@ -8,3 +8,17 @@ pub(crate) struct PlanOutputFields<'py> {
     pub(crate) fields: Vec<(&'static str, Bound<'py, PyAny>)>,
     pub(crate) metadata: Vec<(&'static str, Bound<'py, PyAny>)>,
 }
+
+/// The model changes and resolved actions after write-hash reconciliation.
+#[derive(Debug)]
+pub(crate) struct ChangeReconciliation<'py> {
+    pub(crate) changes: Bound<'py, PyAny>,
+    pub(crate) resolved_actions: Bound<'py, PyAny>,
+}
+
+/// Planned model entries and the warnings planning them raised.
+#[derive(Debug)]
+pub(crate) struct ModelEntryResults<'py> {
+    pub(crate) entries: Vec<Bound<'py, PyAny>>,
+    pub(crate) warnings: Vec<Bound<'py, PyAny>>,
+}

@@ -2,7 +2,9 @@
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::planner_migrations::column_objects::{config, native, replace};
-use crate::bindings::_helpers::planner_migrations::models::MigrationPhase;
+use crate::bindings::_helpers::planner_migrations::models::{
+    MigrationPhase, ModelMigrationPlanning,
+};
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -105,7 +107,7 @@ fn decide_model_migration<'py>(
 pub(crate) fn plan_model_migrations<'py>(
     phase: &MigrationPhase<'py>,
     fingerprints: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
+) -> PyResult<ModelMigrationPlanning<'py>> {
     let py = phase.runtime.py();
     let runtime = phase.runtime.clone();
     let snapshot = phase.snapshot.clone();
@@ -193,7 +195,7 @@ fn finish<'py>(
     state: &Bound<'py, PyAny>,
     schemas: &Bound<'py, PyAny>,
     discovery: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
+) -> PyResult<ModelMigrationPlanning<'py>> {
     let runtime = phase.runtime.clone();
     let py = runtime.py();
     let scope = phase.scope.clone();
@@ -323,15 +325,11 @@ fn finish<'py>(
     if !entries.is_empty() {
         fields.push(("renamed_models", PyFrozenSet::new(py, renamed)?.into_any()));
     }
-    native(
-        py,
-        RecordId::ModelMigrationPlanning,
-        &[
-            ("snapshot", replace(&overlaid, &fields)?),
-            ("entries", PyTuple::new(py, entries)?.into_any()),
-            ("warnings", PyTuple::new(py, warnings)?.into_any()),
-        ],
-    )
+    Ok(ModelMigrationPlanning {
+        snapshot: replace(&overlaid, &fields)?,
+        entries,
+        warnings,
+    })
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

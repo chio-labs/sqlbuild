@@ -4,9 +4,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::column_objects::native;
-use crate::bindings::_helpers::planner_migrations::models::MigrationPhase;
+use crate::bindings::_helpers::planner_migrations::models::{MigrationPhase, OldNameViewPlanning};
 use crate::bindings::_helpers::planner_migrations::old_name_objects::recorded_view;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PySet, PySetMethods, PyTuple};
@@ -71,7 +71,7 @@ fn schemas<'py>(
 pub(crate) fn plan_old_name_views<'py>(
     phase: &MigrationPhase<'py>,
     moves: (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
-) -> PyResult<Bound<'py, PyAny>> {
+) -> PyResult<OldNameViewPlanning<'py>> {
     let py = phase.runtime.py();
     let runtime = phase.runtime.clone();
     let scope = phase.scope.clone();
@@ -171,13 +171,9 @@ pub(crate) fn plan_old_name_views<'py>(
     warnings.extend(super::old_name_references::errors(
         &runtime, &views, &entries,
     )?);
-    native(
-        py,
-        RecordId::OldNameViewPlanning,
-        &[
-            ("entries", entries),
-            ("views", views),
-            ("warnings", PyTuple::new(py, warnings)?.into_any()),
-        ],
-    )
+    Ok(OldNameViewPlanning {
+        entries,
+        views,
+        warnings,
+    })
 }

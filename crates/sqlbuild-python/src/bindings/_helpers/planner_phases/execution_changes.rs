@@ -1,54 +1,29 @@
-//! Execution-scope pruning, write-hash reconciliation and plan entry construction.
+//! Write-hash reconciliation and plan entry construction.
 
 use crate::bindings::_helpers::planner_entries::model_entries::plan_entries;
 use crate::bindings::_helpers::planner_entries::models::{PlanEntriesRequest, RelationsRequest};
 use crate::bindings::_helpers::planner_entries::relations::planner_relations_context;
+use crate::bindings::_helpers::planner_phases::models::{ChangeReconciliation, ModelEntryResults};
 use crate::bindings::_helpers::planner_phases::objects::native;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
-use pyo3::pyfunction;
-use pyo3::types::{PyFrozenSet, PyTuple};
+use pyo3::types::PyFrozenSet;
 
-#[pyfunction]
-#[pyo3(signature = (*, scopes, resolved_actions))]
-pub(crate) fn prune_planner_execution_scope<'py>(
-    scopes: &Bound<'py, PyAny>,
-    resolved_actions: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let py = scopes.py();
-    let inspection = scopes.getattr("inspection_scope")?;
-    native(
-        py,
-        RecordId::PlannerScopePruningResult,
-        &[
-            ("inspection_scope", inspection.clone()),
-            ("execution_scope", inspection),
-            ("resolved_actions", resolved_actions.clone()),
-            ("pruned_direct_model_names", PyTuple::empty(py).into_any()),
-            (
-                "direct_identity_stale_model_names",
-                PyFrozenSet::empty(py)?.into_any(),
-            ),
-        ],
-    )
-}
-
-#[pyfunction]
-#[pyo3(signature = (*, warehouse, identities, pruning, changes))]
+/// The execution scope's changes with honest write hashes, and the actions merged from them.
 pub(crate) fn reconcile_execution_changes<'py>(
-    warehouse: &Bound<'py, PyAny>,
+    (execution_scope, snapshot): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
     identities: &Bound<'py, PyAny>,
-    pruning: &Bound<'py, PyAny>,
+    resolved_actions: &Bound<'py, PyAny>,
     changes: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let py = warehouse.py();
+) -> PyResult<ChangeReconciliation<'py>> {
+    let py = execution_scope.py();
     let honest = native(
         py,
         NativeAttr::WithHonestModelWriteHashes,
         &[
-            ("scope", pruning.getattr("execution_scope")?),
-            ("snapshot", warehouse.getattr("snapshot")?),
+            ("scope", execution_scope.clone()),
+            ("snapshot", snapshot.clone()),
             ("changes", changes.clone()),
             (
                 "version_identities",
@@ -60,15 +35,14 @@ pub(crate) fn reconcile_execution_changes<'py>(
         py,
         NativeAttr::MergeRecomputedModelChanges,
         &[
-            ("resolved_actions", pruning.getattr("resolved_actions")?),
+            ("resolved_actions", resolved_actions.clone()),
             ("changes", honest.clone()),
         ],
     )?;
-    native(
-        py,
-        RecordId::PlannerChangeReconciliation,
-        &[("changes", honest), ("resolved_actions", resolved)],
-    )
+    Ok(ChangeReconciliation {
+        changes: honest,
+        resolved_actions: resolved,
+    })
 }
 
 fn config_or<'py>(
@@ -90,13 +64,12 @@ fn config_or<'py>(
 pub(crate) fn build_planner_entry_results<'py>(
     (runtime, warehouse): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
     (overrides, deferral): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
-    (pruning, reconciliation): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    (execution_scope, reconciliation): (&Bound<'py, PyAny>, &ChangeReconciliation<'py>),
     source_freshness: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
+) -> PyResult<ModelEntryResults<'py>> {
     let py = runtime.py();
     let project = runtime.getattr("project")?;
     let config = runtime.getattr("project_config")?;
-    let execution_scope = pruning.getattr("execution_scope")?;
     let relations = planner_relations_context(RelationsRequest {
         project: project.clone(),
         adapter: runtime.getattr("adapter")?,
@@ -167,22 +140,15 @@ pub(crate) fn build_planner_entry_results<'py>(
             ("microbatch_limit_action", limit_action),
         ],
     )?;
-    let entries = plan_entries(PlanEntriesRequest {
+    plan_entries(PlanEntriesRequest {
         project,
         adapter: runtime.getattr("adapter")?,
-        scope: execution_scope,
+        scope: execution_scope.clone(),
         snapshot: warehouse.getattr("snapshot")?,
         relations,
-        resolved_models: reconciliation
-            .getattr("resolved_actions")?
-            .getattr("models")?,
+        resolved_models: reconciliation.resolved_actions.getattr("models")?,
         cursor_overrides: overrides.getattr("cursor_overrides")?,
         full_refresh: overrides.getattr("full_refresh")?.is_truthy()?,
         build_inputs,
-    })?;
-    native(
-        py,
-        RecordId::PlannerEntryResults,
-        &[("model_entry_results", entries)],
-    )
+    })
 }
