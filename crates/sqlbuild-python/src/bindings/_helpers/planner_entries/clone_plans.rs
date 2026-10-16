@@ -1,5 +1,6 @@
 //! Clone planning: destination and origin entries, and deferred-clone graph traversal.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_entries::values::{
     native, planner_model, planner_type, string,
@@ -145,8 +146,8 @@ fn model_entry<'py>(
         py,
         RecordId::ModelPlanEntry,
         &[
-            ("key", model.getattr("key")?),
-            ("name", model.getattr("name")?),
+            ("key", model_reads::model_key(model)?),
+            ("name", model_reads::name_object(model)?),
             ("relative_path", model.getattr("relative_path")?),
             ("materialization_type", materialization_type),
             ("action", planner_type(py, RecordId::PlanAction, action)?),
@@ -154,7 +155,7 @@ fn model_entry<'py>(
                 "reason",
                 planner_type(py, RecordId::PlanReason, "NO_CHANGE")?,
             ),
-            ("destination", model.getattr("destination")?),
+            ("destination", model_reads::destination(model)?),
             ("fingerprint_query_sql", string(py, "")),
             ("resolved_sql", resolved_sql),
             ("logical_ddl", string(py, "")),
@@ -173,7 +174,7 @@ fn clone_model_entries<'py>(
     let entries = PyDict::new(py);
     for model in project.getattr("models")?.try_iter()? {
         let model = model?;
-        if !selected.contains(model.getattr("key")?)? || disabled_model(&model)? {
+        if !selected.contains(model_reads::model_key(&model)?)? || disabled_model(&model)? {
             continue;
         }
         let materialization_type = native(
@@ -237,7 +238,7 @@ fn clone_model_entries<'py>(
             string(py, "")
         };
         entries.set_item(
-            model.getattr("key")?,
+            model_reads::model_key(&model)?,
             model_entry(&model, materialization_type, resolved_sql)?,
         )?;
     }
@@ -415,7 +416,7 @@ fn origin_model_entries<'py>(
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
     for model in project.getattr("models")?.try_iter()? {
         let model = model?;
-        if !selected_names.contains(model.getattr("name")?)? || disabled_model(&model)? {
+        if !selected_names.contains(model_reads::name_object(&model)?)? || disabled_model(&model)? {
             continue;
         }
         let materialization_type = native(

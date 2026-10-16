@@ -1,5 +1,6 @@
 //! Boundary conversions for the column migration planner.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::records::ids::{NativeAttr, NativeItem, RecordId};
@@ -57,8 +58,8 @@ pub(super) fn definition_hash<'py>(
         model.py(),
         NativeAttr::ModelDefinitionHash,
         &[
-            ("model_name", model.getattr("name")?),
-            ("query_sql", model.getattr("query_sql")?),
+            ("model_name", model_reads::name_object(model)?),
+            ("query_sql", model_reads::query_sql(model)?),
             ("dialect", snapshot.getattr("column_dialect")?),
         ],
     )

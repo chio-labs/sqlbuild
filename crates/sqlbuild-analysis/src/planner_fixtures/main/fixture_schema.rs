@@ -7,7 +7,13 @@ pub fn fixture_schema(columns: &[FixtureColumn], authoritative: bool) -> Fixture
     let mut expected_types: Vec<(String, String)> = Vec::new();
     for column in columns {
         if let Some(sql_type) = &column.sql_type {
-            expected_types.push((column.folded_name.clone(), sql_type.clone()));
+            match expected_types
+                .iter_mut()
+                .find(|(name, _)| *name == column.folded_name)
+            {
+                Some((_, existing)) => existing.clone_from(sql_type),
+                None => expected_types.push((column.folded_name.clone(), sql_type.clone())),
+            }
         }
     }
     FixtureSchema {

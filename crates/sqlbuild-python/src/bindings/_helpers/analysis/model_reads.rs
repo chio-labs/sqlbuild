@@ -6,6 +6,19 @@ use crate::bindings::_helpers::compiled_project::compiled_model_view::{
     DeclaredRow, InferredRow, LineageInput, NativeCompiledModel,
 };
 
+/// `(output, transform kind, confidence, [(resource type, resource, column)])` of one lineage output.
+pub(crate) type LineageFactRow = (String, String, String, Vec<(String, String, String)>);
+
+const TRANSFORM_VALUES: [&str; 6] = [
+    "direct",
+    "cast",
+    "expression",
+    "aggregation",
+    "star",
+    "constant",
+];
+const CONFIDENCE_VALUES: [&str; 3] = ["unknown", "high", "medium"];
+
 /// Each inferred output column as `(name, type, nullability)`, `None` when none were inferred.
 pub(crate) fn inferred_rows(model: &Bound<'_, PyAny>) -> PyResult<Option<Vec<InferredRow>>> {
     if let Ok(view) = model.downcast::<NativeCompiledModel>() {
@@ -116,4 +129,111 @@ pub(crate) fn output_proven(model: &Bound<'_, PyAny>) -> PyResult<bool> {
     }
     let proof: Bound<'_, PyAny> = model.getattr("dynamic_column_contract")?;
     Ok(!proof.is_none() && proof.getattr("output_proven")?.is_truthy()?)
+}
+
+/// Each lineage output with its transform kind and confidence values, `None` without lineage.
+pub(crate) fn lineage_facts(model: &Bound<'_, PyAny>) -> PyResult<Option<Vec<LineageFactRow>>> {
+    if let Ok(view) = model.downcast::<NativeCompiledModel>() {
+        let Some(rows) = view.get().lineage_rows(model.py())? else {
+            return Ok(None);
+        };
+        let mut facts: Vec<LineageFactRow> = Vec::with_capacity(rows.len());
+        for row in rows {
+            facts.push((
+                row.output_column,
+                coded(&TRANSFORM_VALUES, row.transform_code)?,
+                coded(&CONFIDENCE_VALUES, row.confidence_code)?,
+                row.sources,
+            ));
+        }
+        return Ok(Some(facts));
+    }
+    let columns: Bound<'_, PyAny> = model.getattr("fast_lineage_columns")?;
+    if columns.is_none() {
+        return Ok(None);
+    }
+    let mut facts: Vec<LineageFactRow> = Vec::new();
+    for output in columns.try_iter()? {
+        let output: Bound<'_, PyAny> = output?;
+        let mut sources: Vec<(String, String, String)> = Vec::new();
+        for source in output.getattr("upstream_columns")?.try_iter()? {
+            let source: Bound<'_, PyAny> = source?;
+            sources.push((
+                source.getattr("resource_type")?.extract()?,
+                source.getattr("resource_name")?.extract()?,
+                source.getattr("column_name")?.extract()?,
+            ));
+        }
+        facts.push((
+            output.getattr("output_column")?.extract()?,
+            output.getattr("transform_kind")?.str()?.extract()?,
+            output.getattr("confidence")?.str()?.extract()?,
+            sources,
+        ));
+    }
+    Ok(Some(facts))
+}
+
+fn coded(values: &[&str], code: u8) -> PyResult<String> {
+    values
+        .get(usize::from(code))
+        .map(|value| (*value).to_owned())
+        .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("tuple index out of range"))
+}
+
+/// The input relations of a dynamic pivot proof that proved the model's outputs, else `None`.
+pub(crate) fn proven_inputs(model: &Bound<'_, PyAny>) -> PyResult<Option<Vec<String>>> {
+    if let Ok(view) = model.downcast::<NativeCompiledModel>() {
+        return view.get().proven_inputs(model.py());
+    }
+    let proof: Bound<'_, PyAny> = model.getattr("dynamic_column_contract")?;
+    if proof.is_none() || !proof.getattr("output_proven")?.is_truthy()? {
+        return Ok(None);
+    }
+    proof.getattr("input_relations")?.extract().map(Some)
+}
+
+/// The model's name.
+pub(crate) fn model_name(model: &Bound<'_, PyAny>) -> PyResult<String> {
+    if let Ok(view) = model.downcast::<NativeCompiledModel>() {
+        return view.get().name(model.py());
+    }
+    model.getattr("name")?.extract()
+}
+
+/// The model's compiled query SQL.
+pub(crate) fn query_sql<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    if let Ok(view) = model.downcast::<NativeCompiledModel>() {
+        return Ok(view
+            .get()
+            .query_sql(model.py())?
+            .into_bound(model.py())
+            .into_any());
+    }
+    model.getattr("query_sql")
+}
+
+/// The model's `CompiledObjectKey`.
+pub(crate) fn model_key<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    if let Ok(view) = model.downcast::<NativeCompiledModel>() {
+        return Ok(view.get().key(model.py())?.into_bound(model.py()));
+    }
+    model.getattr("key")
+}
+
+/// The model's destination `CompiledRelationLocation`.
+pub(crate) fn destination<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    if let Ok(view) = model.downcast::<NativeCompiledModel>() {
+        return Ok(view.get().destination(model.py())?.into_bound(model.py()));
+    }
+    model.getattr("destination")
+}
+
+/// The model's name as a Python string.
+pub(crate) fn name_object<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    if let Ok(view) = model.downcast::<NativeCompiledModel>() {
+        let name: String = view.get().name(model.py())?;
+        return Ok(pyo3::types::PyString::new(model.py(), &name).into_any());
+    }
+    model.getattr("name")
 }

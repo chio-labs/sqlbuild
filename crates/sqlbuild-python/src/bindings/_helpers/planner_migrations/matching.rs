@@ -1,5 +1,6 @@
 //! Fingerprint cache callbacks around native one-to-one migration matching.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
@@ -14,7 +15,7 @@ fn variants<'py>(
     model: &Bound<'py, PyAny>,
     maps: Bound<'py, PyAny>,
 ) -> PyResult<Vec<String>> {
-    let name = model.getattr("name")?;
+    let name = model_reads::name_object(model)?;
     let metadata = arguments.value("metadata_jsons")?.get_item(name)?;
     let cache = arguments.value("fingerprints")?.getattr("fingerprint")?;
     let mut hashes: Vec<String> = Vec::new();
@@ -22,7 +23,7 @@ fn variants<'py>(
         let hash: Option<String> = call_with(
             &cache,
             &[
-                ("query_sql", model.getattr("query_sql")?),
+                ("query_sql", model_reads::query_sql(model)?),
                 ("metadata_json", metadata.clone()),
                 ("ref_identities", map?),
                 ("dialect", arguments.value("dialect")?),
@@ -67,7 +68,7 @@ fn match_migration_fingerprints<'py>(
     let mut names: Vec<String> = Vec::new();
     for model in arguments.value("models")?.try_iter()? {
         let model = model?;
-        let name: String = model.getattr("name")?.extract()?;
+        let name: String = model_reads::model_name(&model)?;
         if new_names.contains(&name) {
             names.push(name.clone());
         }
@@ -131,7 +132,7 @@ fn migration_destination_fingerprints<'py>(
     let result = PyDict::new(py);
     for request in arguments.value("requests")?.try_iter()? {
         let model = request?.getattr("model")?;
-        let name = model.getattr("name")?;
+        let name = model_reads::name_object(&model)?;
         if arguments
             .value("metadata_jsons")?
             .call_method1("get", (&name,))?

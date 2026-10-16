@@ -1,96 +1,103 @@
 //! Model, function and SQL-hook orchestration through adapter-owned rendering.
 
+use crate::bindings::_helpers::analysis::model_reads;
+use crate::bindings::_helpers::attachments::cursor_intrinsics::resolve_cursor_intrinsics;
+use crate::bindings::_helpers::attachments::reference_markers::assert_no_unresolved_sql_markers;
+use crate::bindings::_helpers::compile_attachment::cursor_roles::resolve_cursor_input_roles;
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
+    KeywordArguments, call_with, imported, keywords,
 };
 use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
-use crate::bindings::_helpers::planner_resolution::values::string;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::planner_resolution::cursor_model::compute_model_cursor_bounds;
+use crate::bindings::_helpers::planner_resolution::refs::{
+    resolve_dbt_ref_references, resolve_ref_references, resolve_table_function_references,
+    resolve_udf_references,
+};
+use crate::bindings::_helpers::planner_resolution::sources::resolve_source_references;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyString, PyTuple};
 use pyo3::{IntoPyObject, PyErr, pyfunction, wrap_pyfunction};
 
+/// What resolving one model's, hook's or function's references reads.
 struct Resolution<'py> {
     adapter: Bound<'py, PyAny>,
-    context: Bound<'py, PyAny>,
     external: Bound<'py, PyAny>,
+    source_map: Bound<'py, PyAny>,
+    source_warehouse_columns: Bound<'py, PyAny>,
+    star_exclude_keyword: Bound<'py, PyAny>,
+    model_locations: Bound<'py, PyAny>,
+    seed_locations: Bound<'py, PyAny>,
+    function_locations: Bound<'py, PyAny>,
 }
 
 impl<'py> Resolution<'py> {
+    /// Resolution against a `ModelPlanContext`'s relations.
+    fn of_context(
+        adapter: Bound<'py, PyAny>,
+        context: &Bound<'py, PyAny>,
+        external: Bound<'py, PyAny>,
+    ) -> PyResult<Self> {
+        Ok(Self {
+            adapter,
+            external,
+            source_map: context.getattr("source_map")?,
+            source_warehouse_columns: context.getattr("source_warehouse_columns")?,
+            star_exclude_keyword: context.getattr("star_exclude_keyword")?,
+            model_locations: context.getattr("model_locations")?,
+            seed_locations: context.getattr("seed_locations")?,
+            function_locations: context.getattr("function_locations")?,
+        })
+    }
+
     fn resolve(
         &self,
         sql: Bound<'py, PyAny>,
         cursor: &[(&str, Bound<'py, PyAny>)],
-    ) -> PyResult<Bound<'py, PyAny>> {
+    ) -> PyResult<String> {
         let py = self.adapter.py();
-        let mut source = vec![("query_sql", sql), ("adapter", self.adapter.clone())];
-        for key in [
-            "source_map",
-            "source_warehouse_columns",
-            "star_exclude_keyword",
-        ] {
-            source.push((key, self.context.getattr(key)?));
-        }
+        let mut source = vec![
+            ("query_sql", sql),
+            ("adapter", self.adapter.clone()),
+            ("source_map", self.source_map.clone()),
+            (
+                "source_warehouse_columns",
+                self.source_warehouse_columns.clone(),
+            ),
+            ("star_exclude_keyword", self.star_exclude_keyword.clone()),
+        ];
         source.extend_from_slice(cursor);
-        let mut resolved = call_with(
-            &registry::native(py, NativeAttr::ResolveSourceReferences)?,
-            &source,
-        )?;
-        let mut refs = vec![("query_sql", resolved), ("adapter", self.adapter.clone())];
-        for key in ["model_locations", "seed_locations"] {
-            refs.push((key, self.context.getattr(key)?));
-        }
+        let resolved: String = resolve_source_references(py, Some(keywords(py, &source)?))?;
+        let mut refs = vec![
+            ("query_sql", PyString::new(py, &resolved).into_any()),
+            ("adapter", self.adapter.clone()),
+            ("model_locations", self.model_locations.clone()),
+            ("seed_locations", self.seed_locations.clone()),
+        ];
         refs.extend_from_slice(cursor);
-        resolved = call_with(
-            &registry::native(py, NativeAttr::ResolveRefReferences)?,
-            &refs,
-        )?;
-        resolved = call_with(
-            &registry::native(py, NativeAttr::ResolveDbtRefReferences)?,
-            &[
-                ("query_sql", resolved),
-                ("external_sql_reference_resolver", self.external.clone()),
-            ],
-        )?;
-        let locations = self.context.getattr("function_locations")?;
-        let locations = if locations.is_truthy()? {
-            locations
+        let resolved: String = resolve_ref_references(py, Some(keywords(py, &refs)?))?;
+        let resolved: String = resolve_dbt_ref_references(&resolved, Some(&self.external))?;
+        let locations = if self.function_locations.is_truthy()? {
+            self.function_locations.clone()
         } else {
             PyDict::new(py).into_any()
         };
-        for name in [
-            NativeAttr::ResolveUdfReferences,
-            NativeAttr::ResolveTableFunctionReferences,
-        ] {
-            resolved = call_with(
-                &registry::native(py, name)?,
-                &[
-                    ("query_sql", resolved),
-                    ("function_locations", locations.clone()),
-                    ("adapter", self.adapter.clone()),
-                ],
-            )?;
-        }
-        Ok(resolved)
+        let resolved: String = resolve_udf_references(&resolved, &locations, &self.adapter)?;
+        resolve_table_function_references(&resolved, &locations, &self.adapter)
     }
 
-    fn assert_resolved(&self, sql: &Bound<'py, PyAny>, label: &str) -> PyResult<()> {
-        call_with(
-            &registry::native(self.adapter.py(), NativeAttr::AssertNoUnresolvedSqlMarkers)?,
-            &[
-                ("sql", sql.clone()),
-                (
-                    "context",
-                    string(self.adapter.py(), &format!("{label} planned SQL")),
-                ),
-            ],
-        )?;
-        Ok(())
+    fn assert_resolved(&self, sql: &str, label: &str) -> PyResult<()> {
+        let py = self.adapter.py();
+        assert_no_unresolved_sql_markers(
+            py,
+            &PyString::new(py, sql),
+            &format!("{label} planned SQL"),
+        )
     }
 
-    fn unbounded(&self, sql: Bound<'py, PyAny>, label: &str) -> PyResult<Bound<'py, PyAny>> {
+    fn unbounded(&self, sql: Bound<'py, PyAny>, label: &str) -> PyResult<String> {
         let py = self.adapter.py();
         let resolved = self.resolve(
             sql,
@@ -162,50 +169,49 @@ pub(crate) fn resolve_model_sql<'py>(
         ),
     )?;
     let model = args.value("model")?;
-    let resolution = Resolution {
-        adapter: args.value("adapter")?,
-        context: args.value("context")?,
-        external: args.value("external_sql_reference_resolver")?,
-    };
+    let context = args.value("context")?;
+    let resolution = Resolution::of_context(
+        args.value("adapter")?,
+        &context,
+        args.value("external_sql_reference_resolver")?,
+    )?;
     let cursor_type =
         authored_config_str(&model.getattr("config")?.getattr("values")?, "cursor_type")?
             .unwrap_or_else(|| py.None().into_bound(py));
     let overrides = args.value("cursor_overrides")?;
-    let bounds = call_with(
-        &registry::native(py, NativeAttr::ComputeModelCursorBounds)?,
-        &[
-            ("model", model.clone()),
-            ("snapshot", args.value("snapshot")?),
-            ("backfill", args.value("backfill")?),
-            ("full_refresh", args.value("full_refresh")?),
-            (
-                "start_cursor_override",
-                overrides.getattr("start_cursor_override")?,
-            ),
-            (
-                "end_cursor_override",
-                overrides.getattr("end_cursor_override")?,
-            ),
-            (
-                "runtime_cursor_producer_names",
-                resolution
-                    .context
-                    .getattr("runtime_cursor_producer_names")?,
-            ),
-            ("context", resolution.context.clone()),
-            (
-                "replaces_relation",
-                args.value_or_false("replaces_relation")?,
-            ),
-        ],
+    let bounds = compute_model_cursor_bounds(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("model", model.clone()),
+                ("snapshot", args.value("snapshot")?),
+                ("backfill", args.value("backfill")?),
+                ("full_refresh", args.value("full_refresh")?),
+                (
+                    "start_cursor_override",
+                    overrides.getattr("start_cursor_override")?,
+                ),
+                (
+                    "end_cursor_override",
+                    overrides.getattr("end_cursor_override")?,
+                ),
+                (
+                    "runtime_cursor_producer_names",
+                    context.getattr("runtime_cursor_producer_names")?,
+                ),
+                ("context", context.clone()),
+                (
+                    "replaces_relation",
+                    args.value_or_false("replaces_relation")?,
+                ),
+            ],
+        )?),
     )?;
-    let roles = call_with(
-        &registry::native(py, NativeAttr::ResolveCursorInputRoles)?,
-        &[("model", model.clone())],
-    )?;
+    let roles = resolve_cursor_input_roles(&model)?;
     let inclusive = append_cursor_inclusive(&model)?;
     let mut sql = resolution.resolve(
-        model.getattr("query_sql")?,
+        model_reads::query_sql(&model)?,
         &[
             ("cursor_bounds", bounds.clone()),
             ("cursor_filter_inputs", roles.getattr("filter_inputs")?),
@@ -213,12 +219,9 @@ pub(crate) fn resolve_model_sql<'py>(
             ("lower_bound_inclusive", inclusive),
         ],
     )?;
-    let intrinsics = call_with(
-        &registry::native(py, NativeAttr::ResolveCursorIntrinsics)?,
-        &[("sql", sql.clone())],
-    )?;
-    let name: String = model.getattr("name")?.extract()?;
-    if intrinsics.get_item(1)?.is_truthy()? {
+    let (_, uses_intrinsics) = resolve_cursor_intrinsics(py, &sql, None, None)?;
+    let name: String = model_reads::model_name(&model)?;
+    if uses_intrinsics {
         if bounds.is_none() {
             let cause = args.value("full_rebuild_cause")?;
             let cause = if cause.is_truthy()? {
@@ -233,7 +236,7 @@ pub(crate) fn resolve_model_sql<'py>(
         sql = intrinsic_bounds(&sql, &bounds, &cursor_type, &resolution.adapter)?;
     }
     resolution.assert_resolved(&sql, &format!("Model '{name}'"))?;
-    Ok(sql)
+    Ok(PyString::new(py, &sql).into_any())
 }
 
 /// Effective append cursor lower-bound inclusivity.
@@ -255,13 +258,13 @@ fn append_cursor_inclusive<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py
 
 /// `__cursor_start()` / `__cursor_end()` replaced with the adapter's typed bound literals.
 fn intrinsic_bounds<'py>(
-    sql: &Bound<'py, PyAny>,
+    sql: &str,
     bounds: &Bound<'py, PyAny>,
     cursor_type: &Bound<'py, PyAny>,
     adapter: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let py = sql.py();
-    let literal = |field: &str| -> PyResult<Bound<'py, PyAny>> {
+) -> PyResult<String> {
+    let py = adapter.py();
+    let literal = |field: &str| -> PyResult<String> {
         call_with(
             &adapter.getattr("render_cursor_bound_literal")?,
             &[
@@ -271,19 +274,12 @@ fn intrinsic_bounds<'py>(
                 ),
                 ("cursor_type", cursor_type.clone()),
             ],
-        )
+        )?
+        .extract()
     };
     let start_sql = literal("start")?;
     let end_sql = literal("end")?;
-    call_with(
-        &registry::native(py, NativeAttr::ResolveCursorIntrinsics)?,
-        &[
-            ("sql", sql.clone()),
-            ("start_sql", start_sql),
-            ("end_sql", end_sql),
-        ],
-    )?
-    .get_item(0)
+    Ok(resolve_cursor_intrinsics(py, sql, Some(&start_sql), Some(&end_sql))?.0)
 }
 
 fn unresolved_bounds_error(py: Python<'_>, name: &str, cause: Option<&str>) -> PyResult<PyErr> {
@@ -324,25 +320,21 @@ fn resolve_function_sql<'py>(
             &[],
         ),
     )?;
-    let mut context = vec![("models_by_name", PyDict::new(py).into_any())];
-    for key in [
-        "model_locations",
-        "seed_locations",
-        "function_locations",
-        "source_map",
-        "source_warehouse_columns",
-        "star_exclude_keyword",
-    ] {
-        context.push((key, args.value(key)?));
-    }
     let resolution = Resolution {
         adapter: args.value("adapter")?,
-        context: call_with(&registry::class(py, RecordId::ModelPlanContext)?, &context)?,
         external: py.None().into_bound(py),
+        source_map: args.value("source_map")?,
+        source_warehouse_columns: args.value("source_warehouse_columns")?,
+        star_exclude_keyword: args.value("star_exclude_keyword")?,
+        model_locations: args.value("model_locations")?,
+        seed_locations: args.value("seed_locations")?,
+        function_locations: args.value("function_locations")?,
     };
     let function = args.value("function")?;
     let name: String = function.getattr("name")?.extract()?;
-    resolution.unbounded(function.getattr("body_sql")?, &format!("Function '{name}'"))
+    let sql: String =
+        resolution.unbounded(function.getattr("body_sql")?, &format!("Function '{name}'"))?;
+    Ok(PyString::new(py, &sql).into_any())
 }
 
 #[pyfunction]
@@ -353,13 +345,9 @@ pub(crate) fn resolve_model_hook_entries<'py>(
     context: Bound<'py, PyAny>,
     external_sql_reference_resolver: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
-    let resolution = Resolution {
-        adapter,
-        context,
-        external: external_sql_reference_resolver,
-    };
+    let resolution = Resolution::of_context(adapter, &context, external_sql_reference_resolver)?;
     let values = model.getattr("config")?.getattr("values")?;
-    let name: String = model.getattr("name")?.extract()?;
+    let name: String = model_reads::model_name(model)?;
     let mut hooks: Vec<Bound<'py, PyAny>> = Vec::new();
     for key in ["pre_hooks", "post_hooks"] {
         hooks.push(resolution.hook(

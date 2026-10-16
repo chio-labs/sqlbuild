@@ -1,5 +1,6 @@
 //! Gather a frozen point-in-time warehouse snapshot for planning.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::host;
@@ -193,7 +194,11 @@ fn metadata_name_filter(
         for key in selected.try_iter()? {
             let name = key?.getattr("name")?;
             if let Some(model) = models.get_item(&name)? {
-                names.insert(model.getattr("destination")?.getattr("name")?.extract()?);
+                names.insert(
+                    model_reads::destination(&model)?
+                        .getattr("name")?
+                        .extract()?,
+                );
                 names.extend(model_upstream_names(
                     &model,
                     (&models, &seeds),
@@ -461,7 +466,7 @@ fn shares_unfiltered(project: &Bound<'_, PyAny>, selected: &Bound<'_, PyAny>) ->
     let mut any_migration = false;
     for model in project.getattr("models")?.try_iter()? {
         let model = model?;
-        if !names.contains(&model.getattr("name")?.extract::<String>()?) {
+        if !names.contains(&model_reads::model_name(&model)?) {
             all_selected = false;
         }
         if model
@@ -847,7 +852,7 @@ pub(crate) fn gather_redirected_cursor_snapshots<'py>(
                     &snapshot,
                     &[(
                         "target_relation",
-                        model.getattr("destination")?.getattr("qualified_name")?,
+                        model_reads::destination(&model)?.getattr("qualified_name")?,
                     )],
                 )?,
             )?;

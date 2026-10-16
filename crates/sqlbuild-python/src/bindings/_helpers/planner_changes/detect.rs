@@ -1,5 +1,6 @@
 //! Detect how each selected model and function changed since its recorded build.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::planner_changes::results::native_enum;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -22,9 +23,11 @@ use sqlbuild_analysis::planner_changes::models::{
     SchemaFindingRow,
 };
 
+use crate::bindings::_helpers::analysis::model_reads::{inferred_rows, star_flags};
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::compiled_project::compiled_model_view::InferredRow;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
@@ -59,7 +62,7 @@ pub(crate) struct ModelPass<'py> {
 /// Selected model and function changes.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn detect_changes<'py>(
+pub(crate) fn detect_changes<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -273,7 +276,7 @@ fn scope_model_changes<'py>(
         if model.is_none() {
             continue;
         }
-        let name: Bound<'py, PyAny> = model.getattr("name")?;
+        let name: Bound<'py, PyAny> = model_reads::name_object(&model)?;
         let expected: (Option<String>, Option<String>) = (
             lookup(&version_hashes, &name)?,
             lookup(&metadata_jsons, &name)?,
@@ -297,7 +300,7 @@ pub(crate) fn model_change<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = model.py();
     let snapshot: &Bound<'py, PyAny> = &pass.snapshot;
-    let model_name: Bound<'py, PyAny> = model.getattr("name")?;
+    let model_name: Bound<'py, PyAny> = model_reads::name_object(model)?;
     let columns_hash: String = model_declared_columns_hash(model)?;
     let base_metadata: String = match expected_metadata_json.filter(|text| !text.is_empty()) {
         Some(text) => text,
@@ -337,7 +340,7 @@ pub(crate) fn model_change<'py>(
             py,
             &model_name.extract::<String>()?,
             (
-                &model.getattr("query_sql")?.extract::<String>()?,
+                &model_reads::query_sql(model)?.extract::<String>()?,
                 dialect.extract::<Option<String>>()?.as_deref(),
             ),
         )?)
@@ -381,7 +384,7 @@ pub(crate) fn model_change<'py>(
     let renames: Bound<'py, PyAny> = snapshot.getattr("reference_renames")?;
     let origins: Option<Vec<(String, String)>> = match (&compiled_query_hash, &recorded) {
         (Some(_), Some(recorded)) if definition_changed && renames.is_truthy()? => origin_names(
-            (model.getattr("query_sql")?.extract()?, &fingerprint),
+            (model_reads::query_sql(model)?.extract()?, &fingerprint),
             &renames,
             (&recorded.definition_hash, &dialect),
         )?,
@@ -495,7 +498,7 @@ fn log_query_check(
         &log_sql,
         &[
             ("logger", logger.clone()),
-            ("sql", model.getattr("query_sql")?),
+            ("sql", model_reads::query_sql(model)?),
             ("action", text("compiled_query")),
         ],
     )?;
@@ -542,26 +545,11 @@ fn model_schema_findings<'py>(
             dynamic = Some(families);
         }
     }
-    let inferred: Option<Vec<(String, Option<String>)>> = {
-        let columns: Bound<'py, PyAny> = model.getattr("inferred_columns")?;
-        if columns.is_none() {
-            None
-        } else {
-            let mut items: Vec<(String, Option<String>)> = Vec::new();
-            for column in columns.try_iter()? {
-                let column: Bound<'py, PyAny> = column?;
-                items.push((
-                    column.getattr("name")?.extract()?,
-                    column.getattr("type")?.extract()?,
-                ));
-            }
-            Some(items)
-        }
-    };
+    let inferred: Option<Vec<(String, Option<String>)>> = inferred_rows(model)?.map(typed_names);
     if yml.is_empty() && inferred.as_ref().is_none_or(Vec::is_empty) {
         return Ok(Vec::new());
     }
-    let inferred_schema_complete: bool = !model.getattr("fast_lineage_has_star")?.is_truthy()?;
+    let inferred_schema_complete: bool = !star_flags(model)?.0;
     schema_findings_of(
         SchemaColumns {
             yml,
@@ -571,6 +559,14 @@ fn model_schema_findings<'py>(
         (type_enforcement, inferred_schema_complete),
         (dynamic, dialect),
     )
+}
+
+fn typed_names(rows: Vec<InferredRow>) -> Vec<(String, Option<String>)> {
+    let mut columns: Vec<(String, Option<String>)> = Vec::with_capacity(rows.len());
+    for (name, column_type, _) in rows {
+        columns.push((name, column_type));
+    }
+    columns
 }
 
 fn column_pairs(columns: &Bound<'_, PyAny>) -> PyResult<Vec<(String, String)>> {

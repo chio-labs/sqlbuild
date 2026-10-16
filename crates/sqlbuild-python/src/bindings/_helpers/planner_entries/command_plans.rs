@@ -1,5 +1,6 @@
 //! Static plans for commands that do not build models, and direct seed identity reads.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_entries::plan_output::{
     function_entry, selected_test_entries, test_selected,
@@ -155,7 +156,7 @@ fn build_audit_command_plan<'py>(
     for model in project.getattr("models")?.try_iter()? {
         let model = model?;
         materializations.set_item(
-            model.getattr("name")?,
+            model_reads::name_object(&model)?,
             native(
                 py,
                 NativeAttr::GetMaterializationType,

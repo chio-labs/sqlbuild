@@ -14,7 +14,10 @@ use sqlbuild_sqltext::resolution::main::{ref_alias::ref_alias, reference_spans::
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn resolve_ref_references(py: Python<'_>, kwargs: Option<Bound<'_, PyDict>>) -> PyResult<String> {
+pub(crate) fn resolve_ref_references(
+    py: Python<'_>,
+    kwargs: Option<Bound<'_, PyDict>>,
+) -> PyResult<String> {
     let args = KeywordArguments::read(
         py,
         "resolve_ref_references",
@@ -72,7 +75,7 @@ fn resolve_ref_references(py: Python<'_>, kwargs: Option<Bound<'_, PyDict>>) -> 
 
 #[pyfunction]
 #[pyo3(signature = (*, query_sql, external_sql_reference_resolver=None))]
-fn resolve_dbt_ref_references(
+pub(crate) fn resolve_dbt_ref_references(
     query_sql: &str,
     external_sql_reference_resolver: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<String> {
@@ -195,7 +198,7 @@ fn resolve_function_calls(
 
 #[pyfunction]
 #[pyo3(signature = (*, query_sql, function_locations, adapter))]
-fn resolve_udf_references(
+pub(crate) fn resolve_udf_references(
     query_sql: &str,
     function_locations: &Bound<'_, PyAny>,
     adapter: &Bound<'_, PyAny>,
@@ -205,7 +208,7 @@ fn resolve_udf_references(
 
 #[pyfunction]
 #[pyo3(signature = (*, query_sql, function_locations, adapter))]
-fn resolve_table_function_references(
+pub(crate) fn resolve_table_function_references(
     query_sql: &str,
     function_locations: &Bound<'_, PyAny>,
     adapter: &Bound<'_, PyAny>,

@@ -12,6 +12,7 @@ use sqlbuild_analysis::planner_strategy::main::lineage_reference::lineage_refere
 use sqlbuild_analysis::planner_strategy::models::{ProducerFacts, ReferenceIdentity};
 use sqlbuild_analysis::planner_strategy::types::ReferenceGraph;
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_attachment::cursor_roles::resolve_cursor_input_roles;
 use crate::bindings::_helpers::model_config::config_values::config_str;
 use crate::bindings::_helpers::planner_strategy::microbatches::{
@@ -126,7 +127,7 @@ pub(crate) fn resolve_lineage_reference<'py>(
         models_by_name,
         functions_by_name,
     };
-    let name: String = text(&model.getattr("name")?)?;
+    let name: String = model_reads::model_name(model)?;
     lineage_reference(&graph, (&name, references(model)?), input_name)
         .map_err(|failure| lineage_error(py, failure))
 }
@@ -134,7 +135,7 @@ pub(crate) fn resolve_lineage_reference<'py>(
 /// Reject capped producers feeding a microbatch model's watermark inputs.
 #[pyfunction(name = "validate_capped_watermark_inputs")]
 #[pyo3(signature = (*, model, models_by_name, functions_by_name = None))]
-fn reject_capped_watermark_inputs<'py>(
+pub(crate) fn reject_capped_watermark_inputs<'py>(
     model: &Bound<'py, PyAny>,
     models_by_name: Bound<'py, PyAny>,
     functions_by_name: Option<Bound<'py, PyAny>>,
@@ -151,7 +152,7 @@ fn reject_capped_watermark_inputs<'py>(
         models_by_name,
         functions_by_name,
     };
-    let name: String = text(&model.getattr("name")?)?;
+    let name: String = model_reads::model_name(model)?;
     let inputs: Vec<String> = watermark_names(model)?;
     match capped_watermark_input(&graph, (&name, references(model)?), inputs) {
         Ok(None) => Ok(()),

@@ -279,7 +279,7 @@ fn resolve_one(args: &KeywordArguments<'_>, name: &str, original: &str) -> PyRes
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn resolve_source_references(
+pub(crate) fn resolve_source_references(
     py: Python<'_>,
     kwargs: Option<Bound<'_, PyDict>>,
 ) -> PyResult<String> {

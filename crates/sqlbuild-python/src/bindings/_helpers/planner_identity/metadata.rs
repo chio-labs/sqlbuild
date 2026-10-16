@@ -14,6 +14,7 @@ use sqlbuild_analysis::planner_identity::main::function_fingerprint_sql::functio
 use sqlbuild_analysis::planner_identity::main::stable_identity_hash::stable_identity_hash;
 use sqlbuild_analysis::planner_identity::models::FunctionFingerprintFields;
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords, within};
 use crate::bindings::_helpers::discovery::hook_entries::hook_entries;
 use crate::bindings::_helpers::planner_identity::hashing::function_definition_hash;
@@ -102,7 +103,7 @@ pub(crate) fn model_version_identity_metadata_json<'py>(
     let signature: Bound<'py, PyDict> =
         execution_signature(model, &config_values, hook_version_hashes)?;
     version_identity_metadata_json(
-        &model.getattr("name")?,
+        &model_reads::name_object(model)?,
         &config_values,
         (
             Some(local_function_hashes.into_any()),

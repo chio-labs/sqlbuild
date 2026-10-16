@@ -1,5 +1,6 @@
 //! Selected-model inspection and untyped override conversion.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::planner_resolution::values::{method, string};
@@ -14,7 +15,7 @@ use sqlbuild_cursor::planner::main::override_kind::override_kind;
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn type_cursor_overrides<'py>(
+pub(crate) fn type_cursor_overrides<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -45,7 +46,10 @@ fn type_cursor_overrides<'py>(
         }
         let kind = config("cursor_type")?;
         if kind.eq("integer")? || kind.eq("timestamp")? {
-            models.push((model.getattr("name")?.extract()?, kind.extract()?));
+            models.push((
+                model_reads::name_object(&model)?.extract()?,
+                kind.extract()?,
+            ));
         }
     }
     let mut integer_literals = true;

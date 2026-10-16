@@ -1,5 +1,7 @@
 //! Materialize column decisions from native proofs and live evidence.
 
+use crate::bindings::_helpers::analysis::model_reads;
+use crate::bindings::_helpers::analysis::model_reads::inferred_rows;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
@@ -52,15 +54,12 @@ pub(super) fn decide<'py>(
             outputs.push(projection?.getattr("key")?.extract::<String>()?);
         }
     } else {
-        let inferred = candidate.model.getattr("inferred_columns")?;
-        if !inferred.is_none() {
-            for column in inferred.try_iter()? {
-                outputs.push(lower(&column?.getattr("name")?)?);
-            }
+        for (name, _, _) in inferred_rows(&candidate.model)?.unwrap_or_default() {
+            outputs.push(name.to_lowercase());
         }
     }
     let relation = host::entry(py, ExecutorHost::MigrationRelationForLocation)?
-        .call1((candidate.model.getattr("destination")?,))?;
+        .call1((model_reads::destination(&candidate.model)?,))?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
     for (origin_name, destination, discovery) in pairs {
         let origin_key = lower(&origin_name)?;
@@ -98,8 +97,8 @@ pub(super) fn decide<'py>(
             py,
             RecordId::ColumnMigrationPlanEntry,
             &[
-                ("model_name", candidate.model.getattr("name")?),
-                ("destination", candidate.model.getattr("destination")?),
+                ("model_name", model_reads::name_object(&candidate.model)?),
+                ("destination", model_reads::destination(&candidate.model)?),
                 (
                     "origin_column",
                     if let Some(origin) = origin {
@@ -155,7 +154,7 @@ pub(super) fn checked<'py>(
             warnings: Vec::new(),
         });
     }
-    let destination = candidate.model.getattr("destination")?;
+    let destination = model_reads::destination(&candidate.model)?;
     let qualified = destination.getattr("qualified_name")?;
     let relation = if physical.is_truthy()? {
         physical.clone()
@@ -227,7 +226,7 @@ pub(super) fn hints<'py>(
         py,
         NativeAttr::RenameHints,
         &[
-            ("model_name", candidate.model.getattr("name")?),
+            ("model_name", model_reads::name_object(&candidate.model)?),
             ("previous", candidate.previous.clone()),
             ("current", candidate.current.clone()),
             ("excluded", excluded.call_method1("union", (claimed,))?),

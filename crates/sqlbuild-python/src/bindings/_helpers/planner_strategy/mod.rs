@@ -19,4 +19,5 @@ pub(crate) mod model_entries;
 pub(crate) mod models;
 pub(crate) mod registration;
 pub(crate) mod strategy;
+pub(crate) mod types;
 pub(crate) mod values;

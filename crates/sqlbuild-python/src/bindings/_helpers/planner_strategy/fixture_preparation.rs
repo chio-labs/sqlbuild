@@ -7,8 +7,12 @@ use sqlbuild_analysis::planner_fixtures::main::empty_fixture_marker::empty_fixtu
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::planner_strategy::fixture_sql::complete_empty_fixture_sql;
 use crate::bindings::_helpers::planner_strategy::fixture_values::{diagnostic, label};
+use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanningContext;
+use crate::bindings::_helpers::planner_strategy::types::FixtureKey;
 
 pub(crate) struct PreparedFixtures<'py> {
+    /// Each fixture's key with its Python key, in request order.
+    pub(crate) keys: Vec<(FixtureKey, Bound<'py, PyAny>)>,
     pub(crate) sql: Bound<'py, PyDict>,
     pub(crate) inferred: Bound<'py, PyDict>,
     pub(crate) null_names: Bound<'py, PyDict>,
@@ -18,12 +22,13 @@ pub(crate) struct PreparedFixtures<'py> {
 
 pub(crate) fn prepare<'py>(
     groups: &Bound<'py, PyAny>,
-    relations: &Bound<'py, PyDict>,
+    context: &RelationFixturePlanningContext,
     adapter: &Bound<'py, PyAny>,
-    inferences: &Bound<'py, PyAny>,
 ) -> PyResult<PreparedFixtures<'py>> {
     let py = groups.py();
+    let inferences = context.fixture_inferences.bind(py);
     let mut prepared = PreparedFixtures {
+        keys: Vec::new(),
         sql: PyDict::new(py),
         inferred: PyDict::new(py),
         null_names: PyDict::new(py),
@@ -36,12 +41,12 @@ pub(crate) fn prepare<'py>(
         let fixtures = group.get_item(1)?.cast_into::<PyDict>()?;
         for (name, sql) in fixtures.iter() {
             let key = PyTuple::new(py, [&kind, &name])?.into_any();
+            let fixture_key: FixtureKey = key.extract()?;
+            prepared.keys.push((fixture_key.clone(), key.clone()));
             let mut sql: String = sql.extract()?;
             if empty_fixture_marker(&sql).map_err(value_error)? {
-                let relation = relations
-                    .get_item(&key)?
-                    .unwrap_or_else(|| py.None().into_bound(py));
-                let (empty_sql, error) = complete_empty_fixture_sql(&sql, &relation, adapter)?;
+                let (empty_sql, error) =
+                    complete_empty_fixture_sql(&sql, context.relations.get(&fixture_key), adapter)?;
                 if let Some(error) = error {
                     prepared
                         .diagnostics

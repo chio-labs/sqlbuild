@@ -1,5 +1,6 @@
 //! Existing old-name planner models at the native decision boundary.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
@@ -109,7 +110,7 @@ fn old_name_claim_errors<'py>(
     let mut errors: Vec<Bound<'py, PyAny>> = Vec::new();
     for model in arguments.value("selected")?.try_iter()? {
         let model = model?;
-        let name = model.getattr("name")?;
+        let name = model_reads::name_object(&model)?;
         let existing = arguments
             .value("snapshot")?
             .getattr("existing_relations")?
@@ -122,7 +123,7 @@ fn old_name_claim_errors<'py>(
         if !kind.eq("view")? {
             continue;
         }
-        let destination = relation(&model.getattr("destination")?)?;
+        let destination = relation(&model_reads::destination(&model)?)?;
         for view in arguments.value("views")?.try_iter()? {
             let view = view?;
             if view.getattr("destination_model")?.eq(&name)?
@@ -177,11 +178,11 @@ fn old_name_view_skip_reason<'py>(
     let mut reuser: Option<String> = None;
     for model in arguments.value("models")?.try_iter()? {
         let model = model?;
-        if relation(&model.getattr("destination")?)?
+        if relation(&model_reads::destination(&model)?)?
             .call_method1("matches", (&old,))?
             .is_truthy()?
         {
-            reuser = Some(model.getattr("name")?.extract()?);
+            reuser = Some(model_reads::name_object(&model)?.extract()?);
             break;
         }
     }

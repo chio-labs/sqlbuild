@@ -1,5 +1,6 @@
 //! Per-model plan actions, schema actions and plan warnings.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::planner_changes::results::native_enum;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyString, PyTuple};
@@ -61,7 +62,7 @@ fn schema_policy(on_schema_change: &Bound<'_, PyAny>) -> PyResult<Option<String>
 /// The `MaterializationType` of a model's `materialized` config: table when unset, custom when unknown.
 #[pyfunction(name = "get_materialization_type")]
 #[pyo3(signature = (model))]
-fn materialization_of<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn materialization_of<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     planner_enum(
         model.py(),
         RecordId::MaterializationType,
@@ -80,7 +81,7 @@ pub(crate) fn resolve_model_plan_action<'py>(
     let py: Python<'py> = model.py();
     let enabled: Bound<'py, PyAny> = config_value(model, "enabled")?;
     let strategy = ModelStrategy {
-        name: text(&model.getattr("name")?)?,
+        name: model_reads::model_name(model)?,
         disabled: enabled.is_instance_of::<PyBool>() && !enabled.is_truthy()?,
         materialization: model_materialization(model)?,
         incremental_strategy: optional_string(&config_value(model, "incremental_strategy")?)?,
@@ -108,7 +109,7 @@ pub(crate) fn resolve_model_plan_action<'py>(
 /// Concrete schema change actions from findings and `on_schema_change`.
 #[pyfunction]
 #[pyo3(signature = (*, schema_findings, on_schema_change))]
-fn resolve_schema_actions<'py>(
+pub(crate) fn resolve_schema_actions<'py>(
     schema_findings: &Bound<'py, PyAny>,
     on_schema_change: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
@@ -140,7 +141,7 @@ fn resolve_schema_actions<'py>(
 /// Warnings for one model from its change detection and plan decisions.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn build_model_warnings<'py>(
+pub(crate) fn build_model_warnings<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {

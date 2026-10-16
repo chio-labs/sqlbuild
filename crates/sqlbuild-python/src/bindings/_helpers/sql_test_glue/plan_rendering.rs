@@ -1,5 +1,6 @@
 //! Adapter rendering and declared cursor-window boundaries for native test planning.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::sql_test_glue::plan_values::{model_payload, string};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult};
@@ -26,7 +27,7 @@ pub(super) fn models<'py>(
     let result = PyDict::new(py);
     for (index, model) in project.getattr("models")?.try_iter()?.enumerate() {
         let model = model?;
-        let sql = model.getattr("query_sql")?;
+        let sql = model_reads::query_sql(&model)?;
         if mentions(&sql.extract::<String>()?) {
             result.set_item(
                 index,
@@ -46,7 +47,7 @@ pub(super) fn overrides<'py>(
     let models = PyDict::new(py);
     for model in project.getattr("models")?.try_iter()? {
         let model = model?;
-        models.set_item(model.getattr("name")?, model)?;
+        models.set_item(model_reads::name_object(&model)?, model)?;
     }
     let tests: Vec<Bound<'py, PyAny>> = tests.extract()?;
     let mut indexes: Vec<usize> = Vec::new();
@@ -116,12 +117,12 @@ pub(super) fn overrides<'py>(
                 }
             }
             for model in declared_window_cursor_models(test, chain_models)? {
-                let name = model.getattr("name")?;
+                let name = model_reads::name_object(&model)?;
                 if !rendered.contains(&name)? {
                     rendered.set_item(
                         name,
                         render_test_cursor_intrinsics(
-                            model.getattr("query_sql")?,
+                            model_reads::query_sql(&model)?,
                             &model,
                             adapter,
                             Some(test),

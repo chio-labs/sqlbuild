@@ -72,6 +72,8 @@ pub(crate) struct DestinationFact {
 
 /// What assembly and the semantic checks finished for one compiled model.
 pub(crate) struct CompiledRecord {
+    /// The model's name, its file stem.
+    name: String,
     /// `(resource type, name)` of each dependency.
     deps: Vec<(String, String)>,
     destination: DestinationFact,
@@ -156,6 +158,7 @@ pub(crate) fn compiled_record(
     let config: &Bound<'_, PyAny> = input.config.bind(py);
     let values: Bound<'_, PyDict> = config.getattr(VALUES_ATTRIBUTE)?.downcast_into()?;
     Ok(CompiledRecord {
+        name: name.to_owned(),
         deps,
         destination: DestinationFact {
             database: text_value(&values, DATABASE_KEY)?,
@@ -309,6 +312,25 @@ impl NativeCompiledModel {
         &self.overlay.poisoned
     }
 
+    /// The kept lineage rows with their transform and confidence codes, or `None`.
+    pub(crate) fn lineage_rows(&self, py: Python<'_>) -> PyResult<Option<Vec<LineageRow>>> {
+        self.compiled(py, |compiled, _| {
+            Ok(compiled.analysis.lineage_rows().map(<[LineageRow]>::to_vec))
+        })
+    }
+
+    /// The input relations of a dynamic pivot proof that proved its outputs, else `None`.
+    pub(crate) fn proven_inputs(&self, py: Python<'_>) -> PyResult<Option<Vec<String>>> {
+        self.compiled(py, |compiled, _| {
+            Ok(compiled
+                .analysis
+                .proof
+                .as_ref()
+                .filter(|proof| proof.output_proven)
+                .map(|proof| proof.input_relations.clone()))
+        })
+    }
+
     fn model_file_attribute(&self, py: Python<'_>, name: &str) -> PyResult<Py<PyAny>> {
         self.read(py, |record, py| {
             Ok(record.model_file.bind(py).getattr(name)?.unbind())
@@ -344,7 +366,7 @@ fn compiled_of(record: &ModelInputRecord) -> PyResult<&CompiledRecord> {
 #[pymethods]
 impl NativeCompiledModel {
     #[getter]
-    fn key(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn key(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.read(py, |record, py| {
             let compiled: &CompiledRecord = compiled_of(record)?;
             compiled
@@ -387,7 +409,7 @@ impl NativeCompiledModel {
     }
 
     #[getter]
-    fn query_sql(&self, py: Python<'_>) -> PyResult<Py<PyString>> {
+    pub(crate) fn query_sql(&self, py: Python<'_>) -> PyResult<Py<PyString>> {
         self.read(py, |record, _| Ok(record.query_sql.clone_ref(py)))
     }
 
@@ -397,7 +419,7 @@ impl NativeCompiledModel {
     }
 
     #[getter]
-    fn destination(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn destination(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.compiled(py, |compiled, py| {
             self.projections
                 .destination
@@ -731,6 +753,9 @@ pub(crate) fn model_graph_row(
 }
 
 fn model_name(record: &ModelInputRecord, py: Python<'_>) -> PyResult<String> {
+    if let Some(compiled) = &record.compiled {
+        return Ok(compiled.name.clone());
+    }
     record
         .model_file
         .bind(py)

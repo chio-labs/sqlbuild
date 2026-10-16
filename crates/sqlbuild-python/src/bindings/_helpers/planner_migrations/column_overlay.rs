@@ -1,5 +1,6 @@
 //! Project column renames onto the existing snapshot and redirect cursor reads.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
@@ -27,7 +28,7 @@ pub(super) fn overlay<'py>(
     let stored = snapshot.getattr("fingerprints")?;
     let fingerprints = imported(py, "builtins", "dict")?.call1((stored.getattr("models")?,))?;
     for candidate in candidates {
-        let name = candidate.model.getattr("name")?;
+        let name = model_reads::name_object(&candidate.model)?;
         let renames = PyDict::new(py);
         let pending = PyDict::new(py);
         let mut blocked = false;
@@ -83,7 +84,7 @@ pub(super) fn overlay<'py>(
                 replace(
                     &candidate.fingerprint,
                     &[
-                        ("definition", candidate.model.getattr("query_sql")?),
+                        ("definition", model_reads::query_sql(&candidate.model)?),
                         (
                             "definition_hash",
                             definition_hash(&candidate.model, snapshot)?,

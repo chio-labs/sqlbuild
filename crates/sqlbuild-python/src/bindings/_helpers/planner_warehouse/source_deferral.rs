@@ -1,5 +1,6 @@
 //! Source read deferral for managed source loaders.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
@@ -83,10 +84,10 @@ fn selected_managed_refs(
     let mut names: BTreeSet<_> = BTreeSet::new();
     for model in project.getattr("models")?.try_iter()? {
         let model = model?;
-        if !selected.contains(model.getattr("key")?)? {
+        if !selected.contains(model_reads::model_key(&model)?)? {
             continue;
         }
-        names.extend(sql_source_reads(&model.getattr("query_sql")?, managed)?);
+        names.extend(sql_source_reads(&model_reads::query_sql(&model)?, managed)?);
         names.extend(hook_source_reads(&model, managed)?);
     }
     for function in project.getattr("functions")?.try_iter()? {

@@ -1,43 +1,49 @@
 //! Expected fixture type propagation boundary conversions.
 
 use pyo3::exceptions::PyKeyError;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
-use pyo3::types::{PyDict, PyDictMethods};
-use pyo3::{pyfunction, wrap_pyfunction};
+use pyo3::prelude::{Bound, PyAny, PyResult, Python};
 use sqlbuild_analysis::planner_fixtures::main::propagate_types::propagate_types;
 use sqlbuild_analysis::planner_fixtures::models::{
     FixtureTypeModel, FixtureTypeProjection, FixtureTypeRead, FixtureTypeState,
 };
 
-use crate::bindings::_helpers::planner_strategy::fixture_values::folded;
-use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
+use sqlbuild_core::text::main::python_casefold::python_casefold;
 
-#[pyfunction]
-#[pyo3(signature = (*, base_expected_types, ordered_model_names, model_map))]
-pub(crate) fn expected_fixture_types<'py>(
-    base_expected_types: &Bound<'py, PyDict>,
-    ordered_model_names: Vec<String>,
-    model_map: &Bound<'py, PyDict>,
-) -> PyResult<Bound<'py, PyAny>> {
+use crate::bindings::_helpers::analysis::model_reads::lineage_facts;
+use crate::bindings::_helpers::planner_strategy::constants::{
+    DIRECT_TRANSFORM, MODEL_REFERENCE_KIND,
+};
+use crate::bindings::_helpers::planner_strategy::models::{
+    ExpectedTypes, RelationFixturePlanningContext,
+};
+use crate::bindings::_helpers::planner_strategy::types::FixtureKey;
+
+/// Each chain model's known column types with direct lineage types propagated from its inputs.
+pub(crate) fn expected_fixture_types<'a>(
+    context: &'a RelationFixturePlanningContext,
+    py: Python<'_>,
+    ordered_model_names: &[String],
+) -> PyResult<ExpectedTypes<'a>> {
+    let base = &context.expected_types;
     let mut state = FixtureTypeState::default();
-    let result = PyDict::new(base_expected_types.py());
+    let mut overlay: Vec<(FixtureKey, Vec<(String, String)>)> = Vec::new();
     let mut models: Vec<FixtureTypeModel> = Vec::new();
     for name in ordered_model_names {
-        let Some(model) = model_map.get_item(&name)? else {
+        let Some(facts) = context.model_facts(py, name)? else {
             continue;
         };
-        let key = ("model".to_owned(), name);
-        let types = base_expected_types
-            .get_item(&key)?
+        let key: FixtureKey = (MODEL_REFERENCE_KIND.to_owned(), name.clone());
+        let types = base
+            .get(&key)
             .ok_or_else(|| PyKeyError::new_err(key.clone()))?
-            .cast_into::<PyDict>()?
-            .copy()?;
-        state.known.insert(key.clone(), types.extract()?);
-        result.set_item(&key, types)?;
+            .clone();
+        state
+            .known
+            .insert(key.clone(), types.iter().cloned().collect());
+        overlay.push((key.clone(), types));
         models.push(FixtureTypeModel {
             key,
-            projections: projections(&model)?,
+            projections: facts.projections.clone(),
         });
     }
     for model in &models {
@@ -50,63 +56,53 @@ pub(crate) fn expected_fixture_types<'py>(
                 {
                     continue;
                 }
-                if let Some(types) = base_expected_types.get_item(&read.key)?
-                    && let Some(value) = types.cast_into::<PyDict>()?.get_item(&read.column)?
-                {
+                if let Some(sql_type) = base.get(&read.key).and_then(|types| {
+                    types
+                        .iter()
+                        .find(|(name, _)| *name == read.column)
+                        .map(|(_, sql_type)| sql_type.clone())
+                }) {
                     state
                         .known
                         .entry(read.key.clone())
                         .or_default()
-                        .insert(read.column.clone(), value.extract()?);
+                        .insert(read.column.clone(), sql_type);
                 }
             }
         }
     }
     let state = propagate_types(state, &models);
     for (read, sql_type) in state.additions {
-        result
-            .get_item(read.key)?
-            .ok_or_else(|| PyKeyError::new_err("fixture types"))?
-            .set_item(read.column, sql_type)?;
+        let types = overlay
+            .iter_mut()
+            .find(|(key, _)| *key == read.key)
+            .map(|(_, types)| types)
+            .ok_or_else(|| PyKeyError::new_err("fixture types"))?;
+        match types.iter_mut().find(|(name, _)| *name == read.column) {
+            Some(existing) => existing.1 = sql_type,
+            None => types.push((read.column, sql_type)),
+        }
     }
-    base_expected_types
-        .py()
-        .import("collections")?
-        .getattr("ChainMap")?
-        .call1((result, base_expected_types))
+    Ok(ExpectedTypes { overlay, base })
 }
 
-fn projections(model: &Bound<'_, PyAny>) -> PyResult<Vec<FixtureTypeProjection>> {
-    let lineage = model.getattr("fast_lineage_columns")?;
+pub(crate) fn projections(model: &Bound<'_, PyAny>) -> PyResult<Vec<FixtureTypeProjection>> {
     let mut projections: Vec<FixtureTypeProjection> = Vec::new();
-    if lineage.is_none() {
-        return Ok(projections);
-    }
-    let direct = registry::class(model.py(), RecordId::ColumnTransformKind)?.getattr("DIRECT")?;
-    for column in lineage.try_iter()? {
-        let column = column?;
-        if !column.getattr("transform_kind")?.eq(&direct)? {
+    for (output_column, transform, _, sources) in lineage_facts(model)?.unwrap_or_default() {
+        if transform != DIRECT_TRANSFORM {
             continue;
         }
-        let mut upstream: Vec<FixtureTypeRead> = Vec::new();
-        for source in column.getattr("upstream_columns")?.try_iter()? {
-            let source = source?;
+        let mut upstream: Vec<FixtureTypeRead> = Vec::with_capacity(sources.len());
+        for (resource_type, resource_name, column_name) in sources {
             upstream.push(FixtureTypeRead {
-                key: (
-                    source.getattr("resource_type")?.extract()?,
-                    source.getattr("resource_name")?.extract()?,
-                ),
-                column: folded(&source.getattr("column_name")?)?,
+                key: (resource_type, resource_name),
+                column: python_casefold(&column_name),
             });
         }
         projections.push(FixtureTypeProjection {
-            output_column: folded(&column.getattr("output_column")?)?,
+            output_column: python_casefold(&output_column),
             upstream,
         });
     }
     Ok(projections)
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(expected_fixture_types, module)?)
 }

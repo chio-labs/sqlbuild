@@ -1,5 +1,6 @@
 //! Assemble scenario execution plans through existing planner and adapter APIs.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
@@ -12,6 +13,8 @@ use crate::bindings::_helpers::planner_scenario::{
     sql::{required_target, resolve_model_dbt_refs, resolve_sql, source_label},
     values::{error, string},
 };
+use crate::bindings::_helpers::planner_strategy::fixture_completion::complete_fixtures as complete_relation_fixtures;
+use crate::bindings::_helpers::planner_strategy::fixture_context::planning_context;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
@@ -116,11 +119,11 @@ pub(crate) fn build_scenario_execution_plan<'py>(
         let destination = required_target(
             &context.relations,
             "model_locations",
-            &model.getattr("name")?.extract::<String>()?,
+            &model_reads::model_name(&model)?,
             "model",
         )?;
         let query = resolve_model_dbt_refs(
-            &model.getattr("query_sql")?.extract::<String>()?,
+            &model_reads::query_sql(&model)?.extract::<String>()?,
             &context.relations,
         )?;
         let record = registry::native(py, NativeAttr::CompiledModelRecord)?.call1((&model,))?;
@@ -207,31 +210,22 @@ fn complete_fixtures<'py>(
         .iter()
         .map(|key| key.getattr("name"))
         .collect::<PyResult<Vec<_>>>()?;
-    let completion = call_with(
-        &registry::native(py, NativeAttr::BuildRelationFixtureCompletion)?,
-        &[
-            ("project", project.clone()),
-            ("adapter", context.adapter.clone()),
-            (
-                "request",
-                PyTuple::new(
-                    py,
-                    [
-                        PyTuple::new(py, names)?.into_any(),
-                        PyTuple::new(py, groups)?.into_any(),
-                    ],
-                )?
-                .into_any(),
-            ),
-        ],
+    let names = names
+        .iter()
+        .map(|name| name.extract())
+        .collect::<PyResult<Vec<String>>>()?;
+    let planning = planning_context(project, None)?;
+    let completion = complete_relation_fixtures(
+        &planning,
+        &context.adapter,
+        (&names, PyTuple::new(py, groups)?.as_any()),
     )?;
-    let diagnostics = completion.getattr("diagnostics")?;
-    if diagnostics.is_truthy()? {
+    if !completion.diagnostics.is_empty() {
         let mut details: Vec<String> = Vec::new();
-        for diagnostic in diagnostics.try_iter()? {
+        for diagnostic in &completion.diagnostics {
             details.push(format!(
                 "- {}",
-                diagnostic?.getattr("message")?.extract::<String>()?
+                diagnostic.getattr("message")?.extract::<String>()?
             ));
         }
         let name: String = scenario.getattr("name")?.extract()?;
@@ -246,7 +240,7 @@ fn complete_fixtures<'py>(
             None,
         )?);
     }
-    completion.getattr("fixture_sql_by_key")
+    Ok(completion.sql_by_key.into_any())
 }
 
 fn model_context<'py>(

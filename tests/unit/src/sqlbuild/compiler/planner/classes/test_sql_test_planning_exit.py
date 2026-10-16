@@ -39,14 +39,7 @@ _SLOW_TEST_PLANNING: str = dedent(
 _FAILED_BUILD: str = dedent(
     """
     from sqlbuild.cli.entry.main.entry import main
-    from sqlbuild._native import PlannerInputError
 
-
-    def failing_reconciliation(**arguments):
-        raise PlannerInputError("forced planning failure")
-
-
-    native.reconcile_execution_changes = failing_reconciliation
     sys.exit(main(["--project-dir", sys.argv[1], "--no-color", "build"]))
     """
 )
@@ -73,7 +66,7 @@ _UNJOINED_PLANNING: str = dedent(
             "plan fails while SQL tests are still planning",
             _SLOW_TEST_PLANNING + _FAILED_BUILD,
             1,
-            "error[S000]: forced planning failure",
+            "error[S405]: cannot build selected scope",
         ),
         PlanningExitTestCase(
             "SQL test planning never joined",
@@ -95,8 +88,15 @@ def test_given_sql_test_planning_running_when_interpreter_finalizes_then_process
         '[connection]\ndatabase = "orders_project.duckdb"\n',
         encoding="utf-8",
     )
+    (project_dir / "sources").mkdir()
+    (project_dir / "sources" / "raw.yml").write_text(
+        "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n"
+        "    schema: raw\n    table: orders\n",
+        encoding="utf-8",
+    )
     (project_dir / "models" / "orders.sql").write_text(
-        "MODEL (description 'Test model orders.', materialized table);\n\nSELECT 1 AS order_id\n",
+        "MODEL (description 'Test model orders.', materialized table);\n\n"
+        'SELECT * FROM __source("raw_orders")\n',
         encoding="utf-8",
     )
     script: Path = tmp_path / "planning_exit.py"

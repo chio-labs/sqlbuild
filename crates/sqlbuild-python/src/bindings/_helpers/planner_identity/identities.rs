@@ -14,6 +14,7 @@ use sqlbuild_analysis::planner_identity::main::graph_write_identity_hashes::grap
 use sqlbuild_analysis::planner_identity::main::model_local_identity_hash::model_local_identity_hash;
 use sqlbuild_analysis::planner_identity::models::{GraphKey, IdentityGraph, IdentityNode};
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
@@ -149,7 +150,7 @@ fn build_direct_model_version_identities<'py>(
         if model.is_none() {
             continue;
         }
-        let name: String = model.getattr("name")?.extract()?;
+        let name: String = model_reads::model_name(&model)?;
         let metadata_json: String = model_version_identity_metadata_json(
             &model,
             Some(function_hashes.as_any()),
@@ -159,7 +160,7 @@ fn build_direct_model_version_identities<'py>(
             py,
             &name,
             (
-                &model.getattr("query_sql")?.extract::<String>()?,
+                &model_reads::query_sql(&model)?.extract::<String>()?,
                 dialect.as_deref(),
             ),
         )?;
@@ -276,7 +277,7 @@ fn with_honest_model_write_hashes<'py>(
         .try_iter()?
     {
         let model: Bound<'py, PyAny> = model?;
-        let name: Bound<'py, PyAny> = model.getattr("name")?;
+        let name: Bound<'py, PyAny> = model_reads::name_object(&model)?;
         graph.nodes.insert(
             key_of(MODEL_RESOURCE, &name.extract::<String>()?),
             IdentityNode {
@@ -323,7 +324,7 @@ fn with_honest_model_write_hashes<'py>(
         if model.is_none() {
             continue;
         }
-        let name: Bound<'py, PyAny> = model.getattr("name")?;
+        let name: Bound<'py, PyAny> = model_reads::name_object(&model)?;
         if local_hashes.call_method1("get", (&name,))?.is_none() {
             continue;
         }

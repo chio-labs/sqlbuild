@@ -10,11 +10,13 @@ use sqlbuild_analysis::planner_fixtures::main::{
 
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
-use crate::bindings::_helpers::planner_strategy::fixture_completion::build_relation_fixture_completion;
-use crate::bindings::_helpers::planner_strategy::fixture_context::build_relation_fixture_context;
+use crate::bindings::_helpers::planner_strategy::constants::MODEL_REFERENCE_KIND;
+use crate::bindings::_helpers::planner_strategy::fixture_completion::complete_fixtures;
 use crate::bindings::_helpers::planner_strategy::fixture_sql::{
     complete_empty_fixture_sql, complete_typed_null_columns,
 };
+use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanningContext;
+use crate::bindings::_helpers::planner_strategy::types::FixtureKey;
 use crate::bindings::_helpers::sql_test_glue::constants::{COMPILE_TYPES, FIXTURE_PREFIXES};
 
 /// Report every statically provable fixture defect or return the completed fixture SQL groups.
@@ -22,11 +24,11 @@ pub(super) fn validated_fixtures<'py>(
     test: &Bound<'py, PyAny>,
     request: (&Bound<'py, PyAny>, [Bound<'py, PyDict>; 4]),
     inputs: (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
-    context: &Bound<'py, PyAny>,
+    context: &RelationFixturePlanningContext,
 ) -> PyResult<Result<[Bound<'py, PyDict>; 4], Vec<String>>> {
     let py = test.py();
     let (chain, [refs, sources, seeds, expected]) = request;
-    let (project, adapter) = inputs;
+    let adapter = inputs.1;
     let resource_types = imported(py, COMPILE_TYPES, "CompiledResourceType")?;
     let model = resource_types.getattr("MODEL")?;
     let kinds = [
@@ -42,20 +44,10 @@ pub(super) fn validated_fixtures<'py>(
             PyTuple::new(py, [kinds[2].clone(), seeds.clone().into_any()])?,
         ],
     )?;
-    let context = if context.is_truthy()? {
-        context.clone()
-    } else {
-        build_relation_fixture_context(project, None)?
-    };
-    let completion = build_relation_fixture_completion(
-        project,
-        adapter,
-        (chain.clone(), groups.into_any()),
-        Some(context.clone()),
-    )?;
+    let chain: Vec<String> = chain.extract()?;
+    let completion = complete_fixtures(context, adapter, (&chain, groups.as_any()))?;
     let mut errors: BTreeSet<String> = BTreeSet::new();
-    for diagnostic in completion.getattr("diagnostics")?.try_iter()? {
-        let diagnostic = diagnostic?;
+    for diagnostic in &completion.diagnostics {
         let key = diagnostic.getattr("key")?;
         errors.insert(format!(
             "{}: {}",
@@ -67,8 +59,7 @@ pub(super) fn validated_fixtures<'py>(
             diagnostic.getattr("message")?.extract::<String>()?
         ));
     }
-    let expected_types = completion.getattr("expected_types")?;
-    let inferred_by_fixture = completion.getattr("inferred_by_fixture")?;
+    let inferred_by_fixture = &completion.inferred_by_fixture;
     let completed_expected = expected.copy()?;
     let sql_test = resource_types.getattr("SQL_TEST")?;
     let type_groups = [
@@ -83,12 +74,12 @@ pub(super) fn validated_fixtures<'py>(
             let name: String = key_name.extract()?;
             let location = || fixture_location(test, kind, &name);
             let inferred = if expected_output {
-                let model_key = PyTuple::new(py, [&model, &key_name])?;
-                let relation = context
-                    .getattr("relations")?
-                    .call_method1("get", (&model_key,))?;
-                let (completed_sql, empty_error) =
-                    complete_empty_fixture_sql(&sql.extract::<String>()?, &relation, adapter)?;
+                let model_key: FixtureKey = (MODEL_REFERENCE_KIND.to_owned(), name.clone());
+                let (completed_sql, empty_error) = complete_empty_fixture_sql(
+                    &sql.extract::<String>()?,
+                    context.relations.get(&model_key),
+                    adapter,
+                )?;
                 if let Some(error) = empty_error {
                     errors.insert(format!("{}: expected output '{name}' {error}", location()?));
                 }
@@ -99,20 +90,21 @@ pub(super) fn validated_fixtures<'py>(
                     "inference_profile",
                     adapter.call_method0("expression_inference_profile")?,
                 )?;
-                let inference = context.getattr("fixture_inferences")?.call_method(
-                    "infer",
-                    (),
-                    Some(&kwargs),
-                )?;
+                let inference =
+                    context
+                        .fixture_inferences
+                        .bind(py)
+                        .call_method("infer", (), Some(&kwargs))?;
                 if inference.is_none() {
                     None
                 } else {
-                    let types = expected_types
-                        .call_method1("get", (&model_key, PyDict::new(py)))?
-                        .cast_into::<PyDict>()?;
+                    let types: &[(String, String)] = completion
+                        .expected_types
+                        .get(&model_key)
+                        .unwrap_or_default();
                     completed_expected.set_item(
                         &name,
-                        complete_typed_null_columns(&completed_sql, &inference, &types, adapter)?,
+                        complete_typed_null_columns(&completed_sql, &inference, types, adapter)?,
                     )?;
                     Some(inference.getattr("columns")?)
                 }
@@ -124,15 +116,23 @@ pub(super) fn validated_fixtures<'py>(
             let Some(columns) = inferred else {
                 continue;
             };
-            let type_kind = if expected_output { &model } else { kind };
-            let type_key = PyTuple::new(py, [type_kind, &key_name])?;
-            let types = expected_types.call_method1("get", (type_key, PyDict::new(py)))?;
+            let type_kind: String = if expected_output {
+                MODEL_REFERENCE_KIND.to_owned()
+            } else {
+                kind.extract()?
+            };
+            let types: &[(String, String)] = completion
+                .expected_types
+                .get(&(type_kind, name.clone()))
+                .unwrap_or_default();
             for column in columns.try_iter()? {
                 let column = column?;
                 let column_name = column.getattr("name")?;
+                let folded_name: String = column_name.call_method0("casefold")?.extract()?;
                 let expected_type: Option<String> = types
-                    .call_method1("get", (column_name.call_method0("casefold")?,))?
-                    .extract()?;
+                    .iter()
+                    .find(|(column, _)| *column == folded_name)
+                    .map(|(_, sql_type)| sql_type.clone());
                 let inferred_type: Option<String> = column.getattr("type")?.extract()?;
                 if !collection_mismatch(expected_type.as_deref(), inferred_type.as_deref()) {
                     continue;
@@ -159,7 +159,7 @@ pub(super) fn validated_fixtures<'py>(
             .map(|error| format!("SQL test '{test_name}': {error}"))
             .collect()));
     }
-    let fixture_sql = completion.getattr("fixture_sql_by_key")?;
+    let fixture_sql = &completion.sql_by_key;
     let completed =
         |kind: &Bound<'py, PyAny>, fixtures: &Bound<'py, PyDict>| -> PyResult<Bound<'py, PyDict>> {
             let result = PyDict::new(py);

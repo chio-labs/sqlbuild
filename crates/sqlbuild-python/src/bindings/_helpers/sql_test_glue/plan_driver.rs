@@ -4,6 +4,7 @@ use crate::bindings::_helpers::compile_driver::compile_timings::add_compile_timi
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::planner_strategy::fixture_context::count_chain_resolution;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::plan_values::tuple;
@@ -58,6 +59,7 @@ pub(crate) fn resolve_sql_test_model_chains<'py>(
         kwargs,
         (&["project", "tests"], &[]),
     )?;
+    count_chain_resolution(py)?;
     chains(&args.value("project")?, &args.value("tests")?)
 }
 

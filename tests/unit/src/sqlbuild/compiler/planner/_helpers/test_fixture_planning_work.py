@@ -11,8 +11,6 @@ from sqlbuild._native import (
     CompiledObjectKey,
     CompiledSqlTest,
     CompileSqlReference,
-    FixtureColumnMetadata,
-    FixtureRelationMetadata,
     PlanWarning,
     RelationFixtureCompletion,
     RelationFixturePlanningContext,
@@ -55,7 +53,6 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.helpers
 )
 def test_given_many_tests_when_building_entries_then_project_fixture_metadata_is_built_once(
     test_case: FixturePlanningWorkTestCase,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     compiled_test, project = build_test_and_project(
         PlanTestChainTestCase(
@@ -94,11 +91,8 @@ def test_given_many_tests_when_building_entries_then_project_fixture_metadata_is
         sql_tests=tests,
         settings=SettingsConfig(sql_analysis=True),
     )
-    metadata_builder: Mock = Mock(wraps=fixture_completion.build_relation_fixture_context)
-    monkeypatch.setattr(fixture_completion, "build_relation_fixture_context", metadata_builder)
     fixture_completion.fixture_read_cache_info(reset=True)
-    topology_builder: Mock = Mock(wraps=sql_test_assembly.resolve_sql_test_model_chains)
-    monkeypatch.setattr(sql_test_assembly, "resolve_sql_test_model_chains", topology_builder)
+    fixture_completion.fixture_planning_work_info(reset=True)
 
     entries: list[SqlTestPlanEntry]
     warnings: list[PlanWarning]
@@ -111,9 +105,12 @@ def test_given_many_tests_when_building_entries_then_project_fixture_metadata_is
 
     assert len(entries) == test_case.test_count
     assert warnings == []
-    assert metadata_builder.call_count == test_case.expected_metadata_builds
+    metadata_builds: int
+    topology_builds: int
+    metadata_builds, topology_builds = fixture_completion.fixture_planning_work_info()
+    assert metadata_builds == test_case.expected_metadata_builds
     assert fixture_completion.fixture_read_cache_info()[0] == test_case.expected_analysis_calls
-    assert topology_builder.call_count == test_case.expected_topology_builds
+    assert topology_builds == test_case.expected_topology_builds
 
 
 @pytest.mark.parametrize(
@@ -216,15 +213,8 @@ def test_given_complete_authoritative_fixture_when_completing_then_skips_column_
     context: RelationFixturePlanningContext = RelationFixturePlanningContext(
         models_by_name={model.name: model},
         relations={
-            source_key: FixtureRelationMetadata(
-                columns=(FixtureColumnMetadata(name="order_id", type="INTEGER", nullable=False),),
-                authoritative_names=True,
-            )
-        },
-        authoritative_columns={source_key: frozenset(("order_id",))},
-        expected_types={
-            source_key: {"order_id": "INTEGER"},
-            (CompiledResourceType.MODEL, model.name): {},
+            source_key: ((("order_id", "INTEGER", False),), True),
+            (CompiledResourceType.MODEL, model.name): ((), False),
         },
     )
     fixture_completion.fixture_read_cache_info(reset=True)

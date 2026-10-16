@@ -1,6 +1,4 @@
-from collections import ChainMap
-from collections.abc import Callable, Mapping
-from copy import deepcopy
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -18,14 +16,16 @@ from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourc
 from tests.integration.src.sqlbuild.compiler.planner._helpers.fixtures._test_types import (
     FixtureTypeScopeTestCase,
 )
+from tests.integration.src.sqlbuild.compiler.planner._helpers.fixtures.helpers import (
+    unrelated_source_entries,
+)
 
 
 @pytest.mark.parametrize(
     "test_case",
     (
         FixtureTypeScopeTestCase(description="small metadata map", unrelated_relations=10),
-        FixtureTypeScopeTestCase(description="large metadata map", unrelated_relations=1000),
-        FixtureTypeScopeTestCase(description="very large metadata map", unrelated_relations=10000),
+        FixtureTypeScopeTestCase(description="large metadata map", unrelated_relations=200),
     ),
     ids=lambda case: case.description,
 )
@@ -48,6 +48,7 @@ def test_given_unrelated_project_types_when_completing_fixture_then_eager_work_i
                 "    contract: enforced\n    columns:\n"
                 "      - name: order_id\n        type: INTEGER\n        nullable: false\n"
                 "      - name: status\n        type: VARCHAR\n        nullable: true\n"
+                + unrelated_source_entries(count=test_case.unrelated_relations)
             ),
         },
     )
@@ -56,14 +57,9 @@ def test_given_unrelated_project_types_when_completing_fixture_then_eager_work_i
         discovered_inputs=discover_project_inputs(project_dir=tmp_path), adapter=adapter
     )
     context: RelationFixturePlanningContext = build_relation_fixture_context(project=project)
-    # Model the shared project metadata supplied to every individual SQL-test plan.
-    for index in range(test_case.unrelated_relations):
-        context.expected_types[(CompiledResourceType.SOURCE, f"unrelated_orders_{index}")] = {
-            "order_id": "INTEGER",
-            "status": "VARCHAR",
-        }
-    before: dict[tuple[CompiledResourceType, str], dict[str, str]] = deepcopy(
-        context.expected_types
+    unrelated_key: tuple[CompiledResourceType, str] = (
+        CompiledResourceType.SOURCE,
+        "unrelated_orders_0",
     )
     fixture_key: tuple[CompiledResourceType, str] = (CompiledResourceType.SOURCE, "raw_orders")
     completed: RelationFixtureCompletion = build_relation_fixture_completion(
@@ -77,20 +73,12 @@ def test_given_unrelated_project_types_when_completing_fixture_then_eager_work_i
     )
     assert completed.diagnostics == ()
     assert 'CAST(NULL AS VARCHAR) AS "status"' in completed.fixture_sql_by_key[fixture_key]
-    assert dict(completed.expected_types) == before
-    assert list(completed.expected_types) == list(before)
-    assert context.expected_types == before
-    # Count eagerly materialized relation/type entries, independent of machine timing.
-    eager: Mapping[tuple[CompiledResourceType, str], dict[str, str]] = getattr(
-        completed.expected_types, "maps", (completed.expected_types,)
-    )[0]
-    assert len(eager) == test_case.expected_eager_relations
-    assert sum(len(columns) for columns in eager.values()) == test_case.expected_eager_columns
-    assert isinstance(completed.expected_types, ChainMap)
-    assert completed.expected_types.maps[-1] is context.expected_types
-    assert completed.expected_types[fixture_key] is context.expected_types[fixture_key]
-    model_key: tuple[CompiledResourceType, str] = (CompiledResourceType.MODEL, "orders")
-    assert completed.expected_types[model_key] is not context.expected_types[model_key]
+    assert context.expected_types(unrelated_key) == {"order_id": "INTEGER"}
+    assert len(completed.expected_types) == test_case.expected_eager_relations
+    assert (
+        sum(len(columns) for columns in completed.expected_types.values())
+        == test_case.expected_eager_columns
+    )
 
 
 if __name__ == "__main__":

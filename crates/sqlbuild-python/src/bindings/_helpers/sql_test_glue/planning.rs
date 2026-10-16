@@ -13,6 +13,7 @@ use sqlbuild_analysis::compiler::models::{
     SqlTestPlanTest,
 };
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 use crate::bindings::types::CompilerDetach;
@@ -99,7 +100,7 @@ fn resolve_compiled_sql_test_chains(
             .iter()
             .map(|model| {
                 Ok(SqlTestChainModel {
-                    name: model.getattr("name")?.extract()?,
+                    name: model_reads::name_object(model)?.extract()?,
                     model_dependencies: model_dependencies(model)?,
                 })
             })
@@ -165,10 +166,10 @@ fn plan_model(
     rendered_sql: Option<String>,
 ) -> PyResult<SqlTestPlanModel> {
     Ok(SqlTestPlanModel {
-        name: model.getattr("name")?.extract()?,
+        name: model_reads::name_object(model)?.extract()?,
         query_sql: match rendered_sql {
             Some(sql) => sql,
-            None => model.getattr("query_sql")?.extract()?,
+            None => model_reads::query_sql(model)?.extract()?,
         },
         model_dependencies: model_dependencies(model)?,
     })

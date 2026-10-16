@@ -1,5 +1,6 @@
 //! Warehouse-aware time-travel retention and Snowflake table-type planning.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
@@ -65,7 +66,7 @@ fn selected_models<'py>(
     let mut models: Vec<_> = Vec::new();
     for model in runtime.getattr("project")?.getattr("models")?.try_iter()? {
         let model = model?;
-        if names.contains(&model.getattr("name")?.extract::<String>()?) {
+        if names.contains(&model_reads::model_name(&model)?) {
             models.push(model);
         }
     }
@@ -98,7 +99,7 @@ pub(crate) fn plan_table_types<'py>(
             .getattr("declared")?
             .is_truthy()?
         {
-            declared.push(model.getattr("name")?.extract::<String>()?);
+            declared.push(model_reads::model_name(model)?);
         }
     }
     if !declared.is_empty() && !snowflake {
@@ -135,7 +136,7 @@ pub(crate) fn plan_table_types<'py>(
         if !backed.is_truthy()? {
             continue;
         }
-        let relation = relations.call_method1("get", (model.getattr("name")?,))?;
+        let relation = relations.call_method1("get", (model_reads::name_object(&model)?,))?;
         if relation.is_none() {
             continue;
         }
@@ -151,7 +152,7 @@ pub(crate) fn plan_table_types<'py>(
             continue;
         }
         let downgrade = actual == Some(false) && desired_transient;
-        let destination = model.getattr("destination")?;
+        let destination = model_reads::destination(&model)?;
         let limit: i64 = adapter
             .call_method0("maximum_identifier_length")?
             .extract()?;
@@ -160,7 +161,7 @@ pub(crate) fn plan_table_types<'py>(
             py,
             RecordId::TableTypePlanEntry,
             &[
-                ("model_name", model.getattr("name")?),
+                ("model_name", model_reads::name_object(&model)?),
                 ("destination", destination),
                 ("copy_name", text(py, &copy_name(&target_name, limit))),
                 ("desired_type", table_type.getattr("value")?.getattr("value")?),
@@ -317,7 +318,7 @@ fn relation_retention<'py>(
     model: &Bound<'py, PyAny>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py = runtime.py();
-    let name: String = model.getattr("name")?.extract()?;
+    let name: String = model_reads::model_name(model)?;
     let config = model.getattr("config")?;
     let retention = config.getattr("time_travel_retention")?;
     if retention.getattr("desired_days")?.is_none() || retention.getattr("source")?.is_none() {
@@ -328,7 +329,7 @@ fn relation_retention<'py>(
         ));
     }
     let desired_days: i64 = retention.getattr("desired_days")?.extract()?;
-    let destination = model.getattr("destination")?;
+    let destination = model_reads::destination(model)?;
     let schema = destination.getattr("schema")?;
     if schema.is_none() {
         return Err(planner_error(
@@ -341,7 +342,7 @@ fn relation_retention<'py>(
         py,
         AdapterHost::RetentionRequest,
         &[
-            ("request_id", model.getattr("name")?),
+            ("request_id", model_reads::name_object(model)?),
             (
                 "scope",
                 member(py, AdapterHost::RetentionScope, "relation")?,
@@ -354,7 +355,7 @@ fn relation_retention<'py>(
     )?;
     let mut base = RetentionEntry {
         request: request.clone(),
-        model_names: tuple(py, vec![model.getattr("name")?])?,
+        model_names: tuple(py, vec![model_reads::name_object(model)?])?,
         state: None,
         source: retention.getattr("source")?.getattr("value")?,
     };
@@ -363,7 +364,7 @@ fn relation_retention<'py>(
     let relations = warehouse
         .getattr("snapshot")?
         .getattr("existing_relations")?;
-    if !relations.contains(model.getattr("name")?)? {
+    if !relations.contains(model_reads::name_object(model)?)? {
         if snowflake && desired_days > 1 && table_type.eq(TRANSIENT_TABLE_TYPE)? {
             return Err(transient_error(py, &name, desired_days, "set "));
         }
@@ -374,7 +375,7 @@ fn relation_retention<'py>(
             flatten(&changes)?,
         )?]);
     }
-    let relation = relations.get_item(model.getattr("name")?)?;
+    let relation = relations.get_item(model_reads::name_object(model)?)?;
     let relation_transient = relation.getattr("is_transient")?;
     let lookup = call_with(
         &host::entry(py, AdapterHost::RelationLookup)?.getattr("key")?,
@@ -465,7 +466,7 @@ fn bigquery_retention<'py>(
     for model in runtime.getattr("project")?.getattr("models")?.try_iter()? {
         let model = model?;
         let retention = model.getattr("config")?.getattr("time_travel_retention")?;
-        let destination = model.getattr("destination")?;
+        let destination = model_reads::destination(&model)?;
         if retention.getattr("unmanaged")?.is_truthy()?
             || retention.getattr("desired_days")?.is_none()
             || destination.getattr("schema")?.is_none()
@@ -482,7 +483,7 @@ fn bigquery_retention<'py>(
     }
     let mut scopes: BTreeSet<(String, String, Option<String>)> = BTreeSet::new();
     for model in models {
-        let destination = model.getattr("destination")?;
+        let destination = model_reads::destination(model)?;
         let database: Option<String> = destination.getattr("database")?.extract()?;
         let schema: String = destination.getattr("schema")?.str()?.extract()?;
         scopes.insert((database.clone().unwrap_or_default(), schema, database));

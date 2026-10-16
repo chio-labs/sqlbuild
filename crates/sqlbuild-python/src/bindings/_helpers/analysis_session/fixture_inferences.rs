@@ -17,7 +17,7 @@ pub(crate) struct FixtureColumnInferences {
 #[pymethods]
 impl FixtureColumnInferences {
     #[new]
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             by_profile: Mutex::new(Vec::new()),
         }

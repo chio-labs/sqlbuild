@@ -15,7 +15,7 @@ const CREATE_TABLE_ACTION: &str = "create_table";
 /// Each selected model's change with the backfill its own `replay_on_change` decided.
 #[pyfunction]
 #[pyo3(signature = (*, scope, changes))]
-fn resolve_model_actions<'py>(
+pub(crate) fn resolve_model_actions<'py>(
     scope: &Bound<'py, PyAny>,
     changes: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -52,7 +52,7 @@ fn resolve_model_actions<'py>(
 /// Incremental replacements, whose bounds must ignore the destination maximum.
 #[pyfunction]
 #[pyo3(signature = (*, materialization_type, action))]
-fn replaces_incremental_relation(materialization_type: &str, action: &str) -> bool {
+pub(crate) fn replaces_incremental_relation(materialization_type: &str, action: &str) -> bool {
     materialization_type == INCREMENTAL_MATERIALIZATION && action == CREATE_TABLE_ACTION
 }
 

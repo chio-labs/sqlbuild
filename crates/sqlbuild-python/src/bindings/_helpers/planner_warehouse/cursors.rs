@@ -1,5 +1,6 @@
 //! Cursor MIN/MAX inspection of selected incremental models and their watermark inputs.
 
+use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_phases::objects::{
@@ -346,7 +347,7 @@ fn collect_models<'py>(
     let mut models: Vec<_> = Vec::new();
     for model in project.getattr("models")?.try_iter()? {
         let model = model?;
-        let name_value = model.getattr("name")?;
+        let name_value = model_reads::name_object(&model)?;
         let model_name: String = name_value.extract()?;
         if !inputs.selected_keys.is_none()
             && !inputs.selected_keys.contains(model_key(py, &name_value)?)?
@@ -390,7 +391,7 @@ fn collect_models<'py>(
             None => None,
         };
         let target_info = existing_relations.get_item(&name_value)?;
-        let qualified = model.getattr("destination")?.getattr("qualified_name")?;
+        let qualified = model_reads::destination(&model)?.getattr("qualified_name")?;
         if let Some(redirected) = redirected.filter(|value| !value.is_none()) {
             target_tag = Some(format!("{model_name}__target__max"));
             target_relation = Some(redirected.extract::<String>()?);
