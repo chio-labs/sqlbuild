@@ -1,6 +1,7 @@
+use crate::lint_text::_helpers::sites::site_pattern;
 use crate::lint_text::constants::{
     FORBIDDEN_FIX_REASON, FORBIDDEN_MESSAGE, FORBIDDEN_REMEDIATION, INVALID_MESSAGE,
-    INVALID_REMEDIATION, REASON_REQUIRED_FIX_REASON, UNUSED_REMEDIATION,
+    INVALID_REMEDIATION, REASON_REQUIRED_FIX_REASON, SITE_START_BYTES, UNUSED_REMEDIATION,
 };
 use crate::lint_text::errors::LintTextError;
 use crate::lint_text::main::apply_suppressions::apply_suppressions;
@@ -17,10 +18,44 @@ use crate::lint_text::models::{
 };
 use crate::lint_text::tests::test_types::{
     Finding, FormatBodiesTestCase, LintBodiesTestCase, NeutralizeTestCase, ParameterTestCase,
-    RestoreTestCase, SuppressionTestCase, TokenAtTestCase,
+    RestoreTestCase, SitePatternTestCase, SuppressionTestCase, TokenAtTestCase,
 };
 
 const SUPPRESSED_FILE: &str = "-- sqb: ignore SQBRSQL005 because kept\n\n-- note\nselect 1\n-- sqb: ignore X because y\n-- sqb: ignore nope\nselect 2\n";
+
+#[test]
+fn given_site_patterns_when_text_opens_with_another_byte_then_no_site_starts_there()
+-> Result<(), LintTextError> {
+    let test_cases = [
+        SitePatternTestCase {
+            description: "lint sites",
+            formatting: false,
+            expected_other_start_bytes: Vec::new(),
+        },
+        SitePatternTestCase {
+            description: "format sites",
+            formatting: true,
+            expected_other_start_bytes: Vec::new(),
+        },
+    ];
+    for test_case in test_cases {
+        let pattern = site_pattern(test_case.formatting)?;
+        let other_start_bytes: Vec<u8> = (0..=127u8)
+            .filter(|byte| !SITE_START_BYTES.contains(byte))
+            .filter(|byte| {
+                ["@@x", "@x", "${x}", "__ref(", "__REF (", "__udf("]
+                    .iter()
+                    .any(|site| pattern.is_match(&format!("{}{site}", char::from(*byte))))
+            })
+            .collect();
+        assert_eq!(
+            other_start_bytes, test_case.expected_other_start_bytes,
+            "{}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
 
 #[test]
 fn given_authored_sql_when_neutralizing_then_sites_use_character_offsets()

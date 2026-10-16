@@ -20,6 +20,8 @@ pub(crate) const FUNCTION_NAMES: [&str; 9] = [
     "__udf",
 ];
 
+/// Bytes every lint and format site pattern match starts with.
+pub(crate) const SITE_START_BYTES: [u8; 3] = *b"@$_";
 pub(crate) const LINT_SITE_PATTERN: &str =
     r"^(?:@@|\$\{|@|(?:__dbt_ref|__ref|__seed|__source|__table_fn|__udf)\()";
 pub(crate) const FORMAT_SITE_PATTERN: &str = r"(?i)^(?:@@|\$\{|@|(?:__cursor_end|__cursor_start|__dbt_ref|__empty_fixture|__ref|__seed|__source|__table_fn|__udf)\s*\()";

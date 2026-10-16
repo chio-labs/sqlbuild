@@ -10,7 +10,7 @@ use sqlbuild_sqltext::sql_scan::main::non_code_end::non_code_end;
 use sqlbuild_sqltext::sql_scan::models::QuotePolicy;
 
 use crate::lint_text::constants::{
-    FORMAT_SITE_PATTERN, FUNCTION_NAMES, LINT_SITE_PATTERN, SENTINEL_SUFFIX,
+    FORMAT_SITE_PATTERN, FUNCTION_NAMES, LINT_SITE_PATTERN, SENTINEL_SUFFIX, SITE_START_BYTES,
 };
 use crate::lint_text::errors::LintTextError;
 use crate::lint_text::models::{InterpolationSite, Neutralized};
@@ -63,7 +63,11 @@ pub(crate) fn site_starts(text: &str, pattern: &Regex, policy: QuotePolicy) -> V
             Err(_) => break,
             Ok(None) => {}
         }
-        if let Some(found) = text.get(index..).and_then(|rest| pattern.find(rest)) {
+        let found = SITE_START_BYTES
+            .contains(&bytes[index])
+            .then(|| text.get(index..).and_then(|rest| pattern.find(rest)))
+            .flatten();
+        if let Some(found) = found {
             starts.push(index);
             index += found.end();
         } else {
