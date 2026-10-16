@@ -135,7 +135,7 @@ pub(crate) fn resolve_lineage_reference<'py>(
 /// Reject capped producers feeding a microbatch model's watermark inputs.
 #[pyfunction(name = "validate_capped_watermark_inputs")]
 #[pyo3(signature = (*, model, models_by_name, functions_by_name = None))]
-fn reject_capped_watermark_inputs<'py>(
+pub(crate) fn reject_capped_watermark_inputs<'py>(
     model: &Bound<'py, PyAny>,
     models_by_name: Bound<'py, PyAny>,
     functions_by_name: Option<Bound<'py, PyAny>>,

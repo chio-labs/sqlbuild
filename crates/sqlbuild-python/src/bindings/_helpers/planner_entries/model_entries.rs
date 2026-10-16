@@ -4,11 +4,14 @@ use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, imported, keywords,
 };
+use crate::bindings::_helpers::planner_changes::actions::replaces_incremental_relation;
 use crate::bindings::_helpers::planner_entries::values::{
     COMPILE_TYPES, MICROBATCH_CONCURRENCY_MESSAGE, boolean, error_of, native, none, planner_type,
     replaced, string,
 };
-use crate::bindings::_helpers::planner_phases::full_refresh::resolve_model_full_refresh;
+use crate::bindings::_helpers::planner_phases::full_refresh::{
+    check_full_rebuild_allowed, describe_full_rebuild_cause, resolve_model_full_refresh,
+};
 use crate::bindings::_helpers::planner_resolution::cursor_ranges::{
     CursorWindowInputs, config_str, cursor_safety_configs, empty_cursor_inputs, microbatch_range,
     model_cursor_overrides, plan_cursor_bounds,
@@ -17,9 +20,16 @@ use crate::bindings::_helpers::planner_resolution::cursor_warnings::with_cursor_
 use crate::bindings::_helpers::planner_resolution::orchestration::{
     resolve_model_hook_entries, resolve_model_sql,
 };
+use crate::bindings::_helpers::planner_strategy::cursor_inputs::{
+    build_cursor_input_relations, reject_unexposed_cursor_input_columns,
+};
+use crate::bindings::_helpers::planner_strategy::lineage::reject_capped_watermark_inputs;
 use crate::bindings::_helpers::planner_strategy::microbatch_limits::apply_configured_microbatch_limits;
 use crate::bindings::_helpers::planner_strategy::model_entries::assemble_model_plan_entry;
-use crate::bindings::_helpers::planner_strategy::strategy::resolve_model_plan_action;
+use crate::bindings::_helpers::planner_strategy::strategy::{
+    materialization_of, resolve_model_plan_action,
+};
+use crate::bindings::_helpers::planner_strategy::values::text;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -28,12 +38,41 @@ use pyo3::{pyfunction, wrap_pyfunction};
 
 const MICROBATCH_COMPLEXITY_CODE: &str = "MICROBATCH_CONCURRENCY_COMPLEXITY";
 
+/// The `ModelPlanContext` fields every model's planning reads, read once per plan.
+struct ContextReads<'py> {
+    context: Bound<'py, PyAny>,
+    models_by_name: Bound<'py, PyAny>,
+    functions_by_name: Bound<'py, PyAny>,
+    source_map: Bound<'py, PyAny>,
+    source_warehouse_columns: Bound<'py, PyAny>,
+    model_locations: Bound<'py, PyAny>,
+    seed_locations: Bound<'py, PyAny>,
+    runtime_cursor_producer_names: Bound<'py, PyAny>,
+    invocation_time: Bound<'py, PyAny>,
+}
+
+impl<'py> ContextReads<'py> {
+    fn of(context: Bound<'py, PyAny>) -> PyResult<Self> {
+        Ok(Self {
+            models_by_name: context.getattr("models_by_name")?,
+            functions_by_name: context.getattr("functions_by_name")?,
+            source_map: context.getattr("source_map")?,
+            source_warehouse_columns: context.getattr("source_warehouse_columns")?,
+            model_locations: context.getattr("model_locations")?,
+            seed_locations: context.getattr("seed_locations")?,
+            runtime_cursor_producer_names: context.getattr("runtime_cursor_producer_names")?,
+            invocation_time: context.getattr("invocation_time")?,
+            context,
+        })
+    }
+}
+
 /// One model's planning request after change detection.
-struct ModelPlanRequest<'py> {
+struct ModelPlanRequest<'a, 'py> {
     model: Bound<'py, PyAny>,
     snapshot: Bound<'py, PyAny>,
     adapter: Bound<'py, PyAny>,
-    context: Bound<'py, PyAny>,
+    context: &'a ContextReads<'py>,
     sql_analysis_enabled: Bound<'py, PyAny>,
     full_refresh: bool,
     overrides: (Bound<'py, PyAny>, Bound<'py, PyAny>),
@@ -44,10 +83,11 @@ struct ModelPlanRequest<'py> {
 
 /// Build a model plan entry and its warnings from a resolved change result.
 fn plan_model_from_change<'py>(
-    request: &ModelPlanRequest<'py>,
+    request: &ModelPlanRequest<'_, 'py>,
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let model = &request.model;
-    let context = &request.context;
+    let reads = request.context;
+    let context = &reads.context;
     let py = model.py();
     let full_refresh = boolean(py, request.full_refresh)?;
     let backfill = if request.full_refresh {
@@ -63,60 +103,35 @@ fn plan_model_from_change<'py>(
         request.change_result.getattr("backfill")?
     };
     let cursor_column = config_str(model, "cursor")?;
-    native(
+    reject_unexposed_cursor_input_columns(Some(&keywords(
         py,
-        NativeAttr::ValidateSourceCursorInputColumns,
         &[
             ("model", model.clone()),
             ("cursor_column", cursor_column.clone()),
-            ("models_by_name", context.getattr("models_by_name")?),
-            ("functions_by_name", context.getattr("functions_by_name")?),
-            ("source_map", context.getattr("source_map")?),
+            ("models_by_name", reads.models_by_name.clone()),
+            ("functions_by_name", reads.functions_by_name.clone()),
+            ("source_map", reads.source_map.clone()),
             (
                 "source_warehouse_columns",
-                context.getattr("source_warehouse_columns")?,
+                reads.source_warehouse_columns.clone(),
             ),
         ],
-    )?;
+    )?))?;
     let resolved = resolve_model_plan_action(model, &request.change_result, request.full_refresh)?;
     let (action, reason) = (resolved.get_item(0)?, resolved.get_item(1)?);
-    let materialization_type = native(
-        py,
-        NativeAttr::GetMaterializationType,
-        &[("model", model.clone())],
-    )?;
-    let replaces_relation = native(
-        py,
-        NativeAttr::ReplacesIncrementalRelation,
-        &[
-            ("materialization_type", materialization_type.clone()),
-            ("action", action.clone()),
-        ],
-    )?
-    .is_truthy()?;
+    let materialization_type = materialization_of(model)?;
+    let replaces_relation =
+        replaces_incremental_relation(&text(&materialization_type)?, &text(&action)?);
     let full_rebuild_cause = if replaces_relation {
-        native(
-            py,
-            NativeAttr::DescribeFullRebuildCause,
-            &[
-                ("change_result", request.change_result.clone()),
-                ("full_refresh", full_refresh.clone()),
-            ],
-        )?
+        let cause: String =
+            describe_full_rebuild_cause(&request.change_result, request.full_refresh)?;
+        if request.protect_full_refresh && !request.full_refresh {
+            check_full_rebuild_allowed(model, &request.change_result, &cause)?;
+        }
+        string(py, &cause)
     } else {
         none(py)
     };
-    if !full_rebuild_cause.is_none() && request.protect_full_refresh && !request.full_refresh {
-        native(
-            py,
-            NativeAttr::CheckFullRebuildAllowed,
-            &[
-                ("model", model.clone()),
-                ("change_result", request.change_result.clone()),
-                ("full_rebuild_cause", full_rebuild_cause.clone()),
-            ],
-        )?;
-    }
     let pair = native(
         py,
         RecordId::CursorOverridePair,
@@ -153,33 +168,29 @@ fn plan_model_from_change<'py>(
         request.external_resolver.clone(),
     )?;
     let (future_config, start_config) = cursor_safety_configs(model, context)?;
-    native(
-        py,
-        NativeAttr::ValidateCappedWatermarkInputs,
-        &[
-            ("model", model.clone()),
-            ("models_by_name", context.getattr("models_by_name")?),
-            ("functions_by_name", context.getattr("functions_by_name")?),
-        ],
+    reject_capped_watermark_inputs(
+        model,
+        reads.models_by_name.clone(),
+        Some(reads.functions_by_name.clone()),
     )?;
-    let cursor_input_relations = native(
+    let cursor_input_relations = build_cursor_input_relations(Some(&keywords(
         py,
-        NativeAttr::BuildCursorInputRelations,
         &[
             ("model", model.clone()),
             ("adapter", request.adapter.clone()),
-            ("model_locations", context.getattr("model_locations")?),
-            ("models_by_name", context.getattr("models_by_name")?),
-            ("functions_by_name", context.getattr("functions_by_name")?),
-            ("seed_locations", context.getattr("seed_locations")?),
-            ("source_map", context.getattr("source_map")?),
+            ("model_locations", reads.model_locations.clone()),
+            ("models_by_name", reads.models_by_name.clone()),
+            ("functions_by_name", reads.functions_by_name.clone()),
+            ("seed_locations", reads.seed_locations.clone()),
+            ("source_map", reads.source_map.clone()),
             ("cursor_column", cursor_column.clone()),
             (
                 "runtime_cursor_producer_names",
-                context.getattr("runtime_cursor_producer_names")?,
+                reads.runtime_cursor_producer_names.clone(),
             ),
         ],
-    )?;
+    )?))?
+    .into_any();
     let mut any_runtime_owned = false;
     for relation in cursor_input_relations.try_iter()? {
         if relation?.getattr("is_runtime_owned")?.is_truthy()? {
@@ -195,7 +206,7 @@ fn plan_model_from_change<'py>(
         overrides: request.overrides.clone(),
         runtime_owned,
         policies: (future_config.clone(), start_config.clone()),
-        invocation_time: context.getattr("invocation_time")?,
+        invocation_time: reads.invocation_time.clone(),
         full_refresh: request.full_refresh,
         replaces_relation,
         cursor_input_relations: cursor_input_relations.clone(),
@@ -232,7 +243,7 @@ fn plan_model_from_change<'py>(
             ("end_cursor_override", request.overrides.1.clone()),
             ("future_cursor_config", future_config),
             ("start_cursor_config", start_config),
-            ("invocation_time", context.getattr("invocation_time")?),
+            ("invocation_time", reads.invocation_time.clone()),
         ],
     )?))?;
     let bounds = if range.is_truthy()? {
@@ -483,6 +494,9 @@ fn plan_entries<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>
             ("invocation_time", inputs.getattr("invocation_time")?),
         ],
     )?;
+    let reads = ContextReads::of(context)?;
+    let sql_analysis_enabled = settings.getattr("sql_analysis")?;
+    let external_resolver = project.getattr("external_sql_reference_resolver")?;
     let skip = planner_type(py, RecordId::PlanAction, "SKIP")?;
     let microbatch = registry::class(py, RecordId::IncrementalMode)?.getattr("MICROBATCH")?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -508,12 +522,12 @@ fn plan_entries<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>
             model: model.clone(),
             snapshot: snapshot.clone(),
             adapter: adapter.clone(),
-            context: context.clone(),
-            sql_analysis_enabled: settings.getattr("sql_analysis")?,
+            context: &reads,
+            sql_analysis_enabled: sql_analysis_enabled.clone(),
             full_refresh: effective_full_refresh,
             overrides,
             change_result: resolved.getattr("change")?,
-            external_resolver: project.getattr("external_sql_reference_resolver")?,
+            external_resolver: external_resolver.clone(),
             protect_full_refresh: !freshness_blocked.contains(&name)?
                 && !external_blocked.contains(&name)?,
         })?;
@@ -650,7 +664,7 @@ fn plan_model<'py>(
         model,
         snapshot,
         adapter: args.value("adapter")?,
-        context: args.value("context")?,
+        context: &ContextReads::of(args.value("context")?)?,
         sql_analysis_enabled: args.value("sql_analysis_enabled")?,
         full_refresh: args.flag("full_refresh")?,
         overrides: (

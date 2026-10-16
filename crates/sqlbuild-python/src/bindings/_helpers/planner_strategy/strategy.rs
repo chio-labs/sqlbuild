@@ -62,7 +62,7 @@ fn schema_policy(on_schema_change: &Bound<'_, PyAny>) -> PyResult<Option<String>
 /// The `MaterializationType` of a model's `materialized` config: table when unset, custom when unknown.
 #[pyfunction(name = "get_materialization_type")]
 #[pyo3(signature = (model))]
-fn materialization_of<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn materialization_of<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     planner_enum(
         model.py(),
         RecordId::MaterializationType,

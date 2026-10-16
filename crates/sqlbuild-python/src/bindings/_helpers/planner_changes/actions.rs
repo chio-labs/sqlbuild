@@ -52,7 +52,7 @@ fn resolve_model_actions<'py>(
 /// Incremental replacements, whose bounds must ignore the destination maximum.
 #[pyfunction]
 #[pyo3(signature = (*, materialization_type, action))]
-fn replaces_incremental_relation(materialization_type: &str, action: &str) -> bool {
+pub(crate) fn replaces_incremental_relation(materialization_type: &str, action: &str) -> bool {
     materialization_type == INCREMENTAL_MATERIALIZATION && action == CREATE_TABLE_ACTION
 }
 
