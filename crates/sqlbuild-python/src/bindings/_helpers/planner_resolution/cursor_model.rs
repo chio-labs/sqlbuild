@@ -67,7 +67,7 @@ fn history_redirected(model: &Bound<'_, PyAny>, snapshot: &Bound<'_, PyAny>) -> 
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn compute_model_cursor_bounds<'py>(
+pub(crate) fn compute_model_cursor_bounds<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

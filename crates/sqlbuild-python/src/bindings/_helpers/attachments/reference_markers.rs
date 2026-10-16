@@ -32,7 +32,7 @@ fn coded_value_error(py: Python<'_>, message: String, code: &str) -> PyResult<Py
 /// Fail if executable SQL still contains unresolved reference markers or an unclosed construct.
 #[pyfunction]
 #[pyo3(signature = (*, sql, context))]
-fn assert_no_unresolved_sql_markers(
+pub(crate) fn assert_no_unresolved_sql_markers(
     py: Python<'_>,
     sql: &Bound<'_, PyString>,
     context: &str,

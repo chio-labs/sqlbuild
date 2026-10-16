@@ -109,7 +109,7 @@ pub(crate) fn resolve_model_plan_action<'py>(
 /// Concrete schema change actions from findings and `on_schema_change`.
 #[pyfunction]
 #[pyo3(signature = (*, schema_findings, on_schema_change))]
-fn resolve_schema_actions<'py>(
+pub(crate) fn resolve_schema_actions<'py>(
     schema_findings: &Bound<'py, PyAny>,
     on_schema_change: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
@@ -141,7 +141,7 @@ fn resolve_schema_actions<'py>(
 /// Warnings for one model from its change detection and plan decisions.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn build_model_warnings<'py>(
+pub(crate) fn build_model_warnings<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {

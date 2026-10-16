@@ -69,7 +69,7 @@ fn classify_cursor_sql_type<'py>(
 /// A `PlanWarning` when the warehouse cursor column type contradicts `cursor_type`.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn check_cursor_type_consistency<'py>(
+pub(crate) fn check_cursor_type_consistency<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
