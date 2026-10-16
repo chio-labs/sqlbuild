@@ -211,7 +211,7 @@ pub(crate) fn planner_relations_context<'py>(
 /// Resolve relation locations and source metadata for plan entry construction.
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn build_planner_relations_context<'py>(
+pub(crate) fn build_planner_relations_context<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

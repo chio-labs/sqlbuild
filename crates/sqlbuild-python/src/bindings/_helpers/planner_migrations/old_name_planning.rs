@@ -69,7 +69,7 @@ fn schemas<'py>(
 
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn plan_old_name_views<'py>(
+pub(crate) fn plan_old_name_views<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

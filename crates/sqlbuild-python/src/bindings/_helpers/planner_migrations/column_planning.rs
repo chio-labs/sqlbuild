@@ -14,7 +14,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 /// Decide column renames and return the existing planning result model.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn plan_column_migrations<'py>(
+pub(crate) fn plan_column_migrations<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

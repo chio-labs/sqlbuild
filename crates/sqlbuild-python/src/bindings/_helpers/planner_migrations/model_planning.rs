@@ -102,7 +102,7 @@ fn decide_model_migration<'py>(
 
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn plan_model_migrations<'py>(
+pub(crate) fn plan_model_migrations<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

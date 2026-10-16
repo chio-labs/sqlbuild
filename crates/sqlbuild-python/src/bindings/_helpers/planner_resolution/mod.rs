@@ -3,7 +3,7 @@
 mod constants;
 mod cursor_bounds;
 mod cursor_model;
-mod cursor_overrides;
+pub(crate) mod cursor_overrides;
 pub(crate) mod cursor_policies;
 pub(crate) mod cursor_ranges;
 mod cursor_safety;

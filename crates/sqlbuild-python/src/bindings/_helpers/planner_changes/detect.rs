@@ -62,7 +62,7 @@ pub(crate) struct ModelPass<'py> {
 /// Selected model and function changes.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn detect_changes<'py>(
+pub(crate) fn detect_changes<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

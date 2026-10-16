@@ -7,6 +7,6 @@ mod execution_plan;
 mod model_entries;
 mod plan_output;
 pub(crate) mod registration;
-mod relations;
+pub(crate) mod relations;
 mod test_planning;
 mod values;

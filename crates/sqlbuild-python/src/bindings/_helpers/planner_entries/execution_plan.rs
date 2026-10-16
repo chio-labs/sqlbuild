@@ -1,15 +1,31 @@
 //! Top-level planner orchestration producing an execution plan.
 
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, within,
+    KeywordArguments, call_with, imported, keywords, within,
 };
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::planner_changes::actions::resolve_model_actions;
+use crate::bindings::_helpers::planner_changes::detect::detect_changes;
 use crate::bindings::_helpers::planner_entries::test_planning::{
     PlanningRequest, SqlTestPlanning, start_planning,
 };
 use crate::bindings::_helpers::planner_entries::values::{COMPILE_TYPES, native, replaced};
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::planner_phases::buildability::check_selected_scope_buildability;
+use crate::bindings::_helpers::planner_phases::execution_changes::{
+    build_planner_entry_results, prune_planner_execution_scope, reconcile_execution_changes,
+};
+use crate::bindings::_helpers::planner_phases::identities::{
+    build_planner_identity_context, detect_stale_warning_changes,
+};
+use crate::bindings::_helpers::planner_phases::output_assembly::{
+    assemble_base_plan_output, with_plan_metadata, with_plan_warnings, with_storage_policies,
+};
+use crate::bindings::_helpers::planner_phases::scopes::resolve_planner_scopes;
+use crate::bindings::_helpers::planner_phases::warehouse_state::gather_planner_warehouse_state;
+use crate::bindings::_helpers::planner_resolution::cursor_overrides::type_cursor_overrides;
+use crate::bindings::_helpers::planner_warehouse::source_freshness::build_planner_source_freshness_result;
+use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -22,14 +38,10 @@ fn scopes_and_cursor_overrides<'py>(
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let project = args.value("project")?;
     let py = project.py();
-    let scopes = native(
-        py,
-        NativeAttr::ResolvePlannerScopes,
-        &[
-            ("project", project.clone()),
-            ("selection", args.value("selection")?),
-            ("policies", args.value("policies")?),
-        ],
+    let scopes = resolve_planner_scopes(
+        &project,
+        &args.value("selection")?,
+        &args.value("policies")?,
     )?;
     let selected = scopes.getattr("selected_scope")?;
     let models_by_name = selected.getattr("models_by_name")?;
@@ -43,13 +55,15 @@ fn scopes_and_cursor_overrides<'py>(
         }
     }
     let overrides = args.value("overrides")?;
-    let typed = native(
+    let typed = type_cursor_overrides(
         py,
-        NativeAttr::TypeCursorOverrides,
-        &[
-            ("cursor_overrides", overrides.getattr("cursor_overrides")?),
-            ("selected_models", PyTuple::new(py, models)?.into_any()),
-        ],
+        Some(keywords(
+            py,
+            &[
+                ("cursor_overrides", overrides.getattr("cursor_overrides")?),
+                ("selected_models", PyTuple::new(py, models)?.into_any()),
+            ],
+        )?),
     )?;
     Ok((
         scopes,
@@ -66,23 +80,25 @@ fn change_results<'py>(
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let py = project.py();
     let versions = identities.getattr("version_identities")?;
-    let changes = native(
+    let changes = detect_changes(
         py,
-        NativeAttr::DetectChanges,
-        &[
-            ("project", project.clone()),
-            ("scope", scopes.getattr("inspection_scope")?),
-            ("snapshot", snapshot.clone()),
-            ("full_refresh", overrides.getattr("full_refresh")?),
-            (
-                "expected_version_hashes",
-                versions.getattr("model_version_hashes")?,
-            ),
-            (
-                "expected_metadata_jsons",
-                versions.getattr("model_metadata_jsons")?,
-            ),
-        ],
+        Some(keywords(
+            py,
+            &[
+                ("project", project.clone()),
+                ("scope", scopes.getattr("inspection_scope")?),
+                ("snapshot", snapshot.clone()),
+                ("full_refresh", overrides.getattr("full_refresh")?),
+                (
+                    "expected_version_hashes",
+                    versions.getattr("model_version_hashes")?,
+                ),
+                (
+                    "expected_metadata_jsons",
+                    versions.getattr("model_metadata_jsons")?,
+                ),
+            ],
+        )?),
     )?;
     if !policies.getattr("selection_diagnostics")?.is_truthy()? {
         let empty = native(
@@ -95,16 +111,18 @@ fn change_results<'py>(
         )?;
         return Ok((changes, empty));
     }
-    let stale = native(
+    let stale = detect_stale_warning_changes(
         py,
-        NativeAttr::DetectStaleWarningChanges,
-        &[
-            ("project", project.clone()),
-            ("scopes", scopes.clone()),
-            ("snapshot", snapshot.clone()),
-            ("identities", identities.clone()),
-            ("execution_changes", changes.clone()),
-        ],
+        Some(keywords(
+            py,
+            &[
+                ("project", project.clone()),
+                ("scopes", scopes.clone()),
+                ("snapshot", snapshot.clone()),
+                ("identities", identities.clone()),
+                ("execution_changes", changes.clone()),
+            ],
+        )?),
     )?;
     Ok((changes, stale))
 }
@@ -120,39 +138,14 @@ fn planned_output<'py>(
     let py = project.py();
     let deferral = args.value("deferral")?;
     let policies = args.value("policies")?;
-    let warehouse = native(
-        py,
-        NativeAttr::GatherPlannerWarehouseState,
-        &[
-            ("runtime", runtime.clone()),
-            ("scopes", scopes.clone()),
-            ("overrides", overrides.clone()),
-            ("deferral", deferral.clone()),
-        ],
-    )?;
+    let warehouse = gather_planner_warehouse_state(runtime, scopes, overrides, &deferral)?;
     let started = Instant::now();
-    let identities = native(
-        py,
-        NativeAttr::BuildPlannerIdentityContext,
-        &[
-            ("project", project.clone()),
-            ("scopes", scopes.clone()),
-            (
-                "include_stale_warning_identities",
-                policies.getattr("selection_diagnostics")?,
-            ),
-        ],
+    let identities = build_planner_identity_context(
+        &project,
+        scopes,
+        policies.getattr("selection_diagnostics")?.extract()?,
     )?;
-    native(
-        py,
-        NativeAttr::CheckSelectedScopeBuildability,
-        &[
-            ("runtime", runtime.clone()),
-            ("scopes", scopes.clone()),
-            ("warehouse", warehouse.clone()),
-            ("deferral", deferral.clone()),
-        ],
-    )?;
+    check_selected_scope_buildability(runtime, scopes, &warehouse, &deferral)?;
     let snapshot = warehouse.getattr("snapshot")?;
     let (changes, stale_warning_changes) = change_results(
         &project,
@@ -161,114 +154,92 @@ fn planned_output<'py>(
         &policies,
     )?;
     let inspection_scope = scopes.getattr("inspection_scope")?;
-    let resolved_actions = native(
+    let resolved_actions = resolve_model_actions(&inspection_scope, &changes)?;
+    let source_freshness = build_planner_source_freshness_result(
         py,
-        NativeAttr::ResolveModelActions,
-        &[
-            ("scope", inspection_scope.clone()),
-            ("changes", changes.clone()),
-        ],
+        Some(keywords(
+            py,
+            &[
+                ("project", project.clone()),
+                ("adapter", args.value("adapter")?),
+                ("connection", args.value("connection")?),
+                ("scope", inspection_scope),
+                ("relations", warehouse.getattr("inspection_relations")?),
+                (
+                    "freshness_state_schemas",
+                    snapshot.getattr("source_freshness_state_schemas")?,
+                ),
+            ],
+        )?),
     )?;
-    let source_freshness = native(
+    let pruning = prune_planner_execution_scope(scopes, &resolved_actions)?;
+    let reconciliation = reconcile_execution_changes(&warehouse, &identities, &pruning, &changes)?;
+    let entries = build_planner_entry_results(
         py,
-        NativeAttr::BuildPlannerSourceFreshnessResult,
-        &[
-            ("project", project.clone()),
-            ("adapter", args.value("adapter")?),
-            ("connection", args.value("connection")?),
-            ("scope", inspection_scope),
-            ("relations", warehouse.getattr("inspection_relations")?),
-            (
-                "freshness_state_schemas",
-                snapshot.getattr("source_freshness_state_schemas")?,
-            ),
-        ],
-    )?;
-    let pruning = native(
-        py,
-        NativeAttr::PrunePlannerExecutionScope,
-        &[
-            ("scopes", scopes.clone()),
-            ("resolved_actions", resolved_actions),
-        ],
-    )?;
-    let reconciliation = native(
-        py,
-        NativeAttr::ReconcileExecutionChanges,
-        &[
-            ("warehouse", warehouse.clone()),
-            ("identities", identities.clone()),
-            ("pruning", pruning.clone()),
-            ("changes", changes),
-        ],
-    )?;
-    let entries = native(
-        py,
-        NativeAttr::BuildPlannerEntryResults,
-        &[
-            ("runtime", runtime.clone()),
-            ("warehouse", warehouse.clone()),
-            ("identities", identities.clone()),
-            ("overrides", overrides.clone()),
-            ("policies", policies.clone()),
-            ("deferral", deferral),
-            ("pruning", pruning.clone()),
-            ("reconciliation", reconciliation.clone()),
-            ("source_freshness", source_freshness.clone()),
-        ],
+        Some(keywords(
+            py,
+            &[
+                ("runtime", runtime.clone()),
+                ("warehouse", warehouse.clone()),
+                ("identities", identities.clone()),
+                ("overrides", overrides.clone()),
+                ("policies", policies.clone()),
+                ("deferral", deferral),
+                ("pruning", pruning.clone()),
+                ("reconciliation", reconciliation.clone()),
+                ("source_freshness", source_freshness.clone()),
+            ],
+        )?),
     )?;
     let planned_sql_tests = test_planning.result(py)?.into_bound(py);
-    let mut plan_output = native(
+    let mut plan_output = assemble_base_plan_output(
         py,
-        NativeAttr::AssembleBasePlanOutput,
-        &[
-            ("runtime", runtime.clone()),
-            ("warehouse", warehouse.clone()),
-            ("identities", identities.clone()),
-            ("overrides", overrides.clone()),
-            ("pruning", pruning.clone()),
-            ("reconciliation", reconciliation),
-            ("entries", entries),
-            ("source_freshness", source_freshness.clone()),
-            ("planned_sql_tests", planned_sql_tests),
-        ],
+        Some(keywords(
+            py,
+            &[
+                ("runtime", runtime.clone()),
+                ("warehouse", warehouse.clone()),
+                ("identities", identities.clone()),
+                ("overrides", overrides.clone()),
+                ("pruning", pruning.clone()),
+                ("reconciliation", reconciliation),
+                ("entries", entries),
+                ("source_freshness", source_freshness.clone()),
+                ("planned_sql_tests", planned_sql_tests),
+            ],
+        )?),
     )?;
-    plan_output = native(
+    plan_output = with_storage_policies(
         py,
-        NativeAttr::WithStoragePolicies,
-        &[
-            ("plan_output", plan_output),
-            ("runtime", runtime.clone()),
-            ("warehouse", warehouse.clone()),
-            ("scopes", scopes.clone()),
-            ("policies", policies.clone()),
-        ],
+        Some(keywords(
+            py,
+            &[
+                ("plan_output", plan_output),
+                ("runtime", runtime.clone()),
+                ("warehouse", warehouse.clone()),
+                ("scopes", scopes.clone()),
+                ("policies", policies.clone()),
+            ],
+        )?),
     )?;
-    plan_output = native(
+    plan_output = with_plan_warnings(
         py,
-        NativeAttr::WithPlanWarnings,
-        &[
-            ("runtime", runtime.clone()),
-            ("scopes", scopes.clone()),
-            ("warehouse", warehouse),
-            ("identities", identities),
-            ("stale_warning_changes", stale_warning_changes),
-            ("pruning", pruning.clone()),
-            ("source_freshness", source_freshness.clone()),
-            ("plan_output", plan_output),
-            ("policies", policies.clone()),
-        ],
+        Some(keywords(
+            py,
+            &[
+                ("runtime", runtime.clone()),
+                ("scopes", scopes.clone()),
+                ("warehouse", warehouse),
+                ("identities", identities),
+                ("stale_warning_changes", stale_warning_changes),
+                ("pruning", pruning.clone()),
+                ("source_freshness", source_freshness.clone()),
+                ("plan_output", plan_output),
+                ("policies", policies.clone()),
+            ],
+        )?),
     )?;
-    plan_output = native(
-        py,
-        NativeAttr::WithPlanMetadata,
-        &[
-            ("plan_output", plan_output),
-            ("pruning", pruning),
-            ("source_freshness", source_freshness),
-            ("policies", policies),
-        ],
-    )?;
+    plan_output = with_plan_metadata(&plan_output, &pruning, &source_freshness, &policies)?;
     let on_progress = args.value("on_progress")?;
     if !on_progress.is_none() {
         on_progress.call1((format!(

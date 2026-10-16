@@ -15,7 +15,7 @@ use sqlbuild_cursor::planner::main::override_kind::override_kind;
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn type_cursor_overrides<'py>(
+pub(crate) fn type_cursor_overrides<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
