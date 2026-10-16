@@ -4,8 +4,11 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyTuple;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
+use crate::bindings::_helpers::compiled_project::function_views::NativeCompiledFunction;
 use crate::bindings::_helpers::compiled_project::records::project_with;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::compiled_project::seed_views::NativeCompiledSeed;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
 /// The adapter defaults every compiled location falls back to.
@@ -18,11 +21,11 @@ pub(crate) struct TargetDefaults<'py> {
 
 impl<'py> TargetDefaults<'py> {
     /// `(default_schema, default_database)`.
-    fn pair(&self) -> PyResult<Bound<'py, PyTuple>> {
-        PyTuple::new(
-            self.default_schema.py(),
-            [self.default_schema.clone(), self.default_database.clone()],
-        )
+    fn pair(&self) -> PyResult<(Option<String>, Option<String>)> {
+        Ok((
+            self.default_schema.extract()?,
+            self.default_database.extract()?,
+        ))
     }
 }
 
@@ -41,13 +44,21 @@ pub(crate) fn apply_target_defaults<'py>(
     defaults: &TargetDefaults<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project.py();
-    let compiled_model: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledModel)?;
-    let native_seed: Bound<'py, PyAny> = registry::native(py, NativeAttr::NativeCompiledSeed)?;
     let replace: Bound<'py, PyAny> = imported(py, "dataclasses", "replace")?;
     let mut models: Vec<Bound<'py, PyAny>> = Vec::new();
     for model in project.getattr("models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
-        models.push(if model.is_instance(&compiled_model)? {
+        models.push(if let Ok(native) = model.cast::<NativeCompiledModel>() {
+            Bound::new(
+                py,
+                native.get().with_target_defaults(
+                    py,
+                    defaults.pair()?,
+                    defaults.render_qualified_name.clone(),
+                )?,
+            )?
+            .into_any()
+        } else {
             replace.call(
                 (&model,),
                 Some(&keywords(
@@ -58,21 +69,21 @@ pub(crate) fn apply_target_defaults<'py>(
                     )],
                 )?),
             )?
-        } else {
-            model.call_method1(
-                "with_target_defaults",
-                (defaults.pair()?, &defaults.render_qualified_name),
-            )?
         });
     }
     let mut seeds: Vec<Bound<'py, PyAny>> = Vec::new();
     for seed in project.getattr("seeds")?.try_iter()? {
         let seed: Bound<'py, PyAny> = seed?;
-        seeds.push(if seed.is_instance(&native_seed)? {
-            seed.call_method1(
-                "with_target_defaults",
-                (defaults.pair()?, &defaults.render_qualified_name),
+        seeds.push(if let Ok(native) = seed.cast::<NativeCompiledSeed>() {
+            Bound::new(
+                py,
+                native.get().with_target_defaults(
+                    py,
+                    defaults.pair()?,
+                    defaults.render_qualified_name.clone(),
+                )?,
             )?
+            .into_any()
         } else {
             replace.call(
                 (&seed,),
@@ -88,14 +99,22 @@ pub(crate) fn apply_target_defaults<'py>(
     }
     let mut functions: Vec<Bound<'py, PyAny>> = Vec::new();
     for function in project.getattr("functions")?.try_iter()? {
-        functions.push(function?.call_method1(
-            "with_target_defaults",
-            (
-                defaults.pair()?,
-                &defaults.render_qualified_name,
-                &defaults.python_functions_inherit_default_namespace,
-            ),
-        )?);
+        let function: Bound<'py, PyAny> = function?;
+        let native: &Bound<'py, NativeCompiledFunction> = function.cast()?;
+        functions.push(
+            Bound::new(
+                py,
+                native.get().with_target_defaults(
+                    py,
+                    defaults.pair()?,
+                    defaults.render_qualified_name.clone(),
+                    defaults
+                        .python_functions_inherit_default_namespace
+                        .extract()?,
+                )?,
+            )?
+            .into_any(),
+        );
     }
     project_with(
         &project.clone(),

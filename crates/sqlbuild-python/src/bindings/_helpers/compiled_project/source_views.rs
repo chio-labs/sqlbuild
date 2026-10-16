@@ -11,6 +11,7 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
     InputViewClasses, view_classes,
 };
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::graph::project_graph::ResourceRow;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 const SOURCE_RESOURCE: &str = "source";
@@ -184,7 +185,7 @@ impl NativeSourceInput {
             let attached: &AttachedSource = &source.attached;
             Ok((
                 attached.name.clone(),
-                !native_field(attached.entry.bind(py), "loader")?.is_none(),
+                !native_field(&attached.entry.bind(py), "loader")?.is_none(),
                 attached.database.clone(),
                 attached.schema.clone(),
             ))
@@ -202,6 +203,18 @@ pub(crate) struct NativeCompiledSource {
 impl NativeCompiledSource {
     pub(crate) fn new(owner: Py<NativeCompiledProject>, index: usize) -> Self {
         Self { owner, index }
+    }
+
+    /// The source's project graph row: its key, with no dependencies, tags or folder.
+    pub(crate) fn graph_row(&self, py: Python<'_>) -> PyResult<ResourceRow> {
+        read_source(&self.owner, self.index, py, |source, _| {
+            Ok((
+                (SOURCE_RESOURCE.to_owned(), source.attached.name.clone()),
+                Vec::new(),
+                Vec::new(),
+                None,
+            ))
+        })
     }
 }
 

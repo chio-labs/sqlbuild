@@ -14,8 +14,10 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
     InputViewClasses, view_classes,
 };
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::graph::project_graph::ResourceRow;
 
 const SEED_RESOURCE: &str = "seed";
+const TAGS_ATTRIBUTE: &str = "tags";
 const NAME_ATTRIBUTE: &str = "name";
 const FILE_PATH_ATTRIBUTE: &str = "file_path";
 const STEM_ATTRIBUTE: &str = "stem";
@@ -192,6 +194,27 @@ impl NativeCompiledSeed {
         }
     }
 
+    /// The seed's project graph row: its key and its declared tags.
+    pub(crate) fn graph_row(&self, py: Python<'_>) -> PyResult<ResourceRow> {
+        read_seed(&self.owner, self.index, py, |seed, py| {
+            let mut tags: Vec<String> = Vec::new();
+            for tag in seed
+                .schema_entry
+                .bind(py)
+                .getattr(TAGS_ATTRIBUTE)?
+                .try_iter()?
+            {
+                tags.push(tag?.str()?.extract()?);
+            }
+            Ok((
+                (SEED_RESOURCE.to_owned(), seed.name.clone()),
+                Vec::new(),
+                tags,
+                None,
+            ))
+        })
+    }
+
     fn current_destination(&self, py: Python<'_>) -> PyResult<DestinationFact> {
         if let Some(defaulted) = &self.defaulted {
             return Ok(defaulted.clone());
@@ -262,7 +285,7 @@ impl NativeCompiledSeed {
     }
 
     /// This seed with the adapter's default schema and database filled into its destination.
-    fn with_target_defaults(
+    pub(crate) fn with_target_defaults(
         &self,
         py: Python<'_>,
         defaults: (Option<String>, Option<String>),

@@ -806,7 +806,7 @@ impl NativeCompiledModel {
     }
 
     /// This model with the adapter's default schema and database filled into its destination.
-    fn with_target_defaults(
+    pub(crate) fn with_target_defaults(
         &self,
         py: Python<'_>,
         defaults: (Option<String>, Option<String>),
