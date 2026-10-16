@@ -5,7 +5,6 @@ use std::fs::{File, OpenOptions};
 use std::io::{ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 
-use crate::artifacts::constants::NEW_FILE_MODE;
 use crate::artifacts::errors::ArtifactError;
 use crate::artifacts::models::{Publication, WrittenArtifacts};
 
@@ -261,7 +260,9 @@ fn copy_new_file(source: &Path, path: &Path) -> std::io::Result<()> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let _ = builder.permissions(std::fs::Permissions::from_mode(NEW_FILE_MODE));
+        let _ = builder.permissions(std::fs::Permissions::from_mode(
+            crate::artifacts::constants::NEW_FILE_MODE,
+        ));
     }
     let mut temporary = builder.tempfile_in(directory)?;
     temporary.write_all(&std::fs::read(source)?)?;
