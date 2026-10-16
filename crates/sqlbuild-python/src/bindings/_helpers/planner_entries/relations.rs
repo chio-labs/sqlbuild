@@ -1,7 +1,9 @@
 //! Relation locations and source metadata for plan entry construction.
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
-use crate::bindings::_helpers::planner_entries::models::RelationsRequest;
+use crate::bindings::_helpers::planner_entries::models::{
+    PlannerRelationsContext, RelationsRequest,
+};
 use crate::bindings::_helpers::planner_entries::values::{native, none, planner_model};
 use crate::bindings::_helpers::planner_strategy::audit_entries::audit_is_selected;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
@@ -192,24 +194,21 @@ pub(crate) fn planner_relations_context<'py>(
             ("columns", columns),
         ],
     )?;
-    planner_model(
+    Ok(Bound::new(
         py,
-        RecordId::PlannerRelationsContext,
-        &[
-            ("model_locations", model_locations),
-            ("seed_locations", seed_locations),
-            ("function_locations", function_locations),
-            ("source_map", source_map),
-            ("source_read_map", source_read_map),
-            ("python_source_read_map", python_source_read_map),
-            ("source_warehouse_columns", semantic_columns),
-            (
-                "star_exclude_keyword",
-                adapter.call_method0("star_exclude_keyword")?,
-            ),
-            ("listed_source_names", listed_source_names),
-        ],
-    )
+        PlannerRelationsContext {
+            model_locations: model_locations.unbind(),
+            seed_locations: seed_locations.unbind(),
+            function_locations: function_locations.unbind(),
+            source_map: source_map.unbind(),
+            source_read_map: source_read_map.unbind(),
+            python_source_read_map: python_source_read_map.unbind(),
+            source_warehouse_columns: semantic_columns.unbind(),
+            star_exclude_keyword: adapter.call_method0("star_exclude_keyword")?.unbind(),
+            listed_source_names: listed_source_names.unbind(),
+        },
+    )?
+    .into_any())
 }
 
 /// Resolve relation locations and source metadata for plan entry construction.

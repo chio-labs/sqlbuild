@@ -2,6 +2,7 @@
 
 mod clone_plans;
 mod command_plans;
+pub(crate) mod contexts;
 mod display_plan;
 mod execution_plan;
 pub(crate) mod model_entries;

@@ -10,6 +10,8 @@ use crate::bindings::_helpers::cursor::values::{local_date_time, replaced};
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::planner_entries::models::ModelPlanContext;
+use crate::bindings::_helpers::planner_phases::contexts::class_field;
 use crate::bindings::_helpers::planner_resolution::cursor_bounds::duration;
 use crate::bindings::_helpers::planner_resolution::cursor_policies::{
     future_cursor_config, start_cursor_config,
@@ -526,8 +528,14 @@ pub(crate) fn cursor_safety_configs<'py>(
     context: &Bound<'py, PyAny>,
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     Ok((
-        future_cursor_config(model, &context.getattr("future_cursor_config")?)?,
-        start_cursor_config(model, &context.getattr("start_cursor_config")?)?,
+        future_cursor_config(
+            model,
+            &class_field(context, |c: &ModelPlanContext| &c.future_cursor_config)?,
+        )?,
+        start_cursor_config(
+            model,
+            &class_field(context, |c: &ModelPlanContext| &c.start_cursor_config)?,
+        )?,
     ))
 }
 

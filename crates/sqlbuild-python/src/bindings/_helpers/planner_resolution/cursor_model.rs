@@ -8,6 +8,8 @@ use crate::bindings::_helpers::model_config::config_values::{
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::planner_entries::models::ModelPlanContext;
+use crate::bindings::_helpers::planner_phases::contexts::class_field;
 use crate::bindings::_helpers::planner_resolution::constants::CURSOR_START;
 use crate::bindings::_helpers::planner_resolution::cursor_policies::{
     future_cursor_config, start_cursor_config,
@@ -76,8 +78,14 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
         return Ok(py.None().into_bound(py));
     }
     let incremental_mode = config(&model, "incremental_mode")?;
-    let future_config = future_cursor_config(&model, &context.getattr("future_cursor_config")?)?;
-    let start_config = start_cursor_config(&model, &context.getattr("start_cursor_config")?)?;
+    let future_config = future_cursor_config(
+        &model,
+        &class_field(context, |c: &ModelPlanContext| &c.future_cursor_config)?,
+    )?;
+    let start_config = start_cursor_config(
+        &model,
+        &class_field(context, |c: &ModelPlanContext| &c.start_cursor_config)?,
+    )?;
     if incremental_mode.eq("microbatch")? {
         return unbounded(py);
     }
@@ -104,7 +112,9 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
         &registry::native(py, NativeAttr::ResolveCursorInputRoles)?,
         &[("model", model.clone())],
     )?;
-    let producers = context.getattr("runtime_cursor_producer_names")?;
+    let producers = class_field(context, |c: &ModelPlanContext| {
+        &c.runtime_cursor_producer_names
+    })?;
     let mut runtime_owned = false;
     for name in roles.getattr("watermark_inputs")?.try_iter()? {
         if producers.contains(name?)? {
@@ -196,7 +206,10 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
         &registry::class(py, RecordId::MaximumStartPolicyInputs)?,
         &[
             ("config", start_config),
-            ("invocation_time", context.getattr("invocation_time")?),
+            (
+                "invocation_time",
+                class_field(context, |c: &ModelPlanContext| &c.invocation_time)?,
+            ),
             (
                 "incremental_strategy",
                 config(&model, "incremental_strategy")?,
@@ -232,7 +245,10 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
             ("cursor_type", cursor_type),
             ("cursor_grain", cursor_grain),
             ("config", future_config),
-            ("invocation_time", context.getattr("invocation_time")?),
+            (
+                "invocation_time",
+                class_field(context, |c: &ModelPlanContext| &c.invocation_time)?,
+            ),
             (
                 "has_complete_override",
                 (!start_override.is_none() && !end_override.is_none())

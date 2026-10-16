@@ -51,3 +51,20 @@ pub(crate) struct PlannerWarehouseState {
     pub(crate) old_name_views: Py<PyAny>,
     pub(crate) migration_fingerprints: Py<PyAny>,
 }
+
+/// Resolved planner scopes for one plan build.
+#[pyclass(module = "sqlbuild._native", frozen, get_all)]
+#[derive(Debug)]
+pub(crate) struct PlannerScopeResolution {
+    pub(crate) selected_scope: Py<PyAny>,
+    pub(crate) stale_warning_scope: Py<PyAny>,
+    pub(crate) inspection_scope: Py<PyAny>,
+}
+
+/// Expected version identities for inspection and stale-warning scopes.
+#[pyclass(module = "sqlbuild._native", frozen, get_all)]
+#[derive(Debug)]
+pub(crate) struct PlannerIdentityContext {
+    pub(crate) version_identities: Py<PyAny>,
+    pub(crate) stale_warning_identities: Py<PyAny>,
+}

@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::planner_entries::models::ModelPlanContext;
 use crate::bindings::_helpers::planner_entries::values::{
     native, planner_model, planner_type, string,
 };
@@ -190,26 +191,24 @@ fn clone_model_entries<'py>(
                 let function = function?;
                 functions.set_item(function.getattr("name")?, function)?;
             }
-            let context = native(
+            let context = Bound::new(
                 py,
-                RecordId::ModelPlanContext,
-                &[
-                    ("model_locations", resolution.model_locations.clone()),
-                    ("models_by_name", PyDict::new(py).into_any()),
-                    ("functions_by_name", functions.into_any()),
-                    ("seed_locations", resolution.seed_locations.clone()),
-                    ("function_locations", resolution.function_locations.clone()),
-                    ("source_map", resolution.source_map.clone()),
-                    (
-                        "source_warehouse_columns",
-                        resolution.source_warehouse_columns.clone(),
-                    ),
-                    (
-                        "star_exclude_keyword",
-                        adapter.call_method0("star_exclude_keyword")?,
-                    ),
-                ],
-            )?;
+                ModelPlanContext {
+                    model_locations: resolution.model_locations.clone().unbind(),
+                    models_by_name: PyDict::new(py).into_any().unbind(),
+                    functions_by_name: functions.into_any().unbind(),
+                    seed_locations: resolution.seed_locations.clone().unbind(),
+                    function_locations: resolution.function_locations.clone().unbind(),
+                    source_map: resolution.source_map.clone().unbind(),
+                    source_warehouse_columns: resolution.source_warehouse_columns.clone().unbind(),
+                    star_exclude_keyword: adapter.call_method0("star_exclude_keyword")?.unbind(),
+                    runtime_cursor_producer_names: PyFrozenSet::empty(py)?.into_any().unbind(),
+                    future_cursor_config: py.None(),
+                    start_cursor_config: py.None(),
+                    invocation_time: py.None(),
+                },
+            )?
+            .into_any();
             let sql = resolve_model_sql(
                 &Resolution::of_context(adapter.clone(), &context, py.None().into_bound(py))?,
                 &context,

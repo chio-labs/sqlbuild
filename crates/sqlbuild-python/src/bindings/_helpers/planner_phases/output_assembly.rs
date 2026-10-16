@@ -4,6 +4,9 @@ use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::planner_entries::models::PlanOutputInputs;
 use crate::bindings::_helpers::planner_entries::plan_output::plan_output_fields;
+use crate::bindings::_helpers::planner_phases::contexts::class_field;
+use crate::bindings::_helpers::planner_phases::models::PlannerIdentityContext;
+use crate::bindings::_helpers::planner_phases::models::PlannerScopeResolution;
 use crate::bindings::_helpers::planner_phases::models::{
     ChangeReconciliation, ModelEntryResults, PlanOutputFields,
 };
@@ -75,7 +78,9 @@ pub(crate) fn base_plan_output<'py>(
     planned_sql_tests: &Bound<'py, PyAny>,
 ) -> PyResult<PlanOutputFields<'py>> {
     let py = runtime.py();
-    let version = identities.getattr("version_identities")?;
+    let version = class_field(identities, |i: &PlannerIdentityContext| {
+        &i.version_identities
+    })?;
     let extras = native(
         py,
         RecordId::PlanOutputExtras,
@@ -206,7 +211,7 @@ pub(crate) fn add_storage_policies<'py>(
             output.field("warnings")?,
         ],
     )?;
-    let selected = scopes.getattr("selected_scope")?;
+    let selected = class_field(scopes, |s: &PlannerScopeResolution| &s.selected_scope)?;
     let storage = [
         ("runtime", runtime.clone()),
         ("warehouse", warehouse.clone()),
@@ -249,8 +254,14 @@ pub(crate) fn add_plan_warnings<'py>(
         py,
         NativeAttr::BuildStaleOutOfSelectionWarnings,
         &[
-            ("original_scope", scopes.getattr("stale_warning_scope")?),
-            ("execution_scope", scopes.getattr("inspection_scope")?),
+            (
+                "original_scope",
+                class_field(scopes, |s: &PlannerScopeResolution| &s.stale_warning_scope)?,
+            ),
+            (
+                "execution_scope",
+                class_field(scopes, |s: &PlannerScopeResolution| &s.inspection_scope)?,
+            ),
             ("changes", stale_warning_changes.clone()),
             (
                 "snapshot",
@@ -258,7 +269,9 @@ pub(crate) fn add_plan_warnings<'py>(
             ),
             (
                 "version_identities",
-                identities.getattr("stale_warning_identities")?,
+                class_field(identities, |i: &PlannerIdentityContext| {
+                    &i.stale_warning_identities
+                })?,
             ),
             ("source_freshness", source_freshness.clone()),
             (

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 import pytest
 
 from sqlbuild._native import (
@@ -25,8 +23,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve.helpers import (
 )
 
 _PYTHON_HOOK: PythonHookEntry = PythonHookEntry(name="refresh_lookup", kwargs={})
-_CONTEXT: ModelPlanContext = replace(
-    build_empty_model_plan_context(),
+_CONTEXT: ModelPlanContext = build_empty_model_plan_context(
     model_locations={"orders": build_target("staging.orders", "orders")},
     seed_locations={"country_codes": build_target("seeds.country_codes", "country_codes")},
     source_map={"raw_orders": SourceEntry(name="raw_orders", schema="raw_prod", table="orders")},

@@ -1,6 +1,8 @@
 //! Selected-scope buildability validation before change planning.
 
 use crate::bindings::_helpers::planner_phases::constants::MISSING_UPSTREAM_CODE;
+use crate::bindings::_helpers::planner_phases::contexts::class_field;
+use crate::bindings::_helpers::planner_phases::models::PlannerScopeResolution;
 use crate::bindings::_helpers::planner_phases::objects::{frozenset, native, planner_error};
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::planner_phases::runtime::warehouse_field;
@@ -19,7 +21,7 @@ pub(crate) fn check_selected_scope_buildability<'py>(
 ) -> PyResult<()> {
     let py = runtime.py();
     let project = runtime_field(runtime, |runtime| &runtime.project)?;
-    let selected_scope = scopes.getattr("selected_scope")?;
+    let selected_scope = class_field(scopes, |s: &PlannerScopeResolution| &s.selected_scope)?;
     let mut external_seeds: Vec<_> = Vec::new();
     for seed in project.getattr("seeds")?.try_iter()? {
         let seed = seed?;

@@ -1,8 +1,9 @@
 //! Resolve the selected, stale-warning and inspection scopes of one plan.
 
 use crate::bindings::_helpers::analysis::model_reads;
+use crate::bindings::_helpers::planner_phases::models::PlannerScopeResolution;
 use crate::bindings::_helpers::planner_phases::objects::{native, replace, tuple};
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::NativeAttr;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
@@ -91,13 +92,13 @@ pub(crate) fn resolve_planner_scopes<'py>(
             ),
         ],
     )?;
-    native(
+    Ok(Bound::new(
         py,
-        RecordId::PlannerScopeResolution,
-        &[
-            ("selected_scope", selected.clone()),
-            ("stale_warning_scope", stale_scope),
-            ("inspection_scope", selected),
-        ],
-    )
+        PlannerScopeResolution {
+            selected_scope: selected.clone().unbind(),
+            stale_warning_scope: stale_scope.unbind(),
+            inspection_scope: selected.unbind(),
+        },
+    )?
+    .into_any())
 }

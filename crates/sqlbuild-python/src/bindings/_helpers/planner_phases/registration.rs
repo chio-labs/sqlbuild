@@ -6,6 +6,8 @@ use pyo3::wrap_pyfunction;
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<super::models::PlannerRuntime>()?;
     module.add_class::<super::models::PlannerWarehouseState>()?;
+    module.add_class::<super::models::PlannerScopeResolution>()?;
+    module.add_class::<super::models::PlannerIdentityContext>()?;
     module.add_function(wrap_pyfunction!(
         super::scopes::resolve_planner_scopes,
         module

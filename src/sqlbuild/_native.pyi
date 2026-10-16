@@ -980,7 +980,7 @@ class UnitTestSelectorSplit(NativeRecord):
     ) -> None: ...
     def __replace__(self, **changes: Any) -> UnitTestSelectorSplit: ...
 
-class ModelPlanContext(NativeRecord):
+class ModelPlanContext:
     """Relation lookups and source columns for building one model plan entry."""
 
     model_locations: dict[str, CompiledRelationLocation]
@@ -997,6 +997,7 @@ class ModelPlanContext(NativeRecord):
     invocation_time: datetime | None
     def __init__(
         self,
+        *,
         model_locations: dict[str, CompiledRelationLocation],
         models_by_name: dict[str, CompiledModelView],
         seed_locations: dict[str, CompiledRelationLocation],
@@ -1010,7 +1011,6 @@ class ModelPlanContext(NativeRecord):
         start_cursor_config: StartCursorsConfig | None = ...,
         invocation_time: datetime | None = ...,
     ) -> None: ...
-    def __replace__(self, **changes: Any) -> ModelPlanContext: ...
 
 class CursorOverridePair(NativeRecord):
     """Resolved per-model cursor start/end overrides for plan entry construction."""
@@ -1022,7 +1022,7 @@ class CursorOverridePair(NativeRecord):
     ) -> None: ...
     def __replace__(self, **changes: Any) -> CursorOverridePair: ...
 
-class PlanEntryBuildInputs(NativeRecord):
+class PlanEntryBuildInputs:
     """Blocked models and cursor overrides for plan entry building."""
 
     source_freshness_blocked_model_names: frozenset[str]
@@ -1037,6 +1037,7 @@ class PlanEntryBuildInputs(NativeRecord):
     microbatch_limit_action: MicrobatchLimitAction
     def __init__(
         self,
+        *,
         source_freshness_blocked_model_names: frozenset[str] = ...,
         external_blocked_model_names: frozenset[str] = ...,
         start_cursor_override: str | None = ...,
@@ -1048,7 +1049,6 @@ class PlanEntryBuildInputs(NativeRecord):
         max_microbatches_is_override: bool = ...,
         microbatch_limit_action: MicrobatchLimitAction = ...,
     ) -> None: ...
-    def __replace__(self, **changes: Any) -> PlanEntryBuildInputs: ...
 
 class FunctionChangeResult(NativeRecord):
     """Per-function output from change detection."""
@@ -1340,7 +1340,7 @@ class PlannerRuntime:
         invocation_time: datetime = ...,
     ) -> None: ...
 
-class PlannerScopeResolution(NativeRecord):
+class PlannerScopeResolution:
     """Resolved planner scopes for one plan build."""
 
     selected_scope: PlannerScope
@@ -1348,11 +1348,11 @@ class PlannerScopeResolution(NativeRecord):
     inspection_scope: PlannerScope
     def __init__(
         self,
+        *,
         selected_scope: PlannerScope,
         stale_warning_scope: PlannerScope,
         inspection_scope: PlannerScope,
     ) -> None: ...
-    def __replace__(self, **changes: Any) -> PlannerScopeResolution: ...
 
 class PlannerWarehouseState:
     """Warehouse snapshot and inspection relations gathered once per plan."""
@@ -1435,17 +1435,17 @@ class MigrationCompatibilityResult(NativeRecord):
     def __init__(self, status: MigrationCompatibility, findings: tuple[str, ...] = ...) -> None: ...
     def __replace__(self, **changes: Any) -> MigrationCompatibilityResult: ...
 
-class PlannerIdentityContext(NativeRecord):
+class PlannerIdentityContext:
     """Expected version identities for inspection and stale-warning scopes."""
 
     version_identities: DirectModelVersionIdentities
     stale_warning_identities: DirectModelVersionIdentities
     def __init__(
         self,
+        *,
         version_identities: DirectModelVersionIdentities,
         stale_warning_identities: DirectModelVersionIdentities,
     ) -> None: ...
-    def __replace__(self, **changes: Any) -> PlannerIdentityContext: ...
 
 class NativeModelInput:
     @property
@@ -12300,7 +12300,7 @@ class PlannerScope(NativeRecord):
         sql_test_selection: SqlTestSelection = ...,
     ) -> None: ...
 
-class PlannerRelationsContext(NativeRecord):
+class PlannerRelationsContext:
     """Resolved relation and source inputs for plan entry construction."""
 
     model_locations: dict[str, CompiledRelationLocation]
@@ -12314,6 +12314,7 @@ class PlannerRelationsContext(NativeRecord):
     listed_source_names: frozenset[str]
     def __init__(
         self,
+        *,
         model_locations: dict[str, CompiledRelationLocation],
         seed_locations: dict[str, CompiledRelationLocation],
         function_locations: dict[str, CompiledRelationLocation],

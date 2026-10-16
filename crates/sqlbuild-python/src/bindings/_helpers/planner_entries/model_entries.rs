@@ -3,11 +3,14 @@
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::planner_changes::actions::replaces_incremental_relation;
-use crate::bindings::_helpers::planner_entries::models::PlanEntriesRequest;
+use crate::bindings::_helpers::planner_entries::models::{
+    ModelPlanContext, PlanEntriesRequest, PlanEntryBuildInputs, PlannerRelationsContext,
+};
 use crate::bindings::_helpers::planner_entries::values::{
     COMPILE_TYPES, MICROBATCH_CONCURRENCY_MESSAGE, error_of, native, none, planner_type, replaced,
     string,
 };
+use crate::bindings::_helpers::planner_phases::contexts::class_field;
 use crate::bindings::_helpers::planner_phases::full_refresh::{
     check_full_rebuild_allowed, describe_full_rebuild_cause, resolve_model_full_refresh,
 };
@@ -36,7 +39,7 @@ use crate::bindings::_helpers::planner_strategy::strategy::{
 use crate::bindings::_helpers::planner_strategy::values::text;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 
@@ -56,18 +59,21 @@ impl<'py> ContextReads<'py> {
         adapter: Bound<'py, PyAny>,
         external_resolver: Bound<'py, PyAny>,
     ) -> PyResult<Self> {
+        let py = context.py();
+        let fields = context.cast::<ModelPlanContext>()?.get();
+        let field = |value: &Py<PyAny>| value.bind(py).clone();
         Ok(Self {
             lookups: CursorInputLookups {
-                models_by_name: context.getattr("models_by_name")?,
-                functions_by_name: context.getattr("functions_by_name")?,
-                source_map: context.getattr("source_map")?,
-                source_warehouse_columns: context.getattr("source_warehouse_columns")?,
-                model_locations: context.getattr("model_locations")?,
-                seed_locations: context.getattr("seed_locations")?,
-                runtime_cursor_producer_names: context.getattr("runtime_cursor_producer_names")?,
+                models_by_name: field(&fields.models_by_name),
+                functions_by_name: field(&fields.functions_by_name),
+                source_map: field(&fields.source_map),
+                source_warehouse_columns: field(&fields.source_warehouse_columns),
+                model_locations: field(&fields.model_locations),
+                seed_locations: field(&fields.seed_locations),
+                runtime_cursor_producer_names: field(&fields.runtime_cursor_producer_names),
             },
             resolution: Resolution::of_context(adapter, &context, external_resolver)?,
-            invocation_time: context.getattr("invocation_time")?,
+            invocation_time: field(&fields.invocation_time),
             context,
         })
     }
@@ -227,7 +233,12 @@ fn check_binding_diagnostics<'py>(
         NativeAttr::SourceBindingDiagnostics,
         &[
             ("project", project.clone()),
-            ("columns", relations.getattr("source_warehouse_columns")?),
+            (
+                "columns",
+                class_field(relations, |context: &PlannerRelationsContext| {
+                    &context.source_warehouse_columns
+                })?,
+            ),
             (
                 "profile",
                 adapter.call_method0("expression_inference_profile")?,
@@ -385,22 +396,24 @@ pub(crate) fn plan_entries<'py>(
     } = request;
     let py = project.py();
     let inputs = if inputs.is_none() {
-        native(py, RecordId::PlanEntryBuildInputs, &[])?
+        Bound::new(py, PlanEntryBuildInputs::new(py, None)?)?.into_any()
     } else {
         inputs
     };
+    let build = inputs.cast::<PlanEntryBuildInputs>()?.get();
+    let relations_context = relations.cast::<PlannerRelationsContext>()?.get();
     let selected_keys = scope.getattr("selected_keys")?;
     check_binding_diagnostics(&project, &adapter, &relations, &selected_keys)?;
-    let freshness_blocked = inputs.getattr("source_freshness_blocked_model_names")?;
-    let external_blocked = inputs.getattr("external_blocked_model_names")?;
-    let start_override = inputs.getattr("start_cursor_override")?;
-    let end_override = inputs.getattr("end_cursor_override")?;
+    let freshness_blocked = build.source_freshness_blocked_model_names.bind(py).clone();
+    let external_blocked = build.external_blocked_model_names.bind(py).clone();
+    let start_override = build.start_cursor_override.bind(py).clone();
+    let end_override = build.end_cursor_override.bind(py).clone();
     let producers = native(
         py,
         NativeAttr::RuntimeCursorProducerNames,
         &[
             ("scope", scope.clone()),
-            ("source_map", relations.getattr("source_map")?),
+            ("source_map", relations_context.source_map.bind(py).clone()),
         ],
     )?;
     let functions_by_name = PyDict::new(py);
@@ -410,39 +423,24 @@ pub(crate) fn plan_entries<'py>(
     }
     let settings = project.getattr("settings")?;
     let models_by_name = scope.getattr("models_by_name")?;
-    let context = native(
+    let context = Bound::new(
         py,
-        RecordId::ModelPlanContext,
-        &[
-            ("model_locations", relations.getattr("model_locations")?),
-            ("models_by_name", models_by_name.clone()),
-            ("functions_by_name", functions_by_name.into_any()),
-            ("seed_locations", relations.getattr("seed_locations")?),
-            (
-                "function_locations",
-                relations.getattr("function_locations")?,
-            ),
-            ("source_map", relations.getattr("source_read_map")?),
-            (
-                "source_warehouse_columns",
-                relations.getattr("source_warehouse_columns")?,
-            ),
-            (
-                "star_exclude_keyword",
-                relations.getattr("star_exclude_keyword")?,
-            ),
-            ("runtime_cursor_producer_names", producers),
-            (
-                "future_cursor_config",
-                inputs.getattr("future_cursor_config")?,
-            ),
-            (
-                "start_cursor_config",
-                inputs.getattr("start_cursor_config")?,
-            ),
-            ("invocation_time", inputs.getattr("invocation_time")?),
-        ],
-    )?;
+        ModelPlanContext {
+            model_locations: relations_context.model_locations.clone_ref(py),
+            models_by_name: models_by_name.clone().unbind(),
+            functions_by_name: functions_by_name.into_any().unbind(),
+            seed_locations: relations_context.seed_locations.clone_ref(py),
+            function_locations: relations_context.function_locations.clone_ref(py),
+            source_map: relations_context.source_read_map.clone_ref(py),
+            source_warehouse_columns: relations_context.source_warehouse_columns.clone_ref(py),
+            star_exclude_keyword: relations_context.star_exclude_keyword.clone_ref(py),
+            runtime_cursor_producer_names: producers.unbind(),
+            future_cursor_config: build.future_cursor_config.clone_ref(py),
+            start_cursor_config: build.start_cursor_config.clone_ref(py),
+            invocation_time: build.invocation_time.clone_ref(py),
+        },
+    )?
+    .into_any();
     let reads = ContextReads::of(
         context,
         adapter.clone(),

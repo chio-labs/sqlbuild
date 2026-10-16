@@ -5,6 +5,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::compiled_project::loop_classes::by_attribute;
+use crate::bindings::_helpers::planner_entries::models::ModelPlanContext;
 use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_INVALID_FIXTURE;
 use crate::bindings::_helpers::planner_scenario::{
     entries::{function_entry, seed_entries},
@@ -18,7 +19,7 @@ use crate::bindings::_helpers::planner_strategy::fixture_context::planning_conte
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
-use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
+use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PyTuple};
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
@@ -250,31 +251,30 @@ fn model_context<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let (models, locations, columns) = inputs;
     let py = project.py();
-    call_with(
-        &registry::class(py, RecordId::ModelPlanContext)?,
-        &[
-            (
-                "model_locations",
-                context.relations.getattr("model_locations")?,
-            ),
-            ("models_by_name", models.clone().into_any()),
-            (
-                "functions_by_name",
-                by_attribute(&project.getattr("functions")?, "name")?.into_any(),
-            ),
-            (
-                "seed_locations",
-                context.relations.getattr("seed_locations")?,
-            ),
-            ("function_locations", locations.clone()),
-            ("source_map", context.relations.getattr("source_map")?),
-            ("source_warehouse_columns", columns.clone()),
-            (
-                "star_exclude_keyword",
-                context.adapter.call_method0("star_exclude_keyword")?,
-            ),
-        ],
-    )
+    let none = || py.None();
+    Ok(Bound::new(
+        py,
+        ModelPlanContext {
+            model_locations: context.relations.getattr("model_locations")?.unbind(),
+            models_by_name: models.clone().into_any().unbind(),
+            functions_by_name: by_attribute(&project.getattr("functions")?, "name")?
+                .into_any()
+                .unbind(),
+            seed_locations: context.relations.getattr("seed_locations")?.unbind(),
+            function_locations: locations.clone().unbind(),
+            source_map: context.relations.getattr("source_map")?.unbind(),
+            source_warehouse_columns: columns.clone().unbind(),
+            star_exclude_keyword: context
+                .adapter
+                .call_method0("star_exclude_keyword")?
+                .unbind(),
+            runtime_cursor_producer_names: PyFrozenSet::empty(py)?.into_any().unbind(),
+            future_cursor_config: none(),
+            start_cursor_config: none(),
+            invocation_time: none(),
+        },
+    )?
+    .into_any())
 }
 
 fn expectations<'py>(
