@@ -21,13 +21,17 @@ use sqlbuild_core::janitor_text::main::render_janitor_plan::render_janitor_plan;
 use sqlbuild_core::janitor_text::main::validate_janitor_settings::validate_janitor_settings;
 use sqlbuild_core::janitor_text::models::JanitorPlanText;
 
+use crate::bindings::_helpers::command_runtime::preview_target::validate_preview_target;
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
 use crate::bindings::_helpers::janitor::janitor_phases::{
     JanitorCompiled, build_janitor_execution_plan, close_janitor_warehouse,
     compile_janitor_project, connect_janitor_warehouse, execute_janitor_cleanup,
 };
 use crate::bindings::_helpers::janitor::janitor_plan::{janitor_plan_text, janitor_result_counts};
+use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
 const COMMAND_NAME: &str = "janitor";
@@ -77,31 +81,25 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Bou
         directory if !directory.is_none() => directory,
         _ => py.import("pathlib")?.getattr("Path")?.call_method0("cwd")?,
     };
-    let discovered: Bound<'py, PyAny> = registry::native(py, NativeAttr::DiscoverProjectInputs)?
-        .call((), Some(&keywords(py, &[("project_dir", &project_dir)])?))?;
+    let discovered: Bound<'py, PyAny> =
+        discover_project_inputs(py, Some(keywords(py, &[("project_dir", &project_dir)])?))?;
     let as_target: Bound<'py, PyAny> = request.getattr("as_target")?;
-    let preview: Bound<'py, PyDict> = keywords(
+    validate_preview_target(
         py,
-        &[
-            ("discovered_inputs", &discovered),
-            ("as_target", &as_target),
-        ],
+        discovered.clone(),
+        as_target.extract::<Option<String>>()?,
+        COMMAND_NAME.to_owned(),
     )?;
-    preview.set_item("command_name", COMMAND_NAME)?;
-    registry::native(py, NativeAttr::ValidatePreviewTarget)?.call((), Some(&preview))?;
     let selected_target: Bound<'py, PyAny> = request.getattr("selected_target")?;
-    let active_target: Bound<'py, PyAny> = registry::native(py, NativeAttr::ResolveTargetName)?
-        .call(
-            (),
-            Some(&keywords(
-                py,
-                &[
-                    ("project_config", &discovered.getattr("project_config")?),
-                    ("local_config", &discovered.getattr("local_config")?),
-                    ("selected_target", &selected_target),
-                ],
-            )?),
-        )?;
+    let active_target: Bound<'py, PyAny> = object(
+        py,
+        resolve_target_name(
+            py,
+            &discovered.getattr("project_config")?,
+            &discovered.getattr("local_config")?,
+            &selected_target,
+        )?,
+    )?;
     let use_color: bool =
         !request.getattr("no_color")?.extract::<bool>()? && stdout_supports_color(py)?;
     let options: Bound<'py, PyDict> = keywords(

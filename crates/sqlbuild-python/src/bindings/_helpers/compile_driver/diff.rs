@@ -13,11 +13,12 @@ use sqlbuild_analysis::diff_selection::main::resolve_diff_selection::resolve_dif
 use sqlbuild_analysis::diff_selection::models::DiffGraph;
 
 use crate::bindings::_helpers::analysis::model_reads;
+use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, keywords,
+    KeywordArguments, imported, keywords,
 };
 use crate::bindings::_helpers::graph::views::project_lineage_views;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
+use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
@@ -203,25 +204,27 @@ fn run_diff_pipeline<'py>(
             &["cli_vars", "external_sql_reference_resolver"],
         ),
     )?;
-    let build: Bound<'py, PyAny> = registry::native(py, NativeAttr::BuildCompiledProject)?;
     let compile = |target: &str| -> PyResult<Bound<'py, PyAny>> {
-        call_with(
-            &build,
-            &[
-                ("discovered_inputs", arguments.value("discovered_inputs")?),
-                ("adapter", arguments.value("adapter")?),
-                ("selected_target", arguments.value(target)?),
-                (
-                    "resolved_connection",
-                    arguments.value("resolved_connection")?,
-                ),
-                ("no_sql_validation", arguments.value("no_sql_validation")?),
-                ("cli_vars", arguments.value("cli_vars")?),
-                (
-                    "external_sql_reference_resolver",
-                    arguments.value("external_sql_reference_resolver")?,
-                ),
-            ],
+        build_compiled_project(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("discovered_inputs", arguments.value("discovered_inputs")?),
+                    ("adapter", arguments.value("adapter")?),
+                    ("selected_target", arguments.value(target)?),
+                    (
+                        "resolved_connection",
+                        arguments.value("resolved_connection")?,
+                    ),
+                    ("no_sql_validation", arguments.value("no_sql_validation")?),
+                    ("cli_vars", arguments.value("cli_vars")?),
+                    (
+                        "external_sql_reference_resolver",
+                        arguments.value("external_sql_reference_resolver")?,
+                    ),
+                ],
+            )?),
         )
     };
     let left: Bound<'py, PyAny> = compile("from_target")?;

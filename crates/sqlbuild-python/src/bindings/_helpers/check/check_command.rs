@@ -1,5 +1,7 @@
 //! `sqb check`: run the selected Python checks after their Python dependencies.
 
+use crate::bindings::_helpers::cli::progress::current_native_progress_projector;
+use crate::bindings::_helpers::cli::progress_text::write_execution_header;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::build_static_pipeline_result;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::relation_targets::build_project_relation_targets;
@@ -7,9 +9,11 @@ use crate::bindings::_helpers::compile_driver::relation_targets::build_python_re
 use crate::bindings::_helpers::compile_driver::selection_phases::compile_static_command_context;
 use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
 use crate::bindings::_helpers::graph::algorithms::transitive_closure_many;
+use crate::bindings::_helpers::graph::execution_gates::sql_ref_key;
 use crate::bindings::_helpers::graph::python_lifecycle::build_python_sql_run_lifecycle;
 use crate::bindings::_helpers::planner_entries::command_plans::build_relation_command_plan;
 use crate::bindings::_helpers::planner_phases::objects::object;
+use crate::bindings::_helpers::planner_selection::selectors::parse_project_selector;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
 use pyo3::prelude::{
@@ -82,12 +86,12 @@ fn empty_tuple(py: Python<'_>) -> Bound<'_, PyAny> {
 
 /// Refuse `+`, `~` and path selectors, splitting selectors as Python's `split` does.
 fn refuse_graph_selectors(py: Python<'_>, selectors: &[Bound<'_, PyAny>]) -> PyResult<()> {
-    let parse: Bound<'_, PyAny> = registry::native(py, NativeAttr::ParseProjectSelector)?;
     let path_selector: Bound<'_, PyAny> = registry::class(py, RecordId::PathSelector)?;
     for selector in selectors {
         for token in selector.call_method0("split")?.try_iter()? {
             for part in token?.call_method1("split", (",",))?.try_iter()? {
-                let parsed: Bound<'_, PyAny> = parse.call1((part?,))?;
+                let parsed: Bound<'_, PyAny> =
+                    parse_project_selector(part?.downcast::<PyString>()?)?;
                 if parsed.is_instance(&path_selector)?
                     || parsed.getattr("upstream")?.is_truthy()?
                     || parsed.getattr("downstream")?.is_truthy()?
@@ -197,10 +201,9 @@ fn compile_pipeline<'py>(
     let key_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledObjectKey)?;
     let source_type: Bound<'py, PyAny> =
         imported(py, COMPILE_TYPES, "CompiledResourceType")?.getattr("SOURCE")?;
-    let ref_key: Bound<'py, PyAny> = registry::native(py, NativeAttr::SqlRefKey)?;
     let mut keys: Vec<Bound<'py, PyAny>> = Vec::new();
     for reference in required_refs.try_iter()? {
-        keys.push(ref_key.call1((reference?,))?);
+        keys.push(sql_ref_key(py, &reference?)?);
     }
     for source_file in discovered.getattr("source_files")?.try_iter()? {
         for source in source_file?.getattr("source_entries")?.try_iter()? {
@@ -567,8 +570,7 @@ fn execute<'py>(
     let event_writer: Bound<'py, PyAny> =
         registry::native(py, NativeAttr::ExecutionEventWriter)?.call0()?;
     let executed: PyResult<Vec<Bound<'py, PyAny>>> = (|| {
-        let projector: Bound<'py, PyAny> =
-            registry::native(py, NativeAttr::CurrentNativeProgressProjector)?.call0()?;
+        let projector: Bound<'py, PyAny> = current_native_progress_projector(py)?;
         if !projector.is_none() {
             let ordinals: Bound<'py, PyDict> = PyDict::new(py);
             let mut total: usize = 0;
@@ -657,7 +659,7 @@ fn run_check_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32
     header.set_item("target", py.None())?;
     header.set_item("concurrency", PyInt::new(py, 1))?;
     header.set_item("use_color", invocation.getattr("use_color")?)?;
-    registry::native(py, NativeAttr::WriteExecutionHeader)?.call((), Some(&header))?;
+    write_execution_header(py, Some(header))?;
     let prepared: Prepared<'_> = prepare(request, &invocation)?;
     let session: Bound<'_, PyAny> = call_with(
         &host::entry(py, UserCodeHost::BuildProviderSession)?,

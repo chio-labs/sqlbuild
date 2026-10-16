@@ -14,10 +14,10 @@ use sqlbuild_core::check_command::models::{CheckGrouping, CheckResultText, Check
 use sqlbuild_core::cli_text::models::CliStyle;
 use sqlbuild_core::json::models::JsonValue;
 
+use crate::bindings::_helpers::cli::progress::current_native_progress_projector;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::result_output::integration_values::json_value;
+use crate::bindings::_helpers::result_output::terminal_index::current_terminal_event_index;
 
 const WARN_SEVERITY: &str = "warn";
 
@@ -124,8 +124,7 @@ pub(crate) fn write_results(
         let check: Bound<'_, PyAny> = check?;
         checks.insert(check.getattr("name")?.extract()?, check);
     }
-    let projector: Bound<'_, PyAny> =
-        registry::native(py, NativeAttr::CurrentNativeProgressProjector)?.call0()?;
+    let projector: Bound<'_, PyAny> = current_native_progress_projector(py)?;
     let mut groups: Vec<(String, Vec<CheckResultText>)> = Vec::new();
     for result in results {
         let text: CheckResultText = check_result_text(result)?;
@@ -169,8 +168,7 @@ pub(crate) fn results_json(results: &[Bound<'_, PyAny>]) -> PyResult<String> {
         return check_json(&[]).map_err(|error| PyValueError::new_err(format!("{error:?}")));
     };
     let py: Python<'_> = first.py();
-    let index: Bound<'_, PyAny> =
-        registry::native(py, NativeAttr::CurrentTerminalEventIndex)?.call0()?;
+    let index: Bound<'_, PyAny> = current_terminal_event_index(py)?;
     let mut texts: Vec<CheckResultText> = Vec::new();
     for result in results {
         let name: Bound<'_, PyAny> = result.getattr("node_name")?;

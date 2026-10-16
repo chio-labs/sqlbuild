@@ -9,8 +9,9 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_model_config::templates::main::deferred_target_segments::deferred_target_segments;
 use sqlbuild_model_config::templates::models::DeferredSegment;
 
+use crate::bindings::_helpers::authored_values::project_vars::render_project_var_text;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
 const PRESERVE_TARGET_VALUE: &str = "preserve";
@@ -150,24 +151,15 @@ fn target_field<'py>(
         .iter()
         .map(|key| (*key).to_owned())
         .collect();
-    let render: Bound<'py, PyAny> = registry::native(py, NativeAttr::RenderProjectVarText)?;
     let mut resolved: String = String::new();
     for segment in deferred_target_segments(&template, &logical, &context_keys, &variables) {
         match segment {
             DeferredSegment::Text(text) => resolved.push_str(&text),
             DeferredSegment::Variable(name) => {
-                let text: String = call_with(
-                    &render,
-                    &[
-                        ("value", effective_vars.get_item(name.as_str())?),
-                        (
-                            "label",
-                            PyString::new(py, &format!("deferred target variable '${{{name}}}'"))
-                                .into_any(),
-                        ),
-                    ],
-                )?
-                .extract()?;
+                let text: String = render_project_var_text(
+                    &effective_vars.get_item(name.as_str())?,
+                    &format!("deferred target variable '${{{name}}}'"),
+                )?;
                 resolved.push_str(&text);
             }
         }

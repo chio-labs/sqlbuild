@@ -4,11 +4,13 @@ use crate::bindings::_helpers::compile_driver::compile_timings::add_compile_timi
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_strategy::fixture_context::count_chain_resolution;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::models::SqlTestPlanOptions;
 use crate::bindings::_helpers::sql_test_glue::plan_values::tuple;
+use crate::bindings::_helpers::sql_test_glue::planning::resolve_compiled_sql_test_chains;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python, pyfunction};
 use pyo3::types::{PyBool, PyDict, PyTuple};
 
@@ -33,7 +35,10 @@ pub(super) fn chains<'py>(
             ),
         ],
     )?;
-    let native = registry::native(py, NativeAttr::ResolveCompiledSqlTestChains)?.call1((request,));
+    let native = request
+        .extract()
+        .and_then(|request| resolve_compiled_sql_test_chains(py, request))
+        .and_then(|chains| object(py, chains));
     let native = match native {
         Ok(value) => value,
         Err(error) if error.is_instance_of::<pyo3::exceptions::PyValueError>(py) => {
