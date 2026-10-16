@@ -183,8 +183,12 @@ fn normalize_hook_reads<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
     } else {
         value.try_iter()?.collect::<PyResult<_>>()?
     };
+    // Only the first non-reference item is checked, and a `None` there is tolerated, as before.
     for item in &reads {
         if !item.is_instance(&reference)? {
+            if item.is_none() {
+                break;
+            }
             let message: String = format!("{HOOK_READS_INVALID}{}", item.get_type().name()?);
             return Err(shared_input_error(py, &message));
         }
@@ -192,6 +196,9 @@ fn normalize_hook_reads<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
     let distinct: Bound<'py, PyDict> = PyDict::new(py);
     let mut ordered: Vec<Bound<'py, PyAny>> = Vec::new();
     for item in reads {
+        if !item.is_instance(&reference)? {
+            continue;
+        }
         if !distinct.contains(&item)? {
             distinct.set_item(&item, py.None())?;
             ordered.push(item);
