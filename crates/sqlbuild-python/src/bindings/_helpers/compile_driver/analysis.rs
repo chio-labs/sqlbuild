@@ -182,7 +182,7 @@ fn analyzed<'py>(
     let graph_failed: bool = any_error(&project.getattr("diagnostics")?)?;
     let mut early_lint_wait_ms: Bound<'py, PyAny> = 0_i64.into_pyobject(py)?.into_any();
     if graph_failed {
-        early_lint_wait_ms = early_lint.borrow().stop(py).into_pyobject(py)?.into_any();
+        early_lint_wait_ms = early_lint.borrow().stop(py)?.into_pyobject(py)?.into_any();
     }
     let (lineage, lineage_ms): (Bound<'py, PyAny>, u64) = driver.lineage(&graph, &dialect)?;
     let contracts: ContractPhase<'py> = driver.contracts(&project, &dialect)?;
@@ -210,7 +210,7 @@ fn analyzed<'py>(
             (&core_diagnostics, &selected_keys),
             &lint_dialect,
         )?;
-        early_lint_wait_ms = early_lint.borrow().stop(py).into_pyobject(py)?.into_any();
+        early_lint_wait_ms = early_lint.borrow().stop(py)?.into_pyobject(py)?.into_any();
         result
     };
     let diagnostics: Bound<'py, PyTuple> =

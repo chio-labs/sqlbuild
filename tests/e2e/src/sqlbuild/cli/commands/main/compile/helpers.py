@@ -4987,7 +4987,7 @@ _SLOW_LINT_MACRO: str = (
 
 
 def slow_lint_model_files(*, model_count: int) -> dict[str, str]:
-    """A macro used by a model, a function, and macro tests that only the background SQL lint expands."""
+    """A macro used by a model, a function, and macro tests only background SQL lint expands."""
 
     return {
         "macros/slow.py": _SLOW_LINT_MACRO,

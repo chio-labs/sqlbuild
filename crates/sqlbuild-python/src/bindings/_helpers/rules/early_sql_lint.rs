@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::thread::JoinHandle;
 
-use pyo3::exceptions::PyRuntimeError;
+use pyo3::exceptions::{PyException, PyRuntimeError};
 use pyo3::prelude::{
     Bound, IntoPyObject, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyRefMut,
     PyResult, Python,
@@ -172,6 +172,11 @@ impl PreparedSqlLint {
         same_codes(&self.codes, codes)
     }
 
+    /// Whether the lint's result is already known.
+    fn finished(&self) -> bool {
+        self.result.get().is_some()
+    }
+
     /// The lint's result, waiting without the GIL until it finishes or a signal handler raises.
     pub(crate) fn result(&self, py: Python<'_>) -> &Result<EarlyLintResult, PyErr> {
         self.result.get_or_init(|| {
@@ -307,14 +312,21 @@ impl EarlySqlLint {
         self.expansion_reuse.as_ref()
     }
 
-    /// Abandon unconsumed speculative work and return the milliseconds spent joining it.
-    pub(crate) fn stop(&self, py: Python<'_>) -> u64 {
+    /// Abandon speculative work, return the milliseconds spent joining it, and raise Ctrl+C caught while waiting.
+    pub(crate) fn stop(&self, py: Python<'_>) -> PyResult<u64> {
         let started: Instant = Instant::now();
         self.stop_requested.store(true, Ordering::Release);
         if let Some(preparation) = &self.preparation {
-            let _ = preparation.get().result(py);
+            let preparation: &PreparedSqlLint = preparation.get();
+            let waiting: bool = !preparation.finished();
+            if let Err(error) = preparation.result(py)
+                && waiting
+                && !error.is_instance_of::<PyException>(py)
+            {
+                return Err(error.clone_ref(py));
+            }
         }
-        u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
+        Ok(u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX))
     }
 }
 
@@ -364,7 +376,7 @@ impl EarlySqlLint {
 
     /// Abandon unconsumed speculative work and return the milliseconds spent joining it.
     #[pyo3(name = "stop")]
-    fn py_stop(&self, py: Python<'_>) -> u64 {
+    fn py_stop(&self, py: Python<'_>) -> PyResult<u64> {
         self.stop(py)
     }
 }
