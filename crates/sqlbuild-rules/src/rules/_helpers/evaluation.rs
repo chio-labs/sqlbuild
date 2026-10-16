@@ -15,6 +15,7 @@ use crate::rules::models::{
     FaultCollector, ModelEvaluationRequest, ProjectEvaluationRequest, ResolvedThresholdOverride,
 };
 use globset::{Glob, GlobSetBuilder};
+use sqlbuild_core::identifier_text::main::is_lowercase_identifier::is_lowercase_identifier;
 use sqlbuild_sqltext::sql_scan::main::matching_paren::matching_paren;
 use sqlbuild_sqltext::sql_scan::main::non_code_end::non_code_end;
 use sqlbuild_sqltext::sql_scan::main::quote_policy::quote_policy as rules_quote_policy;
@@ -972,12 +973,12 @@ pub(super) fn parse_name(name: &str) -> Option<NameParts> {
         "mart",
         "mart_v",
     ];
-    if !valid_lower_name_token(parts[0])
+    if !is_lowercase_identifier(parts[0])
         || !layers.contains(&parts[1])
-        || !valid_lower_name_token(parts[2])
+        || !is_lowercase_identifier(parts[2])
         || parts
             .get(3)
-            .is_some_and(|value| !valid_lower_name_token(value))
+            .is_some_and(|value| !is_lowercase_identifier(value))
     {
         return None;
     }
@@ -988,12 +989,6 @@ pub(super) fn parse_name(name: &str) -> Option<NameParts> {
         source: parts.get(3).map(|value| (*value).into()),
         is_view: parts[1].ends_with("_v"),
     })
-}
-
-fn valid_lower_name_token(value: &str) -> bool {
-    let mut bytes = value.bytes();
-    bytes.next().is_some_and(|byte| byte.is_ascii_lowercase())
-        && bytes.all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
 }
 
 fn view_marker(parsed: &ParsedModel<'_>, rule: &RuleMetadata, faults: &FaultCollector) {

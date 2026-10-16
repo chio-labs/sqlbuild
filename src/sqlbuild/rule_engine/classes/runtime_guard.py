@@ -12,8 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from types import CodeType, FrameType, FunctionType, ModuleType
 
-from sqlbuild._native import NonHermeticRuleError
-from sqlbuild.rule_engine._helpers.engine.hermeticity import allowed_custom_rule_import
+from sqlbuild._native import NonHermeticRuleError, allowed_custom_rule_import
 from sqlbuild.rule_engine.classes.project_tree import ProjectTree
 
 _IMPORT_EVENT: str = "import"

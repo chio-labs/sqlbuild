@@ -1,20 +1,30 @@
 //! Custom-rule import closures, implementation fingerprints and statically found test cases.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::PyTuple;
+use pyo3::prelude::{
+    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
+use pyo3::types::{PyDict, PyDictMethods, PySet, PySetMethods, PyString, PyTuple, PyTupleMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_pysource::rule_evidence::main::allowed_custom_rule_import::allowed_custom_rule_import;
+use sqlbuild_pysource::rule_evidence::main::disallowed_import::disallowed_import;
 use sqlbuild_pysource::rule_evidence::main::implementation_fingerprint::implementation_fingerprint;
 use sqlbuild_pysource::rule_evidence::main::import_closure::import_closure as import_closure_of;
 use sqlbuild_pysource::rule_evidence::main::test_evidence::test_evidence;
-use sqlbuild_pysource::rule_evidence::models::RuleTestEvidence;
+use sqlbuild_pysource::rule_evidence::models::{
+    DisallowedImport, RuleTestEvidence, UnparsedSource,
+};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 
 const PATHLIB_MODULE: &str = "pathlib";
 const INSPECT_MODULE: &str = "inspect";
 const HASHLIB_MODULE: &str = "hashlib";
+const AST_MODULE: &str = "ast";
+const NATIVE_MODULE: &str = "sqlbuild._native";
+const RULES_ERROR: &str = "RulesError";
+const NON_HERMETIC_RULE_ERROR: &str = "NonHermeticRuleError";
 
 fn python_version(py: Python<'_>) -> (u8, u8) {
     let version = py.version_info();
@@ -120,7 +130,108 @@ fn custom_rule_test_evidence<'py>(
         .collect())
 }
 
+/// `error_class(message)` from the native module.
+fn rules_error(py: Python<'_>, error_class: &str, message: String) -> PyErr {
+    match imported(py, NATIVE_MODULE, error_class).and_then(|class| class.call1((message,))) {
+        Ok(error) => PyErr::from_value(error),
+        Err(error) => error,
+    }
+}
+
+/// Whether custom-rule code may import one absolute module name.
+#[pyfunction]
+#[pyo3(name = "allowed_custom_rule_import")]
+fn allowed_custom_rule_import_binding(module: &str) -> bool {
+    allowed_custom_rule_import(module)
+}
+
+/// Reject a repository-owned rule file that imports outside the allowlist.
+fn verify_source(path: &Bound<'_, PyAny>, root: &Path) -> PyResult<()> {
+    let py: Python<'_> = path.py();
+    if !native_path(path)?.starts_with(root) {
+        return Err(rules_error(
+            py,
+            RULES_ERROR,
+            format!(
+                "custom rule source must be repository-owned: {}",
+                path.str()?
+            ),
+        ));
+    }
+    let source: Bound<'_, PyAny> = path.call_method("read_text", (), Some(&utf8_encoding(py)?))?;
+    let text: String = source.extract()?;
+    match disallowed_import(&text, python_version(py)) {
+        Ok(None) => Ok(()),
+        Ok(Some(DisallowedImport { line, module })) => Err(rules_error(
+            py,
+            NON_HERMETIC_RULE_ERROR,
+            format!(
+                "non-hermetic custom rule at {}:{line}: import {} is not allowed",
+                path.str()?,
+                PyString::new(py, &module).repr()?
+            ),
+        )),
+        Err(UnparsedSource) => {
+            let keywords: Bound<'_, PyDict> = PyDict::new(py);
+            keywords.set_item("filename", path.str()?)?;
+            imported(py, AST_MODULE, "parse")?.call((source,), Some(&keywords))?;
+            Err(rules_error(
+                py,
+                RULES_ERROR,
+                format!(
+                    "custom rule source could not be checked for imports: {}",
+                    path.str()?
+                ),
+            ))
+        }
+    }
+}
+
+fn utf8_encoding(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
+    let keywords: Bound<'_, PyDict> = PyDict::new(py);
+    keywords.set_item("encoding", "utf-8")?;
+    Ok(keywords)
+}
+
+/// Reject imports outside the deterministic allowlist in every fingerprinted rule file.
+#[pyfunction]
+#[pyo3(signature = (*, rules, project_dir))]
+pub(crate) fn verify_custom_rules(
+    rules: &Bound<'_, PyAny>,
+    project_dir: &Bound<'_, PyAny>,
+) -> PyResult<()> {
+    let py: Python<'_> = rules.py();
+    let root_path: Bound<'_, PyAny> = project_dir.call_method0("resolve")?;
+    let root: PathBuf = native_path(&root_path)?;
+    let checked: Bound<'_, PySet> = PySet::empty(py)?;
+    for rule in rules.try_iter()? {
+        let rule: Bound<'_, PyAny> = rule?;
+        if !rule.getattr("custom")?.is_truthy()? {
+            continue;
+        }
+        let Some(source) = resolved_source(&rule)? else {
+            continue;
+        };
+        let closure: Vec<PathBuf> =
+            import_closure_of(&native_path(&source)?, &root, python_version(py));
+        let paths: Bound<'_, PyTuple> = closure_paths(py, closure)?;
+        for path in std::iter::once(source).chain(paths.iter()) {
+            if checked.contains(&path)? {
+                continue;
+            }
+            checked.add(&path)?;
+            verify_source(&path, &root)?;
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(
+        allowed_custom_rule_import_binding,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(verify_custom_rules, module)?)?;
     module.add_function(wrap_pyfunction!(custom_rule_import_closure, module)?)?;
     module.add_function(wrap_pyfunction!(
         custom_rule_implementation_fingerprint,

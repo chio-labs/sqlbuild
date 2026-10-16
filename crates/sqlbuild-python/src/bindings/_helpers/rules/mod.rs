@@ -27,6 +27,7 @@ pub(crate) mod registration;
 pub(crate) mod relation_keys;
 pub(crate) mod results;
 pub(crate) mod rows;
+pub(crate) mod rule_api;
 pub(crate) mod rule_cache;
 pub(crate) mod rule_dispatch;
 pub(crate) mod rule_plan;

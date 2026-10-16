@@ -24,3 +24,9 @@ pub(super) struct DeepTomlTestCase {
     pub(super) text: String,
     pub(super) expected_value: ConfigValue,
 }
+
+pub(super) struct TomlLiteralTestCase {
+    pub(super) description: &'static str,
+    pub(super) value: crate::toml::models::TomlLiteral,
+    pub(super) expected_text: &'static str,
+}

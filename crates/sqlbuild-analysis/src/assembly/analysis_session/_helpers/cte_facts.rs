@@ -32,6 +32,9 @@ use crate::assembly::analysis_session::constants::{
 use crate::assembly::analysis_session::models::NullabilityCallback;
 use crate::assembly::analysis_session::models::{ColumnFact, LineageRow};
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
+use crate::nullability_rules::main::conditional_result_nullability::conditional_result_nullability;
+use crate::nullability_rules::main::first_arg_nullability::first_arg_nullability;
+use crate::nullability_rules::main::safe_cast_nullability::safe_cast_nullability;
 use crate::type_system::main::normalize_type::normalize_type;
 use crate::type_system::models::{NormalizedType, TypeFamily};
 
@@ -1020,34 +1023,11 @@ fn combined(node_kind: &str, rule: Option<&str>, arguments: &[&'static str]) -> 
         return UNKNOWN_NULLABILITY;
     }
     match rule {
-        Some(FIRST_ARG_RULE) => arguments.first().copied().unwrap_or(UNKNOWN_NULLABILITY),
-        Some(CONDITIONAL_RESULT_RULE) => conditional_result(arguments),
-        Some(SAFE_CAST_RULE) => safe_cast(arguments),
+        Some(FIRST_ARG_RULE) => first_arg_nullability(arguments),
+        Some(CONDITIONAL_RESULT_RULE) => conditional_result_nullability(arguments),
+        Some(SAFE_CAST_RULE) => safe_cast_nullability(arguments),
         _ => UNKNOWN_NULLABILITY,
     }
-}
-
-/// Python's `safe_cast_nullability`.
-fn safe_cast(arguments: &[&'static str]) -> &'static str {
-    if arguments.first() == Some(&NULLABLE_NULLABILITY) {
-        NULLABLE_NULLABILITY
-    } else {
-        UNKNOWN_NULLABILITY
-    }
-}
-
-/// Python's `conditional_result_nullability`.
-fn conditional_result(arguments: &[&'static str]) -> &'static str {
-    let [_, when_true, when_false, ..] = arguments else {
-        return UNKNOWN_NULLABILITY;
-    };
-    if *when_true == NON_NULL_NULLABILITY && *when_false == NON_NULL_NULLABILITY {
-        return NON_NULL_NULLABILITY;
-    }
-    if *when_true == NULLABLE_NULLABILITY || *when_false == NULLABLE_NULLABILITY {
-        return NULLABLE_NULLABILITY;
-    }
-    UNKNOWN_NULLABILITY
 }
 
 /// Python's `_infer_polyglot_column_nullability`.

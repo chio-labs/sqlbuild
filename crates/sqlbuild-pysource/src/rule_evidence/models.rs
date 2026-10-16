@@ -15,3 +15,14 @@ pub(crate) struct RuleTarget<'a> {
     pub(crate) modules: Vec<String>,
     pub(crate) check_name: &'a str,
 }
+
+/// An import outside the custom-rule allowlist: its statement's line and the module.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DisallowedImport {
+    pub line: usize,
+    pub module: String,
+}
+
+/// A source CPython's parser would reject.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct UnparsedSource;

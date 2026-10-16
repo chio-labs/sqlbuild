@@ -4,8 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import NonHermeticRuleError, Rule
-from sqlbuild.rule_engine._helpers.engine.hermeticity import verify_custom_rules
+from sqlbuild._native import NonHermeticRuleError, Rule, verify_custom_rules
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (
     CustomRuleImportTestCase,
 )

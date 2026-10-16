@@ -5,7 +5,8 @@ use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult};
 use crate::bindings::_helpers::compile_command::models::CompileReuseAttempt;
 
 use crate::bindings::_helpers::compile_command::{
-    prepared_artifacts, report, reuse_attempt, reuse_recording, runtime_identity, target_writer,
+    prepared_artifacts, report, reuse_attempt, reuse_recording, runtime_identity, startup_inputs,
+    target_writer,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -14,6 +15,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     reuse_attempt::register(module)?;
     reuse_recording::register(module)?;
     runtime_identity::register(module)?;
+    startup_inputs::register(module)?;
     target_writer::register(module)?;
     prepared_artifacts::register(module)
 }

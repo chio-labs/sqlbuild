@@ -35,3 +35,27 @@ pub(super) struct FailureTextTestCase {
     pub failure: AssetFailure,
     pub expected_text: &'static str,
 }
+
+pub(super) struct NameNormalizationTestCase {
+    pub description: &'static str,
+    pub value: &'static str,
+    pub expected_tag_key: &'static str,
+    pub expected_segment: &'static str,
+}
+
+pub(super) struct DescriptionTestCase {
+    pub description: &'static str,
+    pub text: &'static str,
+    pub sql: Option<&'static str>,
+    pub path: Option<&'static str>,
+    pub expected_description: &'static str,
+}
+
+pub(super) struct FallbackDescriptionTestCase {
+    pub description: &'static str,
+    pub kind: &'static str,
+    pub name: &'static str,
+    pub qualified_name: &'static str,
+    pub materialization: Option<&'static str>,
+    pub expected_description: &'static str,
+}

@@ -1,9 +1,10 @@
+use crate::posix_path::main::posix_escapes_root::posix_escapes_root;
 use crate::posix_path::main::posix_join::posix_join;
 use crate::posix_path::main::posix_name::posix_name;
 use crate::posix_path::main::posix_parent::posix_parent;
 use crate::posix_path::main::posix_parts::posix_parts;
 use crate::posix_path::main::posix_suffix::posix_suffix;
-use crate::posix_path::tests::test_types::PosixPathTestCase;
+use crate::posix_path::tests::test_types::{EscapesRootTestCase, PosixPathTestCase};
 
 #[test]
 fn given_paths_when_reading_pure_posix_parts_then_they_match_pathlib() {
@@ -135,6 +136,70 @@ fn given_paths_when_reading_pure_posix_parts_then_they_match_pathlib() {
         assert_eq!(
             posix_parts(&posix_join(&parts)),
             parts,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_paths_when_checking_for_escapes_then_absolute_and_parent_paths_escape() {
+    let test_cases = [
+        EscapesRootTestCase {
+            description: "a relative file",
+            path: "models/a.sql",
+            expected_escapes: false,
+        },
+        EscapesRootTestCase {
+            description: "current and empty parts",
+            path: "./a//b/",
+            expected_escapes: false,
+        },
+        EscapesRootTestCase {
+            description: "an empty path",
+            path: "",
+            expected_escapes: false,
+        },
+        EscapesRootTestCase {
+            description: "the current directory",
+            path: ".",
+            expected_escapes: false,
+        },
+        EscapesRootTestCase {
+            description: "an absolute path",
+            path: "/abs/x.yml",
+            expected_escapes: true,
+        },
+        EscapesRootTestCase {
+            description: "a double-slash root",
+            path: "//x",
+            expected_escapes: true,
+        },
+        EscapesRootTestCase {
+            description: "a leading parent",
+            path: "../x.sql",
+            expected_escapes: true,
+        },
+        EscapesRootTestCase {
+            description: "an inner parent",
+            path: "a/../x.sql",
+            expected_escapes: true,
+        },
+        EscapesRootTestCase {
+            description: "only a parent",
+            path: "..",
+            expected_escapes: true,
+        },
+        EscapesRootTestCase {
+            description: "dots inside names",
+            path: "a..b/..c",
+            expected_escapes: false,
+        },
+    ];
+    for test_case in test_cases {
+        assert_eq!(
+            posix_escapes_root(test_case.path),
+            test_case.expected_escapes,
             "{}",
             test_case.description
         );

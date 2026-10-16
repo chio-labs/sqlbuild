@@ -35,7 +35,7 @@ note = "Relation inspection wrappers adapters call, with per-connection caches; 
 [[stays]]
 path = "adapter/type_system"
 rule = 1
-note = "Type normalisation adapters import; already a thin native wrapper."
+note = "Type normalisation and the public nullability rule callables adapters import and register (profile_inputs.rs recognises them by path); normalisation and the first_arg, conditional_result and safe_cast rules are native."
 
 [[stays]]
 path = "provider"
@@ -45,7 +45,7 @@ note = "Provider base class users subclass, and injection into user functions."
 [[stays]]
 path = "python_nodes"
 rule = 3
-note = "Decorators that run when user modules are imported."
+note = "Public decorators and authoring shapes re-exported by assets.py, tasks.py, loaders.py, hooks.py and retries.py, run when user modules are imported; RetryPolicy and AuditCase validation, retry delays and hook-read normalization are native (validate_retry_policy, retry_delay_seconds, validate_audit_case, normalize_hook_reads)."
 
 [[stays]]
 path = "microbatches"
@@ -115,7 +115,7 @@ note = "Imports the project's custom rule modules and collects their @rule funct
 [[stays]]
 path = "rule_engine/classes/rule_context.py"
 rule = 3
-note = "The context object user rules receive."
+note = "The context object user rules receive; finding path and position validation is native (finding_position)."
 
 [[stays]]
 path = "rule_engine/_helpers/engine/definition.py"
@@ -123,14 +123,9 @@ rule = 2
 note = "The @rule decorator implementation; inspects user rule functions and their signatures."
 
 [[stays]]
-path = "rule_engine/_helpers/engine/hermeticity.py"
-rule = 2
-note = "Statically checks the imports of user rule source files."
-
-[[stays]]
 path = "rule_engine/_helpers/engine/rule_harness.py"
 rule = 2
-note = "Public custom-rule test harness that runs user rules over a real compiled project."
+note = "Public custom-rule test harness that writes a temporary project and runs user rules over it; rule-option TOML literals are native (rule_option_toml_value)."
 
 [[stays]]
 path = "rule_engine/_helpers/engine/fact_replay.py"
@@ -190,7 +185,7 @@ note = "Fact view user rules read through RuleContext; the Python API over nativ
 [[stays]]
 path = "rule_engine/classes/project_tree.py"
 rule = 3
-note = "Project-tree fact view user rules read through RuleContext."
+note = "Project-tree fact view user rules read through RuleContext; the walk, path validation and file resolution are native (project_tree_paths, project_tree_file_path, validate_project_relative) and only the file read stays here."
 
 [[stays]]
 path = "rule_engine/classes/sql_document.py"
@@ -370,7 +365,7 @@ note = "Rule 3 shapes: the command-output sink parameter name and the installed 
 [[stays]]
 path = "integrations/dagster"
 rule = 4
-note = "Documented orchestrator integration and rule 4 Dagster glue: translator invocation, context reads, subprocess streaming and Dagster event construction; CLI arguments, selector logs, payload and failure parsing, asset/check/selection projection of the DAG artifact are native."
+note = "Documented orchestrator integration and rule 4 Dagster glue: overridable translator methods, translator invocation, context reads, subprocess streaming and Dagster event construction; CLI arguments, selector logs, payload and failure parsing, asset/check/selection projection of the DAG artifact and the default translator mappings (dagster_default_*) are native."
 
 [[stays]]
 path = "integrations/rivers"
@@ -415,7 +410,7 @@ note = "Inspects user provider settings classes for the environment and files th
 [[stays]]
 path = "cli/compile_reuse/_helpers/startup_inputs.py"
 rule = 2
-note = "Interpreter and site-path inputs user modules import from."
+note = "Reads the live interpreter's sys.path, site-packages, executable and prefixes that user modules import from; absolute paths, .pth discovery, ordering and stamps are native (startup_input_stamps)."
 
 [[stays]]
 path = "cli/entry/main/entry.py"
@@ -715,7 +710,7 @@ note = "Shape rule: data enums and aliases only (CostCapability, CostStatus), no
 [[stays]]
 path = "compiler/lineage/types.py"
 rule = 1
-note = "Shape rule: data enums and aliases only (InferredNullability), no logic; consumed by adapter/contract/types.py, adapter/type_system/_helpers/inference_rules.py, adapter/type_system/main/conditional_result_nullability.py and 2 more."
+note = "Shape rule: data enums and aliases only (InferredNullability), no logic; consumed by adapter/contract/types.py, adapter/type_system/main/conditional_result_nullability.py, adapter/type_system/main/first_arg_nullability.py and adapter/type_system/main/safe_cast_nullability.py, and read natively to build nullability results."
 
 [[stays]]
 path = "compiler/macro_bridge/models.py"
@@ -765,7 +760,7 @@ note = "Shape rule: data protocol and aliases only (RuleContext, RuleCheck, Rule
 [[stays]]
 path = "rule_engine/constants.py"
 rule = 2
-note = "Shape rule: custom-rule host and fact-name constants (CUSTOM_HOST_MAX_TRACKED_READS, CUSTOM_RULE_IMPORT_ROOTS, FACT_PROJECT_MODELS, ...) used by the Python custom-rule host, no logic; versions, launch module and shared keys are native (sqlbuild._native)."
+note = "Shape rule: custom-rule host and fact-name constants (CUSTOM_HOST_MAX_TRACKED_READS, CUSTOM_HOST_STARTUP_ENVIRONMENT, FACT_PROJECT_MODELS, ...) used by the Python custom-rule host, no logic; versions, launch module, shared keys and the import allowlist are native (sqlbuild._native)."
 
 [[stays]]
 path = "compiler/compile/exceptions.py"

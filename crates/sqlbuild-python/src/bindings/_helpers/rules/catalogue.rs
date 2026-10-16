@@ -15,11 +15,11 @@ use sqlbuild_rules::rule_catalogue::models::{CatalogueRule, OptionKind, OptionSp
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::rules::builtin_catalogue::builtin_rules;
+use crate::bindings::_helpers::rules::custom_rule_evidence::verify_custom_rules as verify_rule_sources;
 use crate::bindings::_helpers::rules::selection::{rules_error, selected_rule_codes};
 
 const CUSTOM_CATALOGUE_MODULE: &str = "sqlbuild.rule_engine._helpers.engine._custom_catalogue";
 const CUSTOM_PAYLOADS_MODULE: &str = "sqlbuild.rule_engine._helpers.engine.custom_payloads";
-const HERMETICITY_MODULE: &str = "sqlbuild.rule_engine._helpers.engine.hermeticity";
 const PLANNER_SCOPE_MODULE: &str = "sqlbuild._native";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const JSON_MODULE: &str = "json";
@@ -264,13 +264,7 @@ pub(crate) fn verify_custom_rules<'py>(
     project_dir: &Bound<'py, PyAny>,
 ) -> PyResult<()> {
     let py: Python<'py> = project_dir.py();
-    let _ = call_with(
-        &imported(py, HERMETICITY_MODULE, "verify_custom_rules")?,
-        &[
-            ("rules", PyTuple::new(py, rules)?.into_any()),
-            ("project_dir", project_dir.clone()),
-        ],
-    )?;
+    verify_rule_sources(PyTuple::new(py, rules)?.as_any(), project_dir)?;
     Ok(())
 }
 

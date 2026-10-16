@@ -22,3 +22,37 @@ pub(crate) const TEST_FILE_PREFIX: &str = "test_";
 pub(crate) const TEST_FILE_SUFFIX: &str = "_test.py";
 pub(crate) const TEST_CLASS_PREFIX: &str = "Test";
 pub(crate) const FLOAT_ZERO: f64 = 0.0_f64;
+/// The modules, and their submodules, custom-rule code may import.
+pub(crate) const CUSTOM_RULE_IMPORT_ROOTS: [&str; 29] = [
+    "__future__",
+    "abc",
+    "bisect",
+    "collections",
+    "copy",
+    "dataclasses",
+    "decimal",
+    "difflib",
+    "enum",
+    "fnmatch",
+    "fractions",
+    "functools",
+    "graphlib",
+    "hashlib",
+    "heapq",
+    "itertools",
+    "json",
+    "math",
+    "operator",
+    "pathlib",
+    "re",
+    "rules",
+    "sqlbuild.rules",
+    "statistics",
+    "string",
+    "textwrap",
+    "types",
+    "typing",
+    "unicodedata",
+];
+/// The separator between a module and its submodules.
+pub(crate) const MODULE_SEPARATOR: char = '.';

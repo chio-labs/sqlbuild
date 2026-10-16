@@ -23,13 +23,13 @@ use crate::bindings::_helpers::rules::custom_evaluation::{
     CustomRun, evaluate_custom_rules_cached, outcome,
 };
 use crate::bindings::_helpers::rules::custom_hosts::HostCancel;
+use crate::bindings::_helpers::rules::custom_rule_evidence::verify_custom_rules;
 
 const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const RULES_MODELS_MODULE: &str = "sqlbuild._native";
 const CUSTOM_PAYLOADS_MODULE: &str = "sqlbuild.rule_engine._helpers.engine.custom_payloads";
-const HERMETICITY_MODULE: &str = "sqlbuild.rule_engine._helpers.engine.hermeticity";
 const CUSTOM_THREAD: &str = "sqlbuild-custom-rules";
 const GENERIC_DIALECT: &str = "generic";
 const PROJECT_RULES_OPTIONS: (&[&str], &[&str]) = (
@@ -164,10 +164,7 @@ fn evaluate_project_rules<'py>(
                 ("project_dir", project_dir.clone()),
             ],
         )?;
-        call_with(
-            &imported(py, HERMETICITY_MODULE, "verify_custom_rules")?,
-            &[("rules", rules), ("project_dir", project_dir.clone())],
-        )?;
+        verify_custom_rules(&rules, &project_dir)?;
     }
     let run: NativeRun<'py> = NativeRun {
         project,

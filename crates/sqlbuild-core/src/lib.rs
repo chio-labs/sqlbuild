@@ -30,6 +30,7 @@ pub mod dlt_destination;
 pub mod event_export;
 pub mod format_command;
 pub mod freshness_text;
+pub mod identifier_text;
 pub mod ingestr_command;
 pub mod init_command;
 pub mod integration_results;

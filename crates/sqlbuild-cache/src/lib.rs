@@ -10,4 +10,5 @@ pub mod module_digests;
 pub mod project_reuse;
 pub mod project_snapshot;
 pub mod stage_capture;
+pub mod startup_inputs;
 pub mod store;

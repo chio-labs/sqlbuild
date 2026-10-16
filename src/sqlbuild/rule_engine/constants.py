@@ -19,42 +19,7 @@ CUSTOM_HOST_STARTUP_ENVIRONMENT: tuple[str, ...] = (
     "PYTHONUSERBASE",
     "SYSTEMROOT",
 )
-CUSTOM_RULE_IMPORT_ROOTS: frozenset[str] = frozenset(
-    {
-        "__future__",
-        "abc",
-        "bisect",
-        "collections",
-        "copy",
-        "dataclasses",
-        "decimal",
-        "difflib",
-        "enum",
-        "fnmatch",
-        "fractions",
-        "functools",
-        "graphlib",
-        "hashlib",
-        "heapq",
-        "itertools",
-        "json",
-        "math",
-        "operator",
-        "pathlib",
-        "re",
-        "rules",
-        "sqlbuild.rules",
-        "statistics",
-        "string",
-        "textwrap",
-        "types",
-        "typing",
-        "unicodedata",
-    }
-)
-
 RULE_DECORATOR_TOKEN: str = "@rule"
-PARENT_DIRECTORY_TOKEN: str = ".."
 
 FACT_PROJECT_MODELS: str = "project.models"
 FACT_PROJECT_SOURCES: str = "project.sources"
