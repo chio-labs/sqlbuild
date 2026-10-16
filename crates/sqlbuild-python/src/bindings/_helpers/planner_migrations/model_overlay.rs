@@ -1,24 +1,25 @@
 //! Project inherited fingerprints and live relation facts before normal planning.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::planner_migrations::column_objects::native;
 use crate::bindings::_helpers::planner_migrations::column_objects::{config, replace};
+use crate::bindings::_helpers::planner_migrations::models::MigrationPhase;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods};
 
 pub(super) fn overlay<'py>(
-    args: &KeywordArguments<'py>,
+    phase: &MigrationPhase<'py>,
     state: &Bound<'py, PyAny>,
     entries: &[Bound<'py, PyAny>],
     handovers: &Bound<'py, PyDict>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let snapshot = args.value("snapshot")?;
+    let snapshot = phase.snapshot.clone();
     if handovers.is_empty() {
         return Ok(snapshot);
     }
-    let runtime = args.value("runtime")?;
+    let runtime = phase.runtime.clone();
     let py = runtime.py();
     let relations = snapshot
         .getattr("existing_relations")?
@@ -91,11 +92,11 @@ pub(super) fn overlay<'py>(
         &registry::native(py, NativeAttr::MigrationRedirectedCursorSnapshots)?,
         &[
             ("runtime", runtime),
-            ("scope", args.value("scope")?),
+            ("scope", phase.scope.clone()),
             ("existing_relations", relations.clone().into_any()),
             ("target_relations", redirected.into_any()),
-            ("overrides", args.value("overrides")?),
-            ("deferral", args.value("deferral")?),
+            ("overrides", phase.overrides.clone()),
+            ("deferral", phase.deferral.clone()),
         ],
     )?;
     cursors.call_method1("update", (gathered,))?;

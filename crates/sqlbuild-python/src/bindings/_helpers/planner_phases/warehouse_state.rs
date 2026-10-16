@@ -1,9 +1,12 @@
 //! The warehouse inspection phase: snapshot, migrations and inspection relations in one pass.
 
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::planner_entries::relations::build_planner_relations_context;
+use crate::bindings::_helpers::planner_entries::models::RelationsRequest;
+use crate::bindings::_helpers::planner_entries::relations::planner_relations_context;
 use crate::bindings::_helpers::planner_migrations::column_planning::plan_column_migrations;
 use crate::bindings::_helpers::planner_migrations::model_planning::plan_model_migrations;
+use crate::bindings::_helpers::planner_migrations::models::{
+    ColumnMigrationInputs, MigrationPhase,
+};
 use crate::bindings::_helpers::planner_migrations::old_name_planning::plan_old_name_views as plan_old_name_migration_views;
 use crate::bindings::_helpers::planner_phases::full_refresh::effectively_full_refreshed_model_names;
 use crate::bindings::_helpers::planner_phases::objects::native;
@@ -88,36 +91,26 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
         deferred_locations: deferral.getattr("deferred_locations")?,
         cursor_scope,
     })?;
-    let migrations = plan_model_migrations(
-        py,
-        Some(keywords(
-            py,
-            &[
-                ("runtime", runtime.clone()),
-                ("scope", selected_scope.clone()),
-                ("snapshot", snapshot.clone()),
-                ("overrides", overrides.clone()),
-                ("deferral", deferral.clone()),
-                ("fingerprints", fingerprints.clone()),
-            ],
-        )?),
-    )?;
+    let phase = MigrationPhase {
+        runtime: runtime.clone(),
+        scope: selected_scope.clone(),
+        snapshot: snapshot.clone(),
+        overrides: overrides.clone(),
+        deferral: deferral.clone(),
+    };
+    let migrations = plan_model_migrations(&phase, &fingerprints)?;
     fingerprints.call_method0("persist")?;
-    let inspection_relations = build_planner_relations_context(
-        py,
-        Some(keywords(
-            py,
-            &[
-                ("project", project.clone()),
-                ("adapter", adapter.clone()),
-                ("connection", runtime.getattr("connection")?),
-                ("scope", scopes.getattr("inspection_scope")?),
-                ("deferral", deferral.clone()),
-                ("project_config", config),
-                ("local_config", runtime.getattr("local_config")?),
-            ],
-        )?),
-    )?;
+    let inspection_relations = planner_relations_context(RelationsRequest {
+        project: project.clone(),
+        adapter: adapter.clone(),
+        connection: runtime.getattr("connection")?,
+        scope: scopes.getattr("inspection_scope")?,
+        deferral: deferral.clone(),
+        project_config: config,
+        local_config: runtime.getattr("local_config")?,
+        known_source_columns: py.None().into_bound(py),
+        relation_keys: py.None().into_bound(py),
+    })?;
     let physical = PyDict::new(py);
     for entry in migrations.getattr("entries")?.try_iter()? {
         let entry = entry?;
@@ -139,39 +132,31 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
         }
     }
     let columns = plan_column_migrations(
-        py,
-        Some(keywords(
-            py,
-            &[
-                ("runtime", runtime.clone()),
-                ("scope", selected_scope.clone()),
-                ("snapshot", migrations.getattr("snapshot")?),
-                (
-                    "full_refresh_model_names",
-                    effectively_full_refreshed_model_names(&project, full_refresh)?,
-                ),
-                ("physical_relations", physical.into_any()),
-                ("overrides", overrides.clone()),
-                ("deferral", deferral.clone()),
-                (
-                    "source_columns",
-                    inspection_relations.getattr("source_warehouse_columns")?,
-                ),
-            ],
-        )?),
+        &MigrationPhase {
+            snapshot: migrations.getattr("snapshot")?,
+            ..phase
+        },
+        &ColumnMigrationInputs {
+            full_refresh_model_names: effectively_full_refreshed_model_names(
+                &project,
+                full_refresh,
+            )?,
+            physical_relations: physical.into_any(),
+            source_columns: inspection_relations.getattr("source_warehouse_columns")?,
+        },
     )?;
     let old_names = plan_old_name_migration_views(
-        py,
-        Some(keywords(
-            py,
-            &[
-                ("runtime", runtime.clone()),
-                ("scope", selected_scope),
-                ("snapshot", snapshot),
-                ("migration_entries", migrations.getattr("entries")?),
-                ("column_entries", columns.getattr("entries")?),
-            ],
-        )?),
+        &MigrationPhase {
+            runtime: runtime.clone(),
+            scope: selected_scope,
+            snapshot,
+            overrides: overrides.clone(),
+            deferral: deferral.clone(),
+        },
+        (
+            &migrations.getattr("entries")?,
+            &columns.getattr("entries")?,
+        ),
     )?;
     if !runtime.getattr("on_progress")?.is_none() {
         progress(

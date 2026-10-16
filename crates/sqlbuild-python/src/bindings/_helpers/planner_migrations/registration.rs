@@ -7,7 +7,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     super::compatibility::register(module)?;
     super::matching::register(module)?;
     super::old_names::register(module)?;
-    super::old_name_planning::register(module)?;
     super::columns::register(module)?;
     super::column_planning::register(module)?;
     super::model_planning::register(module)?;

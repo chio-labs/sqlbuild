@@ -1,14 +1,13 @@
 //! Execution-scope pruning, write-hash reconciliation and plan entry construction.
 
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::planner_entries::model_entries::plan_entries;
+use crate::bindings::_helpers::planner_entries::models::{PlanEntriesRequest, RelationsRequest};
+use crate::bindings::_helpers::planner_entries::relations::planner_relations_context;
 use crate::bindings::_helpers::planner_phases::objects::native;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
-use pyo3::types::PyDict as KeywordDict;
 use pyo3::types::{PyFrozenSet, PyTuple};
 
 #[pyfunction]
@@ -87,64 +86,30 @@ fn config_or<'py>(
     Ok(value)
 }
 
-#[pyfunction]
-#[pyo3(signature = (**options))]
+/// Model plan entries for the pruned execution scope, with the freshness and override inputs they need.
 pub(crate) fn build_planner_entry_results<'py>(
-    py: pyo3::Python<'py>,
-    options: Option<Bound<'py, KeywordDict>>,
+    (runtime, warehouse): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    (overrides, deferral): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    (pruning, reconciliation): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    source_freshness: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let args = KeywordArguments::read(
-        py,
-        "build_planner_entry_results",
-        options,
-        (
-            &[
-                "runtime",
-                "warehouse",
-                "identities",
-                "overrides",
-                "policies",
-                "deferral",
-                "pruning",
-                "reconciliation",
-                "source_freshness",
-            ],
-            &[],
-        ),
-    )?;
-    let runtime = &args.value("runtime")?;
-    let warehouse = &args.value("warehouse")?;
-    let identities = &args.value("identities")?;
-    let overrides = &args.value("overrides")?;
-    let policies = &args.value("policies")?;
-    let deferral = &args.value("deferral")?;
-    let pruning = &args.value("pruning")?;
-    let reconciliation = &args.value("reconciliation")?;
-    let source_freshness = &args.value("source_freshness")?;
-
-    let _ = (identities, policies);
     let py = runtime.py();
     let project = runtime.getattr("project")?;
     let config = runtime.getattr("project_config")?;
     let execution_scope = pruning.getattr("execution_scope")?;
-    let relations = call_with(
-        &registry::native(py, NativeAttr::BuildPlannerRelationsContext)?,
-        &[
-            ("project", project.clone()),
-            ("adapter", runtime.getattr("adapter")?),
-            ("connection", runtime.getattr("connection")?),
-            ("scope", execution_scope.clone()),
-            ("deferral", deferral.clone()),
-            ("project_config", config.clone()),
-            ("local_config", runtime.getattr("local_config")?),
-            (
-                "known_source_columns",
-                warehouse
-                    .getattr("inspection_relations")?
-                    .getattr("source_warehouse_columns")?,
-            ),
-        ],
-    )?;
+    let relations = planner_relations_context(RelationsRequest {
+        project: project.clone(),
+        adapter: runtime.getattr("adapter")?,
+        connection: runtime.getattr("connection")?,
+        scope: execution_scope.clone(),
+        deferral: deferral.clone(),
+        project_config: config.clone(),
+        local_config: runtime.getattr("local_config")?,
+        known_source_columns: warehouse
+            .getattr("inspection_relations")?
+            .getattr("source_warehouse_columns")?,
+        relation_keys: py.None().into_bound(py),
+    })?;
     let propagation = source_freshness.getattr("propagation")?;
     let blocked = if propagation.is_none() {
         PyFrozenSet::empty(py)?.into_any()
@@ -202,23 +167,19 @@ pub(crate) fn build_planner_entry_results<'py>(
             ("microbatch_limit_action", limit_action),
         ],
     )?;
-    let entries = call_with(
-        &registry::native(py, NativeAttr::BuildPlanEntries)?,
-        &[
-            ("project", project),
-            ("adapter", runtime.getattr("adapter")?),
-            ("scope", execution_scope),
-            ("snapshot", warehouse.getattr("snapshot")?),
-            ("relations", relations),
-            (
-                "resolved_actions",
-                reconciliation.getattr("resolved_actions")?,
-            ),
-            ("cursor_overrides", overrides.getattr("cursor_overrides")?),
-            ("full_refresh", overrides.getattr("full_refresh")?),
-            ("build_inputs", build_inputs),
-        ],
-    )?;
+    let entries = plan_entries(PlanEntriesRequest {
+        project,
+        adapter: runtime.getattr("adapter")?,
+        scope: execution_scope,
+        snapshot: warehouse.getattr("snapshot")?,
+        relations,
+        resolved_models: reconciliation
+            .getattr("resolved_actions")?
+            .getattr("models")?,
+        cursor_overrides: overrides.getattr("cursor_overrides")?,
+        full_refresh: overrides.getattr("full_refresh")?.is_truthy()?,
+        build_inputs,
+    })?;
     native(
         py,
         RecordId::PlannerEntryResults,

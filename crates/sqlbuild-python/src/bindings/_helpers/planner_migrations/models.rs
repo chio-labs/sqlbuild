@@ -26,3 +26,21 @@ pub(crate) struct CheckedColumns<'py> {
     pub entries: Vec<Bound<'py, PyAny>>,
     pub warnings: Vec<Bound<'py, PyAny>>,
 }
+
+/// The planning-phase inputs every migration planner reads.
+#[derive(Debug)]
+pub(crate) struct MigrationPhase<'py> {
+    pub(crate) runtime: Bound<'py, PyAny>,
+    pub(crate) scope: Bound<'py, PyAny>,
+    pub(crate) snapshot: Bound<'py, PyAny>,
+    pub(crate) overrides: Bound<'py, PyAny>,
+    pub(crate) deferral: Bound<'py, PyAny>,
+}
+
+/// The column migration planning inputs beyond the phase.
+#[derive(Debug)]
+pub(crate) struct ColumnMigrationInputs<'py> {
+    pub(crate) full_refresh_model_names: Bound<'py, PyAny>,
+    pub(crate) physical_relations: Bound<'py, PyAny>,
+    pub(crate) source_columns: Bound<'py, PyAny>,
+}

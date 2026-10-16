@@ -7,15 +7,16 @@ use crate::bindings::_helpers::planner_scenario::constants::{REF, SOURCE};
 use crate::bindings::_helpers::planner_scenario::constants::{
     SCENARIO_PLAN_INTERNAL, SCENARIO_PLAN_MISSING_RELATION_TARGET,
 };
+use crate::bindings::_helpers::planner_scenario::models::ScenarioRelations;
 use crate::bindings::_helpers::planner_scenario::values::error;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods};
 
-#[pyfunction]
+#[pyfunction(name = "build_scenario_relation_plan")]
 #[pyo3(signature = (**kwargs))]
-pub(crate) fn build_scenario_relation_plan<'py>(
+pub(crate) fn build_scenario_relation_plan_of<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -33,13 +34,24 @@ pub(crate) fn build_scenario_relation_plan<'py>(
             &["database", "schema"],
         ),
     )?;
-    let graph = args.value("graph_plan")?;
+    build_scenario_relation_plan(&ScenarioRelations {
+        project: args.value("project")?,
+        graph_plan: args.value("graph_plan")?,
+        relation_map: args.value("relation_map")?,
+        render_qualified_name: args.value("render_qualified_name")?,
+        database: args.value("database")?,
+        schema: args.value("schema")?,
+    })
+}
+
+/// The scenario's model, seed, source and fixture locations under its relation map.
+pub(crate) fn build_scenario_relation_plan<'py>(
+    args: &ScenarioRelations<'py>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = args.project.py();
+    let graph = &args.graph_plan;
     let artifacts = PyDict::new(py);
-    for artifact in args
-        .value("relation_map")?
-        .getattr("artifacts")?
-        .try_iter()?
-    {
+    for artifact in args.relation_map.getattr("artifacts")?.try_iter()? {
         let artifact = artifact?;
         let identity = artifact.getattr("identity")?;
         artifacts.set_item(
@@ -48,7 +60,7 @@ pub(crate) fn build_scenario_relation_plan<'py>(
         )?;
     }
     let sources = PyDict::new(py);
-    for source in args.value("project")?.getattr("sources")?.try_iter()? {
+    for source in args.project.getattr("sources")?.try_iter()? {
         let source = source?;
         sources.set_item(source.getattr("name")?, source.getattr("source_entry")?)?;
     }
@@ -68,7 +80,7 @@ pub(crate) fn build_scenario_relation_plan<'py>(
     ] {
         for name in graph.getattr(field)?.try_iter()? {
             let name: String = name?.extract()?;
-            let target = target_for_artifact(&args, &artifacts, kind, &name)?;
+            let target = target_for_artifact(args, &artifacts, kind, &name)?;
             locations.set_item(&name, &target)?;
             if kind == REF {
                 models.set_item(&name, &target)?;
@@ -105,7 +117,7 @@ pub(crate) fn build_scenario_relation_plan<'py>(
         &registry::class(py, RecordId::ScenarioRelationPlan)?,
         &[
             ("scenario_name", graph.getattr("name")?),
-            ("relation_map", args.value("relation_map")?),
+            ("relation_map", args.relation_map.clone()),
             ("model_locations", models.into_any()),
             ("seed_locations", seeds.into_any()),
             ("project_source_map", sources.into_any()),
@@ -119,7 +131,7 @@ pub(crate) fn build_scenario_relation_plan<'py>(
 }
 
 fn target_for_artifact<'py>(
-    args: &KeywordArguments<'py>,
+    args: &ScenarioRelations<'py>,
     artifacts: &Bound<'py, PyDict>,
     kind: &str,
     name: &str,
@@ -133,10 +145,10 @@ fn target_for_artifact<'py>(
             Some("This is likely a SQLBuild bug. Please file an issue with the scenario name."),
         )?);
     };
-    let database = args.value("database")?;
-    let schema = args.value("schema")?;
+    let database = args.database.clone();
+    let schema = args.schema.clone();
     let qualified = call_with(
-        &args.value("render_qualified_name")?,
+        &args.render_qualified_name,
         &[
             ("database", database.clone()),
             ("schema", schema.clone()),

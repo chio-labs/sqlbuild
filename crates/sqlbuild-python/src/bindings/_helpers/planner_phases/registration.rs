@@ -13,7 +13,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module
     )?)?;
     module.add_function(wrap_pyfunction!(
-        super::identities::detect_stale_warning_changes,
+        super::identities::detect_stale_warning_changes_of,
         module
     )?)?;
     module.add_function(wrap_pyfunction!(
@@ -26,10 +26,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     module.add_function(wrap_pyfunction!(
         super::execution_changes::reconcile_execution_changes,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
-        super::execution_changes::build_planner_entry_results,
         module
     )?)?;
     module.add_function(wrap_pyfunction!(

@@ -20,7 +20,7 @@ mod model_handover;
 mod model_overlay;
 pub(crate) mod model_planning;
 mod model_warnings;
-mod models;
+pub(crate) mod models;
 mod old_name_entries;
 mod old_name_objects;
 pub(crate) mod old_name_planning;

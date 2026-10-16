@@ -13,9 +13,9 @@ use pyo3::types::PyDict;
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_cursor::planner::main::override_kind::override_kind;
 
-#[pyfunction]
+#[pyfunction(name = "type_cursor_overrides")]
 #[pyo3(signature = (**kwargs))]
-pub(crate) fn type_cursor_overrides<'py>(
+fn type_cursor_overrides_of<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -25,18 +25,27 @@ pub(crate) fn type_cursor_overrides<'py>(
         kwargs,
         (&["cursor_overrides"], &["selected_models"]),
     )?;
-    let overrides = args.value("cursor_overrides")?;
+    let selected: Vec<Bound<'py, PyAny>> = if args.passed("selected_models")? {
+        args.value("selected_models")?
+            .try_iter()?
+            .collect::<PyResult<_>>()?
+    } else {
+        Vec::new()
+    };
+    type_cursor_overrides(&args.value("cursor_overrides")?, &selected)
+}
+
+/// Untyped cursor overrides typed by the cursor type of the selected incremental models.
+pub(crate) fn type_cursor_overrides<'py>(
+    overrides: &Bound<'py, PyAny>,
+    selected: &[Bound<'py, PyAny>],
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = overrides.py();
     if overrides.is_none() || !overrides.getattr("has_untyped")?.is_truthy()? {
-        return Ok(overrides);
+        return Ok(overrides.clone());
     }
     let mut models: Vec<(String, String)> = Vec::new();
-    let selected = if args.passed("selected_models")? {
-        args.value("selected_models")?
-    } else {
-        pyo3::types::PyTuple::empty(py).into_any()
-    };
-    for model in selected.try_iter()? {
-        let model = model?;
+    for model in selected {
         let values = model.getattr("config")?.getattr("values")?;
         let config = |key: &str| -> PyResult<Bound<'_, PyAny>> {
             Ok(authored_config_str(&values, key)?.unwrap_or_else(|| py.None().into_bound(py)))
@@ -46,10 +55,7 @@ pub(crate) fn type_cursor_overrides<'py>(
         }
         let kind = config("cursor_type")?;
         if kind.eq("integer")? || kind.eq("timestamp")? {
-            models.push((
-                model_reads::name_object(&model)?.extract()?,
-                kind.extract()?,
-            ));
+            models.push((model_reads::name_object(model)?.extract()?, kind.extract()?));
         }
     }
     let mut integer_literals = true;
@@ -75,9 +81,9 @@ pub(crate) fn type_cursor_overrides<'py>(
         ])) { Ok(error) => PyErr::from_value(error), Err(error) => error }
     })?;
     let kind = registry::class(py, RecordId::CursorType)?.call1((kind,))?;
-    method(&overrides, "typed_as", &[("cursor_type", kind)])
+    method(overrides, "typed_as", &[("cursor_type", kind)])
 }
 
 pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(type_cursor_overrides, module)?)
+    module.add_function(wrap_pyfunction!(type_cursor_overrides_of, module)?)
 }

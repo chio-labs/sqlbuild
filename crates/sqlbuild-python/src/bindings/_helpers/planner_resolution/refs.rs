@@ -3,7 +3,10 @@
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::planner_resolution::values::{cursor_wrap, method, string};
+use crate::bindings::_helpers::planner_resolution::models::CursorFiltering;
+use crate::bindings::_helpers::planner_resolution::values::{
+    cursor_wrap, filtering_of, method, string,
+};
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObject;
@@ -14,10 +17,7 @@ use sqlbuild_sqltext::resolution::main::{ref_alias::ref_alias, reference_spans::
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-pub(crate) fn resolve_ref_references(
-    py: Python<'_>,
-    kwargs: Option<Bound<'_, PyDict>>,
-) -> PyResult<String> {
+fn resolve_ref_references(py: Python<'_>, kwargs: Option<Bound<'_, PyDict>>) -> PyResult<String> {
     let args = KeywordArguments::read(
         py,
         "resolve_ref_references",
@@ -36,10 +36,27 @@ pub(crate) fn resolve_ref_references(
             &[],
         ),
     )?;
-    let original: String = args.value("query_sql")?.extract()?;
-    let mut sql = original.clone();
-    for (kind, key) in [("ref", "model_locations"), ("seed", "seed_locations")] {
-        let locations = args.value(key)?;
+    resolve_refs(
+        &args.value("query_sql")?.extract::<String>()?,
+        (
+            &args.value("model_locations")?,
+            &args.value("seed_locations")?,
+        ),
+        &args.value("adapter")?,
+        &filtering_of(&args)?,
+    )
+}
+
+/// `__ref` and `__seed` references replaced with their relations, cursor inputs filtered.
+pub(crate) fn resolve_refs(
+    original: &str,
+    (model_locations, seed_locations): (&Bound<'_, PyAny>, &Bound<'_, PyAny>),
+    adapter: &Bound<'_, PyAny>,
+    filtering: &CursorFiltering<'_>,
+) -> PyResult<String> {
+    let py = adapter.py();
+    let mut sql = original.to_owned();
+    for (kind, locations) in [("ref", model_locations), ("seed", seed_locations)] {
         let mut output = String::new();
         let mut last = 0;
         for span in reference_spans(&sql, kind) {
@@ -50,7 +67,7 @@ pub(crate) fn resolve_ref_references(
             } else {
                 let relation: String = call_with(
                     &host::entry(py, AdapterHost::ResolveRelationLocationQualifiedName)?,
-                    &[("adapter", args.value("adapter")?), ("location", target)],
+                    &[("adapter", adapter.clone()), ("location", target)],
                 )?
                 .extract()?;
                 let char_end = sql[..span.end].chars().count();
@@ -59,10 +76,10 @@ pub(crate) fn resolve_ref_references(
                     .nth(char_end)
                     .map_or(original.len(), |(offset, _)| offset);
                 output.push_str(&cursor_wrap(
-                    &args,
+                    adapter,
+                    filtering,
                     relation,
-                    &span.name,
-                    !ref_alias(&original, original_end),
+                    (&span.name, !ref_alias(original, original_end)),
                 )?);
             }
             last = span.end;

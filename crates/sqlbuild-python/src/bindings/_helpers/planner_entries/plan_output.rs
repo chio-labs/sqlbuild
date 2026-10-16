@@ -1,6 +1,6 @@
 //! `PlanOutput` assembly from planned model entries, seeds, sources, functions, audits and tests.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_entries::model_entries::scope_overlaps;
 use crate::bindings::_helpers::planner_entries::values::{
     error_of, native, none, planner_model, planner_type, string,
@@ -9,7 +9,9 @@ use crate::bindings::_helpers::planner_phases::constants::PLAN_OUTPUT_INPUTS;
 use crate::bindings::_helpers::planner_strategy::fixture_context::planning_context;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::sql_test_glue::models::SqlTestAssembly;
 use crate::bindings::_helpers::sql_test_glue::plan_assembly::assemble_sql_test_plans;
+use crate::bindings::_helpers::sql_test_glue::plan_driver::resolve_sql_test_model_chains;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyList, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -482,21 +484,13 @@ pub(super) fn selected_test_entries<'py>(
         none(py)
     };
     let results = assemble_sql_test_plans(
-        py,
-        Some(keywords(
-            py,
-            &[
-                ("tests", tuple_of(py, selected)?),
-                ("project", project.clone()),
-                ("adapter", adapter.clone()),
-                ("sql_analysis_enabled", analysis),
-                (
-                    "validate_fixtures",
-                    pyo3::types::PyBool::new(py, true).to_owned().into_any(),
-                ),
-                ("fixture_planning_context", fixture_context),
-            ],
-        )?),
+        &selected,
+        (project, adapter),
+        &SqlTestAssembly {
+            sql_analysis_enabled: analysis,
+            validate_fixtures: true,
+            fixture_planning_context: fixture_context,
+        },
     )?;
     let mut diagnostics: Vec<String> = Vec::new();
     for result in results.try_iter()? {
@@ -755,11 +749,7 @@ fn sql_test_model_chain_names_by_key<'py>(
     tests: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let py = project.py();
-    let chains = native(
-        py,
-        NativeAttr::ResolveSqlTestModelChains,
-        &[("project", project.clone()), ("tests", tests.clone())],
-    )?;
+    let chains = resolve_sql_test_model_chains(project, tests)?;
     let by_key = PyDict::new(py);
     for (test, chain) in tests.try_iter()?.zip(chains.try_iter()?) {
         by_key.set_item(test?.getattr("key")?, chain?)?;

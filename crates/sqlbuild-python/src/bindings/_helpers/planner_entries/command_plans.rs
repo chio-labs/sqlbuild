@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::planner_entries::models::RelationsRequest;
 use crate::bindings::_helpers::planner_entries::plan_output::{
     function_entry, selected_test_entries, test_selected,
 };
@@ -107,11 +108,10 @@ fn resolve_static_relation_context<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let options = kwargs.unwrap_or_else(|| PyDict::new(py));
-    KeywordArguments::read(
+    let args = KeywordArguments::read(
         py,
         "resolve_static_relation_context",
-        Some(options.clone()),
+        kwargs,
         (
             &["project", "adapter", "scope"],
             &[
@@ -122,24 +122,17 @@ fn resolve_static_relation_context<'py>(
             ],
         ),
     )?;
-    options.set_item("connection", none(py))?;
-    options.set_item("known_source_columns", PyDict::new(py))?;
-    let args = KeywordArguments::read(
-        py,
-        "resolve_static_relation_context",
-        Some(options),
-        (
-            &["project", "adapter", "scope", "connection"],
-            &[
-                "deferral",
-                "project_config",
-                "local_config",
-                "relation_keys",
-                "known_source_columns",
-            ],
-        ),
-    )?;
-    planner_relations_context(&args)
+    planner_relations_context(RelationsRequest {
+        project: args.value("project")?,
+        adapter: args.value("adapter")?,
+        connection: none(py),
+        scope: args.value("scope")?,
+        deferral: args.value("deferral")?,
+        project_config: args.value("project_config")?,
+        local_config: args.value("local_config")?,
+        known_source_columns: PyDict::new(py).into_any(),
+        relation_keys: args.value("relation_keys")?,
+    })
 }
 
 /// Project selected audits from canonical static state.

@@ -54,7 +54,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     module.add_function(wrap_pyfunction!(graph::plan_scenario_graph, module)?)?;
     module.add_function(wrap_pyfunction!(
-        relations::build_scenario_relation_plan,
+        relations::build_scenario_relation_plan_of,
         module
     )?)?;
     module.add_function(wrap_pyfunction!(cli::build_cli_scenario_plan, module)?)?;

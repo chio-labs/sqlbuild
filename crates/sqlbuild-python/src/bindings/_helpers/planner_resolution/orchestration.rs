@@ -5,29 +5,29 @@ use crate::bindings::_helpers::attachments::cursor_intrinsics::resolve_cursor_in
 use crate::bindings::_helpers::attachments::reference_markers::assert_no_unresolved_sql_markers;
 use crate::bindings::_helpers::compile_attachment::cursor_roles::resolve_cursor_input_roles;
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, keywords,
+    KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::planner_resolution::cursor_model::compute_model_cursor_bounds;
+use crate::bindings::_helpers::planner_resolution::models::{CursorFiltering, ModelSqlRequest};
 use crate::bindings::_helpers::planner_resolution::refs::{
-    resolve_dbt_ref_references, resolve_ref_references, resolve_table_function_references,
+    resolve_dbt_ref_references, resolve_refs, resolve_table_function_references,
     resolve_udf_references,
 };
-use crate::bindings::_helpers::planner_resolution::sources::resolve_source_references;
+use crate::bindings::_helpers::planner_resolution::sources::resolve_sources;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyString, PyTuple};
-use pyo3::{IntoPyObject, PyErr, pyfunction, wrap_pyfunction};
+use pyo3::{PyErr, pyfunction, wrap_pyfunction};
 
 /// What resolving one model's, hook's or function's references reads.
-struct Resolution<'py> {
-    adapter: Bound<'py, PyAny>,
+pub(crate) struct Resolution<'py> {
+    pub(crate) adapter: Bound<'py, PyAny>,
     external: Bound<'py, PyAny>,
     source_map: Bound<'py, PyAny>,
     source_warehouse_columns: Bound<'py, PyAny>,
-    star_exclude_keyword: Bound<'py, PyAny>,
     model_locations: Bound<'py, PyAny>,
     seed_locations: Bound<'py, PyAny>,
     function_locations: Bound<'py, PyAny>,
@@ -35,7 +35,7 @@ struct Resolution<'py> {
 
 impl<'py> Resolution<'py> {
     /// Resolution against a `ModelPlanContext`'s relations.
-    fn of_context(
+    pub(crate) fn of_context(
         adapter: Bound<'py, PyAny>,
         context: &Bound<'py, PyAny>,
         external: Bound<'py, PyAny>,
@@ -45,39 +45,26 @@ impl<'py> Resolution<'py> {
             external,
             source_map: context.getattr("source_map")?,
             source_warehouse_columns: context.getattr("source_warehouse_columns")?,
-            star_exclude_keyword: context.getattr("star_exclude_keyword")?,
             model_locations: context.getattr("model_locations")?,
             seed_locations: context.getattr("seed_locations")?,
             function_locations: context.getattr("function_locations")?,
         })
     }
 
-    fn resolve(
-        &self,
-        sql: Bound<'py, PyAny>,
-        cursor: &[(&str, Bound<'py, PyAny>)],
-    ) -> PyResult<String> {
+    fn resolve(&self, sql: &str, filtering: &CursorFiltering<'py>) -> PyResult<String> {
         let py = self.adapter.py();
-        let mut source = vec![
-            ("query_sql", sql),
-            ("adapter", self.adapter.clone()),
-            ("source_map", self.source_map.clone()),
-            (
-                "source_warehouse_columns",
-                self.source_warehouse_columns.clone(),
-            ),
-            ("star_exclude_keyword", self.star_exclude_keyword.clone()),
-        ];
-        source.extend_from_slice(cursor);
-        let resolved: String = resolve_source_references(py, Some(keywords(py, &source)?))?;
-        let mut refs = vec![
-            ("query_sql", PyString::new(py, &resolved).into_any()),
-            ("adapter", self.adapter.clone()),
-            ("model_locations", self.model_locations.clone()),
-            ("seed_locations", self.seed_locations.clone()),
-        ];
-        refs.extend_from_slice(cursor);
-        let resolved: String = resolve_ref_references(py, Some(keywords(py, &refs)?))?;
+        let resolved: String = resolve_sources(
+            sql,
+            (&self.source_map, &self.source_warehouse_columns),
+            &self.adapter,
+            filtering,
+        )?;
+        let resolved: String = resolve_refs(
+            &resolved,
+            (&self.model_locations, &self.seed_locations),
+            &self.adapter,
+            filtering,
+        )?;
         let resolved: String = resolve_dbt_ref_references(&resolved, Some(&self.external))?;
         let locations = if self.function_locations.is_truthy()? {
             self.function_locations.clone()
@@ -100,16 +87,13 @@ impl<'py> Resolution<'py> {
     fn unbounded(&self, sql: Bound<'py, PyAny>, label: &str) -> PyResult<String> {
         let py = self.adapter.py();
         let resolved = self.resolve(
-            sql,
-            &[
-                ("cursor_bounds", py.None().into_bound(py)),
-                ("cursor_filter_inputs", PyDict::new(py).into_any()),
-                ("cursor_type", py.None().into_bound(py)),
-                (
-                    "lower_bound_inclusive",
-                    true.into_pyobject(py)?.to_owned().into_any(),
-                ),
-            ],
+            &sql.extract::<String>()?,
+            &CursorFiltering {
+                bounds: py.None().into_bound(py),
+                filter_inputs: PyDict::new(py).into_any(),
+                cursor_type: py.None().into_bound(py),
+                lower_bound_inclusive: true,
+            },
         )?;
         self.assert_resolved(&resolved, label)?;
         Ok(resolved)
@@ -141,9 +125,9 @@ impl<'py> Resolution<'py> {
     }
 }
 
-#[pyfunction]
+#[pyfunction(name = "resolve_model_sql")]
 #[pyo3(signature = (**kwargs))]
-pub(crate) fn resolve_model_sql<'py>(
+fn resolve_model_sql_of<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -168,79 +152,76 @@ pub(crate) fn resolve_model_sql<'py>(
             ],
         ),
     )?;
-    let model = args.value("model")?;
     let context = args.value("context")?;
     let resolution = Resolution::of_context(
         args.value("adapter")?,
         &context,
         args.value("external_sql_reference_resolver")?,
     )?;
+    let overrides = args.value("cursor_overrides")?;
+    let cause = args.value("full_rebuild_cause")?;
+    let request = ModelSqlRequest {
+        model: args.value("model")?,
+        snapshot: args.value("snapshot")?,
+        backfill: args.value("backfill")?,
+        full_refresh: args.flag("full_refresh")?,
+        cursor_overrides: (
+            overrides.getattr("start_cursor_override")?,
+            overrides.getattr("end_cursor_override")?,
+        ),
+        replaces_relation: args.flag("replaces_relation")?,
+        full_rebuild_cause: if cause.is_truthy()? {
+            Some(cause.extract()?)
+        } else {
+            None
+        },
+    };
+    let sql: String = resolve_model_sql(&resolution, &context, &request)?;
+    Ok(PyString::new(py, &sql).into_any())
+}
+
+/// One model's planned SQL: references resolved, cursor inputs filtered and intrinsics bound.
+pub(crate) fn resolve_model_sql<'py>(
+    resolution: &Resolution<'py>,
+    context: &Bound<'py, PyAny>,
+    request: &ModelSqlRequest<'py>,
+) -> PyResult<String> {
+    let model = &request.model;
+    let py = model.py();
     let cursor_type =
         authored_config_str(&model.getattr("config")?.getattr("values")?, "cursor_type")?
             .unwrap_or_else(|| py.None().into_bound(py));
-    let overrides = args.value("cursor_overrides")?;
-    let bounds = compute_model_cursor_bounds(
-        py,
-        Some(keywords(
-            py,
-            &[
-                ("model", model.clone()),
-                ("snapshot", args.value("snapshot")?),
-                ("backfill", args.value("backfill")?),
-                ("full_refresh", args.value("full_refresh")?),
-                (
-                    "start_cursor_override",
-                    overrides.getattr("start_cursor_override")?,
-                ),
-                (
-                    "end_cursor_override",
-                    overrides.getattr("end_cursor_override")?,
-                ),
-                (
-                    "runtime_cursor_producer_names",
-                    context.getattr("runtime_cursor_producer_names")?,
-                ),
-                ("context", context.clone()),
-                (
-                    "replaces_relation",
-                    args.value_or_false("replaces_relation")?,
-                ),
-            ],
-        )?),
-    )?;
-    let roles = resolve_cursor_input_roles(&model)?;
-    let inclusive = append_cursor_inclusive(&model)?;
+    let bounds = compute_model_cursor_bounds(request, context)?;
+    let roles = resolve_cursor_input_roles(model)?;
+    let filtering = CursorFiltering {
+        bounds: bounds.clone(),
+        filter_inputs: roles.getattr("filter_inputs")?,
+        cursor_type: cursor_type.clone(),
+        lower_bound_inclusive: append_cursor_inclusive(model)?,
+    };
     let mut sql = resolution.resolve(
-        model_reads::query_sql(&model)?,
-        &[
-            ("cursor_bounds", bounds.clone()),
-            ("cursor_filter_inputs", roles.getattr("filter_inputs")?),
-            ("cursor_type", cursor_type.clone()),
-            ("lower_bound_inclusive", inclusive),
-        ],
+        &model_reads::query_sql(model)?.extract::<String>()?,
+        &filtering,
     )?;
     let (_, uses_intrinsics) = resolve_cursor_intrinsics(py, &sql, None, None)?;
-    let name: String = model_reads::model_name(&model)?;
+    let name: String = model_reads::model_name(model)?;
     if uses_intrinsics {
         if bounds.is_none() {
-            let cause = args.value("full_rebuild_cause")?;
-            let cause = if cause.is_truthy()? {
-                Some(cause.extract::<String>()?)
-            } else if args.flag("full_refresh")? {
-                Some("--full-refresh".to_owned())
-            } else {
-                None
+            let cause = match &request.full_rebuild_cause {
+                Some(cause) => Some(cause.clone()),
+                None if request.full_refresh => Some("--full-refresh".to_owned()),
+                None => None,
             };
             return Err(unresolved_bounds_error(py, &name, cause.as_deref())?);
         }
         sql = intrinsic_bounds(&sql, &bounds, &cursor_type, &resolution.adapter)?;
     }
     resolution.assert_resolved(&sql, &format!("Model '{name}'"))?;
-    Ok(PyString::new(py, &sql).into_any())
+    Ok(sql)
 }
 
 /// Effective append cursor lower-bound inclusivity.
-fn append_cursor_inclusive<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+fn append_cursor_inclusive(model: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = model.py();
     let strategy = authored_config_str(
         &model.getattr("config")?.getattr("values")?,
@@ -251,9 +232,7 @@ fn append_cursor_inclusive<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py
         .getattr("config")?
         .getattr("values")?
         .call_method1("get", ("append_cursor_inclusive",))?;
-    let inclusive =
-        !strategy.eq("append")? || !raw.is_instance_of::<PyBool>() || raw.is_truthy()?;
-    Ok(inclusive.into_pyobject(py)?.to_owned().into_any())
+    Ok(!strategy.eq("append")? || !raw.is_instance_of::<PyBool>() || raw.is_truthy()?)
 }
 
 /// `__cursor_start()` / `__cursor_end()` replaced with the adapter's typed bound literals.
@@ -325,7 +304,6 @@ fn resolve_function_sql<'py>(
         external: py.None().into_bound(py),
         source_map: args.value("source_map")?,
         source_warehouse_columns: args.value("source_warehouse_columns")?,
-        star_exclude_keyword: args.value("star_exclude_keyword")?,
         model_locations: args.value("model_locations")?,
         seed_locations: args.value("seed_locations")?,
         function_locations: args.value("function_locations")?,
@@ -339,13 +317,21 @@ fn resolve_function_sql<'py>(
 
 #[pyfunction]
 #[pyo3(signature = (*, model, adapter, context, external_sql_reference_resolver))]
-pub(crate) fn resolve_model_hook_entries<'py>(
+fn resolve_model_hook_entries<'py>(
     model: &Bound<'py, PyAny>,
     adapter: Bound<'py, PyAny>,
     context: Bound<'py, PyAny>,
     external_sql_reference_resolver: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let resolution = Resolution::of_context(adapter, &context, external_sql_reference_resolver)?;
+    model_hook_entries(model, &resolution)
+}
+
+/// One model's pre and post hooks with their SQL resolved.
+pub(crate) fn model_hook_entries<'py>(
+    model: &Bound<'py, PyAny>,
+    resolution: &Resolution<'py>,
+) -> PyResult<Bound<'py, PyTuple>> {
     let values = model.getattr("config")?.getattr("values")?;
     let name: String = model_reads::model_name(model)?;
     let mut hooks: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -359,7 +345,7 @@ pub(crate) fn resolve_model_hook_entries<'py>(
 }
 
 pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(resolve_model_sql, module)?)?;
+    module.add_function(wrap_pyfunction!(resolve_model_sql_of, module)?)?;
     module.add_function(wrap_pyfunction!(resolve_function_sql, module)?)?;
     module.add_function(wrap_pyfunction!(resolve_model_hook_entries, module)?)
 }

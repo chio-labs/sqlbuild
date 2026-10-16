@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::planner_migrations::column_objects::{config, native, replace};
+use crate::bindings::_helpers::planner_migrations::models::MigrationPhase;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -100,30 +101,14 @@ fn decide_model_migration<'py>(
     )?)
 }
 
-#[pyfunction]
-#[pyo3(signature = (**options))]
+/// Model migrations of the selected scope: discovered and declared moves, decided against live state.
 pub(crate) fn plan_model_migrations<'py>(
-    py: Python<'py>,
-    options: Option<Bound<'py, PyDict>>,
+    phase: &MigrationPhase<'py>,
+    fingerprints: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let args = KeywordArguments::read(
-        py,
-        "plan_model_migrations",
-        options,
-        (
-            &[
-                "runtime",
-                "scope",
-                "snapshot",
-                "overrides",
-                "deferral",
-                "fingerprints",
-            ],
-            &[],
-        ),
-    )?;
-    let runtime = args.value("runtime")?;
-    let snapshot = args.value("snapshot")?;
+    let py = phase.runtime.py();
+    let runtime = phase.runtime.clone();
+    let snapshot = phase.snapshot.clone();
     let schemas = call_with(
         &registry::native(py, NativeAttr::MigrationProjectSchemas)?,
         &[("runtime", runtime.clone())],
@@ -143,19 +128,19 @@ pub(crate) fn plan_model_migrations<'py>(
             ("known_fingerprints", snapshot.getattr("fingerprints")?),
         ],
     )?;
-    let discovery = discover(&args, &state, &schemas)?;
-    finish(&args, &state, &schemas, &discovery)
+    let discovery = discover((phase, fingerprints), &state, &schemas)?;
+    finish(phase, &state, &schemas, &discovery)
 }
 
 fn discover<'py>(
-    args: &KeywordArguments<'py>,
+    (phase, fingerprints): (&MigrationPhase<'py>, &Bound<'py, PyAny>),
     state: &Bound<'py, PyAny>,
     schemas: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let runtime = args.value("runtime")?;
+    let runtime = phase.runtime.clone();
     let py = runtime.py();
-    let scope = args.value("scope")?;
-    let snapshot = args.value("snapshot")?;
+    let scope = phase.scope.clone();
+    let snapshot = phase.snapshot.clone();
     let mut declared_requests: Vec<Bound<'py, PyAny>> = Vec::new();
     for item in runtime.getattr("project")?.getattr("models")?.try_iter()? {
         if let Some(request) = declared(&item?)? {
@@ -198,21 +183,21 @@ fn discover<'py>(
             ("declarations", PyTuple::new(py, declarations)?.into_any()),
             ("state", state.clone()),
             ("project_schemas", schemas.clone()),
-            ("fingerprints", args.value("fingerprints")?),
+            ("fingerprints", fingerprints.clone()),
         ],
     )
 }
 
 fn finish<'py>(
-    args: &KeywordArguments<'py>,
+    phase: &MigrationPhase<'py>,
     state: &Bound<'py, PyAny>,
     schemas: &Bound<'py, PyAny>,
     discovery: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let runtime = args.value("runtime")?;
+    let runtime = phase.runtime.clone();
     let py = runtime.py();
-    let scope = args.value("scope")?;
-    let snapshot = args.value("snapshot")?;
+    let scope = phase.scope.clone();
+    let snapshot = phase.snapshot.clone();
     let mut resolved: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>, Bound<'py, PyAny>)> = Vec::new();
     for request in discovery.getattr("requests")?.try_iter()? {
         let request = request?;
@@ -320,7 +305,7 @@ fn finish<'py>(
     let overlaid = if entries.is_empty() {
         snapshot.clone()
     } else {
-        super::model_overlay::overlay(args, state, &entries, &handovers)?
+        super::model_overlay::overlay(phase, state, &entries, &handovers)?
     };
     let reference_renames = native(
         py,
@@ -351,6 +336,5 @@ fn finish<'py>(
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(manual_migration_requests, module)?)?;
-    module.add_function(wrap_pyfunction!(decide_model_migration, module)?)?;
-    module.add_function(wrap_pyfunction!(plan_model_migrations, module)?)
+    module.add_function(wrap_pyfunction!(decide_model_migration, module)?)
 }

@@ -252,11 +252,6 @@ def plan_compiled_sql_test_artifacts(
     adapter: BaseAdapter,
     sql_analysis_enabled: bool,
 ) -> tuple[NativeSqlTestArtifact, ...]: ...
-def resolve_sql_test_model_chains(
-    *,
-    project: CompiledProjectView,
-    tests: tuple[CompiledSqlTest, ...],
-) -> tuple[tuple[str, ...], ...]: ...
 def sql_test_plan_error_messages(*, warnings: tuple[PlanWarning, ...]) -> tuple[str, ...]: ...
 
 STAGE_CAPTURE_OMITTED_ATTRIBUTES: dict[str, frozenset[str]]
@@ -2127,18 +2122,6 @@ class NativeCompiledProject:
 
 def compiled_model_record(model: CompiledModelView) -> CompiledModel: ...
 def compiled_audit_record(audit: CompiledAuditView) -> CompiledAudit: ...
-def compute_model_cursor_bounds(
-    *,
-    model: CompiledModelView,
-    snapshot: WarehouseSnapshot,
-    backfill: BackfillResult,
-    full_refresh: bool,
-    start_cursor_override: str | None,
-    end_cursor_override: str | None,
-    runtime_cursor_producer_names: frozenset[str],
-    context: ModelPlanContext,
-    replaces_relation: bool = False,
-) -> CursorBounds | None: ...
 def compute_cursor_bounds(
     *,
     cursor_snapshot: ModelCursorSnapshot,
@@ -6852,18 +6835,6 @@ def build_planner_relations_context(
     known_source_columns: dict[str, tuple[ColumnInfo, ...]] | None = None,
     relation_keys: frozenset[CompiledObjectKey] | None = None,
 ) -> PlannerRelationsContext: ...
-def build_plan_entries(
-    *,
-    project: CompiledProjectView,
-    adapter: BaseAdapter,
-    scope: PlannerScope,
-    snapshot: WarehouseSnapshot,
-    relations: PlannerRelationsContext,
-    resolved_actions: PlannerResolvedActions,
-    cursor_overrides: CursorOverrides | None,
-    full_refresh: bool,
-    build_inputs: PlanEntryBuildInputs | None = None,
-) -> PlannerModelEntryResults: ...
 def build_model_materializations(
     model_entries: tuple[ModelPlanEntry, ...], /
 ) -> dict[str, str]: ...
@@ -7199,14 +7170,6 @@ def migration_destination_fingerprints(
 ) -> dict[str, tuple[str, ...]]: ...
 def stored_migration_fingerprint(fingerprint: Fingerprint) -> str | None: ...
 def declared_column_aliases(model: CompiledModelView) -> tuple[tuple[str, str], ...]: ...
-def plan_old_name_views(
-    *,
-    runtime: PlannerRuntime,
-    scope: PlannerScope,
-    snapshot: WarehouseSnapshot,
-    migration_entries: tuple[ModelMigrationPlanEntry, ...],
-    column_entries: tuple[ColumnMigrationPlanEntry, ...],
-) -> OldNameViewPlanning: ...
 def manual_migration_requests(*, scope: PlannerScope) -> tuple[ModelMigrationRequest, ...]: ...
 def discover_model_migrations(
     *,
@@ -7229,15 +7192,6 @@ def decide_model_migration(
     state: MigrationStateInspection,
     snapshots_config: SnapshotsConfig,
 ) -> tuple[ModelMigrationPlanEntry, Fingerprint | None, bool]: ...
-def plan_model_migrations(
-    *,
-    runtime: PlannerRuntime,
-    scope: PlannerScope,
-    snapshot: WarehouseSnapshot,
-    overrides: PlannerOverrides,
-    deferral: DeferralInputs,
-    fingerprints: MigrationFingerprintCache,
-) -> ModelMigrationPlanning: ...
 def plan_column_migrations(
     *,
     runtime: PlannerRuntime,
@@ -7361,33 +7315,6 @@ def resolve_microbatch_lookback(
     *, model: CompiledModelView, effective_grain: str | None = None
 ) -> str | None: ...
 def extract_seed_columns(seed: CompiledSeedView) -> tuple[ColumnInfo, ...]: ...
-def assemble_model_plan_entry(
-    *,
-    model: CompiledModelView,
-    adapter: BaseAdapter,
-    snapshot: WarehouseSnapshot,
-    change_result: ChangeDetectionResult,
-    action: PlanAction,
-    reason: PlanReason,
-    materialization_type: MaterializationType,
-    resolved_sql: str,
-    sql_analysis_enabled: bool,
-    pre_hooks: object,
-    post_hooks: object,
-    cursor_column: str | None,
-    cursor_input_relations: tuple[CursorInputRelation, ...],
-    runtime_owned_cursor_bounds: bool,
-    cursor_bounds: CursorBounds | None,
-    microbatch_range: CursorBounds | None,
-    empty_cursor_inputs: tuple[str, ...],
-    waiting_on_empty_inputs: bool,
-    backfill: BackfillResult,
-    start_cursor_override: str | None,
-    end_cursor_override: str | None,
-    future_cursor_config: FutureCursorsConfig | None,
-    start_cursor_config: StartCursorsConfig | None,
-    invocation_time: datetime | None,
-) -> tuple[ModelPlanEntry, tuple[PlanWarning, ...]]: ...
 def plan_audit(
     *,
     audit: CompiledAuditView,
@@ -7769,18 +7696,6 @@ def reconcile_execution_changes(
     pruning: PlannerScopePruningResult,
     changes: PlannerChangeResults,
 ) -> PlannerChangeReconciliation: ...
-def build_planner_entry_results(
-    *,
-    runtime: PlannerRuntime,
-    warehouse: PlannerWarehouseState,
-    identities: PlannerIdentityContext,
-    overrides: PlannerOverrides,
-    policies: PlannerPolicies,
-    deferral: DeferralInputs,
-    pruning: PlannerScopePruningResult,
-    reconciliation: PlannerChangeReconciliation,
-    source_freshness: DirectSourceFreshnessPlanningResult,
-) -> PlannerEntryResults: ...
 def resolve_model_full_refresh(*, model: CompiledModelView, cli_full_refresh: bool) -> bool: ...
 def effectively_full_refreshed_model_names(
     *, project: CompiledProjectView, cli_full_refresh: bool

@@ -1,13 +1,14 @@
 //! Project column renames onto the existing snapshot and redirect cursor reads.
 
 use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::planner_migrations::column_objects::{
     config, definition_hash, lower, native, replace,
 };
 use crate::bindings::_helpers::planner_migrations::models::ColumnCandidate;
+use crate::bindings::_helpers::planner_migrations::models::{
+    ColumnMigrationInputs, MigrationPhase,
+};
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
@@ -116,12 +117,12 @@ pub(super) fn overlay<'py>(
 }
 
 pub(super) fn cursors<'py>(
-    args: &KeywordArguments<'py>,
+    (phase, columns): (&MigrationPhase<'py>, &ColumnMigrationInputs<'py>),
     snapshot: Bound<'py, PyAny>,
     entries: &[Bound<'py, PyAny>],
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = snapshot.py();
-    let scope = args.value("scope")?;
+    let scope = phase.scope.clone();
     let models = scope.getattr("models_by_name")?;
     let origins = PyDict::new(py);
     for entry in entries {
@@ -144,9 +145,7 @@ pub(super) fn cursors<'py>(
     }
     let targets = PyDict::new(py);
     for (name, _) in origins.iter() {
-        let physical = args
-            .value("physical_relations")?
-            .call_method1("get", (&name,))?;
+        let physical = columns.physical_relations.call_method1("get", (&name,))?;
         let target = if physical.is_truthy()? {
             physical
         } else {
@@ -165,15 +164,15 @@ pub(super) fn cursors<'py>(
     let redirected = call_with(
         &registry::native(py, NativeAttr::MigrationRedirectedCursorSnapshots)?,
         &[
-            ("runtime", args.value("runtime")?),
+            ("runtime", phase.runtime.clone()),
             ("scope", scope),
             (
                 "existing_relations",
                 snapshot.getattr("existing_relations")?,
             ),
             ("target_relations", targets.into_any()),
-            ("overrides", args.value("overrides")?),
-            ("deferral", args.value("deferral")?),
+            ("overrides", phase.overrides.clone()),
+            ("deferral", phase.deferral.clone()),
             ("origin_cursor_columns", origins.into_any()),
         ],
     )?;

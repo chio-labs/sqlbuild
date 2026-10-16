@@ -1,6 +1,7 @@
 //! Relation locations and source metadata for plan entry construction.
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::planner_entries::models::RelationsRequest;
 use crate::bindings::_helpers::planner_entries::values::{native, none, planner_model};
 use crate::bindings::_helpers::planner_strategy::audit_entries::audit_is_selected;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
@@ -66,21 +67,25 @@ fn source_warehouse_columns<'py>(
 
 /// Resolve relation locations and source metadata for plan entry construction.
 pub(crate) fn planner_relations_context<'py>(
-    args: &KeywordArguments<'py>,
+    request: RelationsRequest<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let project = args.value("project")?;
+    let RelationsRequest {
+        project,
+        adapter,
+        connection,
+        scope,
+        deferral,
+        project_config,
+        local_config,
+        known_source_columns,
+        relation_keys,
+    } = request;
     let py = project.py();
-    let adapter = args.value("adapter")?;
-    let connection = args.value("connection")?;
-    let scope = args.value("scope")?;
-    let deferral = args.value("deferral")?;
     let deferral = if deferral.is_none() {
         planner_model(py, RecordId::DeferralInputs, &[])?
     } else {
         deferral
     };
-    let project_config = args.value("project_config")?;
-    let local_config = args.value("local_config")?;
     let selected_keys = scope.getattr("selected_keys")?;
     let mut model_locations = native(
         py,
@@ -113,7 +118,6 @@ pub(crate) fn planner_relations_context<'py>(
         seed_locations = applied.get_item(1)?;
     }
     let audit_keys = selected_audit_relation_keys(&project, &selected_keys)?;
-    let relation_keys = args.value("relation_keys")?;
     let load_keys = if relation_keys.is_none() {
         selected_keys.call_method1("__or__", (&audit_keys,))?
     } else {
@@ -174,7 +178,7 @@ pub(crate) fn planner_relations_context<'py>(
     let (columns, listed_source_names) = source_warehouse_columns(
         (&project, &adapter, &connection),
         &source_read_map,
-        &args.value("known_source_columns")?,
+        &known_source_columns,
     )?;
     let semantic_columns = native(
         py,
@@ -211,7 +215,7 @@ pub(crate) fn planner_relations_context<'py>(
 /// Resolve relation locations and source metadata for plan entry construction.
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-pub(crate) fn build_planner_relations_context<'py>(
+fn build_planner_relations_context<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -230,7 +234,17 @@ pub(crate) fn build_planner_relations_context<'py>(
             ],
         ),
     )?;
-    planner_relations_context(&args)
+    planner_relations_context(RelationsRequest {
+        project: args.value("project")?,
+        adapter: args.value("adapter")?,
+        connection: args.value("connection")?,
+        scope: args.value("scope")?,
+        deferral: args.value("deferral")?,
+        project_config: args.value("project_config")?,
+        local_config: args.value("local_config")?,
+        known_source_columns: args.value("known_source_columns")?,
+        relation_keys: args.value("relation_keys")?,
+    })
 }
 
 pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

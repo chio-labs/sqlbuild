@@ -60,9 +60,9 @@ pub(crate) struct ModelPass<'py> {
 }
 
 /// Selected model and function changes.
-#[pyfunction]
+#[pyfunction(name = "detect_changes")]
 #[pyo3(signature = (**options))]
-pub(crate) fn detect_changes<'py>(
+fn detect_changes_of<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -75,21 +75,29 @@ pub(crate) fn detect_changes<'py>(
             &["expected_version_hashes", "expected_metadata_jsons"],
         ),
     )?;
-    let (project, scope, snapshot) = (
-        arguments.value("project")?,
-        arguments.value("scope")?,
-        arguments.value("snapshot")?,
-    );
-    let (project, scope, snapshot) = (&project, &scope, &snapshot);
-    let full_refresh: bool = arguments.flag("full_refresh")?;
-    let models: Bound<'py, PyDict> = scope_model_changes(
-        (project, scope, snapshot),
-        None,
+    detect_changes(
+        (
+            &arguments.value("project")?,
+            &arguments.value("scope")?,
+            &arguments.value("snapshot")?,
+        ),
+        arguments.flag("full_refresh")?,
         (
             arguments.value("expected_version_hashes")?,
             arguments.value("expected_metadata_jsons")?,
         ),
-    )?;
+    )
+}
+
+/// Selected model and function changes against expected version hashes and metadata JSON.
+pub(crate) fn detect_changes<'py>(
+    (project, scope, snapshot): (&Bound<'py, PyAny>, &Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    full_refresh: bool,
+    expected: (Bound<'py, PyAny>, Bound<'py, PyAny>),
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = project.py();
+    let models: Bound<'py, PyDict> =
+        scope_model_changes((project, scope, snapshot), None, expected)?;
     let functions: Bound<'py, PyDict> = PyDict::new(py);
     let result_class: Bound<'py, PyAny> = registry::class(py, RecordId::FunctionChangeResult)?;
     let selected: Bound<'py, PyAny> = scope.getattr("selected_keys")?;
@@ -784,7 +792,7 @@ impl<'py> ChangeResult<'py> {
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(detect_changes, module)?)?;
+    module.add_function(wrap_pyfunction!(detect_changes_of, module)?)?;
     module.add_function(wrap_pyfunction!(detect_model_changes_in_scope, module)?)?;
     module.add_function(wrap_pyfunction!(detect_model_changes, module)?)?;
     module.add_function(wrap_pyfunction!(schema_changes, module)?)
