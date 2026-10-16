@@ -54,7 +54,7 @@ fn index_declarations<'py>(
 
 /// Every public enum and constant by name, collision-checked.
 #[pyfunction]
-fn public_declaration_indexes<'py>(
+pub(crate) fn public_declaration_indexes<'py>(
     inputs: Bound<'py, PyAny>,
 ) -> PyResult<(Bound<'py, PyDict>, Bound<'py, PyDict>)> {
     let py: Python<'py> = inputs.py();
@@ -166,7 +166,9 @@ fn lowered_name(column: &Bound<'_, PyAny>) -> PyResult<String> {
 
 /// Every public model schema by name, with its inherited columns first, collision-checked.
 #[pyfunction]
-fn public_model_schema_index<'py>(inputs: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+pub(crate) fn public_model_schema_index<'py>(
+    inputs: Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = inputs.py();
     let mut authored: Vec<(String, Bound<'py, PyAny>)> = Vec::new();
     let mut by_name: HashMap<String, usize> = HashMap::new();

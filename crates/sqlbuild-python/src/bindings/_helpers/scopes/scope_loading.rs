@@ -6,12 +6,16 @@ use pyo3::exceptions::{PyImportError, PyOSError, PyUnicodeError, PyValueError};
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use pyo3::types::{PyBool, PyCFunction, PyDict, PyDictMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::compile_driver::inputs::{InputsRequest, attached_inputs};
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_collection_rendering;
 use crate::bindings::_helpers::discovery::scope_snapshot::discover_scope_snapshot;
 use crate::bindings::_helpers::frontier::cache_directory::cache_directory;
+use crate::bindings::_helpers::frontier::compile_frontier::{FrontierStage, bridged, produced};
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
@@ -24,6 +28,7 @@ use crate::bindings::_helpers::scopes::scope_index::open_native_scope_index;
 use crate::bindings::_helpers::scopes::scope_tolerant::scope_tolerant_index;
 use crate::bindings::_helpers::scopes::scope_validation::scope_index_with_compile_usages;
 use crate::bindings::_helpers::sql_test_glue::constants::SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM;
+use pyo3::IntoPyObjectExt;
 
 const SCOPE_CACHE_DIRECTORY_NAME: &str = "declaration-scopes-v2";
 const SCOPE_CACHE_FILENAME: &str = "scope-index.json";
@@ -53,13 +58,11 @@ fn project_adapter<'py>(
     discover_keywords.set_item("extract_output_column_locations", false)?;
     let discovered: Bound<'py, PyAny> = registry::native(py, NativeAttr::DiscoverProjectInputs)?
         .call((), Some(&discover_keywords))?;
-    let adapter_name: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-        &[
-            ("project_config", discovered.getattr("project_config")?),
-            ("local_config", discovered.getattr("local_config")?),
-        ],
-    )?;
+    let adapter_name: Bound<'py, PyAny> = resolve_effective_adapter_name(
+        &discovered.getattr("project_config")?,
+        &discovered.getattr("local_config")?,
+    )
+    .and_then(|value| value.into_bound_py_any(py))?;
     let adapter: Bound<'py, PyAny> = call_with(
         &host::entry(py, AdapterHost::ResolveAdapter)?,
         &[("adapter_name", adapter_name)],
@@ -75,13 +78,9 @@ fn compiled_index<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = discovered.py();
     let project_config: Bound<'py, PyAny> = discovered.getattr("project_config")?;
-    let collection_rendering: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveCollectionRendering)?,
-        &[
-            ("project_config", project_config),
-            ("declaration_override", py.None().into_bound(py)),
-        ],
-    )?;
+    let collection_rendering: Bound<'py, PyAny> =
+        resolve_effective_collection_rendering(&project_config, &py.None().into_bound(py))
+            .and_then(|value| value.into_bound_py_any(py))?;
     let adapter_context: Bound<'py, PyAny> = call_with(
         &registry::class(py, RecordId::CompileAdapterContext)?,
         &[
@@ -94,26 +93,29 @@ fn compiled_index<'py>(
             ("sql_lexical_syntax", syntax.clone()),
         ],
     )?;
-    let stage_keywords: Bound<'py, PyDict> = PyDict::new(py);
-    stage_keywords.set_item("discovered_inputs", discovered)?;
-    stage_keywords.set_item("adapter_context", adapter_context)?;
-    stage_keywords.set_item("resolved_connection", PyDict::new(py))?;
-    stage_keywords.set_item("no_sql_validation", true)?;
-    stage_keywords.set_item("defer_model_sql_validation", true)?;
-    stage_keywords.set_item("no_cache", true)?;
-    let python_stage: Bound<'py, PyAny> = py.import("functools")?.getattr("partial")?.call(
-        (registry::native(py, NativeAttr::BuildCompileInputs)?,),
-        Some(&stage_keywords),
+    let inputs: InputsRequest = InputsRequest {
+        discovered_inputs: discovered.unbind(),
+        adapter_context: adapter_context.unbind(),
+        selected_target: py.None(),
+        cli_vars: py.None(),
+        run_id: py.None(),
+        no_sql_validation: PyBool::new(py, true).to_owned().into_any().unbind(),
+        defer_model_sql_validation: PyBool::new(py, true).to_owned().into_any().unbind(),
+        external_sql_reference_resolver: py.None(),
+        resolved_connection: PyDict::new(py).into_any().unbind(),
+        no_cache: PyBool::new(py, true).to_owned().into_any().unbind(),
+    };
+    let stage: Bound<'py, PyCFunction> = PyCFunction::new_closure(
+        py,
+        None,
+        None,
+        move |arguments: &Bound<'_, PyTuple>, _: Option<&Bound<'_, PyDict>>| {
+            attached_inputs(arguments.py(), &inputs).map(Bound::unbind)
+        },
     )?;
-    let compile_inputs: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::CompileFrontier)?,
-        &[
-            (
-                "until",
-                registry::class(py, RecordId::CompilerStage)?.getattr("COMPILE_PROJECT_INPUTS")?,
-            ),
-            ("python_stage", python_stage),
-        ],
+    let compile_inputs: Bound<'py, PyAny> = produced(
+        FrontierStage::CompileProjectInputs,
+        bridged(stage.as_any())?,
     )?;
     scope_index_with_compile_usages(&compile_inputs)
 }

@@ -90,7 +90,7 @@ fn syntax_checks<'py>(
 /// Each model's `(sql, placeholders)` that assembly passes to syntax validation.
 #[pyfunction]
 #[pyo3(signature = (*, model_inputs, analysis_model_names, analysis_succeeded))]
-fn model_syntax_checks<'py>(
+pub(crate) fn model_syntax_checks<'py>(
     model_inputs: &Bound<'py, PyAny>,
     analysis_model_names: &Bound<'py, PyAny>,
     analysis_succeeded: &Bound<'py, PyAny>,
@@ -105,7 +105,7 @@ fn model_syntax_checks<'py>(
 /// `(sql, families)` by model index for each pivot model no analysis covered.
 #[pyfunction]
 #[pyo3(signature = (*, model_inputs, analysed))]
-fn standalone_pivot_models<'py>(
+pub(crate) fn standalone_pivot_models<'py>(
     model_inputs: &Bound<'py, PyAny>,
     analysed: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {

@@ -9,10 +9,10 @@ use sqlbuild_model_config::sql_tests::models::{SqlTestBlock, SqlTestCase};
 use sqlbuild_model_config::sql_values::models::{RawKey, RawSqlValue};
 
 use crate::bindings::_helpers::contracts::sql_values::{SqlValueClasses, raw_value, sql_value};
+use crate::bindings::_helpers::native_host::facade::FacadeHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
-
-const TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 
 pub(crate) type NativeBlock<'py> = (Bound<'py, PyDict>, String, Bound<'py, PyAny>);
 
@@ -82,9 +82,7 @@ fn block_record<'py>(
     keywords.set_item("name", block.name)?;
     keywords.set_item(
         "mode",
-        py.import(TYPES_MODULE)?
-            .getattr("SqlTestMode")?
-            .call1((block.mode,))?,
+        host::entry(py, FacadeHost::SqlTestMode)?.call1((block.mode,))?,
     )?;
     keywords.set_item("parameters", PyTuple::new(py, parameters)?)?;
     keywords.set_item("cases", PyTuple::new(py, cases)?)?;

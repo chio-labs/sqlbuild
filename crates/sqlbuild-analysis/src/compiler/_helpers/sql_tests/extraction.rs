@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
 use crate::compiler::_helpers::sql_tests::authored_macro_calls::calls_macro;
@@ -15,6 +16,10 @@ use sqlbuild_sqltext::sql_scan::main::dialect_matching_paren::dialect_matching_p
 use sqlbuild_sqltext::sql_scan::main::dialect_non_code_end::dialect_non_code_end;
 use sqlbuild_sqltext::sql_scan::models::{LexicalSyntax, Unclosed};
 
+/// Batches smaller than this are extracted on the calling thread.
+const PARALLEL_EXTRACTION_MINIMUM: usize = 64;
+const EXTRACTION_WORKERS: usize = 4;
+const EXTRACTION_WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
 const MODEL_PREFIXES: [&str; 8] = [
     "__macro__",
     "__ref__",
@@ -134,10 +139,29 @@ pub(crate) fn extract_tests(
     tests: &[SqlTestRequest],
     syntax: &LexicalSyntax,
 ) -> Result<Vec<SqlTestClassification>, (usize, Failure)> {
-    tests
-        .iter()
+    let extracted: Vec<Result<SqlTestClassification, Failure>> =
+        if tests.len() < PARALLEL_EXTRACTION_MINIMUM {
+            tests
+                .iter()
+                .map(|test| extract_test(test, syntax))
+                .collect()
+        } else {
+            let pool: rayon::ThreadPool = rayon::ThreadPoolBuilder::new()
+                .num_threads(EXTRACTION_WORKERS)
+                .stack_size(EXTRACTION_WORKER_STACK_BYTES)
+                .build()
+                .map_err(|error| (0, Failure::from(error.to_string())))?;
+            pool.install(|| {
+                tests
+                    .par_iter()
+                    .map(|test| extract_test(test, syntax))
+                    .collect()
+            })
+        };
+    extracted
+        .into_iter()
         .enumerate()
-        .map(|(index, test)| extract_test(test, syntax).map_err(|failure| (index, failure)))
+        .map(|(index, result)| result.map_err(|failure| (index, failure)))
         .collect()
 }
 

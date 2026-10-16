@@ -20,7 +20,7 @@ use crate::bindings::models::{NativeDiscoverySession, NativeProjectTree};
 /// Each public Python hook file as `file_path`, `relative_path` and its role's scope fields.
 #[pyfunction]
 #[pyo3(signature = (*, project_dir))]
-fn discover_python_hook_files<'py>(
+pub(crate) fn discover_python_hook_files<'py>(
     project_dir: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     in_snapshot(project_dir, || {

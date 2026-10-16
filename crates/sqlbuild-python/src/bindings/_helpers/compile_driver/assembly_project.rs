@@ -16,6 +16,7 @@ use crate::bindings::_helpers::compile_driver::assembly_models::{
 };
 use crate::bindings::_helpers::compile_driver::assembly_sql_tests::assembled_sql_tests;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::model_config::template_data::early_model_templates;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
@@ -23,6 +24,7 @@ use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_errors::report_scope_index_errors;
 use crate::bindings::_helpers::scopes::scope_validation::scope_index_with_compile_usages;
+use pyo3::IntoPyObjectExt;
 
 const SOURCE_SLOT: &str = "source";
 const SEED_SLOT: &str = "seed";
@@ -164,13 +166,11 @@ fn connection_database_fallback<'py>(
     connection: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = inputs.py();
-    let adapter_name: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-        &[
-            ("project_config", inputs.getattr("project_config")?),
-            ("local_config", inputs.getattr("local_config")?),
-        ],
-    )?;
+    let adapter_name: Bound<'py, PyAny> = resolve_effective_adapter_name(
+        &inputs.getattr("project_config")?,
+        &inputs.getattr("local_config")?,
+    )
+    .and_then(|value| value.into_bound_py_any(py))?;
     if adapter_name.eq(host::entry(py, AdapterHost::BuiltinAdapter)?.getattr("DUCKDB")?)? {
         return Ok(py.None().into_bound(py));
     }

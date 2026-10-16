@@ -20,9 +20,7 @@ use sqlbuild_core::text::main::python_strip::python_strip;
 
 use sqlbuild_model_config::templates::models::TemplateOptions;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, keywords,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, keywords};
 use crate::bindings::_helpers::model_config::template_data::expanded_template_data;
 
 /// Connection settings that identify the warehouse two targets write to.
@@ -39,8 +37,14 @@ const CONNECTION_IDENTITY_KEYS: [&str; 7] = [
 const EXPLICIT_TARGET_ADAPTERS: [&str; 3] = ["snowflake", "bigquery", "databricks"];
 const LOADER_NAMESPACE_LABEL: &str = "managed loader target namespace";
 const DEFAULTS_HELP_PURPOSE: &str = "to set project-wide defaults";
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
+use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_connection_config;
+use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_runtime_config;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
+use crate::bindings::_helpers::discovery::guidance::setting_help;
+use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
+use pyo3::IntoPyObjectExt;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 const DEFAULTS_SECTION: &str = "defaults";
 
@@ -126,25 +130,19 @@ pub(crate) fn named_target_schema_strategy(
     }
     let project_config: Bound<'_, PyAny> = discovered.getattr("project_config")?;
     let local_config: Bound<'_, PyAny> = discovered.getattr("local_config")?;
-    let target_name: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveTargetName)?,
-        &[
-            ("project_config", project_config.clone()),
-            ("local_config", local_config.clone()),
-            ("selected_target", selected_target.clone()),
-        ],
-    )?;
+    let target_name: Bound<'_, PyAny> = resolve_target_name(
+        py,
+        &project_config.clone(),
+        &local_config.clone(),
+        &selected_target.clone(),
+    )
+    .and_then(|value| value.into_bound_py_any(py))?;
     if target_name.is_none() {
         return Ok(());
     }
-    let target_config: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveTargetConfig)?,
-        &[
-            ("project_config", project_config),
-            ("local_config", local_config),
-            ("target_name", target_name.clone()),
-        ],
-    )?;
+    let target_config: Bound<'_, PyAny> =
+        resolve_target_config(py, &project_config, &local_config, &target_name.clone())
+            .and_then(|value| value.into_bound_py_any(py))?;
     let schema: Option<String> = text_or_none(&target_config.getattr("schema")?)?;
     if schema.is_some_and(|schema| !python_strip(&schema).is_empty()) {
         return Ok(());
@@ -261,31 +259,21 @@ fn target_namespaces(
 ) -> PyResult<TargetNamespaces> {
     let py: Python<'_> = discovered.py();
     let name: Bound<'_, PyAny> = PyString::new(py, target_name).into_any();
-    let target_config: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveTargetConfig)?,
-        &[
-            ("project_config", discovered.getattr("project_config")?),
-            ("local_config", discovered.getattr("local_config")?),
-            ("target_name", name.clone()),
-        ],
-    )?;
-    let runtime: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildEffectiveRuntimeConfig)?,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("selected_target", name.clone()),
-        ],
-    )?;
+    let target_config: Bound<'_, PyAny> = resolve_target_config(
+        py,
+        &discovered.getattr("project_config")?,
+        &discovered.getattr("local_config")?,
+        &name.clone(),
+    )
+    .and_then(|value| value.into_bound_py_any(py))?;
+    let runtime: Bound<'_, PyAny> =
+        build_effective_runtime_config(&discovered.clone(), Some(name.clone()), None)
+            .and_then(|value| value.into_bound_py_any(py))?;
     let (_, effective_vars, _): (Bound<'_, PyAny>, Bound<'_, PyAny>, Bound<'_, PyAny>) =
         runtime.extract()?;
     let connection: Bound<'_, PyAny> = if resolved_connection.is_none() {
-        call_with(
-            &registry::native(py, NativeAttr::BuildEffectiveConnectionConfig)?,
-            &[
-                ("discovered_inputs", discovered.clone()),
-                ("selected_target", name),
-            ],
-        )?
+        build_effective_connection_config(&discovered.clone(), Some(name), None)
+            .and_then(|value| value.into_bound_py_any(py))?
     } else {
         resolved_connection.clone()
     };
@@ -447,25 +435,29 @@ fn required_target_parts(
     let Some(first) = missing.first() else {
         return Ok(());
     };
-    let help: String = call_with(
-        &registry::native(py, NativeAttr::SettingHelp)?,
-        &[
-            (
-                "purpose",
-                PyString::new(py, DEFAULTS_HELP_PURPOSE).into_any(),
-            ),
-            (
-                "file_name",
-                PyString::new(py, PROJECT_CONFIG_FILENAME).into_any(),
-            ),
-            ("section", PyString::new(py, DEFAULTS_SECTION).into_any()),
-            ("key", PyString::new(py, first).into_any()),
-            (
-                "value",
-                PyString::new(py, &format!("my_{first}")).into_any(),
-            ),
-        ],
-    )?
+    let help: String = setting_help(
+        py,
+        Some(keywords(
+            py,
+            &[
+                (
+                    "purpose",
+                    PyString::new(py, DEFAULTS_HELP_PURPOSE).into_any(),
+                ),
+                (
+                    "file_name",
+                    PyString::new(py, PROJECT_CONFIG_FILENAME).into_any(),
+                ),
+                ("section", PyString::new(py, DEFAULTS_SECTION).into_any()),
+                ("key", PyString::new(py, first).into_any()),
+                (
+                    "value",
+                    PyString::new(py, &format!("my_{first}")).into_any(),
+                ),
+            ],
+        )?),
+    )
+    .and_then(|value| value.into_bound_py_any(py))?
     .extract()?;
     Err(planner_error(
         py,

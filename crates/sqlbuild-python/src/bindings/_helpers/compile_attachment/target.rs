@@ -8,16 +8,15 @@ use crate::bindings::_helpers::compile_attachment::effective_config::project_var
 use crate::bindings::_helpers::compile_command::constants::{
     COMPILE_CACHE_DISABLE_ENV_VAR, COMPILE_CACHE_DISABLE_VALUE, RETIRED_CACHE_DIRECTORY_NAMES,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
 use crate::bindings::_helpers::frontier::cache_directory::cache_directory;
 use crate::bindings::_helpers::frontier::constants::{
     COMPILER_CACHE_DIRECTORY_NAME, RETIRED_CACHE_NAMESPACE_SUFFIXES,
 };
 use crate::bindings::_helpers::model_config::template_data::{early_model_templates, run_id};
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
+use pyo3::IntoPyObjectExt;
 
 const DATABASE_KEY: &str = "database";
 const SCHEMA_KEY: &str = "schema";
@@ -30,25 +29,19 @@ fn resolved_target<'py>(
     let py: Python<'py> = discovered.py();
     let project_config: Bound<'py, PyAny> = discovered.getattr("project_config")?;
     let local_config: Bound<'py, PyAny> = discovered.getattr("local_config")?;
-    let target_name: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveTargetName)?,
-        &[
-            ("project_config", project_config.clone()),
-            ("local_config", local_config.clone()),
-            ("selected_target", selected_target.clone()),
-        ],
-    )?;
+    let target_name: Bound<'py, PyAny> = resolve_target_name(
+        py,
+        &project_config.clone(),
+        &local_config.clone(),
+        &selected_target.clone(),
+    )
+    .and_then(|value| value.into_bound_py_any(py))?;
     if target_name.is_none() {
         return Ok((target_name, py.None().into_bound(py)));
     }
-    let target_config: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveTargetConfig)?,
-        &[
-            ("project_config", project_config),
-            ("local_config", local_config),
-            ("target_name", target_name.clone()),
-        ],
-    )?;
+    let target_config: Bound<'py, PyAny> =
+        resolve_target_config(py, &project_config, &local_config, &target_name.clone())
+            .and_then(|value| value.into_bound_py_any(py))?;
     Ok((target_name, target_config))
 }
 

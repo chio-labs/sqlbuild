@@ -6,9 +6,12 @@ use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::assembly_project::assembled_project;
 use crate::bindings::_helpers::compile_driver::project::lineage_mode;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, within,
 };
+use crate::bindings::_helpers::compiled_project::records::project_with;
+use crate::bindings::_helpers::compiled_project::records::record_model_analyses;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::ids::NativeAttr;
@@ -35,7 +38,7 @@ pub(crate) struct AssemblyRequest {
 /// Convert compile inputs into the planner-ready project view.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn assemble_project<'py>(
+pub(crate) fn assemble_project<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -60,9 +63,9 @@ fn assemble_project<'py>(
         return Ok(built);
     }
     let diagnostics: Bound<'py, PyTuple> = chained(&built.getattr("diagnostics")?, &collected)?;
-    call_with(
-        &registry::native(py, NativeAttr::ProjectWith)?,
-        &[("project", built), ("diagnostics", diagnostics.into_any())],
+    project_with(
+        &built,
+        Some(keywords(py, &[("diagnostics", diagnostics.into_any())])?),
     )
 }
 
@@ -125,13 +128,15 @@ fn referenced_project(py: Python<'_>, request: AssemblyRequest) -> PyResult<Boun
     }
     let diagnostics: Bound<'_, PyTuple> =
         chained(&project.getattr("diagnostics")?, &reference_diagnostics)?;
-    call_with(
-        &registry::native(py, NativeAttr::ProjectWith)?,
-        &[
-            ("project", project),
-            ("diagnostics", diagnostics.into_any()),
-            ("unmatched_literal_sql_relations", unmatched),
-        ],
+    project_with(
+        &project,
+        Some(keywords(
+            py,
+            &[
+                ("diagnostics", diagnostics.into_any()),
+                ("unmatched_literal_sql_relations", unmatched),
+            ],
+        )?),
     )
 }
 
@@ -144,22 +149,13 @@ fn with_native_project<'py>(
     if native_project.is_none() {
         return Ok(project.clone());
     }
-    call_with(
-        &registry::native(py, NativeAttr::RecordModelAnalyses)?,
-        &[
-            ("project", native_project.clone()),
-            ("models", project.getattr("models")?),
-        ],
-    )?;
+    record_model_analyses(native_project.cast()?, &project.getattr("models")?)?;
     if project.getattr("native_project")?.is(native_project) {
         return Ok(project.clone());
     }
-    call_with(
-        &registry::native(py, NativeAttr::ProjectWith)?,
-        &[
-            ("project", project.clone()),
-            ("native_project", native_project.clone()),
-        ],
+    project_with(
+        &project.clone(),
+        Some(keywords(py, &[("native_project", native_project.clone())])?),
     )
 }
 

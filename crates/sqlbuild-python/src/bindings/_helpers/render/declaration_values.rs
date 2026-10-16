@@ -1,10 +1,10 @@
 //! Declaration scope resolvers, per-path declaration contexts and adapter-rendered constants.
 
 use pyo3::prelude::{
-    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+    Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyInt, PyList, PyString, PyTuple};
-use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
+use pyo3::{IntoPyObject, pyclass, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
@@ -371,7 +371,7 @@ fn rendered_constant<'py>(
 pub(crate) fn constant_declaration_sql<'py>(
     declaration: &Bound<'py, PyAny>,
     value_renderer: &Bound<'py, PyAny>,
-    (collection_rendering, file_path): (&Bound<'py, PyAny>, Option<&Bound<'py, PyAny>>),
+    (collection_rendering, file_path): (&Bound<'py, PyAny>, Option<&str>),
 ) -> PyResult<String> {
     let py: Python<'py> = declaration.py();
     let render_as: Bound<'py, PyAny> = declaration.getattr("render_as")?;
@@ -392,16 +392,16 @@ pub(crate) fn constant_declaration_sql<'py>(
         return Err(error);
     }
     let relative_path: Bound<'py, PyAny> = declaration.getattr("relative_path")?;
-    let location: Bound<'py, PyAny> = match file_path {
-        Some(file_path) if !file_path.is_none() => file_path.clone(),
-        _ => relative_path.clone(),
+    let location: String = match file_path {
+        Some(file_path) => file_path.to_owned(),
+        None => relative_path.str()?.to_string(),
     };
     let compile_error: Bound<'py, PyAny> =
         registry::error(py, ErrorId::CompileInput)?.call1((format!(
             "{} constant '{}' could not be rendered in '{}' by adapter '{}' as {}: {}",
             relative_path.str()?,
             declaration.getattr("name")?.str()?,
-            location.str()?,
+            location,
             value_renderer.getattr("adapter_name")?.str()?,
             selected.getattr("value")?.str()?,
             raised.str()?,
@@ -419,11 +419,46 @@ fn render_constant_declaration<'py>(
     collection_rendering: &Bound<'py, PyAny>,
     file_path: Option<Bound<'py, PyAny>>,
 ) -> PyResult<String> {
+    let location: Option<String> = match file_path {
+        Some(file_path) => Some(file_path.str()?.to_string()),
+        None => None,
+    };
     constant_declaration_sql(
         declaration,
         value_renderer,
-        (collection_rendering, file_path.as_ref()),
+        (collection_rendering, location.as_deref()),
     )
+}
+
+/// The adapter's constant rendering a compile's declaration expansions share.
+#[pyclass(module = "sqlbuild._native", frozen)]
+pub(crate) struct ConstantRendering {
+    value_renderer: Py<PyAny>,
+    collection_rendering: Py<PyAny>,
+}
+
+impl ConstantRendering {
+    /// Rendering with the adapter's value renderer and the project's collection rendering.
+    pub(crate) fn new(value_renderer: Py<PyAny>, collection_rendering: Py<PyAny>) -> Self {
+        Self {
+            value_renderer,
+            collection_rendering,
+        }
+    }
+
+    /// One visible constant as SQL, its failures located at `file_path`.
+    pub(crate) fn render(
+        &self,
+        declaration: &Bound<'_, PyAny>,
+        file_path: &str,
+    ) -> PyResult<String> {
+        let py: Python<'_> = declaration.py();
+        constant_declaration_sql(
+            declaration,
+            self.value_renderer.bind(py),
+            (self.collection_rendering.bind(py), Some(file_path)),
+        )
+    }
 }
 
 /// One enum member value as a SQL scalar literal.

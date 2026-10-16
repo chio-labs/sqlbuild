@@ -17,7 +17,6 @@ use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const REFERENCE_CALL_SYNTAX_CODE: &str = "P012";
 
 /// `(kind, name, package, call_argument_count)` for one reference.
@@ -179,18 +178,17 @@ pub(crate) fn extract_references<'py>(
     let (references, invalid_calls) = scanned(py, sql, syntax)?;
     let report: Bound<'py, PyAny> = registry::native(py, NativeAttr::ReportCompileDiagnostic)?;
     let diagnostic_type: Bound<'py, PyAny> = registry::class(py, RecordId::CompilerDiagnostic)?;
-    let types = py.import(COMPILE_TYPES_MODULE)?;
     for call in invalid_calls {
         let diagnostic: Bound<'py, PyAny> = call_with(
             &diagnostic_type,
             &[
                 (
                     "phase",
-                    registry::class(types.py(), RecordId::DiagnosticPhase)?.getattr("COMPILE")?,
+                    registry::class(py, RecordId::DiagnosticPhase)?.getattr("COMPILE")?,
                 ),
                 (
                     "severity",
-                    registry::class(types.py(), RecordId::DiagnosticSeverity)?.getattr("ERROR")?,
+                    registry::class(py, RecordId::DiagnosticSeverity)?.getattr("ERROR")?,
                 ),
                 ("code", text(py, REFERENCE_CALL_SYNTAX_CODE)?),
                 ("message", call.getattr("message")?),

@@ -7,8 +7,12 @@ use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyListMethods, PyTuple};
 use crate::bindings::_helpers::compile_driver::assembly_analysis::AnalysisContext;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::project_assembly::models::{NativeModelFacts, NativeProjectFacts};
+use crate::bindings::_helpers::project_assembly::native_resources::assemble_native_project_resources;
+use crate::bindings::_helpers::project_assembly::syntax_checks::model_syntax_checks;
+use crate::bindings::_helpers::project_assembly::syntax_checks::standalone_pivot_models;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
+use pyo3::IntoPyObjectExt;
 
 /// `NativeProjectFacts` of `inputs`: resources, syntax validity, deps and standalone pivot proofs.
 pub(crate) fn native_project_facts<'py>(
@@ -31,31 +35,19 @@ pub(crate) fn native_project_facts<'py>(
     } else {
         PyDict::new(py).into_any()
     };
-    let syntax_checks: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ModelSyntaxChecks)?,
-        &[
-            ("model_inputs", model_inputs.clone()),
-            ("analysis_model_names", names.clone()),
-            ("analysis_succeeded", succeeded),
-        ],
-    )?;
-    let resources: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::AssembleNativeProjectResources)?,
-        &[
-            ("inputs", inputs.clone()),
-            ("dialect", dialect.clone()),
-            ("syntax_checks", syntax_checks),
-        ],
-    )?;
+    let syntax_checks: Bound<'py, PyAny> =
+        model_syntax_checks(&model_inputs.clone(), &names.clone(), &succeeded)
+            .and_then(|value| value.into_bound_py_any(py))?;
+    let resources: Bound<'py, PyAny> = assemble_native_project_resources(
+        &inputs.clone(),
+        dialect.clone().extract()?,
+        &syntax_checks,
+    )
+    .and_then(|value| value.into_bound_py_any(py))?;
     let proofs: Bound<'py, PyDict> = pivot_proofs(
-        &call_with(
-            &registry::native(py, NativeAttr::StandalonePivotModels)?,
-            &[
-                ("model_inputs", model_inputs.clone()),
-                ("analysed", positions),
-            ],
-        )?
-        .cast_into::<PyDict>()?,
+        &standalone_pivot_models(&model_inputs.clone(), &positions)
+            .and_then(|value| value.into_bound_py_any(py))?
+            .cast_into::<PyDict>()?,
         context,
         session,
     )?;

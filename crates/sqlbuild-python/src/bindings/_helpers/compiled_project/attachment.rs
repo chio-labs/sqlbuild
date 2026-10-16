@@ -23,14 +23,13 @@ use crate::bindings::_helpers::compiled_project::sql_test_loop::{
     TestBlockRow, TestCaseRow, TestFileRow,
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::constants::SQL_TEST_CTE_SCAN_ALGORITHM;
 
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const AUDITING_TYPES_MODULE: &str = "sqlbuild.compiler.auditing.types";
 const YAML_FILE_SUFFIXES: [&str; 2] = [".yml", ".yaml"];
 const PATHLIB_MODULE: &str = "pathlib";
 const TEST_TIMING_KEY: &str = "test_input_compile_ms";
@@ -55,18 +54,6 @@ fn stem(value: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
 /// Each item of the iterable `value.<name>`.
 fn items<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Vec<Bound<'py, PyAny>>> {
     value.getattr(name)?.try_iter()?.collect()
-}
-
-fn enum_member<'py>(
-    py: Python<'py>,
-    (module, class, member): (&str, &str, &str),
-) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, module, class)?.getattr(member)
-}
-
-/// `{member.value: member for member in enum_class}`.
-fn by_value<'py>(py: Python<'py>, module: &str, class: &str) -> PyResult<Bound<'py, PyDict>> {
-    members_by_value(&imported(py, module, class)?)
 }
 
 /// `{member.value: member for member in enum_class}` of a native string enum.
@@ -350,7 +337,10 @@ fn sql_test_settings<'py>(
     ] {
         settings.set_item(key, registry::class(py, class)?)?;
     }
-    settings.set_item("modes", by_value(py, COMPILE_TYPES_MODULE, "SqlTestMode")?)?;
+    settings.set_item(
+        "modes",
+        members_by_value(&host::entry(py, FacadeHost::SqlTestMode)?)?,
+    )?;
     settings.set_item(
         "test_kind",
         registry::member(py, RecordId::ResourceKind, "TEST")?,
@@ -379,14 +369,8 @@ fn sql_test_settings<'py>(
 
 fn audit_block_row(block: Bound<'_, PyAny>) -> PyResult<AuditBlockRow> {
     let py: Python<'_> = block.py();
-    let measurement: Bound<'_, PyAny> = enum_member(
-        py,
-        (
-            AUDITING_TYPES_MODULE,
-            "AuditEvaluationMode",
-            MEASUREMENT_MODE,
-        ),
-    )?;
+    let measurement: Bound<'_, PyAny> =
+        host::entry(py, FacadeHost::AuditEvaluationMode)?.getattr(MEASUREMENT_MODE)?;
     Ok((
         block.clone().unbind(),
         attr(&block, "name")?,

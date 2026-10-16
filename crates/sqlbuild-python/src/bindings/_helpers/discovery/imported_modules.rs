@@ -5,11 +5,13 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::discovery::locations::project_relative_path;
 use crate::bindings::_helpers::event_exporting::scope::current_scope;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
+use pyo3::IntoPyObjectExt;
 
 /// One project directory under discovery.
 pub(crate) struct ProjectDir<'py> {
@@ -28,13 +30,8 @@ impl<'py> ProjectDir<'py> {
 
     /// `project_relative_path(path=file_path, project_dir=project_dir)`.
     pub(crate) fn relative(&self, file_path: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-        call_with(
-            &registry::native(self.py(), NativeAttr::ProjectRelativePath)?,
-            &[
-                ("path", file_path.clone()),
-                ("project_dir", self.path.clone()),
-            ],
-        )
+        project_relative_path(&file_path.clone(), &self.path.clone())
+            .and_then(|value| value.into_bound_py_any(self.py()))
     }
 
     /// `str(file_path.relative_to(project_dir))`.

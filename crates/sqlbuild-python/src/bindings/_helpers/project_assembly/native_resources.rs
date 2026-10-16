@@ -449,7 +449,7 @@ fn resources_object<'py>(
 /// Return the resource facts and the resource Python's assembly raises at, if any.
 #[pyfunction]
 #[pyo3(signature = (*, inputs, dialect, syntax_checks))]
-fn assemble_native_project_resources<'py>(
+pub(crate) fn assemble_native_project_resources<'py>(
     inputs: &Bound<'py, PyAny>,
     dialect: Option<String>,
     syntax_checks: &Bound<'py, PyAny>,

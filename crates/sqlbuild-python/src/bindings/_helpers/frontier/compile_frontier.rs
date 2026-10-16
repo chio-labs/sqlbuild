@@ -44,15 +44,45 @@ fn native_frontier<'py>(
     if !native_stage.is_none() {
         return native_stage.call0();
     }
-    let inputs_stage: Bound<'py, PyAny> =
-        registry::class(py, RecordId::CompilerStage)?.getattr("COMPILE_PROJECT_INPUTS")?;
-    if until.is(&inputs_stage) {
-        return call_with(
-            &host::entry(py, UserCodeHost::RunWithMacroBridge)?,
-            &[("stage", python_stage.clone())],
-        );
+    if until.is(&frontier_stage(py, FrontierStage::CompileProjectInputs)?) {
+        return bridged(python_stage);
     }
     python_stage.call0()
+}
+
+/// The compiler stages native callers produce through the frontier.
+#[derive(Clone, Copy)]
+pub(crate) enum FrontierStage {
+    DiscoveredProjectInputs,
+    CompileProjectInputs,
+    CompiledProject,
+}
+
+/// The `CompilerStage` member of `stage`.
+pub(crate) fn frontier_stage(py: Python<'_>, stage: FrontierStage) -> PyResult<Bound<'_, PyAny>> {
+    let member: &str = match stage {
+        FrontierStage::DiscoveredProjectInputs => "DISCOVERED_PROJECT_INPUTS",
+        FrontierStage::CompileProjectInputs => "COMPILE_PROJECT_INPUTS",
+        FrontierStage::CompiledProject => "COMPILED_PROJECT",
+    };
+    registry::class(py, RecordId::CompilerStage)?.getattr(member)
+}
+
+/// `stage()` run inside the macro bridge user macros render through.
+pub(crate) fn bridged<'py>(stage: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    call_with(
+        &host::entry(stage.py(), UserCodeHost::RunWithMacroBridge)?,
+        &[("stage", stage.clone())],
+    )
+}
+
+/// The frontier object `produced` for `stage`, captured on request.
+pub(crate) fn produced<'py>(
+    stage: FrontierStage,
+    produced: Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    write_stage_capture(&frontier_stage(produced.py(), stage)?, &produced)?;
+    Ok(produced)
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

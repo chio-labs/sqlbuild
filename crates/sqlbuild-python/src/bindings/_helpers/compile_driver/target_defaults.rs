@@ -4,6 +4,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyTuple;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::compiled_project::records::project_with;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -96,28 +97,30 @@ pub(crate) fn apply_target_defaults<'py>(
             ),
         )?);
     }
-    call_with(
-        &registry::native(py, NativeAttr::ProjectWith)?,
-        &[
-            ("project", project.clone()),
-            (
-                "effective_target_database",
-                or_else(
-                    project.getattr("effective_target_database")?,
-                    &defaults.default_database,
-                )?,
-            ),
-            (
-                "effective_target_schema",
-                or_else(
-                    project.getattr("effective_target_schema")?,
-                    &defaults.default_schema,
-                )?,
-            ),
-            ("models", PyTuple::new(py, models)?.into_any()),
-            ("seeds", PyTuple::new(py, seeds)?.into_any()),
-            ("functions", PyTuple::new(py, functions)?.into_any()),
-        ],
+    project_with(
+        &project.clone(),
+        Some(keywords(
+            py,
+            &[
+                (
+                    "effective_target_database",
+                    or_else(
+                        project.getattr("effective_target_database")?,
+                        &defaults.default_database,
+                    )?,
+                ),
+                (
+                    "effective_target_schema",
+                    or_else(
+                        project.getattr("effective_target_schema")?,
+                        &defaults.default_schema,
+                    )?,
+                ),
+                ("models", PyTuple::new(py, models)?.into_any()),
+                ("seeds", PyTuple::new(py, seeds)?.into_any()),
+                ("functions", PyTuple::new(py, functions)?.into_any()),
+            ],
+        )?),
     )
 }
 

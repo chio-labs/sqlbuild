@@ -290,6 +290,9 @@ _TARGETS: dict[str, tuple[str, str]] = {
         "sqlbuild.runtime.event_exporting.main.get_lifecycle_event_sink_definition",
         "get_lifecycle_event_sink_definition",
     ),
+    "ProjectRelation": ("sqlbuild.compiler.references.models", "ProjectRelation"),
+    "ProjectRelationIndex": ("sqlbuild.compiler.references.models", "ProjectRelationIndex"),
+    "RelationName": ("sqlbuild.compiler.references.models", "RelationName"),
     "CostResourceContext": ("sqlbuild.cost.models", "CostResourceContext"),
     "RunCostSummary": ("sqlbuild.cost.models", "RunCostSummary"),
     "CostCapability": ("sqlbuild.cost.types", "CostCapability"),
@@ -714,6 +717,16 @@ _TARGETS: dict[str, tuple[str, str]] = {
     ),
     "startup_inputs": ("sqlbuild.cli.compile_reuse._helpers.startup_inputs", "startup_inputs"),
     "CompileReuseRequest": ("sqlbuild.cli.compile_reuse.models", "CompileReuseRequest"),
+    "AuditEvaluationMode": ("sqlbuild.compiler.auditing.types", "AuditEvaluationMode"),
+    "AuditOutcome": ("sqlbuild.compiler.auditing.types", "AuditOutcome"),
+    "AuditSeverity": ("sqlbuild.compiler.auditing.types", "AuditSeverity"),
+    "ThresholdOperator": ("sqlbuild.compiler.auditing.types", "ThresholdOperator"),
+    "AttachedAuditTargetKind": ("sqlbuild.compiler.compile.types", "AttachedAuditTargetKind"),
+    "CompiledResourceType": ("sqlbuild.compiler.compile.types", "CompiledResourceType"),
+    "FunctionLanguage": ("sqlbuild.compiler.compile.types", "FunctionLanguage"),
+    "SqlTestMode": ("sqlbuild.compiler.compile.types", "SqlTestMode"),
+    "CursorAlgebraError": ("sqlbuild.cursor_algebra.exceptions", "CursorAlgebraError"),
+    "SharedInputError": ("sqlbuild.errors.contracts.exceptions", "SharedInputError"),
 }
 
 __all__ = ("host_targets", *_TARGETS)

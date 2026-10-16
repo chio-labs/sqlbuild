@@ -17,7 +17,7 @@ fn yaml_entry_line(contents: &str, name: &str) -> Option<usize> {
 /// `path.relative_to(project_dir)` without pathlib's per-parent comparison scan.
 #[pyfunction]
 #[pyo3(signature = (*, path, project_dir))]
-fn project_relative_path<'py>(
+pub(crate) fn project_relative_path<'py>(
     path: &Bound<'py, PyAny>,
     project_dir: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {

@@ -10,6 +10,16 @@ pub(crate) enum FacadeHost {
     ProviderSettingsInputs,
     StartupInputs,
     CompileReuseRequest,
+    AuditEvaluationMode,
+    AuditOutcome,
+    AuditSeverity,
+    ThresholdOperator,
+    AttachedAuditTargetKind,
+    CompiledResourceType,
+    FunctionLanguage,
+    SqlTestMode,
+    CursorAlgebraError,
+    SharedInputError,
 }
 
 /// Every facade entry, in `FacadeHost` order.
@@ -37,6 +47,56 @@ pub(crate) const ENTRIES: &[HostEntry] = &[
     HostEntry {
         name: "CompileReuseRequest",
         kind: HostKind::Class,
+        edge: HostEdge::Facade,
+    },
+    HostEntry {
+        name: "AuditEvaluationMode",
+        kind: HostKind::Class,
+        edge: HostEdge::Facade,
+    },
+    HostEntry {
+        name: "AuditOutcome",
+        kind: HostKind::Class,
+        edge: HostEdge::Facade,
+    },
+    HostEntry {
+        name: "AuditSeverity",
+        kind: HostKind::Class,
+        edge: HostEdge::Facade,
+    },
+    HostEntry {
+        name: "ThresholdOperator",
+        kind: HostKind::Class,
+        edge: HostEdge::Facade,
+    },
+    HostEntry {
+        name: "AttachedAuditTargetKind",
+        kind: HostKind::Class,
+        edge: HostEdge::Facade,
+    },
+    HostEntry {
+        name: "CompiledResourceType",
+        kind: HostKind::Class,
+        edge: HostEdge::Facade,
+    },
+    HostEntry {
+        name: "FunctionLanguage",
+        kind: HostKind::Class,
+        edge: HostEdge::Facade,
+    },
+    HostEntry {
+        name: "SqlTestMode",
+        kind: HostKind::Class,
+        edge: HostEdge::Facade,
+    },
+    HostEntry {
+        name: "CursorAlgebraError",
+        kind: HostKind::Exception,
+        edge: HostEdge::Facade,
+    },
+    HostEntry {
+        name: "SharedInputError",
+        kind: HostKind::Exception,
         edge: HostEdge::Facade,
     },
 ];

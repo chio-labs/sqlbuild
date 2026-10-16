@@ -4,13 +4,12 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
-const AUDITING_TYPES_MODULE: &str = "sqlbuild.compiler.auditing.types";
 const CONTRACT_CLASSES: [(&str, RecordId); 6] = [
     ("schema_column", RecordId::SchemaColumn),
     ("schema_audit_instance", RecordId::SchemaAuditInstance),
@@ -79,11 +78,11 @@ fn built_contract_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     }
     classes.set_item(
         "severities",
-        members_by_value(&imported(py, AUDITING_TYPES_MODULE, "AuditSeverity")?)?,
+        members_by_value(&host::entry(py, FacadeHost::AuditSeverity)?)?,
     )?;
     classes.set_item(
         "threshold_operators",
-        members_by_value(&imported(py, AUDITING_TYPES_MODULE, "ThresholdOperator")?)?,
+        members_by_value(&host::entry(py, FacadeHost::ThresholdOperator)?)?,
     )?;
     Ok(classes)
 }

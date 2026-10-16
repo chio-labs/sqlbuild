@@ -5,19 +5,15 @@ use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyList, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::native_host::facade::FacadeHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const AUDITING_TYPES_MODULE: &str = "sqlbuild.compiler.auditing.types";
 /// The materializations a model's storage policies are inherited for, besides none.
 const TABLE_BACKED_MATERIALIZATIONS: [&str; 3] = ["TABLE", "INCREMENTAL", "SNAPSHOT"];
 /// The declaration kinds whose project-owned records the loop names.
 const NAMED_KINDS: [&str; 4] = ["AUDIT", "SCHEMA", "SQL_HOOK", "PYTHON_HOOK"];
-
-fn class<'py>(py: Python<'py>, module: &str, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, module, name)
-}
 
 fn dict<'py>(
     py: Python<'py>,
@@ -301,11 +297,11 @@ fn input_view_classes<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
                     vec![
                         (
                             "audit_severity",
-                            class(py, AUDITING_TYPES_MODULE, "AuditSeverity")?,
+                            host::entry(py, FacadeHost::AuditSeverity)?,
                         ),
                         (
                             "attached_target_kind",
-                            class(py, COMPILE_TYPES_MODULE, "AttachedAuditTargetKind")?,
+                            host::entry(py, FacadeHost::AttachedAuditTargetKind)?,
                         ),
                     ],
                 )?
@@ -326,7 +322,7 @@ fn input_view_classes<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
                         ),
                         (
                             "function_language",
-                            class(py, COMPILE_TYPES_MODULE, "FunctionLanguage")?,
+                            host::entry(py, FacadeHost::FunctionLanguage)?,
                         ),
                     ],
                 )?
@@ -436,7 +432,6 @@ pub(crate) fn model_loop_classes<'py>(
                 "reference_kind",
                 registry::class(py, RecordId::SqlReferenceKind)?,
             ),
-            ("partial", imported(py, "functools", "partial")?),
             (
                 "config",
                 native_config_classes(&host("config_session")?, &host("record_template_reads")?)?

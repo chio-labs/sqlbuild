@@ -54,8 +54,6 @@ const FILE_PATH_ATTRIBUTE: &str = "file_path";
 const SQL_BODY_ATTRIBUTE: &str = "sql_body";
 const READS_ATTRIBUTE: &str = "reads";
 const KIND_ATTRIBUTE: &str = "kind";
-const FILE_PATH_ARGUMENT: &str = "file_path";
-const CONSTANT_TEXT_CALLBACK: &str = "constant_text";
 const MACRO_TOKEN: char = '@';
 /// `_VisibleModelDeclarations` fields an unscoped hook's `DeclarationResolutionContext` reads.
 const UNSCOPED_FIELDS: [&str; 4] = [
@@ -468,17 +466,7 @@ impl<'py> HookRun<'_, '_, 'py> {
         declarations: &Bound<'py, PyAny>,
         scope: &Scope<'_, 'py>,
     ) -> PyResult<ExpandedDeclarations<'py>> {
-        let py: Python<'py> = scope.consumer.py();
         let (references, stop) = declaration_scan(sql);
-        let file_keyword: Bound<'py, PyDict> = PyDict::new(py);
-        file_keyword.set_item(
-            FILE_PATH_ARGUMENT,
-            self.context.classes.path_class.call1((scope.file_path,))?,
-        )?;
-        let render_constant: Bound<'py, PyAny> = self.context.classes.partial.call(
-            (self.context.host.getattr(CONSTANT_TEXT_CALLBACK)?,),
-            Some(&file_keyword),
-        )?;
         let classes: ExpansionClasses<'py> = ExpansionClasses {
             usage_record: self.context.classes.usage_record.clone(),
             compile_error: self.context.classes.compile_error.clone(),
@@ -493,7 +481,7 @@ impl<'py> HookRun<'_, '_, 'py> {
                 relationship_visibility: false,
                 path: scope.file_path,
             },
-            render_constant: &render_constant,
+            rendering: self.context.host.get(),
             classes: &classes,
         })
     }

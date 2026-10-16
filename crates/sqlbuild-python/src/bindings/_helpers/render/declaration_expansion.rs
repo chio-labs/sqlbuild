@@ -11,6 +11,8 @@ use sqlbuild_analysis::compiled_project::models::{
     DeclarationSplice, InaccessibleDeclaration, SplicedSql,
 };
 
+use crate::bindings::_helpers::render::declaration_values::ConstantRendering;
+
 const ENUM_REFERENCE_KIND: u8 = 0;
 const ENUM_KIND: &str = "enum";
 const CONSTANT_KIND: &str = "constant";
@@ -57,14 +59,14 @@ pub(crate) struct ExpansionConsumer<'a, 'py> {
     pub(crate) path: &'a str,
 }
 
-/// One expansion: the SQL, its scan, the visible declarations and the adapter's constant renderer.
+/// One expansion: the SQL, its scan, the visible declarations and the adapter's constant rendering.
 pub(crate) struct DeclarationExpansion<'a, 'py> {
     pub(crate) sql: &'a str,
     pub(crate) references: &'a [ScannedReference],
     pub(crate) stop: Option<u8>,
     pub(crate) context: &'a Bound<'py, PyAny>,
     pub(crate) consumer: ExpansionConsumer<'a, 'py>,
-    pub(crate) render_constant: &'a Bound<'py, PyAny>,
+    pub(crate) rendering: &'a ConstantRendering,
     pub(crate) classes: &'a ExpansionClasses<'py>,
 }
 
@@ -145,12 +147,9 @@ fn constant_text<'py>(
     name: &str,
 ) -> PyResult<(String, Bound<'py, PyAny>)> {
     let declaration: Bound<'py, PyAny> = visible_declaration(request, CONSTANT_KIND, name)?;
-    let arguments: Bound<'py, PyDict> = PyDict::new(declaration.py());
-    arguments.set_item(DECLARATION, declaration)?;
     let rendered: String = request
-        .render_constant
-        .call((), Some(&arguments))?
-        .extract()?;
+        .rendering
+        .render(&declaration, request.consumer.path)?;
     Ok((rendered, visibility(request, CONSTANT_VISIBILITY, name)?))
 }
 

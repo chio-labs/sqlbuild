@@ -4,11 +4,16 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::{PyBool, PyDict, PyDictMethods};
 
+use crate::bindings::_helpers::compile_attachment::declaration_scope::rebind_declaration_scope;
+use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_vars;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_collection_rendering;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
+use pyo3::IntoPyObjectExt;
 
 /// Build the declaration scope of `discovered`; a static scope lends only its index to macros.
 fn declaration_scope<'py>(
@@ -20,14 +25,9 @@ fn declaration_scope<'py>(
     let loaded_macros: Bound<'py, PyAny> = host::entry(py, UserCodeHost::LoadProjectMacros)?
         .call1((discovered.getattr("macro_files")?,))?;
     if !static_scope.is_none() {
-        let rebound: Bound<'py, PyAny> = call_with(
-            &registry::native(py, NativeAttr::RebindDeclarationScope)?,
-            &[
-                ("scope", static_scope),
-                ("discovered_inputs", discovered.clone()),
-                ("loaded_macros", loaded_macros.clone()),
-            ],
-        )?;
+        let rebound: Bound<'py, PyAny> =
+            rebind_declaration_scope(&static_scope, &discovered.clone(), &loaded_macros.clone())
+                .and_then(|value| value.into_bound_py_any(py))?;
         if !rebound.is_none() {
             return Ok(rebound);
         }
@@ -115,15 +115,13 @@ pub(crate) fn build_sql_expansion_context<'py>(
     if cli_vars.is_none() {
         cli_vars = PyDict::new(py).into_any();
     }
-    let effective_vars: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildEffectiveVars)?,
-        &[
-            ("project_config", project_config.clone()),
-            ("local_config", local_config.clone()),
-            ("target_config", py.None().into_bound(py)),
-            ("cli_vars", cli_vars),
-        ],
-    )?;
+    let effective_vars: Bound<'py, PyAny> = build_effective_vars(
+        &project_config.clone(),
+        &local_config.clone(),
+        &py.None().into_bound(py),
+        &cli_vars,
+    )
+    .and_then(|value| value.into_bound_py_any(py))?;
     let mut scope: Bound<'py, PyAny> = arguments.value("declaration_scope")?;
     if scope.is_none() {
         scope = declaration_scope(
@@ -136,25 +134,16 @@ pub(crate) fn build_sql_expansion_context<'py>(
         registry::native(py, NativeAttr::PublicDeclarationIndexes)?
             .call1((&discovered,))?
             .extract()?;
-    let collection_rendering: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveCollectionRendering)?,
-        &[
-            ("project_config", project_config.clone()),
-            ("declaration_override", py.None().into_bound(py)),
-        ],
-    )?;
+    let collection_rendering: Bound<'py, PyAny> =
+        resolve_effective_collection_rendering(&project_config.clone(), &py.None().into_bound(py))
+            .and_then(|value| value.into_bound_py_any(py))?;
     let macro_context: Bound<'py, PyAny> = call_with(
         &registry::class(py, RecordId::MacroContext)?,
         &[
             (
                 "adapter_name",
-                call_with(
-                    &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-                    &[
-                        ("project_config", project_config.clone()),
-                        ("local_config", local_config),
-                    ],
-                )?,
+                resolve_effective_adapter_name(&project_config.clone(), &local_config)
+                    .and_then(|value| value.into_bound_py_any(py))?,
             ),
             (
                 "sql_analysis_enabled",

@@ -7,7 +7,7 @@ use pyo3::types::{PyDict, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
 use crate::bindings::_helpers::model_config::template_data::record_reads;
 use crate::bindings::_helpers::model_config::unicode_environment::unicode_environment;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
@@ -16,12 +16,12 @@ use crate::bindings::_helpers::render::declaration_expansion::{
     DeclarationExpansion, ExpandedDeclarations, ExpansionClasses, ExpansionConsumer, SpanRow,
     expand_declarations, span_rows,
 };
+use crate::bindings::_helpers::render::declaration_values::ConstantRendering;
 use crate::bindings::_helpers::render::declaration_values::resolved_declaration_context;
 use crate::bindings::_helpers::render::macro_expansion_result::expand_sql_macros;
 use crate::bindings::_helpers::sqltext::declaration_references::declaration_scan;
 use crate::bindings::_helpers::sqltext::static_sql::{InterpolationSources, interpolation_batch};
 
-const FUNCTOOLS_MODULE: &str = "functools";
 const DECLARATION_FIELDS: [&str; 4] = [
     "enums",
     "constants",
@@ -111,17 +111,10 @@ fn declarations_expanded<'py>(
         return Ok((sql.to_owned(), Vec::new()));
     }
     let context: Bound<'py, PyAny> = declaration_context(py, declarations)?;
-    let render_constant: Bound<'py, PyAny> = imported(py, FUNCTOOLS_MODULE, "partial")?.call(
-        (registry::native(py, NativeAttr::RenderConstantDeclaration)?,),
-        Some(&keywords(
-            py,
-            &[
-                ("value_renderer", value_renderer.clone()),
-                ("collection_rendering", collection_rendering.clone()),
-                ("file_path", file_path.clone()),
-            ],
-        )?),
-    )?;
+    let rendering: ConstantRendering = ConstantRendering::new(
+        value_renderer.clone().unbind(),
+        collection_rendering.clone().unbind(),
+    );
     let classes = ExpansionClasses {
         usage_record: registry::class(py, RecordId::UsageRecord)?,
         compile_error: registry::error(py, ErrorId::CompileInput)?,
@@ -137,7 +130,7 @@ fn declarations_expanded<'py>(
             relationship_visibility: false,
             path: &path,
         },
-        render_constant: &render_constant,
+        rendering: &rendering,
         classes: &classes,
     })?;
     let spans: Vec<SpanRow> = span_rows(&expanded.spliced);

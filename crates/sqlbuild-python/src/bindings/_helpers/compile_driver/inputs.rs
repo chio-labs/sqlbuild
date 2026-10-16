@@ -1,17 +1,26 @@
 //! The first attached compile input snapshot: target, vars, macros, scopes, models and resources.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::compile_attachment::effective_config::{
+    build_effective_connection, build_effective_settings, build_effective_vars,
+};
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords, within,
 };
+use crate::bindings::_helpers::compiled_project::attachment::{attach_checks, attach_resources};
+use crate::bindings::_helpers::compiled_project::records::{compile_inputs_view, inputs_with};
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::model_config::template_data::run_id;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::render::declaration_indexes::{
+    public_declaration_indexes, public_model_schema_index,
+};
 
 const REQUIRED: [&str; 2] = ["discovered_inputs", "adapter_context"];
 const OPTIONAL: [&str; 8] = [
@@ -24,6 +33,42 @@ const OPTIONAL: [&str; 8] = [
     "resolved_connection",
     "no_cache",
 ];
+
+/// The arguments of one compile input attachment; unset flags are `False`, other options `None`.
+pub(crate) struct InputsRequest {
+    pub(crate) discovered_inputs: Py<PyAny>,
+    pub(crate) adapter_context: Py<PyAny>,
+    pub(crate) selected_target: Py<PyAny>,
+    pub(crate) cli_vars: Py<PyAny>,
+    pub(crate) run_id: Py<PyAny>,
+    pub(crate) no_sql_validation: Py<PyAny>,
+    pub(crate) defer_model_sql_validation: Py<PyAny>,
+    pub(crate) external_sql_reference_resolver: Py<PyAny>,
+    pub(crate) resolved_connection: Py<PyAny>,
+    pub(crate) no_cache: Py<PyAny>,
+}
+
+impl InputsRequest {
+    /// The request `build_compile_inputs` was called with.
+    fn read(arguments: &KeywordArguments<'_>) -> PyResult<Self> {
+        Ok(Self {
+            discovered_inputs: arguments.value("discovered_inputs")?.unbind(),
+            adapter_context: arguments.value("adapter_context")?.unbind(),
+            selected_target: arguments.value("selected_target")?.unbind(),
+            cli_vars: arguments.value("cli_vars")?.unbind(),
+            run_id: arguments.value("run_id")?.unbind(),
+            no_sql_validation: arguments.value_or_false("no_sql_validation")?.unbind(),
+            defer_model_sql_validation: arguments
+                .value_or_false("defer_model_sql_validation")?
+                .unbind(),
+            external_sql_reference_resolver: arguments
+                .value("external_sql_reference_resolver")?
+                .unbind(),
+            resolved_connection: arguments.value("resolved_connection")?.unbind(),
+            no_cache: arguments.value_or_false("no_cache")?.unbind(),
+        })
+    }
+}
 
 /// The effective target, vars, settings and macro context every later stage shares.
 struct TargetContext<'py> {
@@ -61,11 +106,19 @@ fn build_compile_inputs<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let arguments: KeywordArguments<'py> =
         KeywordArguments::read(py, "build_compile_inputs", options, (&REQUIRED, &OPTIONAL))?;
+    attached_inputs(py, &InputsRequest::read(&arguments)?)
+}
+
+/// The first compile input snapshot, with diagnostics collected while attaching appended.
+pub(crate) fn attached_inputs<'py>(
+    py: Python<'py>,
+    request: &InputsRequest,
+) -> PyResult<Bound<'py, PyAny>> {
     let collector: Bound<'py, PyAny> =
         registry::native(py, NativeAttr::CollectCompileDiagnostics)?.call0()?;
     let (built, violations): (Bound<'py, PyAny>, Bound<'py, PyAny>) =
         within(&collector, |violations| {
-            Ok((compile_inputs(py, &arguments)?, violations.clone()))
+            Ok((compile_inputs(py, request)?, violations.clone()))
         })?;
     let collected: Bound<'py, PyAny> = violations.getattr("diagnostics")?;
     if !collected.is_truthy()? {
@@ -79,21 +132,18 @@ fn build_compile_inputs<'py>(
             .chain(collected.try_iter()?)
             .collect::<PyResult<Vec<_>>>()?,
     )?;
-    call_with(
-        &registry::native(py, NativeAttr::InputsWith)?,
-        &[("inputs", built), ("diagnostics", diagnostics.into_any())],
+    inputs_with(
+        &built,
+        Some(keywords(py, &[("diagnostics", diagnostics.into_any())])?),
     )
 }
 
 /// The undecorated `build_compile_inputs`.
-fn compile_inputs<'py>(
-    py: Python<'py>,
-    arguments: &KeywordArguments<'py>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let discovered: Bound<'py, PyAny> = arguments.value("discovered_inputs")?;
-    let adapter_context: Bound<'py, PyAny> = arguments.value("adapter_context")?;
-    let target: TargetContext<'py> = target_context(arguments, &discovered, &adapter_context)?;
-    let run_id: Bound<'py, PyAny> = run_id(&arguments.value("run_id")?)?;
+fn compile_inputs<'py>(py: Python<'py>, request: &InputsRequest) -> PyResult<Bound<'py, PyAny>> {
+    let discovered: Bound<'py, PyAny> = request.discovered_inputs.bind(py).clone();
+    let adapter_context: Bound<'py, PyAny> = request.adapter_context.bind(py).clone();
+    let target: TargetContext<'py> = target_context(request, &discovered, &adapter_context)?;
+    let run_id: Bound<'py, PyAny> = run_id(&request.run_id.bind(py).clone())?;
     let loaded_macros: Bound<'py, PyAny> = host::entry(py, UserCodeHost::LoadProjectMacros)?
         .call1((discovered.getattr("macro_files")?,))?;
     let syntax: Bound<'py, PyAny> = adapter_context.getattr("sql_lexical_syntax")?;
@@ -129,9 +179,9 @@ fn compile_inputs<'py>(
             ),
         ],
     )?;
-    let models: ModelBuild<'py> = model_build(arguments, &discovered, &model_context)?;
+    let models: ModelBuild<'py> = model_build(request, &discovered, &model_context)?;
     let attached: AttachedResources<'py> = attached_resources(
-        arguments,
+        request,
         &adapter_context,
         (&discovered, &declaration_scope),
         &models,
@@ -149,12 +199,12 @@ fn compile_inputs<'py>(
             ("compile_cache_dir", target.compile_cache_dir.clone()),
             (
                 "effective_connection",
-                effective_connection(arguments, &discovered, &target)?,
+                effective_connection(request, &discovered, &target)?,
             ),
             ("effective_settings", target.settings.clone()),
             (
                 "no_sql_validation",
-                arguments.value_or_false("no_sql_validation")?,
+                request.no_sql_validation.bind(py).clone(),
             ),
             ("effective_vars", target.vars.clone()),
             ("macro_context", target.macro_context.clone()),
@@ -171,24 +221,18 @@ fn compile_inputs<'py>(
             ("diagnostics", attached.checks.get_item(3)?),
             (
                 "external_sql_reference_resolver",
-                arguments.value("external_sql_reference_resolver")?,
+                request.external_sql_reference_resolver.bind(py).clone(),
             ),
             ("scope_index", declaration_scope.getattr("index")?),
             ("declaration_scope", declaration_scope),
         ],
     )?;
-    call_with(
-        &registry::native(py, NativeAttr::CompileInputsView)?,
-        &[
-            ("fields", fields.into_any()),
-            ("native_project", models.native_project),
-        ],
-    )
+    compile_inputs_view(&fields, Some(models.native_project.cast_into()?))
 }
 
 /// The selected target with the macro call store, and the effective vars, settings and macro context.
 fn target_context<'py>(
-    arguments: &KeywordArguments<'py>,
+    request: &InputsRequest,
     discovered: &Bound<'py, PyAny>,
     adapter_context: &Bound<'py, PyAny>,
 ) -> PyResult<TargetContext<'py>> {
@@ -197,43 +241,30 @@ fn target_context<'py>(
         &host::entry(py, UserCodeHost::TargetContextWithMacroCallStore)?,
         &[
             ("discovered_inputs", discovered.clone()),
-            ("selected_target", arguments.value("selected_target")?),
-            ("no_cache", arguments.value_or_false("no_cache")?),
+            ("selected_target", request.selected_target.bind(py).clone()),
+            ("no_cache", request.no_cache.bind(py).clone()),
         ],
     )?;
     let target_name: Bound<'py, PyAny> = selected.get_item(0)?;
     let target: Bound<'py, PyAny> = selected.get_item(1)?;
     let project_config: Bound<'py, PyAny> = discovered.getattr("project_config")?;
     let local_config: Bound<'py, PyAny> = discovered.getattr("local_config")?;
-    let cli_vars: Bound<'py, PyAny> = arguments.value("cli_vars")?;
+    let cli_vars: Bound<'py, PyAny> = request.cli_vars.bind(py).clone();
     let cli_vars: Bound<'py, PyAny> = if cli_vars.is_none() {
         PyDict::new(py).into_any()
     } else {
         cli_vars
     };
-    let vars: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildEffectiveVars)?,
-        &[
-            ("project_config", project_config.clone()),
-            ("local_config", local_config.clone()),
-            ("target_config", target.clone()),
-            ("cli_vars", cli_vars),
-        ],
+    let vars: Bound<'py, PyAny> = build_effective_vars(
+        &project_config.clone(),
+        &local_config.clone(),
+        &target.clone(),
+        &cli_vars,
     )?;
-    let settings: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildEffectiveSettings)?,
-        &[
-            ("project_config", project_config.clone()),
-            ("local_config", local_config.clone()),
-        ],
-    )?;
-    let adapter_name: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-        &[
-            ("project_config", project_config.clone()),
-            ("local_config", local_config),
-        ],
-    )?;
+    let settings: Bound<'py, PyAny> =
+        build_effective_settings(&project_config.clone(), &local_config.clone())?;
+    let adapter_name: Bound<'py, PyAny> =
+        resolve_effective_adapter_name(&project_config.clone(), &local_config)?;
     let macro_context: Bound<'py, PyAny> = call_with(
         &registry::class(py, RecordId::MacroContext)?,
         &[
@@ -269,17 +300,15 @@ fn target_context<'py>(
 
 /// `_build_models_with_declarations`: attach every model with the public declaration indexes.
 fn model_build<'py>(
-    arguments: &KeywordArguments<'py>,
+    request: &InputsRequest,
     discovered: &Bound<'py, PyAny>,
     context: &Bound<'py, PyAny>,
 ) -> PyResult<ModelBuild<'py>> {
     let py: Python<'py> = discovered.py();
-    let declarations: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::PublicDeclarationIndexes)?.call1((discovered,))?;
-    let enums: Bound<'py, PyAny> = declarations.get_item(0)?;
-    let constants: Bound<'py, PyAny> = declarations.get_item(1)?;
-    let schemas: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::PublicModelSchemaIndex)?.call1((discovered,))?;
+    let (enums, constants) = public_declaration_indexes(discovered.clone())?;
+    let (enums, constants): (Bound<'py, PyAny>, Bound<'py, PyAny>) =
+        (enums.into_any(), constants.into_any());
+    let schemas: Bound<'py, PyAny> = public_model_schema_index(discovered.clone())?.into_any();
     let native_project: Bound<'py, PyAny> =
         registry::native(py, NativeAttr::NativeCompiledProject)?.call0()?;
     let replace: Bound<'py, PyAny> = imported(py, "dataclasses", "replace")?;
@@ -301,15 +330,15 @@ fn model_build<'py>(
             ("context", model_context),
             (
                 "no_sql_validation",
-                arguments.value_or_false("no_sql_validation")?,
+                request.no_sql_validation.bind(py).clone(),
             ),
             (
                 "defer_model_sql_validation",
-                arguments.value_or_false("defer_model_sql_validation")?,
+                request.defer_model_sql_validation.bind(py).clone(),
             ),
             (
                 "external_sql_reference_resolver",
-                arguments.value("external_sql_reference_resolver")?,
+                request.external_sql_reference_resolver.bind(py).clone(),
             ),
             ("native_project", native_project.clone()),
         ],
@@ -335,7 +364,7 @@ fn model_build<'py>(
 
 /// The seeds, functions, sources and checks attached to the models.
 fn attached_resources<'py>(
-    arguments: &KeywordArguments<'py>,
+    request: &InputsRequest,
     adapter_context: &Bound<'py, PyAny>,
     (discovered, declaration_scope): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
     models: &ModelBuild<'py>,
@@ -343,55 +372,63 @@ fn attached_resources<'py>(
     let py: Python<'py> = discovered.py();
     let context: &Bound<'py, PyAny> = &models.context;
     let settings: Bound<'py, PyAny> = context.getattr("effective_settings")?;
-    let resources: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::AttachResources)?,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("native_project", models.native_project.clone()),
-            (
-                "settings",
-                PyTuple::new(
-                    py,
-                    [
-                        settings.clone(),
-                        context.getattr("target_config")?,
-                        context.getattr("macro_context")?.getattr("adapter_name")?,
-                    ],
-                )?
-                .into_any(),
-            ),
-            (
-                "no_sql_validation",
-                arguments.value_or_false("no_sql_validation")?,
-            ),
-            (
-                "python_functions_inherit_default_namespace",
-                adapter_context.getattr("python_functions_inherit_default_namespace")?,
-            ),
-        ],
-    )?;
+    let resources: Bound<'py, PyAny> = attach_resources(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", discovered.clone()),
+                ("native_project", models.native_project.clone()),
+                (
+                    "settings",
+                    PyTuple::new(
+                        py,
+                        [
+                            settings.clone(),
+                            context.getattr("target_config")?,
+                            context.getattr("macro_context")?.getattr("adapter_name")?,
+                        ],
+                    )?
+                    .into_any(),
+                ),
+                (
+                    "no_sql_validation",
+                    request.no_sql_validation.bind(py).clone(),
+                ),
+                (
+                    "python_functions_inherit_default_namespace",
+                    adapter_context.getattr("python_functions_inherit_default_namespace")?,
+                ),
+            ],
+        )?),
+    )?
+    .into_any();
     let sources: Bound<'py, PyAny> = resources.get_item(2)?;
-    let checks: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::AttachChecks)?,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("native_project", models.native_project.clone()),
-            (
-                "settings",
-                PyTuple::new(
-                    py,
-                    [
-                        settings,
-                        adapter_context.getattr("value_renderer")?,
-                        context.getattr("sql_lexical_syntax")?,
-                    ],
-                )?
-                .into_any(),
-            ),
-            ("scan_cache", declaration_scope.getattr("sql_test_scans")?),
-            ("source_inputs", sources.clone()),
-        ],
-    )?;
+    let checks: Bound<'py, PyAny> = attach_checks(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", discovered.clone()),
+                ("native_project", models.native_project.clone()),
+                (
+                    "settings",
+                    PyTuple::new(
+                        py,
+                        [
+                            settings,
+                            adapter_context.getattr("value_renderer")?,
+                            context.getattr("sql_lexical_syntax")?,
+                        ],
+                    )?
+                    .into_any(),
+                ),
+                ("scan_cache", declaration_scope.getattr("sql_test_scans")?),
+                ("source_inputs", sources.clone()),
+            ],
+        )?),
+    )?
+    .into_any();
     Ok(AttachedResources {
         seeds: resources.get_item(0)?,
         functions: resources.get_item(1)?,
@@ -402,22 +439,19 @@ fn attached_resources<'py>(
 
 /// The resolved connection when given, otherwise the configured one for the target.
 fn effective_connection<'py>(
-    arguments: &KeywordArguments<'py>,
+    request: &InputsRequest,
     discovered: &Bound<'py, PyAny>,
     target: &TargetContext<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let resolved: Bound<'py, PyAny> = arguments.value("resolved_connection")?;
+    let resolved: Bound<'py, PyAny> = request.resolved_connection.bind(discovered.py()).clone();
     if !resolved.is_none() {
         return Ok(resolved);
     }
-    call_with(
-        &registry::native(discovered.py(), NativeAttr::BuildEffectiveConnection)?,
-        &[
-            ("project_config", discovered.getattr("project_config")?),
-            ("local_config", discovered.getattr("local_config")?),
-            ("target_config", target.target.clone()),
-            ("effective_vars", target.vars.clone()),
-        ],
+    build_effective_connection(
+        &discovered.getattr("project_config")?,
+        &discovered.getattr("local_config")?,
+        &target.target.clone(),
+        &target.vars.clone(),
     )
 }
 

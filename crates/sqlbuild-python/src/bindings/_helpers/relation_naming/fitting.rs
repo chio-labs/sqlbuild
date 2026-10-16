@@ -7,12 +7,11 @@ use sqlbuild_analysis::identifier_fitting::main::fit_artifact_logical_name::fit_
 use sqlbuild_analysis::identifier_fitting::main::fit_auxiliary_relation_name::fit_auxiliary_relation_name as fit_auxiliary;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
-
-const SHARED_EXCEPTIONS_MODULE: &str = "sqlbuild.errors.contracts.exceptions";
+use crate::bindings::_helpers::native_host::facade::FacadeHost;
+use crate::bindings::_helpers::native_host::host;
 
 pub(crate) fn shared_error(py: Python<'_>, message: String) -> PyErr {
-    imported(py, SHARED_EXCEPTIONS_MODULE, "SharedInputError")
+    host::entry(py, FacadeHost::SharedInputError)
         .and_then(|class| class.call1((message,)))
         .map_or_else(|error| error, PyErr::from_value)
 }

@@ -13,10 +13,12 @@ use crate::bindings::_helpers::discovery::imported_modules::{
 };
 use crate::bindings::_helpers::discovery::imported_providers;
 
+use crate::bindings::_helpers::discovery::python_hook_files::discover_python_hook_files;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
+use pyo3::IntoPyObjectExt;
 use sqlbuild_core::constants::PYTHON_NODE_ROOT;
 const NODE_ERROR: ErrorId = ErrorId::PythonNodeDiscovery;
 const AUDIT_CASE: UserCodeHost = UserCodeHost::AuditCase;
@@ -449,10 +451,8 @@ pub(crate) fn discover_hook_functions<'py>(
         Some(providers) => provider_by_name(&providers)?,
         None => PyDict::new(py),
     };
-    let hook_files: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::DiscoverPythonHookFiles)?,
-        &[("project_dir", project.path.clone())],
-    )?;
+    let hook_files: Bound<'py, PyAny> = discover_python_hook_files(&project.path.clone())
+        .and_then(|value| value.into_bound_py_any(py))?;
     let mut hooks: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut seen: Vec<(String, Bound<'py, PyAny>)> = Vec::new();
     for hook_file in hook_files.try_iter()? {
