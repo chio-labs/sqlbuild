@@ -176,3 +176,12 @@ class ConnectionPreparationTimingTestCase:
     expected_connection_seconds: float
     expected_schema_seconds: float
     expected_total_seconds: float
+
+
+@dataclass(frozen=True)
+class ScenarioWorkerExitTestCase:
+    """Scenario workers left inside native code when the interpreter exits, and the exit code."""
+
+    description: str
+    worker_count: int
+    expected_returncode: int

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import atexit
 import logging
 import queue
 import threading
@@ -68,6 +69,8 @@ from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 _STOP_POLL_SECONDS: float = 0.05
+_WORKER_EXIT_JOIN_SECONDS: float = 5.0
+_WORKER_NAME_PREFIX: str = "sqlbuild-scenario-"
 _SCENARIO_INTERNAL_ERROR_HELP: str = (
     "This is likely a SQLBuild bug. Please file an issue with the scenario name."
 )
@@ -558,15 +561,27 @@ def _start_scenario_workers[OutcomeT](
             except BaseException as exc:  # noqa: BLE001 - delivered through the future
                 future.set_exception(exc)
 
+    atexit.unregister(_join_scenario_workers)
+    _ = atexit.register(_join_scenario_workers)
     context: Context = copy_context()
     worker: int
     for worker in range(worker_count):
         threading.Thread(
             target=context.copy().run,
             args=(work,),
-            name=f"sqlbuild-scenario-{worker}",
+            name=f"{_WORKER_NAME_PREFIX}{worker}",
             daemon=True,
         ).start()
+
+
+def _join_scenario_workers() -> None:
+    """Wait a bounded time at exit for abandoned workers, so none is ended inside native code."""
+
+    deadline: float = time.monotonic() + _WORKER_EXIT_JOIN_SECONDS
+    thread: threading.Thread
+    for thread in threading.enumerate():
+        if thread.name.startswith(_WORKER_NAME_PREFIX):
+            thread.join(timeout=max(0.0, deadline - time.monotonic()))
 
 
 def _stop_scenarios[OutcomeT](
