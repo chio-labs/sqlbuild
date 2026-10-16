@@ -36,6 +36,23 @@ pub(crate) fn record_spec(cls: &Bound<'_, PyType>) -> PyResult<&'static RecordSp
         .ok_or_else(|| PyTypeError::new_err("unknown native record class"))
 }
 
+/// A declared field of a native record read from its values; any other attribute, or object, by `getattr`.
+pub(crate) fn field<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyAny>> {
+    if let Ok(record) = value.cast::<NativeRecord>() {
+        let record: &NativeRecord = record.get();
+        if let Some(found) = record
+            .spec
+            .fields
+            .iter()
+            .position(|field| field.name == name)
+            .and_then(|index| record.values.get(index))
+        {
+            return Ok(found.bind(value.py()).clone());
+        }
+    }
+    value.getattr(name)
+}
+
 /// Field values bound from `args` and `kwargs` as a dataclass `__init__` binds them.
 pub(crate) fn build_values(
     spec: &RecordSpec,
